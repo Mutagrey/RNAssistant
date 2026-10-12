@@ -42,12 +42,13 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
         { ToolId: "excel.add_sheet", Subtitle: "Отчёт", Status: "failed", ErrorCode: "excel_sheet_already_exists", ExecutionEvidence: { Dispatch: "NotDispatched", Effect: "None" }, ResultMessage: "Sheet already exists: raw error" },
         { ToolId: "common.office_run_macro", Subtitle: "ОбновитьОтчёт", Status: "failed", ExecutionEvidence: { Dispatch: "MayHaveDispatched", Effect: "Unknown" } },
         { ToolId: "common.resources_find", Subtitle: "Архив отчётов", ResultSummary: { Kind: "resource-find", ReturnedItems: 0, Complete: false, Partial: true } },
-        { ToolId: "common.resources_read", Subtitle: "Папка документа / Очень длинное название раздела с аналитикой продаж по регионам / Итоговые данные за последний квартал!A1:F180", Status: "running" }
+        { ToolId: "common.resources_read", Subtitle: "Папка документа / Очень длинное название раздела с аналитикой продаж по регионам / Итоговые данные за последний квартал!A1:F180", Status: "running" },
+        { ToolId: "common.resources_read", Subtitle: "Закрытый ресурс", Status: "failed", ErrorCode: "resource_access_denied", ExecutionEvidence: { Dispatch: "NotDispatched", Effect: "None" } }
       ];
       const displays = [
         ["Изучение", "Learn"], ["Поиск ресурсов", "Search"], ["Чтение ресурса", "Read"],
         ["Запись диапазона", "Write"], ["Создание листа", "Write"], ["Выполнение макроса", "Command"],
-        ["Поиск ресурсов", "Search"], ["Чтение ресурса", "Read"]
+        ["Поиск ресурсов", "Search"], ["Чтение ресурса", "Read"], ["Чтение ресурса", "Read"]
       ];
       fixtures.forEach((item, i) => { item.Display = { action: displays[i][0], runningAction: displays[i][0], operation: displays[i][1] }; });
       for (const item of fixtures) document.getElementById("actions").appendChild(renderActivityNode(
@@ -84,7 +85,8 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       assert.notEqual(bounds[4].colors[3], bounds[4].colors[0], "error remains distinct");
       assert.ok(bounds[4].text.includes("Лист уже существует"), "failed action shows its readable outcome");
       assert.notEqual(bounds[5].colors[3], bounds[5].colors[0], "unknown effect stands out from the muted action");
-      assert.notEqual(bounds[5].colors[3], bounds[4].colors[3], "unknown effect is distinct from a failed action");
+      assert.equal(bounds[5].colors[3], bounds[4].colors[3], "unknown effect and correctable conflicts use the warning color");
+      assert.notEqual(bounds[5].colors[3], bounds[8].colors[3], "unknown effect is distinct from a hard failure");
       assert.equal(bounds[6].colors[3], bounds[5].colors[3], "incomplete reads use the same warning color");
       assert.ok(bounds[0].text.includes("Загружено") && !bounds[0].text.includes("private-id"));
       assert.ok(bounds[2].text.includes("Получено строк: 120"));

@@ -68,6 +68,7 @@ bridge.setTimeout = callback => timers.push(callback);
 bridge.chrome = { webview: { addEventListener: (_, callback) => { listener = callback; } } };
 bridge.renderChatSessions = () => sidebarRenders++;
 vm.runInContext(read("app-core.js"), bridge);
+vm.runInContext(read("app-chat-run.js"), bridge);
 bridge.state.activeChatId = "foreground";
 bridge.state.pending.request = { type: "sendChat", payload: { chatId: "background" } };
 for (let i = 0; i < 100; i++) listener({ data: { type: "progress", id: "request", payload: { contentDelta: "x" } } });

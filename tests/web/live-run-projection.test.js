@@ -116,6 +116,27 @@ render();
 assert.equal(box.childNodes.length, 3);
 console.log("PASS live projection: restoring active chats, final-stream replay and separate transcript segments");
 
+// Applying a steer splits the same run; the prefix stays above the user's input.
+ctx.state.liveAgentRun = live;
+ctx.resetRenderedMessageUnits(box); render();
+assert.equal(box.childNodes.length, 3);
+assert.match(box.childNodes[0].messageUnitKey, /^run:r:segment:m0$/);
+assert.equal(box.childNodes[1].messageUnitKey, "message:reply");
+assert.equal(box.childNodes[2].messageUnitKey, "live:agent-run");
+assert.equal(ctx.liveAgentTailActivities().map(a => a.StepId).join("|"), "s2|s2",
+  "live replay cannot move earlier narration or actions below the applied steer");
+const prefix = box.childNodes[0], reply = box.childNodes[1];
+ctx.state.liveAgentRun.push(action("s2", "c", "running", "{}"));
+ctx.reconcileMessageUnits(box, ctx.buildLiveMessageUnits(), true);
+assert.equal(box.childNodes[0], prefix); assert.equal(box.childNodes[1], reply);
+assert.equal(box.childNodes[2].messageUnitKey, "live:agent-run");
+ctx.state.messages.pop(); // New input persisted before the first following action.
+render();
+assert.equal(box.childNodes[0].messageUnitKey, "run:r:segment:m0");
+assert.equal(box.childNodes[1].messageUnitKey, "message:reply");
+ctx.state.liveAgentRun = null;
+console.log("PASS live projection: applying steer preserves history order during full and stream rendering");
+
 // A failed no-tool run remains one transcript, including every saved progress step.
 const failed = { RunId: "r", TurnId: "r", Lifecycle: "failed", ExecutionHealth: "clean",
   SuccessfulReads: 0, VerifiedWrites: 0, NoChangeWrites: 0, UnverifiedWrites: 0,
@@ -165,3 +186,17 @@ assert.equal(ctx.state.chatRuns.chat.activities.length, 0, "new run drops previo
 assert.equal(ctx.state.liveStreamContent, "", "new run drops previous stream");
 assert.equal(ctx.state.liveReasoning, "", "new run drops previous reasoning");
 console.log("PASS live projection: terminal no-tool run and consecutive inbox runs stay isolated");
+
+// A same-chat background snapshot must not erase the in-flight output for one paint.
+vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-chat-state.js"), "utf8"), ctx);
+ctx.applyLibraryCatalogState = () => false;
+ctx.renderChatSessions = () => {}; ctx.renderContext = () => {}; ctx.renderContextMeter = () => {}; ctx.renderModelControls = () => {};
+ctx.state.chatProjectionRevisions = {};
+ctx.state.chatRuns.chat = { runId: "r", activities: [marker("fresh")], stream: "Still streaming", reasoning: "Still reasoning" };
+const renderedStreams = [], renderCurrent = ctx.renderMessages;
+ctx.renderMessages = (...args) => { renderedStreams.push(ctx.state.liveStreamContent); renderCurrent(...args); };
+ctx.applyChatState({ activeChatId: "chat", sessionRevision: 1,
+  messages: [{ Id: "user", Role: "user", Content: "Continue working", RunId: "r" }] });
+assert.deepEqual(renderedStreams, ["Still streaming"], "snapshot and restored live output paint together");
+assert.equal(ctx.state.liveReasoning, "Still reasoning");
+console.log("PASS live projection: same-chat refresh retains transient output without an intermediate empty paint");

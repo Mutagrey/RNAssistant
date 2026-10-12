@@ -261,7 +261,7 @@ function applyChatState(response) {
     applyRevisionedChatSummaryState(response);
     return false;
   }
-  if (response.inbox && typeof applyChatInbox === "function") applyChatInbox(response.inbox);
+  if (response.inbox && typeof applyChatInbox === "function") applyChatInbox(response.inbox, true);
   state.chatStateApplyVersion = (state.chatStateApplyVersion || 0) + 1;
   var chatChanged = previousChatId !== nextChatId;
   if (chatChanged) {
@@ -298,7 +298,6 @@ function applyChatState(response) {
     state.htmlWorkspace = { files: [], dataSources: [], history: [], redoHistory: [], redoBranches: [],
       recovery: { status: "empty", canMutate: false } };
   }
-  if (typeof renderChatInbox === "function") renderChatInbox();
   state.activeRunViewState = window.RNAssistantRunViewState.normalize(
     response.runViewState !== undefined ? response.runViewState : response.RunViewState);
   if (response.activeChatModel !== undefined || response.ActiveChatModel !== undefined) {
@@ -331,6 +330,7 @@ function applyChatState(response) {
       ? response.messageStartIndex : (response.MessageStartIndex || 0);
     state.messageTotalCount = response.messageTotalCount !== undefined
       ? response.messageTotalCount : (response.MessageTotalCount || state.messages.length);
+    if (typeof reconcileChatInputEchoes === "function") reconcileChatInputEchoes(nextChatId, state.messages, response.inbox);
   }
   if (response.artifacts !== undefined || response.Artifacts !== undefined) {
     state.artifacts = response.artifacts || response.Artifacts || [];
@@ -363,6 +363,7 @@ function applyChatState(response) {
     restoreChatDraft(state.activeChatId);
     if (typeof clearSendError === "function") clearSendError();
   }
+  if (typeof restoreActiveChatRun === "function") restoreActiveChatRun(false);
   renderChatSessions();
   if (libraryChanged && typeof renderInstructions === "function") renderInstructions();
   renderMessages();
@@ -378,9 +379,6 @@ function applyChatState(response) {
   }
   if (typeof syncPromptContextInspectorState === "function") {
     syncPromptContextInspectorState();
-  }
-  if (chatChanged && typeof restoreActiveChatRun === "function") {
-    restoreActiveChatRun();
   }
   return true;
 }

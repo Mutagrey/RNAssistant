@@ -380,6 +380,13 @@ for that run. Its final `RunViewState` determines the displayed lifecycle; earli
 running markers cannot leave separate active cards after failure. A changed
 `RunViewState` on an existing message also invalidates its rendered unit. Step
 narration is rendered once, with earlier steps available in the collapsed history.
+An applied user input splits the transcript into ordered segments of the same run.
+Earlier segments stay before that input; only the last segment merges with live
+activities, excluding already represented prefix steps. A full history refresh
+restores the same run's transient output before painting, and applies its inbox
+projection with the messages in one render. Pending echoes bridge the interval
+between an intake receipt, queue removal and the corresponding history projection;
+they are disposable UI state, never a durable queue or delivery authority.
 
 An idle selected chat with `RunViewState.lifecycle=awaiting_user` shows a static
 “Нужен ваш ответ” notice above the composer, with an “Ответить” action that focuses

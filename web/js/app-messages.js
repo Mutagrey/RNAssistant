@@ -4,6 +4,11 @@ var renderedMessageUnits = {};
 var renderedLiveRunBase = null;
 var renderedLiveRunSuppressed = false;
 var renderedLiveRunBaseSignature = null;
+var renderedLiveRunPastActivities = {};
+var renderedLiveRunPastSteps = {};
+var chatScrollFollowing = true;
+var chatScrollInteraction = 0;
+var chatScrollPosition = 0;
 
 function resetRenderedMessageUnits(box) {
   if (box && typeof clearMarkdownEnhancements === "function") clearMarkdownEnhancements(box);
@@ -11,6 +16,8 @@ function resetRenderedMessageUnits(box) {
   renderedLiveRunBase = null;
   renderedLiveRunBaseSignature = null;
   renderedLiveRunSuppressed = false;
+  renderedLiveRunPastActivities = {};
+  renderedLiveRunPastSteps = {};
   if (box) box.textContent = "";
 }
 
@@ -35,6 +42,12 @@ function isChatNearBottom(box) {
   return !box || chatDistanceFromBottom(box) <= CHAT_BOTTOM_THRESHOLD;
 }
 
+function shouldFollowChatScroll(box) {
+  if (box.scrollTop < chatScrollPosition - 1 || !isChatNearBottom(box)) chatScrollFollowing = false;
+  else if (box.scrollTop > chatScrollPosition + 1 && chatDistanceFromBottom(box) <= 2) chatScrollFollowing = true;
+  return chatScrollFollowing;
+}
+
 function updateChatScrollButton() {
   var box = $("messages");
   var button = $("chatScrollBottomButton");
@@ -42,8 +55,8 @@ function updateChatScrollButton() {
     return;
   }
 
-  var canScroll = box.scrollHeight > box.clientHeight + CHAT_BOTTOM_THRESHOLD;
-  var visible = canScroll && !isChatNearBottom(box);
+  var canScroll = box.scrollHeight > box.clientHeight + 2;
+  var visible = canScroll && (!isChatNearBottom(box) || !chatScrollFollowing && chatDistanceFromBottom(box) > 2);
   button.classList.toggle("is-visible", visible);
   button.setAttribute("aria-hidden", visible ? "false" : "true");
   button.tabIndex = visible ? 0 : -1;
@@ -55,11 +68,14 @@ function scrollMessagesToBottom(smooth) {
     return;
   }
 
-  if (smooth && typeof box.scrollTo === "function") {
+  chatScrollFollowing = true;
+  if (smooth && typeof box.scrollTo === "function" &&
+      !(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches)) {
     box.scrollTo({ top: box.scrollHeight, behavior: "smooth" });
   } else {
     box.scrollTop = box.scrollHeight;
   }
+  chatScrollPosition = box.scrollTop;
   updateChatScrollButton();
 }
 
@@ -70,13 +86,12 @@ function syncChatScroll(shouldScroll, smooth) {
     updateChatScrollButton();
   }
 
-  if (window.requestAnimationFrame) {
+  var interaction = chatScrollInteraction, chatId = state.activeChatId;
+  var top = $("messages").scrollTop;
+  if (shouldScroll && window.requestAnimationFrame) {
     window.requestAnimationFrame(function () {
-      if (shouldScroll) {
-        scrollMessagesToBottom(false);
-      } else {
-        updateChatScrollButton();
-      }
+      if (interaction === chatScrollInteraction && chatId === state.activeChatId &&
+          chatScrollFollowing && $("messages").scrollTop === top) scrollMessagesToBottom(false);
     });
   }
 }
@@ -85,14 +100,63 @@ function bindMessageScrollControls() {
   var box = $("messages");
   var button = $("chatScrollBottomButton");
   if (box) {
-    box.addEventListener("scroll", updateChatScrollButton, { passive: true });
+    box.addEventListener("scroll", function () {
+      if (box.scrollTop !== chatScrollPosition) {
+        chatScrollInteraction += 1;
+        // Even a short upward movement means the reader took control.
+        chatScrollFollowing = box.scrollTop > chatScrollPosition && chatDistanceFromBottom(box) <= 2;
+        chatScrollPosition = box.scrollTop;
+      }
+      updateChatScrollButton();
+    }, { passive: true });
+    function interrupt(upward) {
+      chatScrollInteraction += 1;
+      if (upward) chatScrollFollowing = false;
+    }
+    box.addEventListener("wheel", function (event) { interrupt(event.deltaY < 0); }, { passive: true });
+    box.addEventListener("pointerdown", function () { interrupt(false); }, { passive: true });
+    var touchY = 0;
+    box.addEventListener("touchstart", function (event) { touchY = event.touches[0].clientY; interrupt(false); }, { passive: true });
+    box.addEventListener("touchmove", function (event) {
+      var next = event.touches[0].clientY; interrupt(next > touchY); touchY = next;
+    }, { passive: true });
+    box.addEventListener("keydown", function (event) {
+      if (/^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName) || event.target.isContentEditable) return;
+      if (["ArrowUp", "PageUp", "Home", "ArrowDown", "PageDown", "End", " "].indexOf(event.key) >= 0)
+        interrupt(event.key === "ArrowUp" || event.key === "PageUp" || event.key === "Home" || event.key === " " && event.shiftKey);
+    });
+    if (window.ResizeObserver) {
+      var resizeObserver = new window.ResizeObserver(function () { syncChatScroll(chatScrollFollowing, false); });
+      resizeObserver.observe(box);
+    }
   }
   if (button) {
     button.addEventListener("click", function () {
-      scrollMessagesToBottom(true);
+      scrollMessagesToBottom(false);
     });
   }
   updateChatScrollButton();
+}
+
+function captureMessageViewport(box) {
+  var snapshot = { top: box.scrollTop };
+  if (!box.getBoundingClientRect) return snapshot;
+  var top = box.getBoundingClientRect().top;
+  Array.prototype.some.call(box.children, function (node) {
+    if (node.getBoundingClientRect().bottom <= top) return false;
+    snapshot.key = node.messageUnitKey;
+    snapshot.offset = node.getBoundingClientRect().top - top;
+    return true;
+  });
+  return snapshot;
+}
+
+function restoreMessageViewport(box, snapshot) {
+  var unit = snapshot.key && renderedMessageUnits[snapshot.key];
+  if (unit && unit.node && unit.node.getBoundingClientRect) {
+    box.scrollTop += unit.node.getBoundingClientRect().top - box.getBoundingClientRect().top - snapshot.offset;
+  } else box.scrollTop = snapshot.top;
+  chatScrollPosition = box.scrollTop;
 }
 
 function messageUsageText(message) {
@@ -408,6 +472,13 @@ function liveAgentActivities() {
     ? state.liveAgentRun : (state.liveActivity ? [state.liveActivity] : []);
 }
 
+function liveAgentTailActivities() {
+  return liveAgentActivities().filter(function (activity) {
+    return !renderedLiveRunPastActivities[activityTimelineKey(activity)] &&
+      !(activityKind(activity) === "step" && renderedLiveRunPastSteps[activityStepId(activity)]);
+  });
+}
+
 function liveAgentRunId() {
   var tracked = state.chatRuns && state.chatRuns[state.activeChatId];
   if (tracked && tracked.runId) return tracked.runId;
@@ -420,8 +491,8 @@ function liveAgentRunId() {
 }
 
 function renderLiveAgentRun() {
-  var activities = liveAgentActivities();
-  if (!activities.length || renderedLiveRunSuppressed) return null;
+  var activities = liveAgentTailActivities();
+  if ((!activities.length && !renderedLiveRunBase) || renderedLiveRunSuppressed) return null;
   var items = renderedLiveRunBase ? renderedLiveRunBase.items.slice() : [];
   var byKey = Object.create(null);
   items.forEach(function (item, index) { byKey[activityTimelineKey(item.activity)] = index; });
@@ -500,6 +571,7 @@ function agentRunUnitKey(run) {
 function agentRunUnitSignature(run) {
   return JSON.stringify({
     live: !!run.live,
+    continued: !!run.continued,
     items: (run.items || []).map(function (item) {
       return { index: item.index, signature: messageUnitSignature(item.message) };
     }),
@@ -550,20 +622,32 @@ function buildMessageUnits() {
   renderedLiveRunBase = null;
   renderedLiveRunBaseSignature = null;
   renderedLiveRunSuppressed = false;
+  renderedLiveRunPastActivities = {};
+  renderedLiveRunPastSteps = {};
+  var lastVisibleIndex = state.messages.length - 1;
+  while (lastVisibleIndex >= 0 && messageProtocolMessage(state.messages[lastVisibleIndex])) lastVisibleIndex -= 1;
+  var lastRunIndexes = {};
+  state.messages.forEach(function (message, index) { if (messageRunId(message)) lastRunIndexes[messageRunId(message)] = index; });
   for (var index = 0; index < state.messages.length; index += 1) {
     if (messageProtocolMessage(state.messages[index])) {
       continue;
     }
     if (canCollectAgentRunAt(index)) {
       var run = collectAgentRun(index);
+      run.continued = !run.finalMessage && lastRunIndexes[agentRunId(run.items, run.finalMessage)] >= run.nextIndex;
       if (liveRunId && agentRunId(run.items, run.finalMessage) === liveRunId) {
-        if (!run.finalMessage) {
+        if (!run.finalMessage && run.nextIndex > lastVisibleIndex) {
           renderedLiveRunBase = run;
           renderedLiveRunBaseSignature = agentRunUnitSignature(run);
           index = run.nextIndex - 1;
           continue;
         }
-        renderedLiveRunSuppressed = true;
+        if (run.finalMessage) renderedLiveRunSuppressed = true;
+        else run.items.forEach(function (item) {
+          renderedLiveRunPastActivities[activityTimelineKey(item.activity)] = true;
+          var stepId = activityStepId(item.activity);
+          if (stepId) renderedLiveRunPastSteps[stepId] = true;
+        });
       }
       appendMessageUnit(units, agentRunUnitKey(run), agentRunUnitSignature(run), (function (capturedRun) {
         return function () { return renderAgentRunArticle(capturedRun); };
@@ -609,9 +693,9 @@ function buildMessageUnits() {
 
 function buildLiveMessageUnits() {
   var units = [];
-  if (!renderedLiveRunSuppressed && liveAgentActivities().length) {
+  if (!renderedLiveRunSuppressed && (liveAgentTailActivities().length || renderedLiveRunBase)) {
     appendMessageUnit(units, "live:agent-run",
-      JSON.stringify({ stream: "agent", value: liveAgentActivities(),
+      JSON.stringify({ stream: "agent", value: liveAgentTailActivities(),
         base: renderedLiveRunBaseSignature }),
       function () { return renderLiveAgentRun(); });
   }
@@ -667,6 +751,12 @@ function reconcileMessageUnits(box, units, liveOnly) {
       }
       node = unit.render();
       restoreMessageDisclosures(node, disclosures);
+      node.messageUnitKey = unit.key;
+      // Insert first: removing a tall live article first temporarily clamps scrollTop.
+      if (cached && cached.node && cached.node.parentNode === box) {
+        box.insertBefore(node, cached.node);
+        box.removeChild(cached.node);
+      }
     }
     nextCache[unit.key] = { signature: unit.signature, actionsSignature: unit.actionsSignature, node: node };
   });
@@ -683,8 +773,8 @@ function reconcileMessageUnits(box, units, liveOnly) {
   var cursor = box.firstChild;
   if (liveOnly) {
     cursor = null;
-    Object.keys(renderedMessageUnits).some(function (key) {
-      var node = renderedMessageUnits[key].node;
+    Object.keys(nextCache).some(function (key) {
+      var node = nextCache[key].node;
       if (key.indexOf("live:") === 0 && node && node.parentNode === box) {
         cursor = node;
         return true;
@@ -732,8 +822,10 @@ function renderStreamingMessages() {
     return;
   }
   var box = $("messages");
-  var shouldScroll = isChatNearBottom(box);
+  var viewport = captureMessageViewport(box);
+  var shouldScroll = shouldFollowChatScroll(box);
   reconcileMessageUnits(box, buildLiveMessageUnits(), true);
+  if (!shouldScroll) restoreMessageViewport(box, viewport);
   syncChatScroll(shouldScroll, false);
 }
 
@@ -744,10 +836,13 @@ function renderMessages(options) {
   if (typeof renderChatResourceNavigation === "function") renderChatResourceNavigation();
   var box = $("messages");
   var chatChanged = renderedMessagesChatId !== state.activeChatId;
-  var shouldScroll = !options.preserveTop && (!!options.forceScroll || chatChanged || isChatNearBottom(box));
+  var viewport = captureMessageViewport(box);
+  if (chatChanged || options.forceScroll) chatScrollFollowing = true;
+  var shouldScroll = !options.preserveTop && (!!options.forceScroll || chatChanged || shouldFollowChatScroll(box));
 
   renderedMessagesChatId = state.activeChatId;
   if (chatChanged || options.fullReset) resetRenderedMessageUnits(box);
+  if (chatChanged) chatScrollPosition = box.scrollTop;
   if (state.chatDetailPending || state.chatDetailError) {
     resetRenderedMessageUnits(box);
     var notice = document.createElement("div");
@@ -765,9 +860,11 @@ function renderMessages(options) {
     return;
   }
   var visibleMessages = (state.messages || []).filter(function (message) { return !messageProtocolMessage(message); });
-  if (!(typeof pendingSteerInputs === "function" && pendingSteerInputs().length) && !visibleMessages.length && !state.messageStartIndex && !state.liveStreamContent && !state.liveReasoning && !state.liveActivity && !(state.liveAgentRun && state.liveAgentRun.length)) {
+  if (!(typeof pendingChatInputs === "function" && pendingChatInputs().length) && !visibleMessages.length && !state.messageStartIndex && !state.liveStreamContent && !state.liveReasoning && !state.liveActivity && !(state.liveAgentRun && state.liveAgentRun.length)) {
     resetRenderedMessageUnits(box);
     box.appendChild(renderChatEmptyState());
+    chatScrollFollowing = true;
+    chatScrollPosition = box.scrollTop;
     renderAgentPlanDock();
     renderAgentApprovalDock();
     syncChatScroll(false, false);
@@ -779,8 +876,9 @@ function renderMessages(options) {
 
   renderAgentPlanDock();
   renderAgentApprovalDock();
-  if (options.preserveTop) {
+  if (options.preserveTop && !viewport.key) {
     box.scrollTop += box.scrollHeight - options.previousScrollHeight;
-  }
+    chatScrollPosition = box.scrollTop;
+  } else if (!shouldScroll) restoreMessageViewport(box, viewport);
   syncChatScroll(shouldScroll, false);
 }

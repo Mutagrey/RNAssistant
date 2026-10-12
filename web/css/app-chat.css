@@ -596,6 +596,7 @@
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
+  overflow-anchor: none;
   padding: 16px clamp(12px, 3vw, 24px) 24px;
 }
 
@@ -609,6 +610,8 @@
   color: var(--muted);
   cursor: pointer;
 }
+
+.messages:focus-visible { outline: 2px solid var(--focus-ring-tight); outline-offset: -2px; }
 
 .chat-history-more:hover {
   color: var(--text);
@@ -688,6 +691,48 @@
   color: inherit;
 }
 
+.inbox-message .inbox-heading, .inbox-actions, .inbox-pause {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.inbox-item-status, .inbox-files, .inbox-pause {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.inbox-message .inbox-pending-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.inbox-files { max-width: 100%; text-align: right; }
+.inbox-item-menu { position: relative; }
+.inbox-item-menu summary {
+  display: grid; place-items: center; width: 30px; height: 28px;
+  list-style: none; border-radius: 8px; color: var(--muted); cursor: pointer;
+}
+.inbox-item-menu summary::-webkit-details-marker { display: none; }
+.inbox-item-menu .inbox-actions {
+  position: absolute; right: 0; bottom: 100%; z-index: 5;
+  width: 200px; padding: 5px; border: 1px solid var(--border);
+  border-radius: 10px; background: var(--surface); box-shadow: 0 5px 18px #0002;
+}
+.inbox-item-menu .inbox-actions button { width: 100%; text-align: left; }
+.inbox-item-menu.opens-below .inbox-actions { bottom: auto; top: 100%; }
+.inbox-message button, .inbox-pause button {
+  min-height: 30px; padding: 5px 8px; border: 0; border-radius: 6px;
+  color: var(--text); background: transparent; font-size: 12px; cursor: pointer;
+}
+.inbox-message button:hover, .inbox-pause button:hover, .inbox-item-menu summary:hover { background: var(--secondary-bg); }
+.inbox-message button:focus-visible, .inbox-pause button:focus-visible, .inbox-item-menu summary:focus-visible {
+  outline: 2px solid var(--focus-ring-tight); outline-offset: 2px;
+}
+.inbox-message textarea {
+  width: min(100%, 600px); box-sizing: border-box; resize: vertical; min-height: 90px;
+  padding: 10px 14px; border: 1px solid var(--border); border-radius: 12px;
+  background: var(--user-message-bg); color: var(--user-message-text); font: inherit;
+}
+
 .message-attachments {
   display: flex;
   flex-wrap: wrap;
@@ -742,6 +787,8 @@
 .message.pending {
   opacity: 0.78;
 }
+
+.message.pending.inbox-message { opacity: 1; }
 
 
 

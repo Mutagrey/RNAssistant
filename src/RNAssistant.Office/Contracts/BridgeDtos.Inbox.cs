@@ -23,6 +23,8 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("epoch")] public string Epoch { get; set; }
         [JsonProperty("revision")] public long Revision { get; set; }
         [JsonProperty("items")] public List<ConversationInput> Items { get; set; }
+        [JsonProperty("acceptedInput", NullValueHandling = NullValueHandling.Ignore)]
+        public ConversationInput AcceptedInput { get; set; }
         [JsonProperty("paused")] public bool Paused { get; set; }
         [JsonProperty("pauseReason")] public string PauseReason { get; set; }
         [JsonProperty("phase")] public string Phase { get; set; }

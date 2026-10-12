@@ -103,7 +103,10 @@ namespace RNAssistant.Office
                 _chatResourceIngestion.DeleteDrafts(message);
             }
             StartInboxWorker(session, progress, changed);
-            return _inbox.Snapshot(session);
+            var response = _inbox.Snapshot(session);
+            // Intake can finish after the worker has already consumed this input.
+            response.AcceptedInput = _inbox.FindOperation(session, request.OperationId);
+            return response;
         }
 
         public ChatInboxResponse UpdateChatInput(UpdateChatInputPayload request, string action,

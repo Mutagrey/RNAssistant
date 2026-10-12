@@ -8,6 +8,22 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## Chat transcript review — 2026-10-12
+
+- **Open older-page refresh / web history + chat projection owners:** code inspection
+  shows full `getChatState`/push snapshots still carry the latest 80 messages. If a
+  reader has loaded earlier pages, such a snapshot can remove the visible anchor
+  even though streaming and prepend now preserve scrolling within the loaded
+  window. A separate change must refresh the requested revision-bound history
+  window; retaining an unverified prefix across edits/deletions is not sufficient.
+  Verify a growing run with more than 240 messages, reading an older page, concurrent
+  history edits and explicit return to latest. This is not established as the cause
+  of the reported incident.
+- **Open Windows evidence / typed inbox receipt + WebView presentation:** local
+  browser tests cover immediate pending bubbles, exact-ID acknowledgement handoff,
+  steer segment order, editor focus and free/follow scrolling. Controller receipt
+  delivery and real Office/WebView2 behavior still need Windows qualification.
+
 ## HTML resource links and short-source report — 2026-10-12
 
 - **Fixed host-neutral / ChatResourceReferenceService:** message re-linking removed

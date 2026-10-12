@@ -391,8 +391,13 @@ closure, final/approval races, durable FIFO editing, recovery and Stop behavior.
 `dotnet run --project demo/RNAssistant.MockDemo/RNAssistant.MockDemo.csproj -- --inbox-test`
 checks first-chat intake, two controllers sharing one data root, actual controller execution and materialized model context
 without Office. Run `node tests/web/chat-inbox.test.js` for UI acknowledgement,
-idempotent retry, chat isolation and queue controls. Manual browser layout checks
-are distinct from Windows/Office/WebView2 qualification.
+idempotent retry, consumed-before-ack receipts, draft preservation, chat isolation
+and queue controls. `node tests/web/live-run-projection.test.js` covers transcript
+order across applied steers. `node tests/web/chat-transcript-layout.test.js` uses
+the bundled Playwright (`NODE_PATH`, optional `BROWSER_EXECUTABLE` and
+`LAYOUT_SCREENSHOT`) to check narrow light/dark bubbles, safe full text, editor
+focus, manual/follow scrolling, deferred gestures and history anchoring.
+These browser checks are distinct from Windows/Office/WebView2 qualification.
 
 ## Test map
 

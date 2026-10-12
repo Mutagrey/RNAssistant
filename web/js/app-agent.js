@@ -480,7 +480,7 @@ function renderAgentRunArticle(run) {
   body.className = "agent-run-wrap";
   var process = document.createElement("div");
   process.className = "agent-run-actions" + (agentToolCallCount(timeline) ? " has-actions" : "");
-  var expanded = run.live || (runViewState && ["running", "awaiting_user", "awaiting_confirmation"].indexOf(runViewState.lifecycle) >= 0);
+  var expanded = !run.continued && (run.live || (runViewState && ["running", "awaiting_user", "awaiting_confirmation"].indexOf(runViewState.lifecycle) >= 0));
   if (expanded) {
     steps.forEach(function (step, stepIndex) {
       var section = document.createElement("section");
@@ -493,7 +493,7 @@ function renderAgentRunArticle(run) {
     appendAgentRunOverview(process, steps, timeline, stats);
   }
   if (process.childNodes.length) body.appendChild(process);
-  if (!run.live) appendAgentRunResult(body, runViewState, timeline, steps);
+  if (!run.live && !run.continued) appendAgentRunResult(body, runViewState, timeline, steps);
   // This warning is outside collapsed trace and never derived from the model's prose.
   if (!run.live) appendAgentRunViewState(body, runViewState, agentRunId(items, finalMessage));
   if (finalMessage) {
@@ -505,7 +505,7 @@ function renderAgentRunArticle(run) {
   if (!run.live && typeof appendAgentRunResourceCards === "function") {
     appendAgentRunResourceCards(body, items, finalMessage);
   }
-  if (!expanded && typeof appendRunChanges === "function") {
+  if (!expanded && !run.continued && typeof appendRunChanges === "function") {
     appendRunChanges(body, state.activeChatId, agentRunId(items, finalMessage));
   }
   node.appendChild(body);

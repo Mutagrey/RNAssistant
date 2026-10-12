@@ -228,8 +228,10 @@ async function jumpToLatestChatMessages() {
   try {
     var response = await loadChatState(chatIdValue);
     if (state.activeChatId === chatIdValue && state.chatNavigationVersion === navigationVersion &&
-        state.chatProjectionRevisions[chatIdValue] === revision)
+        state.chatProjectionRevisions[chatIdValue] === revision) {
       applyChatState(response);
+      if (typeof renderMessages === "function") renderMessages({ forceScroll: true });
+    }
   } catch (error) {
     log(error.detail || error.message, "error");
   }

@@ -10,14 +10,20 @@
   .composer-toolbar {
     align-items: center;
     flex-direction: row;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     gap: 6px;
   }
 
   .composer-quick-actions {
-    flex: 1 1 auto;
+    flex: 1 0 auto;
     flex-wrap: nowrap;
     gap: 2px;
+  }
+
+  .composer-actions {
+    flex-wrap: wrap;
+    max-width: 100%;
+    margin-left: auto;
   }
 
   .message.user .markdown,
@@ -179,7 +185,7 @@
   }
 
   .composer-quick-actions {
-    flex: 1 1 auto;
+    flex: 1 0 auto;
     gap: 2px;
   }
 

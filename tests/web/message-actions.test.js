@@ -29,6 +29,7 @@ const ctx = vm.createContext({
   pendingAgentApprovalActivity: () => approval,
   RNAssistantAgentApproval: { create: () => ({ pendingActivity: () => approval }) },
   messageId: m => m.Id, messageRole: m => m.Role, messageContent: m => m.Content,
+  messageRunId: m => m.RunId || "",
   messageActivity: () => null, messageRunViewState: () => null, messageProtocolMessage: () => false,
   canCollectAgentRunAt: () => false,
   smallIconButton: (title, icon, click) => Object.assign(new Element(), { title, click }),

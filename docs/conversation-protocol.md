@@ -1933,15 +1933,20 @@ Owner: `ConversationInboxService` accepts input and owns the FIFO queue;
 commands are `submitChatInput`, `getChatInbox`, `editChatInput`, `removeChatInput`,
 `steerChatInput`, `resumeChatInbox`, `stopChatInbox`, and `stageSelectionInput`. Intake acknowledges only a
 durable append. Operation IDs deduplicate uncertain retries; runtime allocates input
-and message identities. Queue edits compare the input revision.
+and message identities. The submit response also includes typed `acceptedInput`,
+correlated by `OperationId`, even if the worker has consumed it before acknowledgement.
+This receipt connects the transient UI echo to the exact history message without
+matching text. Queue edits compare the input revision.
 
 `RunningMessageDelivery` selects Steer (default) or Queue for Enter during a run;
 Shift+Enter inserts a newline. A composer menu overrides one submission. Input,
 files and document selection remain available, with a separate Stop button.
 During a run, selection is captured under the document read gate into an immutable
 attachment draft; upload staging does not reserve or mutate the running chat. Idle
-Enter starts an ordinary turn. Queue cards support text editing, removal and sending
-now without replacing the composer draft.
+Enter starts an ordinary turn. Pending user bubbles occupy the transcript tail in
+both delivery modes and support text editing, removal and sending now without
+replacing the composer draft. Intake errors keep the text and retry identity;
+successful acknowledgement clears only the submitted draft and attachments.
 
 Steer cancels only the current model-request token, never the tool/run token.
 The kernel discards late responses, retains charged iterations and completed tool

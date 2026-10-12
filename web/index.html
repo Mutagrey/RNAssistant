@@ -25,9 +25,9 @@
   <link rel="stylesheet" href="css/vendor/wunderbaum.css">
   <link rel="stylesheet" href="css/vendor/viewer.min.css">
   <link rel="stylesheet" href="css/app.css?v=accent-palette-20261012-2">
-  <link rel="stylesheet" href="css/app-chat.css?v=user-bubble-20261012-1">
+  <link rel="stylesheet" href="css/app-chat.css?v=user-bubble-20261012-1-transcript-20261012-1">
   <link rel="stylesheet" href="css/app-markdown.css?v=accent-chat-20261012-1">
-  <link rel="stylesheet" href="css/app-composer.css?v=accent-palette-20261012-2-attachment-input-1-awaiting-input-1">
+  <link rel="stylesheet" href="css/app-composer.css?v=accent-palette-20261012-2-attachment-input-1-awaiting-input-1-transcript-20261012-1">
   <link rel="stylesheet" href="css/app-reasoning.css?v=accent-chat-20261012-1">
   <link rel="stylesheet" href="css/app-context-chips.css?v=sidebar-polish-20260723-1">
   <link rel="stylesheet" href="css/app-models.css?v=model-tables-20260930-1">
@@ -47,7 +47,7 @@
   <link rel="stylesheet" href="css/app-artifacts.css?v=accent-chat-20261012-1">
   <link rel="stylesheet" href="css/app-tree-adapter.css?v=tree-adapter-20260829-1">
   <link rel="stylesheet" href="css/app-html-workspace.css?v=html-memory-20261002-1">
-  <link rel="stylesheet" href="css/app-responsive.css?v=library-layout-20260907-1">
+  <link rel="stylesheet" href="css/app-responsive.css?v=library-layout-20260907-1-composer-wrap-20261012-1">
   <link rel="stylesheet" href="css/app-agent.css?v=result-summary-20261012-1">
   <link rel="stylesheet" href="css/app-agent-data.css?v=json-height-20260929-1">
   <link rel="stylesheet" href="css/app-theme.css?v=user-bubble-20261012-2">
@@ -100,7 +100,7 @@
           <button type="button" class="link-button" id="openDocumentButton">Открыть файл</button>
         </div>
         <div class="chat-scroll-region">
-          <div class="messages" id="messages"></div>
+          <div class="messages" id="messages" role="region" aria-label="Сообщения чата" tabindex="0"></div>
           <button type="button" class="chat-scroll-button" id="chatScrollBottomButton" title="К последним сообщениям" aria-label="К последним сообщениям" aria-hidden="true" tabindex="-1">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>
           </button>
@@ -136,7 +136,6 @@
         </div>
         <div class="agent-approval-dock hidden" id="agentApprovalDock" aria-live="polite"></div>
         <form class="composer" id="chatForm">
-          <section id="chatInbox" class="chat-inbox" aria-label="Очередь сообщений" hidden></section>
           <span id="inboxAnnouncer" class="inbox-sr-only" aria-live="polite"></span>
           <span id="inboxStatus" class="inbox-status" role="status" aria-live="polite"></span>
           <div class="composer-reply-prompt" id="composerReplyPrompt" hidden>
@@ -1114,7 +1113,7 @@
   <script src="js/app-model-render.js?v=model-settings-20260930-1-panel-model-20261002-1"></script>
   <script src="js/app-models.js?v=ui-lazy-20260903-1-usage-20261002-1-panel-model-20261002-2-large-chat-1"></script>
   <script src="js/app-context-data.js"></script>
-  <script src="js/app-chat-state.js?v=office-chat-20260930-3-chat-paging-1-usage-20261002-1-inbox-20261002-1-large-chat-1"></script>
+  <script src="js/app-chat-state.js?v=office-chat-20260930-3-chat-paging-1-usage-20261002-1-inbox-20261002-1-large-chat-1-transcript-20261012-1"></script>
   <script src="js/app-resource-list.js?v=resource-navigation-20260826-1-library-20261002-1"></script>
   <script src="js/app-tools-structured.js?v=library-ux-20260903-1"></script>
   <script src="js/app-tools-actions.js?v=manual-tool-chat-20260908-1"></script>
@@ -1149,14 +1148,14 @@
   <script src="js/app-agent-activity.js?v=agent-continuity-20261002-1"></script>
   <script src="js/app-agent-approval.js?v=run-view-state-20260830-1"></script>
   <script src="js/app-run-changes.js?v=typed-step-results-20260908-1"></script>
-  <script src="js/app-agent.js?v=result-summary-20261012-1"></script>
-  <script src="js/app-messages.js?v=compact-chat-20261007-1"></script>
+  <script src="js/app-agent.js?v=result-summary-20261012-1-transcript-20261012-1"></script>
+  <script src="js/app-messages.js?v=compact-chat-20261007-1-transcript-20261012-1"></script>
   <script src="js/app-reasoning.js?v=chat-projection-20260907-1"></script>
   <script src="js/app-attachments.js?v=attachment-input-20261012-1"></script>
-  <script src="js/app-chat-session.js?v=closed-document-20261012-1"></script>
+  <script src="js/app-chat-session.js?v=closed-document-20261012-1-transcript-20261012-1"></script>
   <script src="js/app-chat-composer.js?v=multi-chat-20260902-1-navigation-20261002-1-panel-model-20261002-1-inbox-20261002-1-large-chat-1-awaiting-input-20261012-1"></script>
-  <script src="js/app-chat-inbox.js?v=inbox-1"></script>
-  <script src="js/app-chat-run.js?v=response-render-timing-20260928-1-usage-20261002-1-navigation-20261002-1-inbox-20261002-1-large-chat-1-run-isolation-1"></script>
+  <script src="js/app-chat-inbox.js?v=inbox-1-transcript-20261012-1"></script>
+  <script src="js/app-chat-run.js?v=response-render-timing-20260928-1-usage-20261002-1-navigation-20261002-1-inbox-20261002-1-large-chat-1-run-isolation-1-transcript-20261012-1"></script>
   <script src="js/app-chat.js?v=office-chat-20260930-3-navigation-20261002-1-panel-model-20261002-1-context-20261002-1-inbox-20261002-1-large-chat-1-awaiting-input-20261012-1"></script>
   <script src="js/app-chat-edit.js?v=chat-sync-20260903-1-usage-20261002-1"></script>
   <script src="js/app.js?v=artifact-catalog-20261002-1"></script>

@@ -290,15 +290,17 @@ function endChatRunTracking(chatId) {
   resetLiveReasoning();
 }
 
-function restoreActiveChatRun() {
+function restoreActiveChatRun(render) {
   var run = state.chatRuns[state.activeChatId];
   state.liveAgentRun = run && run.activities ? run.activities : null;
   state.liveStreamContent = run && run.stream ? run.stream : null;
   state.liveReasoning = run && run.reasoning ? run.reasoning : "";
   state.liveReasoningComplete = !!(run && run.reasoningComplete);
   state.liveActivity = state.liveAgentRun && state.liveAgentRun.length ? state.liveAgentRun[state.liveAgentRun.length - 1] : null;
-  renderMessages();
-  renderSendControls();
+  if (render !== false) {
+    renderMessages();
+    renderSendControls();
+  }
 }
 
 async function confirmAgentTool(pendingId) {
