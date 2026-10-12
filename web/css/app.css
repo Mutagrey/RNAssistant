@@ -6,8 +6,6 @@
   --muted: #6b7482;
   --line: #e2e7ef;
   --line-strong: #cbd3df;
-  --accent: #2563eb;
-  --accent-strong: #1d4ed8;
   --danger: #b42318;
   --success: #16835d;
   --code: #f6f8fb;
@@ -26,16 +24,9 @@
   --button-border: #d9e0ea;
   --button-border-hover: #cbd5e1;
   --button-text: #243044;
-  --button-primary-bg: var(--accent);
-  --button-primary-bg-hover: var(--accent-strong);
-  --button-accent-bg: #eaf2ff;
-  --button-accent-bg-hover: #dbeafe;
-  --button-accent-border: #bad0fb;
   --button-danger-bg-hover: #8f1d13;
   --button-danger-soft-bg: #fff8f7;
   --button-danger-soft-bg-hover: #fff1ef;
-  --focus-ring: rgba(37, 99, 235, 0.18);
-  --focus-ring-tight: rgba(37, 99, 235, 0.14);
   --section-line: rgba(226, 231, 239, 0.72);
   --actionbar-bg: linear-gradient(180deg, rgba(246, 247, 249, 0.88), var(--bg) 42%);
   --button-font-weight: 450;
@@ -140,14 +131,14 @@ button.primary,
 .icon-text-button.primary {
   border-color: var(--button-primary-bg);
   background: var(--button-primary-bg);
-  color: #fff;
+  color: var(--button-primary-text);
 }
 
 button.primary:hover,
 .icon-text-button.primary:hover {
   border-color: var(--button-primary-bg-hover);
   background: var(--button-primary-bg-hover);
-  color: #fff;
+  color: var(--button-primary-text);
 }
 
 button.accent-soft {
@@ -157,9 +148,9 @@ button.accent-soft {
 }
 
 button.accent-soft:hover {
-  border-color: #9fbbf6;
+  border-color: var(--button-accent-border);
   background: var(--button-accent-bg-hover);
-  color: #173ea5;
+  color: var(--accent-strong);
 }
 
 button.danger {
@@ -1004,7 +995,7 @@ button.composer-icon-button.is-busy svg {
 }
 
 .rn-code-editor .CodeMirror-activeline-background {
-  background: rgba(37, 99, 235, 0.06);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
 }
 
 .rn-code-editor.cm-readonly {

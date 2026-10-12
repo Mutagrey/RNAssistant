@@ -16,6 +16,13 @@
   margin-bottom: 0;
 }
 
+.markdown-raw-html {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
+  font-size: .9em;
+}
+
 .markdown pre {
   margin: 8px 0;
   padding: 0;

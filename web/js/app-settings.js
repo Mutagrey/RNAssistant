@@ -61,7 +61,43 @@ function applyUiTheme(settings, persist) {
       // WebView storage may be unavailable while its profile is being reset.
     }
   }
+  if (window.RNAssistantAccents) {
+    window.RNAssistantAccents.apply(document.documentElement.getAttribute("data-accent"), false);
+  }
   return theme;
+}
+
+function renderUiAccentChoices(selected) {
+  var host = $("uiAccentChoices");
+  if (!host || !window.RNAssistantAccents) return;
+  if (!host.firstChild) {
+    window.RNAssistantAccents.choices.forEach(function (choice) {
+      var label = document.createElement("label");
+      label.className = "accent-choice";
+      var input = document.createElement("input");
+      input.type = "radio";
+      input.name = "uiAccent";
+      input.value = choice.id;
+      var swatch = document.createElement("span");
+      swatch.className = "accent-choice-swatch";
+      swatch.style.setProperty("--swatch", choice.swatch);
+      var text = document.createElement("span");
+      label.appendChild(input);
+      label.appendChild(swatch);
+      label.appendChild(text);
+      host.appendChild(label);
+    });
+  }
+  var isDark = document.documentElement.getAttribute("data-theme") === "dark";
+  Array.prototype.slice.call(host.querySelectorAll(".accent-choice")).forEach(function (label, index) {
+    var choice = window.RNAssistantAccents.choices[index];
+    var name = isDark ? choice.label : (choice.lightLabel || choice.label);
+    label.querySelector("input").setAttribute("aria-label", name);
+    label.lastChild.textContent = name;
+  });
+  Array.prototype.slice.call(host.querySelectorAll('input[name="uiAccent"]')).forEach(function (input) {
+    input.checked = input.value === selected;
+  });
 }
 
 function updateReasoningCustomJsonVisibility() {
@@ -190,6 +226,8 @@ function renderSettings() {
   var s = state.settings || {};
   applyUiFontScale(s);
   var uiTheme = applyUiTheme(s);
+  var uiAccent = window.RNAssistantAccents.apply(s.UiAccent || s.uiAccent);
+  renderUiAccentChoices(uiAccent);
   if ($("runningMessageDelivery")) $("runningMessageDelivery").value = String(s.RunningMessageDelivery || "Steer").toLowerCase() === "queue" ? "Queue" : "Steer";
   var appVersion = $("appVersion");
   if (appVersion) {
@@ -293,6 +331,7 @@ function readSettings() {
     DesktopWindowWidth: Number($("desktopWindowWidthInput").value || 1600),
     RunningMessageDelivery: $("runningMessageDelivery") ? $("runningMessageDelivery").value : "Steer",
     UiTheme: normalizeUiTheme((document.querySelector('input[name="uiTheme"]:checked') || {}).value),
+    UiAccent: window.RNAssistantAccents.normalize((document.querySelector('input[name="uiAccent"]:checked') || {}).value),
     ContextWindowOverrideTokens: Number($("contextLimitInput").value || 0),
     AttachmentHelperMaxTokens: Math.max(0, Math.floor(Number($("attachmentHelperMaxTokensInput").value || 0))),
     AttachmentEvidenceMaxTokens: Math.max(0, Math.floor(Number($("attachmentEvidenceMaxTokensInput").value || 0))),
@@ -491,8 +530,16 @@ function bindSettingsActions() {
     input.addEventListener("change", function () {
       if (input.checked) {
         applyUiTheme({ UiTheme: input.value }, false);
+        renderUiAccentChoices(document.documentElement.getAttribute("data-accent"));
       }
     });
+  });
+
+  $("uiAccentChoices").addEventListener("change", function (event) {
+    if (event.target && event.target.name === "uiAccent") {
+      window.RNAssistantAccents.apply(event.target.value, false);
+      markSettingsDirty();
+    }
   });
 
   Array.prototype.slice.call(document.querySelectorAll("#tab-settings input, #tab-settings textarea, #tab-settings select")).forEach(function (control) {

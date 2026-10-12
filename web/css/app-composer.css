@@ -798,8 +798,8 @@
 }
 
 .model-connection-indicator.is-active i {
-  background: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, .12);
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus-ring-tight);
 }
 
 .model-connection-indicator.is-slow {
@@ -879,14 +879,14 @@
 }
 
 .composer-send-button {
-  background: var(--accent);
-  color: #fff;
+  background: var(--button-primary-bg);
+  color: var(--button-primary-text);
 }
 
 .composer-send-button:hover:not(:disabled) {
   border: 0;
-  background: var(--accent-strong);
-  color: #fff;
+  background: var(--button-primary-bg-hover);
+  color: var(--button-primary-text);
   transform: translateY(-1px);
 }
 
@@ -1066,12 +1066,13 @@
 .inbox-card textarea { width: 100%; box-sizing: border-box; resize: vertical; margin: 6px 0; background: var(--composer-surface); color: var(--composer-text); border: 1px solid var(--composer-divider); border-radius: 5px; padding: 6px; }
 .inbox-status { color: var(--composer-muted); font-size: 11px; }
 .inbox-status:empty { display: none; }
-.send-delivery-menu { position: relative; margin-left: auto; }
-.send-delivery-menu summary { list-style: none; cursor: pointer; padding: 6px; border-radius: 6px; color: var(--composer-muted); }
+.send-delivery-menu { position: relative; flex: 0 0 32px; margin-left: auto; }
+.send-delivery-menu summary { display: grid; width: 32px; height: 32px; place-items: center; list-style: none; cursor: pointer; border-radius: 50%; color: var(--composer-muted); }
+.send-delivery-menu summary svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .send-delivery-menu summary::-webkit-details-marker { display: none; }
-.send-delivery-menu summary:hover { background: var(--composer-control-hover); }
+.send-delivery-menu summary:hover, .send-delivery-menu[open] summary { background: var(--composer-control-hover); color: var(--composer-text); }
 .send-delivery-options { position: absolute; z-index: 30; right: 0; bottom: calc(100% + 10px); width: min(230px, 70vw); padding: 5px; border: 1px solid var(--composer-divider); border-radius: 10px; background: var(--composer-surface); box-shadow: var(--composer-shadow); }
-.send-delivery-options button { display: block; text-align: left; width: 100%; border: 0; border-radius: 6px; background: transparent; color: var(--composer-text); padding: 9px; cursor: pointer; }
+.send-delivery-options button { display: block; text-align: left; width: 100%; min-height: 46px; border: 0; border-radius: 6px; background: transparent; color: var(--composer-text); padding: 8px 10px; cursor: pointer; }
 .send-delivery-options button:hover { background: var(--composer-control-hover); }
 .send-delivery-options strong, .send-delivery-options span { display: block; font-size: 12px; }
 .send-delivery-options span { color: var(--composer-muted); font-size: 11px; margin-top: 3px; }

@@ -1,6 +1,20 @@
 (function () {
+  function escapeHtml(text) {
+    return String(text || "").replace(/&/g, "&amp;").replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+
+  var transcriptRenderer = new marked.Renderer();
+  transcriptRenderer.html = function (raw, block) {
+    var escaped = escapeHtml(raw);
+    return block ? '<div class="markdown-raw-html">' + escaped + '</div>' : escaped;
+  };
+
   window.markdown = function (text, options) {
-    return DOMPurify.sanitize(marked.parse(text || "", { breaks: !!(options && options.preserveLineBreaks) }));
+    return DOMPurify.sanitize(marked.parse(text || "", {
+      breaks: !!(options && options.preserveLineBreaks),
+      renderer: transcriptRenderer
+    }));
   };
 
   function renderLatex(root) {

@@ -17,17 +17,18 @@
       document.documentElement.style.colorScheme = theme;
     }());
   </script>
+  <script src="js/app-accent.js?v=accent-palette-20261012-2"></script>
   <link rel="stylesheet" href="css/vendor/katex.min.css">
   <link rel="stylesheet" href="css/vendor/highlight-github-dark.min.css">
   <link rel="stylesheet" href="css/vendor/codemirror/codemirror.min.css">
   <link rel="stylesheet" href="css/vendor/codemirror/addon/hint/show-hint.min.css">
   <link rel="stylesheet" href="css/vendor/wunderbaum.css">
   <link rel="stylesheet" href="css/vendor/viewer.min.css">
-  <link rel="stylesheet" href="css/app.css?v=json-surfaces-20260829-1">
-  <link rel="stylesheet" href="css/app-chat.css?v=compact-chat-20261007-1">
-  <link rel="stylesheet" href="css/app-markdown.css?v=json-height-20260929-1">
-  <link rel="stylesheet" href="css/app-composer.css?v=composer-polish-20260826-1-inbox-20261002-1">
-  <link rel="stylesheet" href="css/app-reasoning.css?v=compact-chat-20261007-1">
+  <link rel="stylesheet" href="css/app.css?v=accent-palette-20261012-2">
+  <link rel="stylesheet" href="css/app-chat.css?v=accent-chat-20261012-1">
+  <link rel="stylesheet" href="css/app-markdown.css?v=accent-chat-20261012-1">
+  <link rel="stylesheet" href="css/app-composer.css?v=accent-palette-20261012-2">
+  <link rel="stylesheet" href="css/app-reasoning.css?v=accent-chat-20261012-1">
   <link rel="stylesheet" href="css/app-context-chips.css?v=sidebar-polish-20260723-1">
   <link rel="stylesheet" href="css/app-models.css?v=model-tables-20260930-1">
   <link rel="stylesheet" href="css/app-workspace.css?v=diagnostics-clarity-20260930-1">
@@ -38,18 +39,18 @@
   <link rel="stylesheet" href="css/app-trajectory.css?v=diagnostics-clarity-20260930-1">
   <link rel="stylesheet" href="css/app-run-journal.css?v=json-height-20260929-1">
   <link rel="stylesheet" href="css/app-tools.css?v=json-height-20260929-1-library-20261002-1">
-  <link rel="stylesheet" href="css/app-vba.css?v=json-height-20260929-1">
+  <link rel="stylesheet" href="css/app-vba.css?v=accent-palette-20261012-2">
   <link rel="stylesheet" href="css/app-context-panel.css?v=json-height-20260929-1">
   <link rel="stylesheet" href="css/app-model-context.css?v=model-context-20261002-1">
   <link rel="stylesheet" href="css/app-context-inspector.css?v=json-height-20260929-1-usage-20261002-1">
   <link rel="stylesheet" href="css/app-chart-artifacts.css?v=chatui-20260622-3">
-  <link rel="stylesheet" href="css/app-artifacts.css?v=compact-chat-20261007-1">
+  <link rel="stylesheet" href="css/app-artifacts.css?v=accent-chat-20261012-1">
   <link rel="stylesheet" href="css/app-tree-adapter.css?v=tree-adapter-20260829-1">
   <link rel="stylesheet" href="css/app-html-workspace.css?v=html-memory-20261002-1">
   <link rel="stylesheet" href="css/app-responsive.css?v=library-layout-20260907-1">
-  <link rel="stylesheet" href="css/app-agent.css?v=compact-chat-20261007-1">
+  <link rel="stylesheet" href="css/app-agent.css?v=accent-palette-20261012-2">
   <link rel="stylesheet" href="css/app-agent-data.css?v=json-height-20260929-1">
-  <link rel="stylesheet" href="css/app-theme.css?v=compact-chat-20261007-1">
+  <link rel="stylesheet" href="css/app-theme.css?v=accent-palette-20261012-2">
 </head>
 <body>
   <div class="shell">
@@ -223,7 +224,7 @@
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6"/><path d="M10 21h4"/><path d="M8.4 14.7A6 6 0 1 1 15.6 14.7c-.9.7-1.4 1.6-1.6 2.3h-4c-.2-.7-.7-1.6-1.6-2.3Z"/><path d="M12 1V0"/><path d="m4.9 4.9-.8-.8"/><path d="m19.9 4.1-.8.8"/></svg>
               </button>
               <details class="send-delivery-menu" id="sendDeliveryMenu">
-                <summary title="Способ отправки" aria-label="Выбрать способ отправки">⌄</summary>
+                <summary title="Способ отправки" aria-label="Выбрать способ отправки"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
                 <div class="send-delivery-options">
                   <button type="button" id="sendSteerButton" aria-label="Отправить сразу — уточнить текущую задачу"><strong>Отправить сразу</strong><span>Уточнить текущую задачу</span></button>
                   <button type="button" id="sendQueueButton" aria-label="В очередь — после текущего ответа"><strong>В очередь</strong><span>После текущего ответа</span></button>
@@ -865,12 +866,15 @@
                 <label class="checkline"><input id="smartChatTitlesInput" type="checkbox"><span>Умные названия чатов</span></label>
               </div>
               <div class="setting-note">Для окон Desktop и Native CLI; встроенные VSTO-панели не меняются. Ширина применяется после сохранения, в развёрнутом окне — после возврата к обычному размеру.</div>
-              <label class="field-label" for="runningMessageDelivery">Сообщения во время работы агента</label>
-              <select id="runningMessageDelivery">
-                <option value="Steer">Отправлять сразу</option>
-                <option value="Queue">Добавлять в очередь</option>
-              </select>
-              <div class="setting-note">Действие Enter. Меню возле отправки позволяет разово выбрать другой способ. Shift+Enter — новая строка.</div>
+              <div class="form-grid two-columns">
+                <label><span>Сообщения во время работы агента</span>
+                  <select id="runningMessageDelivery">
+                    <option value="Steer">Отправлять сразу</option>
+                    <option value="Queue">Добавлять в очередь</option>
+                  </select>
+                  <small>Действие Enter. Меню возле отправки позволяет разово выбрать другой способ. Shift+Enter — новая строка.</small>
+                </label>
+              </div>
               <div class="settings-subheading">
                 <h3>Тема</h3>
                 <p>Цветовая схема всего интерфейса и рабочих областей.</p>
@@ -899,6 +903,11 @@
                   </span>
                 </label>
               </div>
+              <div class="settings-subheading">
+                <h3>Акцентный цвет</h3>
+                <p>Цвет кнопок, выделения и элементов управления во всём интерфейсе.</p>
+              </div>
+              <div class="accent-choice-grid" id="uiAccentChoices" role="radiogroup" aria-label="Акцентный цвет"></div>
               <div class="setting-note">HTML preview и его скрипты всегда доступны в sandboxed iframe.</div>
             </section>
 
@@ -1076,8 +1085,8 @@
   <script src="js/app-layout.js"></script>
   <script src="js/app-vba-completion.js?v=vba-completion-20260903-1"></script>
   <script src="js/app-editors.js?v=html-memory-20261002-1"></script>
-  <script src="js/app-markdown.js?v=chat-message-cleanup-20260908-1"></script>
-  <script src="js/app-settings.js?v=desktop-width-20260930-1-usage-20261002-1-library-20261002-1-panel-model-20261002-1-inbox-20261002-1"></script>
+  <script src="js/app-markdown.js?v=accent-chat-20261012-1"></script>
+  <script src="js/app-settings.js?v=accent-palette-20261012-2"></script>
   <script src="js/app-logs.js?v=diagnostics-clarity-20260930-1"></script>
   <script src="js/app-diagnostics.js?v=diagnostics-clarity-20260930-1"></script>
   <script src="js/app-viewer-registry.js?v=artifact-preview-20260902-2"></script>
@@ -1132,7 +1141,7 @@
   <script src="js/app-agent-activity.js?v=agent-continuity-20261002-1"></script>
   <script src="js/app-agent-approval.js?v=run-view-state-20260830-1"></script>
   <script src="js/app-run-changes.js?v=typed-step-results-20260908-1"></script>
-  <script src="js/app-agent.js?v=compact-chat-20261007-1"></script>
+  <script src="js/app-agent.js?v=accent-chat-20261012-1"></script>
   <script src="js/app-messages.js?v=compact-chat-20261007-1"></script>
   <script src="js/app-reasoning.js?v=chat-projection-20260907-1"></script>
   <script src="js/app-attachments.js?v=vba-upload-20260906-1-inbox-20261002-1"></script>

@@ -70,6 +70,34 @@ namespace RNAssistant.Core.Models
         }
     }
 
+    public static class UiAccents
+    {
+        public const string Blue = "blue";
+        public const string Turquoise = "turquoise";
+        public const string Green = "green";
+        public const string Lime = "lime";
+        public const string Yellow = "yellow";
+        public const string Orange = "orange";
+        public const string Pink = "pink";
+        public const string Magenta = "magenta";
+        public const string Violet = "violet";
+        public const string White = "white";
+
+        public static string Normalize(string value)
+        {
+            if (string.Equals(value, Turquoise, StringComparison.OrdinalIgnoreCase)) return Turquoise;
+            if (string.Equals(value, Green, StringComparison.OrdinalIgnoreCase)) return Green;
+            if (string.Equals(value, Lime, StringComparison.OrdinalIgnoreCase)) return Lime;
+            if (string.Equals(value, Yellow, StringComparison.OrdinalIgnoreCase)) return Yellow;
+            if (string.Equals(value, Orange, StringComparison.OrdinalIgnoreCase)) return Orange;
+            if (string.Equals(value, Pink, StringComparison.OrdinalIgnoreCase)) return Pink;
+            if (string.Equals(value, Magenta, StringComparison.OrdinalIgnoreCase)) return Magenta;
+            if (string.Equals(value, Violet, StringComparison.OrdinalIgnoreCase)) return Violet;
+            if (string.Equals(value, White, StringComparison.OrdinalIgnoreCase)) return White;
+            return Blue;
+        }
+    }
+
     public static class HistoryIntegrityModes
     {
         public const string Sha256 = "sha256";
@@ -318,6 +346,7 @@ namespace RNAssistant.Core.Models
         public bool ScreenCaptureProtectionEnabled { get; set; }
         public double UiFontScale { get; set; }
         public string UiTheme { get; set; }
+        public string UiAccent { get; set; }
         public InputDelivery RunningMessageDelivery { get; set; } = InputDelivery.Steer;
         // Shared by the separate Desktop and NativeHostCli windows.
         public int DesktopWindowWidth { get; set; }
@@ -391,6 +420,7 @@ namespace RNAssistant.Core.Models
             ScreenCaptureProtectionEnabled = true;
             UiFontScale = 1.0;
             UiTheme = UiThemes.Light;
+            UiAccent = UiAccents.Blue;
             DesktopWindowWidth = DefaultDesktopWindowWidth;
             CustomHeaders = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             ModelImageSupportOverrides = new Dictionary<string, bool?>(StringComparer.OrdinalIgnoreCase);

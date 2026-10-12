@@ -129,7 +129,7 @@ ctx.resetRenderedMessageUnits(box);
 assert.equal(ctx.buildMessageUnits().length, 2, "saved progress and terminal diagnostic belong to one run");
 render();
 assert.equal(walk(box).filter(n => n.classList.contains("agent-run")).length, 1);
-assert.equal(walk(box).filter(n => n.classList.contains("agent-run-result")).length, 1);
+assert.equal(walk(box).filter(n => n.classList.contains("agent-result-card")).length, 1);
 assert.match(box.textContent, /Ошибка выполнения/);
 assert.match(box.textContent, /Модель повторила описание прогресса/);
 assert.equal(walk(box).filter(n => n.classList.contains("status-running")).length, 0,

@@ -59,7 +59,7 @@ const context = vm.createContext({
   navigator: { clipboard: { writeText(text) { copied.push(String(text)); return Promise.resolve(); } } },
   state: { highlightRetryAttempts: 0, highlightRetryScheduled: false, highlightLoadLogged: false },
   DOMPurify: { sanitize: text => text },
-  marked: { parse: text => text },
+  marked: { Renderer: class {}, parse: text => text },
   logOnce() {},
   setTimeout() { return 1; }
 });

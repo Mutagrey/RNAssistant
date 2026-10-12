@@ -19,7 +19,7 @@
 
 li.CodeMirror-hint-active {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-on);
 }
 
 .rn-vba-hint-keyword {

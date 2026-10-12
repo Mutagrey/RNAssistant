@@ -1,3 +1,41 @@
+.accent-choice-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.accent-choice {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.accent-choice:hover { border-color: var(--line-strong); }
+.accent-choice:has(input:checked) { border-color: var(--accent); background: var(--button-accent-bg); }
+.accent-choice:has(input:focus-visible) { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.accent-choice input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.accent-choice-swatch { width: 18px; height: 18px; border-radius: 50%; background: var(--swatch); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .18); }
+
+:root {
+  --accent-strong: color-mix(in srgb, var(--accent) 72%, #122236);
+  --button-primary-bg: color-mix(in srgb, var(--accent) 72%, #162c44);
+  --button-primary-bg-hover: color-mix(in srgb, var(--accent) 62%, #162c44);
+  --button-accent-bg: color-mix(in srgb, var(--accent) 10%, var(--panel));
+  --button-accent-bg-hover: color-mix(in srgb, var(--accent) 17%, var(--panel));
+  --button-accent-border: color-mix(in srgb, var(--accent) 34%, var(--line));
+  --focus-ring: color-mix(in srgb, var(--accent) 24%, transparent);
+  --focus-ring-tight: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
 .theme-choice-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -66,7 +104,7 @@
 .theme-choice > input:checked + .theme-choice-card .theme-choice-check {
   border-color: var(--accent);
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-on);
 }
 
 .theme-choice-copy {
@@ -103,7 +141,7 @@
   --theme-preview-side: #eef2f6;
   --theme-preview-line: #d8e0eb;
   --theme-preview-row: #dce5f0;
-  --theme-preview-active: #c8d9f7;
+  --theme-preview-active: color-mix(in srgb, var(--accent) 28%, #fff);
   --theme-preview-composer: #fff;
 }
 
@@ -112,7 +150,7 @@
   --theme-preview-side: #191d24;
   --theme-preview-line: #333a45;
   --theme-preview-row: #333a45;
-  --theme-preview-active: #315185;
+  --theme-preview-active: color-mix(in srgb, var(--accent) 38%, #252b34);
   --theme-preview-composer: #252b34;
 }
 
@@ -180,8 +218,7 @@ html[data-theme="dark"] {
   --muted: #9aa3b1;
   --line: #2c323c;
   --line-strong: #3b4451;
-  --accent: #6d9fff;
-  --accent-strong: #8bb4ff;
+  --accent-strong: color-mix(in srgb, var(--accent) 78%, #fff);
   --danger: #ff7b72;
   --success: #4ac79a;
   --code: #14181e;
@@ -197,16 +234,16 @@ html[data-theme="dark"] {
   --button-border: #343c48;
   --button-border-hover: #485463;
   --button-text: #e1e6ed;
-  --button-primary-bg: #4f7ed8;
-  --button-primary-bg-hover: #628fe5;
-  --button-accent-bg: #1d3152;
-  --button-accent-bg-hover: #263e65;
-  --button-accent-border: #365b91;
+  --button-primary-bg: color-mix(in srgb, var(--accent) 72%, #10243a);
+  --button-primary-bg-hover: color-mix(in srgb, var(--accent) 82%, #10243a);
+  --button-accent-bg: color-mix(in srgb, var(--accent) 17%, var(--panel));
+  --button-accent-bg-hover: color-mix(in srgb, var(--accent) 24%, var(--panel));
+  --button-accent-border: color-mix(in srgb, var(--accent) 37%, var(--line));
   --button-danger-bg-hover: #d95f57;
   --button-danger-soft-bg: #322022;
   --button-danger-soft-bg-hover: #43272a;
-  --focus-ring: rgba(109, 159, 255, .26);
-  --focus-ring-tight: rgba(109, 159, 255, .2);
+  --focus-ring: color-mix(in srgb, var(--accent) 26%, transparent);
+  --focus-ring-tight: color-mix(in srgb, var(--accent) 20%, transparent);
   --section-line: rgba(53, 61, 73, .78);
   --actionbar-bg: linear-gradient(180deg, rgba(16, 18, 22, .76), var(--bg) 42%);
   --scrollbar-thumb: rgba(141, 154, 173, .38);
@@ -440,8 +477,8 @@ html[data-theme="dark"] .chat-scroll-button {
 
 html[data-theme="dark"] .chat-scroll-button:hover,
 html[data-theme="dark"] .chat-empty-suggestion:hover {
-  border-color: #4a6da7;
-  background: #203250;
+  border-color: var(--button-accent-border);
+  background: var(--button-accent-bg-hover);
   color: var(--accent-strong);
 }
 
@@ -473,8 +510,8 @@ html[data-theme="dark"] .context-chip {
 html[data-theme="dark"] .context-chip:hover,
 html[data-theme="dark"] .context-chip:focus-within,
 html[data-theme="dark"] .context-chip-remove:hover {
-  border-color: #48648d;
-  background: #242d39;
+  border-color: var(--button-accent-border);
+  background: var(--button-accent-bg-hover);
 }
 
 html[data-theme="dark"] .context-popover {
