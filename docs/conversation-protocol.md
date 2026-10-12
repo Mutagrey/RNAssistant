@@ -528,8 +528,13 @@ or `ChangeRequired`). Identical failed calls stay blocked until their declared
 recovery is satisfied; repeated ignored recovery is bounded by the existing
 kernel progress guard. `RetryLater` allows its existing bounded retry attempts.
 The model chooses the next semantic action; runtime never automatically replays a
-tool. `RefreshRequired` can be satisfied by an exact complete target read or
-matching resource effect. `ChangeRequired` instead pins up to 32 failed dependency
+tool. `Replan` normally requires corrected arguments. A domain owner may attach
+the exact logical `ResourceIdentity` whose state caused a validation refusal,
+including an absent state without a revision. Only a subsequent `VerifiedChanged`
+or `Restored` effect impacting that identity permits the same call again; a read,
+unrelated change, no-op or unknown effect does not. `RefreshRequired` can be
+satisfied by an exact complete target read or matching resource effect.
+`ChangeRequired` instead pins up to 32 failed dependency
 versions and requires a verified exact whole-resource before/after change on one
 of them, ending at a different revision. Fresh reads, unrelated/no-change writes
 and unknown effects cannot clear it. The same predicate is used by kernel replay
@@ -1205,7 +1210,9 @@ a recovery route. Chat-local Task List and Plan mutations classify model-correct
 pre-dispatch validation/state refusals as `RejectedNoEffect/Replan`; missing session
 is non-retryable, while a successful mutation returned without its required dispatch
 boundary is a `ToolDefect`. Their legacy `retryable` field is not interpreted as a
-transient retry signal.
+transient retry signal. Task List state refusals name the conversation's exact logical
+list identity: creating or updating that list can satisfy recovery, even when no list
+existed at refusal. Malformed input still requires corrected arguments.
 Tool-authoring validation owns the same decision in `ToolAuthoringOutcome`: invalid
 schema/manifest/package input is `RejectedNoEffect/Replan`, unavailable authoring
 storage is `ToolDefect`, and preparation/execution projections preserve that contract.
@@ -1677,8 +1684,10 @@ Prompt Context Inspector должен показывать именно эту �
 kernel не разбирает Excel/VBA/HTML JSON самостоятельно.
 
 - `Replan`: тот же semantic request с той же причиной отказа не dispatch заново;
-  вернуть исходное объяснение и допустимое исправление аргументов. Для фото это
-  удаление `path`, а не ещё один поиск или перезапись источника.
+  вернуть исходное объяснение и допустимое исправление аргументов. Если owner
+  объявил зависимость от exact logical resource identity, подтверждённое изменение
+  этого состояния разрешает новый явный вызов. Чтение и посторонняя запись отказ
+  не снимают. Для фото с недопустимым `path` требуется исправить аргументы.
 - `RefreshRequired`: повтор того же отказавшего запроса требует подходящей
   complete observation, а не любого успешного read или изменения JSON-порядка.
   Другой способ работы остаётся доступен; его допустимость проверяет domain owner.

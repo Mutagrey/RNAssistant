@@ -246,6 +246,7 @@ smoke confirms that this metadata does not grant overwrite authority.
 and Agent/native-tool transport: save/reorder/progress/notes/block/close, invalid
 index atomicity, process restart and pinned current context, journal/publication
 read-back, crash before dispatch and after publication, unknown effect denial,
+retry after a verified change of the refused list's exact logical state,
 identity-free model results and no credit toward file-write acceptance. It uses
 scripted HTTP, not real-model qualification.
 `python3 -B tests/cli/plan_document_smoke.py` verifies shared Markdown Plans with

@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Agent;
+using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office;
@@ -14,6 +16,34 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void TaskListRetriesAfterStateRepair()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) => {
+                var close = new JObject { ["action"] = "close", ["outcome"] = "completed" };
+                var responses = new Queue<string>(new[] {
+                    V4Envelope(V4Call("common.capabilities_read", new JObject { ["id"] = TaskListToolCatalog.SetToolId })),
+                    V4Envelope(V4Call(TaskListToolCatalog.SetToolId, close)),
+                    V4Envelope(V4Call(TaskListToolCatalog.SetToolId, new JObject {
+                        ["action"] = "save", ["goal"] = "Track the outcome",
+                        ["steps"] = new JArray(new JObject { ["text"] = "Review", ["status"] = "completed" }) })),
+                    V4Envelope(V4Call(TaskListToolCatalog.SetToolId, close)),
+                    V4Envelope()
+                });
+                var session = NewSession(adapter);
+                var result = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
+                    Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() }))
+                    .ExecuteAsync(ChatModes.Agent, "Record the completed review.", session, NewContext(adapter), new AppSettings(),
+                        OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null)
+                    .GetAwaiter().GetResult();
+                AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "corrected Task List turn completes");
+                AssertEqual(2, result.RunViewState.VerifiedWrites, "save and retried close both execute with verified effects");
+                AssertEqual(1, result.RunViewState.FailedCalls, "the original missing-list refusal stays visible");
+                AssertTrue(string.IsNullOrEmpty(session.ActiveTaskListArtifactId), "identical close succeeds after creation");
+                AssertEqual(2, session.Artifacts.Count(item => item.Kind == ChatArtifactKinds.TaskList),
+                    "only the requested save and close append revisions");
+            });
+        }
+
         private static void TaskListCrudCreatesRevisionsAndClosesCleanly()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)

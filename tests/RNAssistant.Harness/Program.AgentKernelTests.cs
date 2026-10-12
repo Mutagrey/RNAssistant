@@ -9,6 +9,7 @@ using RNAssistant.Core.Agent;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
+using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Harness
@@ -154,31 +155,37 @@ namespace RNAssistant.Harness
 
         private static async Task KernelAllowsFailedCallAfterInterveningSuccess()
         {
-            const string close = "{\"action\":\"close\",\"outcome\":\"completed\"}";
-            const string save = "{\"action\":\"save\",\"steps\":[{\"text\":\"Draw\",\"status\":\"completed\"}]}";
-            var f = new KernelFixture(
-                KernelResponse(KernelCall("write", close)),
-                KernelResponse(KernelCall("write", save)),
-                KernelResponse(KernelCall("write", close)),
-                KernelResponse());
-            var outcomes = new Queue<ToolExecutionOutcome>(new[]
+            var target = new ResourceIdentity(ResourceUri.Create("state", "conversation", "fixture", "task-list"));
+            var other = new ResourceIdentity(ResourceUri.Create("state", "conversation", "other", "task-list"));
+            foreach (var changed in new[] { other, target })
+            foreach (var firstOutcome in new[] { ToolExecutionOutcome.Error, ToolExecutionOutcome.Unknown })
             {
-                ToolExecutionOutcome.Error,
-                ToolExecutionOutcome.Ok,
-                ToolExecutionOutcome.Ok
-            });
-            f.Tools.OnExecute = (context, token) => Task.FromResult(
-                KernelRecord(context, outcomes.Dequeue(), resourceEffect: context.Call.ArgumentsJson == save
-                    ? new ResourceEffect("saved", context.Call.Id, ResourceEffectOutcome.VerifiedChanged) : null));
+                const string close = "{\"action\":\"close\",\"outcome\":\"completed\"}";
+                const string save = "{\"action\":\"save\",\"steps\":[{\"text\":\"Draw\",\"status\":\"completed\"}]}";
+                var f = new KernelFixture(
+                    KernelResponse(KernelCall("write", close)),
+                    KernelResponse(KernelCall("write", save)),
+                    KernelResponse(KernelCall("write", close)),
+                    KernelResponse());
+                var attempts = 0;
+                f.Tools.OnExecute = (context, token) => Task.FromResult(
+                    KernelRecord(context, ++attempts == 1 ? firstOutcome : ToolExecutionOutcome.Ok,
+                        recovery: attempts == 1 && firstOutcome == ToolExecutionOutcome.Error
+                            ? new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.Replan,
+                                target, semanticTarget: "Active task list") : null,
+                        resourceEffect: context.Call.ArgumentsJson == save
+                            ? new ResourceEffect("saved", context.Call.Id, ResourceEffectOutcome.VerifiedChanged,
+                                new[] { new ResourceImpact(changed, ResourceImpactRelation.ContainerMembership) }) : null));
 
-            var result = await f.RunAsync();
-
-            AssertEqual(RunLifecycle.Completed, result.Summary.Lifecycle,
-                "corrected state allows the same operation again");
-            AssertEqual(3, f.Tools.Calls.Count,
-                "failed close, corrective save and valid close each dispatch once");
-            AssertEqual(4, f.Model.Requests.Count,
-                "kernel continues to the final answer after corrective execution");
+                var result = await f.RunAsync();
+                var retryAllowed = changed.Equals(target) && firstOutcome == ToolExecutionOutcome.Error;
+                AssertEqual(RunLifecycle.Completed, result.Summary.Lifecycle, "each outcome remains available for a final model decision");
+                AssertEqual(retryAllowed ? 3 : 2, f.Tools.Calls.Count,
+                    "only a verified change of the declared dependency permits an explicit retry after definite failure");
+                AssertEqual(4, f.Model.Requests.Count, "denied retries return their result before the final model response");
+                if (firstOutcome == ToolExecutionOutcome.Unknown)
+                    AssertEqual(ExecutionHealth.Unknown, result.Summary.ExecutionHealth, "a matching repair cannot erase uncertain effects");
+            }
         }
 
         private static async Task KernelContinuesAfterAlternatingFailures()

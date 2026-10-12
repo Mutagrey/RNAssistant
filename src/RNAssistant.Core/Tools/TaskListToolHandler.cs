@@ -113,7 +113,8 @@ namespace RNAssistant.Core.Tools
                         mutation.Message, failed), ToolEffectEvidence.None,
                         recovery: new ToolRecoveryContract(
                             ToolFailureKind.RejectedNoEffect,
-                            ToolRetryPolicy.Replan));
+                            ToolRetryPolicy.Replan, TaskListPublication.Identity(_session),
+                            semanticTarget: "Active task list"));
             }
             if (!context.MayHaveDispatched)
                 return new ToolHandlerResult(RuntimeResult.Error(

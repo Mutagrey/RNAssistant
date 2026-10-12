@@ -1,5 +1,24 @@
 # Stabilization progress
 
+## Task List retry after state repair — 2026-10-13
+
+Owner: Core TaskListToolHandler / ToolRecoveryContract. A definite state refusal
+now declares the conversation's logical Task List identity. `Replan` permits a
+new explicit identical call only after a verified change/restoration impacting
+that declared identity. This covers missing-list close → save → the same close;
+the production shared-runtime regression failed before the fix. Fresh reads,
+unrelated changes and no-op/unknown effects do not satisfy that recovery. Unknown
+calls remain non-repeatable. No tool is automatically retried, no domain rules
+were added to AgentKernel, and identities remain runtime-only.
+
+The old corrective-success fixture now checks the exact dependency and unknown
+isolation; stale built-in guidance assertions follow the current prompt/skill
+contract without changing production guidance. Host-neutral checks pass: kernel
+55/55, context continuity 9/9, Task Lists 5/5 and built-in guidance 1/1. CLI build
+has zero warnings/errors; controlled HTTP Task List checks pass Plan/user and
+Agent/tool, including interrupted effects and identity-free model context.
+Windows/Office and real-model qualification remain open.
+
 ## Response v7: tool-driven continuation — 2026-10-13
 
 Owner: ModelProtocol / AgentKernel. Standalone no-call `continue` is removed from
@@ -17,9 +36,8 @@ new chat/reset; `continue` is never silently converted into `done`.
 
 Evidence: host-neutral no-tool flow 3/3, v7 wire 13/13, model protocol 15/15,
 preflight 2/2, prompt migration 3/3, default prompt contract 1/1 and native question
-1/1 and built-in guidance 1/1 pass. Kernel checks are 54/55; the corrective-retry
-fixture also fails unchanged on baseline `921c504c`, independently of the response
-contract. Its source-owned recovery requires a separate fix.
+1/1 pass. Kernel checks pass 55/55 after the independent Task List recovery fix
+described above; the stale built-in guidance assertion also passes.
 The CLI builds with zero warnings/errors. Controlled HTTP checks pass all four
 response-format/result-role combinations, typed questions in Plan/Agent, Chat
 admission, interrupted-run recovery and explicit cancellation/continuation. Web

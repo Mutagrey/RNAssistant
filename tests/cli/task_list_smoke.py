@@ -168,12 +168,24 @@ def run_case(root, mode, role):
             responses.extend([call(TOOL, action="save", goal="Only assessment", steps=[{"text": "Assessed", "status": "completed"}]), DONE])
             result = run("--min-writes", "1", code=5)
             assert result["verifiedFileChanges"] == 0
+
+        # A definite refusal can be retried after its exact logical state changes.
+        # Start a new conversation: the uncertain list above remains unavailable.
+        close = call(TOOL, action="close", outcome="completed")
+        responses.extend([close,
+            call(TOOL, action="save", goal="Record review", steps=[{"text": "Reviewed", "status": "completed"}]),
+            close, DONE])
+        repaired = run()
+        assert repaired["ToolCounts"]["WriteOk"] == 2, repaired
+        assert repaired["ToolCounts"]["WriteError"] == 1, repaired
+        assert inspect(repaired["SessionId"]) is None and task(requests[-1]) is None
+        assert inspect(session)["available"] is False, "A different conversation cannot repair uncertain state"
         raw = json.dumps(requests)
         assert not re.search(r"(?:tasks_|step_)[0-9a-f]{32}|rna://|artifactId", raw), "Runtime identity leaked into model context"
         if role == "tool":
             assert any(message.get("role") == "tool" for request in requests for message in request["messages"])
         assert (workspace / "notes.txt").read_text() == "KEEP_ORIGINAL"
-        print(f"PASS task list {mode}/{role}: persistence, context, admission, read-back and interrupted effects")
+        print(f"PASS task list {mode}/{role}: persistence, context, admission, exact state repair and interrupted effects")
     finally:
         server.shutdown()
         server.server_close()

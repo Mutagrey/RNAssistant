@@ -56,6 +56,9 @@ namespace RNAssistant.Core.Tools
                 (resourceIdentity == null || string.IsNullOrWhiteSpace(view) ||
                  string.IsNullOrWhiteSpace(semanticTarget)))
                 throw new ArgumentException("A conflict requires exact runtime identity, view and semantic target.");
+            if (retryPolicy == ToolRetryPolicy.Replan && resourceIdentity != null &&
+                string.IsNullOrWhiteSpace(semanticTarget))
+                throw new ArgumentException("State-dependent replanning requires a semantic target.");
             if (currentContent != null && currentContent.Length > 16384)
                 throw new ArgumentException("Recovery content exceeds the bounded model projection.", nameof(currentContent));
             if (diff != null && diff.Length > 8192)
@@ -106,6 +109,13 @@ namespace RNAssistant.Core.Tools
                         ChangeDependencies.Any(dependency => dependency.Identity.Equals(impact.Identity) &&
                             dependency.Revision != impact.After.Revision));
             }
+            // The owner can name the logical state behind a validation refusal,
+            // including an absent state with no revision yet. Only a subsequent
+            // verified change of that exact state permits the same call again.
+            if (RetryPolicy == ToolRetryPolicy.Replan)
+                return ResourceIdentity != null && effect != null &&
+                    (effect.Outcome == ResourceEffectOutcome.VerifiedChanged || effect.Outcome == ResourceEffectOutcome.Restored) &&
+                    effect.Impacts.Any(impact => impact.Identity.Equals(ResourceIdentity));
             if (RetryPolicy != ToolRetryPolicy.RefreshRequired || ResourceIdentity == null) return false;
             return (observations ?? new ResourceEvidence[0]).Any(IsSatisfiedBy) ||
                 effect != null && (effect.Outcome == ResourceEffectOutcome.VerifiedChanged ||

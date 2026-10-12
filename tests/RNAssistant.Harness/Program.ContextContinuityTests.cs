@@ -341,23 +341,50 @@ namespace RNAssistant.Harness
 
             var target = new ResourceRef(ResourceUri.Create("workspace", "fixture", "file", "a.txt")).Identity;
             var other = new ResourceRef(ResourceUri.Create("workspace", "fixture", "file", "b.txt")).Identity;
-            foreach (var policy in new[] { ToolRetryPolicy.Replan, ToolRetryPolicy.RefreshRequired })
+            foreach (var recovery in new[] {
+                new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.Replan),
+                new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.Replan, target, "text", "a.txt"),
+                new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.RefreshRequired, target, "text", "a.txt") })
             {
+                var restored = Newtonsoft.Json.JsonConvert.DeserializeObject<ToolExecutionProgress>(
+                    Newtonsoft.Json.JsonConvert.SerializeObject(new ToolExecutionProgress(ToolExecutionOutcome.Error, recovery)));
+                var history = new[] { AgentMessage.Assistant(new AgentResponse("try", new[] { call })),
+                    AgentMessage.AcceptedToolResult(call.Id, "state refused", "{}", restored) };
                 tracker = new AgentProgressTracker();
-                tracker.Observe(call, new ToolExecutionProgress(ToolExecutionOutcome.Error,
-                    recovery: new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, policy,
-                        policy == ToolRetryPolicy.RefreshRequired ? target : null, "text", "a.txt")),
-                    "read required", null, null);
+                tracker.Restore(history);
+                tracker.Observe(new ToolCall("read", "read", "{}"), new ToolExecutionProgress(ToolExecutionOutcome.Ok),
+                    "fresh read", new[] { new ResourceEvidence("read", new ResourceAuthorityScopeId("workspace", "fixture"),
+                        new ResourceRef(target.Uri, "r2"), "text", ResourceCoverage.Whole(), true, 2) }, null);
+                AssertEqual(recovery.RetryPolicy == ToolRetryPolicy.RefreshRequired,
+                    tracker.CanDispatch(call, out reason, out message, out delay), "only refresh recovery accepts a fresh read");
+
+                tracker = new AgentProgressTracker();
+                tracker.Restore(history);
+                foreach (var outcome in new[] { ResourceEffectOutcome.VerifiedNoChange, ResourceEffectOutcome.UnknownAfterDispatch })
+                {
+                    tracker.Observe(new ToolCall("uncertain", "repair", "{}"),
+                        new ToolExecutionProgress(outcome == ResourceEffectOutcome.UnknownAfterDispatch
+                            ? ToolExecutionOutcome.Unknown : ToolExecutionOutcome.Ok), "not repaired", null,
+                        new ResourceEffect("effect", "repair", outcome, new[] { new ResourceImpact(target, ResourceImpactRelation.Exact) }));
+                    AssertTrue(!tracker.CanDispatch(call, out reason, out message, out delay), "no-op or uncertain effects do not release failures");
+                }
                 foreach (var changed in new[] { other, target })
                 {
-                    tracker.Observe(new ToolCall("change", "write", "{}"),
-                        new ToolExecutionProgress(ToolExecutionOutcome.Ok), "changed", null,
-                        new ResourceEffect("effect", "write", ResourceEffectOutcome.VerifiedChanged,
-                            new[] { new ResourceImpact(changed, ResourceImpactRelation.Exact) }));
-                    AssertEqual(policy == ToolRetryPolicy.RefreshRequired && changed.Equals(target),
+                    var change = new ToolCall("change", "repair", "{\"changed\":true}");
+                    var effect = new ResourceEffect("effect", "repair", ResourceEffectOutcome.VerifiedChanged,
+                        new[] { new ResourceImpact(changed, ResourceImpactRelation.ContainerMembership) });
+                    tracker.Observe(change, new ToolExecutionProgress(ToolExecutionOutcome.Ok), "changed", null, effect);
+                    var allowed = recovery.ResourceIdentity != null && changed.Equals(target);
+                    AssertEqual(allowed,
                         tracker.CanDispatch(call, out reason, out message, out delay),
-                        "only a matching refresh dependency releases the failed call");
+                        "only a verified change of the declared dependency releases the failed call");
+                    var replay = new AgentProgressTracker();
+                    replay.Restore(history.Concat(new[] { AgentMessage.Assistant(new AgentResponse("repair", new[] { change })),
+                        AgentMessage.AcceptedToolResult(change.Id, "changed", "{}", new ToolExecutionProgress(ToolExecutionOutcome.Ok), effect: effect) }));
+                    AssertEqual(allowed, replay.CanDispatch(call, out reason, out message, out delay),
+                        "restoring canonical recovery facts retains the same retry decision");
                 }
+                AssertTrue(!restored.Recovery.ModelProjection().ToString().Contains("rna://"), "exact recovery identity stays runtime-only");
             }
         }
 
