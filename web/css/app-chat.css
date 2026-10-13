@@ -1079,8 +1079,3 @@
     transform: none;
   }
 }
-
-.composer-policy-status { font-size: 10px; color: var(--text-muted); max-width: 110px; line-height: 1.2; }
-#composerAddMenu > label, #composerAddMenu > small { display: block; padding: 4px 10px; font-size: 11px; }
-#chatMutationPolicy { margin: 0 10px; width: calc(100% - 20px); }
-@media (max-width: 480px) { .composer-policy-status { max-width: 72px; font-size: 9px; } }

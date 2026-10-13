@@ -8,6 +8,9 @@ finish with zero calls; neither a router LLM nor a mandatory planner is involved
 - The single **Plan** toggle in the composer `+` menu stays active until disabled.
   It permits discovery, skills, questions, Plan save and Task List updates, but
   never execution of the proposed work. Disabling it waits for the next user input.
+  The menu also offers file attachments, document selection and context compaction.
+  Approval controls and status are absent from the composer; automatic approval
+  is configured in Settings → Agent.
 - Independent per-chat `MutationPolicy` is `Ask` (default) or `Deny`. Ask requires
   approval of each effect/code invocation, supplied automatically only by the
   user's captured opt-in below. Deny and Plan prohibit effects

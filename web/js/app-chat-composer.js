@@ -1,42 +1,20 @@
 function renderChatModePicker() {
-  var menu = $("chatModeMenu");
-  if (!menu) return;
+  var button = $("chatPlanButton");
+  if (!button) return;
   var plan = state.activeChatMode === "plan";
-  var denied = String(state.mutationPolicy || "Ask").toLowerCase() === "deny";
-  var settings = state.settings || {};
-  var automatic = settings.AutoConfirmToolActions === true || settings.autoConfirmToolActions === true;
   var disabled = !!state.chatReadOnly || !!state.chatNavigationPending || !!state.initializePromise ||
     !!currentActiveSend() || isPendingChatSubmit(state.activeChatId) || hasActiveMessageEdit() ||
     state.modeSaving || state.reasoningSaving || state.bridgeUnavailable ||
     state.chatDetailPending || state.chatDetailError || !state.activeChatId;
-  var key = plan + ":" + denied + ":" + automatic + ":" + !!state.chatReadOnly + ":" + !!disabled;
-  if (menu.dataset.renderKey === key) return;
-  menu.dataset.renderKey = key;
-  menu.replaceChildren();
-  var button = document.createElement("button");
-  button.type = "button";
-  button.className = "composer-picker-item composer-mode-item" + (plan ? " is-selected" : "");
+  button.classList.toggle("is-selected", plan);
   button.disabled = !!disabled;
-  button.dataset.mode = "plan";
   button.setAttribute("aria-pressed", String(plan));
-  button.textContent = "◇ Plan" + (plan ? " ✓" : "");
-  button.title = "Исследование и план без исполнения. Сохраняется до отключения.";
-  button.addEventListener("click", function () { if (!button.disabled) saveChatMode(plan ? "agent" : "plan"); });
-  menu.appendChild(button);
-  var policy = $("chatMutationPolicy");
-  if (policy) {
-    policy.value = denied ? "Deny" : "Ask";
-    policy.disabled = !!disabled;
-    policy.querySelector('option[value="Ask"]').textContent = automatic ? "Автоподтверждение" : "По подтверждению";
-  }
-  var status = $("chatPolicyStatus");
-  if (status) status.textContent = state.chatReadOnly ? "История · создайте новый чат" :
-    plan ? "Plan · без исполнения" : denied ? "Изменения запрещены" :
-      automatic ? "Автоподтверждение · новые запуски" : "По подтверждению";
 }
 
 function bindComposerPickers() {
-  $("chatMutationPolicy").addEventListener("change", function () { saveChatMutationPolicy(this.value); });
+  $("chatPlanButton").addEventListener("click", function () {
+    if (!this.disabled) saveChatMode(state.activeChatMode === "plan" ? "agent" : "plan");
+  });
   var pickers = [$("composerAddPicker"), $("chatModelPicker")].filter(Boolean);
   pickers.forEach(function (picker) {
     var trigger = picker.querySelector("summary");
@@ -122,7 +100,7 @@ function renderSendControls() {
   if (input) {
     input.readOnly = state.chatReadOnly || navigating || detailUnavailable || isPreparingAttachments || state.modeSaving || state.reasoningSaving ||
       state.bridgeUnavailable;
-    input.placeholder = navigating || state.chatDetailPending ? "Обновляю чат…" : state.chatDetailError
+    input.placeholder = state.chatReadOnly ? "История чата · создайте новый чат…" : navigating || state.chatDetailPending ? "Обновляю чат…" : state.chatDetailError
       ? "Повторите загрузку чата…" : isEditing
       ? "Измените сообщение или отправьте его заново..."
       : (state.bridgeUnavailable

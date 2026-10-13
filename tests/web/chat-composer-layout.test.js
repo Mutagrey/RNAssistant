@@ -30,7 +30,6 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       window.hasActiveMessageEdit = () => !!state.editing;
       window.runningMessageDelivery = () => "Steer";
       window.saveChatMode = mode => { state.activeChatMode = mode; renderSendControls(); };
-      window.saveChatMutationPolicy = policy => { state.mutationPolicy = policy; renderSendControls(); };
       window.findEditingMessage = () => null;
     });
     for (const file of ["app-accent.js", "app-utils.js", "app-model-picker.js", "app-chat-composer.js", "app-chat-state.js", "app-context-inspector.js"])
@@ -59,6 +58,17 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
           assert.equal(await page.locator("#" + id).isVisible(), true);
         assert.equal(await page.locator('#chatModeMenu button').count(), 1);
         assert.equal(await page.locator('#chatModeMenu [aria-pressed="false"]').count(), 1);
+        const rows = await page.locator("#composerAddMenu .composer-menu-action").evaluateAll(buttons =>
+          buttons.map(button => {
+            const row = button.getBoundingClientRect();
+            const icon = button.querySelector(".composer-menu-icon").getBoundingClientRect();
+            const label = button.querySelector(".composer-menu-label").getBoundingClientRect();
+            return { height: row.height, iconX: icon.x, labelX: label.x,
+              aligned: Math.abs(icon.y + icon.height / 2 - label.y - label.height / 2) < 1,
+              fits: button.scrollWidth <= button.clientWidth };
+          }));
+        assert.ok(rows.every(row => row.height === rows[0].height && row.iconX === rows[0].iconX &&
+          row.labelX === rows[0].labelX && row.aligned && row.fits), "menu rows and icons stay aligned");
         await page.keyboard.press("Escape");
         assert.equal(await page.locator("#composerAddPicker").getAttribute("open"), null);
         assert.equal(await page.evaluate(() => document.activeElement.id), "composerAddButton");
@@ -73,24 +83,21 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     }
     console.log("PASS composer: menu and ring tooltip fit 1100/740/360px in both themes");
 
+    await page.evaluate(() => {
+      state.settings.AutoConfirmToolActions = true; state.mutationPolicy = "Deny"; renderSendControls();
+    });
+    assert.equal(await page.locator("#chatMutationPolicy, #chatPolicyStatus").count(), 0);
     await page.locator("#composerAddButton").click();
     await page.locator('#chatModeMenu button[data-mode="plan"]').click();
     assert.equal(await page.evaluate(() => state.activeChatMode), "plan");
+    assert.equal(await page.locator("#chatPlanButton").getAttribute("aria-pressed"), "true");
     assert.equal(await page.locator("#composerAddPicker").getAttribute("open"), null);
     await page.locator("#composerAddButton").click();
     await page.locator('#chatModeMenu button[data-mode="plan"]').click();
     assert.equal(await page.evaluate(() => state.activeChatMode), "agent");
-    await page.locator("#composerAddButton").click();
-    await page.locator("#chatMutationPolicy").selectOption("Deny");
-    assert.match(await page.locator("#chatPolicyStatus").textContent(), /Изменения запрещены/);
-    await page.evaluate(() => { state.settings.AutoConfirmToolActions = true; renderChatModePicker(); });
-    assert.match(await page.locator("#chatPolicyStatus").textContent(), /Изменения запрещены/);
-    await page.locator("#chatMutationPolicy").selectOption("Ask");
-    assert.match(await page.locator("#chatPolicyStatus").textContent(), /Автоподтверждение · новые запуски/);
-    await page.evaluate(() => { state.activeChatMode = "plan"; renderChatModePicker(); });
-    assert.equal(await page.locator("#chatPolicyStatus").textContent(), "Plan · без исполнения");
+    assert.equal(await page.evaluate(() => state.mutationPolicy), "Deny", "planning toggle preserves permissions");
+    assert.equal(await page.evaluate(() => state.settings.AutoConfirmToolActions), true);
     await page.evaluate(() => { state.settings.AutoConfirmToolActions = false; state.activeChatMode = "agent"; renderChatModePicker(); });
-    assert.equal(await page.locator("#chatPolicyStatus").textContent(), "По подтверждению");
     await page.keyboard.press("Escape");
     await page.locator("#composerAddButton").press("Enter");
     await page.locator("#addSelectionContextButton").click();
@@ -101,8 +108,8 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
 
     await page.evaluate(() => { state.sending = true; renderSendControls(); });
     await page.evaluate(() => { state.chatReadOnly = true; renderSendControls(); });
-    assert.equal(await page.locator("#chatPolicyStatus").textContent(), "История · создайте новый чат",
-      "history state must render even when controls were already disabled");
+    assert.match(await page.locator("#chatInput").getAttribute("placeholder"), /История чата · создайте новый чат/);
+    assert.equal(await page.locator("#chatPlanButton").isDisabled(), true);
     await page.evaluate(() => { state.chatReadOnly = false; renderSendControls(); });
     await page.locator("#composerAddButton").click();
     assert.equal(await page.locator("#chatModeMenu button:disabled").count(), 1);
@@ -154,25 +161,28 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     await page.evaluate(() => persistSettingsFromForm());
     assert.equal(await page.evaluate(() => settingsSaves[0].AutoConfirmToolActions), true);
     assert.equal(await page.locator("#autoConfirmToolActionsInput").isChecked(), true);
-    assert.match(await page.locator("#chatPolicyStatus").textContent(), /Автоподтверждение/);
+    assert.equal(await page.locator("#chatMutationPolicy, #chatPolicyStatus").count(), 0);
     await page.evaluate(() => resetAgentSettingsToDefaults());
     await page.evaluate(() => persistSettingsFromForm());
     assert.equal(await page.evaluate(() => settingsSaves[1].AutoConfirmToolActions), false);
     assert.equal(await page.locator("#autoConfirmToolActionsInput").isChecked(), false);
-    assert.equal(await page.locator("#chatPolicyStatus").textContent(), "По подтверждению");
+    assert.equal(await page.locator("#chatMutationPolicy, #chatPolicyStatus").count(), 0);
     console.log("PASS settings: auto-confirm defaults off, saves/reloads both values and resets to Ask");
     assert.deepEqual(errors, []);
     console.log("PASS composer: ring opens the existing usage panel and restores keyboard focus on close");
     if (process.env.COMPOSER_SCREENSHOT) {
       await page.locator("#contextMeter").blur();
       await page.setViewportSize({ width: 740, height: 760 });
-      await page.locator("#composerAddButton").click();
-      await page.screenshot({ path: process.env.COMPOSER_SCREENSHOT });
-      await page.keyboard.press("Escape");
+      for (const theme of ["light", "dark"]) {
+        await page.evaluate(theme => { document.documentElement.dataset.theme = theme; RNAssistantAccents.apply("blue", false); }, theme);
+        await page.locator("#composerAddButton").click();
+        await page.screenshot({ path: process.env.COMPOSER_SCREENSHOT.replace(/\.png$/, "-" + theme + ".png"), animations: "disabled" });
+        await page.keyboard.press("Escape");
+      }
       await page.setViewportSize({ width: 360, height: 760 });
       await page.evaluate(() => { document.documentElement.dataset.theme = "light"; RNAssistantAccents.apply("blue", false); });
       await page.locator("#contextMeter").hover();
-      await page.screenshot({ path: process.env.COMPOSER_SCREENSHOT.replace(/\.png$/, "-tooltip.png") });
+      await page.screenshot({ path: process.env.COMPOSER_SCREENSHOT.replace(/\.png$/, "-tooltip.png"), animations: "disabled" });
     }
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

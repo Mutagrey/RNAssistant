@@ -25,9 +25,9 @@
   <link rel="stylesheet" href="css/vendor/wunderbaum.css">
   <link rel="stylesheet" href="css/vendor/viewer.min.css">
   <link rel="stylesheet" href="css/app.css?v=composer-menu-20261013-1">
-  <link rel="stylesheet" href="css/app-chat.css?v=user-bubble-20261012-1-transcript-20261012-1">
+  <link rel="stylesheet" href="css/app-chat.css?v=user-bubble-20261012-1-transcript-20261012-1-composer-actions-1">
   <link rel="stylesheet" href="css/app-markdown.css?v=accent-chat-20261012-1">
-  <link rel="stylesheet" href="css/app-composer.css?v=composer-menu-20261013-3-settings-delivery-1">
+  <link rel="stylesheet" href="css/app-composer.css?v=composer-actions-20261013-1">
   <link rel="stylesheet" href="css/app-reasoning.css?v=accent-chat-20261012-1">
   <link rel="stylesheet" href="css/app-context-chips.css?v=sidebar-polish-20260723-1">
   <link rel="stylesheet" href="css/app-models.css?v=model-tables-20260930-1">
@@ -191,30 +191,29 @@
                 </summary>
                 <div class="composer-picker-menu composer-add-menu" id="composerAddMenu">
                   <button type="button" class="composer-picker-item composer-menu-action" id="attachFileButton">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21.4 11.6-8.9 8.9a6 6 0 0 1-8.5-8.5l9.6-9.6a4 4 0 0 1 5.7 5.7l-9.6 9.6a2 2 0 1 1-2.8-2.8l8.9-8.9"/></svg>
-                    <span>Прикрепить файл</span>
+                    <span class="composer-menu-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21.4 11.6-8.9 8.9a6 6 0 0 1-8.5-8.5l9.6-9.6a4 4 0 0 1 5.7 5.7l-9.6 9.6a2 2 0 1 1-2.8-2.8l8.9-8.9"/></svg></span>
+                    <span class="composer-menu-label">Прикрепить файлы</span>
                   </button>
-                  <button type="button" class="composer-picker-item composer-menu-action" id="addSelectionContextButton">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2" stroke-dasharray="3 3"/><path d="M12 8v8M8 12h8"/></svg>
-                    <span>Добавить выделение в контекст</span>
+                  <button type="button" class="composer-picker-item composer-menu-action" id="addSelectionContextButton" title="Добавить выделение из документа в контекст чата">
+                    <span class="composer-menu-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2" stroke-dasharray="3 3"/><path d="M12 8v8M8 12h8"/></svg></span>
+                    <span class="composer-menu-label">Выделение в контекст</span>
                   </button>
-                  <div id="chatModeMenu" role="group" aria-label="Планирование"></div>
-                  <label for="chatMutationPolicy">Изменения</label>
-                  <select id="chatMutationPolicy" title="Сохранение плана и списка задач разрешено при любой политике">
-                    <option value="Ask">По подтверждению</option>
-                    <option value="Deny">Изменения запрещены</option>
-                  </select>
-                  <small>План и список задач сохраняются без подтверждения.</small>
-                  <button type="button" class="composer-picker-item composer-menu-action composer-menu-compact" id="compactContextButton" title="Сжать ранний контекст, сохранив полную историю" hidden>
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 4 5 5 5-5M7 20l5-5 5 5M5 12h14"/></svg>
-                    <span>Сжать контекст</span>
+                  <div id="chatModeMenu" role="group" aria-label="Планирование">
+                    <button type="button" class="composer-picker-item composer-menu-action" id="chatPlanButton" data-mode="plan" aria-pressed="false" title="Исследование и план без исполнения. Режим действует до отключения.">
+                      <span class="composer-menu-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="6" r="2"/><circle cx="5" cy="18" r="2"/><path d="M11 6h9M11 12h9M11 18h9M3 12h4"/></svg></span>
+                      <span class="composer-menu-label">Режим планирования</span>
+                      <svg class="composer-menu-check" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
+                    </button>
+                  </div>
+                  <button type="button" class="composer-picker-item composer-menu-action" id="compactContextButton" title="Сжать ранний контекст, сохранив полную историю" hidden>
+                    <span class="composer-menu-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 4 5 5 5-5M7 20l5-5 5 5M5 12h14"/></svg></span>
+                    <span class="composer-menu-label">Сжать контекст</span>
                   </button>
                 </div>
               </details>
               <input id="attachmentFileInput" type="file" multiple hidden>
             </div>
             <div class="composer-actions">
-              <span id="chatPolicyStatus" class="composer-policy-status" aria-live="polite">По подтверждению</span>
               <details class="composer-picker composer-model-picker" id="chatModelPicker">
                 <summary class="composer-picker-trigger" id="chatModelButton" title="Модель чата" aria-label="Модель чата">
                   <span class="composer-picker-trigger-icon model" aria-hidden="true">✦</span>
@@ -1154,10 +1153,10 @@
   <script src="js/app-reasoning.js?v=chat-projection-20260907-1"></script>
   <script src="js/app-attachments.js?v=attachment-input-20261012-1"></script>
   <script src="js/app-chat-session.js?v=closed-document-20261012-1-transcript-20261012-1"></script>
-  <script src="js/app-chat-composer.js?v=composer-auto-confirm-20261013-1"></script>
+  <script src="js/app-chat-composer.js?v=composer-actions-20261013-1"></script>
   <script src="js/app-chat-inbox.js?v=inbox-1-transcript-20261012-1-settings-delivery-1"></script>
   <script src="js/app-chat-run.js?v=response-render-timing-20260928-1-usage-20261002-1-navigation-20261002-1-inbox-20261002-1-large-chat-1-run-isolation-1-transcript-20261012-1-settings-delivery-1"></script>
-  <script src="js/app-chat.js?v=composer-menu-20261013-1"></script>
+  <script src="js/app-chat.js?v=composer-actions-20261013-1"></script>
   <script src="js/app-chat-edit.js?v=chat-sync-20260903-1-usage-20261002-1"></script>
   <script src="js/app.js?v=artifact-catalog-20261002-1"></script>
 </body>
