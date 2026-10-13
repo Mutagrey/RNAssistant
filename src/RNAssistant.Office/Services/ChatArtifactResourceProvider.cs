@@ -129,6 +129,58 @@ namespace RNAssistant.Office.Services
             return _htmlResources.ResolveMemberPath(session, artifact, memberPath, memberType);
         }
 
+        internal ResourceDescriptor ResolveHtmlTarget(ChatSession session, string target)
+        {
+            const int maximumSnapshots = 1000;
+            var snapshots = Artifacts(session).Where(item =>
+                string.IsNullOrWhiteSpace(item.DocumentAuthorityId) && item.Kind == ChatArtifactKinds.HtmlWorkspace).ToList();
+            var localCount = snapshots.Count;
+            long? generation = null;
+            if (!string.IsNullOrWhiteSpace(session?.DocumentAuthorityId))
+            {
+                if (_documentArtifacts == null)
+                    throw new ResourceRequestException("The document artifact owner is unavailable.", "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
+                var offset = 0;
+                do
+                {
+                    var page = _documentArtifacts.InspectHtmlSnapshotMetadata(session, offset, MaximumListItems);
+                    if (generation.HasValue && generation != page.Generation)
+                        throw new ResourceRequestException("HTML history changed during resolution; rediscover the workspace.", "resource_revision_changed", true);
+                    generation = page.Generation;
+                    if (page.UnavailableResources > 0 || localCount + page.Total > maximumSnapshots)
+                        throw new ResourceRequestException("HTML snapshot metadata is incomplete; target uniqueness cannot be established.", "resource_scope_incomplete", false);
+                    snapshots.AddRange(page.Items);
+                    if (!page.NextOffset.HasValue) break;
+                    offset = page.NextOffset.Value;
+                } while (true);
+            }
+            if (snapshots.Count > maximumSnapshots)
+                throw new ResourceRequestException("HTML history exceeds the semantic lookup bound.", "resource_scope_incomplete", false);
+            var matches = new List<ResourceDescriptor>();
+            foreach (var artifact in snapshots)
+            {
+                var descriptor = Describe(session, artifact, true);
+                var workspaceTarget = ResourceGatewayService.IntentTarget(descriptor);
+                if (string.Equals(target, workspaceTarget, StringComparison.Ordinal))
+                    matches.Add(descriptor);
+                else if (target.EndsWith(" in " + workspaceTarget, StringComparison.Ordinal))
+                {
+                    var exactSession = ProjectSession(session, descriptor.Reference.Uri);
+                    var exactArtifact = FindExactArtifact(exactSession, artifact.Id);
+                    EnsureNotRemoved(exactSession, exactArtifact, descriptor.Reference.Uri);
+                    matches.AddRange(_htmlResources.DescribeMembers(exactSession, exactArtifact)
+                        .Where(member => string.Equals(ResourceGatewayService.IntentTarget(member), target, StringComparison.Ordinal)));
+                }
+            }
+            if (generation.HasValue && generation != _documentArtifacts.InspectHtmlSnapshotMetadata(session, 0, 0).Generation)
+                throw new ResourceRequestException("HTML history changed during resolution; rediscover the workspace.", "resource_revision_changed", true);
+            if (matches.Count > 1)
+                throw new ResourceRequestException("The HTML target is ambiguous. Choose one exact workspace/member target.", "resource_target_ambiguous", false);
+            if (matches.Count == 0)
+                throw new ResourceRequestException("HTML target was not found. Read the workspace structure and copy its exact member target.", "resource_target_not_found", true);
+            return Resolve(session, matches[0].Reference.Uri);
+        }
+
         public ResourceSearchResult Search(
             ChatSession session,
             string query,

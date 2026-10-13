@@ -117,7 +117,7 @@ namespace RNAssistant.Office.Tools
                 null, "html_source_observation_required", false,
                 new ToolRecoveryContract(ToolFailureKind.ConflictNoEffect,
                     ToolRetryPolicy.RefreshRequired, current.Identity,
-                    ResourceRepresentations.Source, "HTML file: " + path));
+                    ResourceRepresentations.Source, ChatHtmlResourceCatalog.FileTarget(artifact, file)));
         }
 
         private static bool MatchesCurrentFile(ResourceEvidence evidence, ResourceRef current, string hash)

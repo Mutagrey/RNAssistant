@@ -572,6 +572,7 @@ namespace RNAssistant.Harness
                 Test("outlook tools: dispatch fault classification", OutlookToolsClassifyDispatchFaults),
                 Test("outlook tools: bound window scope", OutlookToolsUseBoundWindowScope),
                 Test("resources: gateway reads searches resolves and pages", ResourceGatewayReadsSearchesAndPages),
+                Test("resources: HTML semantic reads preserve workspace snapshot", HtmlSemanticReadsPreserveWorkspaceSnapshot),
                 Test("resources: duplicate artifact ids fail closed", ResourceGatewayRejectsAmbiguousChatArtifacts),
                 Test("resources: empty text remains exact", ResourceGatewayPreservesEmptyTextRepresentations),
                 Test("artifact viewer: exact bounded text and markdown", ArtifactViewerReadsExactBoundedTextAndMarkdown),

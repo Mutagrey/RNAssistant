@@ -90,6 +90,9 @@ namespace RNAssistant.Core.Models
         public string SourceMessageId { get; set; }
         [Newtonsoft.Json.JsonProperty("parent")]
         public ResourceRef Parent { get; set; }
+        // Runtime projection hint; retained structure bytes keep exact references.
+        [Newtonsoft.Json.JsonIgnore]
+        public string ParentTarget { get; set; }
         [Newtonsoft.Json.JsonProperty("related")]
         public List<ResourceRef> Related { get; set; }
         [Newtonsoft.Json.JsonProperty("representations")]

@@ -8,6 +8,21 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## HTML historical member lookup — 2026-10-13
+
+**Fixed host-neutral / Resource Gateway and artifact provider owners.** The photo
+shows a workspace structure read followed by `resource_target_not_found` for its
+CSS member. Member resolution enumerated only the active workspace, while member
+labels omitted the parent snapshot. A focused native-tool regression additionally
+reproduced a historical CSS read silently returning replacement bytes.
+
+Member targets now qualify the exact parent; bounded document snapshot metadata
+resolves historical roots and children without switching the active workspace or
+rewriting retained bytes. Missing source and ambiguous/incomplete metadata fail
+closed. See [Resource Fabric](../resource-fabric.md). The photo's later
+`handler_failed` and repeated cancellations need incident events for attribution;
+they are not evidence of deleted CSS or a qualified Windows/Office fix.
+
 ## Premature terminal narration — 2026-10-13
 
 **Prompt contradictions corrected; incident attribution and real-model behavior

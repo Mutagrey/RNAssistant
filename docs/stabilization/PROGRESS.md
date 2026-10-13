@@ -1,5 +1,20 @@
 # Stabilization progress
 
+## HTML historical resource reads — 2026-10-13
+
+Owners: Resource Gateway, HTML catalog and DocumentArtifactStore. A workspace
+structure could advertise an unreadable historical member, or its label could
+silently resolve to current replacement bytes. Parent-qualified semantic targets
+now resolve the retained snapshot across edits, file deletion and restart; recovery
+targets use the same contract. Current discovery and immutable stored bytes are
+unchanged. See [Resource Fabric](../resource-fabric.md) and the
+[incident scope](RISK_REGISTER.md#html-historical-member-lookup--2026-10-13).
+
+Evidence: focused native regression 1/1 (including pagination, missing source and
+ambiguity), related resource checks 4/4, shared HTML 6/6 and HTML tools 6/6 pass.
+No Office/VSTO validation or product-version change; live incident qualification
+and attribution of the photo's later `handler_failed` remain open.
+
 ## Skill packages and chat Arsenal — 2026-10-13
 
 Scope/owners: Core `SkillTaskService`/compiler/runtime own task selection and exact

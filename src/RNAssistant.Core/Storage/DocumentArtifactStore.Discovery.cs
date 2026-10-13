@@ -77,6 +77,29 @@ namespace RNAssistant.Core.Storage
             }
             return new DocumentArtifactDiscovery(items, page.Generation, unavailable, page.Total, page.NextOffset);
         }
+
+        // Exact semantic HTML reads must also find retained workspace snapshots.
+        // Scan their metadata only; current discovery and logical heads stay unchanged.
+        public DocumentArtifactDiscovery InspectHtmlSnapshotMetadata(ChatSession session, int offset = 0, int limit = 50)
+        {
+            var scope = Scope(session);
+            var prefix = ResourceUri.Create("chat", scope.Id, "artifact") + "/html_ws_";
+            var page = _authority.ReadHeads(scope,
+                new[] { new ResourceHeadRange(prefix, prefix + "\uffff") }, offset, limit);
+            var items = new List<ChatArtifact>();
+            var unavailable = 0;
+            foreach (var head in page.Items)
+            {
+                if (ResourceUri.Parse(head.Identity.Uri).Segments.Count != 3) continue;
+                if (head.Knowledge == HeadKnowledge.Removed) continue;
+                if (head.Knowledge != HeadKnowledge.Known) { unavailable++; continue; }
+                var artifact = InspectMetadata(session, head.Revision);
+                if (artifact.RemovedFromDocument) continue;
+                if (artifact.AvailabilityIssue != null) unavailable++;
+                else items.Add(artifact);
+            }
+            return new DocumentArtifactDiscovery(items, page.Generation, unavailable, page.Total, page.NextOffset);
+        }
     }
 
     public sealed class DocumentArtifactDiscovery

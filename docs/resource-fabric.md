@@ -463,6 +463,18 @@ For HTML, `structure` belongs to the workspace root and lists members; an exact
 `HTML file` target exposes complete `source`. If a model requests `structure` on
 that file target, the model-facing reader explicitly returns complete `source`
 and reports the actual representation. Other unsupported views still fail.
+HTML file/data targets include their parent workspace's semantic target, including
+its creation time. Structure, discovery, mutation and recovery results use the same label.
+Reading that label resolves the retained parent snapshot, independently of the
+active workspace; edits or deleting a current file cannot redirect a historical
+read. Document-owned history uses a bounded, generation-checked metadata scan
+(at most 1,000 entries), with bodies loaded only for the selected workspace.
+Missing bodies, ambiguous labels and incomplete metadata fail explicitly. Old
+unqualified member labels require rediscovery; there is no current-file fallback.
+This projection does not rewrite retained structure bytes or move logical heads.
+Ordinary filename/content discovery still searches current members; an exact
+qualified HTML query is a point lookup into retained snapshots. `backups` is the
+VBA journal scope, not HTML workspace history.
 Whole-file HTML replacement requires a complete source observation shown to the
 model in an accepted request of the same run. The guard checks the stable file
 member identity and exact content hash, so later context reduction or changes to

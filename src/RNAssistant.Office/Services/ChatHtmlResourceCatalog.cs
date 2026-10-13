@@ -306,6 +306,7 @@ namespace RNAssistant.Office.Services
             }
             descriptor.Metadata["name"] = member.Title ?? string.Empty;
             descriptor.Metadata["revisionArtifactId"] = member.Artifact.Id;
+            descriptor.ParentTarget = WorkspaceTarget(member.Artifact);
             descriptor.Metadata["active"] = member.Active ? "true" : "false";
             if (member.Binding != null)
             {
@@ -315,6 +316,18 @@ namespace RNAssistant.Office.Services
                 descriptor.Metadata["boundResource"] = member.Binding.Resource?.Uri;
             }
             return descriptor;
+        }
+
+        private static string WorkspaceTarget(ChatArtifact artifact)
+        {
+            return ResourceGatewayService.IntentTarget(new ResourceDescriptor {
+                Kind = ChatArtifactKinds.HtmlWorkspace, Title = artifact.Title, CreatedUtc = artifact.CreatedUtc });
+        }
+
+        internal static string FileTarget(ChatArtifact artifact, HtmlWorkspaceFile file)
+        {
+            return artifact == null ? null : ResourceGatewayService.IntentTarget(new ResourceDescriptor {
+                Kind = FileKind, Title = file.Path, CreatedUtc = file.CreatedUtc, ParentTarget = WorkspaceTarget(artifact) });
         }
 
         private static ResourceRef Reference(HtmlMember member)

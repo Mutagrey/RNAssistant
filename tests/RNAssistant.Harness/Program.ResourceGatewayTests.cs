@@ -23,6 +23,88 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void HtmlSemanticReadsPreserveWorkspaceSnapshot()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                var session = NewSession(adapter);
+                var tools = executor.GetControllerTools().ToArray();
+                Action<string> publish = content => executor.MutateLocalResources(session,
+                    HtmlWorkspaceToolCatalog.WriteFileToolId, null,
+                    () => HtmlWorkspaceToolService.UpsertFile(session, "styles.css", "css", content, true));
+                publish("body { color: red; } /* original */");
+                var originalArtifact = session.Artifacts.Single(item => item.Id == session.ActiveHtmlArtifactId);
+                var runtime = executor.CreateNativeRuntime(session, tools, new AppSettings(), ChatModes.Agent, false);
+                Func<string, object, JObject> execute = (id, arguments) =>
+                {
+                    var call = new ToolCall(Guid.NewGuid().ToString("N"), id, JsonConvert.SerializeObject(arguments));
+                    var record = runtime.ExecuteAsync(new ToolExecutionContext(call, runtime.Describe(call),
+                        "run", "turn", "step", DateTime.UtcNow, false, 1), CancellationToken.None).GetAwaiter().GetResult();
+                    AssertEqual(ToolExecutionOutcome.Ok, record.Outcome, "resource call succeeds: " + record.Message);
+                    return JObject.Parse(record.Result.DataJson);
+                };
+                var found = execute(ResourceToolCatalog.FindToolId, new { query = "styles.css", scope = "html" });
+                var workspaceTarget = (string)found["items"].Single(item => (string)item["type"] == "HTML workspace")["target"];
+                var structure = execute(ResourceToolCatalog.ReadToolId, new { target = workspaceTarget, representation = "structure" });
+                var originalTarget = (string)JObject.Parse((string)structure["text"])["members"].Single()["target"];
+                AssertEqual((string)found["items"].Single(item => (string)item["type"] == "HTML file")["target"], originalTarget,
+                    "discovery and workspace structure advertise the same member target");
+                publish("body { color: blue; } /* replacement */");
+                var read = execute(ResourceToolCatalog.ReadToolId, new { target = originalTarget, representation = "source" });
+                AssertEqual("body { color: red; } /* original */", (string)read["text"],
+                    "a member copied from historical structure cannot silently read the current file");
+                structure = execute(ResourceToolCatalog.ReadToolId, new { target = workspaceTarget, representation = "structure" });
+                AssertEqual(originalTarget, (string)JObject.Parse((string)structure["text"])["members"].Single()["target"],
+                    "historical workspace still advertises the same exact member");
+                found = execute(ResourceToolCatalog.FindToolId, new { query = originalTarget, scope = "html" });
+                AssertEqual(originalTarget, (string)found["items"].Single()["target"], "exact historical search round-trips");
+                var currentTarget = (string)execute(ResourceToolCatalog.FindToolId, new { query = "styles.css", scope = "html" })["items"]
+                    .Single(item => (string)item["type"] == "HTML file")["target"];
+                AssertTrue(originalTarget != currentTarget, "versions of the same file have different semantic targets");
+                AssertEqual("body { color: blue; } /* replacement */", (string)execute(ResourceToolCatalog.ReadToolId,
+                    new { target = currentTarget, representation = "source" })["text"], "current discovery reads current bytes");
+                AssertEqual(currentTarget, (string)execute(ResourceToolCatalog.FindToolId,
+                    new { query = "HTML file: styles.css", scope = "html" })["items"].Single()["target"],
+                    "a partial human label remains a discovery query");
+                for (var revision = 0; revision < 26; revision++) publish("/* later revision " + revision + " */");
+                AssertEqual("body { color: blue; } /* replacement */", (string)execute(ResourceToolCatalog.ReadToolId,
+                    new { target = currentTarget, representation = "source" })["text"], "exact lookup consumes multiple metadata pages");
+                var paths = FixturePaths.Value;
+                var chats = new ChatStore(paths);
+                chats.Save(session);
+                session = chats.Load(session.Id);
+                session.Artifacts.Clear();
+                session.ActiveHtmlArtifactId = null;
+                var restarted = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths), new ToolStore(paths));
+                runtime = restarted.CreateNativeRuntime(session, tools, new AppSettings(), ChatModes.Agent, false);
+                read = execute(ResourceToolCatalog.ReadToolId, new { target = originalTarget, representation = "source" });
+                AssertEqual("body { color: red; } /* original */", (string)read["text"],
+                    "retained document history resolves after restart without an active or linked workspace");
+                System.IO.File.Delete(executor.Payloads.PathFor(originalArtifact.ContentSha256));
+                AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() =>
+                    restarted.ResourceGateway.ResolveIntentTarget(session, originalTarget)).ErrorCode,
+                    "a missing historical snapshot cannot fall forward to current bytes");
+            });
+
+            var local = NewSession(FakeOfficeAdapter.ForHost("Excel"));
+            var gateway = new ResourceGatewayService();
+            HtmlWorkspaceToolService.UpsertFile(local, "styles.css", "css", "/* retained stylesheet */", true);
+            var retained = local.Artifacts.Single(item => item.Id == local.ActiveHtmlArtifactId);
+            var oldTarget = gateway.Find(local, "styles.css", "html").Items.Single(item => item.Type == "HTML file").Target;
+            HtmlWorkspaceToolService.DeleteFile(local, "styles.css");
+            var selected = gateway.ResolveIntentTarget(local, oldTarget);
+            AssertEqual("/* retained stylesheet */", gateway.ReadWhole(local, selected.Reference, "source").Result.Text,
+                "a file removed from the active local workspace remains readable in its historical snapshot");
+            AssertEqual("resource_target_not_found", RuntimeThrows<ResourceRequestException>(() =>
+                gateway.ResolveIntentTarget(local, oldTarget.Substring(0, oldTarget.IndexOf(" in HTML workspace: ", StringComparison.Ordinal)))).ErrorCode,
+                "an unqualified historical label is not silently rebound");
+            var duplicate = JsonConvert.DeserializeObject<ChatArtifact>(JsonConvert.SerializeObject(retained));
+            duplicate.Id = Guid.NewGuid().ToString("N");
+            local.Artifacts.Add(duplicate);
+            AssertEqual("resource_target_ambiguous", RuntimeThrows<ResourceRequestException>(() =>
+                gateway.ResolveIntentTarget(local, oldTarget)).ErrorCode, "equal semantic snapshot labels fail closed");
+        }
+
         private static void GenericSearchPublishesZeroMatchScans()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>

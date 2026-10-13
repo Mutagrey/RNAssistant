@@ -203,7 +203,7 @@ namespace RNAssistant.Office.Tools
                         ToolFailureKind.RejectedNoEffect,
                         complete ? ToolRetryPolicy.Replan : ToolRetryPolicy.RefreshRequired,
                         identity, ResourceRepresentations.Source,
-                        "HTML file: " + file.Path,
+                        ChatHtmlResourceCatalog.FileTarget(artifact, file),
                         complete ? before : null, complete);
                     var matchingPaths = new List<string>();
                     if (ex.ErrorCode == "text_patch_not_found" && operations != null &&

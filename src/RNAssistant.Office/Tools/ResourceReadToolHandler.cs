@@ -93,7 +93,7 @@ namespace RNAssistant.Office.Tools
             {
                 var manifest = JsonConvert.DeserializeObject<HtmlWorkspaceResourceManifest>(selection.Result.Text);
                 projection.Text = Serialize(new HtmlWorkspaceReadInfo {
-                    Members = manifest.Resources.Select(member => Gateway.DescribeHtmlMember(Session, member)).ToList() });
+                    Members = manifest.Resources.Select(member => Gateway.DescribeHtmlMember(Session, member, selected.Descriptor)).ToList() });
                 projection.ReturnedCharacters = projection.TotalCharacters = projection.Text.Length;
             }
             var result = RuntimeResult.Ok(

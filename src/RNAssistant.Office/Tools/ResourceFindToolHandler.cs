@@ -11,7 +11,7 @@ namespace RNAssistant.Office.Tools
     {
         internal static readonly ToolDescriptor Descriptor = new ToolDescriptor(
             ResourceToolCatalog.FindToolId,
-            "Read-only: Find readable conversation, document, selection, HTML, VBA, or backup resources. Returns semantic targets, supported representations, and usage constraints for common.resources_read. Follow each candidate's usage; a query returns filtered matches, not a complete inventory. Exact Office target queries are point lookups. For all VBA modules, prefer the bound project target in RUNTIME_CONTEXT; if absent, browse scope=vba without query and read the first VBA project target as structure. Provider routing, resource kinds, exact references, paging, record paths, and limits are runtime-owned.",
+            "Read-only: Find readable conversation, document, selection, HTML, VBA, or backup resources. Returns semantic targets, supported representations, and usage constraints for common.resources_read. Follow each candidate's usage; a query returns filtered matches, not a complete inventory. Exact Office and qualified HTML target queries are point lookups. backups contains VBA journal entries; for retained HTML files read the workspace structure and copy its qualified member target. For all VBA modules, prefer the bound project target in RUNTIME_CONTEXT; if absent, browse scope=vba without query and read the first VBA project target as structure. Provider routing, resource kinds, exact references, paging, record paths, and limits are runtime-owned.",
             Parameters());
         internal static readonly ToolPolicy Policy = new ToolPolicy(
             ToolEffect.Read,

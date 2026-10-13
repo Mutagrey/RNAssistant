@@ -309,6 +309,9 @@ namespace RNAssistant.Harness
                         "recovery labels the complete source");
                     AssertEqual(ToolRetryPolicy.Replan, failed.Recovery.RetryPolicy,
                         "model can repair the patch from returned source");
+                    var recoveryTarget = executor.ResourceGateway.ResolveIntentTarget(session, failed.Recovery.SemanticTarget);
+                    AssertEqual(source, executor.ResourceGateway.ReadWhole(session, recoveryTarget.Reference, "source").Result.Text,
+                        "patch recovery advertises a readable exact member target");
 
                     var corrected = ExecuteHtmlNative(runtime,
                         HtmlWorkspaceToolCatalog.ApplyPatchToolId,
@@ -487,6 +490,9 @@ namespace RNAssistant.Harness
                         "rejected replacement creates no HTML revision");
 
                     var gateway = executor.ResourceGateway;
+                    var recoveryTarget = gateway.ResolveIntentTarget(session, unseen.Recovery.SemanticTarget);
+                    AssertEqual("<main>first</main>", gateway.ReadWhole(session, recoveryTarget.Reference, "source").Result.Text,
+                        "source guard recovery advertises a readable exact member target");
                     var member = gateway.List(session, "chat", ChatHtmlResourceCatalog.FileKind,
                         null, 10).Items.Single(item => item.Title == "index.html");
                     var read = gateway.Read(session, new ResourceReadRequest
@@ -737,7 +743,10 @@ namespace RNAssistant.Harness
                 AssertEqual(ToolExecutionOutcome.Ok, structure.Outcome, "workspace structure remains readable");
                 var manifest = JObject.Parse((string)JObject.Parse(structure.Result.DataJson)["text"]);
                 AssertTrue(!manifest.ToString().Contains("rna://"), "model manifest has semantic targets, not opaque references");
-                AssertTrue(((JArray)manifest["members"]).Any(item => (string)item["target"] == memberTarget),
+                var currentMemberTarget = executor.ResourceGateway.Find(session, null, "html").Items
+                    .Single(item => item.Type == "HTML data").Target;
+                AssertTrue(currentMemberTarget != memberTarget, "each workspace snapshot qualifies its own member target");
+                AssertTrue(((JArray)manifest["members"]).Any(item => (string)item["target"] == currentMemberTarget),
                     "manifest supplies directly readable member targets");
 
                 foreach (var wrongTarget in new[] { memberTarget, workspaceTarget })
@@ -755,6 +764,11 @@ namespace RNAssistant.Harness
                 var bindArgs = new JObject { ["name"] = "dashboardData", ["target"] = sourceTarget, ["view"] = "records" };
                 var rebound = ExecuteHtmlNative(runtime, HtmlWorkspaceToolCatalog.BindDataToolId, bindArgs);
                 AssertEqual(ToolExecutionOutcome.Ok, rebound.Outcome, "explicit source can be rebound as records");
+                var historicalBinding = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
+                    new JObject { ["target"] = memberTarget, ["representation"] = "text" });
+                AssertEqual(ToolExecutionOutcome.Ok, historicalBinding.Outcome, "historical binding remains readable after rebind");
+                AssertEqual("text", (string)JObject.Parse((string)JObject.Parse(historicalBinding.Result.DataJson)["text"])["view"],
+                    "historical member does not borrow the current binding view");
                 var binding = session.HtmlWorkspace.DataSources.Single().Binding;
                 using (var plane = new ResourceDataPlaneService(executor.ResourceGateway))
                 {

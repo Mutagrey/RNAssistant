@@ -63,7 +63,11 @@ namespace RNAssistant.Office.Services
                 matches = SearchIntentResources(
                     session, query, scope, unavailable, ref sourceTruncated);
                 foreach (var match in matches.Values)
-                    AddIntentState(states, DescriptorFromSearchMatch(match));
+                {
+                    if (states.Any(state => state.Reference.Uri == match.Reference.Uri)) continue;
+                    try { AddIntentState(states, DescriptorFromSearchMatch(session, match)); }
+                    catch (Exception ex) when (IsIntentAvailabilityFailure(ex)) { unavailable.Add("html"); }
+                }
             }
             AssignIntentTargets(states);
 
@@ -110,6 +114,11 @@ namespace RNAssistant.Office.Services
             string query,
             string scope)
         {
+            if ((scope == "all" || scope == "html") && IsHtmlIntentTarget(query) &&
+                query.EndsWith("Z]", StringComparison.Ordinal) &&
+                (query.StartsWith("HTML workspace: ", StringComparison.Ordinal) ||
+                    query.Contains(" in HTML workspace: ")))
+                return ResolveIntentTarget(session, query).Descriptor;
             if (query.Length == 0 ||
                 scope != "all" && scope != "document") return null;
             var excel = _registry.All().OfType<ExcelResourceProvider>()
@@ -191,6 +200,16 @@ namespace RNAssistant.Office.Services
                     "Resource URIs cannot be used as model targets. Copy one exact semantic target from RUNTIME_CONTEXT or common.resources_find; it never contains ://.",
                     "resource_target_runtime_owned",
                     true);
+            }
+            if (IsHtmlIntentTarget(target))
+            {
+                var provider = _registry.All().OfType<ChatArtifactResourceProvider>().SingleOrDefault();
+                if (provider == null)
+                    throw new ResourceRequestException("HTML resource provider is unavailable.", "RESOURCE_PROVIDER_UNAVAILABLE", false);
+                var descriptor = WithProvider(provider, session, () => provider.ResolveHtmlTarget(session, target));
+                var type = IntentType(descriptor);
+                return new ResourceIntentTarget { Target = target, Type = type, Scope = IntentScope(descriptor, type),
+                    Descriptor = descriptor, Reference = descriptor.Reference };
             }
             if (target.StartsWith("document: ", StringComparison.Ordinal) ||
                 target.StartsWith("selection: ", StringComparison.Ordinal))
@@ -352,7 +371,7 @@ namespace RNAssistant.Office.Services
                 var searchMatches = SearchIntentResources(session, IntentTargetQuery(target), scope, unavailable, ref searchTruncated);
                 foreach (var foundMatch in searchMatches.Values)
                 {
-                    var descriptor = DescriptorFromSearchMatch(foundMatch);
+                    var descriptor = DescriptorFromSearchMatch(session, foundMatch);
                     if (string.Equals(IntentTarget(descriptor), target, StringComparison.Ordinal))
                         searchConfirmedTarget = true;
                     AddIntentState(states, descriptor);
@@ -745,8 +764,9 @@ namespace RNAssistant.Office.Services
             return info;
         }
 
-        internal HtmlResourceMemberInfo DescribeHtmlMember(ChatSession session, ResourceDescriptor member)
+        internal HtmlResourceMemberInfo DescribeHtmlMember(ChatSession session, ResourceDescriptor member, ResourceDescriptor workspace)
         {
+            member.ParentTarget = IntentTarget(workspace);
             var info = new HtmlResourceMemberInfo {
                 Target = IntentTarget(member), Type = IntentType(member), Name = member.Title,
                 Active = member.Metadata.ContainsKey("active") && member.Metadata["active"] == "true",
@@ -799,12 +819,22 @@ namespace RNAssistant.Office.Services
         internal static string IntentTarget(ResourceDescriptor descriptor)
         {
             var value = IntentBaseTarget(descriptor);
-            return descriptor != null && descriptor.CreatedUtc.HasValue
+            value = descriptor != null && descriptor.CreatedUtc.HasValue
                 ? value + " [created " + descriptor.CreatedUtc.Value
                     .ToUniversalTime().ToString(
                         "yyyy-MM-dd'T'HH:mm:ss.fffffff'Z'",
                         CultureInfo.InvariantCulture) + "]"
                 : value;
+            return descriptor != null && ChatHtmlResourceCatalog.SupportsKind(descriptor.Kind) &&
+                !string.IsNullOrWhiteSpace(descriptor.ParentTarget)
+                ? value + " in " + descriptor.ParentTarget : value;
+        }
+
+        private static bool IsHtmlIntentTarget(string target)
+        {
+            return target.StartsWith("HTML workspace: ", StringComparison.Ordinal) ||
+                target.StartsWith("HTML file: ", StringComparison.Ordinal) ||
+                target.StartsWith("HTML data: ", StringComparison.Ordinal);
         }
 
         private static ResourceSearchMatch Match(
@@ -817,9 +847,11 @@ namespace RNAssistant.Office.Services
                 : null;
         }
 
-        private static ResourceDescriptor DescriptorFromSearchMatch(
-            ResourceSearchMatch match)
+        private ResourceDescriptor DescriptorFromSearchMatch(
+            ChatSession session, ResourceSearchMatch match)
         {
+            if (ChatHtmlResourceCatalog.SupportsKind(match.Kind))
+                return Resolve(session, match.Reference.Uri).Resource;
             var descriptor = new ResourceDescriptor
             {
                 Reference = match.Reference == null ? null : match.Reference.Copy(),
