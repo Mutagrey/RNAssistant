@@ -1088,12 +1088,21 @@ namespace RNAssistant.Harness
                 var arguments = "{\"content\":\"" + new string('x', 100000) + "\"}";
                 var invocation = new ToolInvocation { ToolCallId = "large", ToolId = "common.html_workspace_write_file" };
                 var call = new ChatMessage { Role = "assistant", ProtocolMessage = true, ToolCallId = invocation.ToolCallId, ToolName = invocation.ToolId,
+                    ResponseProtocolVersion = ConversationResponse.ProtocolVersion,
                     Content = "Large accepted write.", ToolResultProtocolVersion = ToolResultWire.CurrentVersion, ToolResultRole = "tool",
                     AcceptedCallOrigin = new AcceptedToolCallOrigin("step", "attempt", 0), ToolCalls = new List<RNAssistant.Core.Llm.LlmToolCall> {
                         new RNAssistant.Core.Llm.LlmToolCall { Id = invocation.ToolCallId, Name = invocation.ToolId, Type = "function", ArgumentsJson = arguments } },
                     ArgumentPayload = PayloadRef.FromBlob(payloads.StoreText(arguments, "application/json")) };
                 AcceptedCallPayloadService.Externalize(call, payloads);
                 AssertTrue(call.Content.Length < 256 && call.ToolCalls.Count == 0, "durable accepted fact contains metadata only");
+                AssertEqual("Large accepted write.", call.AcceptedCallNarration, "archived call header retains exact narration");
+                AssertEqual(call.AcceptedCallNarration, ChatCloneService.CloneMessages(new[] { call }).Single().AcceptedCallNarration,
+                    "fork cloning retains the exact archived commentary");
+                var invalidHeader = HistoricalContextProjector.Project(call);
+                invalidHeader.AcceptedCallNarration = "Invented explanation.";
+                RuntimeThrows<InvalidOperationException>(() => AcceptedCallPayloadService.Hydrate(invalidHeader, payloads));
+                invalidHeader.AcceptedCallNarration = null;
+                AssertTrue(!AcceptedCallPayloadService.IsExternalizedCall(invalidHeader), "incompatible headers cannot silently lose commentary");
                 var result = AgentJsonProtocol.CreateToolResultMessage(invocation,
                     RNAssistant.Core.Tools.Contracts.ToolResult.Ok("saved", "{\"path\":\"index.html\"}"), "tool");
                 var changedResource = new ResourceIdentity("rna://state/conversation/runtime-only");
@@ -1114,6 +1123,8 @@ namespace RNAssistant.Harness
                 var compiled = new ModelContextCompiler(projection: ModelToolResultProjection.Instance).Compile(frozen,
                     new ChatMessage[0], new[] { call, result, ContinuityCall(later), later }, null, new ToolCatalogEntry[0], new AppSettings(), 1024);
                 AssertEqual(0, compiled.Receipt.HydratedPayloads, "older archived frame can fold without reloading its large arguments");
+                AssertContains(compiled.Messages.Single(item => item.Id == call.Id).Content, "Large accepted write.",
+                    "archived narration reaches the model without reading its argument payload");
                 AssertTrue(string.Join("", compiled.Messages.Select(item => item.Content)).Length < 4096, "completed large source is not reserialized into prompt");
                 AssertTrue(string.Join("", compiled.Messages.Select(item => item.Content)).IndexOf(
                         changedResource.Uri, StringComparison.Ordinal) < 0,

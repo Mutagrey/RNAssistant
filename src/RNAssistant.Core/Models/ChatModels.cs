@@ -125,6 +125,10 @@ namespace RNAssistant.Core.Models
         public List<StructuredContextClaim> ContextClaims { get; set; } = new List<StructuredContextClaim>();
         public PayloadRef ArgumentPayload { get; set; }
         public PayloadRef AcceptedCallPayload { get; set; }
+        // Exact accepted response text retained in the lightweight call header,
+        // so folding archived arguments does not also discard the explanation.
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string AcceptedCallNarration { get; set; }
         public PayloadRef ResultPayload { get; set; }
         public ResourceEffect ResourceEffect { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]

@@ -41,7 +41,7 @@ namespace RNAssistant.Core.Tools
         private static JObject NoteSchema()
         {
             return new JObject { ["type"] = "string", ["maxLength"] = TaskListService.MaxStepCharacters,
-                ["description"] = "Optional concise finding or decision with evidence, uncertainty or remaining dependency; keep only what later steps need. Omit to preserve an unchanged stage note; empty clears it." };
+                ["description"] = "Optional current finding or decision with its basis, uncertainty and remaining dependency. Replace superseded assessments; preserve unresolved contradictions and only what later steps need. A note is an agent assessment, not source or effect evidence; updating it does not require a visible progress message. Omit to preserve an unchanged stage note; empty clears it." };
         }
 
         public static string Schema()

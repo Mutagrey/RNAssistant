@@ -47,6 +47,7 @@ namespace RNAssistant.Core.Llm
                     DataJson = source.CompletedOperation.DataJson },
                 ArgumentPayload = source.ArgumentPayload,
                 AcceptedCallPayload = source.AcceptedCallPayload,
+                AcceptedCallNarration = source.AcceptedCallNarration,
                 ResultPayload = source.ResultPayload,
                 ResourceEffect = source.ResourceEffect,
                 ExecutionProgress = source.ExecutionProgress,

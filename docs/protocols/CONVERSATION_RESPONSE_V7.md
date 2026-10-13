@@ -1,6 +1,6 @@
 # Conversation Response v7
 
-Status: **active**. Response protocol is `7`; built-in prompt schema is `40`.
+Status: **active**. Response protocol is `7`; built-in prompt schema is `41`.
 The [v6 contract](CONVERSATION_RESPONSE_V6.md) is historical. Existing v6 chats
 require explicit new chat/reset; no automatic conversion or data deletion occurs.
 
@@ -30,9 +30,17 @@ progress message. `needs_input` preserves the question and waits for the user's
 next message; `common.questions_ask` remains available for structured questions
 and pauses through its typed `AwaitingUser` result. Neither path implies `done`.
 
-The `message` on `tool` concisely states the relevant finding from a prior
-result, when available, the decision it supports and why the selected call is
-next. An initial read states the question it will answer. `done` answers the user
+The `message` on `tool` may be empty. Its frequency is independent of tool calls
+and Task List note updates. At the start of a substantial task, the model briefly
+states the approach once; later updates report a new relevant finding, decision, contradiction,
+blocker or meaningful stage change, with its basis/uncertainty and next action
+when useful. Routine skill/schema loading or continuation of an explained action
+does not require another message. Rephrasing prior progress adds no information.
+`ModelProtocolWire.MessageGuidance` is shared by defaults, schema and format repair.
+There is no extra model call, timer-driven narration, prose classifier or runtime
+completion gate. Tool activities retain their identities and remain available in
+the transcript; UI disclosures may fold completed silent work.
+`done` answers the user
 or reports the delivered outcome and available checks; `blocked` and `needs_input` name the
 unfinished outcome and obstacle or question. Message prose does not expose
 private reasoning or grant execution authority. The selected calls, tool

@@ -19,6 +19,7 @@ namespace RNAssistant.Core.Storage
                 message.ArgumentPayload != null && message.AcceptedCallPayload != null &&
                 message.AcceptedCallPayload.ContentType == ContentType &&
                 message.AcceptedCallOrigin != null &&
+                message.AcceptedCallNarration != null &&
                 !string.IsNullOrWhiteSpace(message.ToolCallId) &&
                 !string.IsNullOrWhiteSpace(message.ToolName) &&
                 message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion &&
@@ -33,9 +34,13 @@ namespace RNAssistant.Core.Storage
             if (message == null || payloads == null || message.ArgumentPayload == null ||
                 string.IsNullOrWhiteSpace(message.ToolCallId) || message.AcceptedCallOrigin == null)
                 throw new ArgumentException("An exact accepted call and argument payload are required.");
+            var accepted = ConversationResponseHistoryReader.Read(message);
+            if (!accepted.Success)
+                throw new ArgumentException("An identified accepted response is required: " + accepted.Error);
             var body = new AcceptedCallBody { Content = message.Content, ToolCalls = message.ToolCalls };
             message.AcceptedCallPayload = PayloadRef.FromBlob(payloads.StoreText(JsonConvert.SerializeObject(body),
                 ContentType));
+            message.AcceptedCallNarration = accepted.Response.Message;
             message.Content = "ACCEPTED_TOOL_CALL: " + message.ToolName + " (exact arguments retained in resource payload)";
             message.ToolCalls = new List<LlmToolCall>();
         }
@@ -54,6 +59,9 @@ namespace RNAssistant.Core.Storage
                 throw new InvalidOperationException("ACCEPTED_CALL_PAYLOAD_INVALID: explicit reset or cancellation required.");
             var message = JsonConvert.DeserializeObject<ChatMessage>(JsonConvert.SerializeObject(fact));
             message.Content = body.Content; message.ToolCalls = body.ToolCalls;
+            var accepted = ConversationResponseHistoryReader.Read(message);
+            if (!accepted.Success || accepted.Response.Message != fact.AcceptedCallNarration)
+                throw new InvalidOperationException("ACCEPTED_CALL_PAYLOAD_INVALID: narration disagrees with the exact accepted body.");
             return message;
         }
 

@@ -316,6 +316,7 @@ namespace RNAssistant.Harness
                 Test("context: compaction uses structured source claims", CompactionUsesStructuredSourceClaims),
                 Test("context continuity: preserves recent pair and transport", ContextContinuityKeepsRecentPair),
                 Test("context continuity: folds older frames only for budget", ContextContinuityFoldsOnlyForBudget),
+                Test("context continuity: narration survives compaction and restart", ContextContinuityNarrationSurvivesCompaction),
                 Test("context continuity: preserves facts and diagnostics", ContextContinuityPreservesFacts),
                 Test("context continuity: source-bound failure becomes historical", ContextContinuityTracksFailedObservation),
                 Test("context continuity: mutation receipts preserve target and outcome", ContextContinuityKeepsMutationReceipts),

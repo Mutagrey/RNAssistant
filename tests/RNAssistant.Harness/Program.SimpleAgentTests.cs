@@ -196,6 +196,9 @@ namespace RNAssistant.Harness
                 call.Response.ToolCalls[0].Arguments["items"][0] is JObject,
                 "nested arrays and objects remain native JSON tokens");
             AssertTrue(!call.Response.Final, "tool turns are not final answers");
+            var silent = JObject.Parse(callJson);
+            silent["message"] = "";
+            AssertTrue(ParseV4(silent.ToString(), tool).Success, "a tool call does not require visible narration");
             AssertTrue(JToken.DeepEquals(JObject.Parse(callJson), JObject.Parse(call.Response.ToJson())), "call round trip preserves arguments without assigning ids");
             AssertTrue(typeof(ConversationResponse).GetProperty("Status") == null, "v7 DTO has no model or universal status");
             foreach (var action in new[] { "done", "blocked", "needs_input" })
@@ -267,11 +270,18 @@ namespace RNAssistant.Harness
                 AssertTrue(JToken.DeepEquals(original, new JArray(repaired.Take(original.Count))), "repair keeps the frozen request intact");
                 AssertContains((string)repaired.Last()["content"], "FORMAT_REPAIR:", "unsupported continue receives protocol repair");
                 AssertContains((string)repaired.Last()["content"], ModelProtocolWire.ActionGuidance, "repair carries the shared control contract");
+                var repairBody = JObject.Parse(((string)repaired.Last()["content"]).Substring("FORMAT_REPAIR:\n".Length));
+                AssertContains((string)repairBody["instruction"], ModelProtocolWire.MessageGuidance, "repair does not reintroduce per-call narration");
                 AssertTrue(!session.Messages.Any(message => (message.Content ?? "").Contains("I will continue.")),
                     "rejected narrative never enters durable chat history");
                 if (responseMode == AgentResponseModes.JsonSchema)
+                {
                     AssertTrue(JToken.DeepEquals(new JArray("tool", "done", "blocked", "needs_input"),
                         requests[0].SelectToken("response_format.json_schema.schema.properties.action.enum")), "schema exposes only four actions");
+                    AssertEqual(ModelProtocolWire.MessageGuidance,
+                        (string)requests[0].SelectToken("response_format.json_schema.schema.properties.message.description"),
+                        "actual strict wire shares optional progress guidance with repair and defaults");
+                }
                 var completed = service.ExecuteAsync(ChatModes.Agent, "Используй Markdown.", session, NewContext(adapter), settings, catalog, null)
                     .GetAwaiter().GetResult();
                 AssertEqual(AgentResponseStatuses.Completed, completed.ResponseStatus, "user reply resumes work through a real tool step");

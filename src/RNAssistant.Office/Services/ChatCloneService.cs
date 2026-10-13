@@ -382,6 +382,7 @@ namespace RNAssistant.Office.Services
                 ContextClaims = JsonConvert.DeserializeObject<List<StructuredContextClaim>>(JsonConvert.SerializeObject(message.ContextClaims)) ?? new List<StructuredContextClaim>(),
                 ArgumentPayload = message.ArgumentPayload,
                 AcceptedCallPayload = message.AcceptedCallPayload,
+                AcceptedCallNarration = message.AcceptedCallNarration,
                 ResultPayload = message.ResultPayload,
                 ResourceEffect = message.ResourceEffect,
                 AuthorityCommitId = message.AuthorityCommitId,

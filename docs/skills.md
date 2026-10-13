@@ -313,3 +313,7 @@ exact admission remains valid and fits the request budget. Body
 omission/staleness is distinct from the historical successful load. Prompt schema
 33 originally required manual review; schema 35 replaces that flow with automatic
 default migration and a recovery copy before the next settings save.
+Schema 41 uses the same migration for sparse user updates, current Task List notes
+and evidence-grounded compaction. Skill/schema loading alone requires no visible
+comment; independent known missing capability reads may be batched. The runtime
+retention contract is owned by [Conversation protocol](conversation-protocol.md#conversation-context).

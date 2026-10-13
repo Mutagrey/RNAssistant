@@ -203,6 +203,46 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       await page.setViewportSize({ width: 360, height: 920 });
       assert.ok(await page.locator("#previews").evaluate(el => el.scrollWidth <= el.clientWidth + 1), "previews fit narrow " + theme + " theme");
     }
-    console.log("PASS activity layout: action/target/result, Markdown line breaks, deduplicated diagnostics, narrow wrapping and concise step details");
+    await page.evaluate(() => {
+      const view = { RunId: "sparse", TurnId: "sparse", Lifecycle: "running", ExecutionHealth: "unknown",
+        SuccessfulReads: 2, VerifiedWrites: 0, NoChangeWrites: 0, UnverifiedWrites: 1, FailedCalls: 1, UnknownEffects: 1 };
+      const states = [
+        { Status: "completed" }, { Status: "completed" },
+        { Status: "completed", ExecutionEvidence: { Effect: "Unknown" } },
+        { Status: "failed" }, { Status: "waiting" }, { Status: "running" }
+      ];
+      window.sparseItems = states.map((extra, index) => {
+        const activity = Object.assign({ Kind: "tool", RunId: "sparse", StepId: "sparse-" + index,
+          ToolId: "common.resources_read", ToolCallId: "sparse-call-" + index,
+          Subtitle: "Источник " + index, StepMessage: index === 0 ? "Проверю исходные данные перед изменением." : "",
+          Display: { action: "Чтение", running: "Читаю", operation: "Read" } }, extra);
+        return { activity, index, message: { Id: "sparse-message-" + index, Role: "assistant",
+          RunId: "sparse", RunViewState: view, Activity: activity, Content: "" } };
+      });
+      const run = renderAgentRunArticle({ live: true, items: sparseItems }); run.id = "sparse-run";
+      document.querySelector("main").appendChild(run);
+    });
+    for (const width of [740, 360]) {
+      await page.setViewportSize({ width, height: 920 });
+      const group = page.locator("#sparse-run .agent-completed-actions");
+      await group.evaluate(node => { node.open = false; });
+      assert.equal(await page.locator("#sparse-run .agent-step-message:visible").count(), 1);
+      assert.equal(await group.locator(".kind-tool:visible").count(), 0, "completed calls are hidden until expanded");
+      assert.equal(await page.locator("#sparse-run .kind-tool:visible").count(), 4, "unknown, failed, waiting and running remain visible");
+      assert.equal(await page.locator("#sparse-run .is-live-current:visible").count(), 1);
+      await group.locator(":scope > summary").focus();
+      await page.keyboard.press("Enter");
+      assert.equal(await page.locator("#sparse-run .kind-tool:visible").count(), 6, "keyboard expansion reveals every original call");
+      await page.evaluate(() => {
+        const previous = document.getElementById("sparse-run");
+        const snapshot = messageDisclosureSnapshot(previous);
+        // The saved running lifecycle must render the same group after reload.
+        const restored = renderAgentRunArticle({ live: false, items: sparseItems }); restored.id = "sparse-run";
+        restoreMessageDisclosures(restored, snapshot); previous.replaceWith(restored);
+      });
+      assert.equal(await page.locator("#sparse-run .kind-tool:visible").count(), 6, "refresh preserves explicit expansion");
+      assert.ok(await page.locator("#sparse-run").evaluate(node => node.scrollWidth <= node.clientWidth + 1), "group fits narrow chat");
+    }
+    console.log("PASS activity layout: action/target/result, Markdown, diagnostics, narrow wrapping and accessible silent-step groups");
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

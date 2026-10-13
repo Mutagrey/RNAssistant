@@ -365,8 +365,13 @@ namespace RNAssistant.Harness
             AssertContains(AgentPromptDefaults.GeneralInstructions, "A loaded skill does not admit any tool named in its text",
                 "Agent loads executable schemas after skill guidance");
             foreach (var prompt in new[] { AgentPromptDefaults.GeneralInstructions, AgentPromptDefaults.ChatInstructions, AgentPromptDefaults.PlanInstructions })
+            {
                 AssertContains(prompt, RNAssistant.Core.ModelProtocol.ModelProtocolWire.ActionGuidance,
                     "all modes share the control contract");
+                AssertContains(prompt, RNAssistant.Core.ModelProtocol.ModelProtocolWire.MessageGuidance,
+                    "all modes share useful, optional progress guidance");
+                AssertTrue(!prompt.Contains("For `tool`, use one or two concise sentences"), "no per-call narration obligation remains");
+            }
             foreach (var version in new[] { 0, AppSettings.CurrentAgentPromptSchemaVersion - 1,
                 AppSettings.CurrentAgentPromptSchemaVersion, AppSettings.CurrentAgentPromptSchemaVersion + 1 })
             {

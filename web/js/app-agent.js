@@ -238,6 +238,44 @@ function appendAgentStepMessage(parent, text) {
   enhanceMarkdown(message, { enableJsonViewer: true, sourceText: text });
 }
 
+// Presentation groups follow comments; model-step and call identities stay intact.
+function groupAgentRunUpdates(steps) {
+  var groups = [];
+  (steps || []).forEach(function (step) {
+    var silent = !String(step.message || "").trim();
+    var previous = groups[groups.length - 1];
+    if (previous && silent) {
+      previous.items = previous.items.concat(step.items || []);
+      previous.ambient = step.ambient;
+      previous.collapseCompleted = true;
+    } else {
+      groups.push({ message: step.message, items: (step.items || []).slice(),
+        ambient: step.ambient, collapseCompleted: silent });
+    }
+  });
+  return groups;
+}
+
+function appendAgentCompletedActions(parent, actions, stats) {
+  if (!actions.length) return;
+  var details = document.createElement("details");
+  details.className = "agent-run-history agent-completed-actions";
+  details.setAttribute("data-disclosure-key", "actions:" + activityTimelineKey(actions[0].activity));
+  var summary = document.createElement("summary");
+  summary.className = "agent-run-history-summary";
+  var title = document.createElement("span");
+  title.className = "agent-run-history-title";
+  title.textContent = "Действия · " + actions.length;
+  summary.appendChild(title);
+  var caret = document.createElement("span");
+  caret.className = "agent-run-history-caret";
+  caret.setAttribute("aria-hidden", "true");
+  summary.appendChild(caret);
+  details.appendChild(summary);
+  appendAgentRunProcess(details, actions, stats);
+  parent.appendChild(details);
+}
+
 function appendLiveAgentStep(parent, step, isLast) {
   var actions = [];
   function append(item, activity, nested) {
@@ -256,7 +294,23 @@ function appendLiveAgentStep(parent, step, isLast) {
   stats.current = active;
   stats.liveFeed = true;
   if (actions.length) {
-    appendAgentRunProcess(parent, actions, stats);
+    if (step.collapseCompleted) {
+      var completed = [];
+      actions.forEach(function (item) {
+        var kind = activityKind(item.activity);
+        if ((kind === "tool" || kind === "control") && activityPresentationState(item.activity) === "completed") {
+          completed.push(item);
+        } else {
+          // Preserve chronology and keep active work, questions and diagnostics visible.
+          appendAgentCompletedActions(parent, completed, stats);
+          completed = [];
+          appendAgentRunProcess(parent, [item], stats);
+        }
+      });
+      appendAgentCompletedActions(parent, completed, stats);
+    } else {
+      appendAgentRunProcess(parent, actions, stats);
+    }
     appendAgentRunArtifacts(parent, step.items || []);
   }
   var ambient = step.ambient || (step.items || []).filter(function (item) {
@@ -482,11 +536,12 @@ function renderAgentRunArticle(run) {
   process.className = "agent-run-actions" + (agentToolCallCount(timeline) ? " has-actions" : "");
   var expanded = !run.continued && (run.live || (runViewState && ["running", "awaiting_user", "awaiting_confirmation"].indexOf(runViewState.lifecycle) >= 0));
   if (expanded) {
-    steps.forEach(function (step, stepIndex) {
+    var updates = groupAgentRunUpdates(steps);
+    updates.forEach(function (step, stepIndex) {
       var section = document.createElement("section");
       section.className = "agent-model-step";
       appendAgentStepMessage(section, step.message);
-      appendLiveAgentStep(section, step, stepIndex === steps.length - 1);
+      appendLiveAgentStep(section, step, stepIndex === updates.length - 1);
       process.appendChild(section);
     });
   } else {

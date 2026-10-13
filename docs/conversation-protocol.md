@@ -135,17 +135,29 @@ reads may share a batch. The next mutation is proposed after the previous result
 reaches the model. Reuse its included complete current after-state; read again only
 when the required source body is absent or invalidated.
 Unknown mutation effects remain visible in cumulative run health and the terminal
-summary, but do not stop the current run by themselves. Schema 40 and v7 require
+summary, but do not stop the current run by themselves. Schema 41 and v7 require
 an explicit model action: `tool`, `done`, `blocked` or `needs_input`.
-Tool messages briefly record actual findings, decisions,
-next actions and reasons; an initial read names the question it will answer.
+`ModelProtocolWire.MessageGuidance` gives defaults, response schema and repair one
+communication policy. Visible update frequency is independent of tool-call and
+Task List note frequency: a brief initial approach, then only new relevant
+findings, decisions, contradictions, blockers or meaningful stage changes.
+`message=""` continues an already explained operation without another paragraph,
+including routine capability preparation. Useful updates connect the changed
+understanding to its basis/uncertainty and next action; they never repeat a plan
+or treat earlier assistant wording as evidence.
 They do not request private reasoning or turn narrative into execution evidence. The current settings
 migration selects built-in defaults for an older schema and archives the prior
 prompt texts on save; see [prompt migration](skills.md#continuity-after-compaction--2026-10-01).
 Resource descriptions/snippets aid discovery but do not prove complete content.
 Compaction guidance preserves findings, decisions, constraints, open questions and
-next actions without upgrading intentions/interpretations to facts. Its local
-parser rejects an entire claims array containing non-object entries, preserving
+next actions without upgrading intentions/interpretations to facts. Its
+instructions reconcile earlier claims with later evidence and user corrections,
+preserve unresolved contradictions and consequential values, and remove fulfilled
+actions only with supporting evidence. A newer statement alone cannot resolve a
+conflict. Only reasons needed by unfinished work survive; repeated narration and
+obsolete chronological detail do not. Semantic summary quality remains a model
+evaluation concern, distinct from source-role validation. The local parser
+rejects an entire claims array containing non-object entries, preserving
 the prior checkpoint rather than silently accepting a partial extraction.
 The shared compaction helper honors `AgentResponseMode`: `json_schema` sends an
 exact schema whose claim-kind alternatives allow only fully included, eligible
@@ -196,7 +208,10 @@ a status update or revised save resumes it.
 
 At a meaningful status change or decision, the agent records a short step note
 with the decisive finding or choice, its evidence or uncertainty, and what
-remains. Routine tool narration stays in the run trace. A note may be updated
+remains. Notes describe the current assessment; superseded conclusions are
+replaced, with a short rejected-approach reason only when it prevents a likely
+repeat. Unresolved contradictions remain explicit. Routine tool narration stays
+in the run trace; note writes do not require a visible comment. A note may be updated
 with the current status when only its content changes; it is an agent assessment,
 not independent proof of a tool effect.
 
@@ -466,6 +481,20 @@ results and then checks the complete request budget. The durable event stream ke
 original calls/results; filtering never deletes them. Search results are bounded
 discovery metadata/snippets, not proof that the underlying body was read.
 
+When a completed call/result is folded (including repeated reads and stale-source
+receipts), its nonempty first-call narration remains a separate assistant update
+with the original accepted-message identity. It is budgeted once, carries no tool
+call or source/effect authority, and reaches compaction as an assistant source.
+The latest intact pair keeps its original transport and wording. The compiler
+does not classify text importance or deduplicate explanations by wording; the
+model's sparse-update policy and bounded compaction claims handle relevance.
+`AcceptedCallNarration` preserves exact commentary in an externalized call header,
+so older large argument payloads need not be hydrated merely to recover it.
+Hydration verifies that header against the canonical accepted body. Incompatible
+archived headers fail explicitly; no historical transcript is rewritten or
+previously omitted summary content invented. Task List notes remain the existing
+current-state projection, without a second memory store or a new response field.
+
 When several complete source/text reads fit individually but exceed the combined
 request budget, the compiler omits older bodies until the request fits. Each
 affected call/result pair keeps its selected transport, correlation and actual
@@ -599,7 +628,7 @@ Format repair explicitly maps `$ contains unsupported property arguments` to a
 removed wrapper, moving declared fields up first only when necessary, and forbids
 repeating the rejected object unchanged.
 
-A descriptor over 24,000 compact JSON characters is omitted from the runnable catalog rather than being partially advertised. Complete resource/capability bodies count as observed evidence only when they fit with request options and both reserves. A successful complete source that cannot fit becomes an operation receipt with a `bodyIncluded=false` notice and bounded-read recovery, preserving outcome/effect without granting source authority. Other oversized exact reads/capabilities return explicit `resource_evidence_context_too_large` or `capability_evidence_context_too_large`; a later media/materialization failure likewise changes an otherwise successful read projection to `status:error`. Budget exhaustion is `PromptBudgetExceeded`, not infrastructure failure. Incomplete schema evidence cannot enter an extension. Prompt schema 23 introduced readiness-before-domain-work, dependency-ordered Task List/skill/tool loading, root tool arguments and evidence-reconciled completion. Schema 24 made that contract an explicit Understand → Prepare → Inspect → Execute → Verify → Finish workflow and assigned non-overlapping authority: system prompt owns universal lifecycle, skill bodies own domain workflow/quality, and current tool descriptions/schemas own exact calls, arguments and evidence. Schema 25 strengthens the finish gate and HTML binding guidance. Schema 26 adds the explicit v5 `final` response intent. Schema 27 requires final read-back, regression review and a quality decision. Schema 28 added the operational-summary/discovery guidance. Schema 29 allowed ordered managed-mutation batches. Schema 30 restricts multi-call responses to independent local reads. Schema 31 permits bounded source discovery before Task List/Plan creation and requires durable planning for complex Agent work. Schema 32 requires `final=true` for an answer without tool calls. Schema 33 reuses current source and durable tool admission. Schema 34 pinned task state and introduced source checks. Schema 35 introduced automatic default migration with a recovery copy of prior texts on settings save. Schema 36 removed source-hash checks and final gates. Schema 37 adds explicit actions, bounded no-call progress and Task List guidance for staged Agent work. Schema 38 clarifies meaningful step messages and durable Task List notes. Schema 39 directed the model from skill/schema preparation to the next needed tool call or a terminal decision and reserved `continue` for a new concrete finding or decision, discouraging repeated promises to start work. Current schema 40 removes standalone `continue`; all modes, schema and repair share one action contract. A no-call response ends the turn as `done`, `blocked` or `needs_input`, while progress accompanies actual calls.
+A descriptor over 24,000 compact JSON characters is omitted from the runnable catalog rather than being partially advertised. Complete resource/capability bodies count as observed evidence only when they fit with request options and both reserves. A successful complete source that cannot fit becomes an operation receipt with a `bodyIncluded=false` notice and bounded-read recovery, preserving outcome/effect without granting source authority. Other oversized exact reads/capabilities return explicit `resource_evidence_context_too_large` or `capability_evidence_context_too_large`; a later media/materialization failure likewise changes an otherwise successful read projection to `status:error`. Budget exhaustion is `PromptBudgetExceeded`, not infrastructure failure. Incomplete schema evidence cannot enter an extension. Prompt schema 23 introduced readiness-before-domain-work, dependency-ordered Task List/skill/tool loading, root tool arguments and evidence-reconciled completion. Schema 24 made that contract an explicit Understand → Prepare → Inspect → Execute → Verify → Finish workflow and assigned non-overlapping authority: system prompt owns universal lifecycle, skill bodies own domain workflow/quality, and current tool descriptions/schemas own exact calls, arguments and evidence. Schema 25 strengthens the finish gate and HTML binding guidance. Schema 26 adds the explicit v5 `final` response intent. Schema 27 requires final read-back, regression review and a quality decision. Schema 28 added the operational-summary/discovery guidance. Schema 29 allowed ordered managed-mutation batches. Schema 30 restricts multi-call responses to independent local reads. Schema 31 permits bounded source discovery before Task List/Plan creation and requires durable planning for complex Agent work. Schema 32 requires `final=true` for an answer without tool calls. Schema 33 reuses current source and durable tool admission. Schema 34 pinned task state and introduced source checks. Schema 35 introduced automatic default migration with a recovery copy of prior texts on settings save. Schema 36 removed source-hash checks and final gates. Schema 37 adds explicit actions, bounded no-call progress and Task List guidance for staged Agent work. Schema 38 clarifies meaningful step messages and durable Task List notes. Schema 39 directed the model from skill/schema preparation to the next needed tool call or a terminal decision and reserved `continue` for a new concrete finding or decision, discouraging repeated promises to start work. Schema 40 removed standalone `continue`; all modes, schema and repair share one action contract. A no-call response ends the turn as `done`, `blocked` or `needs_input`, while progress accompanies actual calls. Current schema 41 separates comment frequency from tool calls and Task List note updates through shared `MessageGuidance`, and retains concise decision reasons, uncertainty and unresolved conflicts during compaction.
 
 Planning and execution tracking are separate. Exact native `common.plan_doc_save` accepts complete title/Markdown/status intent in Plan and Agent. It creates an active plan when absent, updates the guarded selected head, or creates an independent plan with `startNew=true` for a different task while retaining the previous lineage. `common.plan_doc_restore` and `common.plan_doc_delete` are Agent/Ask operations whose approval follows the captured run setting. `RUNTIME_CONTEXT.active_plan` exposes only current readable metadata, while the body is found and read through the semantic resource pair. `common.questions_ask` accepts prompt/options without question or option ids; runtime generates UI-only ids, and submitted answers return question text plus selected labels/free text. `common.task_list_set` has typed `save`, `update_statuses`, and `close` branches; runtime owns active-list and stable step ids while the model supplies complete goal/ordered steps for creation or append, sparse indexed status changes, or a terminal outcome with optional final status changes. Model Tool Results omit all these internal identities and guards. A ready-plan handoff revalidates the exact selected revision internally, switches to Agent, and submits a semantic instruction to find/read the active plan; no URI enters the model request.
 

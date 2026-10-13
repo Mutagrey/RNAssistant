@@ -8,6 +8,60 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## Repeated narration during capability preparation — 2026-10-13
+
+**Host-neutral correction implemented; target-model quality and incident attribution
+remain open / model prompt + Core context owners.** Photos from
+`v16.1.0-dev / 921c504c` show repeated near-identical narration during capability
+loading. The later photo distinguishes three targets: the
+`common.html_workspace_authoring` skill, then the `common.html_workspace_read`
+and `common.html_workspace_write_file` tool schemas. These are different
+`common.capabilities_read` requests; their completed labels prove loading, not
+execution of the named HTML tools. The reporter confirms that the repetition
+survives completion and reopening the chat.
+
+Code inspection supports separate preparation steps: a skill loads instructions
+without admitting named tools, and exact schemas become callable at the next
+model-step boundary. `ConversationKernelAdapter` replaces `_stepMessage` from
+each accepted response; the UI groups by StepId and displays that step's message.
+It does not automatically copy an earlier message when admitting a schema. This
+supersedes the initial hypothesis of repeatedly reading one skill. The unchanged
+three-identical-results guard does not combine different capability targets, and
+removing no-call `continue` does not establish a fix for repeated narration.
+
+Prompt review found concrete pressure toward redundant narration: the old default
+and schema requested one or two sentences for every tool response. Prompt schema
+41 now shares one `ModelProtocolWire.MessageGuidance` across defaults, schema and
+repair: a brief initial approach, then only useful changes in findings, decisions,
+uncertainty, blockers or stage. Routine preparation and Task List note updates can
+use `message=""`; known independent missing schema reads can be batched. Comment
+frequency is independent of calls and note updates. Existing saved-prompt migration
+retains its recovery copy. No timer, text classifier or extra model call was added.
+
+The context review also reproduced a retention gap: completed-operation and
+repeated-read folding discarded the first accepted call's narration. The compiler
+now retains nonempty narration separately with its original message identity and
+assistant provenance, within the same context budget. Externalized call headers
+retain the exact accepted text without hydrating large arguments; full-body
+hydration verifies agreement. Missing narration metadata is explicitly incompatible,
+not inferred from old placeholders. Canonical bodies and history remain unchanged.
+Existing Task List notes carry current decisions, their basis and remaining
+dependencies; compaction preserves uncertainty, user corrections and unresolved
+conflicts. Assistant assessments cannot become observations or user decisions.
+There is no second durable memory store. See the
+[canonical context contract](../conversation-protocol.md#conversation-context).
+
+Host-neutral evidence covers folded mutations/reads, latest-call preservation,
+archived payloads and clone integrity, repeated compaction and restart across all
+three result roles, rejected source-kind promotion, prompt/schema/repair alignment,
+and UI rendering of one comment with three distinct calls. Scripted compaction
+checks transport and provenance, not a real model's summary quality. Earlier UI
+checks also passed against exact old Git sources. No incident event stream was
+supplied: accepted messages and step/call correlations remain needed to attribute
+every displayed copy. Repeated-comment rate and continuity still need a controlled
+run on the reported DeepSeek model. Windows/Office/WebView2 qualification and the
+photographed incident remain open; no Office/VSTO validation ran.
+
 ## Resources, links and artifacts review — 2026-10-12
 
 Five P2 findings reproduced against `921c504c`, fixed host-neutral on 2026-10-13.

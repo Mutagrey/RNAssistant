@@ -200,3 +200,52 @@ ctx.applyChatState({ activeChatId: "chat", sessionRevision: 1,
 assert.deepEqual(renderedStreams, ["Still streaming"], "snapshot and restored live output paint together");
 assert.equal(ctx.state.liveReasoning, "Still reasoning");
 console.log("PASS live projection: same-chat refresh retains transient output without an intermediate empty paint");
+
+// A meaningful update can cover several preparation calls, including after reload.
+const preparation = [0, 1, 2].map(index => {
+  const activity = action("prepare-" + index, "load-" + index, "completed", '{}');
+  activity.ToolId = "common.capabilities_read";
+  activity.StepMessage = index === 0 ? "Inspect the styles before choosing a change." : "";
+  return { activity, message: { Id: "prepare-message-" + index, Role: "assistant", RunId: "r", Activity: activity, Content: "" }, index };
+});
+for (const active of [true, false]) {
+  const article = ctx.renderAgentRunArticle({ live: active, items: preparation });
+  if (!active) {
+    const overview = article.querySelector(".agent-run-overview");
+    overview.open = true; overview.listeners.toggle();
+  }
+  const nodes = walk(article);
+  assert.equal(nodes.filter(n => n.classList.contains("agent-step-message")).length, 1, "one update covers three tool steps");
+  assert.equal(nodes.filter(n => n.classList.contains("kind-tool")).length, 3, "silent preparation keeps every tool activity");
+  if (active) {
+    assert.equal(nodes.filter(n => n.classList.contains("agent-model-step")).length, 1, "silent steps belong to the last comment");
+    const completed = article.querySelector(".agent-completed-actions");
+    assert.equal(completed.open, false, "completed silent work starts collapsed");
+    assert.equal(completed.querySelectorAll(".kind-tool").length, 3);
+    completed.open = true;
+    const added = Object.assign(action("added", "added", "completed", '{}'), { StepMessage: "" });
+    const next = ctx.renderAgentRunArticle({ live: true, items: preparation.concat({ activity: added }) });
+    ctx.restoreMessageDisclosures(next, ctx.messageDisclosureSnapshot(article));
+    assert.equal(next.querySelector(".agent-completed-actions").open, true, "explicit expansion survives new calls");
+    assert.equal(next.querySelector(".agent-completed-actions").querySelectorAll(".kind-tool").length, 4);
+  }
+}
+const originalPreparation = JSON.stringify(preparation);
+for (const extra of [
+  { Status: "running" }, { Status: "waiting" }, { Status: "failed" },
+  { Status: "completed", ExecutionEvidence: { Effect: "Unknown" } },
+  { Status: "completed", ResultSummary: { Kind: "resource-read", Complete: false, Partial: true } }
+]) {
+  const activity = Object.assign(action("next", "next", "running", '{}'), extra, { StepMessage: "" });
+  const article = ctx.renderAgentRunArticle({ live: true, items: preparation.concat({ activity, message: message(activity, 3), index: 3 }) });
+  const completed = article.querySelector(".agent-completed-actions");
+  assert.equal(completed.querySelectorAll(".kind-tool").length, 3, "only completed calls are collapsed");
+  assert.equal(article.querySelectorAll(".kind-tool").length, 4, "attention and current activity remain outside the disclosure");
+  assert.equal(article.querySelectorAll(".agent-model-step").length, 1);
+}
+const nextFinding = action("new-finding", "inspect", "running", '{}');
+nextFinding.StepMessage = "The stylesheet is loaded; inspect the affected selector.";
+const nextArticle = ctx.renderAgentRunArticle({ live: true, items: preparation.concat({ activity: nextFinding }) });
+assert.equal(nextArticle.querySelectorAll(".agent-model-step").length, 2, "a new comment starts a new visible group");
+assert.equal(JSON.stringify(preparation), originalPreparation, "presentation never changes the stored step identities or comments");
+console.log("PASS live projection: silent steps fold below commentary while active work and attention stay visible");

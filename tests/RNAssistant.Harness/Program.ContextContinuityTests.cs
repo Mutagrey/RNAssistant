@@ -4,11 +4,14 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
+using System.Threading;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.ModelProtocol;
+using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Core.Tools.Contracts;
 using RNAssistant.Office.Services;
@@ -80,14 +83,20 @@ namespace RNAssistant.Harness
                 var roomy = compiler.Compile(authority, new ChatMessage[0], facts, null, new ToolCatalogEntry[0], new AppSettings(), 20000);
                 AssertEqual(4, roomy.Messages.Count, "older pairs also remain intact when they fit");
                 var tight = compiler.Compile(authority, new ChatMessage[0], facts, null, new ToolCatalogEntry[0], new AppSettings(), 1400);
-                AssertEqual(3, tight.Messages.Count, "only the old frame folds under budget pressure");
-                var receipt = tight.Messages.First().CompletedOperation;
+                AssertEqual(4, tight.Messages.Count, "old arguments fold while commentary and the latest pair remain");
+                var update = tight.Messages.Single(message => message.Id == call.Id);
+                AssertContains(update.Content, "Attempted create.", "the old decision survives argument folding");
+                AssertTrue(update.ToolCallId == null && update.ToolCalls.Count == 0 && update.ResourceEvidence.Count == 0,
+                    "commentary grants neither execution nor source authority");
+                AssertEqual("assistant-update", tight.Receipt.Messages.Single(item => item.SourceMessageId == call.Id).Kind,
+                    "inspector distinguishes commentary from operation evidence");
+                var receipt = tight.Messages.Single(message => message.CompletedOperation != null).CompletedOperation;
                 AssertEqual(ToolResultStatus.Error, receipt.Status, "budget folding preserves failure");
                 AssertContains(receipt.DataJson, "target_exists", "rejection detail survives folding");
                 AssertTrue(receipt.Targets.Contains("index.html"), "target recovered from accepted semantic arguments when result omits it");
                 AssertEqual(role, tight.Messages.Last().Role, "latest pair survives budget folding");
                 AssertEqual(latest.Content, tight.Messages.Last().Content, "latest short receipt stays complete");
-                AssertEqual(latestCall.Content, tight.Messages[1].Content, "latest call text stays exact");
+                AssertEqual(latestCall.Content, tight.Messages[2].Content, "latest call text stays exact");
                 AssertTrue(tight.Receipt.EstimatedTokens <= 1400, "compiled request fits the actual budget");
             }
         }
@@ -160,6 +169,94 @@ namespace RNAssistant.Harness
                 AssertEqual("tool", terminalSource.SourceRoles.Single(), "operation retains source role through all projections");
                 AssertEqual(0, terminalSource.Evidence.Count, "an execution outcome does not expire with its after-state");
             }
+        }
+
+        private static void ContextContinuityNarrationSurvivesCompaction()
+        {
+            foreach (var role in new[] { "user", "developer", "tool" })
+            WithTempPaths(paths => {
+                const string finding = "Totals differ; inspect formulas before choosing a correction.";
+                var chats = new ChatStore(paths);
+                var session = chats.Create("Excel", "narration", "Book", "Investigation");
+                var scope = new ResourceAuthorityScopeId("document", "narration");
+                var source = new ResourceRef("rna://file/narration/notes", "r1");
+                var evidence = new ResourceEvidence("read", scope, source, "text", ResourceCoverage.Whole(), true, 1);
+                var authority = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new[] {
+                    new ResourceAuthoritySnapshot(scope, 1, null, 0, new[] { ResourceHeadState.Known(source, 1) }) }),
+                    "pack", new SkillCatalogSnapshot(null), null, 1);
+                for (var index = 0; index < 3; index++)
+                {
+                    var id = "read-" + index;
+                    var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = id,
+                        Name = "common.resources_read", Arguments = new Dictionary<string, object> { { "target", "notes.txt" } } },
+                        index == 0 ? finding : "", null, role, FixtureCallOrigin(id));
+                    call.RunId = "continuity";
+                    var result = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolId = call.ToolName, ToolCallId = id },
+                        new ToolResultMaterialization(ToolResult.Ok("Read", "{\"target\":\"notes.txt\",\"text\":\"42 and 43\"}"),
+                            resourceEvidence: new[] { evidence }), int.MaxValue, role);
+                    result.RunId = call.RunId;
+                    session.Messages.AddRange(new[] { call, result });
+                }
+                var original = JsonConvert.SerializeObject(session.Messages);
+                var compiler = new ModelContextCompiler();
+                var snapshot = compiler.Compile(authority, new ChatMessage[0], session.Messages, null,
+                    new ToolCatalogEntry[0], new AppSettings(), 4096);
+                AssertEqual(2, snapshot.Receipt.Deduplicated, "duplicate results fold without repeating reads");
+                var update = snapshot.Messages.Single(item => item.Content.Contains(finding));
+                AssertEqual("assistant", update.Role, "retained explanation stays an assistant assessment");
+                AssertTrue(update.ToolCallId == null && update.ResourceEvidence.Count == 0,
+                    "retained explanation has no execution or source authority");
+                AssertEqual(1, snapshot.Receipt.Messages.Count(item => item.Kind == "assistant-update"), "empty updates add no messages");
+                AssertEqual(original, JsonConvert.SerializeObject(session.Messages), "projection never rewrites the durable transcript");
+                var again = compiler.Compile(authority, new ChatMessage[0], snapshot.Messages, null,
+                    new ToolCatalogEntry[0], new AppSettings(), 4096);
+                AssertEqual(1, again.Messages.Count(item => item.Content.Contains(finding)), "recompiling does not duplicate commentary");
+
+                session.Messages.Add(new ChatMessage { Role = "user", Content = "Continue investigating." });
+                session.Messages.Add(new ChatMessage { Role = "assistant", Content = "The discrepancy is not resolved yet." });
+                string claimKind = "observation";
+                var calls = 0;
+                LlmCompletionDelegate complete = (settings, messages, options, stream, token) => {
+                    calls++;
+                    var sources = messages.SelectMany(item => item.Content.Split('\n'))
+                        .Where(line => line.StartsWith("{\"sourceId\":", StringComparison.Ordinal)).Select(JObject.Parse).ToList();
+                    var input = sources.Single(item => ((string)item["text"] ?? "").Contains(finding));
+                    AssertTrue((string)input["role"] == "assistant" || (string)input["kind"] == "interpretation",
+                        "folding and recompaction preserve the source kind");
+                    var response = new JObject { ["claims"] = new JArray(new JObject {
+                        ["kind"] = claimKind, ["text"] = finding, ["sourceIds"] = new JArray(input["sourceId"]) }) };
+                    string schemaError;
+                    AssertEqual(claimKind == "interpretation", ToolSchemaSupport.ValidateArguments(response,
+                        JObject.Parse(options.ResponseSchemaJson), false, out schemaError), "strict schema rejects upgraded assistant claims");
+                    return Task.FromResult(new LlmCompletionResult { Content = response.ToString() });
+                };
+                var compactor = new ContextCompactionRuntime(complete);
+                var settingsForRun = new AppSettings { AgentResponseMode = AgentResponseModes.JsonSchema };
+                foreach (var invalid in new[] { "observation", "decision" })
+                {
+                    claimKind = invalid;
+                    RuntimeThrows<InvalidOperationException>(() => compactor.EnsureWithinBudgetAsync(session, settingsForRun,
+                        null, true, null, CancellationToken.None, authority, new ToolCatalogEntry[0]).GetAwaiter().GetResult());
+                    AssertTrue(session.ActiveContextCheckpointId == null, "invalid source promotion publishes no checkpoint");
+                }
+                claimKind = "interpretation";
+                for (var pass = 0; pass < 2; pass++)
+                {
+                    var checkpoint = compactor.EnsureWithinBudgetAsync(session, settingsForRun, null, true, null,
+                        CancellationToken.None, authority, new ToolCatalogEntry[0]).GetAwaiter().GetResult();
+                    AssertTrue(checkpoint != null, "completed source boundary permits compaction");
+                    AssertEqual("assistant", checkpoint.Claims.Single().SourceRoles.Single(), "assistant provenance remains explicit");
+                    AssertEqual(session.Messages[0].Id, checkpoint.Claims.Single().SourceMessageIds.Single(), "original accepted response remains the source");
+                    chats.Save(session); session = new ChatStore(paths).Load(session.Id);
+                    var resumed = compiler.Compile(authority, new ChatMessage[0], ContextCompactionRuntime.BuildActiveWindow(session),
+                        null, new ToolCatalogEntry[0], settingsForRun, 4096);
+                    AssertContains(string.Join("\n", resumed.Messages.Select(item => item.Content)), finding,
+                        "the decision basis survives checkpoint save and restart");
+                    session.Messages.Add(new ChatMessage { Role = "user", Content = "Continue with that unresolved question." });
+                    session.Messages.Add(new ChatMessage { Role = "assistant", Content = "No new source evidence yet." });
+                }
+                AssertEqual(4, calls, "only explicit compaction invokes the helper; narration adds no model calls");
+            });
         }
 
         private static ChatMessage ContinuityResult(string id, string tool, ToolResult result, string role = "tool")

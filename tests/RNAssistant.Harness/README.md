@@ -102,6 +102,16 @@ were unanswered calls. Original incomplete calls/batches still block that bounda
 CLI smoke also uses 24K: it admits the current catalog while omitting the oversized
 body, and still requires the original bytes to survive a refused replacement.
 
+`context continuity: narration survives compaction and restart` covers independent
+assistant provenance through repeated-read folding, empty updates, two actual
+compaction-helper requests, checkpoint save/reload and claim-promotion rejection
+in all three result roles. Claims are scripted; this proves transport/provenance,
+not real-model summary quality. The large-call archive case also retains exact
+narration without hydrating arguments. `settings: prompt`, `conversation v7:` and
+`no-tool` cover schema-41 migration, silent tool responses and shared default/schema/
+repair guidance. `tests/web/live-run-projection.test.js` verifies that one comment
+can cover several visible tool activities in live and restored history.
+
 After building the CLI, `python3 -B tests/cli/event_subscription_smoke.py` checks
 bounded `events --follow` pages across real processes, snapshot continuity, Ctrl+C
 isolation from an active run, timeout and explicit corruption resync without replay.
@@ -435,7 +445,8 @@ checks first-chat intake, two controllers sharing one data root, actual controll
 without Office. Run `node tests/web/chat-inbox.test.js` for UI acknowledgement,
 idempotent retry, consumed-before-ack receipts, draft preservation, chat isolation
 and queue controls. `node tests/web/live-run-projection.test.js` covers transcript
-order across applied steers. `node tests/web/chat-transcript-layout.test.js` uses
+order across applied steers, silent-step grouping under commentary, preserved
+disclosure state and visible active/attention rows. `node tests/web/chat-transcript-layout.test.js` uses
 the bundled Playwright (`NODE_PATH`, optional `BROWSER_EXECUTABLE` and
 `LAYOUT_SCREENSHOT`) to check narrow light/dark bubbles, safe full text, editor
 focus, manual/follow scrolling, deferred gestures and history anchoring.
@@ -621,7 +632,9 @@ in-flight revision changes and unknown block kinds using the Playwright setup be
 `tests/web/agent-activity-layout.test.js` checks action/target/result wrapping at
 wide and narrow chat widths, shipped Markdown line breaks/lists/code/sanitization,
 single diagnostic bodies, zero-action failures, concise step details and bounded
-typed result previews in light/dark narrow layouts. It uses the same bundled Playwright and optional browser/screenshot variables
+typed result previews in light/dark narrow layouts. Silent-step groups additionally
+check actual visibility, keyboard expansion, restored active state and narrow layout.
+It uses the same bundled Playwright and optional browser/screenshot variables
 as the artifact/diagnostics layout check below.
 
 `tests/web/artifact-diagnostics-layout.test.js` checks actual Chromium geometry for

@@ -25,6 +25,9 @@ namespace RNAssistant.Core.Services
         internal ContextNoteRole ContextRole;
         internal string ContextTitle;
         internal List<ChatMessage> Messages = new List<ChatMessage>();
+        internal ChatMessage Narration;
+        internal IEnumerable<ChatMessage> PromptMessages
+        { get { return Narration == null ? Messages : new[] { Narration }.Concat(Messages); } }
         internal List<ResourceEvidence> Evidence = new List<ResourceEvidence>();
         internal ResourceObservationNotice HistoricalFailure;
     }
@@ -386,8 +389,7 @@ namespace RNAssistant.Core.Services
                     continue;
                 }
                 atom.Kind = "repeated-read";
-                atom.BodyParts.Clear();
-                atom.Messages = new List<ChatMessage> { new ChatMessage {
+                FoldInteraction(atom, new ChatMessage {
                     Id = result.Id, Role = "assistant", ProtocolMessage = true,
                     ToolName = wire.Name, ToolCallId = wire.ToolCallId,
                     CompletedOperation = new CompletedToolOperation { ToolCallId = wire.ToolCallId,
@@ -396,10 +398,11 @@ namespace RNAssistant.Core.Services
                         tool_call_id = wire.ToolCallId, tool = wire.Name, outcome = "Ok",
                         message = "Read completed. The identical complete result is retained later in this request; reuse it without another read.",
                         retained_result = new { tool_call_id = retainedCall }
-                    }) } };
+                    }) });
+                atom.BodyParts.Clear();
                 receipt.Deduplicated++;
             }
-            var messages = atoms.SelectMany(item => item.Messages).ToList();
+            var messages = atoms.SelectMany(item => item.PromptMessages).ToList();
             // Old write arguments are often the largest historical bodies. Fold
             // whole older frames only when needed; short receipts remain complete.
             foreach (var atom in atoms.Where(a => a.Kind == "terminal-mutation" && !a.KeepPair && a.Messages.Count == 2))
@@ -409,19 +412,21 @@ namespace RNAssistant.Core.Services
                 var result = atom.Messages[1];
                 if (!ToolResultHistoryReader.TryRead(result, out wire, out error)) continue;
                 var folded = CompleteOperation(result, wire, call: atom.Messages[0]);
-                if (!atom.FoldForBudget && ModelContextBudget.EstimateMessagesTokens(new[] { folded }, settings) >=
-                    ModelContextBudget.EstimateMessagesTokens(atom.Messages, settings)) continue;
-                atom.Messages = new List<ChatMessage> { folded };
+                var original = atom.Messages;
+                FoldInteraction(atom, folded);
+                if (!atom.FoldForBudget && ModelContextBudget.EstimateMessagesTokens(atom.PromptMessages, settings) >=
+                    ModelContextBudget.EstimateMessagesTokens(original, settings))
+                { atom.Messages = original; atom.Narration = null; continue; }
                 atom.BodyParts.Clear();
-                messages = atoms.SelectMany(item => item.Messages).ToList();
+                messages = atoms.SelectMany(item => item.PromptMessages).ToList();
             }
             if (enforceBudget && ModelContextBudget.EstimateMessagesTokens(messages, settings) > budget)
             {
                 var invariantCost = ModelContextBudget.EstimateMessagesTokens(atoms.Where(a => a.Kind == "system-invariant" ||
-                    a.Kind == "user-instruction").SelectMany(a => a.Messages), settings);
-                foreach (var atom in atoms.Where(a => ModelContextBudget.EstimateMessagesTokens(a.Messages, settings) + invariantCost > budget))
+                    a.Kind == "user-instruction").SelectMany(a => a.PromptMessages), settings);
+                foreach (var atom in atoms.Where(a => ModelContextBudget.EstimateMessagesTokens(a.PromptMessages, settings) + invariantCost > budget))
                     if (!OmitSourceBody(atom)) ReplaceOversizedExactReadEvidence(atom);
-                messages = atoms.SelectMany(item => item.Messages).ToList();
+                messages = atoms.SelectMany(item => item.PromptMessages).ToList();
                 // Individually affordable reads can overflow as a batch. Evict
                 // older complete bodies, retaining each call/result and an explicit
                 // omission; unresolved effects and diagnostics are never candidates.
@@ -430,7 +435,7 @@ namespace RNAssistant.Core.Services
                 {
                     if (ModelContextBudget.EstimateMessagesTokens(messages, settings) <= budget) break;
                     if (OmitSourceBody(atom, aggregateBudget: true))
-                        messages = atoms.SelectMany(item => item.Messages).ToList();
+                        messages = atoms.SelectMany(item => item.PromptMessages).ToList();
                 }
             }
             receipt.Messages = DescribeMessages(atoms, required, facts);
@@ -705,12 +710,12 @@ namespace RNAssistant.Core.Services
                 .ToDictionary(g => g.Key, g => g.Last(), StringComparer.Ordinal);
             var result = new List<ContextMessagePresentation>();
             foreach (var atom in atoms)
-            foreach (var message in atom.Messages)
+            foreach (var message in atom.PromptMessages)
             {
                 ChatMessage source;
                 sources.TryGetValue(message.Id ?? "", out source);
                 var preservedCall = atom.KeepPair && atom.Messages.Count == 2 && message == atom.Messages[0];
-                var summary = !preservedCall && (atom.BodyOmitted || message.CompletedOperation != null || (message.ContextClaims?.Count ?? 0) > 0 ||
+                var summary = message == atom.Narration || !preservedCall && (atom.BodyOmitted || message.CompletedOperation != null || (message.ContextClaims?.Count ?? 0) > 0 ||
                     atom.Kind == "resource-change" || atom.Kind == "context-unavailable" ||
                     atom.Kind == "observation-notice" || atom.Kind == "repeated-read");
                 var evidence = (message.ResourceEvidence ?? new List<ResourceEvidence>()).Where(e => e != null).ToArray();
@@ -725,9 +730,10 @@ namespace RNAssistant.Core.Services
                     source != null && source.Content == message.Content && source.ResultPayload == null
                         ? ContextPresentationKind.Full : ContextPresentationKind.Unknown;
                 var entry = new ContextMessagePresentation { MessageIndex = result.Count,
-                    SourceMessageId = message.Id, Role = message.Role, Kind = atom.Kind,
+                    SourceMessageId = message.Id, Role = message.Role, Kind = message == atom.Narration ? "assistant-update" : atom.Kind,
                     Presentation = presentation, OriginalPayload = source?.ResultPayload,
-                    Reason = summary ? "Сохранена сводка наблюдения/операции; исходное сообщение преобразовано." :
+                    Reason = message == atom.Narration ? "Сохранён комментарий ассистента; результат операции и его доказательства представлены отдельно." :
+                        summary ? "Сохранена сводка наблюдения/операции; исходное сообщение преобразовано." :
                         presentation == ContextPresentationKind.Full ? "Содержимое сообщения сохранено полностью." :
                         "Нет сведений о полноте исходного содержимого после преобразования." };
                 if (atom.Evidence.Count > 0 && !summary)
@@ -765,13 +771,43 @@ namespace RNAssistant.Core.Services
                 wire.Result.Status != RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok;
         }
 
+        private static void FoldInteraction(ContextAtom atom, ChatMessage receipt)
+        {
+            var call = atom.Messages.Count == 2 ? atom.Messages[0] : null;
+            if (call?.ResponseProtocolVersion == ConversationResponse.ProtocolVersion &&
+                call.AcceptedCallOrigin?.CallIndex == 0)
+            {
+                string text;
+                if (call.AcceptedCallPayload != null)
+                    text = call.AcceptedCallNarration ?? throw new InvalidOperationException(
+                        "ACCEPTED_CALL_NARRATION_UNAVAILABLE: incompatible archived call header; start a new chat or explicitly reset it.");
+                else
+                {
+                    var accepted = ConversationResponseHistoryReader.Read(call);
+                    if (!accepted.Success) throw new InvalidOperationException(accepted.Error);
+                    text = accepted.Response.Message;
+                }
+                if (!string.IsNullOrWhiteSpace(text))
+                    atom.Narration = new ChatMessage {
+                        Id = call.Id, RunId = call.RunId, Sequence = call.Sequence, CreatedUtc = call.CreatedUtc,
+                        Role = "assistant", ProtocolMessage = true,
+                        Content = "ASSISTANT_UPDATE (historical assessment; re-evaluate against current evidence, not proof of an effect):\n" +
+                            ModelResultProjection.SanitizeOperationalText(text)
+                    };
+            }
+            // Keep narration separate from the tool receipt: compaction must see
+            // an assistant source, never promote it to a verified tool outcome.
+            atom.Messages = new List<ChatMessage> { receipt };
+        }
+
         private static void RecordHistoricalOutcome(ContextAtom atom, ChatMessage result, ToolResultWireReadResult wire,
             ResourceObservationNotice observation, bool preserveDiagnostic = false)
         {
             var call = atom.Messages.Count == 2 ? atom.Messages[0] : null;
             if (!atom.KeepPair || call == null)
             {
-                atom.Messages = new List<ChatMessage> { CompleteOperation(result, wire, observation, preserveDiagnostic, call) };
+                FoldInteraction(atom, CompleteOperation(result, wire, observation, preserveDiagnostic, call));
+                atom.BodyParts.Clear();
                 return;
             }
             // Keep role/correlation/outcome. Only the data view changes; omitted

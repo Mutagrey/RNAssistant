@@ -1,5 +1,34 @@
 # Stabilization progress
 
+## Useful commentary and context continuity — 2026-10-13
+
+Owners: Core ModelProtocol/prompt defaults, ModelContextCompiler, accepted-call
+storage and web agent transcript. Prompt schema 41 separates user-facing comment frequency from tool calls
+and Task List note updates. One shared rule permits silent routine preparation,
+asks for useful findings/decisions with their basis and uncertainty, and discourages
+repeated plans. Existing notes retain current state; compaction keeps corrections
+and unresolved conflicts without promoting assistant assessments to evidence.
+
+Folding an older call now preserves its nonempty comment as an assistant source
+within the context budget. Large archived calls retain the exact comment in their
+header, verified against the canonical body on hydration; missing metadata requires
+an explicit new chat/reset. No extra model calls, scheduler, text deduplication or
+second memory store. Details and compatibility are in the
+[canonical context contract](../conversation-protocol.md#conversation-context).
+
+In the active feed, silent steps continue the preceding comment. Completed actions
+fold below it; current work, questions/approvals, errors and uncertain/partial
+results remain visible. Manual expansion survives updates. This uses existing
+activity identities and native disclosures without changing stored history.
+
+Evidence: targeted host-neutral context continuity, repeated compaction/restart,
+source-kind rejection, archived-call integrity, prompt migration/schema/repair and
+live/saved UI projection checks, plus Chromium visibility, keyboard disclosure and
+narrow layout checks. These establish retention and protocol behavior;
+real-model comment frequency/summary quality and Windows/Office/WebView2 remain
+unqualified. The [reported repetition](RISK_REGISTER.md#repeated-narration-during-capability-preparation--2026-10-13)
+still needs incident events and controlled DeepSeek evidence. No Office/VSTO checks.
+
 ## Automatic action approval — 2026-10-13
 
 Owners: settings UI / Core ConversationRunPolicy and ToolRuntime / Office and
