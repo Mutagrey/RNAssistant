@@ -27,6 +27,74 @@ The local Gemma preflight separately fails memory admission. Profiles, unchanged
 budgets, failed outcomes and closure priorities are in
 [PROGRESS](PROGRESS.md#real-v7-model-regression-and-shared-response-contract--2026-10-13).
 
+## Skill and resource workflow regressions — 2026-10-13
+
+**Fixed reproduced causes; incident qualification remains open / Core skill/runtime,
+Office controller, Library UI and HTML publication owners.** Manual confirmation
+lost `SelectedSkills` while replacing the run record. The new invocation id also
+failed `SkillTaskService.CheckDispatch` against the originating context receipt.
+An actual-controller regression failed first on missing selections, then on
+`The exact originating request bindings are unavailable` and absent HTML source.
+It now passes four confirmation/restart boundaries, structured compaction while
+approval is pending, exact patch/full replacement/no-op effects and historical editor
+downloads. Only the exact durable pending call can refer to its originating
+request; altered turn/step/call/arguments or revoked binding still fails closed.
+
+Separately reproduced: UI supporting-file reads assumed a `references/` prefix,
+and identical full HTML/CSS/JS writes changed timestamps and manufactured new
+revisions/verified-change results. These are fixed. The dynamic authoring descriptor
+also now preserves its registered skill-only exposure. Source checks do not qualify
+browser behavior; full workspace JSON copying was removed from current-state
+validation, but end-to-end large-document performance remains unmeasured.
+
+The actual controller additionally reproduced an unreadable `common.tools_upsert`
+source when Agent JavaScript was enabled: the configured descriptor changed, but
+the immutable built-in publication still contained the disabled schema. Startup
+and settings-save publication now use the same configured definitions as runtime
+and Library. Enable/disable source reads and enabled documentation reads pass;
+historical snapshots are retained, with no authoring-file fallback on reads.
+
+Actual-controller creation/read-back of custom skill and VBA tool Library sources
+and all published source downloads passes. This does not explain every reported
+Library read failure; the exact error/event evidence and affected application are
+still needed for attribution. Four real Gemma cloud runs independently pass exact
+HTML/CSS/JS/VBA final-source comparison. Without explicit task-list instructions,
+the model still omits `common.task_tracking` despite default guidance; the explicit
+fixture creates/closes the list and retains both selected skills. Do not claim
+automatic selection fixed, infer deletion from stale historical targets, or replace
+missing model/Office evidence with a new runtime heuristic. Reproduction, profile
+and counts are in [PROGRESS](PROGRESS.md#skill-and-resource-workflow-regressions--2026-10-13).
+
+Follow-up audit of the original symptoms keeps these gaps explicit:
+
+- **Completion / Core conversation owner:** `AgentKernel` accepts structurally valid
+  `done` without a task-specific content acceptance contract. Zero requested writes,
+  a wrong edit or a failed call followed by optimistic narration can still end the
+  model turn. Errors/unknown effects remain in runtime health; terminal lifecycle
+  and Task List completion do not prove that the requested result exists. See also
+  [the false-completion evidence](#workspace-cli-false-completion-with-local-qwen--2026-10-04).
+- **Selection / skill and prompt owners:** task tracking remains guidance rather
+  than a guaranteed task transition. Restart/compaction retention passes, but
+  publication revocation or changed required bindings intentionally suspends a skill
+  until explicit reload; an independent new user turn starts with empty selections.
+- **Resource recovery / Gateway and model owners:** exact current/historical source,
+  competing edits, corrupt/late UI responses and stale VBA refusal pass targeted
+  checks. They do not prove that a model will recover correctly from every refusal,
+  nor explain the unexported incident's missing edits in the latest artifact.
+- **Capacity / context, Library and HTML owners:** the 32K fixture was refused before
+  model dispatch; instructions are not silently dropped. Large source/context
+  pressure needs a suitable profile. Real edits still retain immutable revisions;
+  snapshot-history and Library metadata enumeration scale with retained history.
+  Removing empty file revisions and one full JSON copy is not an end-to-end latency fix.
+- **Qualification / Office and evaluation owners:** four synthetic Gemma runs cover
+  exact text edits, not arbitrary redesigns, rendered interaction, another target
+  model or real COM/WebView2. The full Harness also retains the separately recorded
+  baseline failures; this review ran only the relevant slices.
+
+The repeated controller check asserts clean execution health, five successful
+writes (Task List plus four HTML operations) and exactly one verified no-change,
+so a failed no-op cannot pass merely because the source stayed identical.
+
 ## HTML historical member lookup — 2026-10-13
 
 **Fixed host-neutral / Resource Gateway and artifact provider owners.** The photo

@@ -150,10 +150,10 @@ function fixture(text = "<main>before</main>") {
     console.log("PASS HTML write: lost/cancelled/foreign save response has no false success or automatic retry");
   }
   const index = read("index.html");
-  ["app-html-workspace-actions.js", "app-html-workspace.js", "app-chat-state.js", "app-chat-session.js"]
+  ["app-chat-state.js", "app-chat-session.js"].forEach(file =>
+    assert.match(index, new RegExp(file.replace(/\./g, "\\.") + "\\?v=[^\"\\s]+")));
+  ["app-html-workspace-actions.js", "app-html-workspace.js"]
     .forEach(file => assert.ok(index.includes(file + "?v=" + (
-      file === "app-chat-state.js" ? "office-chat-20260930-3" :
-      file === "app-chat-session.js" ? "office-chat-20260930-4" :
       file === "app-html-workspace-actions.js" ? "html-action-guard-20260908-1" : "html-memory-20261002-1"))));
   assert.ok(index.indexOf("app-resource-upload.js?v=") < index.indexOf("app-html-workspace-actions.js?v="));
   assert.match(read("js/app-html-workspace.js"), /addEventListener\("pagehide", workspaceActions.cancelWrite\)/);

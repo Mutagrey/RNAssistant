@@ -234,6 +234,12 @@ preparation and restart therefore preserve full-run and per-call change attribut
 An already retained revision, including one returned by a no-op, keeps its original
 origin. This does not backfill attribution in previously published snapshots.
 
+Writing identical HTML/CSS/JS source with unchanged file kind/path and entrypoint
+retains its timestamp and active snapshot. The result is verified no-change, with
+`changed=false` and `saved=false`, rather than another revision claiming an edit.
+Current-state validation/result projection clones current files and data only;
+it does not serialize and deserialize the full workspace/navigation history.
+
 Re-linking messages preserves existing exact runtime resource references, including
 HTML member reads and patch results. An archived or bounded activity body cannot
 erase these links. Missing mutation links use the retained originating activity;

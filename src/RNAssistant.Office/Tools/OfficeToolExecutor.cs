@@ -183,7 +183,7 @@ namespace RNAssistant.Office.Tools
             {
                 throw new InvalidOperationException("Duplicate built-in tool id: " + duplicate.Id);
             }
-            _catalogPublication.RegisterBuiltInTools(_adapterTools.Concat(_controllerTools));
+            PublishConfiguredBuiltInTools();
         }
 
         public IEnumerable<ToolCatalogEntry> GetControllerTools()
@@ -192,13 +192,22 @@ namespace RNAssistant.Office.Tools
             foreach (var tool in _controllerTools)
             {
                 if (!enabled && string.Equals(tool.Id, JsToolHandler.RunId, StringComparison.Ordinal)) continue;
-                if (string.Equals(tool.Id, ToolAuthoringCatalog.UpsertToolId, StringComparison.Ordinal))
-                {
-                    yield return ToolAuthoringCatalog.GetTools(_toolAuthoringService, enabled)
-                        .First(entry => entry.Id == tool.Id);
-                }
-                else yield return tool;
+                yield return ConfigureControllerTool(tool, enabled);
             }
+        }
+
+        private ToolCatalogEntry ConfigureControllerTool(ToolCatalogEntry tool, bool enableJavaScript)
+        {
+            if (tool.Id != ToolAuthoringCatalog.UpsertToolId) return tool;
+            var current = ToolAuthoringCatalog.GetTools(_toolAuthoringService, enableJavaScript).First(entry => entry.Id == tool.Id);
+            current.Exposure = tool.Exposure;
+            return current;
+        }
+
+        private void PublishConfiguredBuiltInTools()
+        {
+            var enabled = AgentJavaScriptEnabled;
+            _catalogPublication.PublishBuiltInTools(_adapterTools.Concat(_controllerTools.Select(tool => ConfigureControllerTool(tool, enabled))));
         }
 
         internal bool AgentJavaScriptEnabled
@@ -624,6 +633,9 @@ namespace RNAssistant.Office.Tools
                 throw new ResourceRequestException("An exact prompt publication is required.", "RESOURCE_ACCESS_DENIED", false);
             var intended = PromptEditorResourceService.Prepare(source, request.Settings, expected, _catalogPublication.Read(expected), changes);
             SaveSettingsPublication(intended, () => save(intended), expected);
+            // Publish source and documentation from the same configured descriptors
+            // the Library/runtime now expose. Never rebuild missing source on read.
+            PublishConfiguredBuiltInTools();
         }
 
         internal void MigratePromptSchemaIfNeeded(Func<AppSettings, bool> pending, Action saveMigrated)

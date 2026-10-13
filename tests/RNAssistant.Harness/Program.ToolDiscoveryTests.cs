@@ -520,6 +520,15 @@ namespace RNAssistant.Harness
                     (string)item["id"] == "excel.synthetic_299");
                 AssertEqual(new string('d', 96) + "...[truncated]", (string)optionalTail["summary"],
                     "unloaded capability keeps a bounded summary for selection");
+                var htmlCatalog = CapabilityCatalogService.BuildPromptCatalog(catalog,
+                    new RNAssistant.Core.Services.SkillCatalogService(adapter.HostName, executor.CapturePublishedSkills).GetVisibleSkills(), new ToolCatalogEntry[0]);
+                var htmlTool = ((JArray)htmlCatalog["items"]).OfType<JObject>().Single(item =>
+                    (string)item["id"] == "common.html_workspace_apply_patch");
+                AssertTrue(((JArray)htmlTool["loadSkill"]).Values<string>().Contains("common.html_workspace_authoring"),
+                    "unexposed specialized tool identifies the skill to load");
+                var authoring = ((JArray)htmlCatalog["items"]).OfType<JObject>().Single(item => (string)item["id"] == "common.tools_upsert");
+                AssertTrue(((JArray)authoring["loadSkill"]).Values<string>().Contains("common.tool_authoring"),
+                    "dynamic authoring schema preserves skill-bound exposure");
                 AssertTrue(completeCatalog["items"].ToString(Newtonsoft.Json.Formatting.None)
                         .IndexOf("\"parameters\"", StringComparison.Ordinal) < 0,
                     "complete prompt index remains schema-free");

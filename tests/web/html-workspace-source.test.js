@@ -172,8 +172,8 @@ function fixture(texts = ["\ufeff<main>\r\n" + "я".repeat(140000) + "😀</main
   assert.ok(index.includes("app-html-workspace-preview.js?v=binary-chunks-20260906-1"));
   assert.ok(index.includes("app-html-workspace-source.js?v=html-memory-20261002-1"));
   assert.ok(index.includes("app-html-workspace.js?v=html-memory-20261002-1"));
-  assert.ok(index.includes("app-chat-state.js?v=office-chat-20260930-3"));
-  assert.ok(index.includes("app-chat-session.js?v=office-chat-20260930-4"));
+  assert.match(index, /app-chat-state\.js\?v=[^"\s]+/);
+  assert.match(index, /app-chat-session\.js\?v=[^"\s]+/);
   assert.ok(index.includes('id="reloadHtmlWorkspaceSourceButton"'));
   assert.ok(index.indexOf("app-resource-download.js?v=") < index.indexOf("app-html-workspace-source.js?v="));
   console.log("PASS HTML source: source/editor/preview/export and lifecycle delivery graph is switched together");

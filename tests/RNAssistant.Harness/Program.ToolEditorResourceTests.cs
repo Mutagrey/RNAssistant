@@ -48,7 +48,7 @@ namespace RNAssistant.Harness
                     RuntimeThrows<ResourceRequestException>(() => data.Close("foreign", ToolEditorResourceService.Owner, response.Data.LeaseId));
                     var changed = tool.Clone(); changed.Description += " A later build.";
                     var publisher = new CatalogPublicationService(executor.ResourceAuthority, new ResourceMutationJournal(paths), tools, skills, () => "{}", adapter);
-                    publisher.RegisterBuiltInTools(new[] { changed });
+                    publisher.PublishBuiltInTools(new[] { changed });
                     AssertTrue(!publisher.ReadPublic(publisher.Current(publisher.BuiltInToolsKind)).Contains("## Аргументы"), "public catalog never expands generated human docs");
                     AssertEqual("RESOURCE_REVISION_CHANGED", RuntimeThrows<ResourceRequestException>(() =>
                         editor.OpenDocumentation(session, request, CancellationToken.None)).ErrorCode, "a different registration publication cannot impersonate current runtime docs");

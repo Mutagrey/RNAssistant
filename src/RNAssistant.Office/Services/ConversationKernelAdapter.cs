@@ -76,6 +76,7 @@ namespace RNAssistant.Office.Services
         private object _contextUsage;
         private long _cursor;
         private string _stepMessage;
+        private readonly AgentRunState _confirmationOrigin;
 
         internal ConversationKernelAdapter(IOfficeApplicationAdapter adapter, OfficeToolExecutor executor,
             IConversationStore conversations, IEventStore eventStore, IMaterializedModelProtocol protocol,
@@ -102,6 +103,7 @@ namespace RNAssistant.Office.Services
             _registrar = _policy.AllowsConfirmation ? registrar : null;
             _runCancellation = cancellationToken;
             _confirmedCommand = confirmedCommand;
+            _confirmationOrigin = confirmedCommand == null ? null : session.LastRun.KernelState;
             _refresh = refresh;
             _cursor = revision;
             UseInput(input);
@@ -132,7 +134,7 @@ namespace RNAssistant.Office.Services
                 true, RegisterNativePending, _catalog, _skills, false, runPolicy: _policy,
                 dispatchGuard: context =>
                 {
-                    var error = SkillTaskService.CheckDispatch(_session, context, _toolPack);
+                    var error = SkillTaskService.CheckDispatch(_session, context, _toolPack, _confirmationOrigin);
                     if (error != null) return error;
                     if (_catalogGeneration != _executor.CaptureCatalogGeneration())
                         return "Published catalog changed after this request; recompile before dispatch.";

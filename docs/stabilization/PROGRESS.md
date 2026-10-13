@@ -46,6 +46,63 @@ resume at 24K. Existing Harness fixture debt and Windows/Office delivery remain
 separate work. See the [current risk](RISK_REGISTER.md#cli-response-contract-and-live-v7-completion--2026-10-13)
 and [next slice](#next-cli-acceptance-slice--2026-10-13).
 
+## Skill and resource workflow regressions — 2026-10-13
+
+Reproduced and fixed through the actual Office controller with a fake Excel host:
+confirmation replaced `ChatRunRecord` without `SelectedSkills`, and its new
+invocation id no longer matched the originating request's tool bindings. This
+lost loaded procedures and rejected confirmed writes before dispatch. Resume now
+retains selections and checks the exact durable pending call against its original
+request; changed tools, arguments, tasks and steps remain rejected.
+
+Other fixes: the Skill Library reads `scripts/` and `assets/` with the correct
+published basename; dynamic `tools_upsert` retains skill-only exposure; identical
+HTML/CSS/JS writes retain their snapshot/timestamp and report verified no-change.
+With Agent JavaScript enabled, the Library's configured `tools_upsert` source
+previously mismatched the permanently published disabled schema and could never
+be read. Startup and settings save now publish source/documentation from the same
+configured descriptors; the controller regression covers enable/disable read-back.
+Current workspace validation avoids a full JSON round trip including navigation.
+Schema 45 clarifies singleton skill loads and Task List selection; specialized
+catalog entries name the skill to load. Owners/contracts: [skills](../skills.md),
+[artifact library](../artifact-library.md), Core runtime and Office controller.
+
+Focused evidence: controller create/read skill and tool sources, structured
+compaction during approval and four approval restarts, HTML patch/full replacement/
+identical write with exact effect counts, historical editor downloads and
+independent-task reset pass. Existing
+unified-controller coverage also passes. Harness package 4/4, HTML tools 7/7,
+shared HTML 6/6, tool-pack 8/8, discovery 1/1, prompt migration 3/3 and targeted
+VBA patch/stale-source/editor checks pass. JS Library/editor and HTML source/write
+checks pass; obsolete hardcoded chat-script cache tokens in the HTML fixtures
+were replaced with version-presence checks while retaining lifecycle assertions.
+
+Real `gemma4:cloud` (remote `gemma4:31b`, local tag digest
+`ef09f235533c96cd75e8deed88c628335cb69e2b3ce96275d0d7a67fe9887aba`),
+`json_object`, developer role, requested 131072 context (provider advertises 262144):
+four synthetic runs / 40 requests preserve all unrelated source and produce the
+exact requested HTML/CSS/JS/VBA changes. Baseline: 10 requests; two revised runs:
+9 each; explicit Task List fixture: 12, creates and closes the list. The latter
+recovers from one invented-target read error and one unexposed-tool format repair.
+Unprompted Task List selection remains unreliable on this model. A local 32K
+profile was refused by the prompt budget before dispatch; this is context evidence,
+not a failed model call. Raw local evidence: `/tmp/rna-resource-review-cloud-*`;
+reproduction is in the [Harness README](../../tests/RNAssistant.Harness/README.md).
+
+Follow-up review also passes current-source carry-forward/compaction, stale VBA
+refusal, large VBA editing after compaction, HTML editor and competing-chat/history
+checks (24 focused Harness cases), plus browser-script source/write, artifact-tree
+and skill/tool editor checks. These are host-neutral and scripted-controller checks;
+no additional real-model run was made for this test-only extension.
+
+Open: `model_done` is not task acceptance; a valid terminal response can still
+claim unperformed edits. Runtime effect/health evidence does not grade the user's
+requested content. Target-model automatic skill selection, reported Library failures
+outside the reproduced supporting-path/configuration cases, small-context budget
+refusals, history-dependent metadata work and real Windows Office/WebView2 delivery
+remain open. No Office/VSTO validation, release qualification or
+product-version change. See the [incident scope](RISK_REGISTER.md#skill-and-resource-workflow-regressions--2026-10-13).
+
 ## HTML historical resource reads — 2026-10-13
 
 Owners: Resource Gateway, HTML catalog and DocumentArtifactStore. A workspace

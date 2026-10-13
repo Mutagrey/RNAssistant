@@ -9,10 +9,10 @@ function fixture(text = "# Справка\r\n😀\r\n", sourcePath = referencePa
   const bytes = new TextEncoder().encode(text), calls = [], closes = [], errors = [], cancelled = [], elements = {};
   const skill = { Id: "common.editor", Revision: "package", _baseRevision: builtIn ? "" : "package", _baseId: builtIn ? "" : "common.editor", BuiltIn: builtIn,
     Body: { sha256: sha(bytes), byteLength: bytes.length, characters: text.length },
-    _selectedReferencePath: sourcePath, References: [{ Path: referencePath, ByteLength: bytes.length + 3, Revision: "b".repeat(64) }] };
+    _selectedReferencePath: sourcePath, References: [{ Path: sourcePath || referencePath, ByteLength: bytes.length + 3, Revision: "b".repeat(64) }] };
   const metadata = { type: "rnassistant.skillSourceRead", contractVersion: 1, chatId: "chat", skillId: skill.Id,
-    packageRevision: "package", path: sourcePath, reference: sourcePath ? { path: referencePath, byteLength: bytes.length + 3, revision: "b".repeat(64) } : null,
-    resource: { uri: "rna://catalog/" + (builtIn ? "builtin-skills-word" : "skills") + "/common.editor/" + (sourcePath ? "reference/rules.md" : "body"), revision: "r_published" }, totalCharacters: text.length,
+    packageRevision: "package", path: sourcePath, reference: sourcePath ? { path: sourcePath, byteLength: bytes.length + 3, revision: "b".repeat(64) } : null,
+    resource: { uri: "rna://catalog/" + (builtIn ? "builtin-skills-word" : "skills") + "/common.editor/" + (sourcePath ? "reference/" + encodeURIComponent(sourcePath.split("/").pop()) : "body"), revision: "r_published" }, totalCharacters: text.length,
     data: { leaseId: "a".repeat(64), url: "https://rnassistant.local-resource/v1/download/" + "a".repeat(64), maxChunkBytes: 65536,
       payload: { sha256: sha(bytes), byteLength: bytes.length, contentType: "text/markdown; charset=utf-8" } } };
   const context = vm.createContext({ AbortController, TextDecoder, TextEncoder, Blob, Uint8Array, setTimeout, clearTimeout, crypto: crypto.webcrypto,
@@ -92,6 +92,15 @@ function deferred() {
 }
 
 (async () => {
+  {
+    for (const sourcePath of ["references/rules.md", "scripts/check.js", "assets/page.html"]) {
+      const f = fixture("# exact supporting file\r\n", sourcePath); await f.load();
+      assert.equal(f.skill._sourceLoaded[sourcePath], true, sourcePath + " is readable after creation");
+      assert.equal(f.skill._sourceDrafts[sourcePath], f.text);
+      assert.equal(f.errors.length, 0);
+    }
+    console.log("PASS skill supporting paths: references, scripts and assets use their exact published basename");
+  }
   {
     for (const text of ["# Справка\r\n" + "ж".repeat(140000) + "\r\n", "", "\ufeff# Meaningful leading character\r\n"]) {
       const f = fixture(text); await f.load();

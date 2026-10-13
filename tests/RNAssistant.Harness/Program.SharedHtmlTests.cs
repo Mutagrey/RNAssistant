@@ -189,7 +189,7 @@ namespace RNAssistant.Harness
                     new ConversationToolCall { Name = HtmlWorkspaceToolCatalog.ApplyPatchToolId, Arguments = new JObject {
                         ["path"] = path, ["patch"] = new JArray(new JObject { ["op"] = "replace", ["find"] = find, ["text"] = text }) } } });
                 var responses = new Queue<string>(new[] {
-                    LoadToolSchemaResponse(HtmlWorkspaceToolCatalog.ApplyPatchToolId),
+                    LoadSkillResponse("common.html_workspace_authoring"),
                     patch("styles.css", "red", "green"), patch("index.html", "old", "updated"),
                     ModelProtocolWire.Write("Updated the HTML and CSS.", new ConversationToolCall[0]) });
                 var service = CreateConversationRunService(adapter, executor,
@@ -234,7 +234,7 @@ namespace RNAssistant.Harness
                 }
                 var selected = session.ActiveHtmlArtifactId;
                 var snapshotCount = session.Artifacts.Count(item => item.Kind == ChatArtifactKinds.HtmlWorkspace);
-                responses.Enqueue(LoadToolSchemaResponse(HtmlWorkspaceToolCatalog.ApplyPatchToolId));
+                responses.Enqueue(LoadSkillResponse("common.html_workspace_authoring"));
                 responses.Enqueue(patch("index.html", "updated", "updated"));
                 responses.Enqueue(ModelProtocolWire.Write("No changes needed.", new ConversationToolCall[0]));
                 AssertEqual(RunViewLifecycles.Completed, run().RunViewState.Lifecycle, "later no-op run completes");

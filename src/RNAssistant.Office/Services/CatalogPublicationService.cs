@@ -36,9 +36,8 @@ namespace RNAssistant.Office.Services
             PublishBuiltIns(PromptDefaultsKind);
         }
 
-        internal void RegisterBuiltInTools(IEnumerable<RNAssistant.Core.Tools.ToolCatalogEntry> tools)
+        internal void PublishBuiltInTools(IEnumerable<RNAssistant.Core.Tools.ToolCatalogEntry> tools)
         {
-            if (_builtInTools != null) throw new InvalidOperationException("Built-in tools are already registered.");
             _builtInTools = tools.Select(tool =>
             {
                 var definition = tool.Clone();

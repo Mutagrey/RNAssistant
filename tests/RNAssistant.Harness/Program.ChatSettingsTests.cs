@@ -364,6 +364,10 @@ namespace RNAssistant.Harness
         {
             AssertContains(AgentPromptDefaults.GeneralInstructions, "tool names in prose grant no access",
                 "only declared skill dependencies can expose executable schemas");
+            AssertContains(AgentPromptDefaults.SkillInstructions, "first select common.task_tracking",
+                "multistage task tracking is selected before implementation");
+            AssertContains(AgentPromptDefaults.SkillInstructions, "common.skills_load must be the only call",
+                "skill selection is not sent in an independent read batch");
             foreach (var prompt in new[] { AgentPromptDefaults.GeneralInstructions, AgentPromptDefaults.ChatInstructions, AgentPromptDefaults.PlanInstructions })
             {
                 AssertContains(prompt, RNAssistant.Core.ModelProtocol.ModelProtocolWire.ActionGuidance,

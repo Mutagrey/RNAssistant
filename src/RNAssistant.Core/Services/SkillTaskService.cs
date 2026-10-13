@@ -201,10 +201,22 @@ namespace RNAssistant.Core.Services
                 References = (skill.References ?? new List<SkillReferenceMetadata>()).Select(item => item.Path).ToList() };
         }
 
-        public static string CheckDispatch(ChatSession session, ToolExecutionContext context, ToolPackSnapshot pack)
+        public static string CheckDispatch(ChatSession session, ToolExecutionContext context, ToolPackSnapshot pack,
+            RNAssistant.Core.Persistence.AgentRunState confirmationOrigin = null)
         {
             var request = session?.LastContextReceipt?.Arsenal;
-            if (request == null || request.RunId != context.RunId || request.StepId != context.StepId)
+            var requestRunId = context.RunId;
+            var pending = confirmationOrigin?.Summary.PendingConfirmation;
+            // Controller invocations get a new run id at approval. Only the exact
+            // durable pending call may use the request that originally offered it.
+            if (context.IsConfirmed && pending != null &&
+                confirmationOrigin.Summary.Lifecycle == RNAssistant.Core.Agent.RunLifecycle.AwaitingConfirmation &&
+                confirmationOrigin.Summary.TurnId == context.TurnId && pending.StepId == context.StepId &&
+                pending.Call.Id == context.Call.Id && pending.Call.Name == context.Call.Name &&
+                pending.Call.ArgumentsJson == context.Call.ArgumentsJson && pending.Policy.Revision == context.Policy.Revision &&
+                pending.PreparedStateJson == context.PreparedStateJson)
+                requestRunId = confirmationOrigin.Summary.RunId;
+            if (request == null || request.RunId != requestRunId || request.StepId != context.StepId)
                 return "The exact originating request bindings are unavailable.";
             var offered = request.Tools.SingleOrDefault(item => item.Id == context.Call.Name);
             var actual = pack.Find(context.Call.Name);

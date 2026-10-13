@@ -1,5 +1,25 @@
 # RNAssistant Harness
 
+Resource-workflow regression: after building MockDemo, run
+`dotnet demo/RNAssistant.MockDemo/bin/Debug/net8.0/RNAssistant.MockDemo.dll --resource-workflow-test`.
+This uses the actual controller with a fake Excel host: create/read Library sources,
+Task List, structured compaction during pending approval, four approval/restart
+boundaries, preserved selected skills, HTML patch/full replacement/identical write,
+exact effect counts, immutable editor downloads and new-task reset. The Harness filters `skill packages:`,
+`html tools:`, `shared HTML:`, `tools: discovery is complete and exact`,
+`vba: confirmed mutation rejects stale snapshot` and `vba: patch` cover its owners.
+
+The opt-in real-model fixture runs through the production conversation/runtime:
+set `RNA_BASE_URL`, `RNA_MODEL`, `RNA_RESPONSE_MODE` and `RNA_CONTEXT_TOKENS`, then run
+`dotnet tests/RNAssistant.Harness/bin/Debug/net8.0/RNAssistant.Harness.dll --resource-workflow-live /tmp/new-evidence-directory`.
+An optional `RNA_REQUIRE_TASK_LIST=true` explicitly requests task tracking; keep it
+separate from the unprompted-selection case. `RNA_API_KEY` is optional and never
+saved. The fixture retains synthetic before/after sources, requests/responses,
+settings, session and store, and grades HTML/CSS/JS/VBA against exact expected text.
+Capture the verified model tag/digest and endpoint profile with the evidence.
+This fixture uses automatic approval; the controller regression covers manual
+approval/restart. Neither qualifies Office/COM or rendered WebView2 behavior.
+
 Skill-package checks: after the normal host-neutral Harness build, filter by
 `skill packages:`, `tool pack:`, `skill editor:` and the two `agent:` prompt cases.
 The package slice covers selection, next-request exposure, exact dispatch, shared

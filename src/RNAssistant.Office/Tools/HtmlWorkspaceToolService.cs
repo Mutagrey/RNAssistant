@@ -136,21 +136,23 @@ namespace RNAssistant.Office.Tools
                     var content = ToolArgumentReader.String(
                         arguments, "content", string.Empty);
                     ValidateFileWrite(session, path, string.Empty, content);
+                    var beforeSnapshot = session.ActiveHtmlArtifactId;
                     mark();
                     var file = UpsertFile(session, path, string.Empty,
                         content, true);
+                    var changed = beforeSnapshot != session.ActiveHtmlArtifactId;
                     var files = session.HtmlWorkspace.Files.Where(item => item != null)
                         .Select(item => item.Path).OrderBy(item => item, StringComparer.OrdinalIgnoreCase)
                         .Take(12).ToArray();
                     return WithAutomaticPreflight(session,
                         HtmlWorkspaceToolOutcome.Ok(
-                            "HTML workspace file saved: " + file.Path +
+                            (changed ? "HTML workspace file saved: " : "HTML workspace file unchanged: ") + file.Path +
                             ". Current files (" + session.HtmlWorkspace.Files.Count + "): " +
                             string.Join(", ", files) +
                             (session.HtmlWorkspace.Files.Count > files.Length ? ", ..." : ".") +
                             " Continue from this saved state. Reuse included complete current source; read before replacement only if the needed source is absent or invalidated.",
-                            WorkspaceMutationJson(session, "file", file.Path),
-                            HtmlWorkspaceEffect.VerifiedChange),
+                            WorkspaceMutationJson(session, "file", file.Path, changed: changed),
+                            changed ? HtmlWorkspaceEffect.VerifiedChange : HtmlWorkspaceEffect.VerifiedNoChange),
                         cancellationToken);
                 }
 
@@ -367,6 +369,9 @@ namespace RNAssistant.Office.Tools
             var now = DateTime.UtcNow;
             var file = session.HtmlWorkspace.Files.FirstOrDefault(f =>
                 f != null && string.Equals(f.Id, id, StringComparison.OrdinalIgnoreCase));
+            var normalizedKind = NormalizeKind(kind, normalizedPath);
+            var changed = file == null || file.Path != normalizedPath || file.Kind != normalizedKind ||
+                !string.Equals(file.Content, content ?? string.Empty, StringComparison.Ordinal);
             if (file == null)
             {
                 file = new HtmlWorkspaceFile
@@ -379,21 +384,23 @@ namespace RNAssistant.Office.Tools
             }
 
             file.Path = normalizedPath;
-            file.Kind = NormalizeKind(kind, normalizedPath);
+            file.Kind = normalizedKind;
             file.Content = content ?? string.Empty;
-            file.UpdatedUtc = now;
-            session.HtmlWorkspace.UpdatedUtc = now;
+            if (changed) file.UpdatedUtc = now;
             if (string.Equals(file.Kind, "html", StringComparison.OrdinalIgnoreCase) &&
                 (setActive || string.IsNullOrWhiteSpace(session.HtmlWorkspace.ActiveFileId)))
             {
+                changed |= session.HtmlWorkspace.ActiveFileId != file.Id;
                 session.HtmlWorkspace.ActiveFileId = file.Id;
             }
             else if (!string.Equals(file.Kind, "html", StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(session.HtmlWorkspace.ActiveFileId, file.Id, StringComparison.OrdinalIgnoreCase))
             {
+                changed = true;
                 session.HtmlWorkspace.ActiveFileId = string.Empty;
                 NormalizeWorkspace(session.HtmlWorkspace);
             }
+            if (changed) session.HtmlWorkspace.UpdatedUtc = now;
 
             HtmlWorkspaceArtifactService.CaptureCurrent(session, "HTML: " + normalizedPath);
 
@@ -482,7 +489,7 @@ namespace RNAssistant.Office.Tools
         }
 
         private static string WorkspaceMutationJson(ChatSession session, string itemType, string itemId,
-            ResourceDescriptor boundSource = null)
+            ResourceDescriptor boundSource = null, bool? changed = null)
         {
             var workspace = NormalizedWorkspaceCopy(session == null ? null : session.HtmlWorkspace);
             var result = AddWorkspaceResourceRefs(session, new JObject
@@ -499,6 +506,7 @@ namespace RNAssistant.Office.Tools
                 ["boundDataSourceCount"] = workspace.DataSources.Count(item => item != null && item.Binding != null),
                 ["updatedUtc"] = workspace.UpdatedUtc
             });
+            if (changed.HasValue) { result["changed"] = changed.Value; result["saved"] = changed.Value; }
             var source = itemType == "data" ? workspace.DataSources.SingleOrDefault(item => item.Name == itemId) : null;
             if (source?.Binding != null)
             {
@@ -798,10 +806,7 @@ namespace RNAssistant.Office.Tools
 
         private static HtmlWorkspace NormalizedWorkspaceCopy(HtmlWorkspace workspace)
         {
-            var copy = workspace == null
-                ? new HtmlWorkspace()
-                : JsonConvert.DeserializeObject<HtmlWorkspace>(JsonConvert.SerializeObject(workspace));
-            return NormalizeWorkspace(copy);
+            return NormalizeWorkspace(HtmlWorkspaceCopyService.CloneCurrent(workspace));
         }
 
         private static string NormalizeKind(string kind, string path)

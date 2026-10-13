@@ -75,6 +75,7 @@ namespace RNAssistant.Office
                     Phase = "executing",
                     KernelState = previousRun.KernelState,
                     ConversationPolicy = previousRun.ConversationPolicy,
+                    SelectedSkills = previousRun.SelectedSkills ?? new List<SelectedSkill>(),
                     CurrentAction = supersedePending ? "Учитываю уточнение пользователя." : "Выполняю подтверждённое действие.",
                     DocumentRuntimeKey = documentRuntimeKey,
                     IterationsUsed = pending.IterationsUsed,

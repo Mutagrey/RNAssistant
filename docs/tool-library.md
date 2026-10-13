@@ -500,6 +500,13 @@ the definition and a documentation CAS `PayloadRef`; the root's committed view
 retains these parts. Neither compact/public catalog projections nor execution
 registrations acquire generated Markdown or reconstructed runtime policy.
 
+Startup and successful settings save publish the currently configured built-ins.
+In particular, changing Agent JavaScript updates both `common.tools_upsert` source
+and documentation in one committed built-in catalog snapshot. Library metadata
+and runtime use the same configured descriptor, retaining its skill-only exposure.
+Unchanged publication bytes keep the existing head; older exact snapshots remain
+readable. Reads never rebuild missing published source from current definitions.
+
 Only opening the selected builtin's Docs tab requests `getToolDocumentation` with
 explicit chat, id and expected Library revision. The controller delegates to
 `ToolEditorResourceService`; it reserves shared download capacity before reading

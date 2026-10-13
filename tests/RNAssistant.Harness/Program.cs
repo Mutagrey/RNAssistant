@@ -37,6 +37,8 @@ namespace RNAssistant.Harness
 
         public static int Main(string[] args)
         {
+            if (args != null && args.Length == 2 && args[0] == "--resource-workflow-live")
+                return ResourceWorkflowLive(args[1]);
             var tests = new List<HarnessTest>
             {
                 Test("harness: native async execution", HarnessRunsNativeAsync),
@@ -652,6 +654,7 @@ namespace RNAssistant.Harness
                 Test("html tools: patch mismatch returns current source", HtmlWorkspacePatchMismatchReturnsCurrentSource),
                 Test("html tools: batched writes keep per-call operation identity", HtmlWorkspaceBatchedWritesUsePerCallOperationIdentity),
                 Test("html tools: replacement requires current source", HtmlWorkspaceReplacementRequiresCurrentSource),
+                Test("html tools: identical whole writes retain snapshot", HtmlWorkspaceIdenticalWritesRetainSnapshot),
                 Test("html tools: visible source read authorizes next write", HtmlWorkspaceVisibleSourceReadAuthorizesNextWrite),
                 Test("tools: html source read search and patch", HtmlWorkspaceSourceToolsAreBoundedAndAtomic),
                 Test("tools: html workspace undo", HtmlWorkspaceUndoRestoresPreviousVersion),

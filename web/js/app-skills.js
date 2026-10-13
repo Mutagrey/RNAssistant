@@ -452,7 +452,7 @@ function skillSourceReadFromContract(response, operation) {
     throw new Error("Некорректный снимок источника навыка.");
   if (isReference ? (!response.reference || response.reference.path !== operation.path ||
       response.reference.revision !== operation.sourceRevision || response.reference.byteLength !== operation.sourceByteLength ||
-      decodeURIComponent(parts[6]) !== operation.path.substring("references/".length)) :
+      decodeURIComponent(parts[6]) !== operation.path.split("/").pop()) :
       (response.reference != null || response.data.payload.sha256 !== operation.sourceRevision ||
        response.data.payload.byteLength !== operation.sourceByteLength || response.totalCharacters !== operation.sourceCharacters))
     throw new Error("Метаданные источника навыка не совпадают со снимком.");

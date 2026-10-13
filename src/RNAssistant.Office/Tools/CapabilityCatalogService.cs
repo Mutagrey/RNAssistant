@@ -98,7 +98,15 @@ namespace RNAssistant.Office.Tools
                 .ThenBy(record => record.Kind, StringComparer.Ordinal)
                 .ToList();
             var selected = entries
-                .Select(record => Metadata(record, activeIds.Contains(record.Id), MaximumPromptSummaryCharacters))
+                .Select(record => {
+                    var metadata = Metadata(record, activeIds.Contains(record.Id), MaximumPromptSummaryCharacters);
+                    if (record.Tool != null && record.Tool.Exposure == ToolExposure.Skill && !activeIds.Contains(record.Id))
+                        metadata["loadSkill"] = new JArray(skillCatalog.Where(skill => skill.Package != null &&
+                            (skill.Package.RequiredTools ?? new List<SkillToolDependency>()).Concat(skill.Package.OptionalTools ?? new List<SkillToolDependency>())
+                                .Any(dependency => dependency != null && dependency.Id == record.Id))
+                            .Select(skill => skill.Id).OrderBy(id => id, StringComparer.Ordinal));
+                    return metadata;
+                })
                 .ToArray();
             return new JObject
             {
@@ -109,7 +117,7 @@ namespace RNAssistant.Office.Tools
                 ["truncated"] = false,
                 ["idEnumEnforced"] = HasBoundIdEnum(toolCatalog, entries.Count),
                 ["instruction"] =
-                    "This is the complete runnable tool and enabled skill index for this run. Use only an exact id shown here; common.capabilities_search is an optional filter. Select a skill through common.skills_load; common.capabilities_read inspects sources or admits direct tool schemas. Never synthesize an id."
+                    "This is the complete runnable tool and enabled skill index for this run. Use only an exact id shown here; common.capabilities_search is an optional filter. For a tool with loadSkill, select one listed skill through common.skills_load before calling the tool; an empty list means unavailable. common.capabilities_read inspects sources or admits direct tool schemas. Never synthesize an id."
             };
         }
 

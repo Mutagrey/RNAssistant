@@ -144,6 +144,22 @@ namespace RNAssistant.Harness
             var changed = await runtime.ExecuteAsync(call(tool.Id, "{}"), CancellationToken.None);
             AssertTrue(!changed.MayHaveDispatched && probe.Calls == 1, "S10/S11 rebind refused before dispatch");
             currentPack = pack;
+            var original = call(tool.Id, "{}");
+            var origin = new RNAssistant.Core.Persistence.AgentRunState(new RunSummary("run", "run", RunLifecycle.AwaitingConfirmation,
+                new ToolCounts(), 1, 1, "", "confirmation_required",
+                new PendingConfirmation("pending", original.Call, original.Policy, "step", 1)), new AgentRunLimits(5, 5));
+            Func<ToolCall, string, string, bool, ToolExecutionContext> resumed = (accepted, turn, step, confirmed) =>
+                new ToolExecutionContext(accepted, original.Policy, "new-invocation", turn, step, DateTime.UtcNow, confirmed, 4);
+            AssertEqual(null, SkillTaskService.CheckDispatch(session, resumed(original.Call, "run", "step", true), pack, origin),
+                "exact approved call retains its originating request across invocation ids");
+            foreach (var invalid in new[] {
+                resumed(original.Call, "other-task", "step", true), resumed(original.Call, "run", "other-step", true),
+                resumed(original.Call, "run", "step", false),
+                resumed(new ToolCall("other-call", tool.Id, "{}"), "run", "step", true),
+                resumed(new ToolCall(original.Call.Id, tool.Id, "{\"changed\":true}"), "run", "step", true) })
+                AssertTrue(SkillTaskService.CheckDispatch(session, invalid, pack, origin) != null, "confirmation origin cannot authorize another call");
+            AssertTrue(SkillTaskService.CheckDispatch(session, resumed(original.Call, "run", "step", true),
+                PackageTools(PackageTool(binding: "replacement"), load), origin) != null, "approved origin does not bypass binding revocation");
             await runtime.ExecuteAsync(call(load.Id, "{\"id\":\"fixture.skill\",\"action\":\"remove\"}"), CancellationToken.None);
             AssertEqual(0, session.LastRun.SelectedSkills.Count, "explicit removal uses same task transition");
         }

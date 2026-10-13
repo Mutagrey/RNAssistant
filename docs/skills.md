@@ -66,16 +66,31 @@ existing direct admissions and selected dependencies. The compiler injects compl
 `SELECTED_SKILL` instructions alongside exactly those schemas. Words in Markdown,
 a source read, attached files and historical results cannot select a skill.
 
+Default prompt schema 45 asks multi-deliverable/staged tasks to select
+`common.task_tracking` and maintain its Task List. This is model guidance, not an
+automatic intent classifier or a completion gate. The compact Office catalog's
+`loadSkill` lists the packages that can expose a specialized tool; it never admits
+that tool by itself. The dynamically configured `common.tools_upsert` descriptor
+retains its skill-only exposure.
+
 Selection belongs to one run. Existing `run.updated` events preserve it through
 compaction, confirmation and restart; a new independent turn starts empty. There
 is no loaded-skill store, dual write or replay of an unfinished business action.
+The Office controller preserves selections when confirmation starts a new invocation.
+Dispatch validates that invocation against the exact durable pending call's original
+request, turn, step, arguments, policy and prepared state; it still rejects changed
+bindings. It does not relabel a previous request as a new one.
 Changed/revoked publications suspend incompatible selections until explicit reload.
-Catalog drift after request compilation blocks dispatch. Office keeps the accepted
-run publication frozen; after an in-run catalog update, start a new turn to use
-the new publication. Instructions and schemas
+Catalog drift after request compilation blocks dispatch. Office refreshes complete
+catalog authority at the next model-request boundary after an in-run publication;
+the already accepted request stays pinned. Instructions and schemas
 must fit the budget: selection reserves at most half the input budget, and the
 complete compiler may explicitly refuse an oversized request; it never truncates
 active instructions while leaving their tools callable.
+
+The Library reader validates the published supporting-file basename for all three
+allowed directories (`references`, `scripts`, `assets`); it does not strip a fixed
+`references/` prefix from every path.
 
 ### Arsenal in chat
 
