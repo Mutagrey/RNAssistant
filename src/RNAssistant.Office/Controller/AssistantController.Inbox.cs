@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Services;
 
@@ -86,6 +87,7 @@ namespace RNAssistant.Office
                 !Enum.IsDefined(typeof(InputDelivery), request.Delivery))
                 throw new ArgumentException("An explicit chat, operation id and delivery mode are required.");
             var session = LoadInboxSession(request.ChatId);
+            ConversationRunPolicy.RequireCurrentSession(session);
             if (_inbox.FindOperation(session, request.OperationId) == null)
             {
                 var drafts = _chatResourceIngestion.LoadDrafts(session, request.ResourceDraftIds);
@@ -98,7 +100,7 @@ namespace RNAssistant.Office
                 {
                     Id = Guid.NewGuid().ToString("N"), OperationId = request.OperationId, Text = request.Text ?? string.Empty, Delivery = request.Delivery,
                     CreatedUtc = DateTime.UtcNow, Attachments = message.Attachments,
-                    DocumentRuntimeKey = ChatModes.Normalize(session.Mode) == ChatModes.Chat ? null : CaptureExpectedRuntimeDocumentKey(session)
+                    DocumentRuntimeKey = CaptureExpectedRuntimeDocumentKey(session)
                 });
                 _chatResourceIngestion.DeleteDrafts(message);
             }
@@ -113,6 +115,7 @@ namespace RNAssistant.Office
             Action<string, string, string, ChatActivity> progress, Action<ChatStateResponse> changed)
         {
             var session = LoadInboxSession(request.ChatId);
+            ConversationRunPolicy.RequireCurrentSession(session);
             _inbox.Update(session, request, action);
             StartInboxWorker(session, progress, changed);
             return _inbox.Snapshot(session);
@@ -121,6 +124,7 @@ namespace RNAssistant.Office
             Action<string, string, string, ChatActivity> progress, Action<ChatStateResponse> changed)
         {
             var session = LoadInboxSession(chatId);
+            ConversationRunPolicy.RequireCurrentSession(session);
             _inbox.Resume(session);
             StartInboxWorker(session, progress, changed);
             return _inbox.Snapshot(session);
@@ -128,6 +132,7 @@ namespace RNAssistant.Office
         private void StartInboxWorker(ChatSession session,
             Action<string, string, string, ChatActivity> progress, Action<ChatStateResponse> changed)
         {
+            if (session.FormatVersion != ChatSession.CurrentFormatVersion) return;
             if (_inboxCancellation.IsCancellationRequested || _lifetimeCancellation.IsCancellationRequested || _chatRuns.Get(session.Id) != null || !_inbox.TryStartWorker(session)) return;
             // Owned by the controller lifetime, not by an intake bridge request or selected page.
             var done = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -139,6 +144,7 @@ namespace RNAssistant.Office
                     while (!_inboxCancellation.IsCancellationRequested && !_lifetimeCancellation.IsCancellationRequested)
                     {
                         session = LoadAddressedSession(session.Id);
+                        ConversationRunPolicy.RequireCurrentSession(session);
                         var item = _inbox.TakeNext(session, HasPendingAgentConfirmation(session));
                         if (item == null) break;
                         if (!string.IsNullOrEmpty(item.DocumentRuntimeKey) &&

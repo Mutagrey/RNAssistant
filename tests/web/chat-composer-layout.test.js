@@ -30,6 +30,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       window.hasActiveMessageEdit = () => !!state.editing;
       window.runningMessageDelivery = () => "Steer";
       window.saveChatMode = mode => { state.activeChatMode = mode; renderSendControls(); };
+      window.saveChatMutationPolicy = policy => { state.mutationPolicy = policy; renderSendControls(); };
       window.findEditingMessage = () => null;
     });
     for (const file of ["app-accent.js", "app-utils.js", "app-model-picker.js", "app-chat-composer.js", "app-chat-state.js", "app-context-inspector.js"])
@@ -56,7 +57,8 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
           `menu overlays above the composer inside ${width}px / ${theme}`);
         for (const id of ["attachFileButton", "addSelectionContextButton", "compactContextButton"])
           assert.equal(await page.locator("#" + id).isVisible(), true);
-        assert.equal(await page.locator('#chatModeMenu [aria-pressed="true"]').count(), 1);
+        assert.equal(await page.locator('#chatModeMenu button').count(), 1);
+        assert.equal(await page.locator('#chatModeMenu [aria-pressed="false"]').count(), 1);
         await page.keyboard.press("Escape");
         assert.equal(await page.locator("#composerAddPicker").getAttribute("open"), null);
         assert.equal(await page.evaluate(() => document.activeElement.id), "composerAddButton");
@@ -75,6 +77,21 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     await page.locator('#chatModeMenu button[data-mode="plan"]').click();
     assert.equal(await page.evaluate(() => state.activeChatMode), "plan");
     assert.equal(await page.locator("#composerAddPicker").getAttribute("open"), null);
+    await page.locator("#composerAddButton").click();
+    await page.locator('#chatModeMenu button[data-mode="plan"]').click();
+    assert.equal(await page.evaluate(() => state.activeChatMode), "agent");
+    await page.locator("#composerAddButton").click();
+    await page.locator("#chatMutationPolicy").selectOption("Deny");
+    assert.match(await page.locator("#chatPolicyStatus").textContent(), /Изменения запрещены/);
+    await page.evaluate(() => { state.settings.AutoConfirmToolActions = true; renderChatModePicker(); });
+    assert.match(await page.locator("#chatPolicyStatus").textContent(), /Изменения запрещены/);
+    await page.locator("#chatMutationPolicy").selectOption("Ask");
+    assert.match(await page.locator("#chatPolicyStatus").textContent(), /Автоподтверждение · новые запуски/);
+    await page.evaluate(() => { state.activeChatMode = "plan"; renderChatModePicker(); });
+    assert.equal(await page.locator("#chatPolicyStatus").textContent(), "Plan · без исполнения");
+    await page.evaluate(() => { state.settings.AutoConfirmToolActions = false; state.activeChatMode = "agent"; renderChatModePicker(); });
+    assert.equal(await page.locator("#chatPolicyStatus").textContent(), "По подтверждению");
+    await page.keyboard.press("Escape");
     await page.locator("#composerAddButton").press("Enter");
     await page.locator("#addSelectionContextButton").click();
     assert.equal(await page.locator("#composerAddPicker").getAttribute("open"), null);
@@ -83,8 +100,12 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     assert.equal(await page.locator("#composerAddPicker").getAttribute("open"), null);
 
     await page.evaluate(() => { state.sending = true; renderSendControls(); });
+    await page.evaluate(() => { state.chatReadOnly = true; renderSendControls(); });
+    assert.equal(await page.locator("#chatPolicyStatus").textContent(), "История · создайте новый чат",
+      "history state must render even when controls were already disabled");
+    await page.evaluate(() => { state.chatReadOnly = false; renderSendControls(); });
     await page.locator("#composerAddButton").click();
-    assert.equal(await page.locator("#chatModeMenu button:disabled").count(), 3);
+    assert.equal(await page.locator("#chatModeMenu button:disabled").count(), 1);
     assert.equal(await page.locator("#attachFileButton").isEnabled(), true);
     assert.equal(await page.locator("#addSelectionContextButton").isEnabled(), true);
     await page.evaluate(() => { state.foreign = true; renderSendControls(); });
@@ -109,6 +130,37 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     await page.locator("#closePromptContextInspectorButton").click();
     assert.equal(await page.locator("#promptContextInspector").isVisible(), false);
     assert.equal(await page.evaluate(() => document.activeElement.id), "contextMeter");
+    await page.addScriptTag({ content: read("js/app-settings.js") });
+    await page.evaluate(() => {
+      // Keep production form read/save/reset; stub unrelated model/prompt controls.
+      for (const name of ["renderUiAccentChoices", "renderTokenEstimateCalibrationStatus", "renderModelControls", "renderContextMeter"])
+        window[name] = () => {};
+      window.formatAppVersionLabel = value => value;
+      window.headersToText = () => ""; window.textToHeaders = () => ({});
+      for (const name of ["modelImageSupportOverrides", "modelAudioSupportOverrides", "modelCapabilitiesForSettings"])
+        window[name] = () => ({});
+      window.attachmentModelPriorityForSettings = () => [];
+      window.settingsSaves = [];
+      window.saveSettingsWithPromptChanges = async settings => {
+        settingsSaves.push(JSON.parse(JSON.stringify(settings)));
+        return { settings: JSON.parse(JSON.stringify(settings)), prompts: {} };
+      };
+      state.settings = {}; renderSettings();
+    });
+    assert.equal(await page.locator("#autoConfirmToolActionsInput").isChecked(), false);
+    assert.match(await page.locator("#autoConfirmToolActionsNote").textContent(), /новых запусков во всех чатах/);
+    await page.evaluate(() => { $("autoConfirmToolActionsInput").checked = true; });
+    assert.equal(await page.evaluate(() => settingsSaves.length), 0, "editing the flag alone never dispatches");
+    await page.evaluate(() => persistSettingsFromForm());
+    assert.equal(await page.evaluate(() => settingsSaves[0].AutoConfirmToolActions), true);
+    assert.equal(await page.locator("#autoConfirmToolActionsInput").isChecked(), true);
+    assert.match(await page.locator("#chatPolicyStatus").textContent(), /Автоподтверждение/);
+    await page.evaluate(() => resetAgentSettingsToDefaults());
+    await page.evaluate(() => persistSettingsFromForm());
+    assert.equal(await page.evaluate(() => settingsSaves[1].AutoConfirmToolActions), false);
+    assert.equal(await page.locator("#autoConfirmToolActionsInput").isChecked(), false);
+    assert.equal(await page.locator("#chatPolicyStatus").textContent(), "По подтверждению");
+    console.log("PASS settings: auto-confirm defaults off, saves/reloads both values and resets to Ask");
     assert.deepEqual(errors, []);
     console.log("PASS composer: ring opens the existing usage panel and restores keyboard focus on close");
     if (process.env.COMPOSER_SCREENSHOT) {

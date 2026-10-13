@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Agent;
+using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
 using RNAssistant.Core.Tools.Contracts;
 using ToolResult = RNAssistant.Core.Tools.Contracts.ToolResult;
@@ -19,6 +20,7 @@ namespace RNAssistant.Core.Tools
     {
         private readonly ToolHandlerRegistry _registry;
         private readonly string _mode;
+        private readonly ConversationRunPolicy _runPolicy;
         private readonly bool _autoConfirm;
         private readonly bool _allowsConfirmation;
         private readonly Func<ToolExecutionContext, ToolPreparationResult, string> _pendingRegistrar;
@@ -26,12 +28,14 @@ namespace RNAssistant.Core.Tools
 
         public ToolRuntime(ToolHandlerRegistry registry, string mode, bool autoConfirm, bool allowsConfirmation,
             Func<ToolExecutionContext, ToolPreparationResult, string> pendingRegistrar = null,
-            IToolMutationObserver mutationObserver = null)
+            IToolMutationObserver mutationObserver = null, ConversationRunPolicy runPolicy = null)
         {
             _registry = registry ?? throw new ArgumentNullException(nameof(registry));
             if (mode != "agent" && mode != "plan" && mode != "chat") throw new ArgumentException("A supported conversation mode is required.", nameof(mode));
             _mode = mode;
-            _autoConfirm = autoConfirm;
+            _runPolicy = runPolicy;
+            if (runPolicy != null && runPolicy.Mode != mode) throw new ArgumentException("Run policy mode mismatch.");
+            _autoConfirm = runPolicy == null ? autoConfirm : runPolicy.AutoConfirmsToolActions;
             _allowsConfirmation = allowsConfirmation;
             _pendingRegistrar = pendingRegistrar;
             _mutationObserver = mutationObserver;
@@ -50,7 +54,11 @@ namespace RNAssistant.Core.Tools
             var tool = _registry.Lookup(context.Call.Name);
             if (tool == null) return Reject(context, "unknown_tool", "No handler is registered for this exact tool id.");
             if (!context.Policy.Matches(EffectivePolicy(tool))) return Reject(context, "tool_policy_changed", "The captured tool policy or revision changed.");
-            var policy = tool.Registration.Policy;
+            var policy = _runPolicy == null ? tool.Registration.Policy : EffectivePolicy(tool).Policy;
+            if (_runPolicy != null && (!_runPolicy.Allows(context.Call.Name, policy, tool.Registration.Binding) ||
+                ConversationRunPolicy.IsPlanningArtifact(context.Call.Name, tool.Registration.Binding) &&
+                !(tool.Handler is IPlanningArtifactToolHandler)))
+                return Reject(context, "permission_denied", "The run policy forbids this operation before preparation or dispatch.");
             if (!policy.AllowedModes.Contains(_mode, StringComparer.Ordinal))
                 return Reject(context, "tool_mode_denied", "The tool is not allowed in this conversation mode.");
             if (policy.RequiresConfirmation && !_allowsConfirmation)
@@ -209,10 +217,13 @@ namespace RNAssistant.Core.Tools
         {
             var captured = tool.Policy();
             var policy = tool.Registration.Policy;
+            if (_runPolicy != null) return new ToolPolicySnapshot(captured.ToolId,
+                captured.Revision,
+                _runPolicy.EffectiveToolPolicy(captured.ToolId, policy, tool.Registration.Binding));
             if (!_autoConfirm || !policy.RequiresConfirmation) return captured;
             return new ToolPolicySnapshot(captured.ToolId, captured.Revision,
                 new ToolPolicy(policy.Effect, policy.Verification, false,
-                    policy.IndependentLocalRead, policy.AllowedModes, policy.RiskLevel));
+                    policy.IndependentLocalRead, policy.AllowedModes, policy.RiskLevel, policy.ExecutesCode));
         }
 
         private ToolExecutionRecord CompleteMutation(string attemptId, ToolExecutionRecord record, string preparedStateJson)

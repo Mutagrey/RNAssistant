@@ -1,5 +1,28 @@
 # RNAssistant Harness
 
+Unified-agent checks: `unified policy:` covers the permission matrix, prohibition
+before preparation, forged planning bindings, retired history byte preservation,
+and native Office-adapter confirmation pinned across setting changes/restart.
+`auto confirmation:` covers typed settings and default-off snapshots, dynamic code,
+preparation/refusal/cancellation, automatic multistep execution, next-run disable
+and unknown-effect non-retry through the production runtime with fake hosts. Also use
+`tool runtime:`, `kernel:`, `no-tool`, `plan mode:`, `conversation: stream`, and
+`storage: pre-cutover` for the corresponding changed boundaries. These are
+host-neutral, not real Office qualification. After a CLI build,
+`python3 -B tests/cli/unified_agent_smoke.py` checks direct answers, reads, per-call
+approval/rejection, auto-confirm multistep writes, captured policy/restart,
+unread-file guards, next-run defaults, invalid flags, policy changes, Plan
+persistence, document injection under Deny and emergency disable.
+`tests/web/chat-composer-layout.test.js` checks the setting's default, save/reload,
+reset and composer status alongside the existing responsive layout.
+`turn_decisions_smoke.py` checks both response
+formats/result roles. The former Chat-only and implicit-auto-confirm assumptions
+are not the new contract.
+`mode_questions_smoke.py` verifies Plan/Agent typed questions across processes.
+`dotnet run --project demo/RNAssistant.MockDemo -- --unified-agent-test` exercises
+the actual controller with a fake host, including permission snapshot cloning,
+approval after settings changes/restart, AutoConfirm and planning wrappers.
+
 `conversation v7:` checks batch policy in both parser and actual HTTP response
 schema: authorized reads, singleton effects, mixed batches, contradictory policy
 and the 32-call bound. `protocol context: immutable complete snapshots` also

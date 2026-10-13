@@ -157,7 +157,7 @@ namespace RNAssistant.Harness
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var selected = ConversationRunPolicy.For(ChatModes.Plan).SelectTools(tools);
                 AssertTrue(selected.Any(item => item.Id == PlanDocumentToolCatalog.SaveToolId), "plan save available");
-                AssertTrue(selected.Any(item => item.Id == PlanDocumentToolCatalog.RestoreToolId), "plan restore available");
+                AssertTrue(!selected.Any(item => item.Id == PlanDocumentToolCatalog.RestoreToolId || item.Id == PlanDocumentToolCatalog.DeleteToolId), "Plan excludes restore and delete");
                 AssertTrue(NativeToolRuntimeAdapter.Owns(
                     PlanDocumentToolCatalog.SaveToolId),
                     "Plan document tools use the native ToolRuntime");

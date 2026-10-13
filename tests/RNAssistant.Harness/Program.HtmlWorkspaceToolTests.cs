@@ -102,7 +102,7 @@ namespace RNAssistant.Harness
                     var allTools = OfficeToolCatalog.ForHost(adapter.HostName)
                         .Concat(executor.GetControllerTools()).ToList();
                     var runtime = executor.CreateNativeRuntime(
-                        session, allTools, new AppSettings(), "agent", false);
+                        session, allTools, new AppSettings(), "agent", false, manualRun: true);
                     foreach (var definition in definitions)
                     {
                         AssertTrue(runtime.Describe(new ToolCall(
@@ -266,7 +266,7 @@ namespace RNAssistant.Harness
                     var definitions = OfficeToolCatalog.ForHost(adapter.HostName)
                         .Concat(executor.GetControllerTools()).ToList();
                     var runtime = executor.CreateNativeRuntime(
-                        session, definitions, new AppSettings(), "agent", false);
+                        session, definitions, new AppSettings(), "agent", false, manualRun: true);
                     var source = "const first = 1;\nconst second = 2;\r\nconst third = 3;";
                     var created = ExecuteHtmlNative(runtime,
                         HtmlWorkspaceToolCatalog.WriteFileToolId,
@@ -410,7 +410,7 @@ namespace RNAssistant.Harness
                     var definitions = OfficeToolCatalog.ForHost(adapter.HostName)
                         .Concat(executor.GetControllerTools()).ToList();
                     var runtime = executor.CreateNativeRuntime(
-                        session, definitions, new AppSettings(), "agent", false);
+                        session, definitions, new AppSettings(), "agent", false, manualRun: true);
                     Func<string, string, string, ToolExecutionRecord> write = delegate(string callId, string path, string content)
                     {
                         var call = new ToolCall(callId, HtmlWorkspaceToolCatalog.WriteFileToolId,
@@ -446,7 +446,7 @@ namespace RNAssistant.Harness
                     var definitions = OfficeToolCatalog.ForHost(adapter.HostName)
                         .Concat(executor.GetControllerTools()).ToList();
                     var runtime = executor.CreateNativeRuntime(
-                        session, definitions, new AppSettings(), "agent", false);
+                        session, definitions, new AppSettings(), "agent", false, manualRun: true);
                     var created = ExecuteHtmlNative(runtime,
                         HtmlWorkspaceToolCatalog.WriteFileToolId,
                         new JObject { ["path"] = "index.html", ["content"] = "<main>first</main>" });
@@ -591,7 +591,7 @@ namespace RNAssistant.Harness
                 var tools = ConversationRunService.PrepareToolsForRun(executor.GetHostTools()
                     .Concat(executor.GetControllerTools()).Concat(executor.CapturePublishedGlobalTools(catalogs)));
                 var skills = executor.CaptureSkills(catalogs);
-                var runtime = executor.CreateNativeRuntime(session, tools, settings, "agent", false);
+                var runtime = executor.CreateNativeRuntime(session, tools, settings, "agent", false, manualRun: true);
                 var target = executor.ResourceGateway.Find(session, "index.html", "html").Items
                     .Single(item => item.Type == "HTML file").Target;
                 var readCall = new ToolCall("html-visible-read", ResourceToolCatalog.ReadToolId,
@@ -695,7 +695,7 @@ namespace RNAssistant.Harness
             {
                 var session = NewSession(adapter);
                 var definitions = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
-                var runtime = executor.CreateNativeRuntime(session, definitions, new AppSettings(), "agent", false);
+                var runtime = executor.CreateNativeRuntime(session, definitions, new AppSettings(), "agent", false, manualRun: true);
                 const string json = "[{\"year\":2026,\"value\":42}]";
                 var saved = ExecuteHtmlNative(runtime, HtmlWorkspaceToolCatalog.WriteDataToolId,
                     new JObject { ["name"] = "dashboardData", ["json"] = json });

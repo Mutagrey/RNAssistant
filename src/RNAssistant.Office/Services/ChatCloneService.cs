@@ -68,6 +68,7 @@ namespace RNAssistant.Office.Services
                 Title = session.Title,
                 Model = session.Model,
                 Mode = session.Mode,
+                MutationPolicy = session.MutationPolicy,
                 ReasoningEnabled = session.ReasoningEnabled,
                 CreatedUtc = session.CreatedUtc,
                 UpdatedUtc = session.UpdatedUtc,
@@ -245,6 +246,7 @@ namespace RNAssistant.Office.Services
             return run == null ? null : new ChatRunRecord
             {
                 RunId = run.RunId,
+                ConversationPolicy = run.ConversationPolicy,
                 TurnId = run.TurnId,
                 RuntimeId = run.RuntimeId,
                 ResponseProtocolVersion = run.ResponseProtocolVersion,

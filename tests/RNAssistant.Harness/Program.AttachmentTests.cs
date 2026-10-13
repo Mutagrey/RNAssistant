@@ -187,7 +187,7 @@ namespace RNAssistant.Harness
                 var artifact = durable.Artifacts.Single(item => item.Id == "attachment_" + staged.Id);
                 var uri = ArtifactUri(durable, artifact);
                 var modelRequest = new ModelContextCompiler(projection: ModelToolResultProjection.Instance).BuildPreview(
-                    ChatModes.Chat,
+                    ChatModes.Agent,
                     user.Content,
                     adapter,
                     new ToolCatalogEntry[0],
@@ -682,7 +682,7 @@ namespace RNAssistant.Harness
             AssertEqual(0, helperCalls, "no duplicate model call");
 
             var prompt = new ModelContextCompiler(projection: ModelToolResultProjection.Instance).BuildPreview(
-                ChatModes.Chat,
+                ChatModes.Agent,
                 sourceMessage.Content,
                 null,
                 new ToolCatalogEntry[0],

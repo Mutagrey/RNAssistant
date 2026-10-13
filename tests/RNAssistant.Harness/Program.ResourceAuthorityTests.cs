@@ -859,7 +859,7 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 executor.BindResourceAuthority(session);
                 var runtime = executor.CreateNativeRuntime(session,
-                    OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), new AppSettings(), "agent", false);
+                    OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), new AppSettings(), "agent", false, manualRun: true);
                 var gateway = executor.ResourceGateway;
                 var scope = executor.ResourceAuthority.Scope(session, false);
                 Func<SchemaRegistrySnapshot> schemas = () => ResourceStateProvider.CaptureSchemas(executor.ResourceAuthority.CaptureMany(new[] { scope }));
@@ -1025,7 +1025,7 @@ namespace RNAssistant.Harness
                     "fork never mutates the parent snapshot");
 
                 var childRuntime = executor.CreateNativeRuntime(child,
-                    OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), new AppSettings(), "agent", false);
+                    OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), new AppSettings(), "agent", false, manualRun: true);
                 var copiedMapping = Newtonsoft.Json.JsonConvert.DeserializeObject<ResourceMappingDefinition>(
                     executor.Payloads.ReadText(revisions.GetRevision(childScope,
                         child.HtmlWorkspace.DataSources.Single(item => item.Name == "virtual").Binding.Mapping).Payload.ToBlobReference()));
@@ -1624,8 +1624,8 @@ namespace RNAssistant.Harness
                 var skills = reader.CaptureSkills(publication);
                 var settings = PromptSettingsService.ApplyPublishedTemplates(new AppSettings {
                     ContextWindowOverrideTokens = 64000, MaxTokens = 1024 }, publication.PromptsJson);
-                var readRuntime = reader.CreateNativeRuntime(chatA, catalog, settings, "agent", false);
-                var writeRuntime = writer.CreateNativeRuntime(chatB, catalog, settings, "agent", false);
+                var readRuntime = reader.CreateNativeRuntime(chatA, catalog, settings, "agent", false, manualRun: true);
+                var writeRuntime = writer.CreateNativeRuntime(chatB, catalog, settings, "agent", false, manualRun: true);
                 const string marker = "TWO_CHAT_RETAINED_CELL";
                 adapter.SetExcelCellForTest("Data", "J1", marker);
                 var read = ExecuteHtmlNative(readRuntime, ResourceToolCatalog.ReadToolId,
@@ -2215,7 +2215,7 @@ namespace RNAssistant.Harness
                     .SelectMany(item => item.ResourceEvidence).ToList();
                 var definitions = OfficeToolCatalog.ForHost(adapter.HostName)
                     .Concat(executor.GetControllerTools()).ToList();
-                var runtime = executor.CreateNativeRuntime(session, definitions, new AppSettings(), "agent", false);
+                var runtime = executor.CreateNativeRuntime(session, definitions, new AppSettings(), "agent", false, manualRun: true);
                 var next = new ToolCall("observed-html-replace", HtmlWorkspaceToolCatalog.WriteFileToolId,
                     new JObject { ["path"] = "index.html", ["content"] = "<main>UPDATED_HTML</main>" }.ToString());
                 session.Messages.Add(new ChatMessage { Role = "assistant", RunId = "source-run",

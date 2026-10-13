@@ -272,7 +272,7 @@ namespace RNAssistant.Harness
                 var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths), new ToolStore(paths));
                 var session = NewSession(adapter);
                 var runtime = executor.CreateNativeRuntime(session, OfficeToolCatalog.ForHost(adapter.HostName)
-                    .Concat(executor.GetControllerTools()).ToList(), new AppSettings(), "agent", false);
+                    .Concat(executor.GetControllerTools()).ToList(), new AppSettings(), "agent", false, manualRun: true);
                 const string prefix = "<!doctype html><html><body>before";
                 var source = prefix + new string('x', 32000 - prefix.Length - "</body>".Length) + "</body></html>\r\n";
                 var expectedReferences = new Dictionary<string, string[]>();

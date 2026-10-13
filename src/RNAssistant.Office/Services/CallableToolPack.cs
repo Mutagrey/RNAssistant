@@ -58,7 +58,7 @@ namespace RNAssistant.Office.Services
             string runId,
             IReadOnlyList<ToolCatalogEntry> catalog)
         {
-            _mode = ChatModes.Normalize(mode);
+            _mode = RNAssistant.Core.Services.ConversationRunPolicy.For(mode).Mode;
             _host = host ?? string.Empty;
             _runId = runId ?? string.Empty;
             _catalog = (catalog ?? new ToolCatalogEntry[0])
@@ -132,7 +132,6 @@ namespace RNAssistant.Office.Services
             IEnumerable<SkillDefinition> skills,
             IReadOnlyList<ToolCatalogEntry> callableTools)
         {
-            if (string.Equals(_mode, ChatModes.Chat, StringComparison.Ordinal)) return null;
             var result = CapabilityCatalogService.BuildPromptCatalog(_catalog, skills, callableTools);
             if (!string.IsNullOrWhiteSpace(_restorationFailureCode))
                 result["reconstructionStatus"] = "invalidated_to_core";
@@ -146,7 +145,6 @@ namespace RNAssistant.Office.Services
 
         public bool StageReadResult(ChatMessage message)
         {
-            if (string.Equals(_mode, ChatModes.Chat, StringComparison.Ordinal)) return false;
             // Raw read evidence proves only that a descriptor was returned. It is
             // never replay authority for a prior admission decision; only a typed
             // durable extension event can reconstruct model-visible membership.
@@ -321,7 +319,6 @@ namespace RNAssistant.Office.Services
 
         private IReadOnlyList<ToolCatalogEntry> ToolsFor(IEnumerable<string> optionalIds)
         {
-            if (string.Equals(_mode, ChatModes.Chat, StringComparison.Ordinal)) return _catalog;
             var active = new HashSet<string>(_coreIds, StringComparer.Ordinal);
             foreach (var id in optionalIds ?? new string[0]) active.Add(id);
             return _catalog.Where(tool => active.Contains(tool.Id)).ToArray();
@@ -389,7 +386,6 @@ namespace RNAssistant.Office.Services
 
         private string ProfileId()
         {
-            if (string.Equals(_mode, ChatModes.Chat, StringComparison.Ordinal)) return "chat-resource-core";
             if (string.Equals(_mode, ChatModes.Agent, StringComparison.Ordinal) &&
                 string.Equals(_host, "Excel", StringComparison.OrdinalIgnoreCase)) return "excel-vba-core";
             if (string.Equals(_mode, ChatModes.Agent, StringComparison.Ordinal) &&
@@ -404,7 +400,6 @@ namespace RNAssistant.Office.Services
             IEnumerable<string> catalogIds)
         {
             var catalog = new HashSet<string>(catalogIds ?? new string[0], StringComparer.Ordinal);
-            if (string.Equals(mode, ChatModes.Chat, StringComparison.Ordinal)) return catalog;
             var selected = new HashSet<string>(BootstrapToolIds, StringComparer.Ordinal);
             if (string.Equals(mode, ChatModes.Agent, StringComparison.Ordinal) &&
                 string.Equals(host, "Excel", StringComparison.OrdinalIgnoreCase)) selected.UnionWith(ExcelCoreToolIds);

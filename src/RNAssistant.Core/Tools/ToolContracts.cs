@@ -48,12 +48,13 @@ namespace RNAssistant.Core.Tools
         public int RiskLevel { get; private set; }
         [JsonProperty(Required = Required.Always)]
         public ToolExecutionClass ExecutionClass { get; private set; }
+        public bool ExecutesCode { get; private set; }
         [JsonIgnore]
         public bool MayHaveSideEffects { get { return Effect != ToolEffect.Read; } }
 
         [JsonConstructor]
         public ToolPolicy(ToolEffect effect, ToolVerification verification, bool requiresConfirmation,
-            bool independentLocalRead, IEnumerable<string> allowedModes, int riskLevel = 0)
+            bool independentLocalRead, IEnumerable<string> allowedModes, int riskLevel = 0, bool executesCode = false)
         {
             if (!Enum.IsDefined(typeof(ToolEffect), effect)) throw new ArgumentOutOfRangeException(nameof(effect));
             if (!Enum.IsDefined(typeof(ToolVerification), verification)) throw new ArgumentOutOfRangeException(nameof(verification));
@@ -69,6 +70,7 @@ namespace RNAssistant.Core.Tools
             IndependentLocalRead = independentLocalRead;
             AllowedModes = Array.AsReadOnly(modes.Distinct(StringComparer.Ordinal).OrderBy(mode => mode, StringComparer.Ordinal).ToArray());
             RiskLevel = riskLevel;
+            ExecutesCode = executesCode;
             ExecutionClass = Classify(effect, verification);
         }
 
@@ -84,7 +86,7 @@ namespace RNAssistant.Core.Tools
         {
             return other != null && Effect == other.Effect && Verification == other.Verification &&
                 RequiresConfirmation == other.RequiresConfirmation && IndependentLocalRead == other.IndependentLocalRead &&
-                RiskLevel == other.RiskLevel && ExecutionClass == other.ExecutionClass &&
+                RiskLevel == other.RiskLevel && ExecutesCode == other.ExecutesCode && ExecutionClass == other.ExecutionClass &&
                 AllowedModes.SequenceEqual(other.AllowedModes, StringComparer.Ordinal);
         }
     }

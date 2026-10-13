@@ -98,6 +98,7 @@ namespace RNAssistant.Office.Services
             PendingToolRegistrar pendingToolRegistrar, IReadOnlyList<SkillDefinition> skills,
             CancellationToken cancellationToken, bool appendUserMessage = true)
         {
+            ConversationRunPolicy.RequireCurrentSession(session);
             settings = settings ?? new AppSettings();
             ConversationProtocolContext.EnsureCurrentHistory(session);
             mode = ValidateMode(mode, session);
@@ -112,6 +113,7 @@ namespace RNAssistant.Office.Services
             }
             if (session.LastRun == null || session.LastRun.KernelState != null)
                 session.LastRun = new ChatRunRecord { RunId = Guid.NewGuid().ToString("N"), StartedUtc = DateTime.UtcNow };
+            session.LastRun.ConversationPolicy = ConversationRunPolicy.ForSession(session, settings.AutoConfirmToolActions);
             if (string.IsNullOrWhiteSpace(session.LastRun.RunId)) session.LastRun.RunId = Guid.NewGuid().ToString("N");
             if (string.IsNullOrWhiteSpace(session.LastRun.TurnId)) session.LastRun.TurnId = session.LastRun.RunId;
             var user = session.Messages.LastOrDefault(message => !message.ProtocolMessage && message.Role == "user");
@@ -132,9 +134,11 @@ namespace RNAssistant.Office.Services
             Func<CancellationToken, Task<ConversationRunInput>> refreshModelInput = null,
             CancellationToken cancellationToken = default(CancellationToken), bool supersedePending = false)
         {
+            ConversationRunPolicy.RequireCurrentSession(session);
             if (session == null || ChatModes.Normalize(session.Mode) != ChatModes.Agent)
                 throw new InvalidOperationException("Only Agent mode can continue a confirmed tool call.");
             var continuation = ConversationProtocolContext.RestoreContinuation(session, command, _toolExecutor.Payloads);
+            ConversationRunPolicy.ForAcceptedRun(session);
             if (continuation.Summary.PendingConfirmation.PendingId != pendingId)
                 throw new InvalidOperationException("Pending tool was not found or was already resolved.");
             using (var ports = CreatePorts(ChatModes.Agent, LatestUserRequest(session), session, input,

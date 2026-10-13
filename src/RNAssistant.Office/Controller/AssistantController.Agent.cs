@@ -50,6 +50,7 @@ namespace RNAssistant.Office
                 {
                     throw new InvalidOperationException("Pending tool was not found or was already resolved.");
                 }
+                ConversationRunPolicy.ForAcceptedRun(session);
                 ConversationProtocolContext.EnsureCanContinue(session, pending.Command, _toolExecutor.Payloads);
                 var settings = ResolveChatSettings(session);
                 var documentRuntimeKey = CaptureExpectedRuntimeDocumentKey(session);
@@ -63,7 +64,7 @@ namespace RNAssistant.Office
                 var turnId = session.LastRun == null || string.IsNullOrWhiteSpace(session.LastRun.TurnId)
                     ? (session.LastRun == null ? runId : session.LastRun.RunId)
                     : session.LastRun.TurnId;
-                var previousState = session.LastRun.KernelState;
+                var previousRun = session.LastRun;
                 session.LastRun = new ChatRunRecord
                 {
                     RunId = runId,
@@ -72,7 +73,8 @@ namespace RNAssistant.Office
                     ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion,
                     Status = "running",
                     Phase = "executing",
-                    KernelState = previousState,
+                    KernelState = previousRun.KernelState,
+                    ConversationPolicy = previousRun.ConversationPolicy,
                     CurrentAction = supersedePending ? "Учитываю уточнение пользователя." : "Выполняю подтверждённое действие.",
                     DocumentRuntimeKey = documentRuntimeKey,
                     IterationsUsed = pending.IterationsUsed,

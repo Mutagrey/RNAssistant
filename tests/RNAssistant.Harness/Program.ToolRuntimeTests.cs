@@ -38,6 +38,150 @@ namespace RNAssistant.Harness
                 new ToolBinding(handlerId ?? id + ".handler"), revision);
         }
 
+        private static async Task UnifiedPolicyEnforcesEveryDispatch()
+        {
+            foreach (var mode in new[] { "agent", "plan" })
+            foreach (var permission in new[] { MutationPolicy.Ask, MutationPolicy.Deny })
+            foreach (var automatic in new[] { false, true })
+            foreach (var effect in new[] { ToolEffect.Read, ToolEffect.Write, ToolEffect.External, ToolEffect.Unclassified })
+            {
+                var registration = RuntimeRegistration(policy: Policy(effect, modes: new[] { "agent", "plan" }));
+                var registry = new ToolHandlerRegistry();
+                var handler = new RuntimeTestHandler();
+                handler.Run = (c, token) => {
+                    if (effect != ToolEffect.Read) c.MarkDispatchPossible();
+                    return Task.FromResult(new ToolHandlerResult(RuntimeResult.Ok("Done"),
+                        effect == ToolEffect.Read ? ToolEffectEvidence.None : ToolEffectEvidence.VerifiedChange));
+                };
+                registry.Register(registration, handler);
+                var policy = ConversationRunPolicy.For(mode, permission, automatic);
+                var runtime = new ToolRuntime(registry, mode, true, policy.AllowsConfirmation,
+                    (pendingContext, preparation) => "pending", runPolicy: policy);
+                var call = new ToolCall("call", "fixture.read", "{}");
+                var context = new ToolExecutionContext(call, runtime.Describe(call), "run", "turn", "step", DateTime.UtcNow, false, 5);
+                var record = await runtime.ExecuteAsync(context, CancellationToken.None);
+                var allowedRead = effect == ToolEffect.Read;
+                var allowedEffect = effect != ToolEffect.Unclassified && !allowedRead && mode == "agent" && permission == MutationPolicy.Ask;
+                var dispatched = allowedRead || allowedEffect && automatic;
+                var pending = allowedEffect && !automatic;
+                AssertEqual(dispatched ? (allowedRead ? ToolExecutionOutcome.Ok : ToolExecutionOutcome.Unknown) : pending ? ToolExecutionOutcome.AwaitingConfirmation : ToolExecutionOutcome.Error,
+                    record.Outcome, "independent intent/policy effect matrix");
+                AssertEqual(dispatched ? 1 : 0, handler.Calls, "only captured auto-confirm can approve allowed effects");
+                if (pending)
+                {
+                    var confirmed = new ToolExecutionContext(call, context.Policy, "run", "turn", "step", DateTime.UtcNow, true, 5);
+                    await runtime.ExecuteAsync(confirmed, CancellationToken.None);
+                    AssertEqual(1, handler.Calls, "only explicitly confirmed call dispatches");
+                }
+            }
+        }
+
+        private static async Task UnifiedPolicyBlocksBeforePreparationAndSpoofing()
+        {
+            var registry = new ToolHandlerRegistry();
+            var preparable = new RuntimePreparableHandler();
+            var registration = RuntimeRegistration(policy: Policy(ToolEffect.Write, ToolVerification.Tool));
+            registry.Register(registration, preparable);
+            var runtime = new ToolRuntime(registry, "agent", true, true, runPolicy: ConversationRunPolicy.For("agent", MutationPolicy.Deny, true));
+            var call = new ToolCall("call", "fixture.read", "{}");
+            var context = new ToolExecutionContext(call, runtime.Describe(call), "run", "turn", "step", DateTime.UtcNow, true, 5);
+            await runtime.ExecuteAsync(context, CancellationToken.None);
+            AssertEqual(0, preparable.PrepareCalls, "deny precedes preparation even with forged confirmation");
+            AssertEqual(0, preparable.ExecuteCalls, "deny precedes dispatch");
+            var fake = new RuntimeTestHandler();
+            var id = PlanDocumentToolCatalog.SaveToolId;
+            registry.Register(new ToolRegistration(new ToolDescriptor(id, "fake", RuntimeEmptySchema),
+                Policy(ToolEffect.Write, ToolVerification.Tool), PlanDocumentToolHandler.BindingFor(id), "fake"), fake);
+            call = new ToolCall("fakecall", id, "{}");
+            await runtime.ExecuteAsync(new ToolExecutionContext(call, runtime.Describe(call), "run", "turn", "step", DateTime.UtcNow, false, 5), CancellationToken.None);
+            AssertEqual(0, fake.Calls, "a forged planning binding cannot use the exception");
+        }
+
+        private static void UnifiedPolicyPlanningAndCodeCatalog()
+        {
+            foreach (var permission in new[] { MutationPolicy.Ask, MutationPolicy.Deny })
+            foreach (var automatic in new[] { false, true })
+            {
+                var policy = ConversationRunPolicy.For("plan", permission, automatic);
+                var entries = policy.SelectTools(PlanDocumentToolCatalog.GetTools().Concat(TaskListToolCatalog.GetTools()));
+                AssertEqual(2, entries.Count, "only save and task-list update are planning exceptions");
+                AssertTrue(entries.All(entry => !entry.RequiresConfirmation), "planning exceptions need no approval");
+                var code = new ToolPolicy(ToolEffect.Read, ToolVerification.None, false, false, new[] { "agent", "plan" }, executesCode: true);
+                AssertTrue(!policy.Allows("web.verify", code, new ToolBinding("browser")), "Plan cannot execute read-producing code");
+                AssertTrue(!ConversationRunPolicy.For("agent", MutationPolicy.Deny, automatic).Allows("web.verify", code, new ToolBinding("browser")), "Deny cannot execute read-producing code");
+                AssertTrue(ConversationRunPolicy.For("agent").EffectiveToolPolicy("web.verify", code, new ToolBinding("browser")).RequiresConfirmation, "code needs approval");
+            }
+            RuntimeThrows<ArgumentException>(() => ConversationRunPolicy.For("chat"));
+            var historical = new ChatSession { FormatVersion = 6 };
+            ChatSessionNormalizer.Normalize(historical, "Excel", "doc", "doc");
+            AssertEqual(6, historical.FormatVersion, "normalization must not upgrade authority");
+            RuntimeThrows<InvalidOperationException>(() => ConversationRunPolicy.ForSession(historical));
+            AssertTrue(ChatSession.IsReadableFormat(6), "prior history remains readable");
+            RuntimeThrows<InvalidOperationException>(() => ConversationRunPolicy.For("agent").RequireSame(ConversationRunPolicy.For("agent", MutationPolicy.Deny)));
+        }
+
+        private static void AutoConfirmationSettingsAndRunSnapshot()
+        {
+            AssertTrue(!new AppSettings().AutoConfirmToolActions, "auto-confirm defaults off");
+            foreach (var automatic in new[] { false, true })
+            {
+                var controls = SettingsControlsDto.From(new AppSettings { AutoConfirmToolActions = automatic });
+                var saved = JsonConvert.DeserializeObject<SettingsControlsDto>(JsonConvert.SerializeObject(controls)).ApplyTo(new AppSettings());
+                AssertEqual(automatic, saved.AutoConfirmToolActions, "typed settings transport retains both values");
+                var session = new ChatSession { Mode = "agent", LastRun = new ChatRunRecord {
+                    ConversationPolicy = ConversationRunPolicy.For("agent", MutationPolicy.Ask, saved.AutoConfirmToolActions) } };
+                session = JsonConvert.DeserializeObject<ChatSession>(JsonConvert.SerializeObject(session));
+                saved.AutoConfirmToolActions = !automatic;
+                AssertEqual(automatic, ConversationRunPolicy.ForAcceptedRun(session).AutoConfirmToolActions, "restarted run keeps captured approval");
+                AssertEqual(!automatic, ConversationRunPolicy.ForSession(session, saved.AutoConfirmToolActions).AutoConfirmToolActions, "next run uses saved setting");
+                RuntimeThrows<InvalidOperationException>(() => ConversationRunPolicy.ForAcceptedRun(session)
+                    .RequireSame(ConversationRunPolicy.ForSession(session, saved.AutoConfirmToolActions)));
+            }
+            var prior = JsonConvert.DeserializeObject<ConversationRunPolicy>("{\"Mode\":\"agent\",\"MutationPolicy\":\"Ask\"}");
+            AssertTrue(!prior.AutoConfirmToolActions, "absent authorization never opts in");
+        }
+
+        private static async Task AutoConfirmationKeepsPreparationAndCodeAuthority()
+        {
+            var registry = new ToolHandlerRegistry();
+            var handler = new RuntimePreparableHandler();
+            registry.Register(RuntimeRegistration(policy: Policy(ToolEffect.Write, ToolVerification.Tool)), handler);
+            var policy = ConversationRunPolicy.For("agent", MutationPolicy.Ask, true);
+            var runtime = new ToolRuntime(registry, "agent", false, true, runPolicy: policy);
+            var call = new ToolCall("call", "fixture.read", "{}");
+            var context = new ToolExecutionContext(call, runtime.Describe(call), "run", "turn", "step", DateTime.UtcNow, false, 5);
+            var result = await runtime.ExecuteAsync(context, CancellationToken.None);
+            AssertEqual(ToolExecutionOutcome.Ok, result.Outcome, "auto-approved write dispatches without registrar");
+            AssertEqual(1, handler.PrepareCalls, "auto-confirm preserves preparation");
+            AssertEqual("{\"guard\":1}", handler.ExecutedState, "prepared guard reaches handler");
+            handler.Prepare = c => new ToolPreparationResult(RuntimeResult.Error("stale target"), null);
+            result = await runtime.ExecuteAsync(context, CancellationToken.None);
+            AssertEqual(ToolExecutionOutcome.Error, result.Outcome, "preparation refusal still wins");
+            await runtime.ExecuteAsync(context, new CancellationToken(true));
+            AssertEqual(1, handler.ExecuteCalls, "stale and cancelled calls never dispatch");
+
+            // Dynamically registered code keeps its source policy and exact binding.
+            var code = new RuntimeTestHandler();
+            registry.Register(RuntimeRegistration("package.code", new ToolPolicy(ToolEffect.Read, ToolVerification.None,
+                false, false, new[] { "agent", "plan" }, executesCode: true), handlerId: "package.execute.v1"), code);
+            foreach (var mode in new[] { "agent", "plan" })
+            foreach (var permission in new[] { MutationPolicy.Ask, MutationPolicy.Deny })
+            foreach (var automatic in new[] { false, true })
+            {
+                code.Calls = 0;
+                policy = ConversationRunPolicy.For(mode, permission, automatic);
+                runtime = new ToolRuntime(registry, mode, true, policy.AllowsConfirmation,
+                    (c, preparation) => "pending", runPolicy: policy);
+                call = new ToolCall("code", "package.code", "{}");
+                var snapshot = runtime.Describe(call);
+                AssertTrue(snapshot.Policy.RequiresConfirmation && !snapshot.Policy.IndependentLocalRead, "code does not become a batch-safe read");
+                result = await runtime.ExecuteAsync(new ToolExecutionContext(call, snapshot, "run", "turn", "step", DateTime.UtcNow, false, 5), CancellationToken.None);
+                AssertEqual(policy.AutoConfirmsToolActions ? 1 : 0, code.Calls, "dynamic code follows the same approval gate");
+                AssertEqual(!policy.AllowsConfirmation ? ToolExecutionOutcome.Error : automatic ? ToolExecutionOutcome.Ok : ToolExecutionOutcome.AwaitingConfirmation,
+                    result.Outcome, "code execution matrix");
+            }
+        }
+
         private static async Task ToolRuntimeUsesExactRegistry()
         {
             var f = new ToolRuntimeFixture();

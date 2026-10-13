@@ -216,7 +216,7 @@ namespace RNAssistant.Harness
 
         private static void SimpleAgentEndsNoToolTurn()
         {
-            foreach (var mode in new[] { ChatModes.Agent, ChatModes.Chat, ChatModes.Plan })
+            foreach (var mode in new[] { ChatModes.Agent, ChatModes.Plan })
             foreach (var action in new[] { ConversationResponse.DoneAction, ConversationResponse.BlockedAction, ConversationResponse.NeedsInputAction })
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) => {
                 var requests = 0;
@@ -575,7 +575,7 @@ namespace RNAssistant.Harness
                     return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
                 };
 
-                var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
+                var result = CreateConversationRunService(adapter, executor, completion).ExecuteWithApprovalsAsync(
                     ChatModes.Agent,
                     "Создай HTML без обращения к Excel.",
                     session,
@@ -854,7 +854,7 @@ namespace RNAssistant.Harness
                 };
                 var service = CreateConversationRunService(adapter, executor, completion);
                 var session = NewSession(adapter);
-                var result = service.ExecuteAsync(
+                var result = service.ExecuteWithApprovalsAsync(
                     ChatModes.Agent,
                     "Создай лист Report.", session, NewContext(adapter),
                     new AppSettings { AutoConfirmToolActions = true, MaxAgentIterations = 4 },
@@ -1074,9 +1074,9 @@ namespace RNAssistant.Harness
                 ChatTurnResult result;
                 using (RunCausalTrace.Begin(EventStore(store), session))
                 {
-                    result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
+                    result = CreateConversationRunService(adapter, executor, completion).ExecuteWithApprovalsAsync(
                         ChatModes.Agent, "Update Module1.", session, NewContext(adapter),
-                        new AppSettings { AutoConfirmToolActions = true, MaxAgentFormatRetries = 20 },
+                        new AppSettings { AutoConfirmToolActions = false, MaxAgentFormatRetries = 20 },
                         OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null)
                         .GetAwaiter().GetResult();
                 }
@@ -1106,8 +1106,10 @@ namespace RNAssistant.Harness
                 var callId = acceptedCall.ToolCallId;
                 var acceptedWrite = accepted.Single(item => (string)item.Data["ModelAttemptId"] == acceptedCall.AcceptedCallOrigin.ModelAttemptId);
                 AssertTrue(accepted.All(item => !((JArray)item.Data["ToolCallIds"]).Any()), "protocol verdict never assigns execution IDs");
-                var toolStart = events.Single(item => item.Type == "tool.execution.started" && (string)item.Data["ToolCallId"] == callId);
-                var toolEnd = events.Single(item => item.Type == "tool.execution.completed" && (string)item.Data["ToolCallId"] == callId);
+                AssertEqual(2, events.Count(item => item.Type == "tool.execution.started" && (string)item.Data["ToolCallId"] == callId),
+                    "preparation and explicit confirmation have distinct boundaries");
+                var toolStart = events.Last(item => item.Type == "tool.execution.started" && (string)item.Data["ToolCallId"] == callId);
+                var toolEnd = events.Last(item => item.Type == "tool.execution.completed" && (string)item.Data["ToolCallId"] == callId);
                 foreach (var message in session.Messages.Where(item => item.AcceptedCallOrigin != null))
                 {
                     var origin = message.AcceptedCallOrigin;
@@ -1973,7 +1975,7 @@ namespace RNAssistant.Harness
                 };
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var session = NewSession(adapter);
-                var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
+                var result = CreateConversationRunService(adapter, executor, completion).ExecuteWithApprovalsAsync(
                     ChatModes.Agent, "Run Module1.MigrateApiKey with arguments.", session, NewContext(adapter),
                     new AppSettings
                     {
@@ -2093,7 +2095,7 @@ namespace RNAssistant.Harness
                     ContextWindowOverrideTokens = 131072, MaxTokens = 16384 };
                 var tools = executor.GetControllerTools().Where(tool => VbaToolCatalog.Owns(tool.Id) ||
                     tool.Id == ResourceToolCatalog.ReadToolId || tool.Id == ResourceToolCatalog.FindToolId).ToList();
-                service.ExecuteAsync(ChatModes.Agent, "Create and inspect ContextModule.", session,
+                service.ExecuteWithApprovalsAsync(ChatModes.Agent, "Create and inspect ContextModule.", session,
                     NewContext(adapter), settings, tools, null).GetAwaiter().GetResult();
                 AssertEqual(3, step, "creation and read complete without repairs");
                 AssertEqual(source, adapter.GetVbaModuleCode(module), "creation preserves the complete source");
@@ -2113,7 +2115,7 @@ namespace RNAssistant.Harness
                 compact();
                 phase = 1;
                 step = 0;
-                var continued = service.ExecuteAsync(ChatModes.Agent, "Change before to after in ContextModule.", session,
+                var continued = service.ExecuteWithApprovalsAsync(ChatModes.Agent, "Change before to after in ContextModule.", session,
                     NewContext(adapter), settings, tools, null).GetAwaiter().GetResult();
                 AssertEqual(2, step, "post-compaction edit needs no extra source read or repair: " + continued.AssistantText);
                 AssertEqual(after, adapter.GetVbaModuleCode(module), "edit preserves all unrelated source after compaction");
@@ -2126,7 +2128,7 @@ namespace RNAssistant.Harness
                 // forcing the full module body out of the request.
                 settings.ContextWindowOverrideTokens = 24576;
                 settings.MaxTokens = 1024;
-                continued = service.ExecuteAsync(ChatModes.Agent, "Change after to final in ContextModule using a focused edit.",
+                continued = service.ExecuteWithApprovalsAsync(ChatModes.Agent, "Change after to final in ContextModule using a focused edit.",
                     session, NewContext(adapter), settings, tools, null).GetAwaiter().GetResult();
                 AssertEqual(4, step, "small-context refusal recovers through one excerpt and one patch: " + continued.AssistantText);
                 AssertEqual(after.Replace("\"after\"", "\"final\""), adapter.GetVbaModuleCode(module),
@@ -2338,6 +2340,10 @@ namespace RNAssistant.Harness
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var first = service.ExecuteAsync(ChatModes.Agent, "Создай лист и skill.", session, NewContext(adapter),
                     settingsForRun, tools, null, (pendingSession, command, result) => "pending").GetAwaiter().GetResult();
+                AssertTrue(first.WaitingForConfirmation, "the first mutation also requires approval");
+                first = service.ConfirmAsync("pending", PendingCommand(session), session,
+                    new ConversationRunInput(settingsForRun, NewContext(adapter), tools), null,
+                    (pendingSession, command, result) => "pending").GetAwaiter().GetResult();
                 AssertTrue(first.WaitingForConfirmation, "real loop stops at confirmation");
                 AssertEqual(initialHealth, first.RunViewState.ExecutionHealth, "pending cannot erase earlier execution evidence");
                 AssertEqual(0, first.RunViewState.VerifiedWrites + first.RunViewState.UnverifiedWrites, "pending mutation is not a successful write");
@@ -2725,7 +2731,7 @@ namespace RNAssistant.Harness
                     return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
                 });
                 var session = NewSession(adapter);
-                var result = service.ExecuteAsync(ChatModes.Agent, "Save complete HTML.", session, NewContext(adapter),
+                var result = service.ExecuteWithApprovalsAsync(ChatModes.Agent, "Save complete HTML.", session, NewContext(adapter),
                     new AppSettings { AutoConfirmToolActions = true, MaxAgentFormatRetries = 1,
                         ToolResultRole = resultRole, ContextWindowOverrideTokens = 131072 },
                     OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
@@ -2755,7 +2761,7 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void ModelRefusalIsTerminalInAgentAndChat()
+        private static void ModelRefusalIsTerminalInAgentAndPlan()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
@@ -2788,9 +2794,9 @@ namespace RNAssistant.Harness
                 AssertEqual(1, calls, "agent refusal does not enter format repair");
 
                 var chatSession = NewSession(adapter);
-                chatSession.Mode = ChatModes.Chat;
+                chatSession.Mode = ChatModes.Plan;
                 var chat = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
-                    ChatModes.Chat,
+                    ChatModes.Plan,
                     "Restricted request.", chatSession, NewContext(adapter), new AppSettings(),
                     executor.GetControllerTools().ToList(), (Action<string, string, ChatActivity>)null)
                     .GetAwaiter().GetResult();
@@ -2810,9 +2816,9 @@ namespace RNAssistant.Harness
                     return Task.FromResult(new LlmCompletionResult { Content = string.Empty });
                 });
                 var emptySession = NewSession(adapter);
-                emptySession.Mode = ChatModes.Chat;
+                emptySession.Mode = ChatModes.Plan;
                 var empty = emptyService.ExecuteAsync(
-                    ChatModes.Chat,
+                    ChatModes.Plan,
                     "Empty response.", emptySession, NewContext(adapter),
                     new AppSettings { MaxAgentFormatRetries = 1 }, executor.GetControllerTools().ToList(), null)
                     .GetAwaiter().GetResult();
@@ -2821,72 +2827,94 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void ChatUsesReadOnlyResourceLoop()
+        private static void UnifiedOfficeRequiresExactApproval()
         {
-            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
             {
-                var responses = new Queue<string>(new[]
-                {
-                    "{\"message\":\"Проверяю доступные ресурсы.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.resources_find\",\"arguments\":{}}]}",
-                    "{\"message\":\"Ресурсы доступны.\",\"action\":\"done\",\"tool_calls\":[]}"
+                var responses = new Queue<string>(new[] {
+                    "{\"message\":\"Add sheet\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"ApprovedSheet\"}}]}",
+                    "{\"message\":\"Add another sheet\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"SecondApprovedSheet\"}}]}",
+                    ModelProtocolWire.WriteAction("Done", ConversationResponse.DoneAction)
                 });
-                var captured = new List<IReadOnlyList<ChatMessage>>();
-                var capturedOptions = new List<LlmRequestOptions>();
-                LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
-                {
-                    captured.Add(messages.ToList());
-                    capturedOptions.Add(options);
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
-                };
+                var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
+                    Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() }));
                 var session = NewSession(adapter);
-                session.Mode = ChatModes.Chat;
-                var allTools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
-                var spoofedResource = executor.GetControllerTools()
-                    .Single(tool => tool.Id == ResourceToolCatalog.ReadToolId)
-                    .Clone();
-                spoofedResource.BuiltIn = false;
-                AssertEqual(0, ConversationRunService.PrepareToolsForMode(
-                    ChatModes.Chat, new[] { spoofedResource }).Count,
-                    "chat rejects a non-built-in resource id spoof");
-                try
-                {
-                    CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
-                        ChatModes.Agent,
-                        "mismatched mode", session, NewContext(adapter), new AppSettings(), allTools, null)
-                        .GetAwaiter().GetResult();
-                    throw new InvalidOperationException("mode mismatch unexpectedly reached the model");
-                }
-                catch (InvalidOperationException ex)
-                {
-                    if (ex.Message.IndexOf("unexpectedly", StringComparison.OrdinalIgnoreCase) >= 0) throw;
-                    AssertContains(ex.Message, "does not match", "persisted Chat mode is the policy boundary");
-                }
-                var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
-                    ChatModes.Chat,
-                    "Какие ресурсы доступны?", session, NewContext(adapter), new AppSettings(),
-                    allTools, null).GetAwaiter().GetResult();
+                var configuration = new AppSettings { AutoConfirmToolActions = false };
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
+                var result = service.ExecuteAsync(ChatModes.Agent, "Create sheet", session, NewContext(adapter),
+                    configuration, tools, null, (pendingSession, command, registration) => "approval").GetAwaiter().GetResult();
+                AssertTrue(result.WaitingForConfirmation && !adapter.HasSheet("ApprovedSheet"), "default Ask cannot dispatch");
+                AssertEqual(2, responses.Count, "waiting does not call the model");
+                configuration.AutoConfirmToolActions = true;
+                session = new ChatStore(FixturePaths.Value).Load(session.Id);
+                AssertTrue(!session.LastRun.ConversationPolicy.AutoConfirmToolActions && !adapter.HasSheet("ApprovedSheet"), "setting change and restart cannot approve pending work");
+                var commandToConfirm = PendingCommand(session);
+                session.MutationPolicy = MutationPolicy.Deny;
+                RuntimeThrows<InvalidOperationException>(() => service.ConfirmAsync("approval", commandToConfirm, session,
+                    new ConversationRunInput(configuration, NewContext(adapter), tools), null).GetAwaiter().GetResult());
+                AssertTrue(!adapter.HasSheet("ApprovedSheet"), "changed permission cannot approve");
+                session.MutationPolicy = MutationPolicy.Ask;
+                var final = service.ConfirmAsync("approval", commandToConfirm, session,
+                    new ConversationRunInput(configuration, NewContext(adapter), tools), null,
+                    (pendingSession, command, registration) => "second-approval").GetAwaiter().GetResult();
+                AssertTrue(adapter.HasSheet("ApprovedSheet") && final.WaitingForConfirmation && !adapter.HasSheet("SecondApprovedSheet"),
+                    "the resumed run still requires approval of each subsequent call");
+                final = service.ConfirmAsync("second-approval", PendingCommand(session), session,
+                    new ConversationRunInput(configuration, NewContext(adapter), tools), null).GetAwaiter().GetResult();
+                AssertTrue(adapter.HasSheet("SecondApprovedSheet") && !final.WaitingForConfirmation, "each exact approval dispatches once");
+                AssertEqual(2, adapter.ExcelSheetRequests.Count(request => request.ToolId == "excel.add_sheet"), "two approved mutations");
+            });
+        }
 
-                AssertEqual("Ресурсы доступны.", result.AssistantText, "chat final response");
-                AssertEqual(1, result.ToolResults.Count, "chat executes one read-only resource tool");
-                AssertEqual(2, captured.Count, "resource result returns to the same conversation loop");
-                var firstPrompt = FlattenSimple(captured[0]);
-                AssertContains(firstPrompt, "RUNTIME_CONTEXT", "chat receives runtime context");
-                AssertContains(firstPrompt, ResourceToolCatalog.FindToolId, "chat receives semantic resource discovery");
-                AssertContains(firstPrompt, "common.resources_read", "chat receives resource reads");
-                AssertTrue(firstPrompt.IndexOf("common.resources_list", StringComparison.Ordinal) < 0 &&
-                    firstPrompt.IndexOf("common.resources_resolve", StringComparison.Ordinal) < 0 &&
-                    firstPrompt.IndexOf("common.resources_search", StringComparison.Ordinal) < 0,
-                    "chat receives no retired resource transport tools");
-                AssertTrue(firstPrompt.IndexOf("excel.inspect", StringComparison.OrdinalIgnoreCase) < 0,
-                    "chat excludes Office tools");
-                AssertTrue(firstPrompt.IndexOf("common.capabilities_read", StringComparison.OrdinalIgnoreCase) < 0 &&
-                    firstPrompt.IndexOf("common.capabilities_search", StringComparison.OrdinalIgnoreCase) < 0,
-                    "chat excludes capability discovery");
-                AssertContains(firstPrompt, "\"capabilities\":{\"items\":[]", "chat has no capability catalog");
-                AssertContains(FlattenSimple(captured[1]), "TOOL_RESULT:", "resource result is replayed");
-                AssertEqual(ChatModes.Chat, capturedOptions[0].TracePurpose, "chat trace purpose");
-                AssertEqual(LlmResponseFormats.JsonObject, capturedOptions[0].ResponseFormat,
-                    "chat uses structured response format");
+        private static void AutoConfirmationNativeMultistepAndUnknown()
+        {
+            foreach (var unknown in new[] { false, true })
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                adapter.ExcelSheetThrowAfterMutation = unknown;
+                Func<string, string> add = name => new JObject { ["message"] = "Add sheet", ["action"] = "tool",
+                    ["tool_calls"] = new JArray(new JObject { ["name"] = "excel.add_sheet", ["arguments"] = new JObject { ["name"] = name } })
+                }.ToString(Formatting.None);
+                var responses = new Queue<string>(new[] { add("AutoOne"), add(unknown ? "AutoOne" : "AutoTwo"),
+                    ModelProtocolWire.WriteAction("Done", ConversationResponse.DoneAction) });
+                var configuration = new AppSettings { AutoConfirmToolActions = true };
+                var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) => {
+                    configuration.AutoConfirmToolActions = false;
+                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                });
+                var session = NewSession(adapter);
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
+                var result = service.ExecuteAsync(ChatModes.Agent, "Create sheets", session, NewContext(adapter),
+                    configuration, tools, null).GetAwaiter().GetResult();
+                AssertTrue(!result.WaitingForConfirmation && responses.Count == 0, "captured auto-confirm completes multiple steps without registrar");
+                AssertEqual(unknown ? 1 : 2, adapter.ExcelSheetRequests.Count(request => request.ToolId == "excel.add_sheet"), "unknown effect is never redispatched");
+                AssertEqual(unknown ? RunViewHealth.Unknown : RunViewHealth.Clean, result.RunViewState.ExecutionHealth, "auto-approval does not certify effects");
+                var loaded = new ChatStore(FixturePaths.Value).Load(session.Id);
+                AssertTrue(loaded.LastRun.ConversationPolicy.AutoConfirmToolActions, "durable run keeps opt-in after settings changed");
+                responses.Enqueue(add("NextRun"));
+                var next = service.ExecuteAsync(ChatModes.Agent, "Create next sheet", session, NewContext(adapter),
+                    configuration, tools, null, (pendingSession, command, registration) => "next-approval").GetAwaiter().GetResult();
+                AssertTrue(next.WaitingForConfirmation && !adapter.HasSheet("NextRun"), "the next run returns to Ask after disabling");
+            });
+        }
+
+        private static void RetiredChatCannotDispatch()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                var calls = 0;
+                var session = NewSession(adapter);
+                session.FormatVersion = 6;
+                session.Mode = ChatModes.Chat;
+                var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) => {
+                    calls++;
+                    return Task.FromResult(new LlmCompletionResult { Content = ModelProtocolWire.WriteAction("Unexpected", ConversationResponse.DoneAction) });
+                });
+                var count = session.Messages.Count;
+                RuntimeThrows<InvalidOperationException>(() => service.ExecuteAsync(ChatModes.Chat, "Continue", session,
+                    NewContext(adapter), new AppSettings(), executor.GetControllerTools().ToList(), null).GetAwaiter().GetResult());
+                AssertEqual(0, calls, "retired history never reaches the model");
+                AssertEqual(count, session.Messages.Count, "refusal does not append user input");
             });
         }
 
@@ -2895,7 +2923,8 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 var session = NewSession(adapter);
-                session.Mode = ChatModes.Chat;
+                session.Mode = ChatModes.Agent;
+                session.MutationPolicy = MutationPolicy.Deny;
                 var artifact = new ChatArtifact
                 {
                     Id = "reference_note",
@@ -2926,14 +2955,14 @@ namespace RNAssistant.Harness
                 var service = CreateConversationRunService(adapter, executor, completion);
 
                 var first = service.ExecuteAsync(
-                    ChatModes.Chat, "Что в заметке?", session, NewContext(adapter), new AppSettings(), tools, null)
+                    ChatModes.Agent, "Что в заметке?", session, NewContext(adapter), new AppSettings(), tools, null)
                     .GetAwaiter().GetResult();
                 foreach (var message in session.Messages.Where(message => message != null && message.ProtocolMessage))
                 {
                     message.ExcludeFromModelContext = true;
                 }
                 var second = service.ExecuteAsync(
-                    ChatModes.Chat, "Проверь ту же заметку ещё раз.", session, NewContext(adapter), new AppSettings(), tools, null)
+                    ChatModes.Agent, "Проверь ту же заметку ещё раз.", session, NewContext(adapter), new AppSettings(), tools, null)
                     .GetAwaiter().GetResult();
 
                 AssertEqual("Первый ответ.", first.AssistantText, "first artifact answer");

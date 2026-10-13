@@ -213,7 +213,7 @@ namespace RNAssistant.Core.Storage
                     var root = JObject.Parse(OpenProjection(sessionId, "root", (byte[])reader[12]));
                     var header = ChatHeaderReducer.FromCheckpoint(_blobs,
                         JObject.Parse(OpenProjection(sessionId, "header", (byte[])reader[13])));
-                    if ((int?)root["FormatVersion"] != ChatSession.CurrentFormatVersion ||
+                    if (!ChatSession.IsReadableFormat((int?)root["FormatVersion"]) ||
                         !string.Equals((string)root["Id"], sessionId, StringComparison.OrdinalIgnoreCase) ||
                         !header.IsValid) return null;
                     return new SqliteCursor
@@ -362,7 +362,7 @@ namespace RNAssistant.Core.Storage
                 if (root != null || !(item.Data is JObject))
                     throw new JsonException("Chat projection has an invalid seed.");
                 root = (JObject)item.Data.DeepClone();
-                if ((int?)root["FormatVersion"] != ChatSession.CurrentFormatVersion)
+                if (!ChatSession.IsReadableFormat((int?)root["FormatVersion"]))
                     throw new JsonException("Chat projection format is unsupported.");
                 SeedSqliteList(connection, transaction, "messages", item.SessionId, root["Messages"] as JArray);
                 SeedSqliteList(connection, transaction, "artifacts", item.SessionId, root["Artifacts"] as JArray);

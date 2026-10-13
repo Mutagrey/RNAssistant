@@ -582,7 +582,7 @@ namespace RNAssistant.Harness
                 };
                 var catalog = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var session = NewSession(adapter);
-                var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
+                var result = CreateConversationRunService(adapter, executor, completion).ExecuteWithApprovalsAsync(
                     ChatModes.Agent,
                     "Создай progressive.html.",
                     session,
@@ -1173,7 +1173,7 @@ namespace RNAssistant.Harness
                 {
                     var allTools = OfficeToolCatalog.ForHost(adapter.HostName)
                         .Concat(executor.GetControllerTools()).ToList();
-                    foreach (var mode in new[] { ChatModes.Agent, ChatModes.Plan, ChatModes.Chat })
+                    foreach (var mode in new[] { ChatModes.Agent, ChatModes.Plan })
                     {
                         var catalog = ConversationRunService.PrepareToolsForMode(mode, allTools);
                         CapabilityCatalogService.BindReadSchema(catalog, null);

@@ -93,7 +93,7 @@ namespace RNAssistant.Office.Services
             _compaction = compaction;
             _attachments = attachments;
             _saved = saved;
-            _policy = ConversationRunPolicy.For(mode);
+            _policy = ConversationRunPolicy.ForAcceptedRun(session);
             _text = text;
             _inbox = inbox;
             _ingestion = ingestion;
@@ -114,6 +114,7 @@ namespace RNAssistant.Office.Services
             var publication = _executor.CaptureCatalogs();
             _input = new ConversationRunInput(PromptSettingsService.ApplyPublishedTemplates(input.Settings, publication.PromptsJson),
                 input.Context, input.Tools, input.Skills, input.Attachments);
+            _input.Settings.AutoConfirmToolActions = _policy.AutoConfirmToolActions;
             // Host/document registrations are provided by their bound owner. Global packages
             // must be replaced from this publication, including deletions, before activation.
             var tools = input.Tools.Where(tool => !string.Equals(tool.Scope, "global", StringComparison.OrdinalIgnoreCase))
@@ -128,7 +129,7 @@ namespace RNAssistant.Office.Services
             _toolPack = ToolPackSnapshotFactory.Capture(_policy.Mode, _adapter.HostName, _catalog);
             _nativeTools = _executor.CreateNativeRuntime(
                 _session, _toolPack, _input.Settings, _policy.Mode,
-                true, RegisterNativePending, _catalog, _skills, false);
+                true, RegisterNativePending, _catalog, _skills, false, runPolicy: _policy);
             // Tool/skill projection may materialize an already registered catalog
             // resource. Pin the stable generation after all local publication reads.
             _catalogGeneration = _executor.ResourceAuthority

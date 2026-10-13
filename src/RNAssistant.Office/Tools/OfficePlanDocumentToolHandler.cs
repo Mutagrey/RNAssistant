@@ -7,7 +7,7 @@ using RNAssistant.Office.Runtime;
 namespace RNAssistant.Office.Tools
 {
     // Office retains its bound host gate across mutation and authority publication.
-    internal sealed class OfficePlanDocumentToolHandler : IManagedMutationToolHandler
+    internal sealed class OfficePlanDocumentToolHandler : IPlanningArtifactToolHandler
     {
         private readonly PlanDocumentToolHandler _handler;
 

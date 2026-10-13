@@ -434,6 +434,7 @@ namespace RNAssistant.Office
             try
             {
                 session = ReloadReservedSession(session);
+                ConversationRunPolicy.RequireCurrentSession(session);
                 _inbox.Bind(session);
                 if (input != null && input.InputId != null) _inbox.EnsureCanDispatch(session, input.InputId);
                 settings = ResolveChatSettings(session, settings);
@@ -449,11 +450,7 @@ namespace RNAssistant.Office
                 var attachmentRouting = AttachmentModelRoutingService.Select(settings, session, attachments);
                 settings = attachmentRouting.Settings;
                 var executionMode = ChatModes.Normalize(session.Mode);
-                var documentRuntimeKey = string.Empty;
-                if (executionMode != ChatModes.Chat)
-                {
-                    documentRuntimeKey = CaptureExpectedRuntimeDocumentKey(session);
-                }
+                var documentRuntimeKey = CaptureExpectedRuntimeDocumentKey(session);
                 HtmlWorkspaceArtifactService.RebuildNavigation(session);
                 var firstRunMessageIndex = session.Messages == null ? 0 : session.Messages.Count;
                 ChatMessage appendedUserMessage = null;
@@ -497,7 +494,7 @@ namespace RNAssistant.Office
                     Status = "running",
                     Phase = "starting",
                     CurrentAction = "Preparing request.",
-                    DocumentRuntimeKey = executionMode != ChatModes.Chat ? documentRuntimeKey : null,
+                    DocumentRuntimeKey = documentRuntimeKey,
                     IterationsUsed = 0,
                     ToolStepsUsed = 0,
                     StartedUtc = DateTime.UtcNow
@@ -604,12 +601,8 @@ namespace RNAssistant.Office
                             : _toolCatalog.GetVisibleTools())
                         .Where(tool => tool.Enabled)
                         .ToList();
-                    var capturedSkills = executionMode != ChatModes.Chat || settings.AutoCompressContext
-                        ? _skillCatalog.Capture()
-                        : null;
-                    var skills = executionMode != ChatModes.Chat
-                        ? capturedSkills.Skills.Where(skill => skill.Enabled).ToList()
-                        : new List<SkillDefinition>();
+                    var capturedSkills = _skillCatalog.Capture();
+                    var skills = capturedSkills.Skills.Where(skill => skill.Enabled).ToList();
                     var catalogMs = turnTimer.ElapsedMilliseconds - catalogStartMs;
                     var compactionStartMs = turnTimer.ElapsedMilliseconds;
                     try
@@ -667,8 +660,8 @@ namespace RNAssistant.Office
                     }
                     finally
                     {
-                        // Auto-confirmed VBA mutations bypass the explicit VBA bridge methods.
-                        if (executionMode != ChatModes.Chat) _toolCatalog.InvalidateDocumentVbaTools();
+                        // Tool mutations can invalidate the bound VBA catalog.
+                        _toolCatalog.InvalidateDocumentVbaTools();
                     }
                 }
                 catch (RunStoreException)
@@ -753,6 +746,8 @@ namespace RNAssistant.Office
                 ActiveChatId = activeId,
                 ActiveChatModel = session == null ? string.Empty : session.Model,
                 ActiveChatMode = ChatModes.Normalize(session == null ? null : session.Mode),
+                MutationPolicy = session?.MutationPolicy ?? MutationPolicy.Ask,
+                ChatReadOnly = session != null && session.FormatVersion != ChatSession.CurrentFormatVersion,
                 ActiveChatReasoning = session != null && session.ReasoningEnabled,
                 Chats = chats,
                 Documents = ListOpenDocuments(),

@@ -484,6 +484,8 @@ function applyInitState(init) {
     init.runViewState !== undefined ? init.runViewState : init.RunViewState);
   state.activeChatModel = init.activeChatModel || "";
   state.activeChatMode = init.activeChatMode || init.ActiveChatMode || "agent";
+  state.mutationPolicy = init.mutationPolicy || "Ask";
+  state.chatReadOnly = init.chatReadOnly === true;
   state.activeChatReasoning = !!(init.activeChatReasoning || init.ActiveChatReasoning);
   state.chats = window.RNAssistantRunViewState.mergeCatalog(
     [], init.chats || init.Chats || [], state.chatProjectionRevisions);

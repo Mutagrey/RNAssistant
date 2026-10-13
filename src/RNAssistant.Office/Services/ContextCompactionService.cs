@@ -54,7 +54,7 @@ namespace RNAssistant.Office.Services
                 ? new ResourceAuthoritySnapshotSet(new ResourceAuthoritySnapshot[0]) : _authority.CaptureMany(scopes));
             var frozen = authoritySnapshot ?? new ModelAuthoritySnapshot(resources, pack.Revision,
                 skills, ResourceStateProvider.CaptureSchemas(resources), session.Revision);
-            var instructionTokens = new[] { ChatModes.Agent, ChatModes.Chat, ChatModes.Plan }
+            var instructionTokens = new[] { ChatModes.Agent, ChatModes.Plan }
                 .Max(mode => ModelContextBudget.EstimateTextTokens(ConversationPromptComposer.BuildInstruction(mode, settings), settings));
             return _runtime.EnsureWithinBudgetAsync(session, settings, incomingText, force, progress, cancellationToken,
                 frozen, runnableCatalog ?? pack?.Catalog ?? new ToolCatalogEntry[0], instructionTokens);

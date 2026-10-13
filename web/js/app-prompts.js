@@ -5,7 +5,7 @@
     { key: "systemPrompt", label: "Агент · общие", group: "Основные", field: "SystemPrompt", description: "Роль, runtime context, формат ответа и условие завершения Agent-потока." },
     { key: "agentToolsPrompt", label: "Агент · tools", group: "Основные", field: "AgentToolsPrompt", description: "Общие правила выбора и выполнения tools; конкретные аргументы остаются в схемах tools." },
     { key: "agentSkillsPrompt", label: "Агент · skills", group: "Основные", field: "AgentSkillsPrompt", description: "Правила выбора, обязательного чтения и повторной загрузки skills." },
-    { key: "chatSystemPrompt", label: "Чат", group: "Основные", field: "ChatSystemPrompt", description: "Прямой ответ и доступ только к read-only resource tools." },
+    { key: "chatSystemPrompt", label: "Прежний Chat", group: "Архив", field: "ChatSystemPrompt", description: "Сохранённые инструкции прежнего режима. В новых запусках не используются." },
     { key: "planSystemPrompt", label: "Plan mode", group: "Основные", field: "PlanSystemPrompt", description: "Read-only discovery, typed questions и Markdown-план без выполнения." },
     { key: "contextCompactionPrompt", label: "Сжатие контекста", group: "Служебные", field: "ContextCompactionPrompt", description: "Правила создания checkpoint активной истории." },
     { key: "chatTitlePrompt", label: "Название чата", group: "Служебные", field: "ChatTitlePrompt", description: "Короткий запрос для генерации названия." },

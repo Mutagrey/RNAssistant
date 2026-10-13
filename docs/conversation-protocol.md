@@ -1,10 +1,127 @@
 # Conversation JSON flow
 
-RNAssistant has three explicit modes and one `Core/Agent/AgentKernel` loop, invoked by `ConversationRunService`.
+RNAssistant uses one `Core/Agent/AgentKernel`, invoked by Office's
+`ConversationRunService` and CLI's `WorkspaceConversationService`. A request may
+finish with zero calls; neither a router LLM nor a mandatory planner is involved.
 
-- `chat`: the editable `ChatSystemPrompt`, a dynamic `RUNTIME_CONTEXT`, and exactly the safe read-only semantic `common.resources_find/read` catalog. Skills, Office tools, local mutations, and confirmation are unavailable by runtime policy.
-- `plan`: the editable `PlanSystemPrompt`, read-only discovery, enabled skills, exact native `common.questions_ask`, one revisioned Markdown plan through `common.plan_doc_save/restore/delete`, and an optional checklist through `common.task_list_set`. The question handler returns typed `AwaitingUser`; Plan and Task List mutations carry source-owned verified-write evidence. Message prose cannot pause a run. Office/shared mutations and confirmation are unavailable by runtime policy.
-- `agent`: the same structured loop with progressive tool discovery, enabled skill metadata and typed `common.questions_ask` when a material decision requires user input. Complex work can save the revisioned document Plan as well as a chat Task List. The complete mode/session-filtered catalog remains local execution authority; the model receives only the current callable schema working set. The runtime does not route the request, select a phase, activate skills, retry tools, or verify mutations as a separate stage.
+- Agent is the default behavior, without a mode selector in the UI.
+- The single **Plan** toggle in the composer `+` menu stays active until disabled.
+  It permits discovery, skills, questions, Plan save and Task List updates, but
+  never execution of the proposed work. Disabling it waits for the next user input.
+- Independent per-chat `MutationPolicy` is `Ask` (default) or `Deny`. Ask requires
+  approval of each effect/code invocation, supplied automatically only by the
+  user's captured opt-in below. Deny and Plan prohibit effects
+  and code, except built-in `common.plan_doc_save` and `common.task_list_set`.
+  Restore/delete are not exceptions. Runtime events/CAS remain trusted bookkeeping.
+- `ToolPolicy` retains source-owned effect/verification and additionally marks
+  `ExecutesCode`. Sandboxed `common.js_run`, JS packages and CLI `web.verify`
+  require approval even when their result semantics are read-only. Unknown policy
+  is refused. VBA execution retains its opaque external-effect classification.
+- `ToolRuntime` checks the effective policy before preparation/dispatch and again
+  on approval. The planning exception requires the exact built-in binding and
+  trusted `IPlanningArtifactToolHandler` (including the Office wrappers); a matching
+  tool name alone grants nothing. Model/document text
+  cannot grant authority. Explicit manual-tool execution remains separate.
+- A run records `ConversationPolicy`; tool snapshots capture effective permissions
+  and intent. Changed policy rejects a stale approval. Switching Plan/permissions
+  cancels pending work and never starts execution itself.
+
+### Automatic action approval
+
+Settings → Agent → **Автоподтверждение действий** is a global saved setting,
+off by default. It authorizes changes and code without individual approval for
+new runs in all chats. The typed `SettingsControlsDto.AutoConfirmToolActions`
+round-trips through settings storage. Office captures it in
+`ChatRunRecord.ConversationPolicy.AutoConfirmToolActions` before the first model
+request; workspace requests capture the explicit typed value or their settings.
+Only `ConversationRunPolicy.AutoConfirmsToolActions` can authorize the central
+ToolRuntime approval gate for Agent/Ask. Plan/Deny and the exact built-in planning
+exceptions remain unchanged. Dynamic packages and read-producing code use the
+same gate; tool classification, singleton effect rules and exact binding remain.
+
+The value is pinned for the whole accepted run, including refreshed catalogs,
+approval and explicit continuation after restart. Saving a changed setting neither
+executes a pending call nor changes subsequent calls in that run. A pending Ask
+call still needs explicit approval, and the rest of that run stays Ask. The next
+run captures the saved setting. Missing opt-in is false; no history is rewritten.
+Preparation, target guards, mutation journaling, cancellation, read-back and the
+prohibition on repeating unknown effects all remain in force. Model output,
+document contents and tool results cannot change the setting.
+
+CLI `run` and `answer` accept `--auto-confirm on|off`, defaulting to **off for each
+new turn**, including an existing session. `approve` and `resume` reject this
+override and retain the accepted run's value. `inspect` exposes the complete
+`ConversationPolicy`; the flag also participates in typed input fingerprints.
+This is approval authority, not a promise of successful effects or automatic
+recovery of interrupted work.
+
+### Unified-agent audit and cutover (2026-10-13)
+
+Owners: Core `ConversationRunPolicy`/`ToolRuntime`; Office and workspace application
+services; composer UI. The audited baseline already had one kernel, v7 no-call
+terminal actions, exact registrations, durable confirmation and recovery. The
+consolidation changes permission composition, not the kernel, registry or stores.
+
+| Path | Entry and authority | Outcome/evidence |
+| --- | --- | --- |
+| Direct response | composer → typed bridge → `ConversationRunService.ExecuteAsync` → kernel; CLI `SubmitInputAsync` uses the same coordinator | `ModelStepStarted`, accepted response, terminal summary; zero tool dispatches |
+| Read → answer | same loop → resource handlers via `ToolRuntime` | accepted call/result, `ToolStarted`/`ToolCompleted`, terminal summary |
+| Several tools | kernel continues after each accepted result; exact bound native/workspace handler | existing guards, mutation journal and read-back; no effect inferred from prose |
+| Plan → stop | the same loop with Plan-filtered authority | optional Plan/Task List revisions, `done`/`blocked`/`needs_input`; no auto-execution |
+| Plan → execution | explicit toggle off, then new user input | fresh run snapshot; approval follows the captured user setting |
+| Forbidden mutation/code | schema admission plus independent runtime permission gate | `permission_denied` before preparation/handler dispatch; no effect |
+
+The former Chat runtime prompt/admission branches are removed. Legacy `chat`
+values remain decodable as history, not as a runnable third path. No compatibility
+adapter, shadow store or historical mode remapping is introduced.
+
+New chats use `ChatSession.FormatVersion=7`; format 6 remains readable but cannot
+continue/approve/fork into new execution authority. Normalization preserves the
+original version. Older already-unsupported formats remain reset/skip only. No
+stream or CAS rewrite/deletion is performed. An old binary's exact format-6 reader
+rejects new format-7 chats. Rollback: stop running invocations, set
+`RNA_DISABLE_UNIFIED_AGENT=1`, restart the host; viewing/CLI inspect remains
+available, while new runs/approval/continuation are refused. Removing the variable
+reenables the new contract; never downgrade a chat's stored format.
+
+### Unified-agent verification
+
+Host-neutral evidence (2026-10-13); no real Office/WebView2 qualification:
+
+| Spec IDs | Evidence |
+| --- | --- |
+| T01–T03 | `no-tool` 3/3; controlled CLI direct answer, reads, create/patch with approval; `turn_decisions_smoke.py` 4 response-format/result-role combinations |
+| T04 | `plan mode:` 3/3; CLI saved Plan under Deny, sticky Plan and explicit switch |
+| T05 | Removed by product decision: no AnswerOnly mode/button |
+| T06–T10 | `unified policy:` 6/6; `tool runtime:` 15/15; effect matrix, no preparation under Deny, forged planning binding, code classification, captured Office approval across setting changes/restart, CLI approval/rejection |
+| T11 | Kernel cancellation/typed failure paths; provider timeout classification/recovery checks; no real Office timeout claim |
+| T12 | Format-6 history/header reads retain original stream bytes; execution rejected; older pre-cutover formats remain rejected (1/1) |
+| T13 | CLI inspect after pending approval does not resume; explicit approval reconstructs file read guards; permission change closes pending without dispatch |
+| T14 | `conversation: stream` 2/2, normal no-tool path, controlled HTTP response formats; real provider/WebView2 delivery remains unqualified |
+| T15 | CLI build succeeds; all listed C# checks use the net8 host-neutral Harness |
+| T16 | **Open qualification gap:** Windows x64 + Office x64 + WebView2 not run on this machine |
+| T17 | `kernel:` 55/55 includes stale confirmation, policy changes, unknown-effect non-retry and recovery boundaries |
+| T18 | CLI reads an injected permission grant from a document; attempted write under Deny is never dispatched; runtime ignores model-origin permission claims |
+
+Commands: `dotnet build tests/RNAssistant.Harness/RNAssistant.Harness.csproj --no-restore`;
+`dotnet run --no-build --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj -- "<filter>"`
+with the filters above; `dotnet build src/RNAssistant.Cli/RNAssistant.Cli.csproj --no-restore`;
+`python3 -B tests/cli/unified_agent_smoke.py`; `python3 -B tests/cli/turn_decisions_smoke.py`.
+Composer behavior/layout: `tests/web/chat-composer-layout.test.js` with bundled
+Playwright and local Chromium passes at 1100/740/360 px, light/dark.
+`node tests/web/prompt-review.test.js` passes 11/11 after repairing its accent fixture.
+`dotnet run --project demo/RNAssistant.MockDemo -- --unified-agent-test` checks the
+real controller with a fake host: direct answer, approval after settings change
+and restart, automatic next run, Plan/Deny artifacts, and stale approval rejection.
+`python3 -B tests/cli/mode_questions_smoke.py` covers Plan/Agent typed questions,
+restart and invalid answers. Review also fixed permission loss in session/run
+clones, the retired Chat compaction estimate, and trusted planning-handler wrappers.
+The isolated commit candidate passes 838 of 862 Harness checks. All 24 failures
+also reproduce on pre-change `10f78f40`; no new failure remains. They are tracked
+in [BACKLOG](stabilization/BACKLOG.md#host-neutral-harness-baseline-failures--2026-10-13).
+The final inspector check separately verifies that draft AutoConfirm uses the next
+run's settings without altering an accepted run. Version-format validation passes.
+Real-model task quality remains unqualified.
 
 All modes return conversation-response v7: `message` (string), `action` (enum)
 and `tool_calls` (array); calls contain `name` and `arguments`, never a
@@ -152,16 +269,17 @@ See the [canonical v7 contract](protocols/CONVERSATION_RESPONSE_V7.md).
 
 Core `ConversationRunPolicy` and `UserQuestionToolCatalog/Handler` are shared by
 Office and the workspace runtime. The former Office implementations are removed.
-CLI `run --mode chat|plan|agent` defaults a new session to Agent; later turns inherit
-its persisted mode and reject changes. Invalid modes fail explicitly. Both the
-callable catalog and exact ToolRuntime registrations enforce the selected policy.
-`env --mode ...` lists that capability set. The current workspace surface is:
+CLI `run --mode agent|plan --mutation-policy ask|deny` defaults new chats to
+Agent/Ask. Later turns inherit these settings; explicit changes between runs close
+a pending approval without dispatch. `inspect` exposes the policy. Invalid values
+fail explicitly. `env --mode ... --mutation-policy ...` lists the same filtered
+capabilities enforced by ToolRuntime. The current workspace surface is:
 
 | Mode | Available operations |
 | --- | --- |
-| Chat | Bounded file find/read only; skill type/reference arguments are unavailable |
-| Plan | File/Plan find/read, enabled skills, `web.verify` when the browser exists, typed questions, durable Task Lists and Plan save/restore/delete; no file writes or confirmation |
-| Agent | Available file/Plan/skill/web operations, guarded file writes and confirmations, typed questions, Task Lists and Plan save |
+| Plan, either policy | File/Plan find/read, enabled skills, typed questions, Task Lists and Plan save; no code, file writes, restore/delete or confirmation |
+| Agent/Ask | Read/skill/question tools, planning exceptions, guarded writes and browser execution; individual approval unless the new turn explicitly uses `--auto-confirm on` |
+| Agent/Deny | Read/skill/question tools and planning exceptions only |
 
 CLI uses the shared Core Task List service, catalog, handler and logical authority
 publisher. Task Lists remain conversation-owned revisions in ChatStore events/CAS;
@@ -387,11 +505,11 @@ For a repetition incident, compare the persisted `llm.request` bytes with accept
 calls/results and compaction/effect events. A UI tool label or low token percentage
 cannot establish what evidence the model received or why it chose the next call.
 
-Every request contains one editable instruction followed by one dynamic `RUNTIME_CONTEXT` JSON object. Agent composes general (`SystemPrompt`), tool-use (`AgentToolsPrompt`), and skill-use (`AgentSkillsPrompt`) Markdown; Plan uses `PlanSystemPrompt` with the same progressive capability policy; Chat uses `ChatSystemPrompt`. The instruction role is selected independently as `developer` (default), `system`, or `user`:
+Every request contains one editable instruction followed by one dynamic `RUNTIME_CONTEXT` JSON object. Agent composes general (`SystemPrompt`), tool-use (`AgentToolsPrompt`), and skill-use (`AgentSkillsPrompt`) Markdown; Plan uses `PlanSystemPrompt` with the same progressive capability policy. The instruction role is selected independently as `developer` (default), `system`, or `user`:
 
 - current host and document identity;
 - exact bootstrap and currently loaded callable tool descriptors;
-- one compact `capabilities` catalog with exact `id`, explicit `kind` (`tool` or `skill`), summary, revision, and kind-specific safety/body metadata in Agent, or an empty catalog in Chat;
+- one compact `capabilities` catalog with exact `id`, explicit `kind` (`tool` or `skill`), summary, revision, and kind-specific safety/body metadata in Agent and Plan;
 - chat-owned user context and artifact references.
 
 Token reporting separates three quantities. The context ring's tooltip shows the
@@ -467,9 +585,9 @@ The strict response parser remains authoritative; migration does not validate
 authored instruction semantics. See
 [history and prompts](protocols/CONVERSATION_RESPONSE_V7.md#parsing-history-and-recovery).
 
-Agent bootstrap schemas are `common.resources_find/read` and `common.capabilities_search/read`. The final R61 Excel Agent core adds the exact 15 built-in `excel.*` schemas plus routine VBA editing intents `common.vba_write_module` and `common.vba_apply_patch` (21 schemas total). Word and PowerPoint add the same two VBA editing schemas when present; their host tools remain optional. `common.vba_rename_module`, `common.vba_restore_backup`, `common.vba_delete_module` and `common.office_run_macro` require exact capability admission because they represent explicit identity, rollback, destructive or arbitrary-execution intent. Outlook Agent and other hosts keep only bootstrap unless an optional schema is admitted. Chat keeps only the two read-only resource schemas, while Plan keeps the four bootstrap schemas in core. These finite exact-ID profiles are intersected with the filtered run catalog. `RUNTIME_CONTEXT.capabilities.items` exposes the complete compact schema-free index of exact public runnable tool and enabled skill ids; it carries no catalog/package/descriptor revision. Already callable tools use `schemaLoaded:true`; unloaded tools and skills retain bounded selection metadata.
+Agent bootstrap schemas are `common.resources_find/read` and `common.capabilities_search/read`. The final R61 Excel Agent core adds the exact 15 built-in `excel.*` schemas plus routine VBA editing intents `common.vba_write_module` and `common.vba_apply_patch` (21 schemas total). Word and PowerPoint add the same two VBA editing schemas when present; their host tools remain optional. `common.vba_rename_module`, `common.vba_restore_backup`, `common.vba_delete_module` and `common.office_run_macro` require exact capability admission because they represent explicit identity, rollback, destructive or arbitrary-execution intent. Outlook Agent and other hosts keep only bootstrap unless an optional schema is admitted. Plan keeps the four bootstrap schemas in core. These finite exact-ID profiles are intersected with the filtered run catalog. `RUNTIME_CONTEXT.capabilities.items` exposes the complete compact schema-free index of exact public runnable tool and enabled skill ids; it carries no catalog/package/descriptor revision. Already callable tools use `schemaLoaded:true`; unloaded tools and skills retain bounded selection metadata.
 
-`common.capabilities_search` is an optional fixed-top-20 metadata filter accepting only `query` and optional `kind`. `common.capabilities_read` accepts one exact public id; a skill reference additionally accepts exact `referencePath` and semantic `action=read|next`. Offsets, sizes, catalog/package/descriptor revisions and admission guards are runtime-owned. Both ids execute through exact native ToolRuntime handlers with Agent/Plan `Read + None` policies; Chat cannot admit them. Durable results retain exact revisions for validation and continuation, while `ModelToolResultProjection` removes them from model results and invalidates stale evidence explicitly. A tool read returns the complete native-like descriptor and may stage an atomic optional extension; a skill read returns complete Markdown without changing callable membership. Runtime admits messages, request options, repair overhead and continuation reserve before publication. Failure publishes none and reports `TOOL_PACK_STATE.admitted=false`; success reports admitted public ids only. An optional tool cannot be called in the same response as its read.
+`common.capabilities_search` is an optional fixed-top-20 metadata filter accepting only `query` and optional `kind`. `common.capabilities_read` accepts one exact public id; a skill reference additionally accepts exact `referencePath` and semantic `action=read|next`. Offsets, sizes, catalog/package/descriptor revisions and admission guards are runtime-owned. Both ids execute through exact native ToolRuntime handlers with Agent/Plan `Read + None` policies. Durable results retain exact revisions for validation and continuation, while `ModelToolResultProjection` removes them from model results and invalidates stale evidence explicitly. A tool read returns the complete native-like descriptor and may stage an atomic optional extension; a skill read returns complete Markdown without changing callable membership. Runtime admits messages, request options, repair overhead and continuation reserve before publication. Failure publishes none and reports `TOOL_PACK_STATE.admitted=false`; success reports admitted public ids only. An optional tool cannot be called in the same response as its read.
 
 No callable schema is touched by execution or removed by LRU. Before publication, runtime appends `tool_pack.extension.accepted` or `tool_pack.extension.rejected` to the canonical chat stream; an append failure leaves the live pack unchanged and stops the next model request. Each accepted event carries the exact requested ID/revision delta and before/after snapshot revisions. The ordered accepted chain for the same logical `TurnId` is the only reconstruction authority across confirmation continuation, compaction, and crash/replay, including when the runtime `RunId` changes. A rejected event and raw `capabilities_read` result prove no callable authority. Every delta is rematerialized atomically against the current filtered catalog; descriptor/profile drift or a broken chain leaves only finite core and emits `TOOL_PACK_RESTORE_STATE` until a later accepted event explicitly rebases from the current core revision. The finite global catalog remains local execution authority, and registry changes become visible on the next run. Another run's raw evidence cannot stage an extension. Tool and skill ids share one namespace, and a collision aborts request construction instead of choosing one implicitly. Catalog sources are rebuilt at every user-run and confirmation-continuation boundary (including fresh document-local VBA discovery). Phase 8A captures their complete execution authority in one immutable run `ToolPackSnapshot`: descriptor/schema, typed policy, binding/scope/host and package fingerprint cannot be replaced under the same id in an accepted call or confirmation. Native handlers consume the captured registration; the remaining legacy adapter rechecks it before dispatch. This execution snapshot is outside `AgentKernel` and is distinct from model-visible callable membership.
 
@@ -483,7 +601,7 @@ repeating the rejected object unchanged.
 
 A descriptor over 24,000 compact JSON characters is omitted from the runnable catalog rather than being partially advertised. Complete resource/capability bodies count as observed evidence only when they fit with request options and both reserves. A successful complete source that cannot fit becomes an operation receipt with a `bodyIncluded=false` notice and bounded-read recovery, preserving outcome/effect without granting source authority. Other oversized exact reads/capabilities return explicit `resource_evidence_context_too_large` or `capability_evidence_context_too_large`; a later media/materialization failure likewise changes an otherwise successful read projection to `status:error`. Budget exhaustion is `PromptBudgetExceeded`, not infrastructure failure. Incomplete schema evidence cannot enter an extension. Prompt schema 23 introduced readiness-before-domain-work, dependency-ordered Task List/skill/tool loading, root tool arguments and evidence-reconciled completion. Schema 24 made that contract an explicit Understand → Prepare → Inspect → Execute → Verify → Finish workflow and assigned non-overlapping authority: system prompt owns universal lifecycle, skill bodies own domain workflow/quality, and current tool descriptions/schemas own exact calls, arguments and evidence. Schema 25 strengthens the finish gate and HTML binding guidance. Schema 26 adds the explicit v5 `final` response intent. Schema 27 requires final read-back, regression review and a quality decision. Schema 28 added the operational-summary/discovery guidance. Schema 29 allowed ordered managed-mutation batches. Schema 30 restricts multi-call responses to independent local reads. Schema 31 permits bounded source discovery before Task List/Plan creation and requires durable planning for complex Agent work. Schema 32 requires `final=true` for an answer without tool calls. Schema 33 reuses current source and durable tool admission. Schema 34 pinned task state and introduced source checks. Schema 35 introduced automatic default migration with a recovery copy of prior texts on settings save. Schema 36 removed source-hash checks and final gates. Schema 37 adds explicit actions, bounded no-call progress and Task List guidance for staged Agent work. Schema 38 clarifies meaningful step messages and durable Task List notes. Schema 39 directed the model from skill/schema preparation to the next needed tool call or a terminal decision and reserved `continue` for a new concrete finding or decision, discouraging repeated promises to start work. Current schema 40 removes standalone `continue`; all modes, schema and repair share one action contract. A no-call response ends the turn as `done`, `blocked` or `needs_input`, while progress accompanies actual calls.
 
-Planning and execution tracking are separate. Exact native `common.plan_doc_save` accepts complete title/Markdown/status intent in Plan and Agent. It creates an active plan when absent, updates the guarded selected head, or creates an independent plan with `startNew=true` for a different task while retaining the previous lineage. `common.plan_doc_restore` and `common.plan_doc_delete` remain Plan-only. `RUNTIME_CONTEXT.active_plan` exposes only current readable metadata, while the body is found and read through the semantic resource pair. `common.questions_ask` accepts prompt/options without question or option ids; runtime generates UI-only ids, and submitted answers return question text plus selected labels/free text. `common.task_list_set` has typed `save`, `update_statuses`, and `close` branches; runtime owns active-list and stable step ids while the model supplies complete goal/ordered steps for creation or append, sparse indexed status changes, or a terminal outcome with optional final status changes. Model Tool Results omit all these internal identities and guards. A ready-plan handoff revalidates the exact selected revision internally, switches to Agent, and submits a semantic instruction to find/read the active plan; no URI enters the model request.
+Planning and execution tracking are separate. Exact native `common.plan_doc_save` accepts complete title/Markdown/status intent in Plan and Agent. It creates an active plan when absent, updates the guarded selected head, or creates an independent plan with `startNew=true` for a different task while retaining the previous lineage. `common.plan_doc_restore` and `common.plan_doc_delete` are Agent/Ask operations whose approval follows the captured run setting. `RUNTIME_CONTEXT.active_plan` exposes only current readable metadata, while the body is found and read through the semantic resource pair. `common.questions_ask` accepts prompt/options without question or option ids; runtime generates UI-only ids, and submitted answers return question text plus selected labels/free text. `common.task_list_set` has typed `save`, `update_statuses`, and `close` branches; runtime owns active-list and stable step ids while the model supplies complete goal/ordered steps for creation or append, sparse indexed status changes, or a terminal outcome with optional final status changes. Model Tool Results omit all these internal identities and guards. A ready-plan handoff revalidates the exact selected revision internally, switches to Agent, and submits a semantic instruction to find/read the active plan; no URI enters the model request.
 
 The resource index is a bounded semantic working-set manifest, not a body store.
 `common.resources_find` accepts optional literal `query` plus semantic `scope` and
@@ -1351,13 +1469,20 @@ a current preparation snapshot, not a claim that an old tool result or UI captio
 was sent unchanged to the model. Exact tool ids and arguments remain available.
 Consecutive transcript groups
 require the same runtime `RunId`; confirmation segments keep their own grouping
-while their typed state retains the logical turn's counts. Throughout a live run,
-step narration and all action rows stay visible in chronological order, including
-nested calls and completed earlier steps. Only technical details use individual
-disclosures. The current running action owns the text shimmer; an icon-free thinking
-status appears between calls, without a separate count or duplicate running status.
-Waiting typed lifecycles keep the feed open. Only a terminal run folds the complete
-process into `Действия · N`; a zero-call run emits no empty overview. Independent
+while their typed state retains the logical turn's counts. During a live or restored
+active run, a nonempty comment starts a visible group; following steps without a
+comment continue that group. Completed tool/control rows in such groups fold into
+`Действия · N` under the comment (or without a heading before the first comment).
+Contiguous completed rows are grouped in place: current/queued actions, waiting
+questions or confirmations, failures, warnings, partial results and unknown effects
+stay outside the disclosure in chronological order, including nested calls. New
+comments remain separate even when their text repeats. Explicit expansion survives
+live updates by activity identity; rendering never merges model steps or stored
+calls. Groups without silent steps retain the ordinary visible action rows.
+The current running action owns the text shimmer; an icon-free thinking status
+appears between calls. Waiting typed lifecycles keep the feed open. A terminal run
+folds the complete process into the existing `Действия · N` overview, whose expanded
+history shows every original step; a zero-call run emits no empty overview. Independent
 runtime warnings remain visible. Progress phase names (`thinking`, `working`) are
 not target captions. A nonempty action block ends with a thin divider and a 6 px
 gap before the answer. Assistant footer buttons start at the left, with copy first
@@ -1394,7 +1519,7 @@ See [event durability/recovery](session-events.md),
 ## Local invariants
 
 - Disabled, unavailable, or `AgentCanRun=false` tools are not exposed to Agent mode.
-- Chat exposes only the two exact `common.resources_find/read` tools after schema and safety validation; it never receives skills, confirmation, document mutations, or local-state mutations.
+- New chats use Agent or the optional Plan intent; independent Ask/Deny permissions filter discovery and gate execution. Historical Chat sessions cannot dispatch.
 - Confirmation and mutation safety remain local executor rules.
 - HTML workspace is an ordinary Agent capability, not a separate chat mode or preference flag; the model discovers and chooses its tools from the request and current metadata/schema evidence.
 - `common.html_workspace_write_file` creates a new file directly. Its result summarizes the saved target, bounded current file inventory and source hash for the next model step. Replacing an existing file requires a complete `source` observation of that exact current HTML member revision in the accepted model call's input snapshot; missing or stale source returns `html_source_observation_required` before dispatch. Focused changes can use `common.html_workspace_apply_patch`, which applies ordered anchors to one current file. Exact source matches take precedence; when none exists, LF/CRLF/CR-equivalent matches are mapped back to their original spans, including mixed-line-ending files. A missing or ambiguous anchor rejects the entire patch before write, reports the failing 1-based hunk, and returns complete current source in bounded recovery up to 12,000 characters; larger files require a fresh resource read or snippet search. If the failed exact `find` occurs in another workspace file, the result names up to five matching paths so the model can patch that file separately. Accepted calls inherit only successful resource reads actually present in the model request, so historical call metadata and excluded read bodies cannot authorize a replacement.

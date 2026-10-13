@@ -61,7 +61,7 @@ namespace RNAssistant.Harness
                 });
                 ChatTurnResult result;
                 using (RunCausalTrace.Begin(EventStore(store), session))
-                    result = service.ExecuteAsync(ChatModes.Agent, "Write once", session, NewContext(adapter),
+                    result = service.ExecuteWithApprovalsAsync(ChatModes.Agent, "Write once", session, NewContext(adapter),
                         new AppSettings { AutoConfirmToolActions = true }, OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(),
                         (phase, text, activity) =>
                         {
@@ -348,7 +348,7 @@ namespace RNAssistant.Harness
                         throw new IOException("stopped after terminal evidence but before result projection");
                 });
                 var interrupted = false;
-                try { service.ExecuteAsync(ChatModes.Agent, "Write once", session, NewContext(adapter), new AppSettings { AutoConfirmToolActions = true },
+                try { service.ExecuteWithApprovalsAsync(ChatModes.Agent, "Write once", session, NewContext(adapter), new AppSettings { AutoConfirmToolActions = true },
                     OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult(); }
                 catch (RunStoreException) { interrupted = true; }
                 AssertTrue(interrupted, "fault injected at actual completed-evidence append");
@@ -387,6 +387,7 @@ namespace RNAssistant.Harness
                     store.Save(other);
                 };
                 var calls = 0;
+                var writeEntries = 0;
                 var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
                 {
                     calls++;
@@ -396,10 +397,10 @@ namespace RNAssistant.Harness
                 RunStoreException failure = null;
                 try
                 {
-                    service.ExecuteAsync(ChatModes.Agent, "Write once", session, NewContext(adapter), new AppSettings { AutoConfirmToolActions = true },
+                    service.ExecuteWithApprovalsAsync(ChatModes.Agent, "Write once", session, NewContext(adapter), new AppSettings { AutoConfirmToolActions = false },
                         OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), (phase, message, activity) =>
                         {
-                            if (afterDispatch && phase == "tool_running" && activity.ToolId == "excel.add_sheet") injectConcurrentCommit();
+                            if (afterDispatch && phase == "tool_running" && activity.ToolId == "excel.add_sheet" && ++writeEntries == 2) injectConcurrentCommit();
                         }).GetAwaiter().GetResult();
                 }
                 catch (RunStoreException ex) { failure = ex; }
@@ -2541,7 +2542,7 @@ namespace RNAssistant.Harness
                 var path = SessionEventFile(paths, session);
                 var lines = File.ReadAllLines(path);
                 var seed = JObject.Parse(lines[0]);
-                seed["Data"]["FormatVersion"] = ChatSession.CurrentFormatVersion - 1;
+                seed["Data"]["FormatVersion"] = 5;
                 seed["Hash"] = ComputeUnkeyedEventHash(seed);
                 lines[0] = seed.ToString(Newtonsoft.Json.Formatting.None);
                 File.WriteAllLines(path, lines);
@@ -2551,6 +2552,36 @@ namespace RNAssistant.Harness
                     "pre-cutover projection format is refused instead of normalized");
                 AssertEqual(0, reader.List(session.Host, session.DocumentKey, session.DocumentTitle).Count,
                     "pre-cutover projection format is excluded from headers");
+            });
+        }
+
+        private static void UnifiedHistoryRemainsReadOnly()
+        {
+            WithTempPaths(paths =>
+            {
+                var store = new ChatStore(paths);
+                var session = store.Create("Excel", "prior-contract", "Old.xlsx", "Historical chat");
+                var path = SessionEventFile(paths, session);
+                var lines = File.ReadAllLines(path);
+                var seed = JObject.Parse(lines[0]);
+                seed["Data"]["FormatVersion"] = 6;
+                seed["Data"]["Mode"] = "chat";
+                seed["Data"]["LastRun"] = JObject.FromObject(new ChatRunRecord
+                    { RunId = "prior-run", RuntimeId = "prior-runtime", Status = "running" });
+                ((JObject)seed["Data"]).Remove("MutationPolicy");
+                seed["Hash"] = ComputeUnkeyedEventHash(seed);
+                lines[0] = seed.ToString(Newtonsoft.Json.Formatting.None);
+                File.WriteAllLines(path, lines);
+                var before = File.ReadAllBytes(path);
+                var reader = new ChatStore(paths);
+                var restored = reader.Load(session.Host, session.DocumentKey, session.Id);
+                AssertTrue(restored != null && restored.FormatVersion == 6 && restored.Mode == "chat", "prior contract is readable without migration");
+                AssertEqual(1, reader.List(session.Host, session.DocumentKey, session.DocumentTitle).Count, "prior header is discoverable");
+                new RNAssistant.Office.Services.ChatSessionService(new FakeOfficeAdapter(), ConversationStore(reader))
+                    .ReconcileInterruptedRuns("current-runtime");
+                AssertEqual("running", reader.Load(session.Id).LastRun.Status, "startup does not rewrite prior run history");
+                RuntimeThrows<InvalidOperationException>(() => RNAssistant.Core.Services.ConversationRunPolicy.ForSession(restored));
+                AssertTrue(before.SequenceEqual(File.ReadAllBytes(path)), "read and refusal preserve original stream bytes");
             });
         }
 

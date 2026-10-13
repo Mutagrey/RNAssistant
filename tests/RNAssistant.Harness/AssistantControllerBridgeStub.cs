@@ -183,6 +183,8 @@ namespace RNAssistant.Office
         public ChatStateResponse RenameChat(string chatId, string title) { return ChatState(title, chatId); }
         public ChatPreferenceResponse SetChatModel(string chatId, string model)
         { NavigationWork?.Invoke(); return new ChatPreferenceResponse { ChatId = chatId, Model = model, Mode = "chat" }; }
+        public ChatStateResponse SetChatMutationPolicy(string chatId, RNAssistant.Core.Services.MutationPolicy policy)
+        { var response = ChatState(null, chatId); response.MutationPolicy = policy; return response; }
         public ChatStateResponse SetChatMode(string chatId, string mode)
         {
             NavigationWork?.Invoke();

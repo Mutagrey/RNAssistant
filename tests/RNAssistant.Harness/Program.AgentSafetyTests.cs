@@ -86,7 +86,7 @@ namespace RNAssistant.Harness
                     () => new ModelProtocolClient(completion));
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var settingsForRun = new AppSettings { AgentPromptSchemaVersion = 0, SystemPrompt = "retired text" };
-                foreach (var mode in new[] { ChatModes.Agent, ChatModes.Chat, ChatModes.Plan })
+                foreach (var mode in new[] { ChatModes.Agent, ChatModes.Plan })
                 {
                     var session = NewSession(adapter);
                     session.Mode = mode;
@@ -95,7 +95,7 @@ namespace RNAssistant.Harness
                     AssertEqual("Done", result.AssistantText, "migrated settings allow a normal run");
                     AssertEqual(AgentResponseProtocol.CurrentVersion, result.ResponseProtocolVersion, "all modes retain v7");
                 }
-                AssertEqual(3, rawCalls, "each mode makes one normal request");
+                AssertEqual(2, rawCalls, "each mode makes one normal request");
             });
         }
 
@@ -114,7 +114,7 @@ namespace RNAssistant.Harness
                 var service = CreateConversationRunService(adapter, executor, completion, new ContextCompactionService(completion),
                     () => { boundaryCalls++; return new ModelProtocolClient(completion); });
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
-                foreach (var mode in new[] { ChatModes.Agent, ChatModes.Chat, ChatModes.Plan })
+                foreach (var mode in new[] { ChatModes.Agent, ChatModes.Plan })
                 foreach (var version in new[] { 0, 1, 2, 3, 4, 5, 6, AgentResponseProtocol.CurrentVersion + 1 })
                 foreach (var form in new[] { "plain", ToolResultRoles.User, ToolResultRoles.Tool })
                 {
@@ -213,8 +213,8 @@ namespace RNAssistant.Harness
                     .GetAwaiter().GetResult();
                 AssertEqual("Done", result.AssistantText, "current history, diagnostic and tool-result forms remain usable");
                 var newChat = NewSession(adapter);
-                newChat.Mode = ChatModes.Chat;
-                var fresh = service.ExecuteAsync(ChatModes.Chat, "New chat", newChat, NewContext(adapter), new AppSettings(), tools, null)
+                newChat.Mode = ChatModes.Agent;
+                var fresh = service.ExecuteAsync(ChatModes.Agent, "New chat", newChat, NewContext(adapter), new AppSettings(), tools, null)
                     .GetAwaiter().GetResult();
                 AssertEqual("Done", fresh.AssistantText, "explicit new chat needs no historical conversion");
                 AssertEqual(2, rawCalls, "only compatible and new chats dispatch");
@@ -1195,7 +1195,7 @@ namespace RNAssistant.Harness
                     if (responses.Count == 0) throw new OperationCanceledException("cancel after unknown write result");
                     return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
                 });
-                var cancelled = service.ExecuteAsync(ChatModes.Agent, "Создай лист.", session, NewContext(adapter),
+                var cancelled = service.ExecuteWithApprovalsAsync(ChatModes.Agent, "Создай лист.", session, NewContext(adapter),
                     new AppSettings { AutoConfirmToolActions = true },
                     OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
                 AssertEqual(RunViewLifecycles.Cancelled, cancelled.RunViewState.Lifecycle, "kernel owns cancellation lifecycle");

@@ -137,7 +137,7 @@ namespace RNAssistant.Harness
                 var service = CreateConversationRunService(adapter, executor,
                     (settings, messages, options, stream, token) => Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() }));
                 var session = NewSession(adapter);
-                var result = service.ExecuteAsync(ChatModes.Agent, "Create detailed Markdown documentation.", session, NewContext(adapter),
+                var result = service.ExecuteWithApprovalsAsync(ChatModes.Agent, "Create detailed Markdown documentation.", session, NewContext(adapter),
                     new AppSettings { AutoConfirmToolActions = true, ContextWindowOverrideTokens = 131072 },
                     OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
                 AssertEqual(RunViewLifecycles.Completed, result.RunViewState.Lifecycle, "the complete agent cycle discovers and executes the native Markdown tool: " + JsonConvert.SerializeObject(result.RunViewState));
@@ -157,7 +157,7 @@ namespace RNAssistant.Harness
             {
                 var session = NewSession(adapter);
                 var definition = executor.GetControllerTools().Single(item => item.Id == MarkdownDocumentToolCatalog.SaveToolId);
-                var runtime = executor.CreateNativeRuntime(session, new[] { definition }, new AppSettings(), ChatModes.Agent, false);
+                var runtime = executor.CreateNativeRuntime(session, new[] { definition }, new AppSettings(), ChatModes.Agent, false, manualRun: true);
                 var records = new List<ToolExecutionRecord>();
                 foreach (var id in new[] { "batch-a", "batch-b" })
                 {
@@ -184,8 +184,9 @@ namespace RNAssistant.Harness
                     var rejected = RuntimeThrows<ToolMutationPreparationException>(() => MarkdownDocumentService.PreparePublication(session, context, JsonConvert.SerializeObject(prepared), owner, executor.ResourceAuthority));
                     AssertEqual("RESOURCE_REVISION_CHANGED", rejected.Code, "exact prepared base is rechecked under the publication lease");
                 }
-                var readOnly = executor.CreateNativeRuntime(session, new[] { definition }, new AppSettings(), ChatModes.Chat, false);
-                AssertEqual(ToolExecutionOutcome.Error, ExecuteNative(readOnly, winnerCall, readOnly.Describe(winnerCall)).Outcome, "Chat mode remains read-only");
+                session.MutationPolicy = MutationPolicy.Deny;
+                var readOnly = executor.CreateNativeRuntime(session, new[] { definition }, new AppSettings(), ChatModes.Agent, false);
+                AssertEqual(ToolExecutionOutcome.Error, ExecuteNative(readOnly, winnerCall, readOnly.Describe(winnerCall)).Outcome, "Deny remains read-only");
                 AssertEqual(0, new ResourceMutationJournal(FixturePaths.Value).Unresolved().Count, "stale preparation never crosses dispatch");
             });
         }
@@ -199,7 +200,7 @@ namespace RNAssistant.Harness
                     persistResourceFacts: saved => { throw new System.IO.IOException("Injected link save failure."); });
                 var session = NewSession(adapter);
                 var definition = executor.GetControllerTools().Single(item => item.Id == MarkdownDocumentToolCatalog.SaveToolId);
-                var runtime = executor.CreateNativeRuntime(session, new[] { definition }, new AppSettings(), ChatModes.Agent, false);
+                var runtime = executor.CreateNativeRuntime(session, new[] { definition }, new AppSettings(), ChatModes.Agent, false, manualRun: true);
                 var call = new ToolCall("md-failed-link", MarkdownDocumentToolCatalog.SaveToolId,
                     "{\"title\":\"Guide\",\"description\":\"Deployment guide.\",\"markdown\":\"# Guide\\nRetained\"}");
                 RuntimeThrows<System.IO.IOException>(() => ExecuteNative(runtime, call, runtime.Describe(call)));

@@ -30,7 +30,7 @@ namespace RNAssistant.Harness
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName)
                     .Concat(executor.GetControllerTools()).ToList();
                 var runtime = executor.CreateNativeRuntime(session, tools,
-                    new AppSettings(), "agent", false);
+                    new AppSettings(), "agent", false, manualRun: true);
                 var listed = ExecuteHtmlNative(runtime,
                     HtmlWorkspaceToolCatalog.ListAssetsToolId, new JObject());
                 AssertEqual(ToolExecutionOutcome.Ok, listed.Outcome,
@@ -95,7 +95,7 @@ namespace RNAssistant.Harness
                     "publish writes a manifest in the user asset library");
                 var secondSession = NewSession(adapter);
                 var secondRuntime = executor.CreateNativeRuntime(secondSession, tools,
-                    new AppSettings(), "agent", false);
+                    new AppSettings(), "agent", false, manualRun: true);
                 var notListed = ExecuteHtmlNative(secondRuntime,
                     HtmlWorkspaceToolCatalog.ImportAssetToolId,
                     new JObject { ["id"] = "saved-helper", ["version"] = "1.0.0" });

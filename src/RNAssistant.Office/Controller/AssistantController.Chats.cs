@@ -204,7 +204,9 @@ namespace RNAssistant.Office
                 fork.ParentSessionRevision = source.Revision;
                 fork.ForkedThroughMessageId = targetIndex < 0 ? null : sourceMessages[targetIndex].Id;
                 fork.Model = source.Model;
-                fork.Mode = ChatModes.Normalize(source.Mode);
+                ConversationRunPolicy.RequireCurrentSession(source);
+                fork.Mode = source.Mode;
+                fork.MutationPolicy = source.MutationPolicy;
                 fork.ReasoningEnabled = source.ReasoningEnabled;
                 fork.Context = ChatCloneService.CloneContext(LoadContext(source)) ?? CreateEmptyContext();
                 fork.Messages = targetIndex < 0
@@ -531,9 +533,23 @@ namespace RNAssistant.Office
         {
             return WithReservedChatState(LoadAddressedSession(chatId), session =>
             {
-                session.Mode = ChatModes.Normalize(mode);
+                ConversationRunPolicy.RequireCurrentSession(session);
+                session.Mode = ConversationRunPolicy.For(mode, session.MutationPolicy).Mode;
                 RemovePendingAgentToolsForSession(session.Id);
                 CancelPendingActivities(session, "Pending action cancelled because chat mode changed.");
+                session.LastRun = null;
+                SaveSessionChanges(session);
+            });
+        }
+
+        public ChatStateResponse SetChatMutationPolicy(string chatId, MutationPolicy policy)
+        {
+            return WithReservedChatState(LoadAddressedSession(chatId), session =>
+            {
+                ConversationRunPolicy.RequireCurrentSession(session);
+                session.MutationPolicy = ConversationRunPolicy.For(session.Mode, policy).MutationPolicy;
+                RemovePendingAgentToolsForSession(session.Id);
+                CancelPendingActivities(session, "Pending action cancelled because permissions changed.");
                 session.LastRun = null;
                 SaveSessionChanges(session);
             });
@@ -682,6 +698,8 @@ namespace RNAssistant.Office
                 SessionRevision = updated.Revision,
                 Model = updated.Model,
                 Mode = ChatModes.Normalize(updated.Mode),
+                MutationPolicy = updated.MutationPolicy,
+                ChatReadOnly = updated.FormatVersion != ChatSession.CurrentFormatVersion,
                 ReasoningEnabled = updated.ReasoningEnabled,
                 ContextUsage = includeUsage ? ContextUsageEstimator.FromSession(updated, ResolveChatSettings(updated)) : null
             };
@@ -715,6 +733,8 @@ namespace RNAssistant.Office
                 ActiveChatId = activeId,
                 ActiveChatModel = session == null ? string.Empty : session.Model,
                 ActiveChatMode = ChatModes.Normalize(session == null ? null : session.Mode),
+                MutationPolicy = session?.MutationPolicy ?? MutationPolicy.Ask,
+                ChatReadOnly = session != null && session.FormatVersion != ChatSession.CurrentFormatVersion,
                 ActiveChatReasoning = session != null && session.ReasoningEnabled,
                 Chats = chats,
                 Documents = documents,
@@ -752,6 +772,8 @@ namespace RNAssistant.Office
                 RunViewState = RunViewStateProjector.Create(session),
                 ActiveChatModel = session.Model,
                 ActiveChatMode = ChatModes.Normalize(session.Mode),
+                MutationPolicy = session?.MutationPolicy ?? MutationPolicy.Ask,
+                ChatReadOnly = session != null && session.FormatVersion != ChatSession.CurrentFormatVersion,
                 ActiveChatReasoning = session.ReasoningEnabled,
                 ActiveContextCheckpointId = session.ActiveContextCheckpointId,
                 ActiveHtmlArtifactId = session.ActiveHtmlArtifactId,
@@ -770,6 +792,8 @@ namespace RNAssistant.Office
                 ActiveChatId = activeId,
                 ActiveChatModel = session == null ? string.Empty : session.Model,
                 ActiveChatMode = ChatModes.Normalize(session == null ? null : session.Mode),
+                MutationPolicy = session?.MutationPolicy ?? MutationPolicy.Ask,
+                ChatReadOnly = session != null && session.FormatVersion != ChatSession.CurrentFormatVersion,
                 ActiveChatReasoning = session != null && session.ReasoningEnabled,
                 Chats = _chatSessions.GetChatSummaries(activeId),
                 Documents = ListOpenDocuments()

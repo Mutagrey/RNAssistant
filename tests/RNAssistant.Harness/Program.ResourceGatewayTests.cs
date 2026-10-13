@@ -184,14 +184,14 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
             {
                 var session = NewSession(adapter);
-                session.Mode = ChatModes.Chat;
+                session.Mode = ChatModes.Agent;
                 session.Artifacts.Add(new ChatArtifact { Kind = ChatArtifactKinds.Markdown, Title = "First", InlineText = "body" });
                 var tools = executor.GetControllerTools().ToArray();
                 AssertResourceControllerProjection(tools.Single(item => item.Id == ResourceToolCatalog.FindToolId),
                     ResourceFindToolHandler.Descriptor, ResourceFindToolHandler.Policy, "resources_find");
                 AssertResourceControllerProjection(tools.Single(item => item.Id == ResourceToolCatalog.ReadToolId),
                     ResourceReadToolHandler.Descriptor, ResourceReadToolHandler.Policy, "resources_read");
-                var runtime = executor.CreateNativeRuntime(session, tools, new AppSettings(), ChatModes.Chat, false);
+                var runtime = executor.CreateNativeRuntime(session, tools, new AppSettings(), ChatModes.Agent, false);
                 Func<string, string, ToolExecutionRecord> execute = (id, arguments) =>
                 {
                     var call = new ToolCall("native_" + id, id, arguments);
@@ -204,7 +204,7 @@ namespace RNAssistant.Harness
 
                 var runtimeContext = JObject.Parse(
                     ConversationPromptComposer.BuildRuntimeContext(
-                        ChatModes.Chat,
+                        ChatModes.Agent,
                         adapter,
                         tools,
                         BuiltInSkillProvider.GetSkills(adapter),

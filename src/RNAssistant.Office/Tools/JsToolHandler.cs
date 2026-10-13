@@ -22,7 +22,7 @@ namespace RNAssistant.Office.Tools
         internal const string PackageHandlerId = "js.custom.package.execute.v1";
         internal static readonly ToolBinding Binding = new ToolBinding("js.run.v1");
         internal static readonly ToolPolicy Policy = new ToolPolicy(ToolEffect.Read, ToolVerification.None,
-            false, false, new[] { "agent" });
+            true, false, new[] { "agent" }, executesCode: true);
         internal static readonly ToolDescriptor Descriptor = new ToolDescriptor(RunId,
             "Run read-only JavaScript over the explicit resources inputs for this call. It does not execute page scripts or inherit HTML workspace bindings. Use data source targets; an HTML data target is binding metadata, whose text supplies sourceTarget. Return a JSON value. Use await RN.resources.open(name) and for await (const batch of handle.stream({limit:500})); records/table batches expose rows and columns, text/source batches expose text chunks. No document writes, network, filesystem or CLR access.",
             Parameters());

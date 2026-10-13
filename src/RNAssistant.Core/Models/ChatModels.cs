@@ -280,7 +280,8 @@ namespace RNAssistant.Core.Models
 
     public sealed class ChatSession
     {
-        public const int CurrentFormatVersion = 6;
+        public const int CurrentFormatVersion = 7;
+        public static bool IsReadableFormat(int? version) { return version == 6 || version == CurrentFormatVersion; }
 
         [JsonProperty(Required = Required.Always)]
         public int FormatVersion { get; set; }
@@ -310,6 +311,7 @@ namespace RNAssistant.Core.Models
         public string Title { get; set; }
         public string Model { get; set; }
         public string Mode { get; set; }
+        public RNAssistant.Core.Services.MutationPolicy MutationPolicy { get; set; }
         public bool ReasoningEnabled { get; set; }
         public DateTime CreatedUtc { get; set; }
         public DateTime UpdatedUtc { get; set; }
@@ -390,6 +392,7 @@ namespace RNAssistant.Core.Models
         public DateTime StartedUtc { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public ModelRunMetadata ModelConfiguration { get; set; }
+        public RNAssistant.Core.Services.ConversationRunPolicy ConversationPolicy { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public WorkspaceRunAcceptance WorkspaceAcceptance { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]

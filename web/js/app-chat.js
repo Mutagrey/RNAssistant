@@ -33,9 +33,29 @@ async function createOfficeHostChat(host) {
   }
 }
 
+async function saveChatMutationPolicy(policy) {
+  if (state.chatReadOnly || !state.activeChatId || state.modeSaving || state.reasoningSaving ||
+      state.bridgeUnavailable || state.chatNavigationPending || state.initializePromise ||
+      state.chatDetailPending || state.chatDetailError || currentActiveSend() ||
+      isPendingChatSubmit(state.activeChatId) || hasActiveMessageEdit()) return false;
+  var chatId = state.activeChatId;
+  state.modeSaving = true;
+  renderChatSessions();
+  try {
+    return applyChatStateForChat(await sendChatPreference("setChatMutationPolicy", {
+      chatId: chatId, mutationPolicy: policy
+    }), chatId);
+  } catch (error) { log(error.detail || error.message, "error"); return false; }
+  finally {
+    state.modeSaving = false;
+    if ($("chatModeMenu")) delete $("chatModeMenu").dataset.renderKey;
+    renderChatSessions();
+  }
+}
+
 async function saveChatMode(mode) {
   mode = mode || "agent";
-  if (!state.activeChatId || state.bridgeUnavailable || state.modeSaving || state.chatNavigationPending || state.initializePromise ||
+  if (state.chatReadOnly || !state.activeChatId || state.bridgeUnavailable || state.modeSaving || state.chatNavigationPending || state.initializePromise ||
       state.chatDetailPending || state.chatDetailError || currentActiveSend() || hasActiveMessageEdit()) {
     return false;
   }

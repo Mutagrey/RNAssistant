@@ -257,7 +257,7 @@ namespace RNAssistant.Harness
                     requests.Add(messages.ToList());
                     return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
                 });
-                var completed = service.ExecuteAsync(ChatModes.Agent, "Проверь CSS и JS и исправь оформление графика.", session, NewContext(adapter), new AppSettings(),
+                var completed = service.ExecuteWithApprovalsAsync(ChatModes.Agent, "Проверь CSS и JS и исправь оформление графика.", session, NewContext(adapter), new AppSettings(),
                     OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(),
                     (Action<string, string, ChatActivity>)null, null).GetAwaiter().GetResult();
                 if (completed.ResponseStatus != AgentResponseStatuses.Completed)

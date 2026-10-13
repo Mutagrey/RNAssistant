@@ -198,7 +198,7 @@ namespace RNAssistant.Harness
             WithTempExecutor((executor, adapter) =>
             {
                 var session = NewSession(adapter);
-                session.Mode = ChatModes.Chat;
+                session.Mode = ChatModes.Agent;
                 var edited = new ChatMessage { Role = "user", Content = "Измененный вопрос" };
                 session.Messages.Add(edited);
                 var captured = new List<ChatMessage>();
@@ -224,7 +224,7 @@ namespace RNAssistant.Harness
                     });
 
                 service.ExecuteAsync(
-                    ChatModes.Chat,
+                    ChatModes.Agent,
                     edited.Content,
                     session,
                     new DocumentContext(),

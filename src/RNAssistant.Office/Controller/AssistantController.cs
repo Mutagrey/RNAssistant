@@ -206,7 +206,7 @@ namespace RNAssistant.Office
             _attachmentAnalysisService = new AttachmentAnalysisService(completion);
             _contextCompactionService = new ContextCompactionService(completion, _toolExecutor.ResourceAuthority, _toolExecutor.Payloads,
                 (session, capturedTools, capturedSkills) => {
-                    var policy = ConversationRunPolicy.For(session.Mode);
+                    var policy = ConversationRunPolicy.ForSession(session);
                     var skills = policy.SelectSkills((capturedSkills ?? _skillCatalog.Capture()).Skills);
                     var tools = policy.SelectTools(capturedTools ?? _toolCatalog.GetFreshConversationTools());
                     CapabilityCatalogService.BindReadSchema(tools, skills);
@@ -283,6 +283,8 @@ namespace RNAssistant.Office
                 ActiveChatId = activeId,
                 ActiveChatModel = session == null ? string.Empty : session.Model,
                 ActiveChatMode = ChatModes.Normalize(session == null ? null : session.Mode),
+                MutationPolicy = session?.MutationPolicy ?? MutationPolicy.Ask,
+                ChatReadOnly = session != null && session.FormatVersion != ChatSession.CurrentFormatVersion,
                 ActiveChatReasoning = session != null && session.ReasoningEnabled,
                 Chats = chats,
                 Documents = documents,
@@ -367,6 +369,8 @@ namespace RNAssistant.Office
                 ActiveChatId = activeId,
                 ActiveChatModel = active == null ? string.Empty : active.Model,
                 ActiveChatMode = ChatModes.Normalize(active == null ? null : active.Mode),
+                MutationPolicy = active?.MutationPolicy ?? MutationPolicy.Ask,
+                ChatReadOnly = active != null && active.FormatVersion != ChatSession.CurrentFormatVersion,
                 ActiveChatReasoning = active != null && active.ReasoningEnabled,
                 Chats = chats,
                 Documents = ListOpenDocuments(),

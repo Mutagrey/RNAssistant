@@ -84,17 +84,28 @@ Historical WQ-A1–A5 designs remain in the phase reports and
 active runtime contracts. See [verification](qualification.md) and the
 [release process](operations/RELEASE_PROCESS.md).
 
-## Chat, Plan, and Agent
+## Unified Agent and Plan
 
-There are three persisted modes and one structured execution service.
+New conversations use `Agent` by default and offer a sticky `Plan` toggle. Both use
+`ConversationRunService` and the same conversation-response v7 contract. A final
+answer with zero tool calls completes normally. There is no intent router or
+mandatory planning/model call. Persisted pre-cutover chats, including `Chat`, remain
+read-only history; new turns require a format-7 chat.
 
-- `Chat` uses `ConversationRunService` with `ChatSystemPrompt`, the shared conversation-response v7 `message + action + tool_calls[]` JSON contract, and only the two read-only `common.resources_find/read` tools. Runtime policy removes skills, Office tools, local mutations, and confirmation regardless of prompt wording.
-- `Plan` uses the same loop with `PlanSystemPrompt`, read-only discovery, skills, typed user questions, a single revisioned Markdown plan document, and an optional temporary Task List. Runtime policy removes Office/shared mutations and confirmation. A ready plan is exact-revision validated internally, then handed to Agent as a semantic find/read instruction.
-- `Agent` uses the same service and transcript loop with progressive tool discovery, enabled skill metadata, confirmation, and policy-approved mutations. The full mode/session-filtered catalog stays local as execution authority; it is not injected into every prompt.
+`Plan` uses `PlanSystemPrompt`, reads, skills, questions and the built-in Plan/Task
+List updates. It cannot execute other mutations or code. Returning to Agent is an
+explicit user action. `Agent` supports progressive tool discovery and effects
+allowed by the separate `MutationPolicy`. Ask requires approval; an explicit
+`AutoConfirmToolActions` setting automates that approval for new accepted runs.
+Deny forbids mutations and code regardless of AutoConfirm. The immutable run
+snapshot survives confirmation and restart. `ToolRuntime` enforces the same policy
+at the handler boundary independently of prompt wording and catalog filtering.
+Exact binding, preparation, guards and read-back still apply. The full filtered
+catalog stays local as execution authority. See [Conversation protocol](conversation-protocol.md).
 
 `ConversationModelSession` owns each invocation's model context outside the loop: prompt composition and compaction, callable ToolPack admission/reconstruction, request options/cache, bounded tool-result materialization and temporary media. It uses the existing composer, compactor and resource services; it neither executes tools nor decides run outcomes. `AgentTranscript` owns visible tool-activity construction, resource/chart provenance and HTML checkpoints. `ConversationRunService` orchestrates `Core/Agent/AgentKernel` for all modes and confirmation. Invocation-scoped `ConversationKernelAdapter` partials implement model, executor and typed persistence ports; the kernel alone owns ordering, accepted-call IDs, counts and lifecycle.
 
-`ConversationPromptComposer` selects the editable mode instruction, then appends one dynamic `RUNTIME_CONTEXT` containing mode, readable document state, current callable schemas, complete compact `capabilities.items`, user context and bounded semantic resource targets. Document keys, `ResourceRef` values and catalog/package/descriptor revisions are omitted. Callable capability membership is public id/kind plus `schemaLoaded`; unloaded tools and skills retain bounded selection metadata. Chat receives an empty capability catalog. Agent/Plan bootstrap is the four semantic resource/capability tools. `common.capabilities_search/read` have exact native handlers; runtime validates hidden descriptor/package revisions and projects stale evidence as error. Complete tool reads may stage one atomic optional extension, whose exact before/after state stays only in durable events while `TOOL_PACK_STATE` exposes public ids and admission outcome. One shared admission calculation covers messages, request options, repair overhead and continuation reserve. No execution touch or LRU eviction changes membership. Strict response JSON Schema comes from the same callable set. Confirmation, compaction and restart reconstruct authority from the exact durable chain; raw read results never grant it.
+`ConversationPromptComposer` selects the editable mode instruction, then appends one dynamic `RUNTIME_CONTEXT` containing mode, readable document state, current callable schemas, complete compact `capabilities.items`, user context and bounded semantic resource targets. Document keys, `ResourceRef` values and catalog/package/descriptor revisions are omitted. Callable capability membership is public id/kind plus `schemaLoaded`; unloaded tools and skills retain bounded selection metadata. Agent/Plan bootstrap is the four semantic resource/capability tools. `common.capabilities_search/read` have exact native handlers; runtime validates hidden descriptor/package revisions and projects stale evidence as error. Complete tool reads may stage one atomic optional extension, whose exact before/after state stays only in durable events while `TOOL_PACK_STATE` exposes public ids and admission outcome. One shared admission calculation covers messages, request options, repair overhead and continuation reserve. No execution touch or LRU eviction changes membership. Strict response JSON Schema comes from the same callable set. Confirmation, compaction and restart reconstruct authority from the exact durable chain; raw read results never grant it.
 
 R61/11O is the mandatory post-migration audit of that model-facing surface. 11O1–11O7
 have atomically switched Resources + Capabilities, planning, HTML,
@@ -110,7 +121,7 @@ revision and token accounting. Library reference continuation uses one bounded
 in-memory session clone and never persists opaque state into the active chat. See
 [Tool Library R61](tool-library.md#mandatory-all-tool-contract-audit-r61).
 
-Editable general/tool/skill Agent, Plan, Chat, title, compaction, and attachment-analysis prompts are stored as Markdown. Their instruction role (`developer`/`system`/`user`) is independent from the shared response format (`json_object`/strict `json_schema`) and tool-result role (`user`/`developer`/matched `tool`). Protocol repair and compatibility-probe instructions remain fixed.
+Editable general/tool/skill Agent, Plan, title, compaction, and attachment-analysis prompts are stored as Markdown; the old Chat prompt is retained only as an archived library entry. Their instruction role (`developer`/`system`/`user`) is independent from the shared response format (`json_object`/strict `json_schema`) and tool-result role (`user`/`developer`/matched `tool`). Protocol repair and compatibility-probe instructions remain fixed.
 
 `IMaterializedModelProtocol` in `Core/ModelProtocol` owns conversation endpoint attempts, local validation/repair, native refusals, prompt-budget checks and format fallback. The current loop receives one accepted response/metadata or typed failure per logical step; it neither counts raw attempts nor executes tools before acceptance. See [ADR-0002](decisions/ADR-0002-model-protocol-boundary.md) for the v3 boundary and remaining controller adapters.
 

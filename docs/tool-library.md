@@ -1,5 +1,16 @@
 # Tool Library and capability truth
 
+Conversation permission composition is owned by
+[ConversationRunPolicy](conversation-protocol.md#unified-agent-audit-and-cutover-2026-10-13).
+The source-owned `ToolPolicy.ExecutesCode` flag marks read-producing executors
+(`common.js_run`, JS packages, CLI `web.verify`); a read result does not exempt code
+execution from approval. An accepted Agent/Ask run may grant automatic approval
+through the user's captured `AutoConfirmToolActions` setting; the tool's effect,
+verification, code classification and confirmation requirement stay unchanged.
+ToolRuntime applies Ask/Deny and Plan independently of
+catalog visibility, before preparation and dispatch. Only built-in Plan save and
+Task List handlers receive the documented planning exception.
+
 ## Status and boundary
 
 This is the current contract for tool visibility and authoring. It does not

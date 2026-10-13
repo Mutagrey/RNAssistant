@@ -93,6 +93,40 @@ namespace RNAssistant.Harness
                 modelProtocolFactory);
         }
 
+        // These fixtures explicitly approve each pending call through the real
+        // continuation boundary when the test configuration requires approval.
+        private static Task<ChatTurnResult> ExecuteWithApprovalsAsync(this ConversationRunService service,
+            string mode, string text, ChatSession session, DocumentContext documentContext,
+            AppSettings settings, IReadOnlyList<ToolCatalogEntry> tools,
+            Action<string, string, ChatActivity> progress,
+            ConversationRunService.PendingToolRegistrar registrar = null,
+            IReadOnlyList<SkillDefinition> skills = null, CancellationToken cancellationToken = default(CancellationToken))
+        {
+            return service.ExecuteWithApprovalsAsync(mode, text, session, documentContext, settings,
+                tools, null, progress, registrar, skills, cancellationToken);
+        }
+
+        private static async Task<ChatTurnResult> ExecuteWithApprovalsAsync(this ConversationRunService service,
+            string mode, string text, ChatSession session, DocumentContext documentContext,
+            AppSettings settings, IReadOnlyList<ToolCatalogEntry> tools, IReadOnlyList<ChatAttachment> attachments,
+            Action<string, string, ChatActivity> progress, ConversationRunService.PendingToolRegistrar registrar,
+            IReadOnlyList<SkillDefinition> skills, CancellationToken cancellationToken, bool appendUserMessage = true)
+        {
+            registrar = registrar ?? ((pendingSession, command, registration) => Guid.NewGuid().ToString("N"));
+            var result = await service.ExecuteAsync(mode, text, session, documentContext, settings,
+                tools, attachments, progress, registrar, skills, cancellationToken, appendUserMessage);
+            var confirmations = 0;
+            while (result.WaitingForConfirmation)
+            {
+                AssertTrue(++confirmations <= 128, "bounded explicit fixture approvals");
+                var pending = session.LastRun.KernelState.Summary.PendingConfirmation;
+                result = await service.ConfirmAsync(pending.PendingId, PendingCommand(session), session,
+                    new ConversationRunInput(settings, documentContext, tools, skills, attachments),
+                    progress, registrar, cancellationToken: cancellationToken);
+            }
+            return result;
+        }
+
         private static void WithTempPaths(Action<AppDataPaths> action)
         {
             var root = Path.Combine(Path.GetTempPath(), "RNAssistant.Harness." + Guid.NewGuid().ToString("N"));

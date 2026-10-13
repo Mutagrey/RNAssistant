@@ -11,6 +11,8 @@ namespace RNAssistant.Runtime.Contracts
         public string RequestId { get; set; }
         public string Message { get; set; }
         public string Mode { get; set; }
+        public MutationPolicy? MutationPolicy { get; set; }
+        public bool? AutoConfirmToolActions { get; set; }
         public bool? ReasoningEnabled { get; set; }
         public WorkspaceRunAcceptance Acceptance { get; set; }
         public UserQuestionAnswerCommand Answers { get; set; }
@@ -35,6 +37,8 @@ namespace RNAssistant.Runtime.Contracts
         public string Title { get; set; }
         public string Model { get; set; }
         public string Mode { get; set; }
+        public MutationPolicy? MutationPolicy { get; set; }
+        public ConversationRunPolicy ConversationPolicy { get; set; }
         public long Revision { get; set; }
         public string Cursor { get; set; }
         public string Status { get; set; }

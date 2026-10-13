@@ -83,7 +83,7 @@ namespace RNAssistant.Harness
                 var found = executor.ResourceGateway.Find(b, "Shared context", "document").Items.Single();
                 AssertEqual("shared context", found.Type, "second chat discovers a typed shared resource");
                 var tool = executor.GetControllerTools().Single(item => item.Id == ResourceToolCatalog.ReadToolId);
-                var runtime = executor.CreateNativeRuntime(b, new[] { tool }, new AppSettings(), ChatModes.Chat, false);
+                var runtime = executor.CreateNativeRuntime(b, new[] { tool }, new AppSettings(), ChatModes.Agent, false);
                 var call = new ToolCall("shared-read", tool.Id, new JObject { ["target"] = found.Target, ["representation"] = "text" }.ToString());
                 var record = ExecuteNative(runtime, call, runtime.Describe(call));
                 AssertEqual(ToolExecutionOutcome.Ok, record.Outcome, "native reader reaches document-owned archive");
@@ -92,10 +92,10 @@ namespace RNAssistant.Harness
                         ["name"] = tool.Id, ["arguments"] = JObject.Parse(call.ArgumentsJson) }) }.ToString(),
                     "{\"message\":\"Shared context read.\",\"action\":\"done\",\"tool_calls\":[]}" });
                 var requests = new List<IReadOnlyList<ChatMessage>>();
-                b.Mode = ChatModes.Chat;
+                b.Mode = ChatModes.Agent;
                 var runService = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, cancellationToken) => {
                     requests.Add(messages.ToList()); return Task.FromResult(new LlmCompletionResult { Content = replies.Dequeue() }); });
-                runService.ExecuteAsync(ChatModes.Chat, "Read the shared context.", b, NewContext(adapter), new AppSettings(),
+                runService.ExecuteAsync(ChatModes.Agent, "Read the shared context.", b, NewContext(adapter), new AppSettings(),
                     OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
                 AssertTrue(requests.Count >= 2, "native run obtains a second model request after the shared read");
                 AssertContains(FlattenSimple(requests[1]), "Observed source conclusion", "real model session filters an externalized shared archive after hydration");

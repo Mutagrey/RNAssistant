@@ -94,6 +94,7 @@ namespace RNAssistant.Office.Services
             bool refreshActiveProjection = false)
         {
             if (session == null) return null;
+            if (session.FormatVersion != ChatSession.CurrentFormatVersion) return session;
             var run = session.LastRun;
             if ((run == null || !IsUnfinishedRun(run.Status)) && !refreshActiveProjection) return session;
             if (RunOwnershipProvider != null)

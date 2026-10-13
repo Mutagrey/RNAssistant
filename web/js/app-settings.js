@@ -267,7 +267,7 @@ function renderSettings() {
   $("autoCalibrateTokenEstimateInput").checked = compatibilityValue(s, "AutoCalibrateTokenEstimate", "autoCalibrateTokenEstimate", modelSettingsDefaults.autoCalibrateTokenEstimate) !== false;
   renderTokenEstimateCalibrationStatus(s);
   $("streamInput").checked = compatibilityValue(s, "StreamResponses", "streamResponses", modelSettingsDefaults.streamResponses) !== false;
-  $("autoConfirmToolsInput").checked = compatibilityValue(s, "AutoConfirmToolActions", "autoConfirmToolActions", agentSettingsDefaults.autoConfirmToolActions) === true;
+  $("autoConfirmToolActionsInput").checked = compatibilityValue(s, "AutoConfirmToolActions", "autoConfirmToolActions", agentSettingsDefaults.autoConfirmToolActions) === true;
   $("enableAgentJavaScriptInput").checked = compatibilityValue(s, "EnableAgentJavaScript", "enableAgentJavaScript", agentSettingsDefaults.enableAgentJavaScript) === true;
   $("autoCompressContextInput").checked = compatibilityValue(s, "AutoCompressContext", "autoCompressContext", agentSettingsDefaults.autoCompressContext) !== false;
   $("debugModelTrafficInput").checked = !!(s.DebugModelTraffic || s.debugModelTraffic);
@@ -339,7 +339,7 @@ function readSettings() {
     AutoCalibrateTokenEstimate: $("autoCalibrateTokenEstimateInput").checked,
     TokenEstimateCalibrations: compatibilityValue(state.settings, "TokenEstimateCalibrations", "tokenEstimateCalibrations", {}) || {},
     StreamResponses: $("streamInput").checked,
-    AutoConfirmToolActions: $("autoConfirmToolsInput").checked,
+    AutoConfirmToolActions: $("autoConfirmToolActionsInput").checked,
     EnableAgentJavaScript: $("enableAgentJavaScriptInput").checked,
     AutoCompressContext: $("autoCompressContextInput").checked,
     DebugModelTraffic: $("debugModelTrafficInput").checked,
@@ -379,6 +379,7 @@ async function persistSettingsFromForm() {
   $("apiKeyInput").value = "";
   $("historySecretInput").value = "";
   renderSettings();
+  if (typeof renderChatModePicker === "function") renderChatModePicker();
   if (javascriptWasEnabled !== nextSettings.EnableAgentJavaScript &&
       typeof applyLibraryCatalogState === "function") {
     try {
@@ -432,7 +433,7 @@ function resetAgentSettingsToDefaults() {
   $("agentResponseModeInput").value = agentSettingsDefaults.agentResponseMode;
   $("toolResultRoleInput").value = agentSettingsDefaults.toolResultRole;
   $("fallbackJsonObjectInput").checked = agentSettingsDefaults.fallbackToJsonObject;
-  $("autoConfirmToolsInput").checked = agentSettingsDefaults.autoConfirmToolActions;
+  $("autoConfirmToolActionsInput").checked = agentSettingsDefaults.autoConfirmToolActions;
   $("enableAgentJavaScriptInput").checked = agentSettingsDefaults.enableAgentJavaScript;
   $("autoCompressContextInput").checked = agentSettingsDefaults.autoCompressContext;
   $("maxAgentIterationsInput").value = agentSettingsDefaults.maxAgentIterations;

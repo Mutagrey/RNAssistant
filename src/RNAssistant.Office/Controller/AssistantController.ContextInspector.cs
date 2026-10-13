@@ -38,6 +38,7 @@ namespace RNAssistant.Office
             bool includeRaw, bool fullRaw = false)
         {
             var session = LoadAddressedSession(chatId);
+            RNAssistant.Core.Services.ConversationRunPolicy.RequireCurrentSession(session);
             var settings = ResolveChatSettings(session);
             var attachments = _chatResourceIngestion.LoadDrafts(session, resourceDraftIds);
             var invalidAttachment = attachments.FirstOrDefault(item => item != null && item.Status == "error");
@@ -51,11 +52,8 @@ namespace RNAssistant.Office
             var publication = _toolExecutor.CaptureCatalogs();
             settings = PromptSettingsService.ApplyPublishedTemplates(settings, publication.PromptsJson);
             var publishedSkills = _toolExecutor.CaptureSkills(publication);
-            if (ChatModes.Normalize(session.Mode) != ChatModes.Chat)
-            {
-                tools = _toolCatalog.GetPublishedVisibleTools(publication.Tools).Where(item => item.Enabled).ToList();
-                skills = publishedSkills.Skills;
-            }
+            tools = _toolCatalog.GetPublishedVisibleTools(publication.Tools).Where(item => item.Enabled).ToList();
+            skills = publishedSkills.Skills;
 
             Func<PromptContextInspectorResponse> capture = () => new PromptContextInspectorService(_adapter, _paths, _toolExecutor.ResourceAuthority, _toolExecutor.Payloads, _eventStore).Inspect(
                 session,

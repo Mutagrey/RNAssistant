@@ -11,7 +11,7 @@ namespace RNAssistant.Core.Services
         {
             if (session == null) return;
 
-            session.FormatVersion = ChatSession.CurrentFormatVersion;
+            // Preserve the persisted execution contract; normalization is not migration.
             if (string.IsNullOrWhiteSpace(session.Id)) session.Id = Guid.NewGuid().ToString("N");
             if (string.IsNullOrWhiteSpace(session.Host)) session.Host = host ?? string.Empty;
             if (string.IsNullOrWhiteSpace(session.DocumentKey)) session.DocumentKey = documentKey ?? string.Empty;

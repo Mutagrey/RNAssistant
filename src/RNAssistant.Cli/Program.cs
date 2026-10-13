@@ -44,6 +44,10 @@ namespace RNAssistant.Cli
             else if (args[0] == "session" && args.Length >= 2 && args[1] == "create")
                 options = Parse(args.Skip(2).ToArray());
             else options = Parse(args.Skip(1).ToArray());
+            if (options.ContainsKey("mutation-policy") && args[0] != "run" && args[0] != "answer" && args[0] != "env")
+                throw new ArgumentException("--mutation-policy applies only to run, answer or env; approval keeps the accepted policy.");
+            if (options.ContainsKey("auto-confirm") && args[0] != "run" && args[0] != "answer")
+                throw new ArgumentException("--auto-confirm applies only to run or answer; approval and continuation keep the accepted policy.");
             var jsonl = options.ContainsKey("jsonl");
             Interactive(options, jsonl); // Validate terminal flags before admitting work.
             var root = Required(options, "workspace");
@@ -63,7 +67,8 @@ namespace RNAssistant.Cli
             {
                 Output(jsonl, "environment", new { workspace.WorkspaceId, workspace.RootPath,
                     profile = "development", capabilities = service.AvailableToolIds(workspace,
-                        ChatModes.Require(Value(options, "mode", ChatModes.Agent))) });
+                        ConversationRunPolicy.For(Value(options, "mode", ChatModes.Agent)).Mode,
+                        ParseMutationPolicy(Value(options, "mutation-policy", "ask"))) });
                 return 0;
             }
             if (args[0] == "session" && args.Length >= 2 && args[1] == "create")
@@ -273,7 +278,7 @@ namespace RNAssistant.Cli
             if (args[0] != "run" && !answering) throw new ArgumentException("Unknown command. Use --help.");
             if (options.ContainsKey("profile") && options["profile"] != "development")
                 throw new ArgumentException("Only the development profile is available in the CLI.");
-            var mode = options.ContainsKey("mode") ? ChatModes.Require(options["mode"]) : null;
+            var mode = options.ContainsKey("mode") ? ConversationRunPolicy.For(options["mode"]).Mode : null;
             var sessionIdForRun = answering ? Required(options, "session") : Value(options, "session", null);
             var existingSession = sessionIdForRun == null ? null : service.GetSession(workspace, sessionIdForRun);
             if (sessionIdForRun != null && existingSession == null) throw new ArgumentException("Session not found.");
@@ -303,11 +308,12 @@ namespace RNAssistant.Cli
             var thinking = OptionalThinking(options);
             var inputRequest = new WorkspaceSubmitInputRequest { SessionId = sessionIdForRun,
                 RequestId = Value(options, "request-id", null), Message = message, Mode = mode,
+                MutationPolicy = options.ContainsKey("mutation-policy") ? (MutationPolicy?)ParseMutationPolicy(options["mutation-policy"]) : null,
+                AutoConfirmToolActions = ParseAutoConfirm(options),
                 Acceptance = acceptance, ReasoningEnabled = thinking, Answers = answers };
             var accepted = service.FindAcceptedInput(workspace, inputRequest);
             if (accepted != null) return ReportRun(jsonl, WorkspaceRunResult.AlreadyAccepted(accepted));
-            if (mode != null && existingSession?.LastRun != null && mode != existingSession.Mode)
-                throw new ArgumentException("Mode is fixed for this session; create a new session to change it.");
+            if (existingSession != null) ConversationRunPolicy.RequireCurrentSession(existingSession);
             if (acceptance.RequireWebVerification && WorkspaceWebVerifier.FindBrowserExecutable() == null)
             {
                 Console.Error.WriteLine("Browser verification requires an available Chromium executable (RNA_BROWSER_EXECUTABLE).");
@@ -323,6 +329,21 @@ namespace RNAssistant.Cli
             if (!ModelReady(settings, out modelDigest)) return 4;
             return ExecuteControlled(service, workspace, options, jsonl, (progress, token) => service.SubmitInputAsync(workspace, inputRequest,
                 settings, () => key, progress, token, modelDigest).GetAwaiter().GetResult());
+        }
+
+        private static bool ParseAutoConfirm(Dictionary<string, string> options)
+        {
+            var value = Value(options, "auto-confirm", "off");
+            if (value == "on") return true;
+            if (value == "off") return false;
+            throw new ArgumentException("--auto-confirm must be on or off.");
+        }
+
+        private static MutationPolicy ParseMutationPolicy(string value)
+        {
+            if (value == "ask") return MutationPolicy.Ask;
+            if (value == "deny") return MutationPolicy.Deny;
+            throw new ArgumentException("--mutation-policy must be ask or deny.");
         }
 
         private static WorkspaceRunControlRequest ControlRequest(Dictionary<string, string> options)
@@ -674,14 +695,14 @@ namespace RNAssistant.Cli
 
         private static string PendingPath(string toolId, string argumentsJson)
         {
-            if (toolId != "files.delete" && toolId != "files.move") return null;
+            if (toolId == null || !toolId.StartsWith("files.", StringComparison.Ordinal)) return null;
             try { return JsonConvert.DeserializeObject<PendingFileTarget>(argumentsJson)?.RelativePath; }
             catch (JsonException) { return null; }
         }
 
         private static string PendingTarget(string toolId, string argumentsJson)
         {
-            if (toolId != "files.move") return null;
+            if (toolId != "files.move" && toolId != "files.copy") return null;
             try { return JsonConvert.DeserializeObject<PendingFileTarget>(argumentsJson)?.TargetPath; }
             catch (JsonException) { return null; }
         }
@@ -809,12 +830,13 @@ namespace RNAssistant.Cli
             Console.WriteLine("run/answer/approve/deny/resume show bounded progress, file effects and verification summaries. Terminal input + output enable prompts automatically; --interactive requires a terminal; --no-interactive disables prompts; --jsonl never prompts.");
             Console.WriteLine("Approval requires explicit yes or no; Enter leaves it pending. Questions accept listed numbers (comma-separated for multiple choice) or text: <answer> when allowed. Esc/Ctrl+D leaves input pending; Ctrl+C exits 130. Recommended options are not selected automatically.");
             Console.WriteLine("rna workspace open <path> [--read-only]");
-            Console.WriteLine("rna env --workspace <path> [--mode chat|plan|agent]");
+            Console.WriteLine("rna env --workspace <path> [--mode agent|plan] [--mutation-policy ask|deny]");
             Console.WriteLine("rna sessions --workspace <path> [--jsonl]");
             Console.WriteLine("rna session create --workspace <path> [--title <text>] [--jsonl]");
             Console.WriteLine("run/answer accept --request-id <1..128 characters> with an existing --session. Reuse the same ID and input to obtain its receipt without execution; changed input conflicts. Configuration is not reapplied by a duplicate.");
-            Console.WriteLine("rna run --workspace <path> (--message <text> | --task-file <file>) [--session <id>] [--mode chat|plan|agent] [--profile development] [--model <name>] [--base-url <url>] [--context-tokens <n>] [--response-mode json_schema|json_object] [--instruction-role system|developer] [--tool-result-role user|developer|tool] [--reasoning-mode <mode>] [--thinking on|off] [--max-iterations <1..256>] [--max-tool-steps <1..4096>] [--expect-files <comma-separated paths>] [--min-reads <n>] [--min-writes <n>] [--require-web-verify] [--web-checks <json-file>] [--jsonl]");
-            Console.WriteLine("rna answer --workspace <path> --session <id> --answers-file <json-file> [LLM options] [--jsonl]  (validate answers and start the next turn)");
+            Console.WriteLine("rna run --workspace <path> (--message <text> | --task-file <file>) [--session <id>] [--mode agent|plan] [--mutation-policy ask|deny] [--auto-confirm on|off] [--profile development] [--model <name>] [--base-url <url>] [--context-tokens <n>] [--response-mode json_schema|json_object] [--instruction-role system|developer] [--tool-result-role user|developer|tool] [--reasoning-mode <mode>] [--thinking on|off] [--max-iterations <1..256>] [--max-tool-steps <1..4096>] [--expect-files <comma-separated paths>] [--min-reads <n>] [--min-writes <n>] [--require-web-verify] [--web-checks <json-file>] [--jsonl]");
+            Console.WriteLine("rna answer --workspace <path> --session <id> --answers-file <json-file> [--auto-confirm on|off] [LLM options] [--jsonl]  (validate answers and start the next turn)");
+            Console.WriteLine("--auto-confirm defaults to off for each new run/answer. Plan/Deny still prohibit execution. Pending approval and same-run continuation retain the accepted value after restart.");
             Console.WriteLine("rna inspect --workspace <path> --session <id> [--jsonl]");
             Console.WriteLine("rna cancel --workspace <path> --session <id> --run <RunId> --cursor <inspect Cursor> [--jsonl]  (signal exact running checkpoint; acknowledgement is not completion)");
             Console.WriteLine("rna resume --workspace <path> --session <id> --continue --run <RunId> --cursor <inspect Cursor> [LLM options] [--jsonl]  (explicit continuation with original budget, no unresolved calls/effects)");

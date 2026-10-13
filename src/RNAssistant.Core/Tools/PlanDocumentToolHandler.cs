@@ -11,7 +11,7 @@ using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Core.Tools
 {
-    public sealed class PlanDocumentToolHandler : IManagedMutationToolHandler
+    public sealed class PlanDocumentToolHandler : IPlanningArtifactToolHandler
     {
         private readonly string _toolId;
         private readonly ChatSession _session;

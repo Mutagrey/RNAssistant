@@ -383,6 +383,12 @@ namespace RNAssistant.Office.Contracts
         public string Mode { get; set; }
     }
 
+    public sealed class SetChatMutationPolicyPayload : ChatPayload
+    {
+        [JsonProperty("mutationPolicy", Required = Required.Always)]
+        public RNAssistant.Core.Services.MutationPolicy MutationPolicy { get; set; }
+    }
+
     public sealed class SetChatReasoningPayload : ChatPayload
     {
         [JsonProperty("enabled")]
@@ -723,6 +729,8 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("sessionRevision")] public long SessionRevision { get; set; }
         [JsonProperty("model")] public string Model { get; set; }
         [JsonProperty("mode")] public string Mode { get; set; }
+        [JsonProperty("mutationPolicy")] public RNAssistant.Core.Services.MutationPolicy MutationPolicy { get; set; }
+        [JsonProperty("chatReadOnly")] public bool ChatReadOnly { get; set; }
         [JsonProperty("reasoningEnabled")] public bool ReasoningEnabled { get; set; }
         [JsonProperty("contextUsage", NullValueHandling = NullValueHandling.Ignore)] public object ContextUsage { get; set; }
     }
@@ -753,6 +761,8 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("activeChatMode")]
         public string ActiveChatMode { get; set; }
+        [JsonProperty("mutationPolicy")] public RNAssistant.Core.Services.MutationPolicy MutationPolicy { get; set; }
+        [JsonProperty("chatReadOnly")] public bool ChatReadOnly { get; set; }
 
         [JsonProperty("activeChatReasoning")]
         public bool ActiveChatReasoning { get; set; }
@@ -834,6 +844,8 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("activeChatMode")]
         public string ActiveChatMode { get; set; }
+        [JsonProperty("mutationPolicy")] public RNAssistant.Core.Services.MutationPolicy MutationPolicy { get; set; }
+        [JsonProperty("chatReadOnly")] public bool ChatReadOnly { get; set; }
 
         [JsonProperty("activeChatReasoning")]
         public bool ActiveChatReasoning { get; set; }

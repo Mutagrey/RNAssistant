@@ -22,7 +22,7 @@ namespace RNAssistant.Core.Storage
         {
             "FormatVersion", "Id", "ParentSessionId", "ParentSessionRevision", "ForkedThroughMessageId", "ResourceCopies",
             "Host", "DocumentKey", "PreviousDocumentKeys", "DocumentTitle", "DocumentPath", "DocumentAuthorityId", "LastContextReceipt",
-            "Title", "Model", "Mode", "ReasoningEnabled", "CreatedUtc", "UpdatedUtc", "ArtifactLinks"
+            "Title", "Model", "Mode", "MutationPolicy", "ReasoningEnabled", "CreatedUtc", "UpdatedUtc", "ArtifactLinks"
         };
 
         private JObject ToProjectionToken(ChatSession session)
@@ -72,7 +72,7 @@ namespace RNAssistant.Core.Storage
                         return;
                     }
                     _root = (JObject)sessionEvent.Data.DeepClone();
-                    if ((int?)_root["FormatVersion"] != ChatSession.CurrentFormatVersion)
+                    if (!ChatSession.IsReadableFormat((int?)_root["FormatVersion"]))
                     {
                         _invalid = true;
                         return;

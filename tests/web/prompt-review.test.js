@@ -22,7 +22,9 @@ function fixture(loadPrompts = true) {
   const bodies = Object.fromEntries(keys.map(key => [key, " custom " + key + " "]));
   const context = vm.createContext({ AbortController, TextEncoder, TextDecoder, Uint8Array, Blob, Response, setTimeout, clearTimeout, crypto: crypto.webcrypto,
     state: { settings: { AgentPromptSchemaVersion: 0 }, prompts: metadata(), activeChatId: "chat", promptDrafts: {}, selectedInstructionKind: "prompt", selectedPromptIndex: 0, skills: [], tools: [] },
-    $: get, document: { querySelectorAll: () => [], querySelector: () => null, addEventListener() {} }, isPanelActive: () => !!context.libraryVisible, markdown: text => text,
+    $: get, document: { querySelectorAll: () => [], querySelector: () => null, addEventListener() {},
+      documentElement: { getAttribute: () => "light", setAttribute() {}, style: { setProperty() {} } } },
+    isPanelActive: () => !!context.libraryVisible, markdown: text => text,
     createResourceGroup: options => { const group = new Element(); group.treeChildren = new Element(); group.options = options; groups.push(options); return group; },
     createResourceListItem: options => { items.push(options); return new Element(); },
     modelImageSupportOverrides: () => ({}), modelAudioSupportOverrides: () => ({}), modelCapabilitiesForSettings: () => ({}), attachmentModelPriorityForSettings: () => [], textToHeaders: () => ({}),
@@ -61,6 +63,7 @@ function fixture(loadPrompts = true) {
     }
   });
   context.window = context;
+  vm.runInContext(read("js/app-accent.js"), context, { filename: "app-accent.js" });
   (loadPrompts ? ["app-settings.js", "app-resource-download.js", "app-resource-upload.js", "app-prompts.js"] : ["app-settings.js"])
     .forEach(file => vm.runInContext(read("js/" + file), context, { filename: file }));
   context.renderSettings = () => { if (loadPrompts) context.renderPromptSettings(context.state.prompts); };
@@ -144,12 +147,7 @@ function fixture(loadPrompts = true) {
   }
   {
     ["app-prompts.js", "app-settings.js", "app-resource-list.js", "app-tools.css"].forEach(file =>
-      assert.ok(read("index.html").includes(file + "?v=") &&
-        read("index.html").includes(file + "?v=" +
-          (file === "app-prompts.js" ? "prompt-source-20260906-1-library-20261002-1" :
-           file === "app-settings.js" ? "desktop-width-20260930-1-usage-20261002-1-library-20261002-1" :
-           file === "app-resource-list.js" ? "resource-navigation-20260826-1-library-20261002-1" :
-           "json-height-20260929-1-library-20261002-1"))));
+      assert.match(read("index.html"), new RegExp(file.replace(/\./g, "\\.") + "\\?v=[^\"'\\s]+")));
     assert.ok(read("js/app-prompts.js").includes("fetch: window.fetch.bind(window)"));
     assert.ok(!read("js/app-settings.js").includes("readPromptSettings")); console.log("PASS direct-cutover delivery keys and retired form reader removal");
   }

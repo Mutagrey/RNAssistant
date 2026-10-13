@@ -141,6 +141,8 @@ function applyChatPreferenceStateForChat(response, expectedChatId) {
   if (!window.RNAssistantRunViewState.accept(state.chatProjectionRevisions, responseChatId, revision)) return false;
   state.activeChatModel = response.model || response.Model || "";
   state.activeChatMode = response.mode || response.Mode || "agent";
+  state.mutationPolicy = response.mutationPolicy || "Ask";
+  state.chatReadOnly = response.chatReadOnly === true;
   state.activeChatReasoning = !!(response.reasoningEnabled || response.ReasoningEnabled);
   if (response.contextUsage || response.ContextUsage) {
     state.contextUsage = response.contextUsage || response.ContextUsage;
@@ -302,6 +304,8 @@ function applyChatState(response) {
   }
   if (response.activeChatMode !== undefined || response.ActiveChatMode !== undefined) {
     state.activeChatMode = response.activeChatMode || response.ActiveChatMode || "agent";
+    state.mutationPolicy = response.mutationPolicy || "Ask";
+    state.chatReadOnly = response.chatReadOnly === true;
   }
   if (response.activeChatReasoning !== undefined || response.ActiveChatReasoning !== undefined) {
     state.activeChatReasoning = !!(response.activeChatReasoning || response.ActiveChatReasoning);

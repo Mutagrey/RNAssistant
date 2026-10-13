@@ -83,7 +83,7 @@ namespace RNAssistant.Core.Storage
                 string.Equals(sessionEvent.Type, SessionEventTypes.SessionForked, StringComparison.Ordinal))
             {
                 var root = sessionEvent.Data as JObject;
-                if (_seeded || root == null || (int?)root["FormatVersion"] != ChatSession.CurrentFormatVersion)
+                if (_seeded || root == null || !ChatSession.IsReadableFormat((int?)root["FormatVersion"]))
                 {
                     _invalid = true;
                     return;

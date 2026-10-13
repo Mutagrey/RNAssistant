@@ -38,6 +38,7 @@ namespace RNAssistant.Runtime
                 var session = GetSession(workspace, request.SessionId);
                 if (session?.LastRun?.RunId != request.RunId || ConversationEventFeed.Cursor(session) != request.Cursor)
                     throw new InvalidOperationException("stale_run_checkpoint: inspect the session before requesting continuation.");
+                ConversationRunPolicy.ForAcceptedRun(session);
                 ValidateContinuationSettings(session, settings, modelDigest);
                 if (session.LastRun.InterruptedToolId != null || session.LastRun.InterruptedEffectPossible ||
                     session.Messages.Any(item => item.RunId == request.RunId && item.ProtocolMessage && item.ExcludeFromModelContext))

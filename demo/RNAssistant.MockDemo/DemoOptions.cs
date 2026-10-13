@@ -10,6 +10,7 @@ namespace RNAssistant.MockDemo
         public string DataRoot { get; set; }
         public bool Reset { get; set; }
         public bool SelfTest { get; set; }
+        public bool UnifiedAgentTest { get; set; }
         public bool ArtifactCommitTest { get; set; }
 
         public DemoOptions()
@@ -48,6 +49,10 @@ namespace RNAssistant.MockDemo
                 else if (string.Equals(arg, "--self-test", StringComparison.OrdinalIgnoreCase))
                 {
                     options.SelfTest = true;
+                }
+                else if (string.Equals(arg, "--unified-agent-test", StringComparison.OrdinalIgnoreCase))
+                {
+                    options.UnifiedAgentTest = true;
                 }
                 else if (string.Equals(arg, "--artifact-commit-test", StringComparison.OrdinalIgnoreCase))
                 {

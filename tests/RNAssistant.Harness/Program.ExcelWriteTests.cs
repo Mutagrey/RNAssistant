@@ -24,7 +24,7 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var definition = tools.Single(tool => tool.Id == ExcelWriteToolIds.WriteRange);
-                var runtime = executor.CreateNativeRuntime(session, new[] { definition }, new AppSettings(), "agent", false);
+                var runtime = executor.CreateNativeRuntime(session, new[] { definition }, new AppSettings(), "agent", false, manualRun: true);
                 var call = new ToolCall("excel-write-change", ExcelWriteToolIds.WriteRange,
                     "{\"kind\":\"value\",\"sheet\":\"Data\",\"address\":\"J1\",\"value\":42}");
                 var policy = runtime.Describe(call);
@@ -78,7 +78,7 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var definition = tools.Single(tool => tool.Id == ExcelWriteToolIds.WriteRange);
-                var runtime = executor.CreateNativeRuntime(session, new[] { definition }, new AppSettings(), "agent", false);
+                var runtime = executor.CreateNativeRuntime(session, new[] { definition }, new AppSettings(), "agent", false, manualRun: true);
 
                 var tableCall = new ToolCall("excel-table", ExcelWriteToolIds.WriteRange,
                     "{\"kind\":\"table\",\"sheet\":\"Data\",\"address\":\"K2\",\"values\":[[1,2],[3]]}");
@@ -138,7 +138,7 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var definition = tools.Single(tool => tool.Id == ExcelWriteToolIds.WriteRange);
-                var runtime = executor.CreateNativeRuntime(session, new[] { definition }, new AppSettings(), "agent", false);
+                var runtime = executor.CreateNativeRuntime(session, new[] { definition }, new AppSettings(), "agent", false, manualRun: true);
                 adapter.QueueExcelWriteApplyFailure(
                     "protected target", "excel_write_protected", false);
                 var call = new ToolCall("excel-write-refused", ExcelWriteToolIds.WriteRange,
@@ -182,7 +182,7 @@ namespace RNAssistant.Harness
             {
                 var session = NewSession(adapter);
                 var definition = OfficeToolCatalog.ForHost(adapter.HostName).Single(tool => tool.Id == ExcelWriteToolIds.WriteRange);
-                var runtime = executor.CreateNativeRuntime(session, new[] { definition }, new AppSettings(), "agent", false);
+                var runtime = executor.CreateNativeRuntime(session, new[] { definition }, new AppSettings(), "agent", false, manualRun: true);
                 adapter.BeforeExcelBackendCall = operation =>
                 {
                     if (operation == FakeOfficeAdapter.ExcelWriteApplyOperation)
@@ -207,7 +207,7 @@ namespace RNAssistant.Harness
             {
                 var session = NewSession(adapter);
                 var definition = OfficeToolCatalog.ForHost(adapter.HostName).Single(tool => tool.Id == ExcelWriteToolIds.WriteRange);
-                var runtime = executor.CreateNativeRuntime(session, new[] { definition }, new AppSettings(), "agent", false);
+                var runtime = executor.CreateNativeRuntime(session, new[] { definition }, new AppSettings(), "agent", false, manualRun: true);
                 adapter.ExcelWriteThrowAfterMutation = true;
                 var call = new ToolCall("excel-write-throw-after", ExcelWriteToolIds.WriteRange,
                     "{\"kind\":\"value\",\"sheet\":\"Data\",\"address\":\"N3\",\"value\":\"written\"}");
@@ -222,7 +222,7 @@ namespace RNAssistant.Harness
             {
                 var session = NewSession(adapter);
                 var definition = OfficeToolCatalog.ForHost(adapter.HostName).Single(tool => tool.Id == ExcelWriteToolIds.WriteRange);
-                var runtime = executor.CreateNativeRuntime(session, new[] { definition }, new AppSettings(), "agent", false);
+                var runtime = executor.CreateNativeRuntime(session, new[] { definition }, new AppSettings(), "agent", false, manualRun: true);
                 var reads = 0;
                 adapter.BeforeExcelBackendCall = operation =>
                 {

@@ -6,6 +6,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
+using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Services;
@@ -216,7 +217,7 @@ namespace RNAssistant.Office.Tools
             IReadOnlyList<ToolCatalogEntry> discoveryCatalog = null,
             IReadOnlyList<SkillDefinition> skillCatalog = null,
             bool manualRun = false,
-            bool dryRun = false)
+            bool dryRun = false, ConversationRunPolicy runPolicy = null)
         {
             session = BoundManualSession(session);
             BindResourceAuthority(session);
@@ -234,7 +235,7 @@ namespace RNAssistant.Office.Tools
                     ? null
                     : new ResourceMutationAuthorityObserver(
                         _resourceAuthority, _resourceMutationJournal, session, Payloads, _persistResourceFacts,
-                        _catalogPublication.CaptureReadBack), _markdownDocuments);
+                        _catalogPublication.CaptureReadBack), _markdownDocuments, runPolicy);
         }
 
         // Explicit UI resource commands share the mutation journal/commit owner.
@@ -347,7 +348,7 @@ namespace RNAssistant.Office.Tools
             IReadOnlyList<ToolCatalogEntry> discoveryCatalog = null,
             IReadOnlyList<SkillDefinition> skillCatalog = null,
             bool manualRun = false,
-            bool dryRun = false)
+            bool dryRun = false, ConversationRunPolicy runPolicy = null)
         {
             var catalogList = (catalog ?? new ToolCatalogEntry[0]).ToArray();
             return CreateNativeRuntime(session,
@@ -355,7 +356,7 @@ namespace RNAssistant.Office.Tools
                     mode, _adapter.HostName, catalogList),
                 settings, mode, trace, pendingRegistrar,
                 discoveryCatalog ?? catalogList, skillCatalog, manualRun,
-                dryRun);
+                dryRun, runPolicy);
         }
 
         internal List<ToolCatalogEntry> AvailableConversationToolsForSession(

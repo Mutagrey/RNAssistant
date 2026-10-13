@@ -1,68 +1,42 @@
-function chatModeDefinition(mode) {
-  if (mode === "plan") return { value: "plan", title: "Plan", icon: "◇", description: "Исследует задачу и составляет план" };
-  return mode === "chat"
-    ? { value: "chat", title: "Chat", icon: "○", description: "Ответ модели с безопасным чтением ресурсов" }
-    : { value: "agent", title: "Agent", icon: "✦", description: "Выполняет задачи и изменяет документ" };
-}
-
 function renderChatModePicker() {
-  var picker = $("composerAddPicker");
   var menu = $("chatModeMenu");
-  var trigger = $("composerAddButton");
-  if (!picker || !menu || !trigger) return;
-
-  var active = chatModeDefinition(state.activeChatMode || "agent");
-  trigger.title = "Действия чата · " + active.title;
-  trigger.setAttribute("aria-label", trigger.title);
-  var disabled = !!state.chatNavigationPending || !!state.initializePromise ||
-    !!currentActiveSend() || isPendingChatSubmit(state.activeChatId) ||
-    hasActiveMessageEdit() || state.modeSaving || state.reasoningSaving || state.bridgeUnavailable ||
+  if (!menu) return;
+  var plan = state.activeChatMode === "plan";
+  var denied = String(state.mutationPolicy || "Ask").toLowerCase() === "deny";
+  var settings = state.settings || {};
+  var automatic = settings.AutoConfirmToolActions === true || settings.autoConfirmToolActions === true;
+  var disabled = !!state.chatReadOnly || !!state.chatNavigationPending || !!state.initializePromise ||
+    !!currentActiveSend() || isPendingChatSubmit(state.activeChatId) || hasActiveMessageEdit() ||
+    state.modeSaving || state.reasoningSaving || state.bridgeUnavailable ||
     state.chatDetailPending || state.chatDetailError || !state.activeChatId;
-  var renderKey = active.value + ":" + !!disabled;
-  if (menu.dataset.renderKey === renderKey) return;
-  menu.dataset.renderKey = renderKey;
-
+  var key = plan + ":" + denied + ":" + automatic + ":" + !!state.chatReadOnly + ":" + !!disabled;
+  if (menu.dataset.renderKey === key) return;
+  menu.dataset.renderKey = key;
   menu.replaceChildren();
-  [chatModeDefinition("agent"), chatModeDefinition("plan"), chatModeDefinition("chat")].forEach(function (mode) {
-    var button = document.createElement("button");
-    button.type = "button";
-    button.className = "composer-picker-item composer-mode-item" + (mode.value === active.value ? " is-selected" : "");
-    button.disabled = !!disabled;
-    button.dataset.mode = mode.value;
-    button.setAttribute("aria-pressed", mode.value === active.value ? "true" : "false");
-
-    var modeIcon = document.createElement("span");
-    modeIcon.className = "composer-mode-item-icon";
-    modeIcon.dataset.mode = mode.value;
-    modeIcon.textContent = mode.icon;
-    button.appendChild(modeIcon);
-
-    var copy = document.createElement("span");
-    copy.className = "composer-mode-item-copy";
-    var title = document.createElement("strong");
-    title.textContent = mode.title;
-    copy.appendChild(title);
-    var description = document.createElement("span");
-    description.textContent = mode.description;
-    copy.appendChild(description);
-    button.appendChild(copy);
-
-    if (mode.value === active.value) {
-      var check = document.createElement("span");
-      check.className = "composer-picker-check";
-      check.setAttribute("aria-hidden", "true");
-      check.textContent = "✓";
-      button.appendChild(check);
-    }
-    button.addEventListener("click", function () {
-      if (button.disabled) return;
-      if (mode.value !== active.value) saveChatMode(mode.value);
-    });
-    menu.appendChild(button);
-  });
+  var button = document.createElement("button");
+  button.type = "button";
+  button.className = "composer-picker-item composer-mode-item" + (plan ? " is-selected" : "");
+  button.disabled = !!disabled;
+  button.dataset.mode = "plan";
+  button.setAttribute("aria-pressed", String(plan));
+  button.textContent = "◇ Plan" + (plan ? " ✓" : "");
+  button.title = "Исследование и план без исполнения. Сохраняется до отключения.";
+  button.addEventListener("click", function () { if (!button.disabled) saveChatMode(plan ? "agent" : "plan"); });
+  menu.appendChild(button);
+  var policy = $("chatMutationPolicy");
+  if (policy) {
+    policy.value = denied ? "Deny" : "Ask";
+    policy.disabled = !!disabled;
+    policy.querySelector('option[value="Ask"]').textContent = automatic ? "Автоподтверждение" : "По подтверждению";
+  }
+  var status = $("chatPolicyStatus");
+  if (status) status.textContent = state.chatReadOnly ? "История · создайте новый чат" :
+    plan ? "Plan · без исполнения" : denied ? "Изменения запрещены" :
+      automatic ? "Автоподтверждение · новые запуски" : "По подтверждению";
 }
 
 function bindComposerPickers() {
+  $("chatMutationPolicy").addEventListener("change", function () { saveChatMutationPolicy(this.value); });
   var pickers = [$("composerAddPicker"), $("chatModelPicker")].filter(Boolean);
   pickers.forEach(function (picker) {
     var trigger = picker.querySelector("summary");
@@ -146,7 +120,7 @@ function renderSendControls() {
     stopButton.setAttribute("aria-label", stopButton.title);
   }
   if (input) {
-    input.readOnly = navigating || detailUnavailable || isPreparingAttachments || state.modeSaving || state.reasoningSaving ||
+    input.readOnly = state.chatReadOnly || navigating || detailUnavailable || isPreparingAttachments || state.modeSaving || state.reasoningSaving ||
       state.bridgeUnavailable;
     input.placeholder = navigating || state.chatDetailPending ? "Обновляю чат…" : state.chatDetailError
       ? "Повторите загрузку чата…" : isEditing
@@ -219,7 +193,7 @@ function updateSendButtonAvailability(hasContent) {
 
   var editingTarget = hasActiveMessageEdit() ? findEditingMessage() : null;
   var canSaveEdit = !!editingTarget && canSaveMessageEdit(editingTarget.message, editingTarget.index);
-  sendButton.disabled =
+  sendButton.disabled = state.chatReadOnly ||
     !!state.chatNavigationPending || !!state.initializePromise ||
     !!state.chatDetailPending || !!state.chatDetailError ||
     isPendingChatSubmit(state.activeChatId) ||

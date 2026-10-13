@@ -52,11 +52,11 @@ namespace RNAssistant.Harness
                 };
                 var progress = new List<Tuple<string, string, ChatActivity>>();
                 var session = NewSession(adapter);
-                session.Mode = ChatModes.Chat;
+                session.Mode = ChatModes.Agent;
                 session.ReasoningEnabled = true;
 
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
-                    ChatModes.Chat,
+                    ChatModes.Agent,
                     "Ответь потоково.",
                     session,
                     NewContext(adapter),
@@ -104,11 +104,11 @@ namespace RNAssistant.Harness
                     Task.FromResult(LlmResponseParser.ParseStreamingResponse(sse, streamProgress));
                 var progress = new List<Tuple<string, string, ChatActivity>>();
                 var session = NewSession(adapter);
-                session.Mode = ChatModes.Chat;
+                session.Mode = ChatModes.Agent;
                 session.ReasoningEnabled = true;
 
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
-                    ChatModes.Chat,
+                    ChatModes.Agent,
                     "Ответь с reasoning.",
                     session,
                     NewContext(adapter),
@@ -159,11 +159,11 @@ namespace RNAssistant.Harness
                 };
                 var progressEvents = new List<Tuple<string, string, ChatActivity>>();
                 var session = NewSession(adapter);
-                session.Mode = ChatModes.Chat;
+                session.Mode = ChatModes.Agent;
                 session.ReasoningEnabled = true;
 
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
-                    ChatModes.Chat,
+                    ChatModes.Agent,
                     "Исправь формат.",
                     session,
                     NewContext(adapter),

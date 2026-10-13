@@ -38,7 +38,7 @@ namespace RNAssistant.Core.Tools
             string schema, string name, int riskLevel, bool agentAllowed = false)
         {
             var policy = new ToolPolicy(ToolEffect.Write, ToolVerification.Tool,
-                false, false, agentAllowed ? new[] { "agent", "plan" } : new[] { "plan" }, riskLevel);
+                false, false, agentAllowed ? new[] { "agent", "plan" } : new[] { "agent" }, riskLevel);
             return new ToolCatalogEntry
             {
                 Id = id, Host = "Common", Name = name, Description = description,

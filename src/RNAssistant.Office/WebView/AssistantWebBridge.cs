@@ -305,6 +305,11 @@ namespace RNAssistant.Office.WebView
                         responsePayload = await RunBridgeWorkAsync(
                             () => _controller.SetChatMode(setChatMode.ChatId, setChatMode.Mode), cancellationToken).ConfigureAwait(false);
                         break;
+                    case "setChatMutationPolicy":
+                        var setChatPolicy = Payload<SetChatMutationPolicyPayload>(payload);
+                        responsePayload = await RunBridgeWorkAsync(
+                            () => _controller.SetChatMutationPolicy(setChatPolicy.ChatId, setChatPolicy.MutationPolicy), cancellationToken).ConfigureAwait(false);
+                        break;
                     case "setChatReasoning":
                         var setChatReasoning = Payload<SetChatReasoningPayload>(payload);
                         responsePayload = await RunBridgeWorkAsync(

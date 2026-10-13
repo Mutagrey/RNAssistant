@@ -133,7 +133,8 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
             {
                 var session = NewSession(adapter);
-                session.Mode = ChatModes.Chat;
+                session.Mode = ChatModes.Agent;
+                session.MutationPolicy = RNAssistant.Core.Services.MutationPolicy.Deny;
                 session.Messages.Add(new ChatMessage { Role = "user", Content = "История" });
                 var service = new PromptContextInspectorService(adapter, FixturePaths.Value, executor.ResourceAuthority, executor.Payloads);
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
@@ -167,9 +168,20 @@ namespace RNAssistant.Harness
                 AssertTrue(!raw.Sections.Any(section => section.Id == "catalog_skills"),
                     "chat inspector excludes skills");
                 AssertContains(raw.RawRequestJson, "common.resources_read", "chat raw request includes resource reads");
-                AssertTrue(raw.RawRequestJson.IndexOf("excel.inspect", StringComparison.OrdinalIgnoreCase) < 0,
-                    "chat raw request excludes Office tools");
+                AssertTrue(raw.RawRequestJson.IndexOf("excel.add_sheet", StringComparison.OrdinalIgnoreCase) < 0,
+                    "Deny raw request excludes mutation tools");
                 AssertContains(raw.RawRequestJson, "json_object", "chat raw request includes structured response format");
+                session.MutationPolicy = RNAssistant.Core.Services.MutationPolicy.Ask;
+                session.LastRun = new ChatRunRecord { ConversationPolicy =
+                    RNAssistant.Core.Services.ConversationRunPolicy.ForSession(session, false) };
+                var next = service.Inspect(session, NewContext(adapter),
+                    new AppSettings { AutoConfirmToolActions = true }, tools, new SkillDefinition[0],
+                    new ChatAttachment[0], "Следующий запуск", true, publication);
+                var prompt = string.Join("\n", Newtonsoft.Json.Linq.JObject.Parse(next.RawRequestJson)["messages"]
+                    .Select(message => (string)message["content"]));
+                AssertContains(prompt, "\"auto_confirm_tool_actions\":true", "draft preview uses next-run settings");
+                AssertTrue(!session.LastRun.ConversationPolicy.AutoConfirmToolActions,
+                    "preview cannot change the accepted run's approval policy");
             });
         }
 
@@ -292,7 +304,7 @@ namespace RNAssistant.Harness
             {
             var adapter = FakeOfficeAdapter.ForHost("Excel");
             var session = NewSession(adapter);
-            session.Mode = ChatModes.Chat;
+            session.Mode = ChatModes.Agent;
             session.Messages.Add(new ChatMessage { Role = "user", Content = new string('x', 4000) });
             var context = NewContext(adapter);
             var baseSettings = new AppSettings

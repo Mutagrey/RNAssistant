@@ -50,7 +50,7 @@ namespace RNAssistant.Harness
                 executor.CaptureCatalogs();
                 var session = NewSession(adapter);
                 var tools = executor.GetControllerTools().ToList();
-                var native = executor.CreateNativeRuntime(session, tools, new AppSettings(), ChatModes.Agent, false);
+                var native = executor.CreateNativeRuntime(session, tools, new AppSettings(), ChatModes.Agent, false, manualRun: true);
                 Func<string, ToolExecutionRecord> read = target => ExecutePromptNative(native, ResourceToolCatalog.ReadToolId, new JObject { ["target"] = target });
                 loads = 0;
                 var retired = new ToolCall("retired", "common.prompts_read", "{\"includeDefaults\":true}");
@@ -111,7 +111,7 @@ namespace RNAssistant.Harness
                         () => { loads++; return settings; }, value => settings = value, paths);
                     executor.CaptureCatalogs();
                     var session = NewSession(adapter);
-                    var native = executor.CreateNativeRuntime(session, executor.GetControllerTools().ToList(), new AppSettings(), ChatModes.Agent, false);
+                    var native = executor.CreateNativeRuntime(session, executor.GetControllerTools().ToList(), new AppSettings(), ChatModes.Agent, false, manualRun: true);
                     var scope = CatalogPublicationService.ScopeId;
                     var kind = scenario == "prompt-defaults" ? CatalogPublicationService.PromptDefaultsKind : "prompts";
                     var root = executor.ResourceAuthority.Store.GetHead(scope, new ResourceIdentity(ResourceUri.Create("catalog", kind))).Revision;
@@ -175,7 +175,7 @@ namespace RNAssistant.Harness
                     NewSession(adapter), definitions,
                     new AppSettings { AutoConfirmToolActions = false },
                     "agent", false,
-                    (execution, preparation) => "prompt_pending");
+                    (execution, preparation) => "prompt_pending", manualRun: true);
                 AssertTrue(native.Describe(new ToolCall(
                         "prompt_save_policy", PromptToolCatalog.SaveToolId,
                         "{}")) != null,
@@ -278,7 +278,7 @@ namespace RNAssistant.Harness
                 var mismatchRuntime = mismatchExecutor.CreateNativeRuntime(
                     NewSession(adapter), mismatchDefinitions,
                     new AppSettings { AutoConfirmToolActions = true },
-                    "agent", false);
+                    "agent", false, manualRun: true);
                 var mismatch = ExecutePromptNative(
                     mismatchRuntime, PromptToolCatalog.SaveToolId,
                     new JObject

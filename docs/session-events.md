@@ -379,7 +379,10 @@ tool/control activities and the terminal diagnostic form one transcript segment
 for that run. Its final `RunViewState` determines the displayed lifecycle; earlier
 running markers cannot leave separate active cards after failure. A changed
 `RunViewState` on an existing message also invalidates its rendered unit. Step
-narration is rendered once, with earlier steps available in the collapsed history.
+narration is rendered once. During active work, silent steps continue the preceding
+comment and completed actions may be collapsed below it; current work and attention
+states stay visible. This presentation preserves original step/call identities and
+the terminal run's full expandable history; see [Conversation protocol](conversation-protocol.md).
 An applied user input splits the transcript into ordered segments of the same run.
 Earlier segments stay before that input; only the last segment merges with live
 activities, excluding already represented prefix steps. A full history refresh
@@ -416,7 +419,7 @@ remains separate; full context downloads respect the shared 50 MiB transfer budg
 
 ## Format policy
 
-`ChatSession.CurrentFormatVersion` is 6 and `SessionEvent.CurrentSchemaVersion` is 4. The active conversation protocol is independently versioned as v7 inside typed message/run operations; R29 added accepted-call origins without a new event envelope, v6 replaced the R72 final flag with explicit response actions, and v7 removes no-call continuation. Unversioned/v2/v3/v4/v5/v6 model history is not converted or inferred from prose: full-history preflight requires an explicit new chat/reset before model preparation. A pending confirmation without current-v7 history, complete call origins and `KernelState` cannot continue and must be cancelled or resubmitted in a new chat. Unsupported event schemas and old snapshot files are refused rather than guessed or migrated. Reset is explicit; upgrades and protocol failures never automatically delete user chats, CAS, settings or keys. See [the current conversation contract](protocols/CONVERSATION_RESPONSE_V7.md).
+`ChatSession.CurrentFormatVersion` is 7 (unified intent/permissions). Format 6 is retained for history reads only; its mode and pending calls cannot authorize a new run. Normalization never upgrades it. `MutationPolicy` belongs to session metadata and `ConversationPolicy` pins the accepted run, including `AutoConfirmToolActions` (absent means false). Settings changes cannot rewrite a pending run’s approval authority; restart and explicit continuation retain that snapshot. `SessionEvent.CurrentSchemaVersion` remains 4. No historical bytes or CAS payloads are rewritten. See [unified-agent cutover](conversation-protocol.md#unified-agent-audit-and-cutover-2026-10-13). The active conversation protocol is independently versioned as v7 inside typed message/run operations; R29 added accepted-call origins without a new event envelope, v6 replaced the R72 final flag with explicit response actions, and v7 removes no-call continuation. Unversioned/v2/v3/v4/v5/v6 model history is not converted or inferred from prose: full-history preflight requires an explicit new chat/reset before model preparation. A pending confirmation without current-v7 history, complete call origins and `KernelState` cannot continue and must be cancelled or resubmitted in a new chat. Unsupported event schemas and old snapshot files are refused rather than guessed or migrated. Reset is explicit; upgrades and protocol failures never automatically delete user chats, CAS, settings or keys. See [the current conversation contract](protocols/CONVERSATION_RESPONSE_V7.md).
 
 ## Conversation input queue
 
@@ -530,6 +533,8 @@ and Enter leaves approval pending. Esc/Ctrl+D leaves a question pending. Ctrl+C
 returns 130. User waits happen only after the application call releases its run
 lease. `resume` can present these same pending questions/approvals after restart;
 it does not automatically execute interrupted work. Every submitted answer or
-decision is revalidated by the application owner. No tool replay, new agent loop
-or automatic approval is introduced. Windows terminal behavior remains
+decision is revalidated by the application owner. No tool replay or new agent loop
+is introduced. Automatic approval is a separate explicit per-run opt-in (see
+[the approval contract](conversation-protocol.md#automatic-action-approval));
+pending decisions retain their original policy. Windows terminal behavior remains
 unqualified by the Mac PTY tests.

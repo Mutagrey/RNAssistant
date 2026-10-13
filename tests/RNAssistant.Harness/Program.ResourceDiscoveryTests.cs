@@ -29,7 +29,7 @@ namespace RNAssistant.Harness
                 var candidate = executor.ResourceGateway.Find(b, "Sections.md", "document").Items.Single();
                 AssertContains(candidate.Usage, "section", "discovery advertises the available next read action");
                 var tool = tools.Single(item => item.Id == ResourceToolCatalog.ReadToolId);
-                var runtime = executor.CreateNativeRuntime(b, new[] { tool }, new AppSettings(), ChatModes.Chat, false);
+                var runtime = executor.CreateNativeRuntime(b, new[] { tool }, new AppSettings(), ChatModes.Agent, false, manualRun: true);
                 Func<string, ToolExecutionRecord> read = section =>
                 {
                     var args = new Newtonsoft.Json.Linq.JObject { ["target"] = candidate.Target, ["representation"] = "text" };
@@ -205,7 +205,7 @@ namespace RNAssistant.Harness
             {
                 var session = NewSession(adapter);
                 var definition = executor.GetControllerTools().Single(item => item.Id == MarkdownDocumentToolCatalog.SaveToolId);
-                var runtime = executor.CreateNativeRuntime(session, new[] { definition }, new AppSettings(), ChatModes.Agent, false);
+                var runtime = executor.CreateNativeRuntime(session, new[] { definition }, new AppSettings(), ChatModes.Agent, false, manualRun: true);
                 var text = "# Guide\r\n";
                 text += new string('x', 31994 - text.Length) + "boundary-needle\n";
                 text += new string('x', 63999 - text.Length) + "😀ПоискГраницы\n";
@@ -276,7 +276,7 @@ namespace RNAssistant.Harness
             {
                 var session = NewSession(adapter);
                 var definition = executor.GetControllerTools().Single(item => item.Id == MarkdownDocumentToolCatalog.SaveToolId);
-                var runtime = executor.CreateNativeRuntime(session, new[] { definition }, new AppSettings(), ChatModes.Agent, false);
+                var runtime = executor.CreateNativeRuntime(session, new[] { definition }, new AppSettings(), ChatModes.Agent, false, manualRun: true);
                 var call = new ToolCall("index-race", definition.Id, "{\"title\":\"Race.md\",\"description\":\"Race fixture\",\"markdown\":\"# Source\\nneedle\"}");
                 AssertEqual(ToolExecutionOutcome.Ok, ExecuteNative(runtime, call, runtime.Describe(call)).Outcome, "race fixture published");
                 var authority = new ResourceAuthorityStore(FixturePaths.Value);
@@ -385,7 +385,7 @@ namespace RNAssistant.Harness
             {
                 var session = NewSession(adapter);
                 var definition = executor.GetControllerTools().Single(item => item.Id == MarkdownDocumentToolCatalog.SaveToolId);
-                var runtime = executor.CreateNativeRuntime(session, new[] { definition }, new AppSettings(), ChatModes.Agent, false);
+                var runtime = executor.CreateNativeRuntime(session, new[] { definition }, new AppSettings(), ChatModes.Agent, false, manualRun: true);
                 var call = new ToolCall("first", definition.Id, "{\"title\":\"Guide.md\",\"description\":\"Current guide\",\"markdown\":\"# Earlier\"}");
                 var first = ExecuteNative(runtime, call, runtime.Describe(call));
                 AssertEqual(ToolExecutionOutcome.Ok, first.Outcome, "first Markdown published");

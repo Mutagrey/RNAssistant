@@ -70,7 +70,8 @@ namespace RNAssistant.Office.Runtime
             ToolPackSnapshot snapshot, AppSettings settings, string mode,
             Func<ToolExecutionContext, ToolPreparationResult, string> pendingRegistrar = null,
             bool trace = true,
-            IToolMutationObserver mutationObserver = null, MarkdownDocumentService markdownDocuments = null)
+            IToolMutationObserver mutationObserver = null, MarkdownDocumentService markdownDocuments = null,
+            ConversationRunPolicy runPolicy = null)
         {
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
             var registry = new ToolHandlerRegistry();
@@ -280,10 +281,12 @@ namespace RNAssistant.Office.Runtime
                 registry.Register(registration, handler);
                 _ownedToolIds.Add(registration.Descriptor.Id);
             }
-            var policy = ConversationRunPolicy.For(mode);
+            var policy = manualRun ? ConversationRunPolicy.For(mode) : runPolicy ?? ConversationRunPolicy.ForSession(session);
+            if (!manualRun && runPolicy != null) ConversationRunPolicy.ForAcceptedRun(session).RequireSame(runPolicy);
+            if (policy.Mode != mode) throw new InvalidOperationException("The runtime intent differs from the bound session.");
             _runtime = new ToolRuntime(registry, policy.Mode,
                 settings != null && settings.AutoConfirmToolActions,
-                policy.AllowsConfirmation, pendingRegistrar, mutationObserver);
+                policy.AllowsConfirmation, pendingRegistrar, mutationObserver, manualRun ? null : policy);
             _session = session;
             _trace = trace;
         }

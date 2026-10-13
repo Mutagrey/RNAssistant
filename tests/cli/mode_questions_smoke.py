@@ -80,47 +80,33 @@ def run_case(root, mode, role):
     try:
         capabilities = checked("env", "--mode", mode)["capabilities"]
         assert {"common.resources_find", "common.resources_read"}.issubset(capabilities)
-        if mode == "chat":
-            assert len(capabilities) == 2, capabilities
-            # These calls must fail validation/admission; neither skill nor mutation may execute.
-            responses.extend([call("files.create", relativePath="forbidden.txt", text="bad"),
-                call("common.resources_read", type="skill", target="common.planning"),
-                call("common.resources_read", target="notes.txt"), DONE])
-        else:
-            assert "common.questions_ask" in capabilities
-            assert ("files.create" in capabilities) == (mode == "agent")
-            if mode == "plan":
-                responses.append(call("files.create", relativePath="forbidden.txt", text="bad"))
-            if mode == "agent":
-                responses.append(call("files.create", relativePath="created-before-question.txt", text="ONLY_WRITE"))
-            responses.extend([call("common.resources_read", target="notes.txt"),
-                call("common.questions_ask", questions=QUESTIONS)])
+        assert "common.questions_ask" in capabilities
+        assert ("files.create" in capabilities) == (mode == "agent")
+        if mode == "plan":
+            responses.append(call("files.create", relativePath="forbidden.txt", text="bad"))
+        if mode == "agent":
+            responses.append(call("files.create", relativePath="created-before-question.txt", text="ONLY_WRITE"))
+        responses.extend([call("common.resources_read", target="notes.txt"),
+            call("common.questions_ask", questions=QUESTIONS)])
         final = checked("run", "--mode", mode, "--tool-result-role", role, "--instruction-role", "system",
+            "--auto-confirm", "on" if mode == "agent" else "off",
             "--message", "Read notes.txt and ask for the format and sections before proceeding.",
             "--min-reads", "1", "--min-writes", "1" if mode == "agent" else "0",
-            "--max-iterations", "8", "--max-tool-steps", "8", code=0 if mode == "chat" else 3)
+            "--max-iterations", "8", "--max-tool-steps", "8", code=3)
         assert not responses and not errors, (responses, errors)
         assert not (workspace / "forbidden.txt").exists()
         ids = catalog(requests[0])
         if mode != "agent":
             assert not any(tool.startswith("files.") for tool in ids), ids
         initial = json.dumps(requests[0])
-        assert ("common.planning" in initial) == (mode != "chat")
+        assert "common.planning" in initial
         assert "CUSTOM_SKILL_BODY" not in initial
-        if mode == "chat":
-            assert ids["common.resources_read"]["Schema"]["properties"]["type"]["enum"] == ["file"]
-            assert "referencePath" not in ids["common.resources_read"]["Schema"]["properties"]
-            assert final["reason"] == "model_done" and final["acceptance"] == "passed"
         session_id = final["SessionId"]
         before = len(requests)
-        result, _ = cli("run", "--session", session_id, "--mode", "agent" if mode != "agent" else "plan",
-            "--message", "Try changing mode")
+        result, _ = cli("run", "--session", session_id, "--mode", "chat", "--message", "Try a retired mode")
         assert result.returncode == 2 and len(requests) == before, result.stderr
         result, _ = cli("run", "--mode", "typo", "--message", "Do not escalate")
         assert result.returncode == 2 and len(requests) == before, result.stderr
-        if mode == "chat":
-            print("PASS chat: two file tools, no skills, rejected mutation/skill intent, no mode drift")
-            return
 
         assert final["reason"] == "awaiting_user" and final["action"] == "needs_input", final
         assert final["acceptance"] == "pending", final
@@ -206,5 +192,5 @@ def run_case(root, mode, role):
 if __name__ == "__main__":
     with TemporaryDirectory(prefix="rna-mode-questions-") as temporary:
         root = Path(temporary)
-        for mode, role in [("chat", "user"), ("plan", "tool"), ("agent", "user")]:
+        for mode, role in [("plan", "tool"), ("agent", "user")]:
             run_case(root / mode, mode, role)

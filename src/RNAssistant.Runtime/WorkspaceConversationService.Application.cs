@@ -21,7 +21,8 @@ namespace RNAssistant.Runtime
             return new WorkspaceSessionSnapshot
             {
                 Id = session.Id, WorkspaceId = session.WorkspaceId, Title = session.Title, Model = session.Model,
-                Mode = session.Mode, Revision = session.Revision, Cursor = ConversationEventFeed.Cursor(session),
+                Mode = session.Mode, MutationPolicy = session.MutationPolicy, Revision = session.Revision, Cursor = ConversationEventFeed.Cursor(session),
+                ConversationPolicy = session.LastRun?.ConversationPolicy,
                 Status = session.LastRun?.Status, ModelConfiguration = session.LastRun?.ModelConfiguration,
                 RunId = session.LastRun?.RunId, IterationsUsed = session.LastRun?.KernelState?.Summary.IterationsUsed,
                 ContextCheckpointId = ContextCompactionRuntime.ActiveCheckpoint(session)?.Id,
@@ -111,7 +112,9 @@ namespace RNAssistant.Runtime
             if (request.Answers == null && string.IsNullOrWhiteSpace(request.Message)) throw new ArgumentException("A task message is required.");
             if (request.Answers != null && (string.IsNullOrWhiteSpace(request.SessionId) || request.Message != null))
                 throw new ArgumentException("Typed answers require an existing session and cannot include a task message.");
-            if (request.Mode != null) ChatModes.Require(request.Mode);
+            if (request.Mode != null) ConversationRunPolicy.For(request.Mode);
+            if (request.MutationPolicy.HasValue && !Enum.IsDefined(typeof(MutationPolicy), request.MutationPolicy.Value))
+                throw new ArgumentException("Invalid mutation policy.");
             PrepareAcceptance(request.Acceptance);
         }
 
@@ -120,7 +123,8 @@ namespace RNAssistant.Runtime
             // Transport identity is bound to submitted intent. Environment/model
             // settings are execution configuration; a duplicate never reapplies them.
             var canonical = new WorkspaceSubmitInputRequest { Message = request.Message,
-                Mode = request.Mode == null ? null : ChatModes.Require(request.Mode), ReasoningEnabled = request.ReasoningEnabled,
+                Mode = request.Mode == null ? null : ChatModes.Require(request.Mode), MutationPolicy = request.MutationPolicy,
+                AutoConfirmToolActions = request.AutoConfirmToolActions, ReasoningEnabled = request.ReasoningEnabled,
                 Answers = request.Answers, Acceptance = PrepareAcceptance(request.Acceptance) };
             return TextPatternEngine.Sha256(JsonConvert.SerializeObject(canonical));
         }

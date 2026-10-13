@@ -14,6 +14,90 @@ namespace RNAssistant.MockDemo
 {
     internal static partial class Program
     {
+        private static async Task<int> RunUnifiedAgentTestAsync()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "RNAssistant.Unified." + Guid.NewGuid().ToString("N"));
+            AssistantController controller = null;
+            try
+            {
+                var paths = AppDataPaths.CreateForRoot(root);
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                var responses = new System.Collections.Generic.Queue<string>();
+                var calls = 0;
+                Func<AppSettings, System.Collections.Generic.IEnumerable<ChatMessage>, CancellationToken, Task<LlmCompletionResult>> model =
+                    (settings, messages, token) => { calls++; return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() }); };
+                Func<string, object, string> tool = (name, arguments) => Newtonsoft.Json.JsonConvert.SerializeObject(new {
+                    message = "", action = "tool", tool_calls = new[] { new { name, arguments } } });
+                const string done = "{\"message\":\"Done\",\"action\":\"done\",\"tool_calls\":[]}";
+                new SettingsService(paths).Save(new AppSettings { AutoConfirmToolActions = false });
+                controller = new AssistantController(adapter, paths, model);
+                var id = controller.Initialize().ActiveChatId;
+                responses.Enqueue(done);
+                var direct = await controller.SendChatAsync("Direct answer", id);
+                if (calls != 1 || direct.RunViewState.Lifecycle != "completed") throw new Exception("direct answer did not finish once");
+                responses.Enqueue(tool("common.capabilities_read", new { id = "excel.add_sheet" }));
+                responses.Enqueue(tool("excel.add_sheet", new { name = "ApprovedSheet" }));
+                await controller.SendChatAsync("Create sheet", id);
+                var store = new ChatStore(paths);
+                var pending = store.Load(id).LastRun.KernelState.Summary.PendingConfirmation;
+                if (pending == null || adapter.HasSheet("ApprovedSheet")) throw new Exception("write bypassed approval");
+                var controls = controller.GetSettings().Settings;
+                controls.AutoConfirmToolActions = true;
+                controller.SaveSettings(new SaveSettingsPayload { ChatId = id, Settings = controls,
+                    ExpectedPromptPublication = controller.GetSettings().Prompts.Publication }, CancellationToken.None);
+                if (adapter.HasSheet("ApprovedSheet") || store.Load(id).LastRun.ConversationPolicy.AutoConfirmToolActions)
+                    throw new Exception("settings toggle changed the accepted pending run");
+                controller.Dispose();
+                controller = new AssistantController(adapter, paths, model);
+                responses.Enqueue(done);
+                var approved = await controller.ConfirmAgentToolAsync(pending.PendingId, id);
+                if (!adapter.HasSheet("ApprovedSheet") || approved.RunViewState.Lifecycle != "completed")
+                    throw new Exception("controller lost accepted policy across approval/restart");
+                if (adapter.ExcelSheetRequests.Count(request => request.ToolId == "excel.add_sheet") != 1)
+                    throw new Exception("approved mutation dispatched more than once");
+                responses.Enqueue(tool("excel.add_sheet", new { name = "AutomaticSheet" }));
+                responses.Enqueue(done);
+                var automatic = await controller.SendChatAsync("Create sheet automatically", id);
+                if (!adapter.HasSheet("AutomaticSheet") || automatic.RunViewState.Lifecycle != "completed" ||
+                    !store.Load(id).LastRun.ConversationPolicy.AutoConfirmToolActions)
+                    throw new Exception("new controller run did not capture automatic approval");
+
+                controller.SetChatMutationPolicy(id, RNAssistant.Core.Services.MutationPolicy.Deny);
+                controller.SetChatMode(id, ChatModes.Plan);
+                responses.Enqueue(tool("common.capabilities_read", new { id = "common.plan_doc_save" }));
+                responses.Enqueue(tool("common.plan_doc_save", new { title = "Review", markdown = "# Review", status = "draft" }));
+                responses.Enqueue(tool("common.capabilities_read", new { id = "common.task_list_set" }));
+                responses.Enqueue(tool("common.task_list_set", new { action = "save", goal = "Review", steps = new[] { new { text = "Inspect", status = "pending" } } }));
+                responses.Enqueue(done);
+                var planned = await controller.SendChatAsync("Save the plan and task list", id);
+                var saved = store.Load(id);
+                if (planned.ActiveChatMode != ChatModes.Plan || saved.MutationPolicy != RNAssistant.Core.Services.MutationPolicy.Deny ||
+                    string.IsNullOrEmpty(saved.ActivePlanDocumentArtifactId) || string.IsNullOrEmpty(saved.ActiveTaskListArtifactId) ||
+                    planned.RunViewState.ExecutionHealth != "clean") throw new Exception("Plan/Deny did not preserve both planning artifacts");
+
+                controller.SetChatMode(id, ChatModes.Agent);
+                controller.SetChatMutationPolicy(id, RNAssistant.Core.Services.MutationPolicy.Ask);
+                controls = controller.GetSettings().Settings;
+                controls.AutoConfirmToolActions = false;
+                controller.SaveSettings(new SaveSettingsPayload { ChatId = id, Settings = controls,
+                    ExpectedPromptPublication = controller.GetSettings().Prompts.Publication }, CancellationToken.None);
+                responses.Enqueue(tool("excel.add_sheet", new { name = "CancelledSheet" }));
+                await controller.SendChatAsync("Create another sheet", id);
+                pending = store.Load(id).LastRun.KernelState.Summary.PendingConfirmation;
+                if (pending == null) throw new Exception("second mutation did not wait");
+                var before = calls;
+                controller.SetChatMutationPolicy(id, RNAssistant.Core.Services.MutationPolicy.Deny);
+                var rejected = false;
+                try { await controller.ConfirmAgentToolAsync(pending.PendingId, id); }
+                catch (InvalidOperationException) { rejected = true; }
+                if (!rejected || adapter.HasSheet("CancelledSheet") || calls != before) throw new Exception("stale approval was not cancelled");
+                Console.WriteLine("PASS unified controller: direct answer, approval/restart, automatic next run, Plan/Deny artifacts, policy change cancels pending");
+                return 0;
+            }
+            catch (Exception error) { Console.WriteLine("FAIL unified controller: " + error); return 1; }
+            finally { controller?.Dispose(); if (Directory.Exists(root)) Directory.Delete(root, true); }
+        }
+
         private static async Task<int> RunInboxTestAsync()
         {
             var root = Path.Combine(Path.GetTempPath(), "RNAssistant.Inbox." + Guid.NewGuid().ToString("N"));

@@ -1,5 +1,49 @@
 # Stabilization progress
 
+## Automatic action approval — 2026-10-13
+
+Owners: settings UI / Core ConversationRunPolicy and ToolRuntime / Office and
+workspace conversation services. The saved default-off setting now authorizes
+automatic approval for new Agent/Ask runs in every chat; CLI exposes
+`--auto-confirm on|off` per new turn. Accepted runs keep their captured value
+through settings changes and restart. Plan/Deny, guards, read-back and unknown
+non-retry remain enforced. The completed backlog requirement is now covered by
+the [canonical contract](../conversation-protocol.md#automatic-action-approval).
+
+Evidence: auto confirmation 3/3, unified policy 6/6, tool runtime 15/15 and JS
+package source/policy 1/1. Controlled CLI checks pass multistep automatic writes,
+pending approval after restart, next-turn disable, unread-file guards, Plan/Deny
+and invalid flags. Chromium verifies settings save/reload/reset and composer
+status/layout at 1100/740/360 px. CLI and host-neutral Harness builds pass (Harness
+retains two existing PDF platform warnings). Real Windows/Office/WebView2 and
+real-model task quality remain unqualified; no Office/VSTO validation ran.
+
+## Unified agent permissions and Plan toggle — 2026-10-13
+
+Owners: Core ConversationRunPolicy/ToolRuntime, Office/Workspace conversation
+services and composer UI. Agent is the default with one optional sticky Plan toggle;
+Ask/Deny permissions are separate. Non-planning effect/code approval follows the
+captured user setting; Plan/Deny allow only reads and built-in Plan/Task List updates.
+No second kernel, routing LLM or mandatory tools. New chats use format 7; format 6
+is read-only history with no rewrite or migration. Emergency disable is documented
+in the [canonical audit/contract](../conversation-protocol.md#unified-agent-audit-and-cutover-2026-10-13).
+
+Evidence: unified policy 6/6, tool runtime 15/15, kernel 55/55, no-tool 3/3,
+Plan 3/3, streaming 2/2 and pre-cutover rejection 1/1. Controlled CLI checks cover
+approval across process restart, restored file guards, policy change, injection and
+emergency disable. Chromium composer checks pass at 1100/740/360 px. CLI builds;
+Harness builds with the existing PDF platform warnings. MockDemo's real-controller
+test passes with a fake host, including settings changes during pending approval,
+restart, automatic next run, and Office planning wrappers. Prompt/settings tests
+pass 11/11 after fixture repair. Review fixed permission loss during session/run
+cloning, confirmation and the obsolete Chat compaction estimate. The isolated
+commit candidate passes 838/862 Harness checks; all 24 failures also reproduce on
+`10f78f40` (see BACKLOG), with no new failures. The draft inspector separately
+checks next-run settings without changing accepted authority. Version-format
+validation passes.
+Real Windows/Office/WebView2 and real-model task quality remain unqualified.
+
+
 ## Artifact tree and document removal — 2026-10-13
 
 Owners: Artifact Library UI / DocumentArtifactStore. A single tree and adjacent

@@ -198,8 +198,13 @@
                     <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2" stroke-dasharray="3 3"/><path d="M12 8v8M8 12h8"/></svg>
                     <span>Добавить выделение в контекст</span>
                   </button>
-                  <div class="composer-menu-section-label" id="chatModeMenuLabel">Режим чата</div>
-                  <div id="chatModeMenu" role="group" aria-labelledby="chatModeMenuLabel"></div>
+                  <div id="chatModeMenu" role="group" aria-label="Планирование"></div>
+                  <label for="chatMutationPolicy">Изменения</label>
+                  <select id="chatMutationPolicy" title="Сохранение плана и списка задач разрешено при любой политике">
+                    <option value="Ask">По подтверждению</option>
+                    <option value="Deny">Изменения запрещены</option>
+                  </select>
+                  <small>План и список задач сохраняются без подтверждения.</small>
                   <button type="button" class="composer-picker-item composer-menu-action composer-menu-compact" id="compactContextButton" title="Сжать ранний контекст, сохранив полную историю" hidden>
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 4 5 5 5-5M7 20l5-5 5 5M5 12h14"/></svg>
                     <span>Сжать контекст</span>
@@ -209,6 +214,7 @@
               <input id="attachmentFileInput" type="file" multiple hidden>
             </div>
             <div class="composer-actions">
+              <span id="chatPolicyStatus" class="composer-policy-status" aria-live="polite">По подтверждению</span>
               <details class="composer-picker composer-model-picker" id="chatModelPicker">
                 <summary class="composer-picker-trigger" id="chatModelButton" title="Модель чата" aria-label="Модель чата">
                   <span class="composer-picker-trigger-icon model" aria-hidden="true">✦</span>
@@ -836,14 +842,14 @@
                   <p>Подтверждения, сжатие контекста и предельные значения одного запуска.</p>
                 </div>
                 <div class="form-grid two-columns agent-settings-grid">
-                  <label class="checkline"><input id="autoConfirmToolsInput" type="checkbox"><span>Автоподтверждение действий</span></label>
+                  <label class="checkline"><input id="autoConfirmToolActionsInput" type="checkbox" aria-describedby="autoConfirmToolActionsNote"><span>Автоподтверждение действий</span></label>
                   <label class="checkline"><input id="enableAgentJavaScriptInput" type="checkbox"><span>JavaScript инструменты агента (экспериментально)</span></label>
                   <label class="checkline"><input id="autoCompressContextInput" type="checkbox"><span>Создавать summary при заполнении контекста</span></label>
                   <label><span>Макс. итераций запуска</span><input id="maxAgentIterationsInput" type="number" min="1"></label>
                   <label><span>Попыток формата (включая первую)</span><input id="maxAgentFormatRetriesInput" type="number" min="1" max="20" title="Всего ответов для проверки формата: 1–20. Сетевые повторы (до двух) и schema fallback (один) считаются отдельно."></label>
                   <label><span>Макс. tool шагов</span><input id="maxAgentToolStepsInput" type="number" min="1"></label>
                 </div>
-                <div class="setting-note">Chat получает только read-only resource tools без skills; Plan — scoped planning tools; Agent — полный разрешённый каталог и skills. Все режимы используют один JSON-loop.</div>
+                <div class="setting-note" id="autoConfirmToolActionsNote">Разрешает изменения и запуск кода без отдельных подтверждений. Действует для новых запусков во всех чатах после сохранения. Текущий запуск и ожидающие действия сохраняют прежние правила. Plan и запрет изменений имеют приоритет.</div>
               </section>
               <section class="model-compatibility-panel" aria-labelledby="modelCompatibilityTitle">
                 <div class="model-compatibility-head">
@@ -1088,7 +1094,7 @@
   <script src="js/app-vba-completion.js?v=vba-completion-20260903-1"></script>
   <script src="js/app-editors.js?v=html-memory-20261002-1"></script>
   <script src="js/app-markdown.js?v=accent-chat-20261012-1"></script>
-  <script src="js/app-settings.js?v=accent-palette-20261012-2"></script>
+  <script src="js/app-settings.js?v=auto-confirm-20261013-1"></script>
   <script src="js/app-logs.js?v=diagnostics-clarity-20260930-1"></script>
   <script src="js/app-diagnostics.js?v=diagnostics-clarity-20260930-1"></script>
   <script src="js/app-viewer-registry.js?v=artifact-preview-20260902-2"></script>
@@ -1148,7 +1154,7 @@
   <script src="js/app-reasoning.js?v=chat-projection-20260907-1"></script>
   <script src="js/app-attachments.js?v=attachment-input-20261012-1"></script>
   <script src="js/app-chat-session.js?v=closed-document-20261012-1-transcript-20261012-1"></script>
-  <script src="js/app-chat-composer.js?v=composer-menu-20261013-1-settings-delivery-1"></script>
+  <script src="js/app-chat-composer.js?v=composer-auto-confirm-20261013-1"></script>
   <script src="js/app-chat-inbox.js?v=inbox-1-transcript-20261012-1-settings-delivery-1"></script>
   <script src="js/app-chat-run.js?v=response-render-timing-20260928-1-usage-20261002-1-navigation-20261002-1-inbox-20261002-1-large-chat-1-run-isolation-1-transcript-20261012-1-settings-delivery-1"></script>
   <script src="js/app-chat.js?v=composer-menu-20261013-1"></script>

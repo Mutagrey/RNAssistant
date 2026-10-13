@@ -105,8 +105,8 @@ namespace RNAssistant.Office.Services
             });
 
             var mode = ChatModes.Normalize(previewSession.Mode);
-            var policy = ConversationRunPolicy.For(mode);
-            var runnableCatalog = ConversationRunService.PrepareToolsForMode(mode, tools);
+            var policy = ConversationRunPolicy.ForSession(previewSession, settings.AutoConfirmToolActions);
+            var runnableCatalog = policy.SelectTools(ConversationRunService.PrepareToolsForRun(tools));
             var enabledSkills = policy.SelectSkills(skills);
             CapabilityCatalogService.ThrowOnCollision(runnableCatalog, enabledSkills);
             CapabilityCatalogService.BindReadSchema(runnableCatalog, enabledSkills);
@@ -193,9 +193,7 @@ namespace RNAssistant.Office.Services
             var estimateNotice = calibrationSamples > 0
                 ? "≈ уточнено по " + calibrationSamples + " API usage для этой модели."
                 : "≈ рассчитано по UTF-8 объёму.";
-            estimateNotice += mode != ChatModes.Chat
-                ? " Даже пустой " + (mode == ChatModes.Plan ? "Plan" : "Agent") + " включает system prompt, bootstrap-схемы tools и компактный capability-каталог."
-                : " Даже пустой Chat включает system prompt и схемы read-only resource tools.";
+            estimateNotice += " Контекст включает инструкции, RUNTIME_CONTEXT, доступные tools и skills.";
 
             var response = new PromptContextInspectorResponse
             {
@@ -303,18 +301,11 @@ namespace RNAssistant.Office.Services
             string agentSkillInstruction = string.Empty;
             string instructionEnvelope;
             string runtimeJson = string.Empty;
-            if (mode != ChatModes.Chat)
-            {
-                agentGeneralInstruction = mode == ChatModes.Plan
-                    ? ConversationPromptComposer.ResolvePlanPrompt(settings)
-                    : ConversationPromptComposer.ResolveGeneralPrompt(settings);
-                agentToolInstruction = ConversationPromptComposer.ResolveToolPrompt(settings);
-                agentSkillInstruction = ConversationPromptComposer.ResolveSkillPrompt(settings);
-            }
-            else
-            {
-                agentGeneralInstruction = ConversationPromptComposer.ResolveChatPrompt(settings);
-            }
+            agentGeneralInstruction = mode == ChatModes.Plan
+                ? ConversationPromptComposer.ResolvePlanPrompt(settings)
+                : ConversationPromptComposer.ResolveGeneralPrompt(settings);
+            agentToolInstruction = ConversationPromptComposer.ResolveToolPrompt(settings);
+            agentSkillInstruction = ConversationPromptComposer.ResolveSkillPrompt(settings);
             instruction = ConversationPromptComposer.BuildInstruction(mode, settings);
             runtimeJson = ConversationPromptComposer.BuildRuntimeContext(
                 mode,

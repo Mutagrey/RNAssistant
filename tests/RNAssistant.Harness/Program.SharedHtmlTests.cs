@@ -131,7 +131,7 @@ namespace RNAssistant.Harness
                     persistResourceFacts: saved => { throw new System.IO.IOException("Injected HTML link failure."); });
                 var session = NewSession(adapter);
                 var definition = executor.GetControllerTools().Single(item => item.Id == HtmlWorkspaceToolCatalog.WriteFileToolId);
-                var runtime = executor.CreateNativeRuntime(session, new[] { definition }, new AppSettings(), ChatModes.Agent, false);
+                var runtime = executor.CreateNativeRuntime(session, new[] { definition }, new AppSettings(), ChatModes.Agent, false, manualRun: true);
                 var call = new RNAssistant.Core.Agent.ToolCall("html-link-failure", HtmlWorkspaceToolCatalog.WriteFileToolId,
                     "{\"path\":\"index.html\",\"content\":\"<main>retained</main>\"}");
                 RuntimeThrows<System.IO.IOException>(() => ExecuteNative(runtime, call, runtime.Describe(call)));

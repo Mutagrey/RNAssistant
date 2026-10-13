@@ -819,7 +819,7 @@ namespace RNAssistant.Harness
                                 ? "{\"message\":\"Creating HTML.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.html_workspace_write_file\",\"arguments\":{\"path\":\"index.html\",\"content\":\"<main>Offline</main>\"}}]}"
                                 : "{\"message\":\"Done.\",\"action\":\"done\",\"tool_calls\":[]}" });
                     };
-                    var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
+                    var result = CreateConversationRunService(adapter, executor, completion).ExecuteWithApprovalsAsync(
                         ChatModes.Agent, "Create HTML", selected, new DocumentContext(), new AppSettings(),
                         tools, null, null, null, CancellationToken.None).GetAwaiter().GetResult();
                     AssertEqual("Done.", result.AssistantText, "local run completes after bound document closes");

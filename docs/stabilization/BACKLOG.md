@@ -21,12 +21,30 @@ unrelated baseline failures: `artifact-library-projection.test.js` asserts the o
 omits the existing preview `missingVendors` method from its stub. The same stub
 omission exists in `html-workspace-layout.test.js`.
 
-MockDemo `--artifact-transfer-test` cannot compile because `AssistantController`
-already calls `SettingsService.HasPromptMigrationEvidence`, absent from
-`DemoSettingsService`. Both source facts are present in HEAD independently of this
-slice. Repair these fixtures before claiming their integration checks pass; the
-new controller removal/restart assertions remain unexecuted. Do not infer real
-Office qualification from independent Harness/Chromium checks.
+MockDemo's missing `SettingsService.HasPromptMigrationEvidence` fixture was repaired
+during unified-agent verification. Its artifact removal/restart assertions still
+need a separate `--artifact-transfer-test` run; the successful unified-agent
+controller check does not qualify them or real Office delivery.
+
+## Host-neutral Harness baseline failures — 2026-10-13
+
+Owners: Harness fixtures and the corresponding domain owners. Full-suite comparison
+against an isolated source archive of `10f78f40` found 24 existing failures, separate
+from the archive-only Git substitution fixture. They remain outside the unified
+intent/permissions change and are not reported as passing:
+
+- Production-source inclusion and typed conversation-store architecture checks.
+- Nine agent protocol/history fixtures (wire version, folded outcomes, batching,
+  confirmation, after-state and bounded results), plus archived-read presentation.
+- Three event-integrity/corrupt-tail checks.
+- Five tool catalog/manual-execution checks (Outlook inventory, metadata, R61,
+  manual VBA observation), three resource-cutover checks, and bridge responsiveness.
+
+Reproduce with the full `tests/RNAssistant.Harness` executable on that commit;
+localize each failure before changing production behavior or expectations. New
+permission, no-tool, streaming, recovery and controller cases are checked separately.
+The bridge responsiveness case passes alone after `7e07fb0f`, but still fails in
+the full-suite order; that integration/fixture gap remains open.
 
 ## Real-model compaction/resume task completion — 2026-10-07
 

@@ -149,6 +149,9 @@ namespace RNAssistant.Core.Tools
 
     public interface IReadOnlyToolHandler : IToolHandler { }
     public interface IManagedMutationToolHandler : IToolHandler { }
+    // Trusted built-in planning handlers, including host-gated wrappers. This
+    // marker grants an exception only with the exact planning id and binding.
+    public interface IPlanningArtifactToolHandler : IManagedMutationToolHandler { }
     public interface IOpaqueActionToolHandler : IToolHandler { }
 
     // Preparation may read and validate live state, but it must not dispatch an
