@@ -17,14 +17,7 @@
   background: var(--secondary-bg);
 }
 
-.agent-result-summary { margin: 5px 0; }
-.agent-result-summary > p { margin: 0; }
-.agent-result-summary > p + p { margin-top: 2px; }
-
 .agent-result-title { font-size: 13px; }
-.agent-result-evidence,
-.agent-result-plan,
-.agent-result-last-step { margin: 5px 0 0; color: var(--muted); font-size: 12px; }
 
 .message.assistant.is-compaction-message {
   display: block;

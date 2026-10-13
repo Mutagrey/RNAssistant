@@ -257,7 +257,9 @@ function appendMessageFooter(node, message, index, activity) {
     meta.appendChild(usageNode);
   }
   var runViewState = messageRunViewState(message);
-  if (runViewState && runViewState.lifecycle !== "completed" && runViewState.lifecycle !== "running") {
+  // Run articles already show the outcome with its cause or question in the body.
+  if (runViewState && !node.classList.contains("agent-run") &&
+      runViewState.lifecycle !== "completed" && runViewState.lifecycle !== "running") {
     var outcome = document.createElement("span");
     outcome.className = "message-outcome status-" +
       (runViewState.executionHealth === "unknown" && runViewState.lifecycle === "failed"

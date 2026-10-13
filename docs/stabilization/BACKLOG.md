@@ -21,6 +21,11 @@ unrelated baseline failures: `artifact-library-projection.test.js` asserts the o
 omits the existing preview `missingVendors` method from its stub. The same stub
 omission exists in `html-workspace-layout.test.js`.
 
+Static inspection during chat-card consolidation also found stale assertions in
+`run-journal.test.js`: the `action-severity-20260930-1` agent asset key and the old
+`Журнал запуска` selector label. Reconcile these fixtures separately before using
+that script as evidence; it was not run for the card change.
+
 MockDemo's missing `SettingsService.HasPromptMigrationEvidence` fixture was repaired
 during unified-agent verification. Its artifact removal/restart assertions still
 need a separate `--artifact-transfer-test` run; the successful unified-agent

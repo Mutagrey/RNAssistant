@@ -1416,11 +1416,17 @@ narrative or retained `ResponseStatus`. Unknown/errors retain an independent
 warning, and a clean no-write answer does not certify applied changes.
 
 Chat presentation keeps lifecycle separate from execution health. Earlier failed
-calls remain in history and a separate failure-count note; they do not turn a
+calls remain in history and a compact warning; they do not turn a
 running, waiting or completed header into a failed run. Unknown possible effects
 retain a visible verification warning outside collapsed history. A pre-dispatch
 `excel_sheet_already_exists` is displayed as a quiet conflict, never as proof that
 the sheet satisfies the request or that a later call resolved the conflict.
+
+For `model_needs_input` and `model_blocked`, the chat card contains the terminal
+model message once, without effect counts, Task List progress or a previous step
+recap. Other outcomes have no generic result card or standalone counter summary.
+Typed question tools retain their own question forms. Execution-health warnings
+stay separate and visible; the composer reply prompt remains available.
 
 Activities show **action → semantic target → result** in a naturally wrapping,
 muted 12 px flow. Action, icon, target and ordinary outcome share the muted color.
@@ -1428,7 +1434,7 @@ Unknown effects and incomplete reads are amber. A failed action is amber only fo
 an exact actionable error code with source-owned no-effect/undispatched evidence;
 missing evidence, access failures, tool defects and other failures remain red.
 An unknown effect stays amber even when it stopped the run; the stopped lifecycle
-remains explicit. A completed run with failed calls shows an amber count note,
+remains explicit. A completed run with failed calls shows a compact amber warning,
 while a failed run without unknown effects remains red. Targets use literal
 inline-code styling (not Markdown or HTML interpretation) and remain readable
 without extra UI truncation; distinct
@@ -1483,7 +1489,9 @@ narration or a separate outcome row. Identical `Content`/`ResultMessage` within 
 diagnostic is shown once; distinct bodies and independent calls remain intact.
 A body-only diagnostic is still expandable. Unknown-effect warnings retain priority,
 and failed/cancelled zero-call runs keep their explanation without an empty action
-card. Diagnostic links retain the originating chat.
+card. A failed/cancelled run with unknown effects combines the cause and verification
+warning in that same visible note. The message footer does not repeat the outcome
+already shown by the run. Diagnostic links retain the originating chat.
 
 User Markdown preserves entered single line breaks, including CRLF; model Markdown
 keeps normal paragraph/soft-break semantics. Lists and code fences use the same

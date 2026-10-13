@@ -419,6 +419,9 @@ function appendAgentRunViewState(parent, runViewState, runId) {
   var health = runViewState ? runViewState.executionHealth : "unknown";
   var uncertain = health === "unknown";
   if (health === "clean" && runViewState && ["failed", "cancelled"].indexOf(runViewState.lifecycle) < 0) return;
+  var cause = runViewState && runViewState.lifecycle === "failed"
+    ? window.RNAssistantRunViewState.failureReasonLabel(runViewState.reason)
+    : runViewState && runViewState.lifecycle === "cancelled" ? "Выполнение отменено." : "";
   var note = document.createElement("div");
   note.className = "message-outcome " + (uncertain ? "status-warning" : runViewState && runViewState.lifecycle === "failed" ? "status-failed" :
     health === "errors" ? "status-warning" : "status-history");
@@ -427,14 +430,12 @@ function appendAgentRunViewState(parent, runViewState, runId) {
   if (!runViewState) {
     note.textContent = "Сведения о выполнении недоступны. Результат изменений не подтверждён.";
   } else if (uncertain) {
-    note.textContent = "Есть действия с неподтверждённым результатом: " + runViewState.unknownEffects +
+    note.textContent = (cause ? cause + " " : "") + "Есть действия с неподтверждённым результатом: " + runViewState.unknownEffects +
       ". Проверьте фактическое состояние перед повторной записью.";
-  } else if (runViewState.lifecycle === "failed") {
-    note.textContent = window.RNAssistantRunViewState.failureReasonLabel(runViewState.reason);
-  } else if (runViewState.lifecycle === "cancelled") {
-    note.textContent = "Выполнение отменено.";
+  } else if (cause) {
+    note.textContent = cause;
   } else {
-    note.textContent = "Неудачных попыток в ходе работы: " + runViewState.failedCalls + ".";
+    note.textContent = "В ходе работы были неудачные попытки.";
   }
   if (runId) {
     var openJournal = document.createElement("button");
@@ -457,65 +458,6 @@ function agentRunId(items, finalMessage) {
     if (items[index] && messageRunId(items[index].message)) return messageRunId(items[index].message);
   }
   return "";
-}
-
-function appendAgentRunResult(parent, runViewState, timeline, steps) {
-  if (!runViewState) return;
-  var facts = [];
-  if (runViewState.verifiedWrites) facts.push("Подтверждено изменений: " + runViewState.verifiedWrites);
-  if (runViewState.noChangeWrites) facts.push("Подтверждено без изменений: " + runViewState.noChangeWrites);
-  if (runViewState.unverifiedWrites) facts.push("Без проверки результата: " + runViewState.unverifiedWrites);
-  if (runViewState.failedCalls) facts.push("Неудачных вызовов: " + runViewState.failedCalls);
-  if (runViewState.unknownEffects > runViewState.unverifiedWrites)
-    facts.push("Действий с неизвестным эффектом: " + (runViewState.unknownEffects - runViewState.unverifiedWrites));
-  var task = null;
-  if (window.RNAssistantTaskList) {
-    (timeline || []).forEach(function (item) {
-      var activity = item && item.activity;
-      if (activity && activityToolId(activity) === "common.task_list_set" && activityStatus(activity) === "completed") {
-        var next = window.RNAssistantTaskList.fromActivity(activity);
-        if (next) task = next;
-      }
-    });
-  }
-  var open = task ? (task.steps || []).filter(function (step) {
-    var status = String(step.Status || step.status || "pending").toLowerCase();
-    return status !== "completed" && status !== "cancelled";
-  }) : [];
-  var ordinaryCompletion = runViewState.lifecycle === "completed" &&
-    runViewState.reason !== "model_blocked" && runViewState.reason !== "model_needs_input";
-  if (ordinaryCompletion && !facts.length && !open.length) return;
-  var card = document.createElement("section");
-  card.className = ordinaryCompletion ? "agent-result-summary" : "agent-result-card";
-  if (!ordinaryCompletion) {
-    card.setAttribute("data-run-result-card", "true");
-    var title = document.createElement("strong");
-    title.className = "agent-result-title";
-    title.textContent = window.RNAssistantRunViewState.outcomeLabel(runViewState);
-    card.appendChild(title);
-  }
-  if (facts.length) {
-    var evidence = document.createElement("p");
-    evidence.className = "agent-result-evidence";
-    evidence.textContent = facts.join(" · ");
-    card.appendChild(evidence);
-  }
-  if (task && (open.length || !ordinaryCompletion)) {
-    var plan = document.createElement("p");
-    plan.className = "agent-result-plan";
-    plan.textContent = open.length ? "В списке осталось: " + open.length + " из " + task.steps.length +
-      " · " + open.slice(0, 2).map(function (step) { return step.Text || step.text || "Шаг"; }).join("; ") :
-      "Шаги списка выполнены: " + task.steps.length + ".";
-    card.appendChild(plan);
-  }
-  var messages = (steps || []).map(function (step) { return (step.message || "").trim(); }).filter(Boolean);
-  if (!ordinaryCompletion && messages.length) {
-    var last = document.createElement("p");
-    last.className = "agent-result-last-step";
-    last.textContent = "Последний шаг: " + messages[messages.length - 1];
-    card.appendChild(last);
-  }
-  parent.appendChild(card);
 }
 
 function renderAgentRunArticle(run) {
@@ -548,12 +490,21 @@ function renderAgentRunArticle(run) {
     appendAgentRunOverview(process, steps, timeline, stats);
   }
   if (process.childNodes.length) body.appendChild(process);
-  if (!run.live && !run.continued) appendAgentRunResult(body, runViewState, timeline, steps);
   // This warning is outside collapsed trace and never derived from the model's prose.
   if (!run.live) appendAgentRunViewState(body, runViewState, agentRunId(items, finalMessage));
   if (finalMessage) {
     var finalSection = document.createElement("section");
     finalSection.className = "agent-final-step";
+    if (!run.live && !run.continued && runViewState &&
+        ((runViewState.lifecycle === "awaiting_user" && runViewState.reason === "model_needs_input") ||
+         (runViewState.lifecycle === "completed" && runViewState.reason === "model_blocked"))) {
+      finalSection.className += " agent-result-card";
+      finalSection.setAttribute("data-run-result-card", "true");
+      var title = document.createElement("strong");
+      title.className = "agent-result-title";
+      title.textContent = window.RNAssistantRunViewState.outcomeLabel(runViewState);
+      finalSection.appendChild(title);
+    }
     appendAgentFinalAnswer(finalSection, finalMessage);
     body.appendChild(finalSection);
   }

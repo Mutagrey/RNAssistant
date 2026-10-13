@@ -225,5 +225,4 @@
 
   window.renderAgentPlanDock = renderAgentPlanDock;
   window.setAgentPlanDockOpen = setAgentPlanDockOpen;
-  window.RNAssistantTaskList = Object.freeze({ fromActivity: taskListFromToolActivity });
 }());

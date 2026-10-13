@@ -161,8 +161,9 @@ ctx.resetRenderedMessageUnits(box);
 assert.equal(ctx.buildMessageUnits().length, 2, "saved progress and terminal diagnostic belong to one run");
 render();
 assert.equal(walk(box).filter(n => n.classList.contains("agent-run")).length, 1);
-assert.equal(walk(box).filter(n => n.classList.contains("agent-result-card")).length, 1);
-assert.match(box.textContent, /Ошибка выполнения/);
+assert.equal(walk(box).filter(n => n.classList.contains("agent-result-card")).length, 0);
+assert.equal(walk(box).filter(n => n.attributes["data-runtime-health"]).length, 1);
+assert.doesNotMatch(box.textContent, /Последний шаг|Подтверждено изменений/);
 assert.match(box.textContent, /Модель повторила описание прогресса/);
 assert.equal(walk(box).filter(n => n.classList.contains("status-running")).length, 0,
   "terminal failure does not leave earlier progress cards running");
@@ -172,6 +173,14 @@ overview.open = true; overview.listeners.toggle();
 assert.equal(walk(overview).filter(n => n.classList.contains("agent-step-message")).length, 2);
 assert.equal(walk(overview).filter(n => n.classList.contains("kind-step")).length, 0,
   "step text is not repeated inside its own activity row");
+
+ctx.state.messages = [{ Id: "cancelled", Role: "assistant", RunId: "r", Content: "Текст модели сохранён.",
+  RunViewState: Object.assign({}, failed, { Lifecycle: "cancelled" }) }];
+render();
+assert.equal(box.textContent.split("Выполнение отменено.").length - 1, 1);
+const footer = walk(box).find(n => n.classList.contains("message-footer"));
+assert.equal(walk(footer).filter(n => n.classList.contains("message-outcome")).length, 0,
+  "final-only run footer does not repeat the outcome from the body");
 
 // Background inbox work can start another run without an idle state between them.
 ctx.resetLiveReasoning = () => {};
