@@ -1952,7 +1952,7 @@ This receipt connects the transient UI echo to the exact history message without
 matching text. Queue edits compare the input revision.
 
 `RunningMessageDelivery` selects Steer (default) or Queue for Enter during a run;
-Shift+Enter inserts a newline. A composer menu overrides one submission. Input,
+the send button uses the same setting. Shift+Enter inserts a newline. Input,
 files and document selection remain available, with a separate Stop button.
 During a run, selection is captured under the document read gate into an immutable
 attachment draft; upload staging does not reserve or mutate the running chat. Idle

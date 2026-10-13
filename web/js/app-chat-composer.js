@@ -185,7 +185,6 @@ function renderSendControls() {
   if (typeof renderPromptContextInspectorAvailability === "function") {
     renderPromptContextInspectorAvailability();
   }
-  if ($("sendDeliveryMenu")) $("sendDeliveryMenu").hidden = isEditing;
   updateComposerInputState();
 }
 

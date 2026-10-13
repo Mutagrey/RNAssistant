@@ -142,7 +142,7 @@ async function refreshChatAfterSendFailure(chatId) {
   }
 }
 
-async function submitChatInput(delivery) {
+async function submitChatInput() {
   if (state.chatNavigationPending || state.initializePromise || state.chatDetailPending || state.chatDetailError) return;
   if (hasActiveMessageEdit()) {
     if (!currentActiveSend() && !state.modelSaving && !state.modeSaving && !state.reasoningSaving) {
@@ -193,7 +193,9 @@ async function submitChatInput(delivery) {
     return;
   }
 
-  await submitInboxMessage(text, attachments, targetChatId, delivery || (currentActiveSend() || (typeof pendingAgentApprovalActivity === "function" && pendingAgentApprovalActivity()) ? runningMessageDelivery() : "Steer"));
+  var delivery = currentActiveSend() || (typeof pendingAgentApprovalActivity === "function" && pendingAgentApprovalActivity())
+    ? runningMessageDelivery() : "Steer";
+  await submitInboxMessage(text, attachments, targetChatId, delivery);
 }
 
 function stopActiveSend() {

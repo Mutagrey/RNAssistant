@@ -170,22 +170,10 @@ async function pollChatInbox() {
 function initChatInbox() {
   if (state.inboxInitialized) return;
   state.inboxInitialized = true;
-  ["Steer", "Queue"].forEach(function (delivery) {
-    $("send" + delivery + "Button").addEventListener("click", function () {
-      $("sendDeliveryMenu").open = false;
-      submitChatInput(delivery);
-    });
-  });
   document.addEventListener("click", function (event) {
-    var menu = $("sendDeliveryMenu"); if (menu.open && !menu.contains(event.target)) menu.open = false;
     document.querySelectorAll(".inbox-item-menu[open]").forEach(function (itemMenu) {
       if (!itemMenu.contains(event.target)) itemMenu.open = false;
     });
-  });
-  document.addEventListener("keydown", function (event) {
-    if (event.key === "Escape" && $("sendDeliveryMenu").open) {
-      $("sendDeliveryMenu").open = false; $("sendDeliveryMenu").querySelector("summary").focus();
-    }
   });
   window.setInterval(function () {
     if (document.visibilityState !== "hidden" && (!state.chatInboxes || !state.chatInboxes[state.activeChatId] || chatInbox().running || (chatInbox().items || []).length || pendingChatInputs().length || currentActiveSend())) pollChatInbox();
