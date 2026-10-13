@@ -618,6 +618,9 @@ namespace RNAssistant.Office.WebView
                     case "changeArtifactLink":
                         responsePayload = _controller.ChangeArtifactLink(Payload<ArtifactLinkChangeRequest>(payload));
                         break;
+                    case "deleteDocumentArtifact":
+                        responsePayload = _controller.DeleteDocumentArtifact(Payload<ArtifactDeleteRequest>(payload));
+                        break;
                     case "readArtifactViewerPage":
                         var artifactViewerPage = Payload<ArtifactViewerPagePayload>(payload);
                         responsePayload = _controller.ReadArtifactViewerPage(

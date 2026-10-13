@@ -189,6 +189,8 @@
         $("deleteHtmlWorkspaceButton").disabled = state.bridgeUnavailable || !selected ||
           selected.type === "artifact" || selected.type === "collection" || detailUnavailable ||
           (blocked && selected.type !== "plan");
+        $("deleteHtmlWorkspaceButton").textContent = selected && selected.type === "plan"
+          ? "Удалить из документа…" : "Удалить из HTML-проекта…";
         $("deleteHtmlWorkspaceButton").title = selected
           ? (selected.type === "plan" ? "Удалить план" : "Удалить выбранный файл или источник данных")
           : "Выберите артефакт";
@@ -369,6 +371,7 @@
       if (!frame || !detail) {
         return;
       }
+      if ($("htmlWorkspaceEditor") && $("htmlWorkspaceEditor").hidden) { clearPreview(frame); return; }
       var selected = selectedItem();
       var special = selected && (selected.type === "plan" || selected.type === "artifact" || selected.type === "collection");
       frame.classList.toggle("hidden", !!special);
@@ -427,6 +430,7 @@
     }
 
     return {
+      suspendPreview: function () { clearPreview($("htmlWorkspacePreviewFrame")); },
       applyMode: applyHtmlWorkspaceMode,
       confirmDiscard: confirmDiscardHtmlWorkspaceChanges,
       markDirty: markHtmlWorkspaceDirty,

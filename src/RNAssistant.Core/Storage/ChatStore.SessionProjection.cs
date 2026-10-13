@@ -148,6 +148,7 @@ namespace RNAssistant.Core.Storage
             long htmlMs = 0, contextMs = 0, chartMs = 0;
             if (rebuildDerivedProjections)
             {
+                DocumentArtifacts.ProjectRemovals(session);
                 RebuildHtmlWorkspaceProjection(session);
                 htmlMs = timer.ElapsedMilliseconds - sessionMs - documentMs;
                 RebuildContextCheckpointProjection(session);

@@ -183,6 +183,9 @@
     log: log,
     cancelRequest: function (requestId) { return cancelBridgeRequest(requestId); },
     getSelection: workspaceActionSelection,
+    deleteDocumentArtifact: function (artifact) {
+      return window.RNAssistantArtifactCatalog.remove(prop(artifact, "ResourceUri", "resourceUri", ""));
+    },
     getActionState: workspaceActionState,
     syncEditor: syncHtmlEditorToState,
     applyWorkspaceResponse: applyHtmlWorkspaceResponse,
@@ -267,6 +270,7 @@
   }
 
   function renderHtmlWorkspaceList() {
+    if (window.RNAssistantArtifactCatalog) window.RNAssistantArtifactCatalog.sync();
     var search = $("htmlWorkspaceSearchInput");
     var resourceHeads = typeof artifactResourceHeads === "function" ? artifactResourceHeads() : (state.artifacts || []);
     var libraryArtifacts = resourceHeads.filter(function (artifact) {
@@ -321,6 +325,7 @@
       { status: "ok", passed: true, errorCount: 0, warningCount: 0, issues: [] };
     state.htmlWorkspace = response.workspace || response.Workspace || { activeFileId: "", files: [], dataSources: [], history: [], redoHistory: [], redoBranches: [], recovery: { status: "empty", canMutate: true, candidates: [] } };
     state.htmlWorkspaceDirty = false;
+    if (window.RNAssistantArtifactCatalog) window.RNAssistantArtifactCatalog.editor();
     renderHtmlWorkspace();
     return true;
   }
@@ -408,6 +413,7 @@
       ? { type: "plan", id: artifactId(latest) }
       : { type: "file", id: "" };
     state.htmlWorkspaceDirty = false;
+    if (window.RNAssistantArtifactCatalog) window.RNAssistantArtifactCatalog.editor();
     renderHtmlWorkspace();
     return true;
   }
@@ -491,12 +497,14 @@
     if (typeof isPanelActive === "function" && !isPanelActive("artifacts")) return;
     workspace();
     ensureSelection();
+    if (state.htmlWorkspaceDirty && window.RNAssistantArtifactCatalog) window.RNAssistantArtifactCatalog.editor();
     var layout = $("htmlWorkspaceLayout");
     if (layout) {
       layout.classList.toggle("is-sidebar-hidden", !!state.htmlWorkspaceSidebarHidden);
     }
     updateHtmlSidebarToggle();
     renderHtmlWorkspaceList();
+    if ($("htmlWorkspaceEditor").hidden) { workspaceEditor.suspendPreview(); return; }
     renderHtmlWorkspaceEditor();
     applyHtmlWorkspaceMode();
     updateHtmlWorkspaceStatus();

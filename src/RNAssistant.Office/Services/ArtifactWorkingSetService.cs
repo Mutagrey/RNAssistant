@@ -28,6 +28,7 @@ namespace RNAssistant.Office.Services
                 .GroupBy(item => ArtifactWorkingSet.Identity(session, item)))
             {
                 var first = group.First();
+                if (_artifacts.IsRemoved(session, first)) continue;
                 if (first.Kind != ChatArtifactKinds.PlanDocument && first.Kind != ChatArtifactKinds.HtmlWorkspace && MarkdownDocumentIdentity.LogicalId(first.Id) == null && DocumentArtifactStore.ContextLogicalId(first.Id) == null) { yield return group.Single(); continue; }
                 ResourceRef current = null;
                 var unavailableHead = false;
@@ -70,6 +71,8 @@ namespace RNAssistant.Office.Services
             {
                 var artifact = request.Detached.Value
                     ? _artifacts.InspectMetadata(session, reference) : _artifacts.Read(session, reference, false);
+                if (!request.Detached.Value && _artifacts.IsRemoved(session, artifact))
+                    throw new InvalidOperationException("Артефакт удалён из документа. Обновите дерево.");
                 if (request.Detached.Value && !ArtifactWorkingSet.IsLinked(session, artifact))
                     throw new InvalidOperationException("В этом чате нет такой подключённой ссылки.");
                 if (!request.Detached.Value && artifact.Kind == ChatArtifactKinds.PlanDocument &&
@@ -111,6 +114,22 @@ namespace RNAssistant.Office.Services
         private static ResourceAuthorityScopeId Scope(ChatSession session)
         {
             return ResourceAuthorityScopeId.Document(new DocumentAuthorityId(session.DocumentAuthorityId));
+        }
+
+        public void Delete(ChatSession session, ArtifactDeleteRequest request, Action<ChatSession> persist)
+        {
+            RequireChat(session, request?.ChatId);
+            if (request.ExpectedSessionRevision != session.Revision || !request.Confirmed)
+                throw new InvalidOperationException("Обновите дерево и подтвердите удаление из документа.");
+            if (persist == null) throw new ArgumentNullException(nameof(persist));
+            using (_mutations.AcquireScope(Scope(session)))
+            {
+                var artifact = _artifacts.Remove(session, new ResourceRef(request.ResourceUri));
+                ArtifactWorkingSet.Set(session, artifact, true);
+                _artifacts.ProjectRemovals(session);
+                // Publication survives a failed chat save. Never retry deletion automatically.
+                persist(session);
+            }
         }
 
         private static void RequireChat(ChatSession session, string chatId)

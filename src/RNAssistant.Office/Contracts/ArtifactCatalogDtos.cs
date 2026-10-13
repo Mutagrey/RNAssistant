@@ -23,6 +23,7 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("linked")] public bool Linked { get; set; }
         [JsonProperty("selected")] public bool Selected { get; set; }
         [JsonProperty("canTransfer")] public bool CanTransfer { get; set; }
+        [JsonProperty("canDelete")] public bool CanDelete { get; set; }
         [JsonProperty("availabilityIssue")] public string AvailabilityIssue { get; set; }
     }
     public sealed class ArtifactCatalogDocument
@@ -49,6 +50,13 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("operationId")] public string OperationId { get; set; }
         [JsonProperty("uploadLeaseId")] public string UploadLeaseId { get; set; }
         [JsonProperty("preview")] public bool Preview { get; set; }
+    }
+    public sealed class ArtifactDeleteRequest
+    {
+        [JsonProperty("chatId")] public string ChatId { get; set; }
+        [JsonProperty("expectedSessionRevision")] public long? ExpectedSessionRevision { get; set; }
+        [JsonProperty("resourceUri")] public string ResourceUri { get; set; }
+        [JsonProperty("confirmed")] public bool Confirmed { get; set; }
     }
     public sealed class ArtifactTransferDownload
     {

@@ -5,7 +5,7 @@ const path = require("node:path");
 const vm = require("node:vm");
 
 function fixture() {
-  const f = { calls: [], applied: [], alerts: [], logs: [], confirm: () => true };
+  const f = { calls: [], applied: [], alerts: [], logs: [], removals: [], confirm: () => true };
   f.state = { activeChatId: "chat-a", activeHtmlArtifactId: "html-r3", chatNavigationVersion: 1,
     chatProjectionRevisions: { "chat-a": 7 }, htmlWorkspaceEditVersion: 0,
     htmlWorkspaceSelection: { type: "file", id: "index.html" } };
@@ -17,6 +17,7 @@ function fixture() {
   context.RNAssistantArtifactViewerActions = { create: () => ({}) };
   vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-html-workspace-actions.js"), "utf8"), context);
   f.actions = context.RNAssistantHtmlWorkspaceActions.create({ state: f.state,
+    deleteDocumentArtifact: artifact => { f.removals.push(artifact); return true; },
     getSelection: () => ({ type: "file", path: "index.html", label: "index.html" }),
     getActionState: () => ({ chatId: f.state.activeChatId, dirty: f.state.htmlWorkspaceDirty,
       undoSnapshotId: "parent", redoSnapshotId: "child", recoverySnapshotId: "healthy" }),
@@ -83,6 +84,11 @@ const cases = [
     console.log("PASS HTML actions: " + name + " exact controls and races");
   }
   const f = fixture();
+  const plan = { resourceUri: "rna://chat/doc/artifact/selected-plan/revision/2" };
+  f.state.activePlanDocumentArtifactId = "another-plan";
+  assert.equal(await f.actions.deleteSelection({ type: "plan", item: plan }), true);
+  assert.equal(f.removals[0], plan, "Plan deletion passes the selected exact artifact to the common removal owner");
+  assert.equal(f.calls.length, 0, "Plan deletion cannot call an argument-free tool on a different active Plan");
   f.prompt = () => { f.state.activeChatId = "chat-b"; };
   await f.actions.importUploadedHtml({ sourceResourceUri: "rna://exact/original" });
   assert.equal(f.calls.length, 0, "import pins source chat before the path prompt");

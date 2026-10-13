@@ -65,7 +65,7 @@ namespace RNAssistant.Office.Services
                         Kind = item.Kind, UpdatedUtc = item.CreatedUtc, Linked = linked,
                         Selected = linked && (item.Id == actor.ActiveHtmlArtifactId || item.Id == actor.ActivePlanDocumentArtifactId ||
                             MarkdownDocumentIdentity.LogicalId(item.Id) != null && actor.ArtifactLinks.Any(l => !l.Detached && l.Reference.Uri == ChatResourceUri.CreateArtifactRevisionUri(actor, item))), AvailabilityIssue = item.AvailabilityIssue,
-                        CanTransfer = CanTransfer(item) });
+                        CanTransfer = CanTransfer(item), CanDelete = doc.AuthorityId == actor.DocumentAuthorityId });
                 }
             }
             items = items.OrderByDescending(i => i.UpdatedUtc).ThenBy(i => i.ResourceUri, StringComparer.Ordinal).ToList();
@@ -91,6 +91,7 @@ namespace RNAssistant.Office.Services
             var reference = ChatResourceUri.ArtifactSnapshot(new ResourceRef(request.ResourceUri));
             if (reference.Uri != request.ResourceUri) throw new InvalidDataException("Требуется точная ссылка артефакта.");
             var artifact = _artifacts.Read(source, reference);
+            if (_artifacts.IsRemoved(source, artifact)) throw new InvalidOperationException("Артефакт удалён из документа.");
             if (!CanTransfer(artifact) && !request.Preview) throw new InvalidOperationException("Перенос этого типа пока не поддерживается.");
             if (artifact.Kind == ChatArtifactKinds.HtmlWorkspace)
             {

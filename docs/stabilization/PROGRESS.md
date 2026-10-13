@@ -1,5 +1,22 @@
 # Stabilization progress
 
+## Artifact tree and document removal — 2026-10-13
+
+Owners: Artifact Library UI / DocumentArtifactStore. A single tree and adjacent
+viewer replace the separate catalog/editor screens; selected HTML members stay
+inside that tree. Unlink remains chat-local. Confirmed document removal uses an
+exact-current guard and durable authority tombstone across all chats, including
+originals, Plans, HTML, Markdown and JSON. Historical references/bytes remain.
+The Plan editor no longer deletes through an argument-free active-Plan tool call.
+
+Evidence: host-neutral working set/removal 4/4, Library 5/5, recovery 1/1 and typed
+artifact bridge 1/1; targeted tree/actions/text/media scripts and actual Chromium
+layout at 1100/420 px pass. Stale writers, repeated/unconfirmed deletion, restart,
+CAS retention and a failed post-publication chat save are covered. Existing fixture
+failures and the unexecuted real-controller smoke are recorded in
+[BACKLOG](BACKLOG.md#artifact-ui-check-fixture-drift--2026-10-13).
+Windows/Office/WebView2 delivery remains unqualified; no Office/VSTO checks ran.
+
 ## Task List retry after state repair — 2026-10-13
 
 Owner: Core TaskListToolHandler / ToolRecoveryContract. A definite state refusal

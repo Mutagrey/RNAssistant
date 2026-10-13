@@ -128,14 +128,19 @@ namespace RNAssistant.Core.Storage
             int revision;
             ChatResourceUri.TryParseArtifactRevision(reference, out owner, out id, out revision);
             if (IsPlan(session, reference)) PlanIdFromSnapshot(reference);
-            try { return Read(session, reference, false); }
+            try
+            {
+                var artifact = Read(session, reference, false);
+                artifact.RemovedFromDocument = IsRemoved(session, artifact);
+                return artifact;
+            }
             catch (InvalidDataException) { }
             catch (IOException) { }
             catch (JsonException) { }
             catch (UnauthorizedAccessException) { }
             // Explicit reference-only projection. No recovered title, metadata,
             // body, timestamp or writable head is asserted or persisted.
-            return new ChatArtifact
+            var unavailable = new ChatArtifact
             {
                 Id = id, DocumentAuthorityId = string.IsNullOrWhiteSpace(session.DocumentAuthorityId) ? null : owner,
                 WorkspaceId = string.IsNullOrWhiteSpace(session.DocumentAuthorityId) ? owner : null, Revision = revision,
@@ -144,6 +149,8 @@ namespace RNAssistant.Core.Storage
                     MarkdownDocumentIdentity.LogicalId(id) != null ? ChatArtifactKinds.Markdown : ContextLogicalId(id) != null ? SharedContextKind : ChatArtifactKinds.File,
                 CreatedUtc = default(DateTime), AvailabilityIssue = "metadata_unavailable"
             };
+            unavailable.RemovedFromDocument = IsRemoved(session, unavailable);
+            return unavailable;
         }
 
         public ChatArtifact Read(ChatSession session, ResourceRef reference, bool includeBody = true)
@@ -159,8 +166,7 @@ namespace RNAssistant.Core.Storage
             }
             var scope = Scope(session);
             if (!Owns(session, reference)) throw new InvalidDataException("The artifact belongs to another document.");
-            var head = _authority.GetHead(scope, reference.Identity);
-            if (head?.Knowledge != HeadKnowledge.Known || head.Revision.Uri != reference.Uri || head.Revision.Revision != reference.Revision)
+            if (!HasPublishedSnapshot(scope, reference))
                 throw new InvalidDataException("The original has not crossed its publication barrier or is unavailable.");
             var record = ReadRecord(_revisions.GetView(scope, reference, RecordView));
             var revision = _revisions.GetRevision(scope, reference);

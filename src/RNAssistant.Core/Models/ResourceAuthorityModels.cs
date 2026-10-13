@@ -62,7 +62,7 @@ namespace RNAssistant.Core.Models
     }
 
     [JsonConverter(typeof(StringEnumConverter))]
-    public enum HeadKnowledge { Known, Unknown, Unavailable }
+    public enum HeadKnowledge { Known, Unknown, Unavailable, Removed }
 
     public sealed class ResourceHeadState
     {
@@ -88,7 +88,7 @@ namespace RNAssistant.Core.Models
                 !identity.Equals(revision.Identity)))
                 throw new ArgumentException("A known head requires an exact revision of the same logical resource.", nameof(revision));
             if (knowledge != HeadKnowledge.Known && revision != null)
-                throw new ArgumentException("Unknown/unavailable heads cannot retain a current revision.", nameof(revision));
+                throw new ArgumentException("Non-current heads cannot retain a current revision.", nameof(revision));
             Identity = new ResourceIdentity(identity.Uri);
             Knowledge = knowledge;
             Revision = revision == null ? null : revision.Copy();
@@ -110,6 +110,11 @@ namespace RNAssistant.Core.Models
         public static ResourceHeadState Unavailable(ResourceIdentity identity, long generation, string cause)
         {
             return new ResourceHeadState(identity, HeadKnowledge.Unavailable, null, cause, generation);
+        }
+
+        public static ResourceHeadState Removed(ResourceIdentity identity, long generation)
+        {
+            return new ResourceHeadState(identity, HeadKnowledge.Removed, null, "document-artifact-removal", generation);
         }
 
         public ResourceHeadState AtGeneration(long generation)

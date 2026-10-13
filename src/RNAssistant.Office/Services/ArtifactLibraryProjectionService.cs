@@ -205,7 +205,7 @@ namespace RNAssistant.Office.Services
                 .GroupBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
                 .Where(group => group.Count() == 1)
                 .Select(group => group.Single())
-                .Where(item => !ArtifactWorkingSet.IsDetached(session, item))
+                .Where(item => item.RemovedFromDocument || !ArtifactWorkingSet.IsDetached(session, item))
                 .ToList();
             var byId = artifacts.ToDictionary(item => item.Id, StringComparer.OrdinalIgnoreCase);
             var heads = new List<ArtifactLibraryHeadDto>();
@@ -214,6 +214,12 @@ namespace RNAssistant.Office.Services
 
             foreach (var artifact in artifacts)
             {
+                if (artifact.RemovedFromDocument)
+                {
+                    if (visibleIds != null && visibleIds.Contains(artifact.Id))
+                        removedResourceUris.Add(ChatResourceUri.CreateArtifactRevisionUri(session, artifact));
+                    continue;
+                }
                 var resourceClass = ResourceClass(artifact);
                 if (IsVersioned(resourceClass))
                 {

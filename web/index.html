@@ -44,7 +44,7 @@
   <link rel="stylesheet" href="css/app-model-context.css?v=model-context-20261002-1">
   <link rel="stylesheet" href="css/app-context-inspector.css?v=json-height-20260929-1-usage-20261002-1">
   <link rel="stylesheet" href="css/app-chart-artifacts.css?v=chatui-20260622-3">
-  <link rel="stylesheet" href="css/app-artifacts.css?v=accent-chat-20261012-1-image-display-1">
+  <link rel="stylesheet" href="css/app-artifacts.css?v=accent-chat-20261012-1-image-display-1-artifact-tree-20261013-1">
   <link rel="stylesheet" href="css/app-tree-adapter.css?v=tree-adapter-20260829-1">
   <link rel="stylesheet" href="css/app-html-workspace.css?v=html-memory-20261002-1">
   <link rel="stylesheet" href="css/app-responsive.css?v=library-layout-20260907-1-composer-wrap-20261012-1">
@@ -587,32 +587,18 @@
       <section class="panel" id="tab-artifacts">
         <div class="artifact-catalog-toolbar">
           <label>Артефакты <select id="artifactCatalogScope"><option value="chat">В чате</option><option value="document">В документе</option><option value="all">Все документы</option></select></label>
-          <button type="button" id="artifactCatalogShow">Каталог</button>
-          <button type="button" id="artifactCatalogEditor">Редактор</button>
           <button type="button" id="artifactCatalogImport">Импортировать…</button>
           <input type="file" id="artifactCatalogFile" hidden>
         </div>
-        <section id="artifactCatalog" class="artifact-catalog" aria-label="Каталог артефактов">
-          <div class="artifact-catalog-filters">
-            <input type="search" id="artifactCatalogQuery" placeholder="Поиск по названию" aria-label="Название артефакта" maxlength="200">
-            <select id="artifactCatalogKind" aria-label="Тип артефакта"><option value="">Все типы</option><option value="html_workspace">HTML-проекты</option><option value="markdown">Markdown</option><option value="file">Файлы и JSON</option><option value="image">Изображения</option><option value="plan_document">Планы</option></select>
-            <select id="artifactCatalogDocument" aria-label="Документ"><option value="">Все документы</option></select>
-            <button type="button" id="artifactCatalogRefresh">Обновить</button>
-          </div>
-          <p id="artifactCatalogStatus" role="status" aria-live="polite"></p>
-          <div id="artifactCatalogList" class="artifact-catalog-list"></div>
-          <button type="button" id="artifactCatalogMore" hidden>Следующие 50</button>
-          <section id="artifactCatalogPreview" hidden aria-label="Предпросмотр артефакта">
-            <button type="button" id="artifactCatalogBack">← К списку</button>
-            <h3 id="artifactCatalogPreviewTitle"></h3>
-            <div id="artifactCatalogPreviewBody"></div>
-          </section>
-        </section>
         <div class="tool-layout html-workspace-layout split-layout" id="htmlWorkspaceLayout" data-split-key="html-workspace" data-default-ratio="0.3" data-min-left="180" data-min-ratio="0.18" data-max-ratio="0.5">
           <aside class="tool-list-panel html-workspace-sidebar" id="htmlWorkspaceSidebar">
-            <div class="tool-list-status" id="htmlWorkspaceStatus">Ресурсов пока нет.</div>
+            <div class="artifact-catalog-filters">
+              <select id="artifactCatalogKind" aria-label="Тип артефакта"><option value="">Все типы</option><option value="html_workspace">HTML-проекты</option><option value="markdown">Markdown</option><option value="file">Файлы и JSON</option><option value="image">Изображения</option><option value="plan_document">Планы</option></select>
+              <select id="artifactCatalogDocument" aria-label="Документ" hidden><option value="">Все документы</option></select>
+              <button type="button" id="artifactCatalogRefresh" title="Обновить дерево" aria-label="Обновить дерево">↻</button>
+            </div>
             <div class="tool-list-controls">
-              <input class="tool-search" id="htmlWorkspaceSearchInput" placeholder="Поиск артефактов..." autocomplete="off">
+              <input class="tool-search" id="htmlWorkspaceSearchInput" type="search" maxlength="200" aria-label="Поиск артефактов" placeholder="Поиск артефактов..." autocomplete="off">
               <details class="html-workspace-menu html-workspace-create-menu">
                 <summary>＋ Создать</summary>
                 <div class="html-workspace-menu-items">
@@ -631,10 +617,20 @@
                 </div>
               </div>
             </div>
-            <div class="tool-list html-workspace-tree" id="htmlWorkspaceTree" role="tree" aria-label="Ресурсы чата"></div>
-            <button type="button" class="link-button hidden" id="artifactLibraryMoreButton">Следующие 50 ресурсов</button>
+            <div class="tool-list html-workspace-tree" id="htmlWorkspaceTree" role="tree" aria-label="Артефакты"></div>
+            <div class="artifact-tree-footer">
+              <p id="artifactCatalogStatus" role="status" aria-live="polite"></p>
+              <button type="button" class="link-button" id="artifactCatalogMore" hidden>Показать ещё 50</button>
+              <span id="htmlWorkspaceStatus" class="hidden"></span>
+            </div>
           </aside>
           <div class="splitter" role="separator" aria-orientation="vertical" aria-label="Изменить ширину списка артефактов"></div>
+          <div class="artifact-workspace-content" id="artifactCatalog">
+            <div id="artifactCatalogActions" class="artifact-catalog-actions" hidden></div>
+            <section id="artifactCatalogPreview" class="artifact-catalog-preview" hidden aria-label="Просмотр артефакта">
+              <h3 id="artifactCatalogPreviewTitle"></h3>
+              <div id="artifactCatalogPreviewBody"></div>
+            </section>
           <section class="html-workspace-editor surface-panel padded tool-editor" id="htmlWorkspaceEditor">
             <div class="resource-editor-head html-workspace-head">
               <div class="html-workspace-titlebar">
@@ -696,6 +692,7 @@
               <textarea id="htmlWorkspaceEditorInput" spellcheck="false" placeholder="Выберите HTML файл или JSON источник."></textarea>
             </div>
           </section>
+          </div>
         </div>
       </section>
 
@@ -1129,12 +1126,12 @@
   <script src="js/app-html-workspace-artifacts.js?v=artifact-library-lazy-20261002-1"></script>
   <script src="js/app-html-workspace-source.js?v=html-memory-20261002-1"></script>
   <script src="js/app-html-workspace-model.js?v=html-read-20260906-1"></script>
-  <script src="js/app-html-workspace-editor.js?v=html-memory-20261002-1-large-chat-1-vendors-1"></script>
-  <script src="js/app-tree-adapter.js?v=artifact-gallery-20260902-1"></script>
-  <script src="js/app-html-workspace-tree.js?v=html-memory-20261002-1"></script>
+  <script src="js/app-html-workspace-editor.js?v=html-memory-20261002-1-large-chat-1-vendors-1-artifact-tree-20261013-1"></script>
+  <script src="js/app-tree-adapter.js?v=artifact-gallery-20260902-1-artifact-tree-20261013-1"></script>
+  <script src="js/app-html-workspace-tree.js?v=html-memory-20261002-1-artifact-tree-20261013-1"></script>
   <script src="js/app-artifact-viewer-actions.js?v=binary-chunks-20260906-1"></script>
-  <script src="js/app-html-workspace-actions.js?v=html-action-guard-20260908-1-large-chat-1"></script>
-  <script src="js/app-html-workspace.js?v=html-memory-20261002-1-vendors-1"></script>
+  <script src="js/app-html-workspace-actions.js?v=html-action-guard-20260908-1-large-chat-1-artifact-tree-20261013-1"></script>
+  <script src="js/app-html-workspace.js?v=html-memory-20261002-1-vendors-1-artifact-tree-20261013-1"></script>
   <script src="js/app-context.js?v=ui-lazy-20260903-1-usage-20261002-1-inbox-20261002-1"></script>
   <script src="js/app-model-context.js?v=model-context-20261002-1"></script>
   <script src="js/app-context-inspector.js?v=context-download-20260906-1-usage-20261002-1-model-context-1"></script>
@@ -1142,8 +1139,8 @@
   <script src="js/app-agent-data.js?v=step-results-20260908-1"></script>
   <script src="js/app-agent-model.js?v=catalog-display-chat-20260908-1-run-isolation-1"></script>
   <script src="js/app-chart-artifacts.js?v=chart-chat-scope-20260908-1"></script>
-  <script src="js/app-artifacts.js?v=artifact-library-lazy-20261002-1-image-display-1"></script>
-  <script src="js/app-artifact-catalog.js?v=artifact-catalog-20261002-1-vendors-1"></script>
+  <script src="js/app-artifacts.js?v=artifact-library-lazy-20261002-1-image-display-1-artifact-tree-20261013-1"></script>
+  <script src="js/app-artifact-catalog.js?v=artifact-catalog-20261002-1-vendors-1-artifact-tree-20261013-1"></script>
   <script src="js/app-task-list.js?v=agent-outcome-20261002-1"></script>
   <script src="js/app-agent-activity.js?v=agent-continuity-20261002-1"></script>
   <script src="js/app-agent-approval.js?v=run-view-state-20260830-1"></script>

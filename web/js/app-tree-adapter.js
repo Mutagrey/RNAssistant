@@ -87,7 +87,7 @@
           expanded: expanded,
           selected: false,
           unselectable: !itemType,
-          classes: groupKey ? "rn-tree-group-row" : "rn-tree-item-row",
+          classes: groupKey && (!itemType || itemType === "collection") ? "rn-tree-group-row" : "rn-tree-item-row",
           icon: iconClass(inputNode.iconKind),
           rnDomId: domPrefix + (++domSequence),
           rnItemType: itemType,

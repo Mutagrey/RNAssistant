@@ -651,6 +651,8 @@ namespace RNAssistant.Office
 
         public ChatStateResponse ChangeArtifactLink(ArtifactLinkChangeRequest request)
         { LastChatId = request.ChatId; LastArtifactViewerResourceUri = request.ResourceUri; return new ChatStateResponse { ActiveChatId = request.ChatId }; }
+        public ChatStateResponse DeleteDocumentArtifact(ArtifactDeleteRequest request)
+        { LastChatId = request.ChatId; LastArtifactViewerResourceUri = request.ResourceUri; return new ChatStateResponse { ActiveChatId = request.ChatId }; }
         public ArtifactViewerPageDto ReadArtifactViewerPage(string chatId, string resourceUri, string cursor,
             System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {

@@ -288,7 +288,7 @@
     state.htmlWorkspaceSelection = { type: "artifact", id: artifactId(artifact) };
     setChatResourcePopoverOpen(false);
     switchTab("artifacts");
-    if (window.RNAssistantArtifactCatalog) window.RNAssistantArtifactCatalog.editor();
+    if (window.RNAssistantArtifactCatalog) window.RNAssistantArtifactCatalog.editor(artifact);
     if (typeof renderHtmlWorkspace === "function") renderHtmlWorkspace();
     return true;
   }
@@ -471,6 +471,10 @@
 
   function openArtifactResource(artifact, galleryArtifacts, gallerySource) {
     if (!artifact || value(artifact, "AvailabilityIssue", "availabilityIssue", "") === "metadata_unavailable") return false;
+    if (state.htmlWorkspaceDirty) {
+      window.alert("Сначала сохраните или отмените изменения текущего артефакта.");
+      return false;
+    }
     var kind = artifactKind(artifact);
     if (isImageArtifact(artifact)) {
       createImageGalleryContext(
@@ -496,7 +500,7 @@
     }
     setChatResourcePopoverOpen(false);
     switchTab("artifacts");
-    if (window.RNAssistantArtifactCatalog) window.RNAssistantArtifactCatalog.editor();
+    if (window.RNAssistantArtifactCatalog) window.RNAssistantArtifactCatalog.editor(artifact);
     if (typeof renderHtmlWorkspace === "function") renderHtmlWorkspace();
     return true;
   }
@@ -810,7 +814,7 @@
     if (!button || !count || !list) return 0;
     var items = chatDockResourceHeads();
     var hasMoreHeads = !!value(state.artifactLibrary, "NextCursor", "nextCursor", null);
-    [$("chatResourcesMoreButton"), $("artifactLibraryMoreButton")].forEach(function (more) {
+    [$("chatResourcesMoreButton")].forEach(function (more) {
       if (more) more.classList.toggle("hidden", !hasMoreHeads);
     });
     var hasResources = !!state.activeChatId;
@@ -955,7 +959,7 @@
   function bindChatResourceNavigation() {
     var button = $("toggleChatResourcesButton");
     var menu = $("chatResourceMenu");
-    [$("chatResourcesMoreButton"), $("artifactLibraryMoreButton")].forEach(function (more) {
+    [$("chatResourcesMoreButton")].forEach(function (more) {
       if (more) more.addEventListener("click", loadMoreArtifactHeads);
     });
     var search = $("chatResourcesSearchInput");

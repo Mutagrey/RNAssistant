@@ -93,6 +93,9 @@ namespace RNAssistant.Core.Models
         // Disposable reference-only recovery state, never durable artifact metadata.
         [Newtonsoft.Json.JsonIgnore]
         public string AvailabilityIssue { get; set; }
+        // Derived from document authority, never persisted in chat/artifact metadata.
+        [Newtonsoft.Json.JsonIgnore]
+        public bool RemovedFromDocument { get; set; }
         [Newtonsoft.Json.JsonIgnore]
         public ChatAttachment OriginalAttachment { get; set; }
         public string RunId { get; set; }

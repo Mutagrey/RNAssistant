@@ -1669,6 +1669,14 @@ namespace RNAssistant.Harness
             AssertEqual("chat-view", controller.LastChatId, "link action preserves exact addressed chat");
             AssertEqual(uri, controller.LastArtifactViewerResourceUri, "link action preserves the displayed exact snapshot");
             response = bridge.HandleMessageAsync(JsonConvert.SerializeObject(new {
+                id = "artifact-delete", type = "deleteDocumentArtifact", bridgeToken = token,
+                payload = new ArtifactDeleteRequest { ChatId = "chat-view", ResourceUri = uri,
+                    ExpectedSessionRevision = 4, Confirmed = true }
+            })).GetAwaiter().GetResult();
+            AssertTrue(JObject.Parse(response)["ok"].Value<bool>(), "typed document artifact removal route");
+            AssertEqual("chat-view", controller.LastChatId, "removal preserves addressed chat");
+            AssertEqual(uri, controller.LastArtifactViewerResourceUri, "removal preserves the displayed exact snapshot");
+            response = bridge.HandleMessageAsync(JsonConvert.SerializeObject(new {
                 id = "document-list", type = "listArtifactCatalog", bridgeToken = token,
                 payload = new ArtifactCatalogRequest { Scope = "document", ChatId = "chat-view", Query = "Plan" }
             })).GetAwaiter().GetResult();

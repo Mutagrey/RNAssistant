@@ -55,6 +55,7 @@ namespace RNAssistant.Core.Services
 
         public static bool IsLinked(ChatSession session, ChatArtifact artifact)
         {
+            if (artifact.RemovedFromDocument) return false;
             var identity = Identity(session, artifact);
             var decision = (session.ArtifactLinks ?? new List<ChatArtifactLink>()).SingleOrDefault(link => identity.Equals(link.Identity));
             if (decision != null) return !decision.Detached;
@@ -64,6 +65,7 @@ namespace RNAssistant.Core.Services
 
         public static bool IsDetached(ChatSession session, ChatArtifact artifact)
         {
+            if (artifact?.RemovedFromDocument == true) return true;
             if (artifact == null || string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId) && string.IsNullOrWhiteSpace(artifact.WorkspaceId)) return false;
             var identity = Identity(session, artifact);
             return (session.ArtifactLinks ?? new List<ChatArtifactLink>()).Any(link => link.Detached && identity.Equals(link.Identity));

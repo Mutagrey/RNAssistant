@@ -901,6 +901,7 @@ namespace RNAssistant.Core.Storage
                 CaptureStorageState(session, path);
                 projectedAfter["Revision"] = durableRevision;
                 StoreProjectionCache(path, projectedAfter, session);
+                DocumentArtifacts.ProjectRemovals(session);
                 RebuildHtmlWorkspaceProjection(session);
                 RebuildContextCheckpointProjection(session);
                 RebuildChartActivityProjection(session);

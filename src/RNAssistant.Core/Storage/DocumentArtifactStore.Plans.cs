@@ -117,6 +117,8 @@ namespace RNAssistant.Core.Storage
             var scope = PlanScope(session);
             var head = _authority.GetHead(scope, PlanIdentity(session, planId));
             if (head == null) return null;
+            if (head.Knowledge == HeadKnowledge.Removed)
+                throw new InvalidDataException("The Plan was removed from the document. Create a new Plan instead.");
             if (head.Knowledge != HeadKnowledge.Known)
                 throw new InvalidDataException("The Plan head is unavailable; reconcile its mutation before editing.");
             var revision = _revisions.GetRevision(scope, head.Revision);

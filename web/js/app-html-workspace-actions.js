@@ -211,44 +211,6 @@
       }
     }
 
-    async function deletePlan(selected, chatId) {
-      if (planMutationPending) return false;
-      planMutationPending = true;
-      try {
-        var args = {};
-        var preview = await options.send("runTool", {
-          chatId: chatId,
-          toolId: "common.plan_doc_delete",
-          arguments: args,
-          dryRun: true
-        });
-        if (!toolSucceeded(preview)) throw new Error(toolMessage(preview, "План нельзя удалить."));
-        var data = toolData(preview);
-        var messageIds = value(data, "ReferencingMessageIds", "referencingMessageIds", []) || [];
-        var revisions = Number(value(data, "RemovedRevisions", "removedRevisions", 0) || 0);
-        var warning = (state.htmlWorkspaceDirty ? "Есть несохранённые изменения.\n\n" : "") +
-          "Удалить план «" + selected.label + "»?\n" +
-          "Будет добавлена ревизия удаления; " + revisions + " предыдущих версий останутся в журнале чата.\n" +
-          "Точные ссылки останутся в сообщениях как заглушки «Ресурс удалён».\n\n" +
-          (messageIds.length
-            ? "Ссылки в сообщениях (" + messageIds.length + "):\n" + messageIds.join("\n")
-            : "Ссылок в сообщениях нет.");
-        if (!window.confirm(warning)) return false;
-        var result = await options.send("runTool", {
-          chatId: chatId,
-          toolId: "common.plan_doc_delete",
-          arguments: args,
-          dryRun: false
-        });
-        if (!toolSucceeded(result)) throw new Error(toolMessage(result, "План не удалён."));
-        if (!await refreshPlan(selected.planId, chatId)) return false;
-        options.log("План удалён: " + selected.label);
-        return true;
-      } finally {
-        planMutationPending = false;
-      }
-    }
-
     async function deleteSelection(target) {
       var selected = target && typeof target.type === "string" ? target : options.getSelection();
       if (!selected || selected.type === "artifact" || selected.type === "collection" ||
@@ -257,7 +219,7 @@
 
       try {
         if (selected.type === "plan") {
-          return await deletePlan(selected, chatId);
+          return options.deleteDocumentArtifact ? await options.deleteDocumentArtifact(selected.item) : false;
         }
         if (htmlActionPending || workspaceWrite) return;
         htmlActionPending = true;

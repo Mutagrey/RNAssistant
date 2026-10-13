@@ -646,38 +646,38 @@
 .artifact-link-entry > .chat-resource-row,
 .artifact-link-entry > .chat-resource-row-copy { flex: 1; min-width: 0; }
 .artifact-link-entry > .link-button { flex-shrink: 0; }
-/* Catalog uses the full pane; its preview never selects the editable workspace. */
+/* One artifact tree and one adjacent viewer/editor. */
 .artifact-catalog-toolbar, .artifact-catalog-filters, .artifact-catalog-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
-.artifact-catalog-toolbar { padding:8px 12px; border-bottom:1px solid var(--border, #ddd); }
-.artifact-catalog { padding:12px; overflow:auto; min-height:0; flex:1; }
-.artifact-catalog[hidden], #artifactCatalogPreview[hidden], #artifactCatalogList[hidden] { display:none; }
-.artifact-catalog-filters input { flex:1; min-width:120px; }
-.artifact-catalog-filters select { max-width:100%; }
-.artifact-catalog-list { display:grid; gap:10px; }
-.artifact-catalog-row { padding:12px; border:1px solid var(--border, #ddd); border-radius:8px; }
-.artifact-catalog-copy { display:flex; flex-direction:column; gap:4px; overflow-wrap:anywhere; }
-.artifact-catalog-copy span { font-size:12px; opacity:.7; }
-.artifact-catalog-actions { margin-top:10px; }
-.artifact-catalog-actions button { font-size:12px; }
-.artifact-catalog-source { white-space:pre-wrap; overflow-wrap:anywhere; max-height:65vh; overflow:auto; }
-#artifactCatalogPreviewBody iframe { width:100%; height:50vh; border:0; background:white; }
-#artifactCatalogPreviewBody img { max-width:100%; max-height:65vh; object-fit:contain; }
-#tab-artifacts { flex-direction:column; }
-.artifact-catalog-toolbar { background:var(--panel); }
+.artifact-catalog-toolbar { padding:8px 12px; border-bottom:1px solid var(--line); background:var(--panel); }
 .artifact-catalog-toolbar label { display:flex; align-items:center; gap:8px; font-weight:500; }
-.artifact-catalog-toolbar select, .artifact-catalog-filters select, .artifact-catalog-filters input, #artifactCatalogPreviewBody > select {
-  box-sizing:border-box; min-height:var(--control-height); padding:5px 9px;
-  border:1px solid var(--control-border); border-radius:var(--control-radius);
-  background:var(--panel); color:var(--text); font:inherit;
+.artifact-catalog-toolbar select, .artifact-catalog-filters select, #artifactCatalogPreviewBody select {
+  min-width:0; max-width:100%; border:1px solid var(--line); border-radius:var(--control-radius); padding:5px 8px; color:var(--text); background:var(--panel);
 }
-.artifact-catalog-row { border-color:var(--line); background:var(--panel); }
-.artifact-catalog-copy strong { font-size:14px; font-weight:500; }
-#artifactCatalogStatus { color:var(--muted); font-size:12px; }
-.artifact-catalog-source { background:var(--code); border:1px solid var(--code-border); border-radius:6px; padding:12px; }
-@media (max-width:540px) {
+.artifact-catalog-filters select { flex:1; }
+.artifact-workspace-content { display:flex; flex-direction:column; min-width:0; min-height:0; overflow:hidden; }
+.artifact-workspace-content > .html-workspace-editor { flex:1; min-height:0; }
+.artifact-catalog-actions { padding:8px 12px; border-bottom:1px solid var(--line); }
+.artifact-catalog-actions button { font-size:12px; }
+.artifact-catalog-actions .artifact-action-menu { margin-left:auto; }
+.artifact-catalog-preview { display:flex; flex-direction:column; flex:1; min-height:0; padding:12px; overflow:auto; }
+.artifact-catalog-preview h3 { margin:0 0 12px; font-size:15px; overflow-wrap:anywhere; }
+#artifactCatalogPreviewBody { display:flex; flex-direction:column; gap:10px; flex:1; min-height:0; }
+#artifactCatalogPreviewBody iframe { width:100%; flex:1; min-height:240px; border:0; background:white; }
+#artifactCatalogPreviewBody img { max-width:100%; max-height:100%; object-fit:contain; }
+#artifactCatalogPreviewBody pre { margin:0; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; background:var(--code); border:1px solid var(--code-border); border-radius:6px; padding:12px; }
+.artifact-tree-footer { padding:6px 0; }
+#artifactCatalogStatus { color:var(--muted); font-size:12px; margin:0; overflow-wrap:anywhere; }
+#artifactCatalog [hidden], .artifact-tree-footer [hidden], .artifact-catalog-filters [hidden] { display:none; }
+#htmlWorkspaceSidebar { grid-template-rows:auto auto minmax(0,1fr) auto; }
+#htmlWorkspaceLayout.is-sidebar-hidden .artifact-workspace-content { grid-column:1; }
+@media (max-width:560px) {
+  /* Keep the requested tree/view relationship even in a narrow Office pane. */
+  #htmlWorkspaceLayout:not(.is-sidebar-hidden) { grid-template-columns:minmax(130px, 36%) minmax(0,1fr); grid-template-rows:minmax(0,1fr); gap:4px; }
+  #htmlWorkspaceLayout .html-workspace-tree { max-height:none; }
+  #htmlWorkspaceSidebar { padding:6px 4px; }
+  #htmlWorkspaceSidebar .tool-list-controls { gap:4px; }
+  .artifact-catalog-filters { gap:4px; }
   .artifact-catalog-toolbar { gap:6px; }
-  .artifact-catalog-toolbar label { width:100%; }
-  .artifact-catalog-toolbar label select { flex:1; }
-  .artifact-catalog-filters input { flex-basis:100%; }
-  .artifact-catalog-filters select { flex:1; min-width:0; }
+  .artifact-catalog-actions { padding:6px; gap:4px; }
+  .artifact-catalog-preview { padding:8px; }
 }

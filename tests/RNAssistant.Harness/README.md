@@ -385,6 +385,15 @@ version check still apply.
 
 ## Artifact catalog and transfer
 
+The same working-set filter covers document removal for originals/Plan/HTML/MD/JSON,
+stale and foreign targets, confirmation, repeat clicks at the bridge/UI boundary,
+other chats, restart, stale writes, CAS retention and failed post-publication saves.
+`node tests/web/artifact-catalog-layout.test.js` checks the shipped tree/view layout
+at 1100 and 420 px with Chromium (bundled Playwright via `NODE_PATH`, optional
+`BROWSER_EXECUTABLE`). `artifact-working-set.test.js` checks tree paging, late
+responses and guarded removal. MockDemo's transfer test also contains real-controller
+removal/restart assertions; its current fixture compile gap is in the backlog.
+
 Use `artifact transfer:` for project/archive roundtrips, saved Office snapshots,
 independent copies, repeated operation refusal and original bytes. Use
 `artifact working set:` for membership, stale selection and paginated discovery.

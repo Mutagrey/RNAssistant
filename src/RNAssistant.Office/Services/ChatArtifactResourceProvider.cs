@@ -846,6 +846,7 @@ namespace RNAssistant.Office.Services
             {
                 try
                 {
+                    if (_documentArtifacts?.IsRemoved(result.Session, artifact) == true) continue;
                     if (artifact.AvailabilityIssue != null || !_htmlResources.IsReadableRevision(result.Session, artifact))
                     { result.UnavailableResources++; continue; }
                     healthy.Add(artifact);
@@ -1012,11 +1013,11 @@ namespace RNAssistant.Office.Services
                 StringComparison.OrdinalIgnoreCase);
         }
 
-        private static void EnsureNotRemoved(ChatSession session, ChatArtifact artifact, string resourceUri)
+        private void EnsureNotRemoved(ChatSession session, ChatArtifact artifact, string resourceUri)
         {
-            if (!PlanDocumentService.IsRemoved(session, artifact)) return;
+            if (!PlanDocumentService.IsRemoved(session, artifact) && _documentArtifacts?.IsRemoved(session, artifact) != true) return;
             throw new ResourceRequestException(
-                "Resource was removed from this chat: " + resourceUri,
+                "Resource was removed from the document: " + resourceUri,
                 "resource_removed",
                 false);
         }

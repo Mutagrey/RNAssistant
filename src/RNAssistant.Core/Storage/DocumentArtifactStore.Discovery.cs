@@ -46,6 +46,7 @@ namespace RNAssistant.Core.Storage
             var unavailable = 0;
             foreach (var head in page.Items)
             {
+                if (head.Knowledge == HeadKnowledge.Removed) continue;
                 try
                 {
                     var address = ResourceUri.Parse(head.Identity.Uri);

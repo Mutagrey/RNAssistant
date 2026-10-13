@@ -6,8 +6,10 @@ const path = require("node:path");
 const { webcrypto } = require("node:crypto");
 class Element {
   constructor(tag = "div") { this.tag = tag; this.children = []; this.handlers = {}; this.value = ""; this.hidden = false;
-    this.classList = { add() {}, remove() {} }; this.attributes = {}; }
+    this.classList = { add() {}, remove() {}, toggle() {} }; this.attributes = {}; }
   appendChild(node) { this.children.push(node); return node; }
+  insertBefore(node, before) { this.children.splice(Math.max(0, this.children.indexOf(before)), 0, node); }
+  get firstChild() { return this.children[0]; }
   replaceChildren(...nodes) { this.children = nodes; this._text = ""; }
   addEventListener(name, handler) { this.handlers[name] = handler; }
   setAttribute(name, value) { this.attributes[name] = value; }
@@ -15,11 +17,12 @@ class Element {
   get textContent() { return (this._text || "") + this.children.map(c => c.textContent).join(""); }
   click() { return this.handlers.click && this.handlers.click(); }
 }
-const ids = ["", "Scope", "Show", "Editor", "Import", "File", "Query", "Kind", "Document", "Refresh", "Status", "List", "More", "Preview", "Back", "PreviewTitle", "PreviewBody"];
+const ids = ["", "Scope", "Import", "File", "Kind", "Document", "Refresh", "Status", "More", "Preview", "Actions", "PreviewTitle", "PreviewBody"];
 const elements = Object.fromEntries(ids.map(id => ["artifactCatalog" + id, new Element()]));
-elements.htmlWorkspaceLayout = new Element(); elements.artifactCatalogScope.value = "chat";
+elements.htmlWorkspaceLayout = new Element(); elements.htmlWorkspaceEditor = new Element(); elements.htmlWorkspaceSearchInput = new Element();
+elements.artifactCatalogScope.value = "chat"; elements.artifactCatalogPreview.hidden = true;
 const requests = [], applied = [], previews = [];
-const context = vm.createContext({ console, TextDecoder, TextEncoder, Blob, crypto: webcrypto, URL, setTimeout,
+const context = vm.createContext({ console, TextDecoder, TextEncoder, Blob, crypto: webcrypto, URL, setTimeout, clearTimeout, confirm: () => true,
   Option: function (text, value) { const e = new Element("option"); e.textContent = text; e.value = value; return e; },
   document: { getElementById: id => elements[id], createElement: tag => new Element(tag) },
   $: id => elements[id], state: { activeChatId: "a", chatNavigationVersion: 1, htmlWorkspaceEditVersion: 0 },
@@ -31,12 +34,22 @@ const context = vm.createContext({ console, TextDecoder, TextEncoder, Blob, cryp
 context.window = context;
 vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-artifact-catalog.js"), "utf8"), context);
 const flush = () => new Promise(resolve => setImmediate(resolve));
-const answer = (id = "a", revision = 5) => ({ chatId: id, documentId: "doc", sessionRevision: revision, documents: [{ id: "doc", title: "Book" }], items: [{ documentId: "doc", documentTitle: "Book", resourceUri: "rna://chat/doc/artifact/html_ws_a_r1/revision/1", title: "Dashboard", kind: "html_workspace", updatedUtc: "2026-10-02T12:00:00Z", canTransfer: true, linked: false }] });
-const button = label => elements.artifactCatalogList.children.flatMap(r => r.children).flatMap(r => r.children).find(n => n.tag === "button" && n.textContent === label);
+const answer = (id = "a", revision = 5) => ({ chatId: id, documentId: "doc", sessionRevision: revision, documents: [{ id: "doc", title: "Book" }], items: [{ documentId: "doc", documentTitle: "Book", resourceUri: "rna://chat/doc/artifact/html_ws_a_r1/revision/1", title: "Dashboard", kind: "html_workspace", updatedUtc: "2026-10-02T12:00:00Z", canTransfer: true, canDelete: true, linked: false }] });
+function descendants(root) { return root.children.flatMap(child => [child, ...descendants(child)]); }
+const button = label => descendants(elements.artifactCatalogActions).find(n => n.tag === "button" && n.textContent === label);
+const tree = () => context.RNAssistantArtifactCatalog.tree([], [], {}).nodes;
+const itemUri = answer().items[0].resourceUri;
+async function finishPreview() {
+  const read = requests.shift(); assert.equal(read.type, "exportArtifact"); assert.equal(read.payload.preview, true);
+  read.resolve({ kind: "html_workspace", contentType: "application/json", data: { leaseId: "lease" } }); await flush();
+  assert.equal(requests[0].type, "closeArtifactTransfer"); requests.shift().resolve({ closed: true }); await flush();
+}
 (async () => {
   context.RNAssistantArtifactCatalog.show("all");
   assert.equal(requests[0].payload.scope, "all"); requests.shift().resolve(answer()); await flush();
-  assert.ok(elements.artifactCatalogList.textContent.includes("Book"));
+  assert.equal(tree()[0].title, "Book", "all-document tree groups by document");
+  await context.RNAssistantArtifactCatalog.select(itemUri); await finishPreview();
+  assert.equal(elements.htmlWorkspaceEditor.hidden, true, "external preview uses the same right pane");
   button("Подключить к чату").click(); button("Подключить к чату").click();
   assert.equal(requests.length, 1, "duplicate click submits only once");
   const mutation = requests.shift(); assert.equal(mutation.type, "changeArtifactLink"); assert.equal(mutation.payload.expectedSessionRevision, 5);
@@ -45,15 +58,34 @@ const button = label => elements.artifactCatalogList.children.flatMap(r => r.chi
   context.RNAssistantArtifactCatalog.show("document"); const staleList = requests.shift();
   context.RNAssistantArtifactCatalog.show("chat"); const latestList = requests.shift();
   latestList.resolve(answer("b", 8)); await flush(); staleList.resolve({ ...answer("b"), items: [] }); await flush();
-  assert.ok(button("Независимая копия"), "late query cannot replace current catalog");
+  assert.equal(tree()[0].children[0].title, "Dashboard", "late query cannot replace current tree");
   context.state.htmlWorkspaceDirty = true; button("Независимая копия").click();
-  assert.equal(requests.length, 0, "dirty editor blocks replacement"); context.state.htmlWorkspaceDirty = false;
-  button("Просмотр").click(); const read = requests.shift(); assert.equal(read.type, "exportArtifact"); assert.equal(read.payload.preview, true);
-  read.resolve({ kind: "html_workspace", contentType: "application/json", data: { leaseId: "lease" } }); await flush();
-  assert.equal(requests[0].type, "closeArtifactTransfer"); requests.shift().resolve({ closed: true }); await flush();
+  assert.equal(await context.RNAssistantArtifactCatalog.select(itemUri), false);
+  assert.equal(requests.length, 0, "dirty editor blocks mutation and selection"); context.state.htmlWorkspaceDirty = false;
+  await context.RNAssistantArtifactCatalog.select(itemUri); await finishPreview();
   const frame = elements.artifactCatalogPreviewBody.children.find(n => n.tag === "iframe");
   assert.equal(frame.attributes.sandbox, "allow-scripts", "preview has no same-origin permission");
   assert.equal(previews[0].hostBridge, false); assert.equal(applied.length, 0, "preview never attaches or selects the workspace");
-  elements.artifactCatalogBack.click(); assert.equal(elements.artifactCatalogPreview.hidden, true);
-  console.log("PASS artifact catalog: scope, duplicate clicks, dirty state, late responses and isolated preview");
+  assert.equal(elements.artifactCatalogPreviewBody.children.find(n => n.tag === "pre").hidden, true, "source is not shown below preview");
+  context.confirm = () => false; button("Удалить из документа…").click(); assert.equal(requests.length, 0, "cancel does not delete");
+  context.confirm = () => true; button("Удалить из документа…").click(); button("Удалить из документа…").click();
+  assert.equal(requests.length, 1, "document deletion submits once");
+  const deletion = requests.shift(); assert.equal(deletion.type, "deleteDocumentArtifact");
+  assert.equal(deletion.payload.resourceUri, itemUri); assert.equal(deletion.payload.expectedSessionRevision, 8); assert.equal(deletion.payload.confirmed, true);
+  deletion.resolve({ activeChatId: "b" }); await flush();
+  requests.shift().resolve({ ...answer("b", 9), items: [] }); await flush();
+  assert.equal(tree().length, 0); assert.equal(elements.artifactCatalogActions.hidden, true);
+  assert.equal(elements.artifactCatalogPreviewTitle.textContent, "Выберите артефакт", "removed selection never keeps stale preview");
+  context.RNAssistantArtifactCatalog.show(); requests.shift().resolve({ ...answer("b", 9), nextCursor: "page2" }); await flush();
+  elements.artifactCatalogMore.click(); assert.equal(requests[0].payload.cursor, "page2");
+  const second = { ...answer("b", 9).items[0], title: "Second", resourceUri: itemUri.replace("_a_", "_b_") };
+  requests.shift().resolve({ ...answer("b", 9), items: [second] }); await flush();
+  assert.equal(tree()[0].children.length, 2, "pagination appends without replacing the first page");
+  // A preview begun before navigation cannot overwrite the new selection.
+  await context.RNAssistantArtifactCatalog.select(itemUri); const oldRead = requests.shift();
+  context.RNAssistantArtifactCatalog.editor();
+  oldRead.resolve({ contentType: "application/json", data: { leaseId: "old" } }); await flush();
+  requests.shift().resolve({ closed: true }); await flush();
+  assert.equal(elements.artifactCatalogPreview.hidden, true, "late preview cannot replace editor");
+  console.log("PASS artifact tree: scopes, pagination, guarded selection, duplicate/unconfirmed deletion, dirty editor, late responses and isolated preview");
 })().catch(error => { console.error(error); process.exitCode = 1; });

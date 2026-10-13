@@ -37,6 +37,8 @@ namespace RNAssistant.Core.Storage
                 throw new InvalidDataException("The logical artifact belongs to another scope.");
             var head = _authority.GetHead(scope, logicalIdentity);
             if (head == null) return null;
+            if (head.Knowledge == HeadKnowledge.Removed)
+                throw new InvalidDataException("The artifact was removed from the document. Create a new resource instead.");
             if (head.Knowledge != HeadKnowledge.Known) throw new InvalidDataException("The artifact head is unavailable; reconcile without replay.");
             var refs = _revisions.GetRevision(scope, head.Revision)?.Dependencies.Where(item => item.Kind == "immutable-snapshot").ToArray();
             if (refs == null || refs.Length != 1 || !Owns(session, refs[0].Resource))
@@ -104,9 +106,7 @@ namespace RNAssistant.Core.Storage
             string expectedKind, bool includeBody, ResourceAuthorityScopeId ownerScope = null)
         {
             var scope = ownerScope ?? Scope(session);
-            var head = _authority.GetHead(scope, reference.Identity);
-            if (!Owns(session, reference) || head?.Knowledge != HeadKnowledge.Known ||
-                head.Revision.Uri != reference.Uri || head.Revision.Revision != reference.Revision)
+            if (!Owns(session, reference) || !HasPublishedSnapshot(scope, reference))
                 throw new InvalidDataException("The artifact snapshot has not crossed its publication barrier.");
             var view = _revisions.GetView(scope, reference, recordView);
             if (view?.Payload == null || view.Payload.ByteLength > MaximumRecordBytes)

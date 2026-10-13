@@ -56,7 +56,22 @@ namespace RNAssistant.MockDemo
                 var copied = controller.ListArtifactCatalog(new ArtifactCatalogRequest { ChatId = chatId, Scope = "chat" });
                 if (copied.Items.Count != 2 || copied.Items.Select(i => i.ResourceUri).Distinct().Count() != 2)
                     throw new Exception("copy did not create an independent project");
-                Console.WriteLine("PASS artifact-transfer-controller: empty chat, upload, import, download and copy");
+                var removal = new ArtifactDeleteRequest { ChatId = chatId, ResourceUri = item.ResourceUri,
+                    ExpectedSessionRevision = copied.SessionRevision, Confirmed = true };
+                controller.DeleteDocumentArtifact(removal);
+                var afterRemoval = controller.ListArtifactCatalog(new ArtifactCatalogRequest { ChatId = chatId, Scope = "document" });
+                if (afterRemoval.Items.Count != 1 || afterRemoval.Items[0].ResourceUri == item.ResourceUri)
+                    throw new Exception("removal did not preserve the independent copy");
+                var rejected = false;
+                try { controller.DeleteDocumentArtifact(removal); } catch (InvalidOperationException) { rejected = true; }
+                if (!rejected) throw new Exception("stale repeated deletion was accepted");
+                controller.Dispose();
+                controller = new AssistantController(FakeOfficeAdapter.ForHost("Excel"), AppDataPaths.CreateForRoot(root),
+                    (settings, messages, token) => Task.FromException<LlmCompletionResult>(new Exception("Removal must not call the model.")));
+                var restarted = controller.ListArtifactCatalog(new ArtifactCatalogRequest { ChatId = chatId, Scope = "document" });
+                if (restarted.Items.Count != 1 || restarted.Items[0].ResourceUri != afterRemoval.Items[0].ResourceUri)
+                    throw new Exception("removed project returned after controller restart");
+                Console.WriteLine("PASS artifact-transfer-controller: upload, import, download, independent copy, guarded removal and restart");
                 return 0;
             }
             catch (Exception ex) { Console.WriteLine("FAIL artifact-transfer-controller: " + ex); return 1; }

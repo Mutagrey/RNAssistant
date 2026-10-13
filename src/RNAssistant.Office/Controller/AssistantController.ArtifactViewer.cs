@@ -104,6 +104,16 @@ namespace RNAssistant.Office
             });
         }
 
+        public ChatStateResponse DeleteDocumentArtifact(ArtifactDeleteRequest request)
+        {
+            return WithReservedChatState(LoadArtifactViewerSession(request?.ChatId), session =>
+                _artifactWorkingSet.Delete(session, request, current =>
+                {
+                    _conversationStore.Save(current);
+                    _chatSessions.NotifySaved(current);
+                }));
+        }
+
         public RunChangesDto ReadRunChanges(RunChangesRequest request)
         {
             if (request == null || string.IsNullOrWhiteSpace(request.RunId))

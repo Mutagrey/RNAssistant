@@ -267,7 +267,7 @@
     var nodes = [];
     if (htmlChildren.length) {
       var htmlCount = htmlChildren.reduce(function (sum, node) { return sum + Number(node.meta || 0); }, 0);
-      nodes.push(groupNode("artifacts:html", "HTML · только этот чат", htmlCount, htmlChildren, "html"));
+      nodes.push(groupNode("artifacts:html", "HTML-проект", htmlCount, htmlChildren, "html"));
     }
 
     [
@@ -286,18 +286,30 @@
       }), query, "artifact")
     ].forEach(function (node) { if (node) nodes.push(node); });
 
+    var catalog = window.RNAssistantArtifactCatalog;
+    var catalogTree = catalog && catalog.tree(nodes, htmlChildren, options);
     var mounted = adapter.mount(root, {
-      nodes: nodes,
-      selectedKey: selectedKey(options),
+      nodes: catalogTree ? catalogTree.nodes : nodes,
+      selectedKey: catalogTree && catalogTree.selectedKey || selectedKey(options),
       emptyText: query ? "Ничего не найдено." : "Артефактов пока нет.",
-      limits: { maxNodes: 1800, maxDepth: 12 },
+      limits: { maxNodes: 1800, maxDepth: catalogTree ? 14 : 12 },
       onActivate: function (item) {
-        return typeof options.onSelect === "function" ? options.onSelect(item.type, item.id) : true;
+        if (catalog && item.id.indexOf("rna://") === 0) {
+          if (!catalog.canSelect()) return false;
+          catalog.select(item.id);
+          return true;
+        }
+        var accepted = typeof options.onSelect === "function" ? options.onSelect(item.type, item.id) : true;
+        if (catalog && accepted) catalog.editor();
+        return accepted;
       },
       onDelete: function (item) {
         if (typeof options.onDelete === "function") options.onDelete(item.type, item.id);
       },
-      onToggle: setGroupExpanded
+      onToggle: function (key, expanded) {
+        if (catalog && key.indexOf("catalog") === 0) catalog.toggle(key, expanded);
+        else setGroupExpanded(key, expanded);
+      }
     });
     return mounted.count;
   }

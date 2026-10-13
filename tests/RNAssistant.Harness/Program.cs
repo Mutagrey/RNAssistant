@@ -584,6 +584,7 @@ namespace RNAssistant.Harness
                 Test("artifact working set: Plan lifecycle and missing body", ArtifactWorkingSetPlanLifecycle),
                 Test("artifact working set: stale selection session and writer races", ArtifactWorkingSetRejectsRaces),
                 Test("artifact working set: original links and clear", ArtifactWorkingSetOriginalLifecycle),
+                Test("artifact working set: document removal guards and restart", ArtifactDocumentRemoval),
                 Test("tool presentation: exact call changes", ToolPresentationCallChanges),
                 Test("tool presentation: artifact call correlation", ToolPresentationArtifactCorrelation),
                 Test("tool presentation: typed content blocks", ToolPresentationContentBlocks),

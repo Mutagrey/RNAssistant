@@ -149,6 +149,7 @@ vm.runInContext(source, context, { filename: "app-html-workspace-artifacts.js" }
     send,
     log: message => logs.push(message),
     applyPlanRefresh: () => true,
+    deleteDocumentArtifact: artifact => { calls.push({ method: "deleteDocumentArtifact", artifact }); return true; },
     switchChatMode: async mode => { modes.push(mode); return true; },
     submitPlanHandoff: exactUri => { handoffs.push(exactUri); return true; }
   });
@@ -170,22 +171,12 @@ vm.runInContext(source, context, { filename: "app-html-workspace-artifacts.js" }
 
   calls.length = 0;
   confirmations.length = 0;
-  assert.equal(await actions.deleteSelection({
-    type: "plan",
-    label: "Plan",
-    planId: "plan",
-    expectedRevisionArtifactId: "plan-r2"
-  }), true);
-  assert.equal(calls[0].payload.dryRun, true);
-  assert.equal(calls[1].payload.dryRun, false);
-  assert.equal(calls[0].payload.chatId, "chat-c");
-  assert.equal(calls[1].payload.chatId, "chat-c");
-  assert.deepEqual(calls[0].payload.arguments, {});
-  assert.deepEqual(calls[1].payload.arguments, calls[0].payload.arguments);
-  assert.match(confirmations[0], /ревизия удаления/);
-  assert.match(confirmations[0], /message-a/);
-  assert.match(confirmations[0], /message-b/);
-  console.log("PASS plan document: removal keeps runtime guards out of UI tool arguments");
+  assert.equal(await actions.deleteSelection({ type: "plan", item: state.artifacts[0] }), true);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].method, "deleteDocumentArtifact");
+  assert.equal(calls[0].artifact.resourceUri, uri);
+  assert.equal(confirmations.length, 0, "confirmation belongs to the common document removal UI");
+  console.log("PASS plan document: deletion targets the exact selected artifact through the common removal owner");
 
   calls.length = 0;
   modes.length = 0;

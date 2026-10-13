@@ -44,8 +44,12 @@ mismatch hints accompany actual JavaScript exceptions; they remain repair advice
 
 Owner: Artifact Library. `ArtifactCatalogService` coordinates read-only discovery and
 explicit transfers; Core owns `ArtifactTransferPackage` and document publication.
-The **Артефакты** tab has **В чате / В документе / Все документы**, title search,
-type/document filters and 50-item pages. The catalog reads registered local document
+The **Артефакты** tab uses one tree on the left and a viewer/editor on the right,
+including narrow panes. **В чате / В документе / Все документы**, title search and
+type/document filters change that tree; 50-item pages append to it. The selected
+HTML project expands into files and data. There is no separate card catalog or
+editor screen; **Просмотр / Код** switches the right pane. Shared Markdown/text/JSON
+viewers render exported exact content. Actions apply to the selected root. The catalog reads registered local document
 authorities, including closed documents; it is not another durable inventory. Bodies
 are loaded on demand. Enumeration still scans retained metadata; response pagination
 does not imply bounded source enumeration. Run/system/context resources are excluded.
@@ -59,8 +63,10 @@ it to the addressed chat. Copies across documents grant no live Office authority
 Catalog preview does not attach or change the selected workspace. HTML preview uses
 the existing sandboxed standalone renderer with captured data. Source inspection,
 text/image preview and downloads remain available; other binary kinds show metadata
-and a download action. The editor remains available separately. Dirty editor content
-blocks selection-changing operations until explicitly saved or discarded.
+and a download action. Attached current resources open in the same editor pane. Unattached or foreign
+resources use the read-only viewer. Dirty editor content blocks selection-changing
+operations until explicitly saved or discarded. Late list/preview/mutation responses
+cannot replace newer navigation or edits.
 
 **Экспорт проекта** writes `*.rna-html.zip` contract v1: `manifest.json`, HTML/CSS/JS
 files under `files/`, the entry file, JSON data snapshots under `data/`, and optional
@@ -90,7 +96,7 @@ Markdown/JSON export preserves the authored text; originals preserve their bytes
 Importing `.md`/`.markdown` creates an authored Markdown document, `.json` an authored
 JSON resource, `.html`/`.htm` a new HTML workspace; other files become immutable
 originals. Only `*.rna-html.zip` is interpreted as a project package. No rename,
-original deletion, bulk operation, automatic source refresh or new model tool is added.
+bulk operation, automatic source refresh or new model tool is added.
 
 Transfer filenames preserve their extension (including `.rna-html.zip`) within the
 180-character bound; the project title remains in the package. Original imports use
@@ -106,6 +112,38 @@ Evidence: Harness `artifact transfer:` and `artifact working set:`, browser-scri
 archive refusal, exact bytes, upload/download and late UI responses. MockDemo browser
 layout was inspected at 420 px without horizontal overflow. Windows/Office/WebView2
 qualification remains open; these checks are host-neutral.
+
+## Document artifact removal — 2026-10-13
+
+Owner: `DocumentArtifactStore`; application coordination: `ArtifactWorkingSetService`.
+**Убрать из чата** changes only membership. **Действия → Удалить из документа…**
+requires explicit confirmation that the resource disappears from the document
+library and all its chats. The typed `deleteDocumentArtifact` request carries the
+addressed chat, expected session revision and displayed exact snapshot. It cannot
+delete a foreign document's resource. The Plan editor uses this same exact removal
+path; its old argument-free UI tool dispatch is removed. HTML member deletion
+remains a separate guarded workspace revision, with its existing Undo.
+
+Under the existing document mutation lease, removal checks the current logical head
+(or original/file head), publishes `HeadKnowledge.Removed` in the authority journal
+and reads it back. Stale snapshots, unconfirmed requests, unknown authority and
+repeated deletion fail without another publication. This includes originals, Plans,
+HTML, authored Markdown and JSON. Removal needs no live COM access or model call.
+The publication survives a subsequent failed chat save; it is never retried silently.
+
+Document/chat discovery excludes removed identities. Reloaded chat projections
+clear their selected Plan/HTML and show removed placeholders for historical message
+references. Attaching, exporting and writing through a stale selection are refused.
+Other chats' event streams are not rewritten. Immutable exact snapshots and CAS
+bytes stay retained for history/dependencies; historical reads require evidence of
+prior publication. This is document-library removal, not physical erasure of all
+historical bytes. Existing reachability GC retains referenced bytes.
+
+Evidence: focused working-set, removal/restart/CAS, library, recovery and typed
+bridge Harness checks; tree/actions/viewer browser scripts; actual Chromium layout
+at 1100 and 420 px. Full MockDemo controller smoke has an unrelated fixture compile
+gap recorded in [BACKLOG](stabilization/BACKLOG.md#artifact-ui-check-fixture-drift--2026-10-13).
+Windows/Office/WebView2 qualification remains open.
 
 ## Authorized document ownership cutover — 2026-09-07
 
@@ -1331,7 +1369,8 @@ export hydration use the shared [source reader](#html-editor-source-downloads).
 
 ## Edit and delete semantics
 
-Only domain-owned mutable resources expose Save/Delete:
+Only domain-owned mutable resources expose Save/member mutation. Document-library
+removal is the separate common operation described above:
 
 - Plan Save writes the complete Markdown payload as a new revision; runtime resolves
   and enforces the exact-current guard. Restore selects a readable version and runtime
@@ -1374,12 +1413,11 @@ The older chat-local format is not migrated and cannot be mutated by the new
 native Plan binding.
 
 Draft discard deletes only staging data. `Hide from library` is a UI preference and
-does not alter history or model references. Destructive removal of a committed
-resource first displays every referencing message/document revision and either
-refuses the operation or explicitly includes those references in the same append-
-only mutation. It appends removal/tombstone facts; it never rewrites the JSONL
-stream. Physical CAS deletion is deferred to the existing fail-closed reachability
-GC. Clear Chat/Data remains a separate explicit operation.
+does not alter history or model references. Document-library removal explicitly warns that it affects every chat in the
+owning document. One logical tombstone applies to every revision/reference of that
+artifact, with removed placeholders and no admission as a current resource. It
+never rewrites JSONL history. Physical CAS deletion remains subject to the existing
+fail-closed reachability GC and cannot erase retained historical references. Clear Chat/Data remains a separate explicit operation.
 
 ## Model context
 

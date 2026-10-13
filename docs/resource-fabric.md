@@ -391,7 +391,11 @@ with Parent/RestoredFrom while the existing CAS deduplicates bytes.
 VBA journal preparations record the exact known preimage resource when proven.
 Restore pins that origin before confirmation, or pins the independently captured
 backup resource itself. Equal hashes never select a historical origin.
-Unknown heads never advertise an old revision as current.
+Unknown heads never advertise an old revision as current. Explicit document artifact
+removal publishes typed `HeadKnowledge.Removed`, with no current revision. Discovery,
+attachment and mutations exclude that logical identity; immutable historical
+publication evidence remains retained. Exact semantics belong to
+[Artifact Library](artifact-library.md#document-artifact-removal--2026-10-13).
 
 Descriptors separate physical type, capabilities, views, coverage, schema/mapping
 refs and dependencies. `ResourceCoverage` qualifies the observation; a transport

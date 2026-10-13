@@ -12,6 +12,22 @@
 новая возможность требует явной задачи, scope и owner; дефекты работающей системы
 приоритетнее расширения без конкретного пользовательского результата.
 
+## Artifact UI check fixture drift — 2026-10-13
+
+Owner: test fixtures. During the artifact tree/removal slice, existing checks had
+unrelated baseline failures: `artifact-library-projection.test.js` asserts the old
+`app-chat-session.js?v=office-chat-20260930-4` key while HEAD already uses
+`closed-document-20261012-1-transcript-20261012-1`; `html-preview-reuse.test.js`
+omits the existing preview `missingVendors` method from its stub. The same stub
+omission exists in `html-workspace-layout.test.js`.
+
+MockDemo `--artifact-transfer-test` cannot compile because `AssistantController`
+already calls `SettingsService.HasPromptMigrationEvidence`, absent from
+`DemoSettingsService`. Both source facts are present in HEAD independently of this
+slice. Repair these fixtures before claiming their integration checks pass; the
+new controller removal/restart assertions remain unexecuted. Do not infer real
+Office qualification from independent Harness/Chromium checks.
+
 ## Real-model compaction/resume task completion — 2026-10-07
 
 Owner: CLI evaluation / model context. The completed-receipt boundary defect is

@@ -221,6 +221,112 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void ArtifactDocumentRemoval()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                var paths = FixturePaths.Value;
+                var chats = new ChatStore(paths);
+                var journal = new ResourceMutationJournal(paths);
+                var links = new ArtifactWorkingSetService(chats.DocumentArtifacts, journal);
+                var catalog = WorkingSetCatalog(links);
+                var a = NewSession(adapter);
+                executor.BindResourceAuthority(a);
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
+                AssertTrue(executor.ExecuteManual(Command(PlanDocumentToolCatalog.SaveToolId,
+                    "title", "Delete plan", "markdown", "# First", "status", "draft"),
+                    tools, new AppSettings(), false, false, a).Success, "publish Plan");
+                var oldPlan = a.Artifacts.Single(item => item.Id == a.ActivePlanDocumentArtifactId);
+                AssertTrue(executor.ExecuteManual(Command(PlanDocumentToolCatalog.SaveToolId,
+                    "title", "Delete plan", "markdown", "# Second", "status", "draft"),
+                    tools, new AppSettings(), false, false, a).Success, "revise Plan");
+                var plan = a.Artifacts.Single(item => item.Id == a.ActivePlanDocumentArtifactId);
+                var subjects = new List<ChatArtifact> { plan };
+                foreach (var file in new[] { "project.html", "notes.md", "values.json", "original.bin" })
+                {
+                    var text = file.EndsWith(".html") ? "<h1>Retained</h1>" : file.EndsWith(".json") ? "{\"value\":1}" : "# Retained";
+                    var artifact = catalog.Import(a, Encoding.UTF8.GetBytes(text), file, "application/octet-stream", Guid.NewGuid().ToString("N"));
+                    links.Change(a, LinkRequest(a, ChatResourceUri.CreateArtifactRevisionUri(a, artifact), false), chats.Save);
+                    subjects.Add(artifact);
+                }
+                var b = NewSession(adapter); b.DocumentAuthorityId = a.DocumentAuthorityId;
+                foreach (var artifact in subjects)
+                {
+                    var exact = ChatResourceUri.CreateArtifactRevision(a, artifact);
+                    links.Change(b, LinkRequest(b, exact.Uri, false), chats.Save);
+                    a.Messages.Add(new ChatMessage { Role = "assistant", Content = "Keep historical reference", ResourceRefs = new List<ResourceRef> { exact } });
+                }
+                chats.Save(a);
+                var scope = ResourceAuthorityScopeId.Document(new DocumentAuthorityId(a.DocumentAuthorityId));
+                var authority = new ResourceAuthorityStore(paths);
+                var before = authority.Capture(scope).Generation;
+                var stale = DeleteRequest(a, ChatResourceUri.CreateArtifactRevisionUri(a, oldPlan));
+                RuntimeThrows<InvalidOperationException>(() => links.Delete(a, stale, chats.Save));
+                stale = DeleteRequest(a, ChatResourceUri.CreateArtifactRevisionUri(a, plan)); stale.ExpectedSessionRevision--;
+                RuntimeThrows<InvalidOperationException>(() => links.Delete(a, stale, chats.Save));
+                stale = DeleteRequest(a, ChatResourceUri.CreateArtifactRevisionUri(a, plan)); stale.Confirmed = false;
+                RuntimeThrows<InvalidOperationException>(() => links.Delete(a, stale, chats.Save));
+                var foreign = NewSession(adapter); foreign.DocumentAuthorityId = DocumentAuthorityId.Create().Id;
+                RuntimeThrows<InvalidDataException>(() => links.Delete(foreign,
+                    DeleteRequest(foreign, ChatResourceUri.CreateArtifactRevisionUri(a, plan)), chats.Save));
+                using (journal.AcquireScope(scope))
+                    RuntimeThrows<IOException>(() => links.Delete(a, DeleteRequest(a, ChatResourceUri.CreateArtifactRevisionUri(a, plan)), chats.Save));
+                AssertEqual(before, authority.Capture(scope).Generation, "rejected removals do not publish");
+                foreach (var artifact in subjects)
+                {
+                    var exact = ChatResourceUri.CreateArtifactRevision(a, artifact);
+                    // Unlink remains local and the same original can be attached again.
+                    links.Change(a, LinkRequest(a, exact.Uri, true), chats.Save);
+                    AssertTrue(catalog.List(b, new ArtifactCatalogRequest { ChatId = b.Id, Scope = "document" }).Items.Any(item => item.ResourceUri == exact.Uri), "unlink preserves document ownership");
+                    links.Change(a, LinkRequest(a, exact.Uri, false), chats.Save);
+                    var request = DeleteRequest(a, exact.Uri);
+                    links.Delete(a, request, chats.Save);
+                    var generation = authority.Capture(scope).Generation;
+                    RuntimeThrows<InvalidOperationException>(() => links.Delete(a, DeleteRequest(a, exact.Uri), chats.Save));
+                    AssertEqual(generation, authority.Capture(scope).Generation, "repeat deletion cannot republish");
+                    AssertTrue(!catalog.List(b, new ArtifactCatalogRequest { ChatId = b.Id, Scope = "document" }).Items.Any(item => item.ResourceUri == exact.Uri), "other chat loses document entry immediately");
+                    RuntimeThrows<InvalidOperationException>(() => links.Change(b, LinkRequest(b, exact.Uri, false), chats.Save));
+                    RuntimeThrows<InvalidOperationException>(() => catalog.Export(a, new ArtifactTransferRequest { ChatId = a.Id,
+                        DocumentId = a.DocumentAuthorityId, ResourceUri = exact.Uri, Preview = true }));
+                    if (artifact.Kind == ChatArtifactKinds.HtmlWorkspace || artifact.Kind == ChatArtifactKinds.PlanDocument)
+                    {
+                        var command = artifact.Kind == ChatArtifactKinds.HtmlWorkspace
+                            ? Command("common.html_workspace_write_file", "path", "deleted.css", "content", "body{}")
+                            : Command(PlanDocumentToolCatalog.SaveToolId, "title", "Resurrection", "markdown", "# Refused", "status", "draft");
+                        AssertTrue(!executor.ExecuteManual(command, tools, new AppSettings(), false, false, b).Success,
+                            "stale writer cannot recreate a removed logical resource");
+                    }
+                    AssertTrue(chats.DocumentArtifacts.Read(a, exact, false) != null, "historical record remains exact");
+                    AssertTrue(!chats.DocumentArtifacts.InspectCurrentMetadata(a).Items.Any(item => item.Id == artifact.Id), "model discovery omits removal");
+                }
+                a = new ChatStore(paths).Load(a.Id); b = new ChatStore(paths).Load(b.Id);
+                AssertEqual(0, ArtifactLibraryProjectionService.Project(b).Heads.Count, "restart hides removed resources in the other chat");
+                AssertTrue(b.ActiveHtmlArtifactId == null && b.ActivePlanDocumentArtifactId == null && b.HtmlWorkspace.Files.Count == 0,
+                    "restart clears removed selected Plan and HTML");
+                AssertEqual(subjects.Count, a.Messages.Count, "removal preserves historical messages");
+                AssertEqual(0, catalog.List(a, new ArtifactCatalogRequest { ChatId = a.Id, Scope = "all" }).Items.Count, "all scopes omit deleted artifacts");
+                AssertTrue(CasService(paths, chats, new VbaJournalStore(paths), () => StorageProtector.None).Collect().Completed,
+                    "CAS collection accepts the removal journal");
+                AssertEqual(subjects.Count, ArtifactLibraryProjectionService.Project(a).RemovedResourceUris.Count,
+                    "historical cards explicitly project removed resources");
+                AssertEqual("# First", chats.DocumentArtifacts.Read(a, ChatResourceUri.CreateArtifactRevision(a, oldPlan)).InlineText,
+                    "old exact Plan bytes remain retained");
+                AssertTrue(!ChatResourcePromptIndex.Build(b, 2000).Contains("Delete plan"), "prompt does not advertise removed targets");
+
+                // A failed link save must not make a completed document removal reappear.
+                var orphan = catalog.Import(a, Encoding.UTF8.GetBytes("retained"), "save-failure.bin", "application/octet-stream", Guid.NewGuid().ToString("N"));
+                var orphanRef = ChatResourceUri.CreateArtifactRevision(a, orphan);
+                RuntimeThrows<IOException>(() => links.Delete(a, DeleteRequest(a, orphanRef.Uri), _ => { throw new IOException("save failed"); }));
+                AssertTrue(new ChatStore(paths).DocumentArtifacts.IsRemoved(a, orphan), "document tombstone survives failed chat save");
+            });
+        }
+
+        private static ArtifactDeleteRequest DeleteRequest(ChatSession session, string uri)
+        {
+            return new ArtifactDeleteRequest { ChatId = session.Id, ResourceUri = uri,
+                ExpectedSessionRevision = session.Revision, Confirmed = true };
+        }
+
         private static void ArtifactWorkingSetOriginalLifecycle()
         {
             WithTempPaths(paths =>
