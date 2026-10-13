@@ -58,13 +58,19 @@ const read = file => fs.readFileSync(path.join(root, "web", file), "utf8");
         return { ok: true, json: async () => ({ leaseId: id, nextOffset: upload.size }) };
       };
     });
-    for (const file of ["app-resource-upload.js", "app-attachments.js"])
+    for (const file of ["app-chat-composer.js", "app-resource-upload.js", "app-attachments.js"])
       await page.addScriptTag({ content: read("js/" + file) });
-    await page.evaluate(() => bindAttachmentActions());
+    await page.evaluate(() => {
+      window.updateComposerInputState = () => {};
+      window.renderSendControls = () => {};
+      bindComposerPickers(); bindAttachmentActions();
+    });
     const idle = () => page.waitForFunction(() => !pendingChatResourceIngestion("chat-a"));
     const css = "/* Привет */\r\nbody { color: red; }\n" + " ".repeat(262144);
     const chooserReady = page.waitForEvent("filechooser");
+    await page.click("#composerAddButton");
     await page.click("#attachFileButton");
+    assert.equal(await page.locator("#composerAddPicker").getAttribute("open"), null);
     await (await chooserReady).setFiles({ name: "styles.css", mimeType: "text/css", buffer: Buffer.from(css) });
     await idle();
     assert.equal(await page.locator(".attachment-name").textContent(), "styles.css");

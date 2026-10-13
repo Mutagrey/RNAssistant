@@ -124,39 +124,7 @@ function bindChatActions() {
       $("toggleChatSearchButton").focus();
     }
   });
-  $("chatModeSelect").addEventListener("change", function () {
-    saveChatMode($("chatModeSelect").value);
-  });
-  var composerPickers = [$("chatModePicker"), $("chatModelPicker")].filter(Boolean);
-  composerPickers.forEach(function (picker) {
-    var summary = picker.querySelector("summary");
-    if (summary) {
-      summary.addEventListener("click", function (event) {
-        if (picker.classList.contains("is-disabled")) event.preventDefault();
-      });
-    }
-    picker.addEventListener("toggle", function () {
-      if (!picker.open) return;
-      composerPickers.forEach(function (other) {
-        if (other !== picker) other.open = false;
-      });
-    });
-  });
-  document.addEventListener("pointerdown", function (event) {
-    composerPickers.forEach(function (picker) {
-      if (picker.open && !picker.contains(event.target)) picker.open = false;
-    });
-  });
-  document.addEventListener("keydown", function (event) {
-    if (event.key === "Escape") {
-      var opened = composerPickers.filter(function (picker) { return picker.open; })[0];
-      if (opened) {
-        opened.open = false;
-        var summary = opened.querySelector("summary");
-        if (summary) summary.focus();
-      }
-    }
-  });
+  bindComposerPickers();
   $("clearChatButton").addEventListener("click", clearChat);
   $("compactContextButton").addEventListener("click", compactChatContext);
   $("stopButton").addEventListener("click", stopActiveSend);

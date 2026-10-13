@@ -394,11 +394,15 @@ Every request contains one editable instruction followed by one dynamic `RUNTIME
 - one compact `capabilities` catalog with exact `id`, explicit `kind` (`tool` or `skill`), summary, revision, and kind-specific safety/body metadata in Agent, or an empty catalog in Chat;
 - chat-owned user context and artifact references.
 
-Token reporting separates three quantities. The chat button and the inspector's
-primary counter show the same exact input and output counts from API usage,
-without an approximation mark or calibration. Missing usage is shown explicitly;
-partial usage never substitutes a total or an estimate for missing input. Live
-model results carry all supplied usage fields; the UI neither recomputes counts
+Token reporting separates three quantities. The context ring's tooltip shows the
+remaining percentage and exact input / window size. The inspector's primary
+counter shows exact input and output counts from API usage, without an
+approximation mark or calibration. Missing usage is shown explicitly;
+partial usage never substitutes a total or an estimate for missing input.
+The ring uses exact input divided by the model's full context window, clamps its
+fill to 0–100%, and shows an unknown state if either value is unavailable. Its
+remaining percentage describes that full window, including room reserved for output.
+Live model results carry all supplied usage fields; the UI neither recomputes counts
 from drafts nor searches paged history for usage. When a newer chat revision arrives, an open
 inspector updates its usage counter while its next-request preview stays a manual
 snapshot. The estimated *next* model input is in a separate, initially collapsed

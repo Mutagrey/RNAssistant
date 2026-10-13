@@ -63,9 +63,6 @@ function renderChatSessions() {
     $("compactContextButton").disabled = !hasActive || compactableMessages < 3 || !!currentActiveSend();
     $("compactContextButton").hidden = !hasActive || compactableMessages < 3;
   }
-  if ($("chatModeSelect")) {
-    $("chatModeSelect").value = state.activeChatMode || "agent";
-  }
   renderSendControls();
 }
 
@@ -371,9 +368,6 @@ function applyChatState(response) {
   renderContextMeter();
   renderModelControls();
   if (typeof renderSendControls === "function") renderSendControls();
-  if ($("chatModeSelect")) {
-    $("chatModeSelect").value = state.activeChatMode || "agent";
-  }
   if (typeof renderHtmlWorkspace === "function") {
     renderHtmlWorkspace();
   }
@@ -767,33 +761,25 @@ function lastModelUsage() {
 
 function renderContextMeter() {
   if (typeof isPanelActive === "function" && !isPanelActive("chat")) return;
-  var value = $("contextMeterValue");
-  var detail = $("contextMeterDetail");
+  var summary = $("contextMeterSummary");
   var meter = $("contextMeter");
-  if (!value || !detail || !meter) {
+  if (!summary || !meter) {
     return;
   }
   var last = lastModelUsage();
-  if (last) {
-    var parts = [];
-    if (last.prompt !== null) parts.push("↑" + formatNumber(last.prompt));
-    if (last.completion !== null) parts.push("↓" + formatNumber(last.completion));
-    if (!parts.length && last.total !== null) parts.push(formatNumber(last.total) + " всего");
-    value.textContent = "API";
-    detail.textContent = parts.join(" · ");
-    meter.title = "Последние данные API usage: " +
-      (last.prompt === null ? "" : "вход " + formatNumber(last.prompt) + " · ") +
-      (last.completion === null ? "" : "выход " + formatNumber(last.completion) + " · ") +
-      (last.total === null ? "" : "всего " + formatNumber(last.total) + " · ") +
-      "токенов. Откройте данные usage и состав контекста.";
-  } else {
-    value.textContent = "API";
-    detail.textContent = "нет usage";
-    meter.title = "Точное число токенов не получено от API. Откройте состав контекста.";
-  }
-  meter.dataset.level = "ok";
-  meter.style.setProperty("--context-meter-percent", "0%");
-  meter.setAttribute("aria-label", meter.title);
+  var usage = state.contextUsage || {};
+  var windowTokens = Number(usage.contextWindowTokens || usage.ContextWindowTokens || 0);
+  var used = last && last.prompt !== null ? Number(last.prompt) : null;
+  var knownInput = used !== null && isFinite(used) && used >= 0;
+  var knownWindow = isFinite(windowTokens) && windowTokens > 0;
+  var percent = knownInput && knownWindow ? Math.min(100, used * 100 / windowTokens) : null;
+  summary.textContent = !knownInput ? "API ещё не сообщил число входных токенов"
+    : !knownWindow ? "Использовано " + formatNumber(used) + " токенов · размер окна неизвестен"
+    : "Осталось " + Math.round(100 - percent) + "% · использовано " + formatNumber(used) +
+      " / " + formatNumber(windowTokens) + " токенов";
+  meter.dataset.level = percent === null ? "unknown" : percent >= 95 ? "danger" : percent >= 80 ? "warn" : "ok";
+  meter.style.setProperty("--context-meter-offset", percent === null ? "100" : String(100 - percent));
+  meter.setAttribute("aria-label", "Контекстное окно. " + summary.textContent + ". Открыть подробное использование");
 }
 
 function syncTokenEstimateCalibrationFromUsage() {

@@ -52,7 +52,7 @@
       clearView(c); c.cache = {};
     }
     $("modelContextDialog").classList.add("hidden");
-    $("openModelContextButton").setAttribute("aria-expanded", "false");
+    $("openModelContextFromTokens").setAttribute("aria-expanded", "false");
     if (c && c.returnFocus && c.returnFocus.isConnected) c.returnFocus.focus();
   }
   async function call(c, type, payload) {
@@ -325,15 +325,14 @@
     if (current) close();
     if (typeof closePromptContextInspector === "function") closePromptContextInspector();
     current = { chatId: state.activeChatId, abort: new AbortController(), requests: new Set(), version: 0,
-      mounts: [], cache: {}, pending: {}, mode: "actual", tab: "messages", follow: true, attempts: [], returnFocus: document.activeElement };
+      mounts: [], cache: {}, pending: {}, mode: "actual", tab: "messages", follow: true, attempts: [], returnFocus: $("contextMeter") };
     $("modelContextDialog").classList.remove("hidden");
-    $("openModelContextButton").setAttribute("aria-expanded", "true");
+    $("openModelContextFromTokens").setAttribute("aria-expanded", "true");
     $("modelContextMode").value = "actual"; $("modelContextTab").value = "messages";
     $("modelContextActualControls").classList.remove("hidden"); $("closeModelContextButton").focus();
     tick(current);
   }
   function bind() {
-    $("openModelContextButton").addEventListener("click", open);
     $("openModelContextFromTokens").addEventListener("click", open);
     $("closeModelContextButton").addEventListener("click", close);
     $("modelContextMode").addEventListener("change", function () {

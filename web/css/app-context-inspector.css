@@ -2,27 +2,6 @@
   position: relative;
 }
 
-button.context-meter {
-  appearance: none;
-  cursor: pointer;
-}
-
-.context-meter svg {
-  width: 12px;
-  height: 12px;
-  color: var(--muted);
-}
-
-.context-meter:hover,
-.context-meter[aria-expanded="true"] {
-  border-color: var(--button-accent-border);
-  background: var(--button-accent-bg);
-}
-
-.context-meter:disabled {
-  cursor: default;
-}
-
 .prompt-context-inspector {
   position: absolute;
   z-index: 40;
@@ -456,13 +435,6 @@ button.context-meter {
 html[data-theme="dark"] .prompt-context-inspector {
   box-shadow: -12px 0 30px rgba(0, 0, 0, .38);
 }
-
-html[data-theme="dark"] .context-meter:hover,
-html[data-theme="dark"] .context-meter[aria-expanded="true"] {
-  border-color: #50698f;
-  background: #263954;
-}
-
 html[data-theme="dark"] .prompt-context-budget-track[data-level="warn"] > i {
   background: #d69e4b;
 }

@@ -1,33 +1,35 @@
 function chatModeDefinition(mode) {
-  if (mode === "plan") return { value: "plan", title: "Plan", icon: "◇", description: "Исследует, задаёт вопросы и создаёт Markdown-план без изменений" };
+  if (mode === "plan") return { value: "plan", title: "Plan", icon: "◇", description: "Исследует задачу и составляет план" };
   return mode === "chat"
     ? { value: "chat", title: "Chat", icon: "○", description: "Ответ модели с безопасным чтением ресурсов" }
-    : { value: "agent", title: "Agent", icon: "✦", description: "Получает skills и tools, выполняет их по одному" };
+    : { value: "agent", title: "Agent", icon: "✦", description: "Выполняет задачи и изменяет документ" };
 }
 
 function renderChatModePicker() {
-  var picker = $("chatModePicker");
+  var picker = $("composerAddPicker");
   var menu = $("chatModeMenu");
-  var label = $("chatModeButtonLabel");
-  var icon = $("chatModeButtonIcon");
-  if (!picker || !menu || !label || !icon) return;
+  var trigger = $("composerAddButton");
+  if (!picker || !menu || !trigger) return;
 
   var active = chatModeDefinition(state.activeChatMode || "agent");
-  label.textContent = active.title;
-  icon.textContent = active.icon;
-  icon.dataset.mode = active.value;
-  var disabled = !!currentActiveSend() || isPendingChatSubmit(state.activeChatId) ||
+  trigger.title = "Действия чата · " + active.title;
+  trigger.setAttribute("aria-label", trigger.title);
+  var disabled = !!state.chatNavigationPending || !!state.initializePromise ||
+    !!currentActiveSend() || isPendingChatSubmit(state.activeChatId) ||
     hasActiveMessageEdit() || state.modeSaving || state.reasoningSaving || state.bridgeUnavailable ||
     state.chatDetailPending || state.chatDetailError || !state.activeChatId;
-  if (typeof setComposerPickerDisabled === "function") setComposerPickerDisabled(picker, disabled);
+  var renderKey = active.value + ":" + !!disabled;
+  if (menu.dataset.renderKey === renderKey) return;
+  menu.dataset.renderKey = renderKey;
 
   menu.replaceChildren();
   [chatModeDefinition("agent"), chatModeDefinition("plan"), chatModeDefinition("chat")].forEach(function (mode) {
     var button = document.createElement("button");
     button.type = "button";
     button.className = "composer-picker-item composer-mode-item" + (mode.value === active.value ? " is-selected" : "");
-    button.setAttribute("role", "option");
-    button.setAttribute("aria-selected", mode.value === active.value ? "true" : "false");
+    button.disabled = !!disabled;
+    button.dataset.mode = mode.value;
+    button.setAttribute("aria-pressed", mode.value === active.value ? "true" : "false");
 
     var modeIcon = document.createElement("span");
     modeIcon.className = "composer-mode-item-icon";
@@ -53,12 +55,44 @@ function renderChatModePicker() {
       button.appendChild(check);
     }
     button.addEventListener("click", function () {
-      if (picker.classList.contains("is-disabled")) return;
-      picker.open = false;
-      $("chatModeSelect").value = mode.value;
-      saveChatMode(mode.value);
+      if (button.disabled) return;
+      if (mode.value !== active.value) saveChatMode(mode.value);
     });
     menu.appendChild(button);
+  });
+}
+
+function bindComposerPickers() {
+  var pickers = [$("composerAddPicker"), $("chatModelPicker")].filter(Boolean);
+  pickers.forEach(function (picker) {
+    var trigger = picker.querySelector("summary");
+    trigger.addEventListener("click", function (event) {
+      if (picker.classList.contains("is-disabled")) event.preventDefault();
+    });
+    picker.addEventListener("toggle", function () {
+      if (!picker.open) return;
+      pickers.forEach(function (other) { if (other !== picker) other.open = false; });
+    });
+  });
+  $("composerAddMenu").addEventListener("click", function (event) {
+    var button = event.target.closest("button");
+    if (!button || button.disabled) return;
+    $("composerAddPicker").open = false;
+    $("composerAddButton").focus();
+  });
+  document.addEventListener("pointerdown", function (event) {
+    pickers.forEach(function (picker) {
+      if (picker.open && !picker.contains(event.target)) picker.open = false;
+    });
+  });
+  document.addEventListener("keydown", function (event) {
+    if (event.key !== "Escape") return;
+    var opened = pickers.filter(function (picker) { return picker.open; })[0];
+    if (opened) {
+      event.preventDefault();
+      opened.open = false;
+      opened.querySelector("summary").focus();
+    }
   });
 }
 
@@ -79,7 +113,6 @@ function renderSendControls() {
   var stopButton = $("stopButton");
   var input = $("chatInput");
   var clearButton = $("clearInputButton");
-  var modeSelect = $("chatModeSelect");
   var form = $("chatForm");
   var editBar = $("messageEditBar");
   var cancelEditButton = $("cancelMessageEditButton");
@@ -128,9 +161,8 @@ function renderSendControls() {
   if (clearButton) {
     clearButton.disabled = isPreparingAttachments || state.editingBusy;
   }
-  if (modeSelect) {
-    modeSelect.disabled = navigating || detailUnavailable || isSending || isPreparingAttachments || isEditing || state.modeSaving || state.reasoningSaving || state.bridgeUnavailable || !state.activeChatId;
-  }
+  setComposerPickerDisabled($("composerAddPicker"), navigating || detailUnavailable ||
+    isPreparingAttachments || isEditing || state.bridgeUnavailable || !state.activeChatId);
   renderChatModePicker();
   if (typeof renderChatModelPicker === "function") {
     renderChatModelPicker();
@@ -140,7 +172,6 @@ function renderSendControls() {
   }
   if (navigating || detailUnavailable || isPreparingAttachments) {
     if (typeof setComposerPickerDisabled === "function") {
-      setComposerPickerDisabled($("chatModePicker"), true);
       setComposerPickerDisabled($("chatModelPicker"), true);
     }
     if ($("chatReasoningToggle")) $("chatReasoningToggle").disabled = true;

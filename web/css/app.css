@@ -237,16 +237,14 @@ button.is-busy::after {
   animation: control-busy-spin .7s linear infinite;
 }
 
-button.icon-button.is-busy::after,
-button.composer-icon-button.is-busy::after {
+button.icon-button.is-busy::after {
   position: absolute;
   top: 50%;
   left: 50%;
   margin: -7px 0 0 -7px;
 }
 
-button.icon-button.is-busy svg,
-button.composer-icon-button.is-busy svg {
+button.icon-button.is-busy svg {
   visibility: hidden;
 }
 
@@ -1014,8 +1012,6 @@ body[data-ui-font-scale] .danger-zone-text,
 body[data-ui-font-scale] .message-footer-meta,
 body[data-ui-font-scale] .message-meta,
 body[data-ui-font-scale] .context-meter,
-body[data-ui-font-scale] .composer-mode select,
-body[data-ui-font-scale] .composer-model select,
 body[data-ui-font-scale] .workspace-note,
 body[data-ui-font-scale] .context-panel-meta,
 body[data-ui-font-scale] .agent-run-subtitle,

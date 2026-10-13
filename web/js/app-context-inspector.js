@@ -43,8 +43,12 @@ function setPromptContextInspectorOpen(open) {
   panel.classList.toggle("hidden", !open);
   panel.setAttribute("aria-hidden", open ? "false" : "true");
   trigger.setAttribute("aria-expanded", open ? "true" : "false");
+  hideContextMeterTooltip();
   if (open) {
+    if ($("composerAddPicker")) $("composerAddPicker").open = false;
+    if ($("chatModelPicker")) $("chatModelPicker").open = false;
     loadPromptContextInspector(false);
+    $("closePromptContextInspectorButton").focus();
   } else {
     cancelPromptContextInspection();
     clearPromptContextRawViewer();
@@ -437,8 +441,9 @@ function renderPromptContextInspectorAvailability() {
   if (!trigger) return;
   var disabled = hasActiveMessageEdit() || state.bridgeUnavailable || !state.activeChatId;
   trigger.disabled = disabled;
-  var modelContextTrigger = $("openModelContextButton");
+  var modelContextTrigger = $("openModelContextFromTokens");
   if (modelContextTrigger) modelContextTrigger.disabled = state.bridgeUnavailable || !state.activeChatId;
+  if (disabled) hideContextMeterTooltip();
   if (disabled && promptContextInspectorOpen()) closePromptContextInspector();
 }
 
@@ -466,12 +471,42 @@ function syncPromptContextInspectorState() {
   }
 }
 
+function hideContextMeterTooltip() {
+  if ($("contextMeterTooltip")) $("contextMeterTooltip").hidden = true;
+}
+
+function bindContextMeterTooltip() {
+  var wrap = $("contextMeterWrap");
+  var tooltip = $("contextMeterTooltip");
+  var trigger = $("contextMeter");
+  function show() {
+    if (trigger.disabled || promptContextInspectorOpen()) return;
+    tooltip.hidden = false;
+    tooltip.style.setProperty("--context-tooltip-shift", "0px");
+    var rect = tooltip.getBoundingClientRect();
+    var shift = Math.max(12 - rect.left, Math.min(0, window.innerWidth - 12 - rect.right));
+    tooltip.style.setProperty("--context-tooltip-shift", shift + "px");
+  }
+  wrap.addEventListener("pointerenter", show);
+  wrap.addEventListener("pointerleave", hideContextMeterTooltip);
+  trigger.addEventListener("focus", show);
+  trigger.addEventListener("blur", hideContextMeterTooltip);
+  window.addEventListener("resize", hideContextMeterTooltip);
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape") hideContextMeterTooltip();
+  });
+}
+
 function bindContextInspectorActions() {
+  bindContextMeterTooltip();
   $("contextMeter").addEventListener("click", function () {
     if ($("contextMeter").disabled) return;
     setPromptContextInspectorOpen(!promptContextInspectorOpen());
   });
-  $("closePromptContextInspectorButton").addEventListener("click", closePromptContextInspector);
+  $("closePromptContextInspectorButton").addEventListener("click", function () {
+    closePromptContextInspector();
+    $("contextMeter").focus();
+  });
   $("refreshPromptContextInspectorButton").addEventListener("click", function () {
     loadPromptContextInspector(false);
   });

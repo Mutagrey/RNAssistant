@@ -8,8 +8,9 @@ function fixture() {
   const nodes = new Map();
   function element() {
     const classes = new Set();
-    return { textContent: "", children: [], dataset: {}, open: false,
-      style: { setProperty() {} }, setAttribute() {},
+    return { textContent: "", children: [], dataset: {}, open: false, attributes: {},
+      style: { setProperty(name, value) { this[name] = value; } },
+      setAttribute(name, value) { this.attributes[name] = value; },
       classList: { add: name => classes.add(name), remove: name => classes.delete(name),
         contains: name => classes.has(name),
         toggle: (name, force) => force ? classes.add(name) : classes.delete(name) },
@@ -42,7 +43,7 @@ c.state.messages = [{ Role: "assistant", PromptTokens: 321, CompletionTokens: 12
   { Role: "user", Content: "pending local draft", Local: true }];
 c.renderContextMeter();
 c.renderPromptContextInspector(snapshot);
-assert.equal(f.node("contextMeterDetail").textContent, "↑" + c.formatNumber(1234) + " · ↓56");
+assert.ok(f.node("contextMeterSummary").textContent.includes(c.formatNumber(1234)));
 assert.equal(f.node("promptContextInspectorUsage").textContent, "Вход " + c.formatNumber(1234) + " токенов");
 assert.doesNotMatch(f.node("promptContextInspectorUsage").textContent, /≈/);
 assert.match(f.node("promptContextInspectorLastUsage").textContent, /выход 56/);
@@ -55,7 +56,7 @@ assert.equal(c.lastModelUsage().prompt, 777, "exact request input precedes stale
 c.state.contextUsage = { ...usage, actual: false, usedTokens: 9999 };
 c.state.messages = [];
 c.renderContextMeter();
-assert.equal(f.node("contextMeterDetail").textContent, "↑" + c.formatNumber(1234) + " · ↓56",
+assert.ok(f.node("contextMeterSummary").textContent.includes(c.formatNumber(1234)),
   "reloaded usage does not depend on the visible page");
 console.log("PASS context usage: request and reload projections retain exact counts");
 
@@ -80,10 +81,10 @@ for (const partial of [
   c.state.messages = [{ PromptTokens: 100, CompletionTokens: 10, TotalTokens: 110 }];
   c.renderContextMeter();
   c.renderPromptContextInspector({ ...partial, usedTokens: 9999 });
-  assert.doesNotMatch(f.node("contextMeterDetail").textContent, /≈|undefined|NaN/);
+  assert.doesNotMatch(f.node("contextMeterSummary").textContent, /≈|undefined|NaN/);
   assert.doesNotMatch(f.node("promptContextInspectorUsage").textContent, /≈|undefined|NaN/);
   if (partial.lastTotalTokens === null) {
-    assert.equal(f.node("contextMeterDetail").textContent, "нет usage");
+    assert.equal(f.node("contextMeterSummary").textContent, "API ещё не сообщил число входных токенов");
     assert.equal(f.node("promptContextInspectorUsage").textContent, "Нет данных usage");
   } else if (partial.lastPromptTokens === null) {
     assert.equal(c.lastModelUsage().prompt, null, "total and estimates cannot become exact input");
@@ -94,6 +95,30 @@ for (const partial of [
   }
 }
 console.log("PASS context usage: zero, partial and absent usage are explicit");
+
+c.state.contextUsage = { lastPromptTokens: 118000, lastCompletionTokens: 5000,
+  contextWindowTokens: 258000, usedTokens: 200000, actual: false };
+c.renderContextMeter();
+assert.ok(Math.abs(Number(f.node("contextMeter").style["--context-meter-offset"]) - (100 - 118000 / 258000 * 100)) < .001);
+assert.match(f.node("contextMeterSummary").textContent, /Осталось 54%/);
+assert.ok(f.node("contextMeterSummary").textContent.includes(c.formatNumber(118000)));
+assert.equal(f.node("contextMeter").dataset.level, "ok");
+assert.match(f.node("contextMeter").attributes["aria-label"], /Осталось 54%/);
+
+for (const [prompt, limit, level, offset] of [
+  [0, 100, "ok", 100], [80, 100, "warn", 20], [100, 100, "danger", 0],
+  [120, 100, "danger", 0], [null, 100, "unknown", 100], [12, 0, "unknown", 100]
+]) {
+  c.state.contextUsage = { LastPromptTokens: prompt, LastCompletionTokens: 10,
+    LastTotalTokens: 130, ContextWindowTokens: limit, usedTokens: 77 };
+  c.renderContextMeter();
+  assert.equal(f.node("contextMeter").dataset.level, level);
+  assert.equal(Number(f.node("contextMeter").style["--context-meter-offset"]), offset);
+  assert.doesNotMatch(f.node("contextMeterSummary").textContent, /NaN|undefined|Осталось -/);
+  if (prompt === null) assert.match(f.node("contextMeterSummary").textContent, /API ещё не сообщил/);
+  if (!limit) assert.match(f.node("contextMeterSummary").textContent, /размер окна неизвестен/);
+}
+console.log("PASS context usage: ring uses exact input, clamps capacity and keeps unknown usage explicit");
 
 const html = fs.readFileSync(path.join(__dirname, "../../web/index.html"), "utf8");
 const estimateTag = html.match(/<details\b[^>]*id="promptContextInspectorEstimate"[^>]*>/)[0];

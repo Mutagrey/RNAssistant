@@ -24,10 +24,10 @@
   <link rel="stylesheet" href="css/vendor/codemirror/addon/hint/show-hint.min.css">
   <link rel="stylesheet" href="css/vendor/wunderbaum.css">
   <link rel="stylesheet" href="css/vendor/viewer.min.css">
-  <link rel="stylesheet" href="css/app.css?v=accent-palette-20261012-2">
+  <link rel="stylesheet" href="css/app.css?v=composer-menu-20261013-1">
   <link rel="stylesheet" href="css/app-chat.css?v=user-bubble-20261012-1-transcript-20261012-1">
   <link rel="stylesheet" href="css/app-markdown.css?v=accent-chat-20261012-1">
-  <link rel="stylesheet" href="css/app-composer.css?v=accent-palette-20261012-2-attachment-input-1-awaiting-input-1-transcript-20261012-1-image-display-1">
+  <link rel="stylesheet" href="css/app-composer.css?v=composer-menu-20261013-3">
   <link rel="stylesheet" href="css/app-reasoning.css?v=accent-chat-20261012-1">
   <link rel="stylesheet" href="css/app-context-chips.css?v=sidebar-polish-20260723-1">
   <link rel="stylesheet" href="css/app-models.css?v=model-tables-20260930-1">
@@ -42,12 +42,12 @@
   <link rel="stylesheet" href="css/app-vba.css?v=accent-palette-20261012-2">
   <link rel="stylesheet" href="css/app-context-panel.css?v=json-height-20260929-1">
   <link rel="stylesheet" href="css/app-model-context.css?v=model-context-20261002-1">
-  <link rel="stylesheet" href="css/app-context-inspector.css?v=json-height-20260929-1-usage-20261002-1">
+  <link rel="stylesheet" href="css/app-context-inspector.css?v=composer-menu-20261013-1">
   <link rel="stylesheet" href="css/app-chart-artifacts.css?v=chatui-20260622-3">
   <link rel="stylesheet" href="css/app-artifacts.css?v=accent-chat-20261012-1-image-display-1-artifact-tree-20261013-1">
   <link rel="stylesheet" href="css/app-tree-adapter.css?v=tree-adapter-20260829-1">
   <link rel="stylesheet" href="css/app-html-workspace.css?v=html-memory-20261002-1">
-  <link rel="stylesheet" href="css/app-responsive.css?v=library-layout-20260907-1-composer-wrap-20261012-1">
+  <link rel="stylesheet" href="css/app-responsive.css?v=composer-menu-20261013-1">
   <link rel="stylesheet" href="css/app-agent.css?v=result-summary-20261012-1">
   <link rel="stylesheet" href="css/app-agent-data.css?v=json-height-20260929-1">
   <link rel="stylesheet" href="css/app-theme.css?v=user-bubble-20261012-2">
@@ -185,42 +185,35 @@
           </div>
           <div class="composer-toolbar">
             <div class="composer-quick-actions">
-              <button type="button" class="composer-icon-button" id="attachFileButton" title="Прикрепить файл" aria-label="Прикрепить файл">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21.4 11.6-8.9 8.9a6 6 0 0 1-8.5-8.5l9.6-9.6a4 4 0 0 1 5.7 5.7l-9.6 9.6a2 2 0 1 1-2.8-2.8l8.9-8.9"/></svg>
-              </button>
+              <details class="composer-picker composer-add-picker" id="composerAddPicker">
+                <summary class="composer-picker-trigger composer-add-trigger" id="composerAddButton" title="Действия чата" aria-label="Действия чата" aria-controls="composerAddMenu">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                </summary>
+                <div class="composer-picker-menu composer-add-menu" id="composerAddMenu">
+                  <button type="button" class="composer-picker-item composer-menu-action" id="attachFileButton">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21.4 11.6-8.9 8.9a6 6 0 0 1-8.5-8.5l9.6-9.6a4 4 0 0 1 5.7 5.7l-9.6 9.6a2 2 0 1 1-2.8-2.8l8.9-8.9"/></svg>
+                    <span>Прикрепить файл</span>
+                  </button>
+                  <button type="button" class="composer-picker-item composer-menu-action" id="addSelectionContextButton">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2" stroke-dasharray="3 3"/><path d="M12 8v8M8 12h8"/></svg>
+                    <span>Добавить выделение в контекст</span>
+                  </button>
+                  <div class="composer-menu-section-label" id="chatModeMenuLabel">Режим чата</div>
+                  <div id="chatModeMenu" role="group" aria-labelledby="chatModeMenuLabel"></div>
+                  <button type="button" class="composer-picker-item composer-menu-action composer-menu-compact" id="compactContextButton" title="Сжать ранний контекст, сохранив полную историю" hidden>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 4 5 5 5-5M7 20l5-5 5 5M5 12h14"/></svg>
+                    <span>Сжать контекст</span>
+                  </button>
+                </div>
+              </details>
               <input id="attachmentFileInput" type="file" multiple hidden>
-              <button type="button" class="composer-icon-button" id="addSelectionContextButton" title="Добавить выделение документа" aria-label="Добавить выделение документа">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2" stroke-dasharray="3 3"/><path d="m10 9 7 7"/><path d="M12 16h5v-5"/></svg>
-              </button>
-              <button class="icon-button" id="openModelContextButton" type="button" title="Контекст модели" aria-label="Контекст модели" aria-expanded="false" aria-controls="modelContextDialog"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5-6 7 6 7m8-14 6 7-6 7M14 3l-4 18"/></svg></button>
-              <button class="context-meter" id="contextMeter" type="button" title="Токены API и состав контекста" aria-label="Токены API и состав контекста" aria-expanded="false" aria-controls="promptContextInspector">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 4-8 4-8-4 8-4Z"/><path d="m20 12-8 4-8-4"/><path d="m20 17-8 4-8-4"/></svg>
-                <strong id="contextMeterValue">API</strong>
-                <em id="contextMeterDetail">нет usage</em>
-              </button>
-              <button type="button" class="composer-icon-button context-compact-button" id="compactContextButton" title="Сжать ранний контекст" aria-label="Сжать ранний контекст" hidden>
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 4 5 5 5-5"/><path d="m7 20 5-5 5 5"/></svg>
-              </button>
             </div>
             <div class="composer-actions">
-              <details class="composer-picker composer-mode-picker" id="chatModePicker">
-                <summary class="composer-picker-trigger" id="chatModeButton" title="Режим чата" aria-label="Режим чата">
-                  <span class="composer-picker-trigger-icon" id="chatModeButtonIcon" aria-hidden="true"></span>
-                  <span class="composer-picker-trigger-label" id="chatModeButtonLabel">Agent</span>
-                  <span class="composer-picker-trigger-caret" aria-hidden="true">⌄</span>
-                </summary>
-                <div class="composer-picker-menu composer-mode-menu" id="chatModeMenu" role="listbox" aria-label="Выбор режима чата"></div>
-              </details>
-              <select id="chatModeSelect" class="hidden" aria-label="Режим чата">
-                <option value="agent">Agent</option>
-                <option value="plan">Plan</option>
-                <option value="chat">Chat</option>
-              </select>
               <details class="composer-picker composer-model-picker" id="chatModelPicker">
                 <summary class="composer-picker-trigger" id="chatModelButton" title="Модель чата" aria-label="Модель чата">
                   <span class="composer-picker-trigger-icon model" aria-hidden="true">✦</span>
                   <span class="composer-picker-trigger-label" id="chatModelButtonLabel">Модель</span>
-                  <span class="composer-picker-trigger-caret" aria-hidden="true">⌄</span>
+                  <svg class="composer-picker-trigger-caret" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
                 </summary>
                 <div class="composer-picker-menu composer-model-menu" id="chatModelMenu" role="listbox" aria-label="Выбор модели чата"></div>
               </details>
@@ -230,6 +223,18 @@
               <button type="button" class="composer-reasoning-button" id="chatReasoningToggle" title="Reasoning выключен" aria-label="Включить reasoning" aria-pressed="false">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6"/><path d="M10 21h4"/><path d="M8.4 14.7A6 6 0 1 1 15.6 14.7c-.9.7-1.4 1.6-1.6 2.3h-4c-.2-.7-.7-1.6-1.6-2.3Z"/><path d="M12 1V0"/><path d="m4.9 4.9-.8-.8"/><path d="m19.9 4.1-.8.8"/></svg>
               </button>
+              <div class="context-meter-wrap" id="contextMeterWrap">
+                <button class="context-meter" id="contextMeter" type="button" data-level="unknown" aria-label="Контекстное окно" aria-describedby="contextMeterTooltip" aria-expanded="false" aria-controls="promptContextInspector">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <circle class="context-meter-track" cx="12" cy="12" r="9"/>
+                    <circle class="context-meter-fill" cx="12" cy="12" r="9" pathLength="100"/>
+                  </svg>
+                </button>
+                <div class="context-meter-tooltip" id="contextMeterTooltip" role="tooltip" hidden>
+                  <strong>Контекстное окно</strong>
+                  <span id="contextMeterSummary">API ещё не сообщил число входных токенов</span>
+                </div>
+              </div>
               <details class="send-delivery-menu" id="sendDeliveryMenu">
                 <summary title="Способ отправки" aria-label="Выбрать способ отправки"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
                 <div class="send-delivery-options">
@@ -268,7 +273,7 @@
             <div class="prompt-context-inspector-heading">
               <strong>Контекст и токены</strong>
               <span id="promptContextInspectorSubtitle">API usage</span>
-              <button type="button" class="secondary compact" id="openModelContextFromTokens">Контекст модели · запрос / ответ</button>
+              <button type="button" class="secondary compact" id="openModelContextFromTokens" aria-expanded="false" aria-controls="modelContextDialog">Контекст модели · запрос / ответ</button>
             </div>
             <div class="prompt-context-inspector-head-actions">
               <button type="button" class="icon-button" id="refreshPromptContextInspectorButton" title="Обновить снимок" aria-label="Обновить снимок">
@@ -1110,7 +1115,7 @@
   <script src="js/app-model-render.js?v=model-settings-20260930-1-panel-model-20261002-1"></script>
   <script src="js/app-models.js?v=ui-lazy-20260903-1-usage-20261002-1-panel-model-20261002-2-large-chat-1"></script>
   <script src="js/app-context-data.js"></script>
-  <script src="js/app-chat-state.js?v=office-chat-20260930-3-chat-paging-1-usage-20261002-1-inbox-20261002-1-large-chat-1-transcript-20261012-1"></script>
+  <script src="js/app-chat-state.js?v=composer-menu-20261013-3"></script>
   <script src="js/app-resource-list.js?v=resource-navigation-20260826-1-library-20261002-1"></script>
   <script src="js/app-tools-structured.js?v=library-ux-20260903-1"></script>
   <script src="js/app-tools-actions.js?v=manual-tool-chat-20260908-1"></script>
@@ -1133,8 +1138,8 @@
   <script src="js/app-html-workspace-actions.js?v=html-action-guard-20260908-1-large-chat-1-artifact-tree-20261013-1"></script>
   <script src="js/app-html-workspace.js?v=html-memory-20261002-1-vendors-1-artifact-tree-20261013-1"></script>
   <script src="js/app-context.js?v=ui-lazy-20260903-1-usage-20261002-1-inbox-20261002-1"></script>
-  <script src="js/app-model-context.js?v=model-context-20261002-1"></script>
-  <script src="js/app-context-inspector.js?v=context-download-20260906-1-usage-20261002-1-model-context-1"></script>
+  <script src="js/app-model-context.js?v=composer-menu-20261013-1"></script>
+  <script src="js/app-context-inspector.js?v=composer-menu-20261013-1"></script>
   <script src="js/app-tool-result-preview.js?v=typed-step-results-20260908-1"></script>
   <script src="js/app-agent-data.js?v=step-results-20260908-1"></script>
   <script src="js/app-agent-model.js?v=catalog-display-chat-20260908-1-run-isolation-1"></script>
@@ -1150,10 +1155,10 @@
   <script src="js/app-reasoning.js?v=chat-projection-20260907-1"></script>
   <script src="js/app-attachments.js?v=attachment-input-20261012-1"></script>
   <script src="js/app-chat-session.js?v=closed-document-20261012-1-transcript-20261012-1"></script>
-  <script src="js/app-chat-composer.js?v=multi-chat-20260902-1-navigation-20261002-1-panel-model-20261002-1-inbox-20261002-1-large-chat-1-awaiting-input-20261012-1"></script>
+  <script src="js/app-chat-composer.js?v=composer-menu-20261013-1"></script>
   <script src="js/app-chat-inbox.js?v=inbox-1-transcript-20261012-1"></script>
   <script src="js/app-chat-run.js?v=response-render-timing-20260928-1-usage-20261002-1-navigation-20261002-1-inbox-20261002-1-large-chat-1-run-isolation-1-transcript-20261012-1"></script>
-  <script src="js/app-chat.js?v=office-chat-20260930-3-navigation-20261002-1-panel-model-20261002-1-context-20261002-1-inbox-20261002-1-large-chat-1-awaiting-input-20261012-1"></script>
+  <script src="js/app-chat.js?v=composer-menu-20261013-1"></script>
   <script src="js/app-chat-edit.js?v=chat-sync-20260903-1-usage-20261002-1"></script>
   <script src="js/app.js?v=artifact-catalog-20261002-1"></script>
 </body>
