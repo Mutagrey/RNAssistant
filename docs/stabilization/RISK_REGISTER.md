@@ -164,6 +164,21 @@ real-model or Windows/Office/WebView2 qualification is claimed.
 
 ## Attachment input review — 2026-10-12
 
+- **Fixed host-neutral 2026-10-13 / resource upload owner:** a new photo reports
+  `RESOURCE_UPLOAD_FAILED: 503` for `main.part_001.js`; the reporter estimates
+  3 MB. Inspection of the pinned WebView2 SDK `1.0.2903.40` confirms that
+  `COMStreamWrapper.Read` throws `NotImplementedException` for nonzero buffer
+  offsets. Uploads passed their accumulated offset directly, failing at the
+  second 256 KiB chunk or an earlier partial read. Reads now use a bounded 64 KiB
+  scratch buffer at offset zero, then copy into the reserved body. Unexpected
+  WebView response failures retain exception diagnostics and return typed JSON
+  instead of an empty 503. A regression fails before the fix; all five upload
+  checks pass after it, including exact bytes for 3 MiB + 17 with full/partial
+  reads, invalid lengths, cancellation and lease cleanup. JS transport is 9/9.
+  Harness evidence uses isolated baseline `4a2814d3` plus this fix because the
+  working tree's unrelated arsenal edits duplicate `AgentArsenalProjection` in
+  Compile items and lack `GetAgentArsenal` in the bridge test stub. Current-tree
+  integration and real Windows/Office/WebView2 delivery remain unqualified.
 - **Open Windows evidence / resource upload owner:** the shared browser writer
   now posts bounded `ArrayBuffer` chunks instead of Blob/File-backed bodies, which
   avoids relying on WebView2's reported missing request-content path. Chromium

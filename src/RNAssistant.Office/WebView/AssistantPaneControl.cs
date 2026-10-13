@@ -283,15 +283,11 @@ namespace RNAssistant.Office.WebView
             catch (Exception ex)
             {
                 if (!_resourcesDisposed)
-                    RuntimeLog.Error("Resource response failed: " + ex.GetType().Name);
+                    RuntimeLog.Error("Resource response failed.", ex);
                 if (!_resourcesDisposed)
                 {
-                    var response = new Services.ResourceStreamResponse
-                    {
-                        StatusCode = 503,
-                        Reason = "Resource unavailable",
-                        Body = new MemoryStream()
-                    };
+                    var response = Services.ResourceDataRouter.Failure(503, "RESOURCE_TRANSPORT_UNAVAILABLE",
+                        "Не удалось передать данные через WebView2. Подробности в журнале RN Assistant.");
                     if (!TrySetResourceResponse(e, response)) response.Body.Dispose();
                 }
             }

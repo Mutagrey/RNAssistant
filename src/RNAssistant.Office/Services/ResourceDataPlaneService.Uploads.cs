@@ -64,15 +64,19 @@ namespace RNAssistant.Office.Services
                 if (count < 1 || count > MaximumUploadChunkBytes || count > upload.Bytes.Length - offset)
                     throw Error("RESOURCE_BATCH_TOO_LARGE", "The upload chunk exceeds the negotiated bounds.");
                 if (body == null || !body.CanRead) throw Error("RESOURCE_UPLOAD_INVALID", "A binary request body is required.");
+                // WebView2's COMStreamWrapper only implements Read with a zero buffer offset.
+                // Keep that offset separate from both the upload cursor and partial stream reads.
+                var buffer = new byte[Math.Min(count, 64 * 1024)];
                 var read = 0;
                 while (read < count)
                 {
                     RequireActiveUpload(upload, token, false);
-                    var next = body.Read(upload.Bytes, offset + read, count - read);
+                    var next = body.Read(buffer, 0, Math.Min(buffer.Length, count - read));
                     if (next == 0) throw Error("RESOURCE_UPLOAD_INVALID", "The upload chunk is truncated.");
+                    Buffer.BlockCopy(buffer, 0, upload.Bytes, offset + read, next);
                     read += next;
                 }
-                if (body.ReadByte() != -1) throw Error("RESOURCE_BATCH_TOO_LARGE", "The upload body exceeds its declared chunk length.");
+                if (body.Read(buffer, 0, 1) != 0) throw Error("RESOURCE_BATCH_TOO_LARGE", "The upload body exceeds its declared chunk length.");
                 RequireActiveUpload(upload, token);
                 upload.Received += count;
                 return new ResourceUploadBatchResponse { LeaseId = upload.Id, NextOffset = upload.Received };

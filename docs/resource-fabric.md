@@ -1181,8 +1181,14 @@ ingestion path. Progress and failures are visible beside the composer and scoped
 to the addressed chat. Text drags retain normal editing behavior; file drops
 outside the conversation cannot navigate the app away. Navigation, message editing
 and pending submit refuse new attachments explicitly.
-Extraction runs off the UI thread; the bounded
-WebView request stream is consumed on its STA. No base64 staging route/adapter or
+Extraction runs off the UI thread; the bounded WebView request stream is consumed
+on its STA. Each active upload read uses at most 64 KiB of scratch space in addition
+to the reserved body: stream reads always use buffer offset zero, then copy into
+the exact upload offset. This handles partial reads and the WebView2 SDK's
+`COMStreamWrapper`, which rejects nonzero destination offsets. Unexpected WebView
+response failures are logged with their exception and return typed
+`RESOURCE_TRANSPORT_UNAVAILABLE` JSON instead of an empty 503 response.
+No base64 staging route/adapter or
 second durable upload store remains. Real Windows POST/preflight/close-during-PDF
 qualification is still open.
 

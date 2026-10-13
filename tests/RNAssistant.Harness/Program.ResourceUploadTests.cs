@@ -74,6 +74,35 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void ResourceUploadReadsZeroOffsetStreams()
+        {
+            var session = new ChatSession();
+            var expected = Enumerable.Range(0, 3 * 1024 * 1024 + 17)
+                .Select(index => (byte)(index % 251)).ToArray();
+            using (var data = new ResourceDataPlaneService(new ResourceGatewayService()))
+            {
+                var router = new ResourceDataRouter(data);
+                foreach (var maximumRead in new[] { int.MaxValue, 4093 })
+                {
+                    var lease = data.OpenUpload(session, UploadRequest(session, expected.Length));
+                    for (var offset = 0; offset < expected.Length;)
+                    {
+                        var count = Math.Min(lease.MaxChunkBytes, expected.Length - offset);
+                        using (var body = new UploadZeroOffsetStream(expected, offset, count, maximumRead))
+                        {
+                            var ack = UploadResponse(router.Handle("POST", lease.Url + "?offset=" + offset + "&count=" + count,
+                                CancellationToken.None, body), 200);
+                            AssertEqual(offset + count, (int)ack["nextOffset"], "complete and partial reads acknowledge the exact chunk");
+                        }
+                        offset += count;
+                    }
+                    var actual = data.ConsumeUpload(session, lease.LeaseId, ResourceDataPlaneService.UploadOwner,
+                        (bytes, fileName, contentType) => bytes.ToArray(), CancellationToken.None);
+                    AssertTrue(actual.SequenceEqual(expected), "zero-offset stream reads preserve every byte across chunks");
+                }
+            }
+        }
+
         private static void ResourceUploadRejectsInvalidChunks()
         {
             WithTempPaths(paths =>
@@ -193,6 +222,19 @@ namespace RNAssistant.Harness
                     AssertEqual(0, Directory.GetFiles(paths.ChatBlobDirectory, "*.blob", SearchOption.AllDirectories).Length, "cancellation never publishes CAS");
                 }
             });
+        }
+
+        // WebView2 SDK 1.0.2903.40 COMStreamWrapper.Read rejects a nonzero buffer offset.
+        private sealed class UploadZeroOffsetStream : MemoryStream
+        {
+            private readonly int _maximumRead;
+            internal UploadZeroOffsetStream(byte[] bytes, int offset, int count, int maximumRead)
+                : base(bytes, offset, count, false) { _maximumRead = maximumRead; }
+            public override int Read(byte[] buffer, int offset, int count)
+            {
+                if (offset != 0) throw new NotImplementedException("The request stream requires a zero buffer offset.");
+                return base.Read(buffer, 0, Math.Min(count, _maximumRead));
+            }
         }
 
         private sealed class UploadProbeStream : MemoryStream

@@ -129,7 +129,7 @@ namespace RNAssistant.Office.Services
         }
         private static bool IsLeaseId(string id)
         { return System.Text.RegularExpressions.Regex.IsMatch(id, "\\A[0-9a-f]{64}\\z"); }
-        private static ResourceStreamResponse Failure(int code, string error, string message)
+        internal static ResourceStreamResponse Failure(int code, string error, string message)
         {
             return new ResourceStreamResponse { StatusCode = code, Reason = "Resource request failed",
                 Body = new MemoryStream(Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new ResourceDataError {

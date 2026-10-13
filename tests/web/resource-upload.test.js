@@ -69,6 +69,19 @@ function fixture() {
   }
   {
     const f = fixture();
+    let attempts = 0;
+    f.context.fetch = async () => {
+      attempts++;
+      return { ok: false, status: 503, json: async () => ({ code: "RESOURCE_TRANSPORT_UNAVAILABLE",
+        message: "Не удалось передать данные через WebView2." }) };
+    };
+    await assert.rejects(f.context.uploadChatResourceFile("chat-a", file), /RESOURCE_UPLOAD_FAILED: 503 · Не удалось передать данные через WebView2\./);
+    assert.equal(attempts, 1, "failed chunk delivery is never automatically replayed");
+    assert.deepEqual(f.calls.map(call => call.type), ["beginChatResourceUpload", "cancelChatResourceUpload"]);
+    console.log("PASS upload: transport failure preserves its reason and cancels without completion or retry");
+  }
+  {
+    const f = fixture();
     f.context.fetch = async () => ({ ok: true, json: async () => ({ leaseId: "b".repeat(64), nextOffset: 3 }) });
     await assert.rejects(f.context.uploadChatResourceFile("chat-a", file), /RESOURCE_CURSOR_INVALID/);
     assert.deepEqual(f.calls.map(call => call.type), ["beginChatResourceUpload", "cancelChatResourceUpload"]);
@@ -131,5 +144,5 @@ function fixture() {
   }
   assert.equal(/fileToBase64|readAsDataURL|send\("stageChatResource"/.test(source), false);
   console.log("PASS upload: legacy bridge body path is removed");
-  console.log("OK 8/8");
+  console.log("OK 9/9");
 }()).catch(error => { console.error(error.stack || error); process.exitCode = 1; });

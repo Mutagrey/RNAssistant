@@ -475,6 +475,7 @@ namespace RNAssistant.Harness
 
                 Test("attachments: import commit delete", AttachmentImportCommitDelete),
                 Test("attachments: upload uses the bounded resource data plane", ResourceUploadStagesThroughDataPlane),
+                Test("attachments: upload accepts zero-offset partial stream reads", ResourceUploadReadsZeroOffsetStreams),
                 Test("attachments: upload rejects invalid chunks before staging", ResourceUploadRejectsInvalidChunks),
                 Test("attachments: upload lease bounds cancellation and expiry", ResourceUploadLeaseLifecycle),
                 Test("attachments: upload discards cancelled completion", ResourceUploadDiscardsCancelledCompletion),
