@@ -588,9 +588,17 @@ namespace RNAssistant.Harness
             using (var bridge = new AssistantWebBridge(new AssistantController
             {
                 SendChatEntered = entered,
-                SendChatRelease = release
+                SendChatRelease = release,
+                CurrentDocumentChatSelection = chatId => chatId == "chat-a" || chatId == "chat-b"
+                    ? new ChatStateResponse { ActiveChatId = chatId } : null
             }, null))
             {
+                var coordinatorCalls = 0;
+                bridge.OfficeChatSelectionRequested = chatId =>
+                {
+                    Interlocked.Increment(ref coordinatorCalls);
+                    throw new InvalidOperationException("An active run must retain its document binding.");
+                };
                 var token = BridgeToken(bridge);
                 var running = bridge.HandleMessageAsync(
                     "{\"id\":\"long-agent\",\"type\":\"sendChat\",\"bridgeToken\":\"" + token +
@@ -608,6 +616,29 @@ namespace RNAssistant.Harness
                         "chat navigation is not serialized behind an agent run");
                     AssertTrue(JObject.Parse(await select)["ok"].Value<bool>(),
                         "chat selection remains available during an agent run");
+                    AssertTrue(!running.IsCompleted, "selecting another chat does not stop the original run");
+                    AssertTrue(!bridge.HostSwitchPending, "same-document selection does not reserve a host switch");
+
+                    var foreign = JObject.Parse(await bridge.HandleMessageAsync(JsonConvert.SerializeObject(new
+                    {
+                        id = "foreign-select", type = "selectChat", bridgeToken = token,
+                        payload = new { chatId = "another-document-chat" }
+                    })));
+                    AssertTrue(!(bool)foreign["ok"], "document rebinding remains blocked during the run");
+                    AssertEqual("bridge_switch_busy", (string)foreign["errorCode"], "foreign selection reports a busy binding");
+
+                    foreach (var chatId in new[] { "chat-a", "chat-b" })
+                    {
+                        var selected = JObject.Parse(await bridge.HandleMessageAsync(JsonConvert.SerializeObject(new
+                        {
+                            id = "return-" + chatId, type = "selectChat", bridgeToken = token,
+                            payload = new { chatId }
+                        })));
+                        AssertTrue((bool)selected["ok"], "navigation remains available after a refused document switch");
+                        AssertEqual(chatId, (string)selected["payload"]["activeChatId"], "selection returns the addressed chat");
+                    }
+                    AssertEqual(0, coordinatorCalls, "same-document navigation never reaches the rebinding coordinator");
+                    AssertTrue(!bridge.HostSwitchPending, "a refused document switch does not retain the exclusive gate");
 
                     var cancel = JObject.Parse(await bridge.HandleMessageAsync(
                         "{\"id\":\"cancel-long-agent\",\"type\":\"cancelRequest\",\"bridgeToken\":\"" + token +

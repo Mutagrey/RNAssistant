@@ -763,6 +763,11 @@ Panel/model responsiveness uses `bridge: navigation leaves caller context` and
 They cover worker dispatch, cancel/drain before exclusive rebinding, stale catalog
 responses, settings-preview cancellation/reload, chat preference ordering, hidden
 model DOM work and activity batching.
+`bridge: agent run keeps controls responsive` installs the Office selection
+coordinator and checks same-document chat round trips during an active request,
+refusal of document rebinding, and cancellation of the original request.
+`node tests/web/multi-chat-requests.test.js` and `node tests/web/chat-sync.test.js`
+cover per-chat responses and serialized UI navigation.
 The bridge controller is a stub; real controller/HTTP wiring and Desktop/Office
 UI responsiveness still need Windows evidence.
 

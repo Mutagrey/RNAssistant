@@ -81,6 +81,7 @@ namespace RNAssistant.Office
         internal ManualResetEventSlim SendChatEntered { get; set; }
         internal ManualResetEventSlim SendChatRelease { get; set; }
         internal Action NavigationWork { get; set; }
+        internal Func<string, ChatStateResponse> CurrentDocumentChatSelection { get; set; }
 
         public InitResponse Initialize()
         {
@@ -167,6 +168,10 @@ namespace RNAssistant.Office
             NavigationWork?.Invoke();
             selected?.Invoke(new ChatStateResponse { ActiveChatId = chatId, DetailDeferred = true });
             return ChatState(null, chatId);
+        }
+        public ChatStateResponse TrySelectCurrentDocumentChat(string chatId)
+        {
+            return CurrentDocumentChatSelection == null ? null : CurrentDocumentChatSelection(chatId);
         }
         public OpenDocumentResponse OpenDocument(string chatId) { NavigationWork?.Invoke(); return new OpenDocumentResponse { Path = string.Empty, Launched = false }; }
         public ChatStateResponse ActivateDocument(string documentKey) { NavigationWork?.Invoke(); return ChatState(null, documentKey); }

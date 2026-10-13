@@ -104,8 +104,7 @@ namespace RNAssistant.Office.WebView
                 {
                     if (_disposed) throw new OperationCanceledException("Bridge is closing.");
                     var telemetry = string.Equals(type, "reportClientTiming", StringComparison.Ordinal);
-                    var needsExclusiveBinding = string.Equals(type, "createOfficeHostChat", StringComparison.Ordinal) ||
-                        (string.Equals(type, "selectChat", StringComparison.Ordinal) && OfficeChatSelectionRequested != null);
+                    var needsExclusiveBinding = string.Equals(type, "createOfficeHostChat", StringComparison.Ordinal);
                     if (!telemetry && (_hostSwitchPending || (needsExclusiveBinding && _requestsInFlight != 0)))
                         throw new BridgeSwitchBusyException();
                     if (!telemetry)
@@ -220,6 +219,23 @@ namespace RNAssistant.Office.WebView
                                 cancellationToken).ConfigureAwait(false);
                         else
                         {
+                            // Selecting a chat on the bound document does not replace the
+                            // controller or the document session captured by an active run.
+                            var currentDocumentChat = await RunBridgeWorkAsync(
+                                () => _controller.TrySelectCurrentDocumentChat(selectChat.ChatId),
+                                cancellationToken).ConfigureAwait(false);
+                            if (currentDocumentChat != null)
+                            {
+                                responsePayload = currentDocumentChat;
+                                break;
+                            }
+                            lock (_hostSwitchSync)
+                            {
+                                if (_disposed) throw new OperationCanceledException("Bridge is closing.");
+                                if (_hostSwitchPending || _requestsInFlight != 1)
+                                    throw new BridgeSwitchBusyException();
+                                _hostSwitchPending = true;
+                            }
                             var selectedOfficeChat = await Task.Run(() => OfficeChatSelectionRequested(
                                 selectChat.ChatId), cancellationToken).ConfigureAwait(false);
                             if (selectedOfficeChat == null ||
