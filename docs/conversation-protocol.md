@@ -1329,6 +1329,12 @@ counted. Missing/corrupt/oversized source stays explicitly unavailable, never an
 baseline. Chat-owned source must match the retained CAS hash and byte length;
 document-owned source uses exact existing gateway reads and retains removal rules.
 
+HTML run/call attribution is retained by the publication owner with each new
+snapshot, before the next preparation can reload history. The diff reads those
+fields without parsing activity result bodies, so sequential edits and archived
+results survive restart. No-op calls cannot take ownership of a prior revision;
+older snapshots with missing attribution are not inferred from model prose.
+
 VBA uses the addressed document journal and exact chat/run correlation. Accepted
 protocol-call IDs also locate preparations belonging to an earlier confirmation run;
 the current call run owns the display. Only terminal exact actual/intended source-hash

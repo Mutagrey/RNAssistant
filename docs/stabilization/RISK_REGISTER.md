@@ -44,6 +44,58 @@ Closure of this incident needs the accepted response, `RunSummary.Reason`, repai
 attempts if any, and a controlled reproduction on the reported DeepSeek model.
 Real Windows/Office/WebView2 behavior is unqualified.
 
+## Claimed HTML edit absent in current artifact — 2026-10-13
+
+**Open incident / Conversation and HTML workspace owners.** The photo shows an
+assistant claiming creation of custom CSS and insertion of a stylesheet link in
+`index.html`; the visible change card lists one created text artifact. The reporter
+checked both the chat resource card and the latest version in the Artifacts tab
+and found the changes absent. An old chat card alone therefore does not explain
+the report. Exact build, accepted calls, results and publication events are missing;
+the photo does not establish whether an HTML mutation was attempted or published.
+
+The sequential-snapshot/cursor hypothesis was checked host-neutrally through the
+production native runtime: publish HTML/CSS, patch CSS, patch HTML, save/reload, then
+compare both exact bodies, parent chain and selected/published head. The earlier CSS
+edit survives the later HTML snapshot. A historical read cursor retains its old
+source; using it with the new exact member is rejected. This is covered by
+`shared HTML: sequential snapshots and stale source cursors`, not evidence that the
+reported Windows run behaved identically. The existing shared HTML and native HTML
+tool checks also pass. Source/write UI behavior checks pass before their unrelated
+stale asset-key assertions; exact-action race checks pass. No Office/VSTO validation.
+
+Next evidence: export this chat's accepted model responses, tool results and
+trajectory/publication records with the build version. Correlate the claimed
+`index.html`/CSS operations, exact workspace head and delivered UI revision. Keep
+model narrative, saved file bytes and rendered appearance separate; do not close
+the incident based on prompt changes or a scripted successful save.
+
+## HTML run-change attribution can disappear during snapshot reload — 2026-10-13
+
+**Corrected host-neutrally / HTML publication and RunChangesService owners.** New
+HTML snapshots previously reached publication without `RunId`/`SourceMessageId`;
+later chat linking only filled the mutable projection. The next preparation
+reloaded the incomplete retained metadata. The old linker recognized only
+`rnassistant.htmlWorkspaceMutation`, omitting patches and archived activity bodies.
+
+A focused diagnostic with two successful native patches (CSS then HTML), save and
+reload preserved both actual file edits but produced zero run-change entries where
+two were expected. This explains a possible missing change card, not the reported
+absence of edits in the latest artifact; that incident remains open.
+
+`HtmlWorkspacePublication.ReadBack` now retains the exact execution run and matching
+activity before publication. Matching uses run/step/call/tool identity. Relinking
+consumes retained attribution and no longer infers it from result JSON. Existing
+snapshots and no-ops keep their original attribution; old missing metadata is not
+backfilled. The production conversation regression covers CSS → HTML patches,
+full-run and per-call diffs, archived activity bodies, restart, exact before/after
+source and a later no-op that must not claim the earlier revisions. Canonical scope
+is in [Artifact Library](../artifact-library.md#implemented-shared-html-publication--2026-09-08).
+Validation: `shared HTML:` (6), `html tools:` (6), `run changes:` (3), and both
+canonical HTML resource-reference/archival storage checks passed; the strengthened
+conversation regression explicitly verifies the later no-op's effect evidence.
+Windows/Office/WebView2 delivery remains unqualified; no Office/VSTO checks.
+
 ## Repeated narration during capability preparation — 2026-10-13
 
 **Host-neutral correction implemented; target-model quality and incident attribution

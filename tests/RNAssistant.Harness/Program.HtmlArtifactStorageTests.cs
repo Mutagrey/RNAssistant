@@ -347,9 +347,13 @@ namespace RNAssistant.Harness
             var writeMessage = new ChatMessage
             {
                 Role = "assistant",
+                RunId = "html-origin-run",
                 HtmlWorkspaceCheckpoint = HtmlCheckpoint(session, revisionId),
                 Activity = new ChatActivity { ToolId = write.ToolId, DataJson = writeResult.DataJson }
             };
+            var published = session.Artifacts.Single(item => item.Id == revisionId);
+            published.RunId = writeMessage.RunId;
+            published.SourceMessageId = writeMessage.Id;
             var fileResource = new ResourceGatewayService()
                 .List(session, "chat", ChatHtmlResourceCatalog.FileKind, null, 10)
                 .Items.Single();
@@ -375,6 +379,7 @@ namespace RNAssistant.Harness
             var duplicateMutationMessage = new ChatMessage
             {
                 Role = "assistant",
+                RunId = writeMessage.RunId,
                 HtmlWorkspaceCheckpoint = HtmlCheckpoint(session, revisionId),
                 Activity = new ChatActivity { ToolId = HtmlWorkspaceToolCatalog.WriteFileToolId, DataJson = writeResult.DataJson }
             };
@@ -382,10 +387,11 @@ namespace RNAssistant.Harness
             session.Messages.Add(duplicateMutationMessage);
             session.Messages.Add(readMessage);
 
+            writeMessage.Activity.DataJson = null;
             ChatResourceReferenceService.LinkMessageResources(session, 0);
 
-            AssertTrue(ReferencesArtifact(session, writeMessage, revisionId), "html mutation links its canonical revision resource");
-            AssertTrue(!ReferencesArtifact(session, duplicateMutationMessage, revisionId), "same html revision is linked only once");
+            AssertTrue(ReferencesArtifact(session, writeMessage, revisionId), "published origin links its canonical revision without an inline result body");
+            AssertTrue(!ReferencesArtifact(session, duplicateMutationMessage, revisionId), "copied mutation JSON cannot claim another activity's revision");
             AssertEqual(fileResource.Reference.Uri, readMessage.ResourceRefs.Single().Uri,
                 "html read preserves its exact member without promoting the checkpoint to a root mutation reference");
         }

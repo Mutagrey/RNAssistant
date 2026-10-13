@@ -76,7 +76,7 @@ namespace RNAssistant.Office.Services
         }
 
         internal static IReadOnlyList<ResourceMutationReadBack> ReadBack(ChatSession session, MutationAttempt attempt,
-            string operationKey, DocumentArtifactStore owner, ChatBlobStore payloads)
+            ToolExecutionContext context, string operationKey, DocumentArtifactStore owner, ChatBlobStore payloads)
         {
             var logicalId = ResourceUri.Parse(attempt.Target.Uri).Segments.Last();
             var artifact = session.Artifacts.SingleOrDefault(item => item.Id == session.ActiveHtmlArtifactId);
@@ -111,6 +111,18 @@ namespace RNAssistant.Office.Services
             var restoredId = (string)JObject.Parse(artifact.MetadataJson ?? "{}")["restoredFromArtifactId"];
             if (!string.IsNullOrEmpty(restoredId))
                 restoredFrom = ChatResourceUri.CreateArtifactRevision(session, session.Artifacts.Single(item => item.Id == restoredId));
+            if (!artifact.ContentByteLength.HasValue)
+            {
+                // Retain provenance with the new immutable snapshot. Later chat
+                // linking cannot repair it after preparation reloads this record.
+                // An already retained revision keeps its original attribution.
+                artifact.RunId = context.RunId;
+                artifact.SourceMessageId = session.Messages?.SingleOrDefault(message =>
+                    message != null && !message.ProtocolMessage && message.RunId == context.RunId &&
+                    message.Activity?.ToolCallId == context.Call.Id &&
+                    message.Activity.ToolId == context.Call.Name &&
+                    message.Activity.StepId == context.StepId)?.Id;
+            }
             var retained = owner.RetainAuthoredSnapshot(session, artifact, attempt.AttemptId, operationKey, restoredFrom, dependencies);
             result.Add(retained);
             var exact = retained.Revision;

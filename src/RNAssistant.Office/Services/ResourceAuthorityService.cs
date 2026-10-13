@@ -481,7 +481,7 @@ namespace RNAssistant.Office.Services
                 if (ResourceMutationDomains.IsDocumentArtifactOperation(attempt.Operation))
                 {
                     if (record.Evidence?.Effect == ToolEffectEvidence.VerifiedChange && HtmlWorkspacePublication.Owns(attempt.Operation))
-                        readBack.AddRange(HtmlWorkspacePublication.ReadBack(_session, attempt, documentOperationKey,
+                        readBack.AddRange(HtmlWorkspacePublication.ReadBack(_session, attempt, record.Context, documentOperationKey,
                             new DocumentArtifactStore(_authority.Store, _authority.Revisions, _payloads), _payloads));
                     else if (record.Evidence?.Effect == ToolEffectEvidence.VerifiedChange && RNAssistant.Office.Tools.MarkdownDocumentToolCatalog.Owns(attempt.Operation))
                         readBack.AddRange(MarkdownDocumentService.ReadBack(_session, attempt, record, preparedStateJson,

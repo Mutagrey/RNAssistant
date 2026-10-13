@@ -227,10 +227,17 @@ cross one authority publication barrier; saving chat links follows publication.
 A failed link save leaves a discoverable resource, and replaying the same operation
 is refused. Incompatible chat-owned HTML is explicitly rejected for mutation.
 
+New HTML snapshots retain the runtime run and originating activity before that
+publication barrier. The activity is matched by run, step, call and tool identity;
+manual operations without a transcript have no invented message origin. Sequential
+preparation and restart therefore preserve full-run and per-call change attribution.
+An already retained revision, including one returned by a no-op, keeps its original
+origin. This does not backfill attribution in previously published snapshots.
+
 Re-linking messages preserves existing exact runtime resource references, including
 HTML member reads and patch results. An archived or bounded activity body cannot
-erase these links. Missing mutation links may be added once; a workspace checkpoint
-alone does not become a resource reference.
+erase these links. Missing mutation links use the retained originating activity;
+result JSON and workspace checkpoints cannot assign or change snapshot attribution.
 
 Gateway and HTML member URIs preserve the document owner. Exact root/member refs
 reconstruct one snapshot in chat projection; member refs do not create duplicate

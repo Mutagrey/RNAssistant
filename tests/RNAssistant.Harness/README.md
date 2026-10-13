@@ -593,7 +593,11 @@ also covers MD attachment/refresh and late navigation responses.
 `shared HTML:` covers document publication, failed chat-link replay refusal,
 second-chat selection/edit/restart, member URI round-trip, concurrent stale writers,
 new-revision undo/redo, shared fork, origin deletion/GC, independent workspaces and
-unlink with a missing body. Use `html`, `resource cutover: local restore`,
+unlink with a missing body. Sequential CSS/HTML patches preserve exact source,
+historical cursor isolation and retained run/activity attribution. The production
+conversation regression checks full-run/per-call diffs after activity archival and
+restart, including a later verified no-op that cannot claim prior revisions.
+Use `html`, `resource cutover: local restore`,
 `resource cutover: chat lifecycle` and `artifact working set:` for the ownership
 cutover; the same working-set browser test covers HTML selection and dirty drafts.
 

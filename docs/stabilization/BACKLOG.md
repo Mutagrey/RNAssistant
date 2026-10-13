@@ -21,6 +21,12 @@ unrelated baseline failures: `artifact-library-projection.test.js` asserts the o
 omits the existing preview `missingVendors` method from its stub. The same stub
 omission exists in `html-workspace-layout.test.js`.
 
+The HTML false-success investigation also reached all eight behavioral groups in
+`html-workspace-source.test.js` and `html-workspace-write.test.js` before their
+hard-coded asset-key assertions failed (`office-chat-20260930-3` in the source
+test). These failures do not establish a source/write behavior regression; update
+the delivery-key fixtures separately.
+
 Static inspection during chat-card consolidation also found stale assertions in
 `run-journal.test.js`: the `action-severity-20260930-1` agent asset key and the old
 `Журнал запуска` selector label. Reconcile these fixtures separately before using

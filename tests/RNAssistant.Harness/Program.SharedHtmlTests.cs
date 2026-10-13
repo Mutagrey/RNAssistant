@@ -3,9 +3,13 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
+using RNAssistant.Core.Agent;
+using RNAssistant.Core.Llm;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
+using RNAssistant.Core.Tools;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
@@ -119,6 +123,133 @@ namespace RNAssistant.Harness
                 }
                 session.ActiveHtmlArtifactId = selected;
                 AssertEqual(1, provider.Search(session, "needle", ChatHtmlResourceCatalog.FileKind, 20, 600).Matches.Count, "fresh search succeeds after drift");
+            });
+        }
+
+        private static void SharedHtmlSequentialSnapshotsAndCursors()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                var session = NewSession(adapter);
+                var store = new ChatStore(FixturePaths.Value);
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
+                var css = "body { color: red; }\n/*" + new string('x', 256) + "*/";
+                foreach (var file in new[] { new[] { "index.html", "<main>old</main>" }, new[] { "styles.css", css } })
+                    AssertTrue(executor.ExecuteManual(Command(HtmlWorkspaceToolCatalog.WriteFileToolId, "path", file[0], "content", file[1]),
+                        tools, new AppSettings(), false, false, session).Success, "baseline file published");
+                var provider = new ChatArtifactResourceProvider(payloads: executor.Payloads, documentArtifacts: store.DocumentArtifacts);
+                var beforeCss = provider.List(session, ChatHtmlResourceCatalog.FileKind, null, 20).Items.Single(item => item.Title == "styles.css").Reference;
+                var firstPage = provider.Read(session, new ResourceReadRequest { Reference = beforeCss, Representation = "source", MaxChars = 128 }).Result;
+                AssertTrue(firstPage.NextCursor != null, "cursor fixture has a second page");
+                var baseline = session.ActiveHtmlArtifactId;
+                var runtime = executor.CreateNativeRuntime(session, tools, new AppSettings(), "agent", false, manualRun: true);
+                const string runId = "html-sequential-run";
+                var authored = new List<string>();
+                foreach (var edit in new[] { new[] { "styles.css", "red", "green" }, new[] { "index.html", "old", "updated" } })
+                {
+                    var call = new ToolCall("edit-" + authored.Count, HtmlWorkspaceToolCatalog.ApplyPatchToolId,
+                        new JObject { ["path"] = edit[0], ["patch"] = new JArray(new JObject {
+                            ["op"] = "replace", ["find"] = edit[1], ["text"] = edit[2] }) }.ToString());
+                    var result = runtime.ExecuteAsync(new ToolExecutionContext(call, runtime.Describe(call), runId, "turn", call.Id,
+                        DateTime.UtcNow, false, 4), System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+                    AssertEqual(ToolExecutionOutcome.Ok, result.Outcome, "sequential patch published");
+                    AssertEqual(ToolEffectEvidence.VerifiedChange, result.Evidence.Effect, "each patch has verified publication evidence");
+                    authored.Add(session.ActiveHtmlArtifactId);
+                }
+                store.Save(session);
+                session = store.Load(session.Id);
+                AssertEqual(authored.Last(), session.ActiveHtmlArtifactId, "restart selects the latest sequential snapshot");
+                AssertEqual("<main>updated</main>", session.HtmlWorkspace.Files.Single(item => item.Path == "index.html").Content, "HTML update survives restart");
+                AssertEqual(css.Replace("red", "green"), session.HtmlWorkspace.Files.Single(item => item.Path == "styles.css").Content, "later HTML write preserves earlier CSS edit");
+                var afterCss = provider.List(session, ChatHtmlResourceCatalog.FileKind, null, 20).Items.Single(item => item.Title == "styles.css").Reference;
+                var oldRemainder = provider.Read(session, new ResourceReadRequest { Reference = beforeCss, Representation = "source", Cursor = firstPage.NextCursor, MaxChars = 1000 }).Result;
+                AssertEqual(css, firstPage.Text + oldRemainder.Text, "historical cursor remains pinned to old exact source");
+                RuntimeThrows<ResourceRequestException>(() => provider.Read(session, new ResourceReadRequest {
+                    Reference = afterCss, Representation = "source", Cursor = firstPage.NextCursor, MaxChars = 100 }));
+                var current = store.DocumentArtifacts.CurrentSnapshot(session,
+                    HtmlWorkspaceIdentity.Identity(session, HtmlWorkspaceIdentity.LogicalId(session.ActiveHtmlArtifactId)));
+                AssertEqual(session.ActiveHtmlArtifactId, store.DocumentArtifacts.Read(session, current, false).Id, "selected snapshot equals the document's published head");
+                AssertEqual(baseline, session.Artifacts.Single(item => item.Id == authored[0]).ParentArtifactId, "first edit retains the exact original baseline");
+                AssertEqual(authored[0], session.Artifacts.Single(item => item.Id == authored[1]).ParentArtifactId, "second edit advances the first snapshot");
+            });
+        }
+
+        private static void SharedHtmlRunChangesSurviveRestart()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                var session = NewSession(adapter);
+                var store = new ChatStore(FixturePaths.Value);
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
+                foreach (var file in new[] { new[] { "index.html", "<main>old</main>" }, new[] { "styles.css", "body { color: red; }" } })
+                    AssertTrue(executor.ExecuteManual(Command(HtmlWorkspaceToolCatalog.WriteFileToolId, "path", file[0], "content", file[1]),
+                        tools, new AppSettings(), false, false, session).Success, "baseline file published");
+                var baseline = session.ActiveHtmlArtifactId;
+                Func<string, string, string, string> patch = (path, find, text) => ModelProtocolWire.Write("", new[] {
+                    new ConversationToolCall { Name = HtmlWorkspaceToolCatalog.ApplyPatchToolId, Arguments = new JObject {
+                        ["path"] = path, ["patch"] = new JArray(new JObject { ["op"] = "replace", ["find"] = find, ["text"] = text }) } } });
+                var responses = new Queue<string>(new[] {
+                    LoadToolSchemaResponse(HtmlWorkspaceToolCatalog.ApplyPatchToolId),
+                    patch("styles.css", "red", "green"), patch("index.html", "old", "updated"),
+                    ModelProtocolWire.Write("Updated the HTML and CSS.", new ConversationToolCall[0]) });
+                var service = CreateConversationRunService(adapter, executor,
+                    (settings, messages, options, stream, token) => Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() }));
+                Func<ChatTurnResult> run = () => service.ExecuteWithApprovalsAsync(ChatModes.Agent, "Update the HTML and CSS.", session,
+                    NewContext(adapter), new AppSettings { AutoConfirmToolActions = true, ContextWindowOverrideTokens = 131072 }, tools, null).GetAwaiter().GetResult();
+                AssertEqual(RunViewLifecycles.Completed, run().RunViewState.Lifecycle, "production conversation completes sequential patches");
+                var runId = session.LastRun.RunId;
+                var activities = session.Messages.Where(message => message.RunId == runId && message.Activity?.ToolId == HtmlWorkspaceToolCatalog.ApplyPatchToolId).ToArray();
+                AssertEqual(2, activities.Length, "both patch activities are retained: " + string.Join("; ", session.Messages
+                    .Where(message => message.Activity != null).Select(message => message.RunId + "/" + message.Activity.ToolId + "/" + message.Activity.ResultMessage)));
+                Func<RunChangesService> changes = () => new RunChangesService(artifact => store.DocumentArtifacts.Read(session,
+                    ChatResourceUri.CreateArtifactRevision(session, artifact)).InlineText, null, null);
+                AssertEqual(2, changes().Read(session, runId).Items.Count, "sequential publication preserves both run changes before relinking");
+                foreach (var activity in activities)
+                {
+                    // Exercise normal activity externalization without changing the canonical tool result.
+                    var data = JObject.Parse(activity.Activity.DataJson);
+                    data["diagnostic"] = new string('x', 9000);
+                    activity.Activity.DataJson = data.ToString();
+                }
+                store.Save(session);
+                session = store.Load(session.Id);
+                ChatResourceReferenceService.LinkMessageResources(session, 0);
+                var result = changes().Read(session, runId);
+                AssertEqual(2, result.Items.Count, "archived activity bodies and restart preserve the complete run diff");
+                AssertEqual("<main>old</main>", result.Items.Single(item => item.Title == "index.html").Before, "HTML baseline stays exact");
+                AssertEqual("<main>updated</main>", result.Items.Single(item => item.Title == "index.html").After, "HTML after-state stays exact");
+                AssertEqual("body { color: red; }", result.Items.Single(item => item.Title == "styles.css").Before, "CSS baseline stays exact");
+                AssertEqual("body { color: green; }", result.Items.Single(item => item.Title == "styles.css").After, "CSS survives the later HTML patch");
+                for (var index = 0; index < activities.Length; index++)
+                {
+                    var activity = session.Messages.Single(message => message.Id == activities[index].Id);
+                    AssertTrue(activity.Activity.ResultPayload != null && activity.Activity.DataJson == null, "activity is archived");
+                    var perCall = changes().Read(session, runId, activity.Activity.ToolCallId);
+                    AssertEqual(1, perCall.Items.Count, "each call retains only its own file change");
+                    AssertEqual(index == 0 ? "styles.css" : "index.html", perCall.Items.Single().Title, "call attribution is exact");
+                    var artifact = session.Artifacts.Single(item => item.SourceMessageId == activity.Id && item.Kind == ChatArtifactKinds.HtmlWorkspace);
+                    var retained = store.DocumentArtifacts.Read(session, ChatResourceUri.CreateArtifactRevision(session, artifact), false);
+                    AssertEqual(runId, retained.RunId, "run identity is retained in the immutable publication");
+                    AssertEqual(activity.Id, retained.SourceMessageId, "activity identity is retained before result archival");
+                }
+                var selected = session.ActiveHtmlArtifactId;
+                var snapshotCount = session.Artifacts.Count(item => item.Kind == ChatArtifactKinds.HtmlWorkspace);
+                responses.Enqueue(LoadToolSchemaResponse(HtmlWorkspaceToolCatalog.ApplyPatchToolId));
+                responses.Enqueue(patch("index.html", "updated", "updated"));
+                responses.Enqueue(ModelProtocolWire.Write("No changes needed.", new ConversationToolCall[0]));
+                AssertEqual(RunViewLifecycles.Completed, run().RunViewState.Lifecycle, "later no-op run completes");
+                var noOpRun = session.LastRun.RunId;
+                var noOp = session.Messages.Single(message => message.RunId == noOpRun &&
+                    message.Activity?.ToolId == HtmlWorkspaceToolCatalog.ApplyPatchToolId).Activity;
+                AssertEqual(ToolEffectEvidence.VerifiedNoChange, noOp.ExecutionEvidence.Effect, "later patch executes as a verified no-op");
+                store.Save(session);
+                session = store.Load(session.Id);
+                ChatResourceReferenceService.LinkMessageResources(session, 0);
+                AssertEqual(selected, session.ActiveHtmlArtifactId, "no-op keeps the same snapshot");
+                AssertEqual(snapshotCount, session.Artifacts.Count(item => item.Kind == ChatArtifactKinds.HtmlWorkspace), "no-op creates no revision");
+                AssertEqual(0, changes().Read(session, noOpRun).Items.Count, "no-op cannot claim prior changes");
+                AssertEqual(2, changes().Read(session, runId).Items.Count, "no-op leaves original run attribution intact");
+                AssertTrue(session.Artifacts.Single(item => item.Id == baseline).RunId != runId, "historical baseline is never reassigned");
             });
         }
 

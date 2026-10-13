@@ -250,40 +250,14 @@ namespace RNAssistant.Office.Services
 
         private static void LinkHtmlWorkspace(ChatSession session, ChatMessage message)
         {
-            // Runtime refs are durable facts, including exact members and patch
-            // results. An activity preview may be archived or have another shape;
-            // neither makes those refs invalid. Only add missing mutation links.
-            var activity = message.Activity;
-            if (activity == null || string.IsNullOrWhiteSpace(activity.DataJson))
-            {
-                return;
-            }
-            string artifactId;
-            try
-            {
-                var data = JObject.Parse(activity.DataJson);
-                if (!string.Equals((string)data["type"], "rnassistant.htmlWorkspaceMutation", StringComparison.OrdinalIgnoreCase))
-                {
-                    return;
-                }
-                artifactId = (string)data["revisionArtifactId"];
-            }
-            catch (JsonException)
-            {
-                return;
-            }
-            if (string.IsNullOrWhiteSpace(artifactId)) return;
-            var artifact = FindUniqueArtifact(session, artifactId, ChatArtifactKinds.HtmlWorkspace);
-            if (artifact != null)
-            {
-                artifact.SourceMessageId = string.IsNullOrWhiteSpace(artifact.SourceMessageId) ? message.Id : artifact.SourceMessageId;
-                if (!string.Equals(artifact.SourceMessageId, message.Id, StringComparison.OrdinalIgnoreCase))
-                {
-                    return;
-                }
-                artifact.RunId = string.IsNullOrWhiteSpace(artifact.RunId) ? message.RunId : artifact.RunId;
-                AddReference(session, message, artifact);
-            }
+            // Publication owns attribution. Preserve exact runtime references and
+            // add only links backed by that retained origin, even after archival.
+            if (message.Activity == null || string.IsNullOrWhiteSpace(message.RunId)) return;
+            foreach (var artifact in session.Artifacts.Where(item => item != null &&
+                item.Kind == ChatArtifactKinds.HtmlWorkspace && item.RunId == message.RunId &&
+                item.SourceMessageId == message.Id))
+                if (FindUniqueArtifact(session, artifact.Id, ChatArtifactKinds.HtmlWorkspace) == artifact)
+                    AddReference(session, message, artifact);
         }
 
         private static void LinkTaskList(ChatSession session, ChatMessage message)
