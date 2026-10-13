@@ -212,6 +212,7 @@ namespace RNAssistant.Core.ModelProtocol
                     "Return a new response to the current user request as exactly one conversation-response-v7 JSON object " +
                     "containing only message (string), action (tool, done, blocked, or needs_input), and tool_calls (array). No extra root field, Markdown, fences, or surrounding prose. " +
                     ModelProtocolWire.ActionGuidance + " " + ModelProtocolWire.MessageGuidance + " " +
+                    "Repair the format while preserving the unfinished task: supply a missing callable step or deliver the complete answer now. Never relabel a promise as done merely to fix an empty tool_calls array. " +
                     "Every call contains only an exact name and object arguments. Do not include id; runtime assigns call IDs. " +
                     "Inside a call, arguments is already the root object described by the tool schema; never nest another arguments, parameters, schema, or wrapper inside it. If the error says $ contains unsupported property arguments, remove that undeclared property; only when declared fields exist inside it, move those fields up one level first. For any unsupported property, remove it instead of repeating the rejected object unchanged. " +
                     "Every string, including nested arguments, uses one JSON escaping layer: use \\n for a real line break and \\\\ for one literal source backslash; never drop or pre-decode a backslash. " +

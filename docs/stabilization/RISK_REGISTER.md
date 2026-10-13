@@ -8,6 +8,42 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## Premature terminal narration — 2026-10-13
+
+**Prompt contradictions corrected; incident attribution and real-model behavior
+remain open / Core ModelProtocol and prompt owners.** The supplied Excel photo
+shows an HTML/CSS redesign request ending with “Сейчас подготовлю современный
+дизайн” and intended CSS changes, without the requested CSS deliverable. It does
+not expose the accepted action, final run reason or any format-repair attempts.
+A premature `done` would explain the stop, but the photo alone cannot prove it.
+
+The audited path preserves explicit action through parser, Office/workspace
+adapters, kernel and terminal history. A tool result drives another model step;
+`done`, `blocked` and `needs_input` end the turn with distinct reasons. Approval,
+questions, cancellation, limits, provider/format failures and unknown effects
+retain their existing typed controls. No-call prose cannot schedule more work.
+
+Concrete instruction defects: the completion review forced `blocked`/`needs_input`
+whenever anything remained; initial narration was not explicitly paired with a
+call; missing-call repair could be satisfied by changing only action to `done`.
+Schema 42 requires continued feasible work, delivery of a tool-free answer/code
+in the current message, and actual obstacles or indispensable answers for the
+unfinished terminal states. Repair preserves the task rather than relabeling a
+promise. The shared rule reaches schema, defaults, repair and workspace prompts.
+It cannot reject a semantically premature but structurally valid `done`.
+
+No-tool 3/3 (including both formats/result roles), kernel 55/55, model protocol
+15/15 and prompt migration 3/3 pass. The separate built-in guidance check failed
+on `smallest complete set of clearly applicable skills`: the pre-existing
+working-tree skill policy now teaches `common.skills_load`, while that assertion
+still expects the former wording. Owner: skill cutover / Harness fixtures; reconcile
+that assertion separately without suppressing the completion checks preceding it.
+The isolated commit candidate excludes those skill changes and passes no-tool
+3/3, prompt migration 3/3 and built-in guidance 1/1 with prompt schema 42.
+Closure of this incident needs the accepted response, `RunSummary.Reason`, repair
+attempts if any, and a controlled reproduction on the reported DeepSeek model.
+Real Windows/Office/WebView2 behavior is unqualified.
+
 ## Repeated narration during capability preparation — 2026-10-13
 
 **Host-neutral correction implemented; target-model quality and incident attribution

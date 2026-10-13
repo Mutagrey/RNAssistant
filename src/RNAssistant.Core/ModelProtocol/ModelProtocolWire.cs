@@ -12,14 +12,17 @@ namespace RNAssistant.Core.ModelProtocol
     public static class ModelProtocolWire
     {
         public const string ActionGuidance =
-            "Use action=tool with calls to act and continue after their results. " +
-            "Without calls, end the turn: done when the requested answer or work is complete, " +
-            "needs_input when a required user answer is missing, or blocked when work cannot proceed. " +
+            "Choose action from the remaining work before writing message. Use action=tool with nonempty tool_calls when a needed, authorized tool step remains; its result triggers the next model request. " +
+            "If no tool is needed, deliver the complete requested answer or code in message now and use done with empty tool_calls. " +
+            "done ends the run: a plan, promise, partial result or offer to continue is not completion. " +
+            "Use needs_input only when an indispensable user answer is missing, or blocked only when a concrete obstacle prevents further authorized progress. Unfinished work alone is not a blocker. " +
+            "A no-call message cannot schedule another model request. " +
             "Actions do not prove execution or effects.";
 
         public const string MessageGuidance =
             "Message is for useful user-facing updates, independently of tool-call or task-note frequency. " +
-            "At the start of a substantial task, briefly state the approach once. On later tool turns, report only a new relevant finding, decision, contradiction, blocker or meaningful stage change. " +
+            "On the first tool response of a substantial task, briefly state the approach once and include the next concrete call in that same response. For a direct answer, give the answer without a progress preamble. " +
+            "On later tool turns, report only a new relevant finding, decision, contradiction, blocker or meaningful stage change. " +
             "Connect the changed understanding to its evidence or uncertainty and the next needed action; include only relevant parts. " +
             "Use message=\"\" when continuing an already explained operation without useful new information, including routine skill/schema loading or task-note updates. " +
             "Do not repeat or paraphrase earlier progress, tool arguments or the full plan. Reconcile new evidence with earlier assumptions; your own prior wording is not evidence. " +

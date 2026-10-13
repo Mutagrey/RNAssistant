@@ -847,6 +847,16 @@ evidence. Open Task Lists do not gate terminal actions. Provider-native refusal,
 `common.questions_ask`, confirmation and technical failures retain typed runtime
 control signals.
 
+The shared action guidance selects the next step from remaining work before
+writing narration. Continue feasible authorized work; if no tool is needed,
+deliver the actual requested answer/code in the current message. An initial
+approach accompanies a concrete call, not a no-call promise. Unfinished work by
+itself is not a blocker. Format repair explicitly forbids merely relabeling that
+promise `done`. Agent completion review, Plan and Task Tracking use the same
+distinction between remaining work and an actual obstacle or missing user answer.
+This prompt correction does not add a prose classifier or semantic completion gate;
+the [v7 contract](protocols/CONVERSATION_RESPONSE_V7.md) retains four actions.
+
 Accepted history is marked protocol `7`: ID-less v7 call envelopes with
 runtime metadata, native history with matching
 runtime IDs/canonical names, or plain terminal text. A dedicated history reader

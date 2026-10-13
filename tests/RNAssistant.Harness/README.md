@@ -31,6 +31,10 @@ tool-pack checks cover schema projection and admission with both array branches.
 
 `no-tool` checks distinct terminal outcomes, rejection and frozen repair of the
 removed `continue` action, and resuming tool work only after an actual user reply.
+It also checks missing-call repair followed by either a complete code answer or a
+real tool step/result before that answer, in both response formats and result roles.
+These scripted responses check control flow and emitted guidance, not whether a
+real model will select `done` at the right time.
 `kernel: rejects narrative checkpoint` and `protocol preflight:` reject old
 checkpoints/history without migration or dispatch. After building the CLI,
 `python3 -B tests/cli/turn_decisions_smoke.py` checks production HTTP requests in
@@ -108,7 +112,7 @@ compaction-helper requests, checkpoint save/reload and claim-promotion rejection
 in all three result roles. Claims are scripted; this proves transport/provenance,
 not real-model summary quality. The large-call archive case also retains exact
 narration without hydrating arguments. `settings: prompt`, `conversation v7:` and
-`no-tool` cover schema-41 migration, silent tool responses and shared default/schema/
+`no-tool` cover schema-42 migration, silent tool responses and shared default/schema/
 repair guidance. `tests/web/live-run-projection.test.js` verifies that one comment
 can cover several visible tool activities in live and restored history.
 

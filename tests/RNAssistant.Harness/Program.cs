@@ -273,7 +273,7 @@ namespace RNAssistant.Harness
                 Test("agent: status-free response controls loop", SimpleAgentUsesStatusFreeResponse),
                 Test("agent: no-tool decisions end the turn", SimpleAgentEndsNoToolTurn),
                 Test("agent: no-tool continue repairs then waits for reply", SimpleAgentRejectsContinueThenWaitsForReply),
-                Test("agent: repairs nonfinal without tools", SimpleAgentRepairsNoToolNonFinal),
+                Test("agent: no-tool repair preserves unfinished work", SimpleAgentRepairsNoToolNonFinal),
                 Test("agent: characterization twenty invalid responses stay out of history", SimpleAgentFailedRepairDoesNotPolluteContext),
                 Test("agent: characterization limit includes initial response", SimpleAgentClampsFormatRepairLimit),
                 Test("agent: exposes safe VBA editing tools", SimpleAgentExposesSafeVbaEditingTools),

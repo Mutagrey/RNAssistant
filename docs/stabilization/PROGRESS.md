@@ -1,5 +1,24 @@
 # Stabilization progress
 
+## Premature terminal narration — 2026-10-13
+
+Owners: Core ModelProtocol/prompt defaults and Task Tracking guidance. The reported
+CSS task stopped at a promise to continue. Prompt schema 42 removes instructions
+that treated every unfinished outcome as a blocker, couples initial progress to a
+concrete call, and requires a complete answer/code now when no tool is needed.
+Format repair must not merely relabel a missing-call promise `done`.
+The v7 actions and kernel lifecycle remain unchanged; see the
+[canonical decision rules](../protocols/CONVERSATION_RESPONSE_V7.md).
+
+Host-neutral checks: no-tool 3/3, kernel 55/55, model protocol 15/15 and prompt
+migration 3/3 pass. The isolated commit candidate additionally passes no-tool
+3/3, prompt migration 3/3 and built-in guidance 1/1; the earlier stale skill
+assertion belongs to pending skill changes excluded from this commit.
+Exact incident attribution and DeepSeek completion behavior still
+need accepted response/run evidence; see the
+[incident and remaining gap](RISK_REGISTER.md#premature-terminal-narration--2026-10-13).
+No Office/VSTO validation ran.
+
 ## Useful commentary and context continuity — 2026-10-13
 
 Owners: Core ModelProtocol/prompt defaults, ModelContextCompiler, accepted-call

@@ -281,6 +281,8 @@ namespace RNAssistant.Harness
                     AssertEqual(ModelProtocolWire.MessageGuidance,
                         (string)requests[0].SelectToken("response_format.json_schema.schema.properties.message.description"),
                         "actual strict wire shares optional progress guidance with repair and defaults");
+                    AssertContains((string)requests[0].SelectToken("response_format.json_schema.schema.description"),
+                        ModelProtocolWire.ActionGuidance, "actual strict wire shares the completion decision rules");
                 }
                 var completed = service.ExecuteAsync(ChatModes.Agent, "Используй Markdown.", session, NewContext(adapter), settings, catalog, null)
                     .GetAwaiter().GetResult();
@@ -1445,13 +1447,18 @@ namespace RNAssistant.Harness
 
         private static void SimpleAgentRepairsNoToolNonFinal()
         {
+            foreach (var responseMode in new[] { AgentResponseModes.JsonSchema, AgentResponseModes.JsonObject })
+            foreach (var toolResultRole in new[] { ToolResultRoles.Tool, ToolResultRoles.User })
+            foreach (var needsTool in new[] { false, true })
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
-                var responses = new Queue<string>(new[]
-                {
-                    "{\"message\":\"Составляю итоговый отчет.\",\"action\":\"tool\",\"tool_calls\":[]}",
-                    "{\"message\":\"Итог готов.\",\"action\":\"done\",\"tool_calls\":[]}"
-                });
+                const string promise = "Сейчас подготовлю CSS.";
+                const string answer = "Добавьте после исходных стилей:\n```css\nbutton { border-radius: 8px; }\n```";
+                var responses = new Queue<string>();
+                responses.Enqueue(new JObject { ["message"] = promise, ["action"] = "tool", ["tool_calls"] = new JArray() }.ToString());
+                if (needsTool)
+                    responses.Enqueue(V4Envelope(V4Call("common.capabilities_search", new JObject { ["query"] = "CSS" })));
+                responses.Enqueue(ModelProtocolWire.WriteAction(answer, ConversationResponse.DoneAction));
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
                 {
@@ -1461,18 +1468,30 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
-                    "Составь итог.", session, NewContext(adapter), new AppSettings(),
+                    needsTool ? "Найди доступные инструменты CSS и предложи скругление button." : "Предложи CSS для скругления button.",
+                    session, NewContext(adapter), new AppSettings { AgentResponseMode = responseMode, ToolResultRole = toolResultRole },
                     OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(),
                     null).GetAwaiter().GetResult();
 
-                AssertEqual(2, requests.Count, "invalid no-tool intent gets one format repair");
+                AssertEqual(needsTool ? 3 : 2, requests.Count, "repair either delivers the answer or continues through a real tool result");
                 AssertContains(FlattenSimple(requests[1]), "FORMAT_REPAIR:",
                     "repair reaches the model before accepting an answer");
                 AssertContains(FlattenSimple(requests[1]), "action must be tool with calls",
                     "repair explains the exact invalid combination");
-                AssertTrue(!session.Messages.Any(message => (message.Content ?? string.Empty).Contains("Составляю итоговый отчет.")),
+                AssertContains(FlattenSimple(requests[1]), "Never relabel a promise as done",
+                    "format repair cannot instruct the model to abandon unfinished work by changing only action");
+                AssertContains(FlattenSimple(requests[1]), ModelProtocolWire.ActionGuidance,
+                    "both response formats receive the same work-or-answer decision rules");
+                AssertTrue(!session.Messages.Any(message => (message.Content ?? string.Empty).Contains(promise)),
                     "invalid no-tool response is not accepted into durable history");
-                AssertEqual("Итог готов.", result.AssistantText, "final response owns the visible terminal answer");
+                if (needsTool)
+                {
+                    var outputs = session.Messages.Where(message => !string.IsNullOrWhiteSpace(message.ToolCallId) &&
+                        message.ToolCalls.Count == 0 && message.Activity == null && message.Role != "assistant").ToList();
+                    AssertEqual(1, outputs.Count, "the corrected call produces exactly one accepted result");
+                    AssertContains(FlattenSimple(requests[2]), "common.capabilities_search", "next step receives the accepted tool exchange");
+                }
+                AssertEqual(answer, result.AssistantText, "terminal response delivers the actual code without scheduling another model request");
                 AssertEqual(RunViewLifecycles.Completed, result.RunViewState.Lifecycle,
                     "action=done with no calls ends the run");
             });

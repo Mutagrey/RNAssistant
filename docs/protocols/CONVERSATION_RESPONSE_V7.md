@@ -1,6 +1,6 @@
 # Conversation Response v7
 
-Status: **active**. Response protocol is `7`; built-in prompt schema is `41`.
+Status: **active**. Response protocol is `7`; built-in prompt schema is `42`.
 The [v6 contract](CONVERSATION_RESPONSE_V6.md) is historical. Existing v6 chats
 require explicit new chat/reset; no automatic conversion or data deletion occurs.
 
@@ -30,9 +30,18 @@ progress message. `needs_input` preserves the question and waits for the user's
 next message; `common.questions_ask` remains available for structured questions
 and pauses through its typed `AwaitingUser` result. Neither path implies `done`.
 
+Choose the action from remaining work before composing the message. Feasible
+authorized work continues through the next needed call. If the requested answer
+or code needs no tool, deliver it in the current `done` message. A promise to
+prepare it later is not completion and cannot schedule another request.
+Unfinished work alone is not a blocker: `blocked` requires a concrete obstacle,
+and `needs_input` requires an indispensable user answer. These decision rules are
+shared by defaults, schema, format repair and the workspace prompt.
+
 The `message` on `tool` may be empty. Its frequency is independent of tool calls
-and Task List note updates. At the start of a substantial task, the model briefly
-states the approach once; later updates report a new relevant finding, decision, contradiction,
+and Task List note updates. The first tool response of a substantial task briefly
+states the approach and includes the next concrete call in that same response;
+direct answers need no progress preamble. Later updates report a new relevant finding, decision, contradiction,
 blocker or meaningful stage change, with its basis/uncertainty and next action
 when useful. Routine skill/schema loading or continuation of an explained action
 does not require another message. Rephrasing prior progress adds no information.
@@ -54,6 +63,10 @@ repair for both `json_schema` and `json_object`. The kernel validates action/cal
 shape again before acceptance. `continue` is invalid, including with a nonblank
 message. It receives bounded format repair and cannot become accepted history, visible progress or an implicit
 `done`. Call acceptance retains runtime IDs and exact tool policy as before.
+Repair instructions preserve the unfinished task: a missing call must be supplied
+or the complete answer delivered, rather than merely relabeling a promise `done`.
+These are model instructions, not a semantic validator: a syntactically valid
+premature `done` still ends the turn. Its wording never triggers an automatic retry.
 
 The strict response schema and parser use the same explicit local
 `ModelProtocolCallContext` for batch membership. `tool_calls` allows either up to

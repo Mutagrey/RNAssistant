@@ -371,6 +371,12 @@ namespace RNAssistant.Harness
                 AssertContains(prompt, RNAssistant.Core.ModelProtocol.ModelProtocolWire.MessageGuidance,
                     "all modes share useful, optional progress guidance");
                 AssertTrue(!prompt.Contains("For `tool`, use one or two concise sentences"), "no per-call narration obligation remains");
+                AssertContains(prompt, "deliver the complete requested answer or code in message now",
+                    "no-tool work is delivered in the response, not promised for a nonexistent next step");
+                AssertContains(prompt, "Unfinished work alone is not a blocker",
+                    "an intermediate result does not require a terminal action");
+                AssertContains(prompt, "include the next concrete call in that same response",
+                    "progress narration accompanies an executable next step");
             }
             foreach (var version in new[] { 0, AppSettings.CurrentAgentPromptSchemaVersion - 1,
                 AppSettings.CurrentAgentPromptSchemaVersion, AppSettings.CurrentAgentPromptSchemaVersion + 1 })
@@ -638,8 +644,10 @@ namespace RNAssistant.Harness
                 "tool policy permits reasoned replanning");
             AssertContains(defaults.ContextCompactionPrompt, "compaction does not require another capabilities_read or admission",
                 "compaction guidance agrees with durable tool admission");
-            AssertContains(defaults.SystemPrompt, "If any requested outcome remains, choose `blocked` or `needs_input` and name it",
-                "ending the answer does not imply completed deliverables");
+            AssertContains(defaults.SystemPrompt, "If feasible authorized work remains, perform the next needed tool step or deliver the requested content in this response",
+                "unfinished work continues instead of forcing a terminal decision");
+            AssertContains(taskTracking, "use blocked only for a concrete obstacle and needs_input only for an indispensable user answer",
+                "task tracking does not treat every unfinished stage as a blocker");
             AssertContains(defaults.AgentToolsPrompt, "never add an inner `arguments`",
                 "tool arguments are supplied at the schema root");
             AssertContains(defaults.AgentToolsPrompt, "Skills define domain workflow and quality criteria",
