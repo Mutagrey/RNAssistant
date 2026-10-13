@@ -8,6 +8,25 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## CLI response contract and live v7 completion — 2026-10-13
+
+**Instruction gap fixed; autonomous completion remains open / Core model protocol,
+workspace conversation and CLI evaluation.** CLI previously supplied an abbreviated
+v7 response instruction while Office defaults contained the complete raw envelope.
+Cloud `json_object` exhausted ten format attempts without a tool. Reusing the
+existing Core contract removes that divergence; a focused HTTP regression and
+real counter repair pass. Some real format errors still require bounded repair.
+
+Cloud CSV with thinking repairs the application and passes 24/24 browser checks,
+then stops without the three explicitly required final reads. The 24K notes task
+preserves all final bytes and note order but omits receipt reading; it never reaches
+compaction/restart. Canonical HTTP audits retain the latest tool results and exact
+task, so these traces do not demonstrate missing-result delivery. Do not infer a
+universal model weakness or complete context correctness from this comparison.
+The local Gemma preflight separately fails memory admission. Profiles, unchanged
+budgets, failed outcomes and closure priorities are in
+[PROGRESS](PROGRESS.md#real-v7-model-regression-and-shared-response-contract--2026-10-13).
+
 ## HTML historical member lookup — 2026-10-13
 
 **Fixed host-neutral / Resource Gateway and artifact provider owners.** The photo

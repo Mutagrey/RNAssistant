@@ -1090,8 +1090,7 @@ namespace RNAssistant.Runtime
                         "The minimum counts distinct files read with common.resources_read at their final revision; a later edit invalidates that read. " +
                         "Creation, mutation read-back and web.verify do not count as these reads. Before done, satisfy remainingCompleteFileReads by reading the final files. " +
                         "This summary contains no source bytes and grants no permission to overwrite. " : string.Empty) +
-                    "Respond with exactly one conversation-response v7 JSON object: message, action, tool_calls. " +
-                    ModelProtocolWire.ActionGuidance + " One mutation per response. " +
+                    AgentPromptDefaults.StructuredResponseContract +
                     "Mutation policy: " + _mode.MutationPolicy + ". Plan and Deny forbid writes and code execution except built-in Plan save and Task List updates. " +
                     (_mode.AutoConfirmsToolActions ? "The user enabled automatic approval for this run. Guards and verification still apply. " :
                         "Ask requires confirmation of every other change or code execution. ") +

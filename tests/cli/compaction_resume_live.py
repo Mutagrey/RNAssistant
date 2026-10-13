@@ -285,6 +285,10 @@ def main():
     parser.add_argument("--cli", type=Path, default=CLI, help="Pinned production CLI binary for comparisons")
     parser.add_argument("--source-root", type=Path, default=REPO, help="Source checkout used for the pinned build")
     parser.add_argument("--context-tokens", type=int, default=24576)
+    parser.add_argument("--instruction-role", choices=("system", "developer"), default="system")
+    parser.add_argument("--response-mode", choices=("json_schema", "json_object"), default="json_schema")
+    parser.add_argument("--thinking", choices=("on", "off"), default="off")
+    parser.add_argument("--auto-confirm", choices=("on", "off"), default="off")
     parser.add_argument("--seconds", type=int, default=600, help="One total deadline, including restart")
     args = parser.parse_args()
     upstream = urlsplit(args.base_url)
@@ -316,8 +320,9 @@ def main():
                 "model": args.model, "digest": args.digest, "baseUrl": args.base_url,
                 "contextTokens": args.context_tokens, "maxOutputTokens": 4096,
                 "maxIterations": 40, "maxToolSteps": 48, "totalDeadlineSeconds": args.seconds,
-                "instructionRole": "system", "toolResultRole": "user", "responseMode": "json_schema",
-                "thinking": False, "taskSha256": digest(task.encode()),
+                "instructionRole": args.instruction_role, "toolResultRole": "user",
+                "responseMode": args.response_mode, "thinking": args.thinking == "on",
+                "autoConfirm": args.auto_confirm == "on", "taskSha256": digest(task.encode()),
                 "binarySource": str(args.cli.resolve()), "driverSha256": digest(Path(__file__).read_bytes()),
                 "fixture": {name: digest(content) for name, content in initial.items()},
                 "binaries": {p.name: digest(p.read_bytes()) for p in cli_path.parent.glob("RNAssistant*.dll")}}
@@ -414,10 +419,10 @@ def main():
         save(name + ".json", value)
         return value
 
-    llm_options = ["--instruction-role", "system", "--tool-result-role", "user", "--response-mode", "json_schema",
-                   "--reasoning-mode", "reasoning_effort", "--thinking", "off"]
+    llm_options = ["--instruction-role", args.instruction_role, "--tool-result-role", "user",
+                   "--response-mode", args.response_mode, "--reasoning-mode", "reasoning_effort", "--thinking", args.thinking]
     expected_paths = [*initial, "receipt.txt"]
-    arguments = command("run", "--task-file", str(root / "task.md"), *llm_options,
+    arguments = command("run", "--task-file", str(root / "task.md"), *llm_options, "--auto-confirm", args.auto_confirm,
                         "--max-iterations", "40", "--max-tool-steps", "48", "--min-reads", "10", "--min-writes", "10",
                         "--expect-files", ",".join(expected_paths))
     process, files, audit = None, [], None

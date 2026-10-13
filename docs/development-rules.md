@@ -265,11 +265,11 @@ reasoning/thinking и capability metadata. Смена `SystemPromptRole` сох�
 | `gpt-oss:20b` | Другое семейство: cross-model regression prompts/harness/tools | 16K; 32K только после проверки памяти |
 | `qwen3.5:9b` | Adversarial robustness: JSON, неверные tools, преждевременный `done`, recovery и защита от ошибочных действий | 32K |
 | `qwen3.8:27b` | Milestone и production-parity qualification | 16K после проверки памяти и входного бюджета; 8K только для проверки отказа по контексту |
-| `gemma4:cloud` | Кандидат в reference; через локальный Ollama 0.35.0 пока не прошёл v6 protocol, сначала проверить endpoint | По условиям endpoint; фиксировать фактический лимит |
+| `gemma4:cloud` | Reference-сравнение через Ollama 0.35.0: v7 `json_object` проверен на реальных CLI/Office-neutral траекториях; полная M4/M5 acceptance открыта | По условиям endpoint; фиксировать фактический лимит |
 
 Обычный цикл: `gemma4:12b` ежедневно → `qwen3.5:9b` после значимого изменения →
 `gpt-oss:20b` для cross-model regression → `gemma4:cloud` для сложной/reference
-задачи только после успешного v6 probe → `qwen3.8:27b` на milestone. Успех сильных моделей
+задачи после успешного актуального protocol probe → `qwen3.8:27b` на milestone. Успех сильных моделей
 при провале 9B может быть нормальным пределом модели; не усложнять harness
 эвристиками ради прохождения всех задач 9B.
 
@@ -344,7 +344,7 @@ warning с новой выгрузкой страниц. Это измеренн
 
 Ollama Cloud [не поддерживает structured outputs](https://docs.ollama.com/capabilities/structured-outputs).
 Поэтому простой JSON greeting не квалифицирует облачный `json_schema`-маршрут.
-Явный `json_object` также требует отдельного v6/tool-trajectory evidence; строгий
+Явный `json_object` требует отдельного evidence текущего protocol/tool trajectory; строгий
 parser и общий runtime ради cloud-модели не ослабляются.
 
 Для сравнения зафиксировать RNAssistant commit, task, исходный workspace, tool

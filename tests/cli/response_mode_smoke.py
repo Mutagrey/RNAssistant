@@ -75,6 +75,24 @@ def main():
                 assert result["reason"] == "model_done", result
                 assert requests[-1]["response_format"]["type"] == mode, requests[-1]
                 assert requests[-1]["messages"][0]["role"] == role, requests[-1]
+                # json_object has no provider-side call schema. The initial
+                # instructions must show the same raw envelope in either mode.
+                prompt = requests[-1]["messages"][0]["content"]
+                examples = []
+                for index, character in enumerate(prompt):
+                    if character != "{":
+                        continue
+                    try:
+                        example, _ = json.JSONDecoder().raw_decode(prompt[index:])
+                    except ValueError:
+                        continue
+                    if isinstance(example, dict) and set(example) == {"message", "action", "tool_calls"}:
+                        examples.append(example)
+                assert any(example["action"] == "tool" and isinstance(example["message"], str)
+                           and example["tool_calls"] and all(set(call) == {"name", "arguments"}
+                           and isinstance(call["name"], str) and isinstance(call["arguments"], dict)
+                           for call in example["tool_calls"]) for example in examples), \
+                    "Initial model context lacks an explicit conversation-response call envelope"
                 inspect = cli("inspect", "--workspace", str(workspace),
                               "--session", result["SessionId"])
                 assert inspect.returncode == 0, inspect.stderr
@@ -136,7 +154,7 @@ def main():
                 ])
                 start = len(requests)
                 run = cli("run", "--workspace", str(workspace), "--message", "Create and read " + path,
-                          "--tool-result-role", role.upper())
+                          "--tool-result-role", role.upper(), "--auto-confirm", "on")
                 assert run.returncode == 0 and not scripted, (run.stdout, run.stderr)
                 assert len(requests) == start + 3, len(requests)
                 assert_pair(requests[start + 1], role, "files.create", arguments)

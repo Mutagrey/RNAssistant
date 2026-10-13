@@ -133,6 +133,13 @@ bounded repair and provider compatibility; the kernel receives one validated
 draft, separate provider-native refusal, or typed failure. Model wording and
 `action` are never execution evidence.
 
+The workspace prompt includes Core's `AgentPromptDefaults.StructuredResponseContract`,
+the same complete response contract used by Office defaults. Both response formats
+receive the raw JSON envelope, exact `name`/`arguments` call shape, escaping,
+batching and commentary rules on the initial request. Catalog metadata is not a
+substitute for this contract when `json_object` has no provider-enforced schema.
+The parser and captured tool authority remain unchanged.
+
 Prompt schema 30 requires one mutation per model response; only independent local
 reads may share a batch. The next mutation is proposed after the previous result
 reaches the model. Reuse its included complete current after-state; read again only

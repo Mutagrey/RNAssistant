@@ -1,5 +1,51 @@
 # Stabilization progress
 
+## Real v7 model regression and shared response contract — 2026-10-13
+
+Tested HEAD `9619aba4` plus the captured pending skill/resource fixes. Source
+archive, working-tree patch, untracked fixtures, exact binaries, HTTP/CAS,
+commands and audits are retained in
+`artifacts/cli-evidence/2026-10-13-v7-live/`. Owner: Core response contract /
+workspace conversation / CLI evaluation. Model writes used disposable workspaces
+and synthetic host state.
+
+Found and fixed a CLI instruction gap: its initial prompt named the three v7
+fields but omitted the complete call envelope, escaping and message rules already
+used by Office. With `json_object`, Gemma Cloud exhausted ten format attempts
+before any tool. CLI now reuses `AgentPromptDefaults.StructuredResponseContract`;
+parser, tool authority, task checks and budgets are unchanged. The focused HTTP
+regression fails before this change and passes afterward, including all three
+result roles and manual approval/profile inheritance. CLI builds cleanly; the
+host-neutral Harness build retains its two existing PDF platform warnings.
+
+| Real scenario | Result |
+|---|---|
+| Gemma 12B / 32K / f16, both server caches disabled | Greeting JSON passes, but memory admission fails: 20/22 warning samples and 1549.5 MiB new swap-out. No full task dispatched; model unloaded. This is an environment limit. |
+| Cloud HTML/CSS/JS/VBA + explicit Task List | Exact four-source edits pass, selected procedures and closed Task List retained; 13 requests. Production Office services with a fake host, not COM/WebView2 qualification. |
+| Cloud CLI counter repair | Passed in 16.37 s / 8 requests: initial browser failure, verified repair, current source read and final 9/9 checks. |
+| Cloud CLI CSV, thinking off | 96.81 s / 18 requests, 16-iteration limit. Repeated clipped-chart failures; 0/3 final reads. Failed. |
+| Same CSV, thinking on | 109.28 s / 18 requests, actual reasoning present. Model repaired numeric sorting; final 24/24 browser checks pass, but 0/3 required final reads. Failed; feature follow-up not run. |
+| Cloud 24K compaction/resume fixture | 58.62 s / 32 requests: 10/10 exact final files, 9/9 ordered read/write/read-back stages, but 9/10 final reads (receipt omitted). No checkpoint, process loss or resume occurred. Full fixture failed. |
+
+Cloud tag `gemma4:cloud` resolves to `gemma4:31b`, digest
+`ef09f235533c96cd75e8deed88c628335cb69e2b3ce96275d0d7a67fe9887aba`.
+CLI profiles use `json_object`, developer instructions, user results, 4096 output,
+explicit auto-confirm, 32K planning (24K for compaction); the Office fixture uses
+128K, temperature 0 and non-streaming. CSV retains 16/24/600, repair 12/12/600,
+and compaction 40/48/600. No operator repairs, hints or increased task limits.
+Canonical audits pass for all dispatched CLI runs, including exact task retention,
+latest results and 553 cumulative call/result pairs after the fix. Presence in
+transport does not establish model attention. Cloud CSV/repair runs have normal
+memory pressure and no new swap-out. Owned endpoint is stopped; no models remain
+loaded. An ambiguous greeting probe and a runner invocation with an overlong
+`TMPDIR` were retained separately and do not count as task evidence.
+
+**M4/M5 remain open.** Priorities: premature completion/current-read adherence and
+CSV repair → unchanged feature follow-up → real checkpoint/restart/external-edit/
+resume at 24K. Existing Harness fixture debt and Windows/Office delivery remain
+separate work. See the [current risk](RISK_REGISTER.md#cli-response-contract-and-live-v7-completion--2026-10-13)
+and [next slice](#next-cli-acceptance-slice--2026-10-13).
+
 ## HTML historical resource reads — 2026-10-13
 
 Owners: Resource Gateway, HTML catalog and DocumentArtifactStore. A workspace
@@ -1092,11 +1138,11 @@ conversation application services; resource/Office boundaries retain their owner
 | Stage | Current implementation and remaining scope |
 |---|---|
 | M0 | Baseline, ADR-0013, migration map and SDK limits recorded. Done as a planning baseline; Windows builds were not qualified. |
-| M1 | Independent production Core/Runtime/CLI uses ProjectReference, LlmClient/v6, coordinator → AgentKernel, ToolRuntime and the same frozen compiler. No fake Office dependency or second loop. Office/CLI application preparation and handler composition remain separate; full shared application/lifetime cutover is open. |
+| M1 | Independent production Core/Runtime/CLI uses ProjectReference, LlmClient/v7, coordinator → AgentKernel, ToolRuntime and the same frozen compiler. No fake Office dependency or second loop. Office/CLI application preparation and handler composition remain separate; full shared application/lifetime cutover is open. |
 | M2 | Workspace/session without document authority, stable identity, known root relocation and read-only association tested. Only the root directory mount is supplied; managed/multiple/external mounts and shared-source identity/heads (A24) remain open. |
 | M3 | Single WorkspaceFileService owns UTF-8 find/read/create/patch/replace/copy/move/delete/restore, bounded raw/PNG/JPEG views, exact history, drift and non-replay recovery. Focused tests pass. Remaining §8.1 large/format-specific views, directory pagination, complete Office/filesystem dispatch and cross-platform path qualification are open. |
 | M4 | First useful real-model multi-file result achieved. Modes, skills, typed questions/answers, approvals, Task Lists/Plans, receipts, cancel/explicit continuation and event following exist. Interactive host UX/recorded file-effect presentation passes Mac PTY checks. Typed application resource discovery, bounded exact text views and isolated development snapshot preview are implemented. Office UI use of shared application contracts is the later M7 cutover. Scripted runs do not close real task quality. |
-| M5 | Retained browser snapshots, dependency checks, structured functional verification, repair, bounded same-run continuation and shared compaction implemented. Controlled compaction/resume passes. Schema, completed-receipt boundary and aggregate source-budget defects are fixed. Real Qwen reached restart/resume but timed out; the latest Gemma run with server checkpoints disabled timed out before checkpoint/restart, after eight exact status edits and 0/9 prescribed read-back stages. Full live quality remains open. A real counter repair passed previously; typed dependency-change recovery passes controlled guards and real Gemma dispatches re-verification after repair, but its CSV result still fails. Isolated development snapshot preview passes Mac lifecycle/isolation checks. Bounded PNG/CDP diagnostics have exact retained references and pass browser/CAS checks. The latest CSV passes 24/24 browser checks with normal memory pressure, but 0/3 final reads prevents acceptance and follow-up. Bounded PNG/JPEG assets pass snapshot replay and stale-final checks. Working previews/additional formats remain open; Ctrl+C/expiry and abrupt caller-loss cleanup pass on Mac. Helper/OS loss and other platforms remain unqualified. |
+| M5 | Retained browser snapshots, dependency checks, structured functional verification, repair, bounded same-run continuation and shared compaction implemented. Controlled compaction/resume passes. Schema, completed-receipt boundary and aggregate source-budget defects are fixed. Real Qwen reached restart/resume but timed out. The latest Cloud Gemma 24K run retains 10/10 exact files and 9/9 ordered stages but only 9/10 final reads, without a checkpoint/restart. Full live quality remains open. A real counter repair passed previously; typed dependency-change recovery passes controlled guards and real Gemma dispatches re-verification after repair, but its CSV result still fails. Isolated development snapshot preview passes Mac lifecycle/isolation checks. Bounded PNG/CDP diagnostics have exact retained references and pass browser/CAS checks. The latest Cloud CSV with thinking on passes 24/24 browser checks with normal memory pressure, but 0/3 final reads prevents acceptance and follow-up. Bounded PNG/JPEG assets pass snapshot replay and stale-final checks. Working previews/additional formats remain open; Ctrl+C/expiry and abrupt caller-loss cleanup pass on Mac. Helper/OS loss and other platforms remain unqualified. |
 | M6 | Authoring cutover not started. Office HTML/MD/JSON and Plan authoring remain on their existing owners; file materialization/linkage/crash guards and old-writer removal are required. CLI files have no dual writer. |
 | M7 | Receipts/cursors/subscription provide shared primitives; Office UI transport/application migration, file tree, preview isolation, bounded body delivery and pane-independent lifetime are not closed. |
 | M8 | External Office provider/mount/target cutover remains open; exact binding/discovery/SaveAs and multiple-instance behavior need Windows evidence. |
@@ -2331,53 +2377,33 @@ boundary, not a functional CSV score. Scripted HTTP tests confirmed both CLI
 transport modes and saved metadata. The existing v6 parser correctly rejected
 these outputs; no permissive JSON repair or separate agent loop was added.
 
-Next concrete slice (2026-10-12): compare explicit thinking-enabled/reference
-model behavior on the qualified low-memory profile, preserving the fixed CSV/follow-up
-and 24K compaction/resume tasks, read requirements and original budgets. Owned browser/profile
-cleanup after CLI loss now passes on Mac, as recorded
-[above](#browser-lifetime-after-caller-process-loss--2026-10-12). Bounded raw/PNG/JPEG views and
-retained screenshots/traces are implemented as recorded
-[above](#exact-raw-and-raster-workspace-views--2026-10-08). The
-[GPT-OSS preflight](#gpt-oss-input-and-endpoint-qualification--2026-10-07) did not
-admit a full CSV run: 16K cannot fit the initial context/reserves, and tested 32K
-profiles retain warning pressure. Reference task qualification still needs a
-compatible endpoint with input/memory headroom. Keep the fixed task/checks and
-original bounds; the latest Gemma CSV and compaction attempts remain failed.
-Complete real compaction/restart/resume acceptance remains open at its original
-24K planning budget; a lower-context diagnostic cannot replace it. Typed resource discovery,
-bounded exact text views and isolated development snapshot preview are implemented.
-Browser provider recovery after verified dependency repair is fixed; full
-`web_checks_runtime_smoke.py` passes with unrelated/no-change/unknown guards preserved.
-M4 §11.4 interactive CLI is implemented with retained non-interactive/reconnect
-behavior.
-The per-note read-back order grader is complete. A real run must still combine
-the prescribed task sequence with checkpoint publication, process loss, external
-edit and same-run resume. Gemma produced exact files without the required order
-or restart boundary; Qwen reached that boundary but timed out. Preserve the fixed
-task/checks/original bounds; neither partial trajectory closes full E-* acceptance.
-The Qwen cross-family regression and paired shared-schema correction are complete
-above. Fixed CSV acceptance still failed, so its unchanged feature follow-up
-remains unrun. Do not substitute a larger budget or a diagnostic task for that
-acceptance. Gemma's native-role change is likewise not an established fix.
-Controlled HTTP E-CONTEXT/E-RESUME passes; real continuation reached the expected
-boundary but autonomous task completion remains open. Bounded event subscription is implemented;
-working preview, additional binary formats and Office UI adoption remain open.
-Modes, typed answer/restart handling, published skills, frozen context, Task Lists
-and workspace-owned Markdown Plans are implemented with the evidence limits above.
-Explicit reconciliation of uncertain planning mutations remains open.
+## Next CLI acceptance slice — 2026-10-13
 
-M4's first useful real-model/file result is achieved; its complete §11 surface is
-not closed. M5 still needs autonomous fixed CSV creation with current final reads
-and the unchanged feature follow-up, plus remaining E-FILE/E-RESUME/E-CONTEXT/
-E-CAPABILITY evidence. The latest real Gemma runs have no new paging; CSV had late
-warning pressure and timed out, while notes had normal pressure and prematurely
-finished without required reads/restart. The follow-up was not run.
-Keep task/checks/bounds fixed and declare each changed
-factor in further model comparisons. Scripted runtime checks do not close that gap.
-Bounded raw/PNG/JPEG views are implemented. Additional format/large-file views,
-general preview UI and common Office/file dispatch remain open §8.1/M5–M7 scope. File authoring cutover M6 and M7–M11 have not started. Existing
-Office document authoring remains active; CLI Plans use service artifacts pending
-the explicit M6 file-backed transition. No CLI source file is dual-written.
+The [v7 comparison](#real-v7-model-regression-and-shared-response-contract--2026-10-13)
+replaces the previous next-step proposal: thinking on/off and a cloud reference
+have now been exercised. The missing CLI response contract is fixed; remaining
+failures involve repair/completion decisions, not demonstrated loss of tool results.
+
+1. Complete the fixed CSV task with current final reads, then its unchanged
+   feature follow-up. Thinking-on Cloud passes browser checks but skips all three
+   final reads. Keep task/checks and 16/24/600 limits; do not turn `done` into an
+   automatic retry or weaken the grader.
+2. Complete real 24K compaction/restart/resume, including the external edit and
+   non-replayed receipt. Cloud now preserves all final bytes and the prescribed
+   note order, but skips receipt reading and never publishes a checkpoint.
+   Controlled recovery evidence does not close this real-model gate.
+3. Qualify an affordable local profile with measured memory headroom. The latest
+   Gemma 12B/32K preflight fails despite disabling both server caches; previous
+   successful memory admission does not establish current capacity.
+
+M4's first useful real-model/file result and interactive CLI are implemented;
+full M4/M5 remain open. Typed resource discovery, exact text/raw/PNG/JPEG views,
+retained browser snapshots/diagnostics, Mac caller-loss cleanup, event following,
+questions, selected skills, Task Lists and workspace-owned Plans have bounded
+implementation evidence. Remaining working-preview/format/path coverage, uncertain
+planning reconciliation and Windows/Office behavior retain their existing scope.
+M6 file-backed authoring and M7–M11 cutovers remain separate planned work; the
+existing Office authoring owners stay active and CLI sources have no dual writer.
 
 ## Current operating status — 2026-09-30
 

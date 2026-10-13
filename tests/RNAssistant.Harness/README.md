@@ -68,7 +68,17 @@ at 40 iterations / 48 tool steps / 600 total seconds across both invocations.
 `--cli <dll> --source-root <checkout>` pins an already verified binary and its
 matching source for comparisons; the evidence retains binaries, a source archive
 and the working-tree patch. API keys stay in `RNA_API_KEY`, not arguments.
+The runner accepts explicit `--response-mode`, `--instruction-role` and
+`--thinking`; defaults remain `json_schema`, `system`, and `off`. Its audited
+tool-result role remains `user`. For the unattended v7 fixture, pass `--auto-confirm on` to
+authorize the disposable workspace writes; the default remains `off`, matching
+the CLI. This choice is captured at run start and retained across resume. These
+profile options do not change the task, source checks or 40/48/600 limits.
 This is not a replacement for fixed CSV acceptance.
+
+`python3 -B tests/cli/response_mode_smoke.py` also checks that the initial HTTP
+instructions carry the raw call envelope in both formats, all three result roles
+preserve call/result pairing, and a manual approval retains its accepted profile.
 
 The task changes only release-note headers while retaining source bytes. An HTTP
 proxy forwards exact real requests/responses and holds one request after a
