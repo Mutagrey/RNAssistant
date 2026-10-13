@@ -35,14 +35,13 @@ function applyChatInbox(inbox, deferRender) {
         old.phase !== inbox.phase || old.running !== inbox.running || old.paused !== inbox.paused || inbox.acceptedInput)) renderChatInbox();
   }
 }
-function reconcileChatInputEchoes(chatId, messages, inbox) {
-  var current = chatInbox(chatId);
-  var coherent = inbox && inbox.epoch === current.epoch && inbox.revision === current.revision;
+function reconcileChatInputEchoes(chatId, messages) {
   state.chatInputEchoes = state.chatInputEchoes || {};
   state.chatInputEchoes[chatId] = chatInputEchoes(chatId).filter(function (item) {
     if (!item.Id) return true; // Only an intake receipt can resolve an uncertain local send.
-    if ((messages || []).some(function (message) { return (message.Id || message.id) === item.Id; })) return false;
-    return !coherent || (inbox.items || []).some(function (pending) { return pending.Id === item.Id; });
+    // The history page may predate queue consumption even within one response.
+    // Absence from the queue is not evidence that its user bubble was rendered.
+    return !(messages || []).some(function (message) { return (message.Id || message.id) === item.Id; });
   });
 }
 function runningMessageDelivery() {
@@ -78,7 +77,7 @@ async function submitInboxMessage(text, attachments, chatId, delivery) {
   state.inboxSubmissions[chatId] = pending;
   pending.localStatus = "submitting";
   var submittedDraft = state.activeChatId === chatId ? $("chatInput").value : null;
-  if (state.activeChatId === chatId) renderChatInbox();
+  if (state.activeChatId === chatId) renderChatInbox({ forceScroll: true });
   try {
     var inbox = await send("submitChatInput", { chatId: chatId, operationId: pending.OperationId,
       text: text, resourceDraftIds: attachments.map(attachmentId), delivery: delivery });
@@ -149,8 +148,8 @@ function inboxButton(label, action) {
   button.type = "button"; button.textContent = label; button.addEventListener("click", action);
   return button;
 }
-function renderChatInbox() {
-  if (typeof renderMessages === "function") renderMessages();
+function renderChatInbox(options) {
+  if (typeof renderMessages === "function") renderMessages(options);
 }
 async function pollChatInbox() {
   if (!state.activeChatId || state.bridgeUnavailable || state.inboxPolling || state.chatNavigationPending) return;

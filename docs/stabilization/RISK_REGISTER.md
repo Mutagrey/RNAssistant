@@ -164,6 +164,16 @@ real-model or Windows/Office/WebView2 qualification is claimed.
 
 ## Chat transcript review — 2026-10-12
 
+- **Fixed host-neutral send visibility — 2026-10-13 / web inbox:** the actual Send
+  button reproduced an offscreen echo after manual scroll; matching inbox revisions
+  also incorrectly removed receipts before their exact history message arrived.
+  Explicit submission reveals its bubble, later updates preserve manual scrolling,
+  and an empty queue no longer discards an unresolved echo. Chromium covers both
+  Steer and Queue through real send/state/render handlers with controlled replies.
+- **Open cross-window removal receipts / inbox projection owner:** snapshots omit
+  both applied and removed inputs. Removal from another window cannot be distinguished
+  from history lag by absence alone; a retained echo needs an explicit terminal
+  receipt to resolve that case. Local successful removal still removes its bubble.
 - **Open older-page refresh / web history + chat projection owners:** code inspection
   shows full `getChatState`/push snapshots still carry the latest 80 messages. If a
   reader has loaded earlier pages, such a snapshot can remove the visible anchor

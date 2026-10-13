@@ -331,7 +331,7 @@ function applyChatState(response) {
       ? response.messageStartIndex : (response.MessageStartIndex || 0);
     state.messageTotalCount = response.messageTotalCount !== undefined
       ? response.messageTotalCount : (response.MessageTotalCount || state.messages.length);
-    if (typeof reconcileChatInputEchoes === "function") reconcileChatInputEchoes(nextChatId, state.messages, response.inbox);
+    if (typeof reconcileChatInputEchoes === "function") reconcileChatInputEchoes(nextChatId, state.messages);
   }
   if (response.artifacts !== undefined || response.Artifacts !== undefined) {
     state.artifacts = response.artifacts || response.Artifacts || [];
