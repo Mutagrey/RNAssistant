@@ -561,7 +561,7 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     "{\"message\":\"Создаю сразу.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.html_workspace_write_file\",\"arguments\":{\"path\":\"progressive.html\",\"content\":\"<main>Ready</main>\"}}]}",
-                    LoadToolSchemaResponse(optionalId),
+                    LoadSkillResponse("common.html_workspace_authoring"),
                     "{\"message\":\"Создаю после admission.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.html_workspace_write_file\",\"arguments\":{\"path\":\"progressive.html\",\"content\":\"<main>Ready</main>\"}}]}",
                     "{\"message\":\"HTML создан.\",\"action\":\"done\",\"tool_calls\":[]}"
                 });
@@ -609,12 +609,12 @@ namespace RNAssistant.Harness
                     "strict wire prompt keeps callable metadata while response schema carries arguments");
                 AssertContains(FlattenSimple(requests[1]), "Tool schema is not loaded: " + optionalId,
                     "local parser distinguishes an unloaded known tool during repair");
-                AssertContains(FlattenSimple(requests[1]), "common.capabilities_read",
-                    "repair names the exact schema-loading action");
-                AssertContains(FlattenSimple(requests[2]), "\"kind\":\"tool-schema\"",
-                    "complete schema evidence reaches the next model step");
-                AssertContains(FlattenSimple(requests[2]), "TOOL_PACK_STATE",
-                    "atomic admission is visible before the optional call");
+                AssertContains(FlattenSimple(requests[1]), "common.skills_load",
+                    "repair directs specialized tools through the skill loader");
+                AssertContains(FlattenSimple(requests[2]), "SELECTED_SKILL common.html_workspace_authoring",
+                    "complete instructions reach the same request as specialized tools");
+                AssertTrue(session.LastRun.SelectedSkills.Any(skill => skill.Id == "common.html_workspace_authoring"),
+                    "HTML pilot retains the task selection");
             });
         }
 
@@ -1191,6 +1191,7 @@ namespace RNAssistant.Harness
                             expected.Add(ResourceToolCatalog.ReadToolId);
                             expected.Add(CapabilityToolCatalog.SearchToolId);
                             expected.Add(CapabilityToolCatalog.ReadToolId);
+                            expected.Add(SkillLoadToolHandler.ToolId);
                             if (string.Equals(mode, ChatModes.Agent, StringComparison.Ordinal) &&
                                 string.Equals(host, "Excel", StringComparison.Ordinal))
                             {

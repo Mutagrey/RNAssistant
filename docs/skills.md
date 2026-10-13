@@ -2,7 +2,10 @@
 
 ## Status and boundary
 
-The progressive skill read contract is implemented. Immutable custom package
+Task-scoped skill loading and dependency-bound tools are implemented without a new Code Mode.
+Core `SkillTaskService` owns resolution and request exposure; `SkillLoadToolHandler`
+owns selection, the existing compiler owns complete instructions, and Office/CLI
+use the same `ToolRuntime` dispatch guard. Source inspection remains a resource read. Immutable custom package
 history, import/export provenance and restore/delete UX remain deferred product
 work. They require a concrete scope and owner; they are not prerequisites for
 ordinary bug fixes or proof of existing release qualification.
@@ -21,12 +24,73 @@ authority.
 
 Built-in skills are supplied by the application and host adapter. Custom skills are
 stored under `%AppData%/RNAssistant/skills/<host>/<skill>/` as one `SKILL.md` plus
-up to 64 direct UTF-8 `references/*.md` files. The core front matter contains `id`,
+up to 64 direct UTF-8 supporting files under `references/`, `scripts/` and `assets/`.
+Allowed extensions are `.md`, `.txt`, `.json`, `.csv`, `.js`, `.py`, `.cs`, `.html`,
+`.css`, `.svg`; nested paths, symlinks, traversal and duplicate basenames are rejected.
+These files are data; loading a package executes none of them. Binary assets and
+archive installation are deferred. The core front matter contains `id`,
 `host`, `name`, `description`, human-authored `version` and `enabled`.
 
 The visible catalog is built-in first, then custom, filtered to `Common` plus the
 current host (`Workspace` for the independent CLI). A custom package cannot shadow a built-in id. Tool and skill
 ids share one namespace and a collision fails request construction.
+
+### Manifest and task selection
+
+`SKILL.md` is the sole dependency source. A portable file with scalar `name` and
+`description` and Markdown body works without a manifest; omitted `id` uses `name`.
+The existing bounded front-matter parser is not a general YAML implementation.
+RNAssistant extends it with a single-line JSON `rnassistant` field:
+
+```markdown
+---
+name: report-check
+description: Check a report against its source data.
+rnassistant: {"formatVersion":1,"packageId":"reports","requiredTools":[{"id":"common.resources_read","contractVersion":"1"}],"optionalTools":[{"id":"web.verify","contractVersion":"1","fallback":"Inspect the generated source and state that browser verification is unavailable."}]}
+---
+Read the source, compare the report, and verify the final result.
+```
+
+Each dependency names a public tool id, contract version and optionally an exact
+`revision`. Missing required dependencies, incompatible contracts and conflicts
+refuse the entire selection. Optional dependencies require explicit fallback text.
+The resolver captures exact descriptor/policy/binding revisions, deduplicates shared
+tools, and never silently chooses a different conflicting version. The manifest
+participates in the package fingerprint; editor saves and clones preserve it.
+
+The model calls `common.skills_load` with `{ "id": "report-check" }`; optional
+`action:"remove"` clears that selection for the next request. The loader is a
+singleton call. Success changes `ChatRunRecord.SelectedSkills`, not the already
+accepted request. On the next step `SkillTaskService.Compile` combines direct core,
+existing direct admissions and selected dependencies. The compiler injects complete
+`SELECTED_SKILL` instructions alongside exactly those schemas. Words in Markdown,
+a source read, attached files and historical results cannot select a skill.
+
+Selection belongs to one run. Existing `run.updated` events preserve it through
+compaction, confirmation and restart; a new independent turn starts empty. There
+is no loaded-skill store, dual write or replay of an unfinished business action.
+Changed/revoked publications suspend incompatible selections until explicit reload.
+Catalog drift after request compilation blocks dispatch. Office keeps the accepted
+run publication frozen; after an in-run catalog update, start a new turn to use
+the new publication. Instructions and schemas
+must fit the budget: selection reserves at most half the input budget, and the
+complete compiler may explicitly refuse an oversized request; it never truncates
+active instructions while leaving their tools callable.
+
+### Arsenal in chat
+
+The header button opens a compact panel with **Навыки** and **Инструменты** tabs,
+search, selected statuses, shared-tool relationships and collapsed supporting and
+technical details. Other published skills are rendered when their section opens.
+Current, prepared, pending and historical states are labelled separately; the
+permission line does not grant access. Base tools remain visible without skills.
+
+`getAgentArsenal` returns typed `rnassistant.agentArsenal` v1 metadata from the run,
+`ContextReceipt.Arsenal` and published metadata. Opening, searching or expanding
+never executes or selects anything. Closed panels request summary counts; open
+panels preserve the active tab, query, disclosures, focus and scroll. Late responses
+from another chat are discarded. The panel follows application themes and font
+scaling, supports keyboard tabs, Escape and closing by clicking outside.
 
 ### Independent workspace runtime
 
@@ -35,7 +99,7 @@ The former owns skill catalog publication, exact package/reference CAS reads and
 publication dependencies; the latter selects host metadata. Office's catalog
 provider delegates skill reads to that owner and retains its bounded continuation
 and host/runtime guards. Tools and prompts keep their existing publication owners.
-There is no second catalog store or persistent loaded-skill registry.
+There is no second catalog store; selection is part of the existing run record.
 
 The CLI supplies only enabled skill metadata to the model. It exposes bounded
 `common.resources_find(type="skill", query?)` (up to 50 entries, explicit
@@ -58,8 +122,8 @@ A workspace-local `SKILL.md` is an ordinary file, not an installed instruction.
 The workspace built-ins are `workspace.files` and
 `workspace.web_verify_repair`. They cover exact source/edit/final-read workflow
 and local browser verification/repair. Both require available file mutation
-tools; the web skill also requires `web.verify`. They are omitted for a read-only
-workspace, and the web skill is omitted when no supported browser is available.
+tools; the web skill also requires `web.verify`. They remain discoverable with an explicit unavailable status when required tools
+are missing, the workspace is read-only or the browser provider is absent.
 Skill selection stays with the single existing agent loop; the runtime does not
 force a skill call or retry `done` to satisfy an acceptance check. Actual LLM
 selection and task completion are separate evidence from scripted contract tests.
@@ -198,28 +262,19 @@ empty built-ins and prevents retired `TOOL_RESULT ok=true` guidance from returni
 
 ## Model context
 
-- Chat has an empty capability catalog and cannot load skills.
-- Plan and Agent receive enabled skill metadata only: exact id, `kind:"skill"`,
-  summary, body size and reference count; package revision remains runtime-only.
-- When the user names a skill or its summary clearly matches the task, the model
-  reads the exact id through `common.capabilities_read`.
-- A core read returns complete revision-matched Markdown and reference metadata. A
-  needed reference is read separately in bounded chunks through the same tool.
-- Reading a skill does not activate a router, load tool schemas, add callable tools
-  or weaken confirmation/safety policy. Lost complete evidence or a catalog
-  revision mismatch requires another exact read; compaction alone does not.
-- Complete skill results are retained in the normal history/CAS path, not a second
-  loaded-skill store. Re-reading the same publication must not mark the earlier
-  successful read stale. See [context retention](conversation-protocol.md#conversation-context).
-- Under Host Fabric, the capability catalog comes from the selected execution
-  endpoint. A window hosted by Excel but targeting Word receives `Common + Word`
-  skills, never skills chosen from the window-owner host.
+- Agent and Plan receive enabled skill metadata, without instruction bodies or
+  package revisions. The retired Chat mode is history only.
+- `common.skills_load` is the canonical selection boundary; resource reads only
+  inspect source. Selected complete bodies are compiler invariants restored from
+  the frozen published catalog on every request, independent of compaction.
+- Core/source inspection and supporting reads retain their ordinary history/CAS
+  evidence and bounded continuation. A reference read never selects a procedure.
+- Default prompt schema 44 switches Agent/Plan, discovery and compaction guidance
+  together. Already customized prompts remain governed by existing migration rules.
+- The current `Discuss skill` UI copies Markdown into custom chat context; that copy
+  does not create a selection or grant any tool access.
+- Host filtering uses the selected execution endpoint, not the containing window.
 
-The current `Discuss skill` UI convenience copies a Markdown definition into custom
-chat context. The target path instead records a compact exact skill id/revision hint
-and lets Agent/Plan perform the normal `common.capabilities_read`; it must not create
-a second durable body transport. Chat mode cannot use this shortcut because skills
-are unavailable there.
 
 ## Target Skill Library UX
 
@@ -307,9 +362,10 @@ Core bodies use Gateway whole-read assembly, including bodies larger than one
 provider page. The bounded context working set restores complete current skill
 results and needed reference coverage from saved events/CAS. Compaction alone is
 not a reason to load a skill or admit an already callable schema again. A new user
-turn reuses a complete current skill body when it is included in that request;
-unchanged optional tool schemas can carry across turns of the same chat when their
-exact admission remains valid and fits the request budget. Body
+turn may reuse source evidence but starts without task selections; only a new
+`common.skills_load` can restore procedure authority. Unchanged direct optional
+schemas may carry across turns when their exact admission remains valid and fits
+the request budget; specialized schemas cannot. Body
 omission/staleness is distinct from the historical successful load. Prompt schema
 33 originally required manual review; schema 35 replaces that flow with automatic
 default migration and a recovery copy before the next settings save.

@@ -553,7 +553,7 @@ namespace RNAssistant.Harness
             AssertContains(prompt, "common.capabilities_read", "unified capability loading guidance present");
             AssertContains(prompt, "\"kind\":\"skill\"", "skill kind is explicit in compact catalog");
             AssertContains(prompt, "metadata only", "catalog is not mistaken for loaded skill instructions");
-            AssertContains(prompt, "`loaded=true`", "skill loading state is explicit");
+            AssertContains(prompt, "SELECTED_SKILL", "task selection in the next request is explicit");
             AssertContains(prompt, "Return several calls", "multi-tool guidance present");
             AssertContains(prompt, "data.truncated=true", "bounded tool-result guidance present");
             AssertTrue(prompt.IndexOf("ROUTE:", StringComparison.OrdinalIgnoreCase) < 0, "no route wrapper");
@@ -576,7 +576,7 @@ namespace RNAssistant.Harness
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var responses = new Queue<string>(new[]
                 {
-                    LoadToolSchemaResponse(HtmlWorkspaceToolCatalog.WriteFileToolId),
+                    LoadSkillResponse("common.html_workspace_authoring"),
                     "{\"message\":\"Создаю локальный HTML.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.html_workspace_write_file\",\"arguments\":{\"path\":\"index.html\",\"content\":\"<main>Offline</main>\"}}]}",
                     "{\"message\":\"Локальный HTML готов.\",\"action\":\"done\",\"tool_calls\":[]}"
                 });
@@ -635,7 +635,7 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void SimpleAgentLoadsFullSkillThroughTool()
+        private static void SimpleAgentInspectsFullSkillThroughTool()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
@@ -689,10 +689,9 @@ namespace RNAssistant.Harness
                     "model result hides skill revision");
                 AssertContains(replay, "\"loaded\":true", "loaded skill result is explicit");
                 AssertContains(replay, "\"complete\":true", "loaded skill body is complete");
-                AssertContains(replay, "No tool schema was admitted by this resource read.",
-                    "skill result explicitly keeps referenced tool schemas unloaded");
-                AssertContains(replay, "common.capabilities_read",
-                    "skill result gives adjacent tool-schema loading guidance");
+                AssertContains(replay, "common.skills_load",
+                    "source read directs selection through the canonical loader");
+                AssertEqual(0, session.LastRun.SelectedSkills.Count, "source inspection does not select a skill");
                 AssertTrue(replay.IndexOf("\"truncated\":true", StringComparison.Ordinal) < 0,
                     "loaded skill is not duplicated into a truncated result");
                 var durableMessage = session.Messages.Last(message => string.Equals(
@@ -1755,9 +1754,9 @@ namespace RNAssistant.Harness
                     currentMessages, currentOptions, settings, repairReserve, continuationReserve);
                 var legacyTokens = ModelContextBudget.EstimateAdmittedRequestTokens(
                     legacyMessages, legacyOptions, settings, repairReserve, continuationReserve);
-                AssertEqual(20, currentPack.Tools.Count,
-                    "R61 Excel Agent core contains four bootstrap, fourteen Excel, and two VBA editing schemas");
-                AssertEqual(24, legacyCore.Length,
+                AssertEqual(21, currentPack.Tools.Count,
+                    "R61 Excel Agent core contains five bootstrap, fourteen Excel, and two VBA editing schemas");
+                AssertEqual(25, legacyCore.Length,
                     "counterfactual post-11O5 Excel Agent core contains all six VBA/macro schemas");
                 AssertTrue(currentTokens < legacyTokens,
                     "R61 core lowers deterministic initial input estimate; before=" +
@@ -2355,7 +2354,7 @@ namespace RNAssistant.Harness
                 {
                     LoadToolSchemaResponse("excel.add_sheet"),
                     "{\"message\":\"Добавляю лист.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"}}]}",
-                    LoadToolSchemaResponse("common.skills_upsert"),
+                    LoadSkillResponse("common.skill_authoring"),
                     "{\"message\":\"Сохраняю skill.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.skills_upsert\",\"arguments\":{\"id\":\"common.test\",\"description\":\"Test\",\"bodyMarkdown\":\"# Test\"}}]}",
                     "{\"message\":\"Все изменения применены.\",\"action\":\"done\",\"tool_calls\":[]}",
                     "{\"message\":\"Обычный новый ответ.\",\"action\":\"done\",\"tool_calls\":[]}"
@@ -2398,7 +2397,7 @@ namespace RNAssistant.Harness
             {
                 var responses = new Queue<string>(new[]
                 {
-                    LoadToolSchemaResponse("common.skills_upsert"),
+                    LoadSkillResponse("common.skill_authoring"),
                     "{\"message\":\"Создаю skill.\",\"action\":\"tool\",\"tool_calls\":[" +
                     "{\"name\":\"common.skills_upsert\",\"arguments\":{\"id\":\"common.test\",\"description\":\"Test\",\"bodyMarkdown\":\"# Test\"}}]}",
                     "{\"message\":\"Skill сохранён.\",\"action\":\"done\",\"tool_calls\":[]}"
@@ -2748,7 +2747,7 @@ namespace RNAssistant.Harness
                 });
                 var responses = new Queue<string>(new[]
                 {
-                    LoadToolSchemaResponse(HtmlWorkspaceToolCatalog.WriteFileToolId), rawWrite, rawWrite,
+                    LoadSkillResponse("common.html_workspace_authoring"), rawWrite, rawWrite,
                     ModelProtocolWire.Write("Done.", new ConversationToolCall[0])
                 });
                 var requestCount = 0;

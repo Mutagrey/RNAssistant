@@ -24,7 +24,9 @@ namespace RNAssistant.Core.ModelProtocol
             var knownTools = callableTools.Where(tool => tool != null && !string.IsNullOrWhiteSpace(tool.Id))
                 .GroupBy(tool => tool.Id, StringComparer.Ordinal)
                 .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
-            var catalogIds = new HashSet<string>(runnableCatalog.Where(tool => tool != null).Select(tool => tool.Id), StringComparer.Ordinal);
+            var catalog = runnableCatalog.Where(tool => tool != null && !string.IsNullOrWhiteSpace(tool.Id))
+                .GroupBy(tool => tool.Id, StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
             // Batching is opt-in from local authority. External or unresolved
             // effects must not be in this set; call identity belongs to runtime.
             foreach (var call in parsed.Response.ToolCalls)
@@ -32,8 +34,11 @@ namespace RNAssistant.Core.ModelProtocol
                 ToolCatalogEntry tool;
                 if (!knownTools.TryGetValue(call.Name, out tool))
                 {
-                    return ConversationResponseParseResult.Fail(catalogIds.Contains(call.Name)
-                        ? "Tool schema is not loaded: " + call.Name + ". Call common.capabilities_read with arguments " +
+                    ToolCatalogEntry entry;
+                    return ConversationResponseParseResult.Fail(catalog.TryGetValue(call.Name, out entry)
+                        ? entry.Exposure == ToolExposure.Skill
+                            ? "Tool schema is not loaded: " + call.Name + ". Select its published skill with common.skills_load, then wait for the next request before using its tools."
+                            : "Tool schema is not loaded: " + call.Name + ". Call common.capabilities_read with arguments " +
                             new JObject { ["id"] = call.Name }.ToString(Formatting.None) + ", wait for its complete TOOL_RESULT, then call the tool in a later response."
                         : "Unknown tool: " + call.Name + ". Use an exact name from the current callable tools.");
                 }

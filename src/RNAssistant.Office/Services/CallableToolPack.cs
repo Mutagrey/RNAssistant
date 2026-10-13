@@ -15,6 +15,7 @@ namespace RNAssistant.Office.Services
     internal sealed class CallableToolPack
     {
         private static readonly HashSet<string> BootstrapToolIds = ExactIds(
+            SkillLoadToolHandler.ToolId,
             ResourceToolCatalog.FindToolId,
             ResourceToolCatalog.ReadToolId,
             CapabilityToolCatalog.SearchToolId,
@@ -69,6 +70,7 @@ namespace RNAssistant.Office.Services
                 .ToArray();
             _catalogById = _catalog.ToDictionary(tool => tool.Id, StringComparer.Ordinal);
             _coreIds = SelectCoreIds(_mode, _host, _catalogById.Keys);
+            _coreIds.RemoveWhere(id => _catalogById[id].Exposure == ToolExposure.Skill);
         }
 
         public static CallableToolPack Create(
@@ -151,7 +153,7 @@ namespace RNAssistant.Office.Services
             if (message == null || string.IsNullOrWhiteSpace(_runId) ||
                 !string.Equals(message.RunId, _runId, StringComparison.Ordinal)) return false;
             string id;
-            if (!TryReadEvidence(message, out id) || _coreIds.Contains(id) || _optionalSet.Contains(id) ||
+            if (!TryReadEvidence(message, out id) || _catalogById[id].Exposure == ToolExposure.Skill || _coreIds.Contains(id) || _optionalSet.Contains(id) ||
                 !_pendingSet.Add(id)) return false;
             _pendingIds.Add(id);
             return true;

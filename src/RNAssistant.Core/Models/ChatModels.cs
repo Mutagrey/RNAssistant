@@ -381,6 +381,7 @@ namespace RNAssistant.Core.Models
 
     public sealed class ChatRunRecord
     {
+        public List<SelectedSkill> SelectedSkills { get; set; } = new List<SelectedSkill>();
         public string RunId { get; set; }
         public string TurnId { get; set; }
         public string RuntimeId { get; set; }

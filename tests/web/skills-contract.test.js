@@ -24,7 +24,8 @@ function item(id, revision, description = "Description") {
   return {
     revision, id, host: "Common", name: id,
     description, version: "1.0.0", body: { sha256: "b".repeat(64), byteLength: 10, characters: 10 },
-    enabled: true, builtIn: false, references: []
+    enabled: true, builtIn: false, references: [],
+    package: { formatVersion: 1, packageId: "fixture", requiredTools: [{ id: "common.resources_read", contractVersion: "1" }], optionalTools: [] }
   };
 }
 
@@ -74,6 +75,8 @@ function library(skills) {
   assert.equal(mutations[0].preserveBody, true, "metadata edits do not need to fetch or send the body");
   assert.equal(mutations[0].bodyMarkdown, undefined);
   assert.equal(mutations[1].bodyMarkdown, "# New");
+  assert.equal(mutations[0].package.requiredTools[0].id, "common.resources_read", "metadata edits retain dependencies");
+  assert.equal(mutations[1].package.packageId, "fixture", "new copies retain their manifest");
   assert.equal(mutations[1].baseId, "");
   assert.equal(mutations[1].expectedRevision, "");
   assert.equal(mutations[2].baseId, "common.delete");
@@ -111,7 +114,7 @@ function library(skills) {
 }
 
 {
-  assert.ok(index.includes("app-skills.js?v=skill-source-timing-20260928-1"));
+  assert.match(index, /src="js\/app-skills\.js\?v=[^"]+"/);
   assert.equal(/StoragePath|storagePath|response\s*\|\|\s*\[\]/.test(source), false);
   assert.match(source, /expectedPackageRevision/);
   assert.match(source, /skillLibraryMutationRequestType/);

@@ -109,7 +109,7 @@ namespace RNAssistant.Office.Tools
                 ["truncated"] = false,
                 ["idEnumEnforced"] = HasBoundIdEnum(toolCatalog, entries.Count),
                 ["instruction"] =
-                    "This is the complete runnable tool and enabled skill index for this run. Use only an exact id shown here; common.capabilities_search is an optional filter. Load the selected tool schema or skill body with common.capabilities_read. Never synthesize an id."
+                    "This is the complete runnable tool and enabled skill index for this run. Use only an exact id shown here; common.capabilities_search is an optional filter. Select a skill through common.skills_load; common.capabilities_read inspects sources or admits direct tool schemas. Never synthesize an id."
             };
         }
 
@@ -201,6 +201,12 @@ namespace RNAssistant.Office.Tools
             }
             if (tool != null)
             {
+                if (tool.Exposure == ToolExposure.Skill)
+                    return CapabilityToolOutcome.Error("This tool requires a selected procedure. Use common.skills_load.",
+                        new JObject { ["id"] = tool.Id, ["skills"] = new JArray(skills.Where(item =>
+                            (item.Package?.RequiredTools ?? new List<SkillToolDependency>()).Concat(
+                                item.Package?.OptionalTools ?? new List<SkillToolDependency>()).Any(dependency => dependency.Id == tool.Id))
+                            .Select(item => item.Id)) }.ToString(Formatting.None), "skill_required", true);
                 if (HasArgument(arguments, "referencePath") ||
                     HasArgument(arguments, "action"))
                 {

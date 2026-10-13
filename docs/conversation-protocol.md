@@ -711,17 +711,30 @@ run-lease release path. The lease remains per chat; global coordination and
 document gates are not held across model wait. `ConversationRunService →
 AgentKernel` remains the single execution loop.
 
-The skill entries in the unified capability catalog are metadata only. When the user names a skill or a summary clearly matches, the model calls `common.capabilities_read` with that exact public id. Its model result contains `kind:"skill"`, id, readable metadata/version, complete `bodyMarkdown`, and explicit loaded/complete flags, but no package revision. Runtime validates the hidden exact revision before every projection and replaces stale evidence with `capability_evidence_stale`. Each tool named by the skill still needs its own schema read unless already callable. Oversized evidence becomes explicit `capability_evidence_context_too_large`. Compaction alone requires no reread: reuse a current complete body restored in the working set; reload only needed absent or stale bodies.
+The skill catalog contains metadata only. `common.skills_load(id, action?)` selects
+or removes a published procedure for this run. `SkillTaskService` resolves required
+and optional dependencies against the policy-filtered frozen ToolPack, rejecting
+missing contracts, version conflicts and oversized selections atomically. The next
+request contains complete `SELECTED_SKILL` bodies and the deduplicated union of
+core, direct admissions and declared compatible tools. Loading cannot change the
+bindings of the already accepted response. Specialized tools reject direct schema
+admission; source inspection through `common.capabilities_read` does not activate
+a skill.
 
-A custom skill package may contain up to 64 direct UTF-8 `references/*.md` files. The core read lists paths and byte sizes without bodies or model-visible revisions. A needed reference is read with exact public skill id and `referencePath`; fixed runtime chunks continue with `action=next`. Exact offsets and reference/package revisions remain in durable results. A reference chunk never loads the core skill. Core/reference mutations remain separate confirmed calls.
+`ChatRunRecord.SelectedSkills` survives compaction and confirmation/restart via
+`run.updated`; a new turn starts with no selections. `ContextReceipt.Arsenal`
+records the request's selected revisions, tool bindings, relationships and policy.
+Dispatch requires that originating run/step and exact binding, in addition to the
+existing permission, host, resource and approval gates. Updated/revoked selections
+are suspended; catalog drift after compilation blocks dispatch. Complete
+instructions that do not fit cause explicit refusal, not silent truncation.
 
-Installed skills are capability-library entities rather than chat artifacts. An
-uploaded Markdown/package remains untrusted resource content and cannot appear in
-the capability catalog until an explicit validated install. Agent authoring changes
-the catalog only at a later run boundary; the accepted step keeps its immutable
-catalog. Deferred package history, tombstone, restore/import and Library UX are
-defined in [Skill Library](skills.md) without changing the exact
-`common.capabilities_read` model transport.
+Supporting UTF-8 files under `references/`, `scripts/` and `assets/` remain bounded
+resource reads, never executable authority. Read paths come from published metadata;
+Office continuation stays runtime-owned. Attachments and workspace-local SKILL.md
+remain untrusted resource content until explicit publication. Package format,
+editor behavior and the typed chat Arsenal projection are defined in
+[Skill Library](skills.md).
 
 Tools use a native-like description (abbreviated discovery example):
 

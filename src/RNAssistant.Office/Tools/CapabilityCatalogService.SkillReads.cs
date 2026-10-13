@@ -40,7 +40,7 @@ namespace RNAssistant.Office.Tools
                 return CapabilityToolOutcome.Error("Offsets and page sizes belong to resource continuation.", null, "capability_runtime_state_not_allowed", false);
             var exact = SkillPublicationService.SkillResource(skill);
             var result = _resources.ReadWhole(session, exact, "text").Result;
-            return CapabilityToolOutcome.Ok("Skill loaded: " + skill.Id + ". No tool schema was admitted by this resource read.",
+            return CapabilityToolOutcome.Ok("Skill source inspected: " + skill.Id + ". Use common.skills_load to select it for the task.",
                 JsonConvert.SerializeObject(new {
                     kind = "skill", loaded = result.Complete, complete = result.Complete, truncated = !result.Complete,
                     id = skill.Id, host = skill.Host, name = skill.Name, description = skill.Description,

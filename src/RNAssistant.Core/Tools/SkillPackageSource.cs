@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using RNAssistant.Core.Models;
+using Newtonsoft.Json;
 
 namespace RNAssistant.Core.Tools
 {
@@ -10,6 +11,7 @@ namespace RNAssistant.Core.Tools
     public sealed class SkillPackageSource
     {
         private readonly SkillPackageReferenceSource[] _references;
+        private readonly string _package;
 
         public int ContractVersion
         {
@@ -23,6 +25,8 @@ namespace RNAssistant.Core.Tools
         public string Version { get; private set; }
         public string BodyMarkdown { get; private set; }
         public bool Enabled { get; private set; }
+        public SkillPackageManifest Package
+        { get { return JsonConvert.DeserializeObject<SkillPackageManifest>(_package); } }
         public IReadOnlyList<SkillPackageReferenceSource> References
         {
             get { return Array.AsReadOnly(_references); }
@@ -31,7 +35,7 @@ namespace RNAssistant.Core.Tools
         public SkillPackageSource(string id, string host, string name,
             string description, string version, string bodyMarkdown,
             bool enabled,
-            IEnumerable<SkillPackageReferenceSource> references)
+            IEnumerable<SkillPackageReferenceSource> references, SkillPackageManifest package = null)
         {
             Id = id ?? string.Empty;
             Host = host ?? string.Empty;
@@ -40,6 +44,7 @@ namespace RNAssistant.Core.Tools
             Version = version ?? string.Empty;
             BodyMarkdown = bodyMarkdown ?? string.Empty;
             Enabled = enabled;
+            _package = JsonConvert.SerializeObject(package);
             _references = (references ??
                     new SkillPackageReferenceSource[0])
                 .Where(item => item != null)
@@ -58,7 +63,7 @@ namespace RNAssistant.Core.Tools
                 (skill.References ?? new List<SkillReferenceMetadata>())
                     .Where(item => item != null)
                     .Select(item => new SkillPackageReferenceSource(
-                        item.Path, item.ByteLength, item.Revision)));
+                        item.Path, item.ByteLength, item.Revision)), skill.Package);
         }
 
         public SkillDefinition ToDefinition()
@@ -73,6 +78,7 @@ namespace RNAssistant.Core.Tools
                 BodyMarkdown = BodyMarkdown,
                 Enabled = Enabled,
                 BuiltIn = false,
+                Package = Package,
                 References = _references.Select(item =>
                     new SkillReferenceMetadata
                     {

@@ -1231,7 +1231,7 @@ namespace RNAssistant.Harness
             AssertContains(settings.AgentSkillsPrompt, "metadata only", "skill catalog is explicitly not loaded guidance");
             AssertContains(settings.AgentSkillsPrompt, "package revisions are not model-owned state",
                 "skill prompt assigns package identity to runtime");
-            AssertContains(settings.AgentSkillsPrompt, "`loaded=true`", "skill prompt defines explicit loaded evidence");
+            AssertContains(settings.AgentSkillsPrompt, "SELECTED_SKILL", "skill prompt defines task-selected instructions");
             AssertContains(settings.AgentSkillsPrompt, "do not retry unchanged", "skill prompt prevents truncated skill loops");
             AssertContains(settings.AgentSkillsPrompt, "referencePath", "skill prompt explains progressive reference reads");
             AssertTrue(settings.ChatSystemPrompt.StartsWith("# RNAssistant Chat", StringComparison.Ordinal), "chat prompt Markdown heading");

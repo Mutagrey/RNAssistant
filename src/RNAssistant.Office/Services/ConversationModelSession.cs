@@ -44,6 +44,7 @@ namespace RNAssistant.Office.Services
         private ChatMessage _packState;
         private List<ResourceEvidence> _responseEvidence = new List<ResourceEvidence>();
         private CallableToolPack _toolPack;
+        private string _requestStepId;
         private LlmRunCache _runCache;
         private bool _carryOverOnly;
         private bool _skipPriorAdmissions;
@@ -103,6 +104,7 @@ namespace RNAssistant.Office.Services
 
         internal ModelProtocolRequest CreateRequest(string stepId, ModelProtocolCallContext callContext)
         {
+            _requestStepId = stepId;
             try { _lastSnapshot = CompileCurrent(true); }
             catch (PromptBudgetExceededException) when (_carryOverOnly)
             {
@@ -125,6 +127,7 @@ namespace RNAssistant.Office.Services
         internal async Task<ModelProtocolRequest> PrepareRequestAsync(
             string stepId, ModelProtocolCallContext callContext, CancellationToken cancellationToken)
         {
+            if (_requestStepId != stepId) { _requestStepId = stepId; _lastSnapshot = null; }
             // Compile at the request boundary, after every accepted terminal
             // result (including confirmation continuation) has entered history.
             if (_lastSnapshot == null)
@@ -137,8 +140,9 @@ namespace RNAssistant.Office.Services
         private ModelProtocolRequest CreateRequestFromSnapshot(
             string stepId, ModelProtocolCallContext callContext)
         {
-            var activeTools = _toolPack.Tools;
             var snapshot = _lastSnapshot;
+            var exposed = new HashSet<string>(snapshot.Receipt.Arsenal.Tools.Select(item => item.Id), StringComparer.Ordinal);
+            var activeTools = _runnableCatalog.Where(item => exposed.Contains(item.Id)).OrderBy(item => item.Id, StringComparer.Ordinal).ToArray();
             _session.LastContextReceipt = snapshot.Receipt;
             _responseEvidence = snapshot.Messages.Where(message =>
                     IsVisibleResourceRead(message) || message.SyntheticResourceObservation)
@@ -472,6 +476,11 @@ namespace RNAssistant.Office.Services
         {
             var skills = _skillSnapshot;
             var skillDefinitions = skills.Skills;
+            var surface = SkillTaskService.Compile(_session, skills,
+                ToolPackSnapshotFactory.Capture(_mode, _adapter.HostName, _runnableCatalog),
+                _runnableCatalog, tools, _requestStepId, _settings);
+            tools = surface.Tools;
+            toolGeneration = surface.Arsenal.ToolFingerprint;
             if (retainAuthority) _skills = skillDefinitions;
             var facts = PromptBudgetComposer.ConversationHistory(_session, true, false);
             var currentIndex = facts.FindIndex(item => item.Id == _currentUserId);
@@ -524,7 +533,7 @@ namespace RNAssistant.Office.Services
                 Math.Max(0, Math.Min(budget / 3, budget - ContextWorkingSet.EstimateCost(required.Concat(facts), _settings))), ModelToolResultProjection.Instance);
             facts.AddRange(workingSet.Messages);
             return _compiler.Compile(frozen, required, facts, _context?.Notes, _runnableCatalog,
-                _settings, budget, enforceBudget, workingSet.IncludedBodies, workingSet.OmittedBodies);
+                _settings, budget, enforceBudget, workingSet.IncludedBodies, workingSet.OmittedBodies, surface);
         }
 
         private ChatMessage MaterializeToolResultMessage(

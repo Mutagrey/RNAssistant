@@ -173,6 +173,13 @@ message/run/bridge fields are removed; retained unknown JSON fields are ignored 
 cannot seed UI authority or confirmation execution. A run without current
 `KernelState` requires the explicit new-chat/reset path.
 
+`ChatRunRecord.SelectedSkills` also travels through `run.updated`: exact package
+revision, publication dependency, selection call and tool pins. Successful load or
+removal is persisted with the existing accepted tool terminal. Compaction keeps this
+run state independently of transcript text. Restart revalidates its publications;
+missing or changed bindings are explicitly unavailable. New runs start empty. The
+receipt's Arsenal is a read projection, not another store or permission authority.
+
 `ConversationKernelAdapter.Store` saves accepted responses and execution boundaries
 before dispatch, and records actual counts before optional result/media/context
 materialization. Its invocation cursor guards kernel appends; `IConversationStore.Save`

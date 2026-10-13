@@ -362,8 +362,8 @@ namespace RNAssistant.Harness
 
         private static void SettingsMigratePromptsOnSchemaChange()
         {
-            AssertContains(AgentPromptDefaults.GeneralInstructions, "A loaded skill does not admit any tool named in its text",
-                "Agent loads executable schemas after skill guidance");
+            AssertContains(AgentPromptDefaults.GeneralInstructions, "tool names in prose grant no access",
+                "only declared skill dependencies can expose executable schemas");
             foreach (var prompt in new[] { AgentPromptDefaults.GeneralInstructions, AgentPromptDefaults.ChatInstructions, AgentPromptDefaults.PlanInstructions })
             {
                 AssertContains(prompt, RNAssistant.Core.ModelProtocol.ModelProtocolWire.ActionGuidance,

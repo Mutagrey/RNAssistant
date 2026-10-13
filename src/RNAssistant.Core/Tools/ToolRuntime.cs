@@ -25,10 +25,12 @@ namespace RNAssistant.Core.Tools
         private readonly bool _allowsConfirmation;
         private readonly Func<ToolExecutionContext, ToolPreparationResult, string> _pendingRegistrar;
         private readonly IToolMutationObserver _mutationObserver;
+        private readonly Func<ToolExecutionContext, string> _dispatchGuard;
 
         public ToolRuntime(ToolHandlerRegistry registry, string mode, bool autoConfirm, bool allowsConfirmation,
             Func<ToolExecutionContext, ToolPreparationResult, string> pendingRegistrar = null,
-            IToolMutationObserver mutationObserver = null, ConversationRunPolicy runPolicy = null)
+            IToolMutationObserver mutationObserver = null, ConversationRunPolicy runPolicy = null,
+            Func<ToolExecutionContext, string> dispatchGuard = null)
         {
             _registry = registry ?? throw new ArgumentNullException(nameof(registry));
             if (mode != "agent" && mode != "plan" && mode != "chat") throw new ArgumentException("A supported conversation mode is required.", nameof(mode));
@@ -39,6 +41,7 @@ namespace RNAssistant.Core.Tools
             _allowsConfirmation = allowsConfirmation;
             _pendingRegistrar = pendingRegistrar;
             _mutationObserver = mutationObserver;
+            _dispatchGuard = dispatchGuard;
         }
 
         public ToolPolicySnapshot Describe(ToolCall call)
@@ -53,6 +56,8 @@ namespace RNAssistant.Core.Tools
             if (cancellationToken.IsCancellationRequested) return NotDispatched(context, "Cancelled before handler dispatch.");
             var tool = _registry.Lookup(context.Call.Name);
             if (tool == null) return Reject(context, "unknown_tool", "No handler is registered for this exact tool id.");
+            var admissionError = _dispatchGuard?.Invoke(context);
+            if (admissionError != null) return Reject(context, "tool_not_exposed", admissionError);
             if (!context.Policy.Matches(EffectivePolicy(tool))) return Reject(context, "tool_policy_changed", "The captured tool policy or revision changed.");
             var policy = _runPolicy == null ? tool.Registration.Policy : EffectivePolicy(tool).Policy;
             if (_runPolicy != null && (!_runPolicy.Allows(context.Call.Name, policy, tool.Registration.Binding) ||
@@ -160,6 +165,8 @@ namespace RNAssistant.Core.Tools
             var preparedState = context.PreparedStateJson ?? preparation?.PreparedStateJson;
 
             string mutationAttemptId = null;
+            admissionError = _dispatchGuard?.Invoke(context);
+            if (admissionError != null) return Reject(context, "tool_binding_unavailable", admissionError);
             if (policy.MayHaveSideEffects && _mutationObserver != null)
             {
                 try { mutationAttemptId = _mutationObserver.Prepare(context, arguments, preparedState); }

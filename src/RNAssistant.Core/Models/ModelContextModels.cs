@@ -9,15 +9,27 @@ namespace RNAssistant.Core.Models
     public sealed class SkillCatalogSnapshot
     {
         private readonly string _json;
+        private readonly string _metadata;
+        private readonly Dictionary<string, string> _revisions;
         public string Generation { get; private set; }
         public IReadOnlyList<SkillDefinition> Skills
         { get { return Array.AsReadOnly(JsonConvert.DeserializeObject<SkillDefinition[]>(_json)); } }
+        public IReadOnlyList<RNAssistant.Core.Services.ArsenalSkill> Metadata
+        { get { return JsonConvert.DeserializeObject<RNAssistant.Core.Services.ArsenalSkill[]>(_metadata); } }
+        public string Revision(string id)
+        { string revision; return id != null && _revisions.TryGetValue(id, out revision) ? revision : null; }
         public SkillCatalogSnapshot(IEnumerable<SkillDefinition> skills, string publicationRevision = null)
         {
             var values = (skills ?? new SkillDefinition[0]).Where(item => item != null)
                 .OrderBy(item => item.Id, StringComparer.Ordinal).ToArray();
             _json = JsonConvert.SerializeObject(values);
-            Generation = SkillRevision.ComputeMarkdown((publicationRevision ?? "") + "\n" + string.Join("\n", values.Select(SkillRevision.Compute)));
+            _revisions = values.ToDictionary(item => item.Id, SkillRevision.Compute, StringComparer.Ordinal);
+            _metadata = JsonConvert.SerializeObject(values.Where(item => item.Enabled).Select(item =>
+                new RNAssistant.Core.Services.ArsenalSkill { Id = item.Id, Name = item.Name, Description = item.Description, Host = item.Host,
+                    Revision = Revision(item.Id), Status = "available",
+                    Tools = (item.Package?.RequiredTools ?? new List<SkillToolDependency>()).Select(tool => tool.Id).ToList(),
+                    References = (item.References ?? new List<SkillReferenceMetadata>()).Select(reference => reference.Path).ToList() }));
+            Generation = SkillRevision.ComputeMarkdown((publicationRevision ?? "") + "\n" + string.Join("\n", values.Select(item => Revision(item.Id))));
         }
     }
 
@@ -72,6 +84,7 @@ namespace RNAssistant.Core.Models
 
     public sealed class ContextReceipt
     {
+        public RNAssistant.Core.Services.AgentArsenal Arsenal { get; set; }
         public List<ContextMessagePresentation> Messages { get; set; } = new List<ContextMessagePresentation>();
         public string SnapshotId { get; set; }
         public string ToolGeneration { get; set; }

@@ -1,6 +1,6 @@
 # Conversation Response v7
 
-Status: **active**. Response protocol is `7`; built-in prompt schema is `42`.
+Status: **active**. Response protocol is `7`; built-in prompt schema is `44`.
 The [v6 contract](CONVERSATION_RESPONSE_V6.md) is historical. Existing v6 chats
 require explicit new chat/reset; no automatic conversion or data deletion occurs.
 

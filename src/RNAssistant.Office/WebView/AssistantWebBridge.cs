@@ -731,6 +731,9 @@ namespace RNAssistant.Office.WebView
                             inspectContext.ResourceDraftIds,
                             inspectContext.IncludeRaw);
                         break;
+                    case "getAgentArsenal":
+                        responsePayload = _controller.GetAgentArsenal(Payload<AgentArsenalPayload>(payload));
+                        break;
                     case "stageSelectionInput":
                         var stagedSelection = Payload<SelectionContextPayload>(payload);
                         responsePayload = _controller.StageSelectionInput(stagedSelection.Mode, stagedSelection.ChatId);

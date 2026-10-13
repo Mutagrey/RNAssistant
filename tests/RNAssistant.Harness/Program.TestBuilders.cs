@@ -139,6 +139,15 @@ namespace RNAssistant.Harness
             return command;
         }
 
+        private static string LoadSkillResponse(string id)
+        {
+            return JsonConvert.SerializeObject(new
+            {
+                message = "Подключаю навык.", action = "tool",
+                tool_calls = new[] { new { name = SkillLoadToolHandler.ToolId, arguments = new { id } } }
+            });
+        }
+
         private static string LoadToolSchemaResponse(string toolId)
         {
             return JsonConvert.SerializeObject(new

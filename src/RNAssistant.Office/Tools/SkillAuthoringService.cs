@@ -272,6 +272,15 @@ namespace RNAssistant.Office.Tools
                     skill.Id, id, StringComparison.OrdinalIgnoreCase));
         }
 
+        private static SkillPackageManifest ReadPackage(IDictionary<string, object> arguments)
+        {
+            object value;
+            if (!arguments.TryGetValue("package", out value) || value == null) return null;
+            var json = value as Newtonsoft.Json.Linq.JObject;
+            if (json == null) throw new ArgumentException("package must be a structured manifest.");
+            return json.ToObject<SkillPackageManifest>();
+        }
+
         private static SkillDefinition ReadSkillDefinition(
             IDictionary<string, object> arguments)
         {
@@ -287,6 +296,7 @@ namespace RNAssistant.Office.Tools
                     arguments, "version", "1.0.0"),
                 BodyMarkdown = ToolArgumentReader.String(
                     arguments, "bodyMarkdown", string.Empty),
+                Package = ReadPackage(arguments),
                 Enabled = ReadBool(arguments, "enabled", true),
                 BuiltIn = false
             };
@@ -297,6 +307,7 @@ namespace RNAssistant.Office.Tools
             IDictionary<string, object> arguments)
         {
             var intended = Clone(current);
+            if (HasArgument(arguments, "package")) intended.Package = ReadPackage(arguments);
             SetString(arguments, "host", value => intended.Host = value);
             SetString(arguments, "name", value => intended.Name = value);
             SetString(arguments, "description",
@@ -321,7 +332,7 @@ namespace RNAssistant.Office.Tools
 
         private static readonly string[] CoreFields =
         {
-            "host", "name", "description", "version",
+            "host", "name", "description", "version", "package",
             "bodyMarkdown", "enabled"
         };
 

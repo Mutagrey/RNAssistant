@@ -129,7 +129,15 @@ namespace RNAssistant.Office.Services
             _toolPack = ToolPackSnapshotFactory.Capture(_policy.Mode, _adapter.HostName, _catalog);
             _nativeTools = _executor.CreateNativeRuntime(
                 _session, _toolPack, _input.Settings, _policy.Mode,
-                true, RegisterNativePending, _catalog, _skills, false, runPolicy: _policy);
+                true, RegisterNativePending, _catalog, _skills, false, runPolicy: _policy,
+                dispatchGuard: context =>
+                {
+                    var error = SkillTaskService.CheckDispatch(_session, context, _toolPack);
+                    if (error != null) return error;
+                    if (_catalogGeneration != _executor.CaptureCatalogGeneration())
+                        return "Published catalog changed after this request; recompile before dispatch.";
+                    return null;
+                });
             // Tool/skill projection may materialize an already registered catalog
             // resource. Pin the stable generation after all local publication reads.
             _catalogGeneration = _executor.ResourceAuthority

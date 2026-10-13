@@ -5,6 +5,8 @@ using System.Linq;
 using System.Security;
 using System.Text;
 using RNAssistant.Core.Models;
+using Newtonsoft.Json;
+using RNAssistant.Core.Services;
 
 namespace RNAssistant.Core.Storage
 {
@@ -129,7 +131,7 @@ namespace RNAssistant.Core.Storage
             string normalizedPath;
             if (!TryNormalizeReferencePath(referencePath, out normalizedPath))
             {
-                error = "Reference path must be one UTF-8 Markdown file directly under references/.";
+                error = "Supporting path must be one bounded UTF-8 file directly under references/, scripts/ or assets/.";
                 return false;
             }
 
@@ -148,7 +150,7 @@ namespace RNAssistant.Core.Storage
             }
 
             normalizedPath = expected.Path;
-            var referenceDirectory = Path.Combine(skill.StoragePath, "references");
+            var referenceDirectory = Path.Combine(skill.StoragePath, normalizedPath.Split('/')[0]);
             var path = Path.Combine(referenceDirectory, Path.GetFileName(normalizedPath));
             try
             {
@@ -229,7 +231,7 @@ namespace RNAssistant.Core.Storage
             string normalizedPath;
             if (!TryNormalizeReferencePath(referencePath, out normalizedPath))
             {
-                error = "Reference path must be one UTF-8 Markdown file directly under references/.";
+                error = "Supporting path must be one bounded UTF-8 file directly under references/, scripts/ or assets/.";
                 return false;
             }
             var value = content ?? string.Empty;
@@ -254,7 +256,7 @@ namespace RNAssistant.Core.Storage
             }
             if (existing != null) normalizedPath = existing.Path;
 
-            var directory = Path.Combine(skill.StoragePath, "references");
+            var directory = Path.Combine(skill.StoragePath, normalizedPath.Split('/')[0]);
             var path = Path.Combine(directory, Path.GetFileName(normalizedPath));
             try
             {
@@ -316,7 +318,7 @@ namespace RNAssistant.Core.Storage
             string normalizedPath;
             if (!TryNormalizeReferencePath(referencePath, out normalizedPath))
             {
-                error = "Reference path must be one UTF-8 Markdown file directly under references/.";
+                error = "Supporting path must be one bounded UTF-8 file directly under references/, scripts/ or assets/.";
                 return false;
             }
             var current = LoadReferences(skill.StoragePath);
@@ -334,7 +336,7 @@ namespace RNAssistant.Core.Storage
             }
             normalizedPath = existing.Path;
 
-            var referenceDirectory = Path.Combine(skill.StoragePath, "references");
+            var referenceDirectory = Path.Combine(skill.StoragePath, normalizedPath.Split('/')[0]);
             var path = Path.Combine(referenceDirectory, Path.GetFileName(normalizedPath));
             try
             {
@@ -433,35 +435,19 @@ namespace RNAssistant.Core.Storage
 
         private static void CopySkillReferences(string sourceDirectory, string targetDirectory)
         {
-            var sourceReferences = Path.Combine(sourceDirectory, "references");
-            if (!Directory.Exists(sourceReferences)) return;
-            if ((File.GetAttributes(sourceReferences) & FileAttributes.ReparsePoint) != 0)
-            {
-                throw new IOException("Skill references directory cannot be a symbolic link.");
-            }
-            var targetReferences = Path.Combine(targetDirectory, "references");
-            if (Directory.Exists(targetReferences) &&
-                (File.GetAttributes(targetReferences) & FileAttributes.ReparsePoint) != 0)
-            {
-                throw new IOException("Skill references directory cannot be a symbolic link.");
-            }
-            StorageFileSystem.EnsureRegularDirectory(targetReferences);
             var references = LoadReferences(sourceDirectory);
-            if (references == null) throw new IOException("Skill references are invalid or unreadable.");
+            if (references == null) throw new IOException("Skill supporting files are invalid or unreadable.");
             foreach (var reference in references)
             {
-                var sourcePath = Path.Combine(sourceReferences, Path.GetFileName(reference.Path));
-                var targetPath = Path.Combine(targetReferences, Path.GetFileName(reference.Path));
+                var sourcePath = Path.Combine(sourceDirectory, reference.Path.Replace('/', Path.DirectorySeparatorChar));
+                var targetPath = Path.Combine(targetDirectory, reference.Path.Replace('/', Path.DirectorySeparatorChar));
+                StorageFileSystem.EnsureRegularDirectory(Path.GetDirectoryName(targetPath));
                 var bytes = File.ReadAllBytes(sourcePath);
-                if (!string.Equals(Sha256(bytes), reference.Revision, StringComparison.OrdinalIgnoreCase))
-                {
-                    throw new IOException("Skill reference changed while its package was moving: " + reference.Path);
-                }
+                if (Sha256(bytes) != reference.Revision)
+                    throw new IOException("Skill supporting file changed while copying: " + reference.Path);
                 if (File.Exists(targetPath) && (File.GetAttributes(targetPath) & FileAttributes.ReparsePoint) != 0)
-                {
-                    throw new IOException("Skill reference cannot be a symbolic link: " + reference.Path);
-                }
-                StorageFileSystem.WriteAtomic(targetPath, tempPath => File.WriteAllBytes(tempPath, bytes));
+                    throw new IOException("Skill supporting file cannot be a symbolic link.");
+                StorageFileSystem.WriteAtomic(targetPath, temporary => File.WriteAllBytes(temporary, bytes));
             }
         }
 
@@ -508,6 +494,7 @@ namespace RNAssistant.Core.Storage
             {
                 return null;
             }
+            catch (JsonException) { return null; }
             catch (IOException)
             {
                 return null;
@@ -526,55 +513,37 @@ namespace RNAssistant.Core.Storage
         {
             var result = new List<SkillReferenceMetadata>();
             if (string.IsNullOrWhiteSpace(skillDirectory)) return result;
-            var directory = Path.Combine(skillDirectory, "references");
             try
             {
-                if (!Directory.Exists(directory)) return result;
-                if ((File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0) return null;
-
-                var files = Directory.GetFiles(directory, "*.md", SearchOption.TopDirectoryOnly)
-                    .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
-                    .ThenBy(path => path, StringComparer.Ordinal)
-                    .ToArray();
-                if (files.Length > MaximumSkillReferences || files
-                    .GroupBy(path => Path.GetFileName(path), StringComparer.OrdinalIgnoreCase)
-                    .Any(group => group.Count() > 1)) return null;
-                foreach (var file in files)
+                foreach (var folder in new[] { "references", "scripts", "assets" })
                 {
-                    var info = new FileInfo(file);
-                    if (!info.Exists || info.Length > MaximumSkillReferenceBytes ||
-                        (File.GetAttributes(file) & FileAttributes.ReparsePoint) != 0)
+                    var directory = Path.Combine(skillDirectory, folder);
+                    if (!Directory.Exists(directory)) continue;
+                    if ((File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0) return null;
+                    foreach (var file in Directory.GetFiles(directory).OrderBy(item => item, StringComparer.Ordinal))
                     {
-                        return null;
+                        string path;
+                        if (!TryNormalizeReferencePath(folder + "/" + Path.GetFileName(file), out path)) return null;
+                        var info = new FileInfo(file);
+                        if (!info.Exists || info.Length > MaximumSkillReferenceBytes ||
+                            (info.Attributes & FileAttributes.ReparsePoint) != 0) return null;
+                        var bytes = File.ReadAllBytes(file);
+                        var start = Utf8BomLength(bytes);
+                        new UTF8Encoding(false, true).GetCharCount(bytes, start, bytes.Length - start);
+                        result.Add(new SkillReferenceMetadata { Path = path, ByteLength = info.Length, Revision = Sha256(bytes) });
+                        if (result.Count > MaximumSkillReferences) return null;
                     }
-                    var bytes = File.ReadAllBytes(file);
-                    var start = Utf8BomLength(bytes);
-                    new UTF8Encoding(false, true).GetCharCount(bytes, start, bytes.Length - start);
-                    result.Add(new SkillReferenceMetadata
-                    {
-                        Path = "references/" + Path.GetFileName(file),
-                        ByteLength = info.Length,
-                        Revision = Sha256(bytes)
-                    });
+                    // Nested and linked directories are outside the bounded portable package contract.
+                    if (Directory.GetDirectories(directory).Length > 0) return null;
                 }
+                if (result.GroupBy(item => Path.GetFileName(item.Path), StringComparer.OrdinalIgnoreCase)
+                    .Any(group => group.Count() > 1)) return null;
+                return result;
             }
-            catch (DecoderFallbackException)
-            {
-                return null;
-            }
-            catch (IOException)
-            {
-                return null;
-            }
-            catch (UnauthorizedAccessException)
-            {
-                return null;
-            }
-            catch (SecurityException)
-            {
-                return null;
-            }
-            return result;
+            catch (DecoderFallbackException) { return null; }
+            catch (IOException) { return null; }
+            catch (UnauthorizedAccessException) { return null; }
+            catch (SecurityException) { return null; }
         }
 
         private static int Utf8BomLength(byte[] bytes)
@@ -587,8 +556,10 @@ namespace RNAssistant.Core.Storage
         public static bool TryNormalizeReferencePath(string value, out string normalized)
         {
             normalized = (value ?? string.Empty).Trim().Replace('\\', '/');
-            const string prefix = "references/";
-            if (!normalized.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return false;
+            var relative = normalized;
+            var prefix = new[] { "references/", "scripts/", "assets/" }.FirstOrDefault(item =>
+                relative.StartsWith(item, StringComparison.OrdinalIgnoreCase));
+            if (prefix == null) return false;
             var fileName = normalized.Substring(prefix.Length);
             if (string.IsNullOrWhiteSpace(fileName) || fileName.IndexOf('/') >= 0 ||
                 !string.Equals(fileName, fileName.Trim(), StringComparison.Ordinal) ||
@@ -598,7 +569,7 @@ namespace RNAssistant.Core.Storage
             }
             try
             {
-                if (!string.Equals(Path.GetExtension(fileName), ".md", StringComparison.OrdinalIgnoreCase) ||
+                if (!new[] { ".md", ".txt", ".json", ".csv", ".js", ".py", ".cs", ".html", ".css", ".svg" }.Contains(Path.GetExtension(fileName), StringComparer.OrdinalIgnoreCase) ||
                     !string.Equals(Path.GetFileName(fileName), fileName, StringComparison.Ordinal))
                 {
                     return false;
@@ -662,11 +633,15 @@ namespace RNAssistant.Core.Storage
                 }
                 if (!closed) return null;
 
-                skill.Id = Value(header, "id");
+                skill.Id = FirstNonEmpty(Value(header, "id"), Value(header, "name"));
                 skill.Host = FirstNonEmpty(Value(header, "host"), "Common");
                 skill.Name = Value(header, "name");
                 skill.Description = Value(header, "description");
                 skill.Version = FirstNonEmpty(Value(header, "version"), "1.0.0");
+                var package = Value(header, "rnassistant");
+                if (!string.IsNullOrWhiteSpace(package))
+                    skill.Package = JsonConvert.DeserializeObject<SkillPackageManifest>(package,
+                        new JsonSerializerSettings { MissingMemberHandling = MissingMemberHandling.Error });
                 bool enabled;
                 skill.Enabled = !bool.TryParse(Value(header, "enabled"), out enabled) || enabled;
             }
@@ -693,6 +668,7 @@ namespace RNAssistant.Core.Storage
             builder.AppendLine("description: " + FrontMatterScalar(skill.Description));
             builder.AppendLine("version: " + FrontMatterScalar(FirstNonEmpty(skill.Version, "1.0.0")));
             builder.AppendLine("enabled: " + (skill.Enabled != false ? "true" : "false"));
+            if (skill.Package != null) builder.AppendLine("rnassistant: " + JsonConvert.SerializeObject(skill.Package));
             builder.AppendLine("---");
             builder.AppendLine();
             builder.Append(skill.BodyMarkdown ?? string.Empty);
@@ -702,6 +678,8 @@ namespace RNAssistant.Core.Storage
         public static string ValidateDefinition(SkillDefinition skill)
         {
             if (skill == null || string.IsNullOrWhiteSpace(skill.Id)) return "Skill id is required.";
+            var packageError = SkillTaskService.Validate(skill.Package);
+            if (packageError != null) return packageError;
             var id = skill.Id.Trim();
             if (!string.Equals(skill.Id, id, StringComparison.Ordinal))
             {

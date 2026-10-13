@@ -71,7 +71,7 @@ namespace RNAssistant.Office.Runtime
             Func<ToolExecutionContext, ToolPreparationResult, string> pendingRegistrar = null,
             bool trace = true,
             IToolMutationObserver mutationObserver = null, MarkdownDocumentService markdownDocuments = null,
-            ConversationRunPolicy runPolicy = null)
+            ConversationRunPolicy runPolicy = null, Func<ToolExecutionContext, string> dispatchGuard = null)
         {
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
             var registry = new ToolHandlerRegistry();
@@ -92,7 +92,11 @@ namespace RNAssistant.Office.Runtime
                     !string.Equals(binding.EntryPoint, registration.Binding.EntryPoint, StringComparison.Ordinal))
                     throw new InvalidOperationException("Pinned native binding does not match its handler: " + registration.Descriptor.Id);
                 IToolHandler handler;
-                if (string.Equals(registration.Descriptor.Id, ResourceToolCatalog.FindToolId, StringComparison.Ordinal))
+                if (registration.Descriptor.Id == SkillLoadToolHandler.ToolId)
+                {
+                    handler = new SkillLoadToolHandler(session, () => new SkillCatalogSnapshot(skillCatalog), () => snapshot, settings);
+                }
+                else if (string.Equals(registration.Descriptor.Id, ResourceToolCatalog.FindToolId, StringComparison.Ordinal))
                 {
                     handler = new ResourceFindToolHandler(gateway, session);
                 }
@@ -286,14 +290,14 @@ namespace RNAssistant.Office.Runtime
             if (policy.Mode != mode) throw new InvalidOperationException("The runtime intent differs from the bound session.");
             _runtime = new ToolRuntime(registry, policy.Mode,
                 settings != null && settings.AutoConfirmToolActions,
-                policy.AllowsConfirmation, pendingRegistrar, mutationObserver, manualRun ? null : policy);
+                policy.AllowsConfirmation, pendingRegistrar, mutationObserver, manualRun ? null : policy, dispatchGuard);
             _session = session;
             _trace = trace;
         }
 
         internal static bool Owns(string toolId)
         {
-            return string.Equals(toolId, ResourceToolCatalog.FindToolId, StringComparison.Ordinal) ||
+            return toolId == SkillLoadToolHandler.ToolId || string.Equals(toolId, ResourceToolCatalog.FindToolId, StringComparison.Ordinal) ||
                 string.Equals(toolId, ResourceToolCatalog.ReadToolId, StringComparison.Ordinal) ||
                 string.Equals(toolId, JsToolHandler.RunId, StringComparison.Ordinal) ||
                 ResourceDefinitionToolHandler.Owns(toolId) ||

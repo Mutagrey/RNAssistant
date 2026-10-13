@@ -60,6 +60,7 @@ namespace RNAssistant.Office.Tools
                 ["type"] = "boolean",
                 ["description"] = "Whether the skill is enabled and appears in Agent context."
             };
+            properties["package"] = PackageSchema();
             return new JObject
             {
                 ["type"] = "object",
@@ -81,6 +82,23 @@ namespace RNAssistant.Office.Tools
                 ["required"] = new JArray("id"),
                 ["additionalProperties"] = false
             }.ToString(Formatting.None);
+        }
+
+        private static JObject PackageSchema()
+        {
+            var dependency = new JObject { ["type"] = "object", ["additionalProperties"] = false,
+                ["properties"] = new JObject { ["id"] = new JObject { ["type"] = "string", ["description"] = "Exact registered tool id.", ["maxLength"] = 128 },
+                    ["contractVersion"] = new JObject { ["type"] = "string", ["description"] = "Required operation contract version, normally 1.", ["maxLength"] = 64 },
+                    ["fallback"] = new JObject { ["type"] = "string", ["description"] = "Explicit alternative when an optional dependency is absent.", ["maxLength"] = 2000 } },
+                ["required"] = new JArray("id", "contractVersion") };
+            return new JObject { ["type"] = "object", ["additionalProperties"] = false,
+                ["description"] = "Dependency manifest. References existing registered tools; never grants permissions or installs handlers. Optional dependencies require a fallback. Omit to preserve on update.",
+                ["properties"] = new JObject {
+                    ["formatVersion"] = new JObject { ["type"] = "integer", ["description"] = "Manifest format, 1.", ["enum"] = new JArray(1) },
+                    ["packageId"] = new JObject { ["type"] = "string", ["description"] = "Stable package identity.", ["maxLength"] = 128 },
+                    ["requiredTools"] = new JObject { ["type"] = "array", ["description"] = "Tools required for the procedure.", ["maxItems"] = 64, ["items"] = dependency },
+                    ["optionalTools"] = new JObject { ["type"] = "array", ["description"] = "Optional tools with explicit fallback.", ["maxItems"] = 64, ["items"] = dependency.DeepClone() } },
+                ["required"] = new JArray("formatVersion", "packageId", "requiredTools", "optionalTools") };
         }
 
         private static string ReferenceUpsertSchema()
@@ -144,7 +162,7 @@ namespace RNAssistant.Office.Tools
             return new JObject
             {
                 ["type"] = "string",
-                ["description"] = "Exact direct references/<name>.md path.",
+                ["description"] = "Exact direct UTF-8 supporting file path under references/, scripts/ or assets/.",
                 ["minLength"] = 1,
                 ["maxLength"] = 260
             };

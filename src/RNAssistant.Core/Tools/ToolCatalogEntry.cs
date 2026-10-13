@@ -8,6 +8,8 @@ namespace RNAssistant.Core.Tools
     public sealed class ToolCatalogEntry
     {
         public string Id { get; set; }
+        public ToolExposure Exposure { get; set; }
+        public string ContractVersion { get; set; } = "1";
         public string Host { get; set; }
         public string Name { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]

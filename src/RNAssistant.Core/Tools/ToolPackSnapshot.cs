@@ -110,7 +110,9 @@ namespace RNAssistant.Core.Tools
                 {
                     ["id"] = descriptor.Id,
                     ["description"] = descriptor.Description,
-                    ["parameters"] = parameters
+                    ["parameters"] = parameters,
+                    ["exposure"] = descriptor.Exposure.ToString(),
+                    ["contractVersion"] = descriptor.ContractVersion
                 },
                 ["policy"] = new JObject
                 {
@@ -138,7 +140,7 @@ namespace RNAssistant.Core.Tools
             var descriptor = new ToolDescriptor(
                 source.Descriptor.Id,
                 source.Descriptor.Description,
-                source.Descriptor.ParametersJson);
+                source.Descriptor.ParametersJson, source.Descriptor.Exposure, source.Descriptor.ContractVersion);
             var policy = new ToolPolicy(
                 source.Policy.Effect,
                 source.Policy.Verification,

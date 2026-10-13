@@ -41,6 +41,7 @@ function skillFromContract(skill) {
     Name: skill.name,
     Description: skill.description,
     Version: skill.version,
+    Package: skill.package || null,
     Body: skill.body,
     Enabled: skill.enabled,
     BuiltIn: skill.builtIn,
@@ -155,6 +156,7 @@ function skillLibraryComparable(skill) {
       Name: skill.Name || skill.Id || "",
       Description: skill.Description || "",
       Version: skill.Version || "1.0.0",
+      Package: skill.Package || null,
       BodySha256: skill.Body ? skill.Body.sha256 : "",
       Enabled: skill.Enabled !== false
   };
@@ -655,6 +657,7 @@ function skillLibraryMutations() {
       name: skill.Name || skill.Id || "",
       description: skill.Description || "",
       version: skill.Version || "1.0.0",
+      package: skill.Package || null,
       preserveBody: !replaceBody,
       bodyMarkdown: replaceBody ? skill._sourceDrafts[""] : undefined,
       enabled: skill.Enabled !== false
@@ -1030,6 +1033,7 @@ function bindSkillActions() {
       Name: id,
       Description: source.Description || "",
       Version: source.Version || "1.0.0",
+      Package: source.Package ? JSON.parse(JSON.stringify(source.Package)) : null,
       References: [],
       Enabled: true,
       BuiltIn: false,

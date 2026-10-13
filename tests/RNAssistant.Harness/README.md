@@ -1,5 +1,22 @@
 # RNAssistant Harness
 
+Skill-package checks: after the normal host-neutral Harness build, filter by
+`skill packages:`, `tool pack:`, `skill editor:` and the two `agent:` prompt cases.
+The package slice covers selection, next-request exposure, exact dispatch, shared
+dependencies, version conflicts/revocation, budget, compaction-independent state,
+restart and inert UI metadata. `tool pack:` includes the production HTML skill
+loader/local-write flow with a fake host. After building the CLI, run
+`python3 -B tests/cli/skill_packages_smoke.py` for the controlled HTTP pilot with
+two approval restarts; it makes no real-model quality claim.
+
+`node tests/web/skills-contract.test.js` and
+`node tests/web/skill-editor-resource.test.js` cover manifest transport and editor
+preservation. `tests/web/agent-arsenal.test.js` uses Playwright/Chromium with the
+shipped HTML/CSS. Set `BROWSER_EXECUTABLE` if the browser is not bundled and optional
+`LAYOUT_SCREENSHOT=/tmp/arsenal.png` for light/dark screenshots. It checks narrow
+panes, full scrollable tools, tabs/search/focus retention, restrictions and stale
+chat responses. These checks are not Windows/Office/WebView2 qualification.
+
 Unified-agent checks: `unified policy:` covers the permission matrix, prohibition
 before preparation, forged planning bindings, retired history byte preservation,
 and native Office-adapter confirmation pinned across setting changes/restart.
@@ -112,7 +129,7 @@ compaction-helper requests, checkpoint save/reload and claim-promotion rejection
 in all three result roles. Claims are scripted; this proves transport/provenance,
 not real-model summary quality. The large-call archive case also retains exact
 narration without hydrating arguments. `settings: prompt`, `conversation v7:` and
-`no-tool` cover schema-42 migration, silent tool responses and shared default/schema/
+`no-tool` cover schema-44 migration, silent tool responses and shared default/schema/
 repair guidance. `tests/web/live-run-projection.test.js` verifies that one comment
 can cover several visible tool activities in live and restored history.
 

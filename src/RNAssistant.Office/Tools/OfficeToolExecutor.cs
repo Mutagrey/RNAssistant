@@ -169,6 +169,7 @@ namespace RNAssistant.Office.Tools
                 HtmlWorkspaceToolCatalog.GetTools(_htmlWorkspaceService));
             RegisterControllerTools(controllerTools,
                 TaskListToolCatalog.GetTools());
+            RegisterControllerTools(controllerTools, new[] { SkillLoadToolHandler.Entry() });
             RegisterControllerTools(controllerTools,
                 PlanDocumentToolCatalog.GetTools());
             RegisterControllerTools(controllerTools, MarkdownDocumentToolCatalog.GetTools());
@@ -217,7 +218,8 @@ namespace RNAssistant.Office.Tools
             IReadOnlyList<ToolCatalogEntry> discoveryCatalog = null,
             IReadOnlyList<SkillDefinition> skillCatalog = null,
             bool manualRun = false,
-            bool dryRun = false, ConversationRunPolicy runPolicy = null)
+            bool dryRun = false, ConversationRunPolicy runPolicy = null,
+            Func<ToolExecutionContext, string> dispatchGuard = null)
         {
             session = BoundManualSession(session);
             BindResourceAuthority(session);
@@ -235,7 +237,7 @@ namespace RNAssistant.Office.Tools
                     ? null
                     : new ResourceMutationAuthorityObserver(
                         _resourceAuthority, _resourceMutationJournal, session, Payloads, _persistResourceFacts,
-                        _catalogPublication.CaptureReadBack), _markdownDocuments, runPolicy);
+                        _catalogPublication.CaptureReadBack), _markdownDocuments, runPolicy, dispatchGuard);
         }
 
         // Explicit UI resource commands share the mutation journal/commit owner.
@@ -963,6 +965,9 @@ namespace RNAssistant.Office.Tools
                 }
 
                 _controllerToolIds.Add(tool.Id);
+                if (HtmlWorkspaceToolCatalog.Owns(tool.Id) || SkillAuthoringCatalog.Owns(tool.Id) ||
+                    ToolAuthoringCatalog.Owns(tool.Id) || PromptToolCatalog.Owns(tool.Id))
+                    tool.Exposure = ToolExposure.Skill;
                 target.Add(tool);
             }
         }

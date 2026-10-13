@@ -7,6 +7,8 @@ using Newtonsoft.Json.Converters;
 namespace RNAssistant.Core.Tools
 {
     [JsonConverter(typeof(StringEnumConverter))]
+    public enum ToolExposure { Direct, Skill }
+    [JsonConverter(typeof(StringEnumConverter))]
     public enum ToolEffect { Read, Write, External, Unclassified }
     [JsonConverter(typeof(StringEnumConverter))]
     public enum ToolVerification { None, Tool }
@@ -18,8 +20,11 @@ namespace RNAssistant.Core.Tools
         public string Id { get; private set; }
         public string Description { get; private set; }
         public string ParametersJson { get; private set; }
+        public ToolExposure Exposure { get; private set; }
+        public string ContractVersion { get; private set; }
 
-        public ToolDescriptor(string id, string description, string parametersJson)
+        public ToolDescriptor(string id, string description, string parametersJson,
+            ToolExposure exposure = ToolExposure.Direct, string contractVersion = "1")
         {
             if (string.IsNullOrWhiteSpace(id) || id.Any(char.IsWhiteSpace))
                 throw new ArgumentException("An exact tool id is required.", nameof(id));
@@ -28,6 +33,8 @@ namespace RNAssistant.Core.Tools
             Id = id;
             Description = description ?? string.Empty;
             ParametersJson = parametersJson;
+            Exposure = exposure;
+            ContractVersion = contractVersion;
         }
     }
 

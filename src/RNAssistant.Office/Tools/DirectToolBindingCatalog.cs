@@ -9,6 +9,7 @@ namespace RNAssistant.Office.Tools
     {
         internal static ToolBinding Resolve(string toolId)
         {
+            if (toolId == SkillLoadToolHandler.ToolId) return SkillLoadToolHandler.Binding;
             if (string.Equals(toolId, ResourceToolCatalog.FindToolId,
                 StringComparison.Ordinal)) return ResourceFindToolHandler.Binding;
             if (string.Equals(toolId, ResourceToolCatalog.ReadToolId,

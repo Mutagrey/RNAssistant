@@ -57,6 +57,14 @@ permission, no-tool, streaming, recovery and controller cases are checked separa
 The bridge responsiveness case passes alone after `7e07fb0f`, but still fails in
 the full-suite order; that integration/fixture gap remains open.
 
+Skill-package comparison on clean `0410126e` also reproduces ten `agent:` failures
+(42/52 pass): selectable response format still expects v6; folded write error and
+unknown; separate mutations; rejected VBA batch; macro loading; confirmation replay,
+confirmed after-state and failure continuation; oversized-result business fields.
+The skill-package changes do not close this baseline debt. Changed skill selection,
+HTML loader, editor and compiler cases use separate focused checks.
+
+
 ## Real-model compaction/resume task completion — 2026-10-07
 
 Owner: CLI evaluation / model context. The completed-receipt boundary defect is

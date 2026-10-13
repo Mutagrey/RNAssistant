@@ -62,7 +62,7 @@ namespace RNAssistant.Office.Services
                 new ToolDescriptor(
                     definition.Id,
                     ConversationPromptComposer.BuildDescription(definition),
-                    definition.ArgumentSchemaJson),
+                    definition.ArgumentSchemaJson, definition.Exposure, definition.ContractVersion),
                 policy,
                 new ToolBinding(
                     binding.HandlerId,

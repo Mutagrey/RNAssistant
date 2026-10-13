@@ -154,6 +154,27 @@ namespace RNAssistant.Office.Contracts
         public bool IncludeRaw { get; set; }
     }
 
+    public sealed class AgentArsenalPayload : ChatPayload
+    {
+        [JsonProperty("includeDetails")]
+        public bool IncludeDetails { get; set; }
+    }
+
+    public sealed class AgentArsenalResponse
+    {
+        [JsonProperty("type")] public string Type { get { return "rnassistant.agentArsenal"; } }
+        [JsonProperty("contractVersion")] public int ContractVersion { get { return 1; } }
+        [JsonProperty("chatId")] public string ChatId { get; set; }
+        [JsonProperty("revision")] public long Revision { get; set; }
+        [JsonProperty("historical")] public bool Historical { get; set; }
+        [JsonProperty("prepared")] public bool Prepared { get; set; }
+        [JsonProperty("pending")] public bool Pending { get; set; }
+        [JsonProperty("restriction")] public string Restriction { get; set; }
+        [JsonProperty("skillCount")] public int SkillCount { get; set; }
+        [JsonProperty("toolCount")] public int ToolCount { get; set; }
+        [JsonProperty("details")] public RNAssistant.Core.Services.AgentArsenal Details { get; set; }
+    }
+
     public sealed class PromptContextInspectorResponse
     {
         [JsonProperty("resourceContextReceipt")]

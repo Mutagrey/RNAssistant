@@ -11,6 +11,23 @@ ToolRuntime applies Ask/Deny and Plan independently of
 catalog visibility, before preparation and dispatch. Only built-in Plan save and
 Task List handlers receive the documented planning exception.
 
+## Request exposure through skills
+
+Core `ToolDescriptor` and published `ToolCatalogEntry` carry `Exposure` (`Direct`
+or `Skill`) and `ContractVersion`. Both participate in the exact registration
+fingerprint with schema, policy and binding. Core/direct discovery remains usable
+without a skill. Specialized HTML workspace and skill/tool/prompt authoring tools,
+and CLI browser verification, are exposed through declared skill dependencies.
+
+`common.skills_load` is a direct bootstrap call in Agent and Plan. The loader
+captures exact compatible dependencies; they become callable on the next request.
+`common.capabilities_read` refuses direct admission for `Skill` exposure and gives
+related skill ids. `ConversationResponseParser` directs a guessed specialized call
+to the loader. `ToolRuntime` checks the originating receipt before preparation and
+dispatch; schema presence alone grants no mutation permission. Manual Library and
+Tools UI actions keep their existing explicit authoring/confirmation guards.
+See [manifest, selection and Arsenal](skills.md#manifest-and-task-selection).
+
 ## Status and boundary
 
 This is the current contract for tool visibility and authoring. It does not
@@ -555,7 +572,7 @@ qualification remains open.
    are a review trigger, not an unsafe automatic stripping rule.
 3. **Semantic family switches and final core-pack selection through 11O6 are done
    host-neutral:** deleted argument paths have no aliases or dual schemas. Excel
-   Agent keeps four bootstrap, 15 Excel and two routine VBA editing schemas;
+   Agent now keeps five bootstrap (including the skill loader), host core and two routine VBA editing schemas;
    rename/restore/delete/macro remain exact optional schemas available through
    admission.
 4. Run deterministic model scenarios proving that calls complete without invented
@@ -710,9 +727,9 @@ Word 8, PowerPoint 8, Outlook 4. Доступный объединённый к�
 пакеты в эти числа не входят.
 
 Это не размер каждого model request. `CallableToolPack` начинает Agent/Excel
-с 4 bootstrap + 14 Excel + 2 VBA = 20 доступных схем; Agent/Word и PowerPoint —
-с 6, Outlook — с 4, Plan — с 4, Chat — с 2 resource readers. Optional schemas
-подключаются по admission. Проверять меньший Excel core можно по trajectories,
+с 5 bootstrap + 14 Excel + 2 VBA = 21 доступной схемы; Agent/Word и PowerPoint —
+с 7, Outlook — с 5, Plan — с 5. Старый Chat — только история. Direct optional
+схемы подключаются по admission; специализированные — через выбранный skill. Проверять меньший Excel core можно по trajectories,
 но считать любое большое число ID архитектурной ошибкой нельзя.
 
 Во всех рассмотренных схемах описаны top-level arguments; closed object branches,

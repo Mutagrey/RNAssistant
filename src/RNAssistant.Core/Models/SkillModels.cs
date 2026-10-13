@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using Newtonsoft.Json;
 
 namespace RNAssistant.Core.Models
 {
@@ -25,6 +26,8 @@ namespace RNAssistant.Core.Models
                 skill != null && skill.Enabled ? "true" : "false");
             Append(canonical, "bodyMarkdown", NormalizeMarkdown(
                 skill == null ? null : skill.BodyMarkdown));
+            if (skill?.Package != null)
+                Append(canonical, "package", JsonConvert.SerializeObject(skill.Package));
             var references = (skill == null ? null : skill.References) ?? new List<SkillReferenceMetadata>();
             foreach (var reference in references
                 .Where(item => item != null && !string.IsNullOrWhiteSpace(item.Path))
@@ -91,6 +94,7 @@ namespace RNAssistant.Core.Models
         public bool Enabled { get; set; }
         public bool BuiltIn { get; set; }
         public List<SkillReferenceMetadata> References { get; set; }
+        public SkillPackageManifest Package { get; set; }
 
         public SkillDefinition()
         {
@@ -100,5 +104,45 @@ namespace RNAssistant.Core.Models
             Enabled = true;
             References = new List<SkillReferenceMetadata>();
         }
+    }
+
+    // RNAssistant extension metadata; dependency declarations never grant permissions.
+    public sealed class SkillPackageManifest
+    {
+        [JsonProperty("formatVersion")]
+        public int FormatVersion { get; set; } = 1;
+        [JsonProperty("packageId")]
+        public string PackageId { get; set; }
+        [JsonProperty("requiredTools")]
+        public List<SkillToolDependency> RequiredTools { get; set; } = new List<SkillToolDependency>();
+        [JsonProperty("optionalTools")]
+        public List<SkillToolDependency> OptionalTools { get; set; } = new List<SkillToolDependency>();
+    }
+
+    public sealed class SkillToolDependency
+    {
+        [JsonProperty("id")]
+        public string Id { get; set; }
+        [JsonProperty("contractVersion")]
+        public string ContractVersion { get; set; } = "1";
+        [JsonProperty("revision", NullValueHandling = NullValueHandling.Ignore)]
+        public string Revision { get; set; }
+        [JsonProperty("fallback", NullValueHandling = NullValueHandling.Ignore)]
+        public string Fallback { get; set; }
+    }
+
+    public sealed class SelectedSkill
+    {
+        public string Id { get; set; }
+        public string Revision { get; set; }
+        public string SelectionCallId { get; set; }
+        public ResourceRef Publication { get; set; }
+        public List<SkillToolPin> Tools { get; set; } = new List<SkillToolPin>();
+    }
+
+    public sealed class SkillToolPin
+    {
+        public string Id { get; set; }
+        public string Revision { get; set; }
     }
 }

@@ -56,6 +56,9 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("preserveBody")]
         public bool PreserveBody { get; set; }
 
+        [JsonProperty("package")]
+        public SkillPackageManifest Package { get; set; }
+
         [JsonProperty("enabled")]
         public bool Enabled { get; set; }
     }
@@ -205,6 +208,9 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("body")]
         public SkillBodyMetadataDto Body { get; set; }
 
+        [JsonProperty("package")]
+        public SkillPackageManifest Package { get; set; }
+
         [JsonProperty("enabled")]
         public bool Enabled { get; set; }
 
@@ -232,6 +238,7 @@ namespace RNAssistant.Office.Contracts
                 Name = source.Name,
                 Description = source.Description,
                 Version = source.Version,
+                Package = source.Package,
                 Body = SkillBodyMetadataDto.From(source.BodyMarkdown),
                 Enabled = source.Enabled,
                 BuiltIn = builtIn,

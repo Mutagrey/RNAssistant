@@ -539,6 +539,9 @@ namespace RNAssistant.Office
             return Task.FromResult(ChatState(pendingId, chatId));
         }
         public ChatStateResponse CancelAgentTool(string pendingId, string chatId = null) { return ChatState(pendingId, chatId); }
+        public AgentArsenalResponse GetAgentArsenal(AgentArsenalPayload query)
+        { return new AgentArsenalResponse { ChatId = query.ChatId }; }
+
         public PromptContextInspectorResponse InspectPromptContext(string chatId, string text, IReadOnlyList<string> resourceDraftIds, bool includeRaw, bool fullRaw = false)
         {
             return new PromptContextInspectorResponse

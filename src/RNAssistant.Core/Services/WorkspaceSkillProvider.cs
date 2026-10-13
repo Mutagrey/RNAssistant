@@ -37,7 +37,14 @@ Use for a local HTML/CSS/JS application when web.verify and file mutation tools 
         }
 
         private static SkillDefinition Skill(string id, string name, string description, string body)
-        { return new SkillDefinition { Id = id, Host = "Workspace", Name = name, Description = description,
-            BodyMarkdown = body, BuiltIn = true, Enabled = true, Version = "1.0.0" }; }
+        {
+            var tools = new List<string> { "common.resources_find", "common.resources_read", "files.create", "files.patch", "files.replace" };
+            if (id == WebId) tools.Add("web.verify");
+            return new SkillDefinition { Id = id, Host = "Workspace", Name = name, Description = description,
+                BodyMarkdown = body.Replace("Read workspace.files", "Load workspace.files with common.skills_load"),
+                BuiltIn = true, Enabled = true, Version = "1.0.0",
+                Package = new SkillPackageManifest { PackageId = id,
+                    RequiredTools = tools.ConvertAll(tool => new SkillToolDependency { Id = tool }) } };
+        }
     }
 }

@@ -221,6 +221,7 @@ namespace RNAssistant.Office.Services
                         Name = item.Name,
                         Description = item.Description,
                         Version = item.Version,
+                        Package = item.Package,
                         BodyMarkdown = item.BodyMarkdown,
                         Enabled = item.Enabled,
                         BuiltIn = false

@@ -1,5 +1,40 @@
 # Stabilization progress
 
+## Skill packages and chat Arsenal — 2026-10-13
+
+Scope/owners: Core `SkillTaskService`/compiler/runtime own task selection and exact
+request bindings; existing Office/CLI ports supply publications and permissions;
+Office controller + `web/app-arsenal` own the metadata projection. Implemented the
+attached skill/tool package plan's first runtime slice **without new Code Mode**.
+`rnassistant` front matter declares dependencies, `common.skills_load` selects them
+for the next request, existing run events preserve selection through compaction and
+restart, and specialized tools cannot bypass selection via schema discovery.
+Default prompt schema 44 aligns selection, Plan, catalog and compaction guidance.
+The Library retains manifests on save/clone; scripts/assets are bounded inert UTF-8.
+Canonical contracts: [skills](../skills.md), [tools](../tool-library.md),
+[conversation](../conversation-protocol.md), [events](../session-events.md).
+
+Arsenal was redesigned as a compact themed popover: tabs, search, readable skill
+cards, short permission/status labels and expandable details. It retains search,
+focus, disclosures and scroll, drops stale chat replies and performs metadata reads
+only. Checked at 1100/740/360 px, including a short 480 px pane and a 60-tool list.
+
+Evidence: package Harness 4/4; tool-pack 8/8 (includes an HTML skill → actual local
+write through the production Office service with a fake host); skill editor 6/6;
+JS Library 4/4 and editor 13/13; prompt migration 3/3 and both prompt checks pass;
+Arsenal Chromium checks pass. Core CLI pilot passed
+source inspection → canonical load → read/patch → report creation → final read-back,
+with two process-boundary approvals, exact published instruction recovery, optional
+fallback and new-task reset: 8 pilot requests / 11 controlled HTTP requests total.
+These are scripted model responses, **not real-model quality evidence**. Host-neutral
+Harness, CLI and MockDemo compilation passed; no Office/VSTO validation was run.
+
+Broader `agent:` comparison against clean source archive `0410126e` reproduces ten
+pre-existing protocol/history failures; see [baseline backlog](BACKLOG.md#host-neutral-harness-baseline-failures--2026-10-13).
+The full Harness is not green. Live model task comparison, actual Office/WebView2,
+release qualification, binary assets and archive import remain open, not implicit
+requirements to add another execution runtime. Product version is unchanged; no release/tag.
+
 ## Premature terminal narration — 2026-10-13
 
 Owners: Core ModelProtocol/prompt defaults and Task Tracking guidance. The reported

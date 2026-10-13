@@ -103,6 +103,7 @@ namespace RNAssistant.Office.Tools
                 ["bodyMarkdown"] = intended.BodyMarkdown,
                 ["enabled"] = intended.Enabled
             };
+            if (intended.Package != null) arguments["package"] = Newtonsoft.Json.Linq.JObject.FromObject(intended.Package);
             return ExecutePreparedManualMutation(
                 SkillAuthoringCatalog.UpsertToolId,
                 arguments, expectedRevision, intended.Id);
@@ -203,6 +204,7 @@ namespace RNAssistant.Office.Tools
             intended.Name = supplied.Name;
             intended.Description = supplied.Description;
             intended.Version = supplied.Version;
+            if (supplied.Package != null) intended.Package = supplied.Package;
             intended.BodyMarkdown = supplied.BodyMarkdown;
             intended.Enabled = supplied.Enabled;
             intended.StoragePath = current.StoragePath;

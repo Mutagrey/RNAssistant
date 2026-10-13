@@ -62,8 +62,20 @@ namespace RNAssistant.Core.Services
         public ModelContextSnapshot Compile(ModelAuthoritySnapshot authority,
             IReadOnlyList<ChatMessage> required, IReadOnlyList<ChatMessage> facts,
             IReadOnlyList<ContextNote> notes, IReadOnlyList<ToolCatalogEntry> tools,
-            AppSettings settings, int budget, bool enforceBudget = true, int retainedBodies = 0, int evictedBodies = 0)
+            AppSettings settings, int budget, bool enforceBudget = true, int retainedBodies = 0, int evictedBodies = 0,
+            SkillRequestSurface skillSurface = null)
         {
+            if (skillSurface != null)
+            {
+                var complete = (required ?? new ChatMessage[0]).ToList();
+                foreach (var skill in skillSurface.Instructions)
+                    complete.Add(new ChatMessage { Role = settings.SystemPromptRole,
+                        Content = "SELECTED_SKILL " + skill.Id + "\n" + skill.BodyMarkdown });
+                foreach (var skill in skillSurface.Arsenal.Selected.Where(item => item.Reason != null))
+                    complete.Add(new ChatMessage { Role = settings.SystemPromptRole,
+                        Content = "SKILL_AVAILABILITY " + skill.Id + ": " + skill.Status + "\n" + skill.Reason });
+                required = complete;
+            }
             IReadOnlyList<SkillDefinition> projectionSkills = null;
             var receipt = new ContextReceipt
             {
@@ -74,6 +86,7 @@ namespace RNAssistant.Core.Services
                 ConversationHighWaterMark = authority.ConversationHighWaterMark,
                 RetainedBodies = retainedBodies,
                 EvictedBodies = evictedBodies,
+                Arsenal = skillSurface?.Arsenal,
                 ResourceGenerations = authority.Resources.Snapshots.ToDictionary(item => item.Key, item => item.Value.Generation)
             };
             var atoms = new List<ContextAtom>();

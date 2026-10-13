@@ -1016,6 +1016,15 @@ enumeration, binding, cancellation and WebView navigation need Windows qualifica
 
 ## Conversation loop
 
+Installed skill publication is distinct from task selection. `SkillTaskService`
+resolves the frozen published skill/tool catalogs; it never reads live package
+files during compilation. Complete selected instructions are compiler invariants,
+independent of retained historical tool results. Supporting files keep ordinary
+resource evidence semantics. Per-request Arsenal metadata records exact bindings;
+the dispatcher checks the originating receipt and rejects subsequent catalog drift.
+This uses the existing catalog authority and `run.updated`, with no new runtime,
+store or execution path. See [skills](skills.md#manifest-and-task-selection).
+
 Controller clear/edit/message-delete/fork use typed `ChatResourceMutationIntent`
 through the existing mutation observer/journal. `ChatHistoryEditService` and
 `ChatCloneService` own history/resource preparation; conversation state is durable

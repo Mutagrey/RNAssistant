@@ -643,7 +643,10 @@ namespace RNAssistant.Runtime
             private readonly WorkspacePlanService _plans;
             private readonly SkillPublicationService _skillPublications;
             private readonly SkillCatalogService _skillCatalog;
+            private readonly ResourceAuthorityStore _catalogAuthority;
             private SkillCatalogSnapshot _skills;
+            private readonly ToolPackSnapshot _toolPack;
+            private SkillRequestSurface _skillSurface;
             private readonly ModelTracePersistenceService _modelTrace;
             private readonly Dictionary<string, ResourceRef> _observed = new Dictionary<string, ResourceRef>(StringComparer.Ordinal);
             private long _cursor;
@@ -678,9 +681,12 @@ namespace RNAssistant.Runtime
                 var registry = new ToolHandlerRegistry();
                 var entries = new List<ToolCatalogEntry>();
                 var authorityStore = new ResourceAuthorityStore(paths);
+                _catalogAuthority = authorityStore;
                 _skillPublications = new SkillPublicationService(authorityStore, authorityStore,
                     new ResourceMutationJournal(paths), payloads, new SkillStore(paths), "Workspace", WorkspaceSkillProvider.GetSkills());
                 _skillCatalog = new SkillCatalogService("Workspace", _skillPublications.Capture);
+                Register(registry, entries, SkillLoadToolHandler.Entry(),
+                    new SkillLoadToolHandler(session, () => _skills, () => _toolPack, _settings));
                 Register(registry, entries, "common.resources_find", _mode.AllowsSkills ? "Find workspace files (default type=file, one directory, up to 200) or enabled skills (type=skill, up to 50), or workspace Plans (type=plan, up to 50 from at most 100 heads). For workspace root omit directory or use null, never / or .; directory applies only to files. Narrow the query when incomplete." : "Find workspace files in one directory, up to 200. For workspace root omit directory or use null, never / or .; narrow the query when incomplete.",
                     ResourceSchema(true, _mode.AllowsSkills), false,
                     new WorkspaceResourceHandler(_resources.Select("file"), _skillPublications, () => _skills, _observed, true, _plans));
@@ -720,9 +726,22 @@ namespace RNAssistant.Runtime
                 foreach (var entry in PlanDocumentToolCatalog.GetTools())
                     Register(registry, entries, entry, new PlanDocumentToolHandler(entry.Id, session));
                 _catalog = entries;
+                _toolPack = new ToolPackSnapshot("workspace", _mode.Mode, "Workspace", entries.Select(item =>
+                    ToolPackSnapshot.Capture(new ToolDescriptor(item.Id, item.Description, item.ArgumentSchemaJson,
+                        item.Exposure, item.ContractVersion), item.Policy, item.Binding)));
                 _skills = VisibleSkills(_skillPublications.Capture());
                 Tools = new ToolRuntime(registry, _mode.Mode, false, _mode.AllowsConfirmation,
-                    (context, preparation) => "pending_" + Guid.NewGuid().ToString("N"), mutationObserver: new WorkspacePlanningObserver(_taskLists, _plans), runPolicy: _mode);
+                    (context, preparation) => "pending_" + Guid.NewGuid().ToString("N"), mutationObserver: new WorkspacePlanningObserver(_taskLists, _plans), runPolicy: _mode,
+                    dispatchGuard: context =>
+                    {
+                        var error = SkillTaskService.CheckDispatch(_session, context, _toolPack);
+                        if (error != null) return error;
+                        long generation;
+                        if (!_session.LastContextReceipt.ResourceGenerations.TryGetValue(SkillPublicationService.ScopeId.ToString(), out generation) ||
+                            generation != _catalogAuthority.Capture(SkillPublicationService.ScopeId).Generation)
+                            return "Published catalog changed after this request; recompile before dispatch.";
+                        return null;
+                    });
                 if (restorePendingObservation) RestorePendingObservation();
             }
 
@@ -770,8 +789,9 @@ namespace RNAssistant.Runtime
             {
                 entry = _mode.SelectTools(new[] { entry }).SingleOrDefault();
                 if (entry == null) return;
-                registry.Register(new ToolRegistration(new ToolDescriptor(entry.Id, entry.Description, entry.ArgumentSchemaJson),
-                    entry.Policy, entry.Binding, "workspace-v1"), handler);
+                if (entry.Id == "web.verify") entry.Exposure = ToolExposure.Skill;
+                registry.Register(ToolPackSnapshot.Capture(new ToolDescriptor(entry.Id, entry.Description, entry.ArgumentSchemaJson,
+                    entry.Exposure, entry.ContractVersion), entry.Policy, entry.Binding), handler);
                 entries.Add(entry);
             }
 
@@ -839,9 +859,7 @@ namespace RNAssistant.Runtime
             {
                 var selected = _skillCatalog.SelectPublished(published);
                 var ids = new HashSet<string>(_catalog.Select(tool => tool.Id), StringComparer.OrdinalIgnoreCase);
-                var skills = _mode.SelectSkills(selected.Skills).Where(skill => skill.Enabled &&
-                    (skill.Id != WorkspaceSkillProvider.FilesId || ids.Contains("files.create")) &&
-                    (skill.Id != WorkspaceSkillProvider.WebId || ids.Contains("web.verify") && ids.Contains("files.patch"))).ToArray();
+                var skills = _mode.SelectSkills(selected.Skills).Where(skill => skill.Enabled).ToArray();
                 if (skills.Any(skill => ids.Contains(skill.Id)))
                     throw new InvalidOperationException("A skill ID collides with an available tool ID.");
                 return new SkillCatalogSnapshot(skills, selected.Generation);
@@ -850,8 +868,9 @@ namespace RNAssistant.Runtime
             public async Task<AgentModelResult> SendAsync(AgentModelRequest request, CancellationToken cancellationToken)
             {
                 var authority = CaptureModelAuthority(request.RunId, cancellationToken);
-                var callContext = new ModelProtocolCallContext(_catalog.Where(tool => tool.Policy.IndependentLocalRead).Select(tool => tool.Id));
-                var options = ModelProtocolWire.CreateRequestOptions(_settings.AgentResponseMode, _catalog, callContext);
+                _skillSurface = SkillTaskService.Compile(_session, _skills, _toolPack, _catalog, _catalog, request.StepId, _settings);
+                var callContext = new ModelProtocolCallContext(_skillSurface.Tools.Where(tool => tool.Policy.IndependentLocalRead).Select(tool => tool.Id));
+                var options = ModelProtocolWire.CreateRequestOptions(_settings.AgentResponseMode, _skillSurface.Tools, callContext);
                 options.ReasoningEnabled = _session.ReasoningEnabled;
                 options.TraceStepId = request.StepId;
                 options.TraceModelAttemptId = "attempt_" + Guid.NewGuid().ToString("N");
@@ -890,7 +909,7 @@ namespace RNAssistant.Runtime
                 {
                     Settings = _settings, AcceptedMessages = snapshot.Messages, ContextSnapshot = snapshot,
                     CompileRepair = notice => _compiler.CompileRepair(snapshot, notice),
-                    CallableTools = _catalog, RunnableCatalog = _catalog,
+                    CallableTools = _skillSurface.Tools, RunnableCatalog = _catalog,
                     CallContext = callContext, Options = options
                 }, null, cancellationToken).ConfigureAwait(false);
                 if (result.Failure != null) return AgentModelResult.Failed(result.Failure.Kind, result.Failure.Message);
@@ -939,7 +958,7 @@ namespace RNAssistant.Runtime
                     archive: ContextCompactionRuntime.ActiveCheckpoint(_session) == null ? null :
                         AcceptedFacts(_session.Messages.Where(ContextCompactionRuntime.IsReplayMessage).ToArray()));
                 return _compiler.Compile(authority, required, facts.Concat(workingSet.Messages).ToArray(), null, _catalog, _settings,
-                    budget, retainedBodies: workingSet.IncludedBodies, evictedBodies: workingSet.OmittedBodies);
+                    budget, retainedBodies: workingSet.IncludedBodies, evictedBodies: workingSet.OmittedBodies, skillSurface: _skillSurface);
             }
 
             private ResourceAuthoritySnapshotSet CaptureContextAuthority(string runId, CancellationToken cancellationToken)
@@ -1086,11 +1105,11 @@ namespace RNAssistant.Runtime
                     "RUNTIME_CONTEXT.active_task_list is the current durable checklist. Statuses are your assessment, not verified file effects. " +
                     "A task-list write does not satisfy file-write acceptance, and closing a list is not a prerequisite for done. " +
                     "Use common.questions_ask for material decisions that require user input after available discovery. Its typed result stops the run for answers; never choose an answer for the user. " +
-                    "Before starting a task covered by an available skill, read its complete instructions using common.resources_read with type=skill and its target. " +
-                    "This metadata list does not load skill bodies. Apply only complete current skill reads; source omission or staleness requires another read. " +
+                    "For a clearly applicable skill, select it with common.skills_load and its id. The next request includes complete instructions and compatible tools. " +
+                    "Selection survives compaction for this run. Resource reads are inspection only and never activate a skill. " +
                     "Available skill metadata: " + ResourceFindProjection.Serialize(SkillCatalogService.Find(_skills, null)) + ". " : string.Empty) +
                     "Available tools and exact argument schemas: " +
-                    JsonConvert.SerializeObject(_catalog.Select(tool => new { tool.Id, tool.Description, Schema = JObject.Parse(tool.ArgumentSchemaJson) })) +
+                    JsonConvert.SerializeObject((_skillSurface?.Tools ?? _catalog.Where(tool => tool.Exposure != ToolExposure.Skill).ToArray()).Select(tool => new { tool.Id, tool.Description, Schema = JObject.Parse(tool.ArgumentSchemaJson) })) +
                     ". Workspace root is a user-selected directory; internal absolute paths and runtime references are not tool arguments.";
             }
 

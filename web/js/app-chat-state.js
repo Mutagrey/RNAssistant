@@ -10,6 +10,7 @@ function sortedChatSessions(chats) {
 }
 
 function renderChatSessions() {
+  if (window.RNAssistantArsenal) window.RNAssistantArsenal.sync();
   if (typeof isPanelActive === "function" && !isPanelActive("chat")) return;
   var select = $("chatSessionSelect");
   if (!select) {
