@@ -254,7 +254,7 @@
         <section id="modelContextDialog" class="model-context-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="modelContextTitle">
           <div class="model-context-head"><strong id="modelContextTitle">Контекст модели</strong><button type="button" class="secondary compact" id="closeModelContextButton">Закрыть</button></div>
           <div class="model-context-toolbar">
-            <select id="modelContextMode" aria-label="Источник контекста"><option value="actual">Фактический запрос / ответ</option><option value="preview">Предварительный контекст</option></select>
+            <select id="modelContextMode" aria-label="Источник контекста"><option value="actual">Фактический запрос / ответ</option><option id="modelContextPreviewOption" value="preview">Предварительный контекст</option></select>
             <button type="button" class="secondary compact" id="modelContextRefresh">Обновить</button>
             <button type="button" class="secondary compact" id="modelContextDownload">Скачать запрос</button>
           </div>
@@ -1137,8 +1137,8 @@
   <script src="js/app-html-workspace-actions.js?v=html-action-guard-20260908-1-large-chat-1-artifact-tree-20261013-1"></script>
   <script src="js/app-html-workspace.js?v=html-memory-20261002-1-vendors-1-artifact-tree-20261013-1"></script>
   <script src="js/app-context.js?v=ui-lazy-20260903-1-usage-20261002-1-inbox-20261002-1"></script>
-  <script src="js/app-model-context.js?v=composer-menu-20261013-1"></script>
-  <script src="js/app-context-inspector.js?v=composer-menu-20261013-1"></script>
+  <script src="js/app-model-context.js?v=history-context-20261013-1"></script>
+  <script src="js/app-context-inspector.js?v=history-context-20261013-1"></script>
   <script src="js/app-tool-result-preview.js?v=typed-step-results-20260908-1"></script>
   <script src="js/app-agent-data.js?v=step-results-20260908-1"></script>
   <script src="js/app-agent-model.js?v=catalog-display-chat-20260908-1-run-isolation-1"></script>

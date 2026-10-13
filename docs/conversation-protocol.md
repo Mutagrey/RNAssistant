@@ -586,6 +586,12 @@ and attachment metadata. It is explicitly not a sent HTTP body; transport materi
 attachment parts later. Refresh is manual and changed drafts/revisions mark it stale.
 Token usage and admission estimates retain their existing separate meanings.
 
+For read-only historical chats, the token inspector shows saved API usage and an
+explicit new-chat notice without compiling a next request. Next-request estimates,
+raw preview and the model window's preview mode are unavailable before bridge
+dispatch. Saved request/response inspection remains available; becoming read-only
+invalidates pending previews and releases their download leases.
+
 Compiler/transport diagnostic provenance assigns final wire positions and records
 full content, fragments, summaries, excluded sources or unknown presentation. Exact
 resource coverage and unchanged projected data fields supply the evidence; stored

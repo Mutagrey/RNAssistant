@@ -67,8 +67,26 @@ function promptContextResourceDraftIds() {
   }).filter(Boolean);
 }
 
+function renderPromptContextHistory() {
+  cancelPromptContextInspection();
+  clearPromptContextRawViewer();
+  $("promptContextInspectorLoading").classList.remove("hidden");
+  $("promptContextInspectorLoading").textContent = "Этот чат доступен только для чтения. Для нового запроса создайте новый чат.";
+  $("promptContextInspectorError").classList.add("hidden");
+  $("promptContextInspectorError").textContent = "";
+  $("promptContextInspectorSubtitle").textContent = "Последний API usage · история";
+  $("promptContextInspectorBody").classList.remove("hidden");
+  $("promptContextInspectorEstimate").classList.add("hidden");
+  $("promptContextInspectorEstimate").open = false;
+  $("refreshPromptContextInspectorButton").disabled = true;
+  $("loadPromptContextRawButton").disabled = true;
+  renderPromptContextUsage(lastModelUsage(), "");
+}
+
 async function loadPromptContextInspector(includeRaw) {
-  if (promptContextInspectorRequest || !state.activeChatId || state.bridgeUnavailable) return;
+  if (!state.activeChatId || state.bridgeUnavailable) return;
+  if (state.chatReadOnly) { renderPromptContextHistory(); return; }
+  if (promptContextInspectorRequest) return;
   var chatId = state.activeChatId;
   var loading = $("promptContextInspectorLoading");
   var error = $("promptContextInspectorError");
@@ -80,6 +98,7 @@ async function loadPromptContextInspector(includeRaw) {
   error.classList.add("hidden");
   error.textContent = "";
   body.classList.add("hidden");
+  $("promptContextInspectorEstimate").classList.remove("hidden");
   refresh.disabled = true;
   rawButton.disabled = true;
 
@@ -88,7 +107,7 @@ async function loadPromptContextInspector(includeRaw) {
   var operation = { chatId: chatId, abort: new AbortController(), cancelled: false, lease: null };
   function current() {
     return promptContextInspectorRequest === operation && !operation.cancelled &&
-      promptContextInspectorOpen() && state.activeChatId === chatId;
+      promptContextInspectorOpen() && state.activeChatId === chatId && !state.chatReadOnly;
   }
   promptContextInspectorRequest = operation;
   try {
@@ -125,8 +144,8 @@ async function loadPromptContextInspector(includeRaw) {
       promptContextInspectorRequest = null;
       if (promptContextInspectorOpen()) {
         loading.classList.add("hidden");
-        refresh.disabled = false;
-        rawButton.disabled = false;
+        refresh.disabled = !!state.chatReadOnly;
+        rawButton.disabled = !!state.chatReadOnly;
       }
     }
   }
@@ -424,6 +443,7 @@ function formatPromptContextTime(value) {
 }
 
 function togglePromptContextRaw() {
+  if (state.chatReadOnly) { renderPromptContextHistory(); return; }
   var raw = promptContextInspectorSnapshot && promptContextInspectorRawText;
   if (!raw) {
     loadPromptContextInspector(true);
@@ -451,6 +471,10 @@ function syncPromptContextInspectorState() {
   if (window.RNAssistantModelContext) window.RNAssistantModelContext.sync();
   if (promptContextInspectorRequest && promptContextInspectorRequest.chatId !== state.activeChatId) {
     closePromptContextInspector();
+    return;
+  }
+  if (promptContextInspectorOpen() && state.chatReadOnly) {
+    renderPromptContextHistory();
     return;
   }
   if (!promptContextInspectorOpen() || !promptContextInspectorSnapshot) return;

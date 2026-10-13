@@ -11,7 +11,7 @@ function deferred() {
   return { promise, resolve };
 }
 function fixture(source = "{}") {
-  const nodes = new Map(), closes = [], renders = [], fetches = [];
+  const nodes = new Map(), closes = [], renders = [], fetches = [], inspections = [];
   function node(id) {
     if (!nodes.has(id)) {
       const classes = new Set();
@@ -30,10 +30,12 @@ function fixture(source = "{}") {
       contentType: "text/plain; charset=utf-8" }, maxChunkBytes: 65536 };
   const c = vm.createContext({ AbortController, TextDecoder, Uint8Array, setTimeout, clearTimeout,
     crypto: crypto.webcrypto, state: { activeChatId: "chat-a", draftAttachments: [] }, $: node,
+    lastModelUsage: () => ({ prompt: 1234, completion: 5, total: 1239 }), formatNumber: String,
     send: async (method, payload) => {
       if (method === "closeResourceData") { closes.push(payload); return {}; }
       assert.equal(method, "inspectPromptContext");
-      return { chatId: payload.chatId, rawData: lease, rawTruncated: true };
+      inspections.push(payload);
+      return { chatId: payload.chatId, rawData: payload.includeRaw ? lease : null, rawTruncated: true };
     }, fetchImpl: async (url, options) => {
       fetches.push(options);
       const query = new URL(url).searchParams;
@@ -46,7 +48,7 @@ function fixture(source = "{}") {
     vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js", name), "utf8"), c);
   c.clearPromptContextRawViewer = () => {};
   c.renderPromptContextInspector = snapshot => renders.push(snapshot);
-  return { c, lease, node, closes, renders, fetches };
+  return { c, lease, node, closes, renders, fetches, inspections };
 }
 function assertClosed(f) {
   assert.equal(f.closes.length, 1);
@@ -56,6 +58,44 @@ function assertClosed(f) {
 }
 
 (async () => {
+  const history = fixture();
+  history.c.state.chatReadOnly = true;
+  await history.c.loadPromptContextInspector(false);
+  await history.c.loadPromptContextInspector(true);
+  assert.equal(history.inspections.length, 0, "history inspection never compiles a next-run request");
+  history.c.togglePromptContextRaw();
+  assert.equal(history.inspections.length, 0);
+  assert.equal(history.fetches.length, 0);
+  assert.equal(history.node("promptContextInspectorUsage").textContent, "Вход 1234 токенов");
+  assert.match(history.node("promptContextInspectorLoading").textContent, /создайте новый чат/);
+  assert.equal(history.node("promptContextInspectorError").classList.contains("hidden"), true);
+  assert.equal(history.node("promptContextInspectorBody").classList.contains("hidden"), false);
+  assert.equal(history.node("promptContextInspectorEstimate").classList.contains("hidden"), true);
+  assert.equal(history.node("refreshPromptContextInspectorButton").disabled, true);
+  assert.equal(history.node("loadPromptContextRawButton").disabled, true);
+  history.c.state.chatReadOnly = false;
+  await history.c.loadPromptContextInspector(false);
+  assert.equal(history.inspections.length, 1, "current chats retain normal inspection");
+  assert.equal(history.node("promptContextInspectorEstimate").classList.contains("hidden"), false);
+  assert.equal(history.node("refreshPromptContextInspectorButton").disabled, false);
+  assert.equal(history.node("loadPromptContextRawButton").disabled, false);
+  console.log("PASS context inspector: history retains API usage without requesting a future run");
+
+  const retired = fixture(), reply = deferred();
+  const retiredSend = retired.c.send;
+  retired.c.send = (method, payload) => method === "inspectPromptContext" ? reply.promise : retiredSend(method, payload);
+  const retiring = retired.c.loadPromptContextInspector(true);
+  retired.c.state.chatReadOnly = true;
+  retired.c.syncPromptContextInspectorState();
+  reply.resolve({ chatId: "chat-a", rawData: retired.lease });
+  await retiring;
+  assertClosed(retired);
+  assert.equal(retired.fetches.length, 0);
+  assert.equal(retired.renders.length, 0, "late previews cannot replace read-only history");
+  assert.equal(retired.c.promptContextInspectorSnapshot, null);
+  assert.equal(retired.node("loadPromptContextRawButton").disabled, true);
+  console.log("PASS context inspector: read-only transition invalidates pending preview and releases lease");
+
   const raw = '\uFEFF{"text":"' + "語😀".repeat(60000) + '"}';
   const success = fixture(raw);
   await success.c.loadPromptContextInspector(true);

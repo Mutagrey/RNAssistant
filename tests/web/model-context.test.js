@@ -60,6 +60,56 @@ function fixture() {
   };
 }
 (async () => {
+  const history = fixture();
+  history.c.state.chatReadOnly = true;
+  history.c.RNAssistantModelContext.open(); await flush();
+  assert.equal(history.get("modelContextAttempt").value, "r1", "saved requests remain readable in history");
+  assert.equal(history.closes.length, 1, "historical payloads remain downloadable");
+  assert.equal(history.get("modelContextPreviewOption").disabled, true);
+  history.get("modelContextMode").value = "preview";
+  await history.get("modelContextMode").fire("change"); await flush();
+  await history.get("modelContextRefresh").fire("click"); await flush();
+  assert.equal(history.calls.filter(call => call.type === "inspectModelContextPreview").length, 0);
+  assert.match(history.get("modelContextStatus").textContent, /создайте новый чат/);
+  assert.equal(history.get("modelContextRefresh").disabled, true);
+  assert.equal(history.get("modelContextDownload").disabled, true);
+  const callsBeforeDownload = history.calls.length;
+  await history.get("modelContextDownload").fire("click"); await flush();
+  assert.equal(history.calls.length, callsBeforeDownload, "unavailable preview cannot download the last actual request");
+  history.get("modelContextMode").value = "actual";
+  await history.get("modelContextMode").fire("change"); await flush();
+  assert.equal(history.get("modelContextRefresh").disabled, false);
+  assert.equal(history.get("modelContextDownload").disabled, false);
+  history.c.state.chatReadOnly = false;
+  history.c.RNAssistantModelContext.sync();
+  assert.equal(history.get("modelContextPreviewOption").disabled, false);
+  history.c.RNAssistantModelContext.close();
+  console.log("PASS model context: history keeps saved requests and refuses future-request previews locally");
+
+  const emptyHistory = fixture();
+  emptyHistory.events.length = 0;
+  emptyHistory.c.state.chatReadOnly = true;
+  emptyHistory.c.RNAssistantModelContext.open(); await flush();
+  assert.match(emptyHistory.get("modelContextStatus").textContent, /создайте новый чат/);
+  emptyHistory.c.RNAssistantModelContext.close();
+
+  const retired = fixture();
+  retired.c.RNAssistantModelContext.open(); await flush();
+  let releasePreview;
+  retired.hold(new Promise(resolve => releasePreview = resolve));
+  retired.get("modelContextMode").value = "preview";
+  await retired.get("modelContextMode").fire("change"); await flush();
+  const mountsBeforeRetiring = retired.mounts.length;
+  retired.c.state.chatReadOnly = true;
+  retired.c.RNAssistantModelContext.sync();
+  releasePreview(); await flush();
+  assert.equal(retired.closes.length, 2, "late preview lease is released after a read-only transition");
+  assert.equal(retired.mounts.length, mountsBeforeRetiring);
+  assert.match(retired.get("modelContextStatus").textContent, /создайте новый чат/);
+  assert.equal(retired.get("modelContextDownload").disabled, true);
+  retired.c.RNAssistantModelContext.close();
+  console.log("PASS model context: empty history and late previews retain the read-only state");
+
   const f = fixture(), api = f.c.RNAssistantModelContext;
   const raw = '{"n":9007199254740993123456789,"n":2,"text":"escaped \\\" }, : [ ","nested":[{"x":true}]}';
   const parts = api.members(raw);

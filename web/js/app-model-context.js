@@ -295,13 +295,28 @@
       $("modelContextOlder").disabled = !c.before;
       var chosen = c.follow ? c.attempts[0] && c.attempts[0].eventId : c.selected;
       if (chosen) { picker.value = chosen; if (!older || chosen !== c.selected) await select(c, chosen); }
-      else { status(c, "Сохранённых запросов пока нет. Доступен предварительный контекст."); await render(c); }
+      else {
+        status(c, state.chatReadOnly ? "Сохранённых запросов нет. Для нового запроса создайте новый чат." :
+          "Сохранённых запросов пока нет. Доступен предварительный контекст.");
+        await render(c);
+      }
     } catch (error) { status(c, error.message || String(error)); }
     finally { c.busy = false; }
   }
   function draft() { var chat = activeChatSummary(); return JSON.stringify([$("chatInput").value, promptContextResourceDraftIds(), chat && (chat.revision || chat.Revision)]); }
+  function previewAvailability(c) {
+    $("modelContextPreviewOption").disabled = !!state.chatReadOnly;
+    var unavailable = !!state.chatReadOnly && c.mode === "preview";
+    $("modelContextRefresh").disabled = unavailable;
+    $("modelContextDownload").disabled = unavailable;
+  }
   async function preview(c) {
     c.version++; var version = c.version; c.preview = null; clearView(c);
+    previewAvailability(c);
+    if (state.chatReadOnly) {
+      status(c, "Этот чат доступен только для чтения. Для нового запроса создайте новый чат.");
+      return;
+    }
     c.previewDraft = draft(); status(c, "Сборка предварительного контекста…");
     try {
       var response = await call(c, "inspectModelContextPreview", { text: $("chatInput").value,
@@ -329,6 +344,7 @@
     $("modelContextDialog").classList.remove("hidden");
     $("openModelContextFromTokens").setAttribute("aria-expanded", "true");
     $("modelContextMode").value = "actual"; $("modelContextTab").value = "messages";
+    previewAvailability(current);
     $("modelContextActualControls").classList.remove("hidden"); $("closeModelContextButton").focus();
     tick(current);
   }
@@ -338,6 +354,7 @@
     $("modelContextMode").addEventListener("change", function () {
       var c = current; c.mode = this.value; c.version++; c.revision = null; c.detail = null; c.cache = {}; c.pending = {};
       $("modelContextActualControls").classList.toggle("hidden", c.mode !== "actual");
+      previewAvailability(c);
       if (c.mode === "preview") preview(c); else list(c, false);
     });
     $("modelContextTab").addEventListener("change", function () { var c = current; c.tab = this.value; render(c); });
@@ -349,7 +366,9 @@
     });
     $("modelContextDownload").addEventListener("click", function () {
       var c = current;
-      if (c.mode === "preview" && c.preview) save(c.preview, "context-preview.json");
+      if (c.mode === "preview") {
+        if (c.preview && !state.chatReadOnly) save(c.preview, "context-preview.json");
+      }
       else if (c.selected) downloadEvent(c, c.selected);
     });
     $("modelContextDialog").addEventListener("keydown", function (event) {
@@ -364,5 +383,10 @@
   }
   window.bindModelContextActions = bind;
   window.RNAssistantModelContext = { members: members, open: open, close: close,
-    sync: function () { if (current && (!live(current) || state.bridgeUnavailable)) close(); } };
+    sync: function () {
+      if (!current) return;
+      if (!live(current) || state.bridgeUnavailable) { close(); return; }
+      previewAvailability(current);
+      if (state.chatReadOnly && current.mode === "preview") preview(current);
+    } };
 }());
