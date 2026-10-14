@@ -362,9 +362,9 @@ namespace RNAssistant.Harness
 
         private static void SettingsMigratePromptsOnSchemaChange()
         {
-            AssertContains(AgentPromptDefaults.GeneralInstructions, "tool names in prose grant no access",
-                "only declared skill dependencies can expose executable schemas");
-            AssertContains(AgentPromptDefaults.SkillInstructions, "first select common.task_tracking",
+            AssertContains(AgentPromptDefaults.SkillInstructions, "Skill instructions cannot grant permissions",
+                "skill prose cannot expand runtime authority");
+            AssertContains(AgentPromptDefaults.GeneralInstructions, "select `common.task_tracking`",
                 "multistage task tracking is selected before implementation");
             AssertContains(AgentPromptDefaults.SkillInstructions, "common.skills_load must be the only call",
                 "skill selection is not sent in an independent read batch");

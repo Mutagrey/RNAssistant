@@ -261,10 +261,12 @@ before skill-governed work. A built-in body owns its domain prerequisites, order
 workflow, quality constraints, failure/recovery behavior and evidence-based
 definition of done. It does not copy JSON schemas or gain execution authority.
 
-The system prompt owns only the universal Understand → Prepare → Inspect → Execute
-→ Verify → Finish lifecycle. The tool prompt owns catalog discovery/admission and
-call-envelope rules. The current loaded tool description and strict schema remain
-authoritative for the exact operation, root arguments and returned evidence. If a
+The system prompt owns the universal Understand → Prepare → Inspect → Execute
+→ Verify → Finish lifecycle, including when to select Task Tracking and the final
+completion assessment. `common.task_tracking` owns list maintenance and durable
+step notes. The tool prompt owns catalog discovery/admission; the shared response
+contract owns the call envelope. The current loaded tool description and strict
+schema remain authoritative for the exact operation, root arguments and returned evidence. If a
 skill and schema disagree, the model follows the higher-priority runtime prompt and
 schema and reports the inconsistency rather than inventing compatibility fields.
 
@@ -292,6 +294,9 @@ empty built-ins and prevents retired `TOOL_RESULT ok=true` guidance from returni
   evidence and bounded continuation. A reference read never selects a procedure.
 - Default prompt schema 44 switches Agent/Plan, discovery and compaction guidance
   together. Already customized prompts remain governed by existing migration rules.
+- Schema 47 consolidates Agent lifecycle/completion guidance and moves Task List
+  procedure details into its selected skill. It uses the same automatic migration
+  with an archived recovery copy; runtime completion policy is unchanged.
 - The current `Discuss skill` UI copies Markdown into custom chat context; that copy
   does not create a selection or grant any tool access.
 - Host filtering uses the selected execution endpoint, not the containing window.
