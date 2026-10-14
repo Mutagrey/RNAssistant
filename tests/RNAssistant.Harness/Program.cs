@@ -406,6 +406,7 @@ namespace RNAssistant.Harness
                 Test("event feed: subscription backpressure and cancellation", EventFeedSubscriptionBackpressureAndCancellation),
                 Test("storage: accepted call operation ignores result role", AcceptedCallOperationIgnoresResultRole),
                 Test("storage: message operations record state transitions once", MessageOperationsRecordStateTransitionsOnce),
+                Test("storage: runtime commits preserve final responses", RuntimeCommitsPreserveFinalResponseSemantics),
                 Test("storage: natural list changes omit reorder", NaturalListChangesOmitReorder),
                 Test("storage: headers use artifact metadata", ChatHeadersUseArtifactMetadata),
                 Test("storage: header cache trusts only owned appends", HeaderCacheTrustsOnlyOwnedAppends),

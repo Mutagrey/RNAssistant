@@ -369,6 +369,9 @@ namespace RNAssistant.Harness
                     executor.Payloads.ReadText(terminal.ResultPayload.ToBlobReference());
                 AssertContains(retained, "Choose scope", "the question closes its accepted call before pausing");
                 var reloaded = new ChatStore(FixturePaths.Value).Load(session.Id);
+                AssertEqual(RunViewLifecycles.AwaitingUser, reloaded.Messages.Last(message =>
+                    message.RunViewState != null).RunViewState.Lifecycle,
+                    "the paused message projection is durable without a new terminal message");
                 responses.Enqueue(ModelProtocolWire.WriteAction("Учту выбранную область Core.", ConversationResponse.DoneAction));
                 var resumed = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Plan, "Core", reloaded, NewContext(adapter),

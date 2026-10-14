@@ -336,15 +336,16 @@ namespace RNAssistant.Office.Services
             return true;
         }
 
-        internal static void ReleasePreviousMedia(ChatSession session)
+        internal static IReadOnlyList<ChatMessage> ReleasePreviousMedia(ChatSession session)
         {
-            ReleaseHydratedArtifactMedia(session == null ? null : session.Messages);
+            return ReleaseHydratedArtifactMedia(session == null ? null : session.Messages);
         }
 
-        internal void ReleaseRequestMedia()
+        internal IReadOnlyList<ChatMessage> ReleaseRequestMedia()
         {
-            ReleaseHydratedArtifactMedia(_session == null ? null : _session.Messages);
+            var changed = ReleaseHydratedArtifactMedia(_session == null ? null : _session.Messages);
             _lastSnapshot = null;
+            return changed;
         }
 
         public void Dispose()
@@ -777,15 +778,19 @@ namespace RNAssistant.Office.Services
             return target.Length == 0 ? string.Empty : "\nsemantic_target:" + target;
         }
 
-        private static void ReleaseHydratedArtifactMedia(IEnumerable<ChatMessage> messages)
+        private static IReadOnlyList<ChatMessage> ReleaseHydratedArtifactMedia(IEnumerable<ChatMessage> messages)
         {
+            var changed = new List<ChatMessage>();
             foreach (var message in messages ?? new ChatMessage[0])
             {
                 if (message == null || !message.ProtocolMessage ||
                     !(message.Content ?? string.Empty).StartsWith("RESOURCE_MEDIA_INPUT", StringComparison.Ordinal)) continue;
+                if (message.ExcludeFromModelContext && (message.Attachments == null || message.Attachments.Count == 0)) continue;
                 message.Attachments = new List<ChatAttachment>();
                 message.ExcludeFromModelContext = true;
+                changed.Add(message);
             }
+            return changed;
         }
     }
 }

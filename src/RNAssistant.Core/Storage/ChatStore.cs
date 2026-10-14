@@ -9,6 +9,7 @@ using System.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 
 namespace RNAssistant.Core.Storage
@@ -216,6 +217,13 @@ namespace RNAssistant.Core.Storage
         internal void Save(ChatSession session)
         {
             SaveInternal(session, null, false);
+        }
+
+        internal void CommitRun(ChatSession session, ConversationRunCommit commit)
+        {
+            if (commit == null || session?.LastRun?.RunId != commit.RunId)
+                throw new InvalidOperationException("The runtime commit must belong to the current run.");
+            SaveInternal(session, null, false, commit);
         }
 
         internal SessionEvent AppendTrace(
@@ -801,30 +809,35 @@ namespace RNAssistant.Core.Storage
             catch (ChatConcurrencyException) { }
         }
 
-        private void SaveInternal(ChatSession session, string explicitPath, bool allowRelocatedSession)
+        private void SaveInternal(ChatSession session, string explicitPath, bool allowRelocatedSession,
+            ConversationRunCommit commit = null)
         {
             if (session == null) throw new ArgumentNullException("session");
             using (AcquirePersistenceRead())
             {
-                foreach (var message in session.Messages ?? new List<ChatMessage>())
+                foreach (var message in commit == null ? session.Messages ?? new List<ChatMessage>() :
+                    commit.Messages.Select(write => write.Message))
                     RuntimePayloadService.ExternalizeActivity(message.Activity, _blobs);
                 NormalizeSession(session, session.Host, session.DocumentKey, session.DocumentTitle);
                 var path = explicitPath ?? GetSessionPath(session.Host, session.DocumentKey, session.Id);
                 using (AcquireDocumentPathLock(path))
                 {
-                    SaveInternalLocked(session, path, allowRelocatedSession);
+                    SaveInternalLocked(session, path, allowRelocatedSession, commit);
                 }
             }
         }
 
-        private void SaveInternalLocked(ChatSession session, string path, bool allowRelocatedSession)
+        private void SaveInternalLocked(ChatSession session, string path, bool allowRelocatedSession,
+            ConversationRunCommit commit = null)
         {
             var timer = Stopwatch.StartNew();
             EnsureUniqueArtifactIdentities(session);
-            EnsureChartArtifacts(session);
+            EnsureChartArtifacts(session, commit?.Messages.Select(write => write.Message));
             ExternalizeArtifacts(session);
             var externalizeMs = timer.ElapsedMilliseconds;
             var exists = File.Exists(path);
+            if (commit != null && !exists)
+                throw new ChatConcurrencyException("Persist the conversation before appending runtime facts.");
             EventLogReadResult log = null;
             var stored = exists ? ReadProjectedSession(path, false, false, out log) : null;
             var readMs = timer.ElapsedMilliseconds - externalizeMs;
@@ -854,7 +867,7 @@ namespace RNAssistant.Core.Storage
                     cachedBefore.Sequence == storedRevision &&
                     string.Equals(cachedBefore.HeadHash, stored.StorageHeadHash, StringComparison.OrdinalIgnoreCase)
                     ? cachedBefore.Root : exists ? ToProjectionToken(stored) : null;
-                var projectedAfter = ToProjectionToken(session);
+                var projectedAfter = ToProjectionToken(session, commit == null);
                 var projectionMs = timer.ElapsedMilliseconds - externalizeMs - readMs;
                 if (!exists)
                 {
@@ -866,7 +879,30 @@ namespace RNAssistant.Core.Storage
                 }
                 else
                 {
-                    var operations = BuildOperations(projectedBefore, projectedAfter);
+                    var operations = BuildOperations(projectedBefore, projectedAfter, commit == null);
+                    if (commit != null)
+                    {
+                        var writes = commit.Messages.Select(write => Operation(write.Operation,
+                            new JObject { ["Value"] = JObject.FromObject(write.Message,
+                                JsonSerializer.Create(ProjectionJsonSettings)) })).ToList();
+                        projectedAfter["Messages"] = projectedBefore["Messages"]?.DeepClone() ?? new JArray();
+                        var replay = new ProjectionReplayState(projectedAfter);
+                        ApplyOperations(projectedAfter, writes, replay);
+                        replay.Materialize(projectedAfter);
+                        var actualIds = ((JArray)projectedAfter["Messages"]).Select(item => (string)item["Id"]).ToArray();
+                        var requestedIds = session.Messages.Select(message => message.Id).ToArray();
+                        if (actualIds.Length != requestedIds.Length || !new HashSet<string>(actualIds,
+                            StringComparer.OrdinalIgnoreCase).SetEquals(requestedIds))
+                            throw new InvalidOperationException("A runtime commit omitted conversation messages.");
+                        if (!actualIds.SequenceEqual(requestedIds, StringComparer.OrdinalIgnoreCase))
+                        {
+                            writes.Add(Operation(SessionOperationTypes.MessagesReorder,
+                                new JObject { ["Ids"] = JArray.FromObject(requestedIds) }));
+                            replay.Reorder("Messages", JArray.FromObject(requestedIds));
+                            replay.Materialize(projectedAfter);
+                        }
+                        operations.AddRange(writes);
+                    }
                     var correlationRunId = CurrentRunId(session) ?? CurrentRunId(stored);
                     var correlationTurnId = CurrentTurnId(session) ?? CurrentTurnId(stored);
                     pending.Add(PendingEvent(SessionEventTypes.SessionCommit,

@@ -79,7 +79,7 @@ namespace RNAssistant.Office.Services
             }
             finally
             {
-                if (_modelSession != null) _modelSession.ReleaseRequestMedia();
+                if (_modelSession != null) _pendingMessageUpdates.AddRange(_modelSession.ReleaseRequestMedia());
             }
             if (_lastModel == null) return AgentModelResult.Failed(ModelProtocolFailureKind.Infrastructure, "Missing model result.");
             _contextUsage = _lastModel.ContextUsage ?? _contextUsage;

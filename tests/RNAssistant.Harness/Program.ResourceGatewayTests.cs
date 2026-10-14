@@ -2614,6 +2614,17 @@ namespace RNAssistant.Harness
                 AssertTrue(session.Messages.Where(message => message != null &&
                     (message.Content ?? string.Empty).StartsWith("RESOURCE_MEDIA_INPUT", StringComparison.Ordinal))
                     .All(message => message.ExcludeFromModelContext), "consumed media stays out of later steps");
+                var store = new ChatStore(FixturePaths.Value);
+                var reopened = store.Load(session.Id);
+                var media = reopened.Messages.Single(message =>
+                    (message.Content ?? string.Empty).StartsWith("RESOURCE_MEDIA_INPUT", StringComparison.Ordinal));
+                AssertTrue(media.ExcludeFromModelContext && media.Attachments.Count == 0,
+                    "explicit runtime updates release consumed media across restart");
+                var mediaWrites = store.ReadEvents(session.Host, session.DocumentKey, session.Id)
+                    .Where(item => item.Data != null).SelectMany(item => item.Data["Operations"] as JArray ?? new JArray())
+                    .Where(operation => (string)operation["Data"]?["Value"]?["Id"] == media.Id).ToList();
+                AssertTrue(mediaWrites.Count > 0 && mediaWrites.All(operation => (string)operation["Type"] == SessionOperationTypes.MessageUpdated),
+                    "protocol media helpers are projection updates, not tool results or new user requests");
             });
         }
 

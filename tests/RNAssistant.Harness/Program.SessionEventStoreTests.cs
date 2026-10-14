@@ -18,6 +18,7 @@ using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Tools;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office.Contracts;
@@ -160,6 +161,10 @@ namespace RNAssistant.Harness
             var loaded = new ChatStore(FixturePaths.Value).Load(session.Host, session.DocumentKey, session.Id);
             AssertEqual(JsonConvert.SerializeObject(session.LastRun.KernelState), JsonConvert.SerializeObject(loaded.LastRun.KernelState),
                 "fresh event replay preserves lifecycle, health, counts, limits and pending policy/call");
+            var projectionSettings = new JsonSerializerSettings { DateTimeZoneHandling = DateTimeZoneHandling.Utc };
+            AssertEqual(JsonConvert.SerializeObject(session.Messages.Select(message => message.RunViewState), projectionSettings),
+                JsonConvert.SerializeObject(loaded.Messages.Select(message => message.RunViewState), projectionSettings),
+                "explicit commits retain the latest message projections as well as kernel facts");
             var acceptedCalls = AcceptedCallIdentitiesJson(session);
             AssertEqual(acceptedCalls, AcceptedCallIdentitiesJson(loaded), "event replay preserves accepted call IDs and model attempt origins without allocation");
             var runJson = JObject.FromObject(loaded.LastRun);
@@ -2265,6 +2270,51 @@ namespace RNAssistant.Harness
                 AssertTrue(resultOperations.All(operation =>
                     (string)operation["Type"] == SessionOperationTypes.ToolResultRecorded),
                     "result messages remain distinct from accepted calls");
+            });
+        }
+
+        private static void RuntimeCommitsPreserveFinalResponseSemantics()
+        {
+            WithTempPaths(paths =>
+            {
+                var store = new ChatStore(paths);
+                var session = store.Create("Workspace", "runtime-commits", "Workspace", "Runtime facts");
+                session.LastRun = new ChatRunRecord { RunId = "run-explicit", TurnId = "turn-explicit" };
+                store.Save(session);
+                var summary = new RunSummary("run-explicit", "turn-explicit", RunLifecycle.Running,
+                    new ToolCounts(), 1, 0, "", null, null);
+                foreach (var action in new[] { "done", "blocked", "needs_input" })
+                {
+                    var message = new ChatMessage { Role = "assistant", ProtocolMessage = true,
+                        ResponseProtocolVersion = ConversationResponse.ProtocolVersion, RunId = summary.RunId,
+                        Content = new ConversationResponse(action, new ConversationToolCall[0], action).ToJson() };
+                    session.Messages.Add(message);
+                    var fact = new AgentRunEvent(AgentRunEventKind.ResponseAccepted, summary,
+                        response: new AgentResponse(action, new ToolCall[0], action));
+                    store.CommitRun(session, new ConversationRunCommit(fact, new[] { message }));
+                }
+                var events = store.ReadEvents(session.Host, session.DocumentKey, session.Id);
+                var causal = new EventStreamTrajectoryQuery().QueryView(events, new TrajectoryViewQueryRequest
+                { View = TrajectoryViews.RunCausal, RunId = summary.RunId, PageSize = 100 }).Rows;
+                AssertEqual(3, causal.Count(row => row.Kind == SessionOperationTypes.AssistantMessageAppended),
+                    "each terminal model response is recorded as an assistant response");
+                AssertEqual(0, causal.Count(row => row.Kind == SessionOperationTypes.ToolResultRecorded),
+                    "no phantom tool result is created by protocol message format");
+                var reopened = new ChatStore(paths).Load(session.Id);
+                AssertTrue(reopened.Messages.Select(message => message.Content).SequenceEqual(
+                    session.Messages.Select(message => message.Content)), "runtime commits replay exact messages in order");
+                var revision = session.Revision;
+                var unlisted = new ChatMessage { Role = "assistant", Content = "not in commit" };
+                session.Messages.Add(unlisted);
+                try
+                {
+                    store.CommitRun(session, new ConversationRunCommit(
+                        new AgentRunEvent(AgentRunEventKind.ModelStepStarted, summary), new ChatMessage[0]));
+                    throw new Exception("An incomplete runtime commit was accepted.");
+                }
+                catch (InvalidOperationException) { }
+                AssertEqual(revision, new ChatStore(paths).Load(session.Id).Revision,
+                    "an omitted message fails before append");
             });
         }
 

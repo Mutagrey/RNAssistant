@@ -18,6 +18,11 @@ namespace RNAssistant.Core.Storage
             ContractResolver = new ChatProjectionContractResolver(),
             DateTimeZoneHandling = DateTimeZoneHandling.Utc
         };
+        private static readonly JsonSerializerSettings RuntimeProjectionJsonSettings = new JsonSerializerSettings
+        {
+            ContractResolver = new ChatProjectionContractResolver(false),
+            DateTimeZoneHandling = DateTimeZoneHandling.Utc
+        };
         private static readonly string[] MetadataProperties =
         {
             "FormatVersion", "Id", "ParentSessionId", "ParentSessionRevision", "ForkedThroughMessageId", "ResourceCopies",
@@ -25,10 +30,11 @@ namespace RNAssistant.Core.Storage
             "Title", "Model", "Mode", "MutationPolicy", "ReasoningEnabled", "CreatedUtc", "UpdatedUtc", "ArtifactLinks"
         };
 
-        private JObject ToProjectionToken(ChatSession session)
+        private JObject ToProjectionToken(ChatSession session, bool includeMessages = true)
         {
             ArtifactWorkingSet.Validate(session);
-            var root = JObject.FromObject(session, JsonSerializer.Create(ProjectionJsonSettings));
+            var root = JObject.FromObject(session, JsonSerializer.Create(includeMessages
+                ? ProjectionJsonSettings : RuntimeProjectionJsonSettings));
             // Document artifacts and workspace Plans are reconstructed from exact refs.
             // The conversation never becomes a second owner of artifact metadata.
             root["Artifacts"] = new JArray(((JArray)root["Artifacts"] ?? new JArray()).Where(item =>
@@ -171,7 +177,7 @@ namespace RNAssistant.Core.Storage
             return session;
         }
 
-        private static List<SessionOperation> BuildOperations(JObject before, JObject after)
+        private static List<SessionOperation> BuildOperations(JObject before, JObject after, bool includeMessages = true)
         {
             var operations = new List<SessionOperation>();
 
@@ -187,8 +193,9 @@ namespace RNAssistant.Core.Storage
 
             AddSetOperation(operations, before, after, "Context", SessionOperationTypes.ContextSet);
             AddRunOperation(operations, before["LastRun"], after["LastRun"]);
-            AddListOperations(operations, before, after, "Messages", "Id",
-                SessionOperationTypes.MessageUpdated, SessionOperationTypes.MessageRemove, SessionOperationTypes.MessagesReorder);
+            if (includeMessages)
+                AddListOperations(operations, before, after, "Messages", "Id",
+                    SessionOperationTypes.MessageUpdated, SessionOperationTypes.MessageRemove, SessionOperationTypes.MessagesReorder);
             AddListOperations(operations, before, after, "Artifacts", "Id",
                 SessionOperationTypes.ArtifactRevisionCreated, SessionOperationTypes.ArtifactRemove, SessionOperationTypes.ArtifactsReorder);
 
@@ -335,9 +342,9 @@ namespace RNAssistant.Core.Storage
                     return SessionOperationTypes.ToolCallRecorded;
                 }
                 var calls = item["ToolCalls"] as JArray;
-                return calls != null && calls.Count > 0
-                    ? SessionOperationTypes.ToolCallRecorded
-                    : SessionOperationTypes.ToolResultRecorded;
+                if (calls != null && calls.Count > 0) return SessionOperationTypes.ToolCallRecorded;
+                if (!string.IsNullOrWhiteSpace((string)item["ToolCallId"])) return SessionOperationTypes.ToolResultRecorded;
+                if (!string.Equals((string)item["Role"], "assistant", StringComparison.OrdinalIgnoreCase)) return fallback;
             }
             if (previous == null && string.Equals((string)item["Role"], "user", StringComparison.OrdinalIgnoreCase))
             {
@@ -623,9 +630,14 @@ namespace RNAssistant.Core.Storage
 
         private sealed class ChatProjectionContractResolver : DefaultContractResolver
         {
+            private readonly bool _includeMessages;
+            internal ChatProjectionContractResolver(bool includeMessages = true) { _includeMessages = includeMessages; }
+
             protected override JsonProperty CreateProperty(MemberInfo member, MemberSerialization memberSerialization)
             {
                 var property = base.CreateProperty(member, memberSerialization);
+                if (!_includeMessages && member.DeclaringType == typeof(ChatSession) && member.Name == "Messages")
+                    property.ShouldSerialize = value => false;
                 if (member.DeclaringType == typeof(ChatArtifact) &&
                     string.Equals(member.Name, "InlineText", StringComparison.Ordinal))
                 {

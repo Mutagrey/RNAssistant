@@ -1173,6 +1173,7 @@ namespace RNAssistant.Runtime
             public Task<long> AppendAsync(AgentRunEvent fact, long expectedRevision, CancellationToken cancellationToken)
             {
                 if (expectedRevision != _cursor) throw new InvalidOperationException("Stale workspace run cursor.");
+                var firstMessage = _session.Messages.Count;
                 _session.LastRun.KernelState = AgentRunState.Apply(_session.LastRun.KernelState, fact);
                 _session.LastRun.Status = fact.Summary.Lifecycle.ToString().ToLowerInvariant();
                 _session.LastRun.IterationsUsed = fact.Summary.IterationsUsed;
@@ -1206,7 +1207,7 @@ namespace RNAssistant.Runtime
                         RunId = fact.Summary.RunId
                     });
                 }
-                _chats.Save(_session);
+                _chats.CommitRun(_session, new ConversationRunCommit(fact, _session.Messages.Skip(firstMessage)));
                 _cursor++;
                 if (_progress != null)
                 {

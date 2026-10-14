@@ -63,6 +63,7 @@ namespace RNAssistant.Office.Services
         private readonly Dictionary<string, ToolInvocation> _commands = new Dictionary<string, ToolInvocation>(StringComparer.Ordinal);
         private readonly Dictionary<string, ToolResultMaterialization> _results = new Dictionary<string, ToolResultMaterialization>(StringComparer.Ordinal);
         private readonly List<ToolResultDescriptionDto> _projectedResults = new List<ToolResultDescriptionDto>();
+        private readonly List<ChatMessage> _pendingMessageUpdates = new List<ChatMessage>();
         private ConversationRunInput _input;
         private List<ToolCatalogEntry> _catalog;
         private ToolPackSnapshot _toolPack;
@@ -107,7 +108,7 @@ namespace RNAssistant.Office.Services
             _refresh = refresh;
             _cursor = revision;
             UseInput(input);
-            ConversationModelSession.ReleasePreviousMedia(session);
+            _pendingMessageUpdates.AddRange(ConversationModelSession.ReleasePreviousMedia(session));
         }
 
         private void UseInput(ConversationRunInput input)

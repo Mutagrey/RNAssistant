@@ -1,5 +1,6 @@
 using RNAssistant.Core.Llm;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -21,7 +22,7 @@ namespace RNAssistant.Office.Services
         public async Task<long> AppendAsync(AgentRunEvent fact, long expectedRevision, CancellationToken cancellationToken)
         {
             if (expectedRevision != _cursor) throw new InvalidOperationException("Stale kernel continuation cursor.");
-            var firstMessage = _session.Messages.Count;
+            var previousMessages = new HashSet<string>(_session.Messages.Select(message => message.Id), StringComparer.Ordinal);
             var run = _session.LastRun;
             run.KernelState = AgentRunState.Apply(run.KernelState, fact);
             ConversationRunProjection.Apply(run);
@@ -60,29 +61,38 @@ namespace RNAssistant.Office.Services
                     AppendTerminalMessage(fact.Summary);
                     break;
             }
-            StampMessages(firstMessage);
-            Save();
+            var appended = _session.Messages.Where(message => !previousMessages.Contains(message.Id)).ToArray();
+            StampMessages(appended);
+            Save(fact, appended, activity);
             if (fact.Kind == AgentRunEventKind.ToolCompleted)
             {
                 // Counts and the completed activity are already durable. Context/media
                 // preparation cannot rewrite a known effect or cause a tool retry.
+                previousMessages = new HashSet<string>(_session.Messages.Select(message => message.Id), StringComparer.Ordinal);
                 await MaterializeResultAsync(fact.Execution).ConfigureAwait(false);
-                StampMessages(firstMessage);
-                Save();
+                appended = _session.Messages.Where(message => !previousMessages.Contains(message.Id)).ToArray();
+                StampMessages(appended);
+                Save(fact, appended, activity, true);
             }
             _cursor = _session.Revision;
             Report(fact, activity);
             return _cursor;
         }
 
-        private void Save()
+        private void Save(AgentRunEvent fact = null, IEnumerable<ChatMessage> appended = null,
+            ChatMessage activity = null, bool resultProjection = false)
         {
             // LLM causal trace/progress may advance this same session's global CAS
             // revision between kernel appends. The private cursor guards this port;
             // The conversation store guards against other sessions/processes with
             // the canonical backend revision CAS behind its adapter.
-            RunViewStateProjector.StampCurrentRun(_session);
-            _conversations.Save(_session);
+            var view = RunViewStateProjector.StampCurrentRun(_session);
+            var projected = _session.Messages.LastOrDefault(message => view != null && ReferenceEquals(message.RunViewState, view));
+            if (projected != null) _pendingMessageUpdates.Add(projected);
+            if (fact == null) _conversations.Save(_session);
+            else _conversations.CommitRun(_session, new ConversationRunCommit(fact, appended, activity,
+                resultProjection, _pendingMessageUpdates));
+            _pendingMessageUpdates.Clear();
             if (_saved != null) _saved(_session);
         }
 
@@ -210,11 +220,10 @@ namespace RNAssistant.Office.Services
             _session.Messages.Add(message);
         }
 
-        private void StampMessages(int first)
+        private void StampMessages(IEnumerable<ChatMessage> messages)
         {
-            for (var index = first; index < _session.Messages.Count; index++)
+            foreach (var message in messages)
             {
-                var message = _session.Messages[index];
                 message.RunId = _session.LastRun.RunId;
                 if (message.Activity != null) message.Activity.RunId = _session.LastRun.RunId;
             }

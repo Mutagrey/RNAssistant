@@ -10,6 +10,7 @@ namespace RNAssistant.Core.Persistence
         ChatSession Load(string host, string documentKey, string sessionId);
         ChatSession Load(string sessionId);
         void Save(ChatSession session);
+        void CommitRun(ChatSession session, ConversationRunCommit commit);
         void SetTitle(ChatSession session, string title);
         void SetModel(ChatSession session, string model);
         void SetReasoningEnabled(ChatSession session, bool enabled);

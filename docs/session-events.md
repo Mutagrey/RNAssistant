@@ -182,8 +182,22 @@ receipt's Arsenal is a read projection, not another store or permission authorit
 
 `ConversationKernelAdapter.Store` saves accepted responses and execution boundaries
 before dispatch, and records actual counts before optional result/media/context
-materialization. Its invocation cursor guards kernel appends; `IConversationStore.Save`
-delegates to the canonical `ChatStore` current-session revision CAS. Own causal-trace appends may
+materialization. Office and workspace runtime adapters use `ConversationRunCommit`
+through `IConversationStore.CommitRun` / the existing `ChatStore`. The runtime fact
+selects accepted-response and execution operations; the exact runtime call identity
+distinguishes a result from its media helper. Helpers use `message.updated`, never
+a user-request or tool-result event. `done`, `blocked` and `needs_input`
+remain assistant responses even when their transport uses `ProtocolMessage`.
+A commit names appended/updated messages, including the stamped run-view projection
+and released media. Storage serializes those messages and preserves paired batch
+ordering without diffing every message body. Omitting a new message fails before
+append. Initial/user admission is saved before the first kernel fact.
+
+The invocation cursor guards kernel appends; the store retains its existing
+current-session revision CAS. General `Save` still serves non-runtime mutations;
+its consumers and removal gate are in [MIGRATION_MAP](stabilization/MIGRATION_MAP.md#runtime-commit-boundary--2026-10-15).
+This is not an O(1) save claim: normalization, metadata/artifact comparison and
+projection/cache maintenance still depend on session size. Own causal-trace appends may
 advance that revision without invalidating the kernel cursor. A stale reloaded
 confirmation fails its first save before execution. Mandatory save failure escapes
 as `RunStoreException` with explicitly unpersisted evidence; controller error
@@ -327,8 +341,10 @@ viewer source appends no event and creates no artifact/CAS body; durable authori
 remains the original artifact revision and its existing attachment/text evidence.
 
 `HtmlWorkspaceArtifactService` is the only owner allowed to append whole-workspace
-revisions. A generic `ChatStore.Save` externalizes already-created artifact bodies
-but cannot compare mutable workspace state or manufacture a revision. Successful
+revisions. A generic `ChatStore.Save` externalizes chat-owned artifact bodies only;
+document/workspace-owned bodies remain with `DocumentArtifactStore`. It cannot
+re-encode a hydrated authored-file view, compare mutable workspace state or
+manufacture a revision. Successful
 binding refresh may update the in-memory projection; it becomes durable only at the
 next explicit chat/export checkpoint through that owner. Therefore an unrelated save
 cannot replace last-good recovery state or create an invisible branch. Export is an

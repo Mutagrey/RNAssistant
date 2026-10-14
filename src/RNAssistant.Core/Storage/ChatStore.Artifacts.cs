@@ -59,11 +59,11 @@ namespace RNAssistant.Core.Storage
             artifact.StorageContentByteLength = artifact.ContentByteLength;
         }
 
-        private static void EnsureChartArtifacts(ChatSession session)
+        private static void EnsureChartArtifacts(ChatSession session, IEnumerable<ChatMessage> messages = null)
         {
             if (session == null) return;
             session.Artifacts = session.Artifacts ?? new List<ChatArtifact>();
-            foreach (var message in session.Messages ?? new List<ChatMessage>())
+            foreach (var message in messages ?? session.Messages ?? new List<ChatMessage>())
             {
                 var activity = message == null ? null : message.Activity;
                 JObject chart;

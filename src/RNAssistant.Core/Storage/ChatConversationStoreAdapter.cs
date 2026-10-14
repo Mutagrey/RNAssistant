@@ -39,6 +39,11 @@ namespace RNAssistant.Core.Storage
             _store.Save(session);
         }
 
+        public void CommitRun(ChatSession session, ConversationRunCommit commit)
+        {
+            _store.CommitRun(session, commit);
+        }
+
         public void SetTitle(ChatSession session, string title) { _store.SetTitle(session, title); }
         public void SetModel(ChatSession session, string model) { _store.SetModel(session, model); }
         public void SetReasoningEnabled(ChatSession session, bool enabled) { _store.SetReasoningEnabled(session, enabled); }

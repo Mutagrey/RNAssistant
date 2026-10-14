@@ -118,6 +118,10 @@ namespace RNAssistant.Office.Services
             if (string.IsNullOrWhiteSpace(session.LastRun.TurnId)) session.LastRun.TurnId = session.LastRun.RunId;
             var user = session.Messages.LastOrDefault(message => !message.ProtocolMessage && message.Role == "user");
             if (user != null) user.RunId = session.LastRun.TurnId;
+            if (appendUserMessage || !_conversationStore.IsPersisted(session))
+            {
+                _conversationStore.Save(session);
+            }
             var input = new ConversationRunInput(settings, documentContext, tools, skills, attachments);
             using (var ports = CreatePorts(mode, text, session, input, progress, pendingToolRegistrar, cancellationToken))
             {
