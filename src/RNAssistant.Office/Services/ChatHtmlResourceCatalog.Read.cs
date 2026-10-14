@@ -148,7 +148,7 @@ namespace RNAssistant.Office.Services
                 type = "rnassistant.htmlWorkspaceManifest",
                 revision = ChatResourceUri.CreateArtifactRevisionUri(session, artifact),
                 activeFileId = snapshot.ActiveFileId,
-                resources = Members(session, artifact).Select(Describe).ToList()
+                resources = Members(session, artifact).Select(member => Describe(member)).ToList()
             });
             return ReadText(new HtmlMember
             {

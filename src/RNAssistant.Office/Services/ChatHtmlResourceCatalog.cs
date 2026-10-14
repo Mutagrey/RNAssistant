@@ -47,7 +47,7 @@ namespace RNAssistant.Office.Services
                 .OrderByDescending(item => item.Active)
                 .ThenBy(item => item.Title, StringComparer.OrdinalIgnoreCase)
                 .ToList();
-            var descriptors = members.Select(Describe).ToList();
+            var descriptors = members.Select(member => Describe(member, includeContentHash: false)).ToList();
             var cursorBinding = ResourceReadCursor.ListBinding(ChatArtifactResourceProvider.ProviderName, kind);
             var position = ResourceReadCursor.ParseRevisionBound(cursor, cursorBinding);
             var collectionRevision = ResourceReadCursor.CollectionRevision(descriptors, sourceRevision == null ? null : sourceRevision + ":" + unavailableResources);
@@ -55,6 +55,10 @@ namespace RNAssistant.Office.Services
             ResourceReadCursor.ValidateCollectionOffset(position, descriptors.Count);
             var offset = position.Offset;
             var selected = descriptors.Skip(offset).Take(limit).ToList();
+            // CollectionRevision uses complete metadata, not content hashes.
+            // Hash only returned bodies; continuation still covers every member.
+            for (var index = 0; index < selected.Count; index++)
+                selected[index].ContentSha256 = TextPatternEngine.Sha256(members[offset + index].Content ?? string.Empty);
             var next = offset + selected.Count;
             return new ResourceListPage
             {
@@ -149,7 +153,7 @@ namespace RNAssistant.Office.Services
 
         internal IReadOnlyList<ResourceDescriptor> DescribeMembers(ChatSession session, ChatArtifact artifact)
         {
-            return RequiredMembers(session, artifact).Select(Describe).ToList();
+            return RequiredMembers(session, artifact).Select(member => Describe(member)).ToList();
         }
 
         internal bool IsReadableRevision(ChatSession session, ChatArtifact artifact)
@@ -275,7 +279,7 @@ namespace RNAssistant.Office.Services
             }
         }
 
-        private ResourceDescriptor Describe(HtmlMember member)
+        private ResourceDescriptor Describe(HtmlMember member, bool includeContentHash = true)
         {
             var descriptor = new ResourceDescriptor
             {
@@ -287,7 +291,7 @@ namespace RNAssistant.Office.Services
                 Mutable = false,
                 ByteLength = Encoding.UTF8.GetByteCount(member.Content ?? string.Empty),
                 CreatedUtc = member.CreatedUtc,
-                ContentSha256 = TextPatternEngine.Sha256(member.Content ?? string.Empty),
+                ContentSha256 = includeContentHash ? TextPatternEngine.Sha256(member.Content ?? string.Empty) : null,
                 Parent = new ResourceRef(
                     ChatResourceUri.CreateArtifactRevisionUri(member.Session, member.Artifact),
                     RevisionText(member))

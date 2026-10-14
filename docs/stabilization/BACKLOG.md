@@ -12,18 +12,6 @@
 новая возможность требует явной задачи, scope и owner; дефекты работающей системы
 приоритетнее расширения без конкретного пользовательского результата.
 
-## Measured HTML metadata costs — 2026-10-14
-
-P2, owner: Office `ChatHtmlResourceCatalog`. For 8/128/512 HTML files of 16 KiB,
-`context perf: remaining hotspots` measures a one-item catalog page at
-0.32/4.27/21.11 ms; snapshot parsing alone takes 0.22/2.80/10.75 ms. Paging still
-processes the full snapshot. Narrow metadata construction/hashing to the requested
-page where authority permits, using the existing snapshot owner. Any future change
-must preserve exact current/history membership and revisions and remove the old
-path; a second durable index/cache is outside this scope. These local synthetic
-measurements do not establish a Windows UI hang. Evidence and priorities are in
-[PROGRESS](PROGRESS.md#prompt-simplification-and-incremental-context-cost--2026-10-14).
-
 ## Artifact UI check fixture drift — 2026-10-13
 
 Owner: test fixtures. During the artifact tree/removal slice, existing checks had

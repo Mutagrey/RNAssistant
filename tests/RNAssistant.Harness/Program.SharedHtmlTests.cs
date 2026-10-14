@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.Llm;
@@ -18,6 +19,50 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void SharedHtmlMetadataPagesPreserveDescriptors()
+        {
+            WithTempPaths(paths =>
+            {
+                var snapshot = new HtmlWorkspaceSnapshot { Id = "paging", ActiveFileId = "b" };
+                snapshot.Files.Add(new HtmlWorkspaceFile { Id = "a", Path = "a.js", Content = "Привет 😀" });
+                snapshot.Files.Add(new HtmlWorkspaceFile { Id = "b", Path = "b.js", Content = "active" });
+                snapshot.Files.Add(new HtmlWorkspaceFile { Id = "c", Path = "empty.js", Content = "" });
+                snapshot.DataSources.Add(new HtmlWorkspaceDataSource { Id = "rows", Name = "Rows",
+                    Binding = new HtmlWorkspaceDataBinding { Resource = new ResourceRef("rna://catalog/skills/test/body", "r1"),
+                        Policy = "exact", View = "text", ViewPath = "$" } });
+                var artifact = new ChatArtifact { Id = "paging", Kind = ChatArtifactKinds.HtmlWorkspace,
+                    Revision = 1, InlineText = JsonConvert.SerializeObject(snapshot) };
+                var session = new ChatSession { ActiveHtmlArtifactId = artifact.Id,
+                    Artifacts = new List<ChatArtifact> { artifact } };
+                var catalog = new ChatHtmlResourceCatalog(null, new ChatBlobStore(paths));
+                var expected = catalog.DescribeMembers(session, artifact)
+                    .OrderByDescending(item => item.Metadata["active"] == "true")
+                    .ThenBy(item => item.Title, StringComparer.OrdinalIgnoreCase).ToList();
+                var revision = ResourceReadCursor.CollectionRevision(expected, "source:0");
+                var binding = ResourceReadCursor.ListBinding(ChatArtifactResourceProvider.ProviderName, null);
+                var first = catalog.List(session, null, null, 1, "source");
+                AssertEqual("b.js", first.Items.Single().Title, "active file remains first");
+                var page = first;
+                for (var index = 0; index < expected.Count; index++)
+                {
+                    AssertEqual(expected.Count, page.Total, "each page reports the whole collection");
+                    AssertEqual(ResourceReadCursor.CreateRevisionBound(index, revision, binding), page.Cursor,
+                        "cursor identity is byte-for-byte identical to complete metadata");
+                    AssertTrue(JToken.DeepEquals(JObject.FromObject(expected[index]), JObject.FromObject(page.Items.Single())),
+                        "paged descriptors preserve UTF-8 byte lengths, content hashes, raw capability and binding metadata");
+                    if (index + 1 < expected.Count) page = catalog.List(session, null, page.NextCursor, 1, "source");
+                }
+                AssertTrue(page.NextCursor == null && !page.Truncated, "last page ends the collection");
+                snapshot.Files[2].Content = "changed outside the returned page";
+                artifact.InlineText = JsonConvert.SerializeObject(snapshot);
+                ResourceRequestException changed = null;
+                try { catalog.List(session, null, first.NextCursor, 1, "source"); }
+                catch (ResourceRequestException ex) { changed = ex; }
+                AssertEqual("resource_revision_changed", changed?.ErrorCode,
+                    "unreturned member metadata still invalidates continuation");
+            });
+        }
+
         private static void SharedHtmlTextDiscoveryViews()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>

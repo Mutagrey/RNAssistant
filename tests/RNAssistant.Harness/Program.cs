@@ -849,6 +849,7 @@ namespace RNAssistant.Harness
                 Test("shared Markdown: prepared guards and batch identity", SharedMarkdownPreparedGuards),
                 Test("shared Markdown: publication survives failed chat link", SharedMarkdownFailedLink),
                 Test("shared HTML: publication survives failed chat link", SharedHtmlFailedLinkDoesNotReplay),
+                Test("shared HTML: metadata pages preserve exact descriptors", SharedHtmlMetadataPagesPreserveDescriptors),
                 Test("shared HTML: publication selection and competing chats", SharedHtmlPublicationAndSelection),
                 Test("shared HTML: sequential snapshots and stale source cursors", SharedHtmlSequentialSnapshotsAndCursors),
                 Test("shared HTML: run changes survive sequential patches archival and restart", SharedHtmlRunChangesSurviveRestart),

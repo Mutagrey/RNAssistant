@@ -479,6 +479,9 @@ fixtures. `context perf: remaining hotspots` separately measures mandatory
 working-set restoration and HTML snapshot parsing/one-item metadata pages. These
 fixtures are opt-in and have no timing gates. `context budget:` checks incremental
 costs against the whole-request estimator, including removal of the last media.
+`shared HTML: metadata pages preserve exact descriptors` compares paged metadata
+and cursors with complete descriptors (UTF-8, empty files, raw access and data
+bindings), and rejects continuation after an unreturned member changes.
 
 Permanent test policy is defined in
 [development rules §9](../../docs/development-rules.md#9-тестирование-по-риску);

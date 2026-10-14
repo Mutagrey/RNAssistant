@@ -1,5 +1,27 @@
 # Stabilization progress
 
+## HTML metadata hashes follow the requested page — 2026-10-14
+
+Owner: Office `ChatHtmlResourceCatalog`. Listing still validates the complete
+ordered collection metadata, but hashes source content only for returned members.
+The collection fingerprint never included content hashes; descriptors and cursor
+bytes therefore stay unchanged. Direct member/structure reads retain full hashes.
+No index or cache was introduced.
+
+All 7 shared-HTML checks and the Gateway paging check pass on isolated task source.
+The new case compares complete/paged descriptors and cursor bytes across active
+files, Unicode, empty content, raw capabilities and data bindings, and confirms
+that unreturned-member metadata drift still rejects continuation. Local one-item
+page medians for 8/128/512 files of 16 KiB are
+0.386/4.525/20.867 → 0.329/3.673/15.111 ms. Full snapshot parsing remains about
+11.68 ms for 512 files; this result does not establish Office/UI latency. Further
+structural changes need a real latency case, not another metadata store.
+
+Evidence and frozen task source: `/tmp/rna-html-metadata-20261014-gdgtuzv6/`.
+The two bounded P2 follow-ups below are complete. P1 model completion/skill
+adherence and Windows/Office qualification remain open; large-file reading stays
+in its separate workstream.
+
 ## Working-set recovery scan reduction — 2026-10-14
 
 Owner: Core `ContextWorkingSet`. A reverse pass retains only successful-result
@@ -21,8 +43,8 @@ unmaterialized result format and was excluded from this comparison.
 
 Evidence, frozen sources and before/after binaries:
 `/var/folders/k9/hr_94nt142x1f43jr6g0wr_00000gp/T/rna-working-set-20261014-jvw_38d6/`.
-P1 model completion/skill adherence remains open. The next bounded P2 is
-[HTML metadata paging](BACKLOG.md#measured-html-metadata-costs--2026-10-14).
+P1 model completion/skill adherence remains open. HTML metadata paging is addressed
+in the section above.
 
 ## Prompt simplification and incremental context cost — 2026-10-14
 
@@ -54,8 +76,7 @@ completion remains open. No runtime `done` gate was added.
 
 Evidence, profiles, original compiler, paired binaries and live traces:
 `/tmp/rna-context-opt-20261014-3hodfzht/`. P1 remains real-model completion/skill
-adherence; measured HTML metadata costs remain a bounded P2 follow-up in
-[BACKLOG](BACKLOG.md#measured-html-metadata-costs--2026-10-14).
+adherence; the bounded working-set and HTML follow-ups are recorded above.
 Large/structural reading is a separate workstream. Office/VSTO/WebView2 was not run.
 
 ## Working resource links and verified-effect boundary — 2026-10-14

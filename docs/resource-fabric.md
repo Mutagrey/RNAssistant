@@ -1156,6 +1156,13 @@ document-owned workspace root as well as its members. The prompt working set
 omits superseded HTML snapshots already known in the chat; their history remains
 durable, but current discovery cannot resolve those old root targets.
 
+HTML member listing validates continuation against metadata for the complete
+ordered collection, including UTF-8 byte lengths and binding metadata. Content
+hashes are not part of that collection fingerprint and are computed only for the
+returned page. Returned descriptors remain complete; structure/member resolution
+still computes every requested hash. Snapshot parsing remains whole-snapshot work
+under the existing owner, without a separate metadata index.
+
 An `HTML data` member is binding metadata, not the dataset. Model text reads expose
 name/view/path/policy/sourceTarget instead of internal references. Bind refuses a
 workspace or binding member as a data source before mutation; structured model and
