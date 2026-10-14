@@ -1,7 +1,6 @@
 using System;
 using System.Globalization;
 using System.Linq;
-using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using RNAssistant.Core.Models;
@@ -42,18 +41,10 @@ namespace RNAssistant.Office.Services
                 if (save != null && (save.ExpectedCodeSha256 == null || save.ExpectedCodeSha256.Length != 64 ||
                     save.ExpectedCodeSha256.Any(character => !Uri.IsHexDigit(character))))
                     throw Error("vba_editor_guard_required", "Saving requires the exact source hash from the editor read.");
-                if (bytes.Length > MaximumBytes || contentType != "text/plain; charset=utf-8" ||
-                    string.IsNullOrWhiteSpace(request.ModuleName) || request.SourceSha256 == null || request.SourceSha256.Length != 64)
+                if (string.IsNullOrWhiteSpace(request.ModuleName))
                     throw Error("RESOURCE_UPLOAD_INVALID", "The VBA source metadata is invalid.");
-                using (var sha = SHA256.Create())
-                {
-                    var hash = BitConverter.ToString(sha.ComputeHash(bytes)).Replace("-", "").ToLowerInvariant();
-                    if (!string.Equals(hash, request.SourceSha256, StringComparison.Ordinal))
-                        throw Error("RESOURCE_UPLOAD_INVALID", "The uploaded source does not match its byte hash.");
-                }
-                string code;
-                try { code = new UTF8Encoding(false, true).GetString(bytes); }
-                catch (DecoderFallbackException) { throw Error("RESOURCE_UPLOAD_INVALID", "The VBA source is not valid UTF-8."); }
+                var code = ResourceDataPlaneService.ReadUploadText(bytes, contentType,
+                    "text/plain; charset=utf-8", MaximumBytes, request.SourceSha256);
                 if (code.Length > MaximumCharacters)
                     throw Error("RESOURCE_BATCH_TOO_LARGE", "The VBA source exceeds the editor character limit.");
                 return code;

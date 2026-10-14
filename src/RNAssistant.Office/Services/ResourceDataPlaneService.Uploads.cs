@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Security.Cryptography;
+using System.Text;
+using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office.Contracts;
@@ -104,6 +107,32 @@ namespace RNAssistant.Office.Services
                 if (draft != null) ingestion.Discard(session, draft.Id);
                 throw;
             }
+        }
+
+        internal T ConsumeJsonUpload<T>(ChatSession session, string leaseId, string owner,
+            string sha256, int maximumBytes, int maximumDepth, CancellationToken token)
+        {
+            return ConsumeUpload(session, leaseId, owner, (bytes, name, mime) =>
+            {
+                var text = ReadUploadText(bytes, mime, "application/json; charset=utf-8", maximumBytes, sha256);
+                try
+                {
+                    return JsonConvert.DeserializeObject<T>(text, new JsonSerializerSettings {
+                        MaxDepth = maximumDepth, CheckAdditionalContent = true, MissingMemberHandling = MissingMemberHandling.Error });
+                }
+                catch (JsonException) { throw Error("RESOURCE_UPLOAD_INVALID", "The upload must be a complete typed JSON body."); }
+            }, token);
+        }
+
+        internal static string ReadUploadText(byte[] bytes, string mime, string expectedMime, int maximumBytes, string sha256)
+        {
+            if (bytes.Length > maximumBytes || mime != expectedMime || sha256 == null || sha256.Length != 64)
+                throw Error("RESOURCE_UPLOAD_INVALID", "Invalid uploaded text metadata.");
+            using (var sha = SHA256.Create())
+                if (BitConverter.ToString(sha.ComputeHash(bytes)).Replace("-", "").ToLowerInvariant() != sha256)
+                    throw Error("RESOURCE_UPLOAD_INVALID", "The complete upload does not match its byte hash.");
+            try { return new UTF8Encoding(false, true).GetString(bytes); }
+            catch (DecoderFallbackException) { throw Error("RESOURCE_UPLOAD_INVALID", "The uploaded text is not valid UTF-8."); }
         }
 
         internal T ConsumeUpload<T>(ChatSession session, string leaseId, string owner,

@@ -2,10 +2,8 @@ using RNAssistant.Core.Services;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
-using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office.Contracts;
@@ -60,7 +58,7 @@ namespace RNAssistant.Office.Services
                     read.TotalCharacters < 0 || read.TotalCharacters > SkillStore.MaximumSkillReferenceCharacters)
                     throw Error("RESOURCE_SNAPSHOT_UNAVAILABLE", "A complete bounded skill snapshot is required for editing.");
                 var bytes = _gateway.Authority.Payloads.ReadBytes(payload.ToBlobReference());
-                if (bytes == null || new UTF8Encoding(false, true).GetString(bytes).Length != read.TotalCharacters)
+                if (bytes == null || new UTF8Encoding(false, true).GetCharCount(bytes) != read.TotalCharacters)
                     throw Error("RESOURCE_SNAPSHOT_UNAVAILABLE", "The exact reference snapshot is incomplete or invalid.");
                 cancellation.ThrowIfCancellationRequested();
                 response = new SkillSourceReadResponse { Type = SkillSourceReadResponse.ContractType,
@@ -101,21 +99,8 @@ namespace RNAssistant.Office.Services
         {
             if (request == null || session == null || request.ChatId != session.Id)
                 throw Error("RESOURCE_ACCESS_DENIED", "An explicit addressed skill mutation upload is required.");
-            return _data.ConsumeUpload(session, request.UploadLeaseId, Owner, (bytes, name, mime) =>
-            {
-                if (bytes.Length > MaximumMutationBytes || mime != "application/json; charset=utf-8" || request.Sha256 == null || request.Sha256.Length != 64)
-                    throw Error("RESOURCE_UPLOAD_INVALID", "The skill mutation metadata is invalid.");
-                using (var sha = SHA256.Create())
-                    if (BitConverter.ToString(sha.ComputeHash(bytes)).Replace("-", "").ToLowerInvariant() != request.Sha256)
-                        throw Error("RESOURCE_UPLOAD_INVALID", "The complete mutation does not match its byte hash.");
-                try
-                {
-                    return JsonConvert.DeserializeObject<T>(new UTF8Encoding(false, true).GetString(bytes),
-                        new JsonSerializerSettings { MaxDepth = 16, CheckAdditionalContent = true, MissingMemberHandling = MissingMemberHandling.Error });
-                }
-                catch (DecoderFallbackException) { throw Error("RESOURCE_UPLOAD_INVALID", "The skill mutation is not valid UTF-8."); }
-                catch (JsonException) { throw Error("RESOURCE_UPLOAD_INVALID", "The skill mutation is not a complete typed JSON body."); }
-            }, token);
+            return _data.ConsumeJsonUpload<T>(session, request.UploadLeaseId, Owner,
+                request.Sha256, MaximumMutationBytes, 16, token);
         }
 
         private static void ValidateSource(string text)

@@ -135,7 +135,7 @@ namespace RNAssistant.Office.Services
                 read.TotalCharacters < 0 || read.TotalCharacters > maximumBytes)
                 throw Error("RESOURCE_SNAPSHOT_UNAVAILABLE", "A complete bounded tool source snapshot is required.");
             var bytes = _gateway.Authority.Payloads.ReadBytes(payload.ToBlobReference());
-            if (bytes == null || new UTF8Encoding(false, true).GetString(bytes).Length != read.TotalCharacters)
+            if (bytes == null || new UTF8Encoding(false, true).GetCharCount(bytes) != read.TotalCharacters)
                 throw Error("RESOURCE_SNAPSHOT_UNAVAILABLE", "The tool source snapshot is incomplete or invalid.");
             return bytes;
         }
@@ -154,21 +154,8 @@ namespace RNAssistant.Office.Services
         {
             if (request == null || session == null || request.ChatId != session.Id)
                 throw Error("RESOURCE_ACCESS_DENIED", "An explicit addressed tool mutation upload is required.");
-            var body = _data.ConsumeUpload(session, request.UploadLeaseId, Owner, (bytes, name, mime) =>
-            {
-                if (bytes.Length > MaximumMutationBytes || mime != "application/json; charset=utf-8" || request.Sha256 == null || request.Sha256.Length != 64)
-                    throw Error("RESOURCE_UPLOAD_INVALID", "The tool mutation metadata is invalid.");
-                using (var sha = SHA256.Create())
-                    if (BitConverter.ToString(sha.ComputeHash(bytes)).Replace("-", "").ToLowerInvariant() != request.Sha256)
-                        throw Error("RESOURCE_UPLOAD_INVALID", "The complete mutation does not match its byte hash.");
-                try
-                {
-                    return JsonConvert.DeserializeObject<ToolLibraryMutationBatch>(new UTF8Encoding(false, true).GetString(bytes),
-                        new JsonSerializerSettings { MaxDepth = 16, CheckAdditionalContent = true, MissingMemberHandling = MissingMemberHandling.Error });
-                }
-                catch (DecoderFallbackException) { throw Error("RESOURCE_UPLOAD_INVALID", "The tool mutation is not valid UTF-8."); }
-                catch (JsonException) { throw Error("RESOURCE_UPLOAD_INVALID", "The tool mutation is not a complete typed JSON body."); }
-            }, token);
+            var body = _data.ConsumeJsonUpload<ToolLibraryMutationBatch>(session, request.UploadLeaseId, Owner,
+                request.Sha256, MaximumMutationBytes, 16, token);
             var mutations = ValidateToolLibraryPayload(body);
             token.ThrowIfCancellationRequested();
             return mutations;

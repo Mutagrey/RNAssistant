@@ -1,10 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
-using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Office.Contracts;
@@ -58,7 +56,7 @@ namespace RNAssistant.Office.Services
                     payload.ByteLength > MaximumSourceBytes || read.TotalCharacters < 0 || read.TotalCharacters > PromptSettingsService.MaximumPromptCharacters)
                     throw Error("RESOURCE_SNAPSHOT_UNAVAILABLE", "A complete bounded prompt snapshot is required.");
                 var bytes = _gateway.Authority.Payloads.ReadBytes(payload.ToBlobReference());
-                if (bytes == null || new UTF8Encoding(false, true).GetString(bytes).Length != read.TotalCharacters)
+                if (bytes == null || new UTF8Encoding(false, true).GetCharCount(bytes) != read.TotalCharacters)
                     throw Error("RESOURCE_SNAPSHOT_UNAVAILABLE", "The exact prompt snapshot is incomplete.");
                 cancellation.ThrowIfCancellationRequested();
                 response = new PromptSourceReadResponse { Type = PromptSourceReadResponse.ContractType, ContractVersion = 1,
@@ -84,22 +82,11 @@ namespace RNAssistant.Office.Services
             if (session == null || request == null || request.ChatId != session.Id)
                 throw Error("RESOURCE_ACCESS_DENIED", "An addressed settings save is required.");
             if (request.UploadLeaseId == null && request.Sha256 == null) return null;
-            return _data.ConsumeUpload(session, request.UploadLeaseId, Owner, (bytes, name, mime) =>
-            {
-                if (bytes.Length > MaximumMutationBytes || mime != "application/json; charset=utf-8" || request.Sha256 == null || request.Sha256.Length != 64)
-                    throw Error("RESOURCE_UPLOAD_INVALID", "Invalid prompt upload metadata.");
-                using (var sha = SHA256.Create())
-                    if (BitConverter.ToString(sha.ComputeHash(bytes)).Replace("-", "").ToLowerInvariant() != request.Sha256)
-                        throw Error("RESOURCE_UPLOAD_INVALID", "The complete prompt upload does not match its hash.");
-                try
-                {
-                    var batch = JsonConvert.DeserializeObject<PromptMutationBatch>(new UTF8Encoding(false, true).GetString(bytes),
-                        new JsonSerializerSettings { MaxDepth = 8, CheckAdditionalContent = true, MissingMemberHandling = MissingMemberHandling.Error });
-                    Validate(batch); return batch;
-                }
-                catch (DecoderFallbackException) { throw Error("RESOURCE_UPLOAD_INVALID", "Invalid UTF-8 prompt upload."); }
-                catch (JsonException) { throw Error("RESOURCE_UPLOAD_INVALID", "A complete typed prompt mutation is required."); }
-            }, token);
+            var batch = _data.ConsumeJsonUpload<PromptMutationBatch>(session, request.UploadLeaseId, Owner,
+                request.Sha256, MaximumMutationBytes, 8, token);
+            Validate(batch);
+            token.ThrowIfCancellationRequested();
+            return batch;
         }
 
         private static void Validate(PromptMutationBatch batch)

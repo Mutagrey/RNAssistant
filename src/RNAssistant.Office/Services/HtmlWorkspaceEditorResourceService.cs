@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using RNAssistant.Core.Models;
@@ -55,7 +54,7 @@ namespace RNAssistant.Office.Services
                     payload.ByteLength > MaximumSourceBytes || read.TotalCharacters < 0 || read.TotalCharacters > HtmlWorkspaceToolService.MaxHtmlChars)
                     throw Error("RESOURCE_SNAPSHOT_UNAVAILABLE", "A complete bounded HTML file snapshot is required.");
                 var bytes = _executor.Payloads.ReadBytes(payload.ToBlobReference());
-                if (bytes == null || new UTF8Encoding(false, true).GetString(bytes).Length != read.TotalCharacters)
+                if (bytes == null || new UTF8Encoding(false, true).GetCharCount(bytes) != read.TotalCharacters)
                     throw Error("RESOURCE_SNAPSHOT_UNAVAILABLE", "The exact HTML source is incomplete.");
                 response = new HtmlWorkspaceSourceResponse { ChatId = session.Id, Resource = exact, TotalCharacters = read.TotalCharacters };
                 return new ResourceDownloadContent { Bytes = bytes, ContentType = ContentType };
@@ -121,15 +120,7 @@ namespace RNAssistant.Office.Services
             if (session == null || request == null || string.IsNullOrWhiteSpace(session.Id) || request.ChatId != session.Id)
                 throw Error("RESOURCE_ACCESS_DENIED", "An addressed HTML save is required.");
             return _data.ConsumeUpload(session, request.UploadLeaseId, Owner, (bytes, name, mime) =>
-            {
-                if (bytes.Length > MaximumSourceBytes || mime != ContentType || request.Sha256 == null || request.Sha256.Length != 64)
-                    throw Error("RESOURCE_UPLOAD_INVALID", "Invalid HTML upload metadata.");
-                using (var sha = SHA256.Create())
-                    if (BitConverter.ToString(sha.ComputeHash(bytes)).Replace("-", "").ToLowerInvariant() != request.Sha256)
-                        throw Error("RESOURCE_UPLOAD_INVALID", "The complete HTML upload does not match its hash.");
-                try { return new UTF8Encoding(false, true).GetString(bytes); }
-                catch (DecoderFallbackException) { throw Error("RESOURCE_UPLOAD_INVALID", "Invalid UTF-8 HTML upload."); }
-            }, token);
+                ResourceDataPlaneService.ReadUploadText(bytes, mime, ContentType, MaximumSourceBytes, request.Sha256), token);
         }
 
         private string ValidateCurrent(ChatSession session, HtmlWorkspaceMutationPayload request, CancellationToken token)

@@ -327,6 +327,12 @@ revision-guarded mutation upload and read-back path.
 
 ### Library mutation uploads
 
+The existing Resource Data Plane owns complete-byte hash/MIME/size checks and
+strict UTF-8 decoding for editor uploads. Prompt, Tool and Skill JSON batches
+also share strict typed deserialization with their existing depth limits.
+Editor owners retain domain validation, exact revision guards and mutation
+publication; consumption remains single-use on success, failure and cancellation.
+
 Both Library Save and the save-before-VBA-install step use one bounded upload
 consumer, `ToolEditorResourceService`, over the existing resource data plane.
 `beginToolMutationUpload` reserves a chat-bound `tool-editor` capability; the
