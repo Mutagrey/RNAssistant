@@ -1,3 +1,4 @@
+using RNAssistant.Office.Domains;
 using System;
 using System.Collections.Generic;
 using System.Threading;
@@ -30,7 +31,7 @@ namespace RNAssistant.Office.Tools
             return _archiveBackend.ScanArchive(request, token);
         }
 
-        internal OutlookOutcome Execute(
+        internal DomainOutcome Execute(
             string toolId,
             IDictionary<string, object> arguments,
             Action markDispatchPossible,
@@ -65,7 +66,7 @@ namespace RNAssistant.Office.Tools
                     Categories = ToolArgumentReader.String(
                         arguments, "categories", string.Empty)
                 }, markDispatchPossible, cancellationToken);
-            return OutlookOutcome.Error(
+            return DomainOutcome.Error(
                 "Unsupported Outlook tool: " + toolId,
                 new JObject
                 {

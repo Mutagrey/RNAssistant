@@ -1,3 +1,4 @@
+using RNAssistant.Office.Domains;
 using System;
 using System.Collections.Generic;
 using System.Threading;
@@ -15,7 +16,7 @@ namespace RNAssistant.Office.Tools
                 backend ?? throw new ArgumentNullException(nameof(backend)));
         }
 
-        internal ExcelSheetOutcome Add(
+        internal DomainOutcome Add(
             IDictionary<string, object> arguments,
             Action markDispatchPossible,
             CancellationToken cancellationToken)
@@ -28,7 +29,7 @@ namespace RNAssistant.Office.Tools
             }, markDispatchPossible, cancellationToken);
         }
 
-        internal ExcelSheetOutcome Rename(
+        internal DomainOutcome Rename(
             IDictionary<string, object> arguments,
             Action markDispatchPossible,
             CancellationToken cancellationToken)

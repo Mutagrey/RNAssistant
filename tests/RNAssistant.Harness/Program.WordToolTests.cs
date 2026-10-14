@@ -1,3 +1,4 @@
+using RNAssistant.Office.Domains;
 using System;
 using System.Linq;
 using Newtonsoft.Json.Linq;
@@ -237,7 +238,7 @@ namespace RNAssistant.Harness
                 AssertTrue(empty.Success && (int)JObject.Parse(empty.DataJson)["matchCount"] == 0, "genuine empty source is searchable");
                 var oldAdapter = new WordToolAdapter(adapter).Execute(WordToolIds.FindText,
                     new System.Collections.Generic.Dictionary<string, object> { { "query", "x" } }, null, CancellationToken.None);
-                AssertEqual(WordOutcomeStatus.Error, oldAdapter.Status, "direct Word adapter no longer dispatches search");
+                AssertEqual(DomainOutcomeStatus.Error, oldAdapter.Status, "direct Word adapter no longer dispatches search");
             });
         }
 

@@ -56,7 +56,7 @@ namespace RNAssistant.Office.Domains.PowerPoint
             return snapshot;
         }
 
-        public PowerPointOutcome List(
+        public DomainOutcome List(
             PowerPointListRequest request,
             CancellationToken cancellationToken)
         {
@@ -84,14 +84,10 @@ namespace RNAssistant.Office.Domains.PowerPoint
                 {
                     var slides = snapshot.Slides ??
                         new PowerPointSlideSummarySnapshot[0];
-                    return PowerPointOutcome.Ok(
-                        "Slides listed: " + slides.Count,
-                        SlideSummariesJson(slides), PowerPointEffect.None);
+                    return DomainOutcome.Read("Slides listed: " + slides.Count, SlideSummariesJson(slides));
                 }
                 var shapes = snapshot.Shapes ?? new PowerPointShapeSnapshot[0];
-                return PowerPointOutcome.Ok(
-                    "Shapes listed: " + shapes.Count,
-                    ShapesJson(shapes), PowerPointEffect.None);
+                return DomainOutcome.Read("Shapes listed: " + shapes.Count, ShapesJson(shapes));
             }
             catch (OperationCanceledException) { throw; }
             catch (PowerPointBackendException ex)
@@ -134,7 +130,7 @@ namespace RNAssistant.Office.Domains.PowerPoint
             return new PowerPointSearchSnapshot { SlideIndex = slideIndex, IncludeNotes = includeNotes, Targets = targets };
         }
 
-        internal static PowerPointOutcome Search(
+        internal static DomainOutcome Search(
             PowerPointSearchSnapshot snapshot,
             PowerPointReplaceRequest request,
             int maxResults,
@@ -144,7 +140,7 @@ namespace RNAssistant.Office.Domains.PowerPoint
             request = request ?? new PowerPointReplaceRequest();
             if (string.IsNullOrWhiteSpace(request.Find))
                 return Failure("query is required.", "invalid_arguments", false);
-            PowerPointOutcome scopeFailure;
+            DomainOutcome scopeFailure;
             var scope = Scope(request.Scope, request.SlideIndex, out scopeFailure);
             if (scopeFailure != null) return scopeFailure;
             request.Scope = scope;
@@ -180,7 +176,7 @@ namespace RNAssistant.Office.Domains.PowerPoint
                         });
                     }
                 }
-                return PowerPointOutcome.Ok(
+                return DomainOutcome.Read(
                     "PowerPoint text matches found: " + total,
                     new JObject
                     {
@@ -188,8 +184,7 @@ namespace RNAssistant.Office.Domains.PowerPoint
                         ["returnedCount"] = matches.Count,
                         ["truncated"] = total > matches.Count,
                         ["matches"] = matches
-                    }.ToString(Formatting.None),
-                    PowerPointEffect.None);
+                    }.ToString(Formatting.None));
             }
             catch (OperationCanceledException) { throw; }
             catch (TextPatternException ex)
@@ -208,7 +203,7 @@ namespace RNAssistant.Office.Domains.PowerPoint
             }
         }
 
-        public PowerPointOutcome AddSlide(
+        public DomainOutcome AddSlide(
             PowerPointAddSlideRequest request,
             Action markDispatchPossible,
             CancellationToken cancellationToken)
@@ -222,7 +217,7 @@ namespace RNAssistant.Office.Domains.PowerPoint
                 markDispatchPossible, cancellationToken);
         }
 
-        public PowerPointOutcome SetText(
+        public DomainOutcome SetText(
             PowerPointSetTextRequest request,
             Action markDispatchPossible,
             CancellationToken cancellationToken)
@@ -253,7 +248,7 @@ namespace RNAssistant.Office.Domains.PowerPoint
                 });
         }
 
-        public PowerPointOutcome Replace(
+        public DomainOutcome Replace(
             PowerPointReplaceRequest request,
             Action markDispatchPossible,
             CancellationToken cancellationToken)
@@ -261,7 +256,7 @@ namespace RNAssistant.Office.Domains.PowerPoint
             request = request ?? new PowerPointReplaceRequest();
             if (string.IsNullOrWhiteSpace(request.Find))
                 return Failure("find is required.", "invalid_arguments", false);
-            PowerPointOutcome scopeFailure;
+            DomainOutcome scopeFailure;
             var scope = Scope(request.Scope, request.SlideIndex, out scopeFailure);
             if (scopeFailure != null) return scopeFailure;
             request.Scope = scope;
@@ -283,10 +278,10 @@ namespace RNAssistant.Office.Domains.PowerPoint
                 var replacements = plans.Sum(plan => plan.Replacements.Count);
                 if (replacements == 0 || plans.All(plan => string.Equals(
                     plan.ExpectedText, plan.ResultText, StringComparison.Ordinal)))
-                    return PowerPointOutcome.Ok(
+                    return DomainOutcome.Verified(
                         "PowerPoint replacements completed: " + replacements + ".",
                         ReplaceData(replacements, TargetHash(before)),
-                        PowerPointEffect.VerifiedNoChange);
+                        DomainEffect.VerifiedNoChange);
                 var after = _backend.ApplyReplacement(
                     new PowerPointReplaceApplyRequest
                     {
@@ -294,32 +289,32 @@ namespace RNAssistant.Office.Domains.PowerPoint
                         Targets = plans
                     }, mark);
                 if (!dispatched)
-                    return PowerPointOutcome.Unknown(
+                    return DomainOutcome.Unknown(
                         "PowerPoint replacement backend returned without a dispatch boundary.",
                         ReplaceData(replacements, TargetHash(before)),
                         "powerpoint_replace_dispatch_boundary_missing");
                 cancellationToken.ThrowIfCancellationRequested();
                 if (!ReplacementVerified(before, after, plans))
-                    return PowerPointOutcome.Unknown(
+                    return DomainOutcome.Unknown(
                         "PowerPoint text may have been replaced, but exact read-back diverged.",
                         ReplaceData(replacements, TargetHash(after)),
                         "powerpoint_replace_verification_failed");
-                return PowerPointOutcome.Ok(
+                return DomainOutcome.Verified(
                     "PowerPoint replacements completed: " + replacements + ".",
                     ReplaceData(replacements, TargetHash(after)),
-                    PowerPointEffect.VerifiedChange);
+                    DomainEffect.VerifiedChange);
             }
             catch (OperationCanceledException)
             {
                 if (!dispatched) throw;
-                return PowerPointOutcome.Unknown(
+                return DomainOutcome.Unknown(
                     "Cancellation was observed after the PowerPoint replacement dispatch boundary; inspect the target before retrying.",
                     null, "powerpoint_effect_unknown");
             }
             catch (TextPatternException ex)
             {
                 return dispatched
-                    ? PowerPointOutcome.Unknown(
+                    ? DomainOutcome.Unknown(
                         "PowerPoint replacement final state is unknown. " + ex.Message,
                         null, "powerpoint_effect_unknown")
                     : Failure(ex.Message, ex.ErrorCode, false);
@@ -327,7 +322,7 @@ namespace RNAssistant.Office.Domains.PowerPoint
             catch (PowerPointBackendException ex)
             {
                 return dispatched
-                    ? PowerPointOutcome.Unknown(
+                    ? DomainOutcome.Unknown(
                         "PowerPoint replacement final state is unknown. " + ex.Message,
                         ex.DetailsJson, "powerpoint_effect_unknown")
                     : Failure(ex.Message, ex.ErrorCode, ex.Retryable, ex.DetailsJson);
@@ -335,7 +330,7 @@ namespace RNAssistant.Office.Domains.PowerPoint
             catch (Exception ex)
             {
                 return dispatched
-                    ? PowerPointOutcome.Unknown(
+                    ? DomainOutcome.Unknown(
                         "PowerPoint replacement final state is unknown. " + ex.Message,
                         null, "powerpoint_effect_unknown")
                     : Failure(
@@ -344,7 +339,7 @@ namespace RNAssistant.Office.Domains.PowerPoint
             }
         }
 
-        public PowerPointOutcome AddObject(
+        public DomainOutcome AddObject(
             PowerPointAddObjectRequest request,
             Action markDispatchPossible,
             CancellationToken cancellationToken)
@@ -412,7 +407,7 @@ namespace RNAssistant.Office.Domains.PowerPoint
                 markDispatchPossible, cancellationToken);
         }
 
-        public PowerPointOutcome DuplicateSlide(
+        public DomainOutcome DuplicateSlide(
             PowerPointDuplicateSlideRequest request,
             Action markDispatchPossible,
             CancellationToken cancellationToken)
@@ -439,7 +434,7 @@ namespace RNAssistant.Office.Domains.PowerPoint
                 markDispatchPossible, cancellationToken);
         }
 
-        public PowerPointOutcome MoveSlide(
+        public DomainOutcome MoveSlide(
             PowerPointMoveSlideRequest request,
             Action markDispatchPossible,
             CancellationToken cancellationToken)
@@ -455,7 +450,7 @@ namespace RNAssistant.Office.Domains.PowerPoint
                 null, markDispatchPossible, cancellationToken);
         }
 
-        private PowerPointOutcome Mutate(
+        private DomainOutcome Mutate(
             Func<Action, PowerPointMutationBackendResult> operation,
             string successMessage,
             Func<PowerPointMutationBackendResult, string> data,
@@ -478,39 +473,39 @@ namespace RNAssistant.Office.Domains.PowerPoint
                 var result = operation(mark);
                 if (result == null)
                     return dispatched
-                        ? PowerPointOutcome.Unknown(
+                        ? DomainOutcome.Unknown(
                             "PowerPoint backend returned no mutation result.",
                             null, "powerpoint_effect_unknown")
                         : Failure(
                             "PowerPoint backend returned no mutation result.",
                             "powerpoint_mutation_result_missing", true);
                 if (result.Changed && !dispatched)
-                    return PowerPointOutcome.Unknown(
+                    return DomainOutcome.Unknown(
                         "PowerPoint backend reported a change without a dispatch boundary.",
                         null, "powerpoint_dispatch_boundary_missing");
                 cancellationToken.ThrowIfCancellationRequested();
                 if (!result.Verified)
-                    return PowerPointOutcome.Unknown(
+                    return DomainOutcome.Unknown(
                         "PowerPoint presentation may have changed, but exact read-back diverged.",
                         null, "powerpoint_verification_failed");
-                return PowerPointOutcome.Ok(
+                return DomainOutcome.Verified(
                     message == null ? successMessage : message(result),
                     data == null ? null : data(result),
                     result.Changed
-                        ? PowerPointEffect.VerifiedChange
-                        : PowerPointEffect.VerifiedNoChange);
+                        ? DomainEffect.VerifiedChange
+                        : DomainEffect.VerifiedNoChange);
             }
             catch (OperationCanceledException)
             {
                 if (!dispatched) throw;
-                return PowerPointOutcome.Unknown(
+                return DomainOutcome.Unknown(
                     "Cancellation was observed after the PowerPoint dispatch boundary; inspect the target before retrying.",
                     null, "powerpoint_effect_unknown");
             }
             catch (PowerPointBackendException ex)
             {
                 return dispatched
-                    ? PowerPointOutcome.Unknown(
+                    ? DomainOutcome.Unknown(
                         "PowerPoint presentation final state is unknown. " + ex.Message,
                         ex.DetailsJson, "powerpoint_effect_unknown")
                     : Failure(ex.Message, ex.ErrorCode, ex.Retryable, ex.DetailsJson);
@@ -518,7 +513,7 @@ namespace RNAssistant.Office.Domains.PowerPoint
             catch (Exception ex)
             {
                 return dispatched
-                    ? PowerPointOutcome.Unknown(
+                    ? DomainOutcome.Unknown(
                         "PowerPoint presentation final state is unknown. " + ex.Message,
                         null, "powerpoint_effect_unknown")
                     : Failure(
@@ -660,7 +655,7 @@ namespace RNAssistant.Office.Domains.PowerPoint
         }
 
         private static string Scope(
-            string value, int slideIndex, out PowerPointOutcome failure)
+            string value, int slideIndex, out DomainOutcome failure)
         {
             failure = null;
             var scope = Normalize(value, "deck");
@@ -746,7 +741,7 @@ namespace RNAssistant.Office.Domains.PowerPoint
                 ? fallback : value.Trim().ToLowerInvariant();
         }
 
-        private static PowerPointOutcome Failure(
+        private static DomainOutcome Failure(
             string message, string code, bool retryable,
             string detailsJson = null)
         {
@@ -762,7 +757,7 @@ namespace RNAssistant.Office.Domains.PowerPoint
             }
             data["code"] = code;
             data["retryable"] = retryable;
-            return PowerPointOutcome.Error(
+            return DomainOutcome.Error(
                 message, data.ToString(Formatting.None), code, retryable);
         }
     }

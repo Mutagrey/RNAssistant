@@ -1,3 +1,4 @@
+using RNAssistant.Office.Domains;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -56,7 +57,7 @@ namespace RNAssistant.Office.Services
                         "RESOURCE_SNAPSHOT_TOO_LARGE");
                 var outcome = OutlookService.SearchMail(JsonConvert.DeserializeObject<OutlookSearchSnapshot>(json), request, cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
-                if (outcome.Status != OutlookOutcomeStatus.Ok)
+                if (outcome.Status != DomainOutcomeStatus.Ok)
                     return new ToolHandlerResult(
                         RuntimeResult.Error(outcome.Message, outcome.DataJson),
                         ToolEffectEvidence.None,

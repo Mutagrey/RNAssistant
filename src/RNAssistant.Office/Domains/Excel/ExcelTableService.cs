@@ -19,7 +19,7 @@ namespace RNAssistant.Office.Domains.Excel
             _backend = backend ?? throw new ArgumentNullException(nameof(backend));
         }
 
-        public ExcelTableOutcome Add(
+        public DomainOutcome Add(
             ExcelAddTableRequest request,
             Action markDispatchPossible,
             CancellationToken cancellationToken)
@@ -95,9 +95,10 @@ namespace RNAssistant.Office.Domains.Excel
                     ["style"] = created.Style,
                     ["verification"] = "changed"
                 };
-                return ExcelTableOutcome.Ok(
+                return DomainOutcome.Verified(
                     "Table added: " + created.Name,
-                    data.ToString(Formatting.None));
+                    data.ToString(Formatting.None),
+                    DomainEffect.VerifiedChange);
             }
             catch (OperationCanceledException)
             {
@@ -224,16 +225,16 @@ namespace RNAssistant.Office.Domains.Excel
                     "Excel table read-back resolved a different source range.");
         }
 
-        private static ExcelTableOutcome Failure(
+        private static DomainOutcome Failure(
             string message, string code, bool retryable,
             string detailsJson = null)
         {
-            return ExcelTableOutcome.Error(message,
+            return DomainOutcome.Error(message,
                 ErrorData(code, retryable, detailsJson).ToString(Formatting.None),
                 code, retryable);
         }
 
-        private static ExcelTableOutcome Unknown(
+        private static DomainOutcome Unknown(
             string message, string code, ExcelTableCollectionSnapshot snapshot,
             string detailsJson = null)
         {
@@ -246,7 +247,7 @@ namespace RNAssistant.Office.Domains.Excel
                     ["rows"] = snapshot.Rows,
                     ["columns"] = snapshot.Columns
                 };
-            return ExcelTableOutcome.Unknown(
+            return DomainOutcome.Unknown(
                 message, data.ToString(Formatting.None), code);
         }
 

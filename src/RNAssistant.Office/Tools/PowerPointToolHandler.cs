@@ -6,7 +6,6 @@ using RNAssistant.Core.Tools;
 using RNAssistant.Office.Domains.PowerPoint;
 using RNAssistant.Office.Runtime;
 using RNAssistant.Office.Services;
-using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Office.Tools
 {
@@ -76,8 +75,8 @@ namespace RNAssistant.Office.Tools
                                 _toolId, context.Arguments,
                                 context.MarkDispatchPossible,
                                 cancellationToken);
-                        }, terminalOutcome => context.Complete(Result(terminalOutcome)), context.CompleteFailure);
-                return Task.FromResult(Result(outcome));
+                        }, terminalOutcome => context.Complete(OfficeDomainResult.Project(terminalOutcome)), context.CompleteFailure);
+                return Task.FromResult(OfficeDomainResult.Project(outcome));
             }
             catch (OfficeDocumentGuardException ex)
                 when (!context.MayHaveDispatched)
@@ -88,37 +87,6 @@ namespace RNAssistant.Office.Tools
                 when (!context.MayHaveDispatched)
             {
                 return OfficeToolFailure.Lock(ex);
-            }
-        }
-
-        private static ToolHandlerResult Result(PowerPointOutcome outcome)
-        {
-            if (outcome == null)
-                throw new InvalidOperationException(
-                    "PowerPoint operation returned no outcome.");
-            RuntimeResult result;
-            if (outcome.Status == PowerPointOutcomeStatus.Ok)
-                result = RuntimeResult.Ok(outcome.Message, outcome.DataJson);
-            else if (outcome.Status == PowerPointOutcomeStatus.Unknown)
-                result = RuntimeResult.Unknown(outcome.Message, outcome.DataJson);
-            else result = RuntimeResult.Error(outcome.Message, outcome.DataJson);
-            return new ToolHandlerResult(result, Effect(outcome.Effect),
-                recovery: outcome.Status == PowerPointOutcomeStatus.Error
-                    ? OfficeToolFailure.DefiniteDomain(outcome.Retryable) : null);
-        }
-
-        private static ToolEffectEvidence Effect(PowerPointEffect effect)
-        {
-            switch (effect)
-            {
-                case PowerPointEffect.VerifiedNoChange:
-                    return ToolEffectEvidence.VerifiedNoChange;
-                case PowerPointEffect.VerifiedChange:
-                    return ToolEffectEvidence.VerifiedChange;
-                case PowerPointEffect.Unknown:
-                    return ToolEffectEvidence.Unknown;
-                default:
-                    return ToolEffectEvidence.None;
             }
         }
 

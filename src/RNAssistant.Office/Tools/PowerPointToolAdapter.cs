@@ -1,3 +1,4 @@
+using RNAssistant.Office.Domains;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -19,7 +20,7 @@ namespace RNAssistant.Office.Tools
                 backend ?? throw new ArgumentNullException(nameof(backend)));
         }
 
-        internal PowerPointOutcome Execute(
+        internal DomainOutcome Execute(
             string toolId,
             IDictionary<string, object> arguments,
             Action markDispatchPossible,
@@ -204,10 +205,10 @@ namespace RNAssistant.Office.Tools
                 : Convert.ToString(value.Value, CultureInfo.InvariantCulture);
         }
 
-        private static PowerPointOutcome Invalid(
+        private static DomainOutcome Invalid(
             string message, string code = "invalid_arguments")
         {
-            return PowerPointOutcome.Error(
+            return DomainOutcome.Error(
                 message,
                 new JObject
                 {

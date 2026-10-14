@@ -1,3 +1,4 @@
+using RNAssistant.Office.Domains;
 using System;
 using System.Collections.Generic;
 using System.Threading;
@@ -15,7 +16,7 @@ namespace RNAssistant.Office.Tools
                 backend ?? throw new ArgumentNullException(nameof(backend)));
         }
 
-        internal ExcelChartOutcome Execute(
+        internal DomainOutcome Execute(
             string toolId,
             IDictionary<string, object> arguments,
             Action markDispatchPossible,

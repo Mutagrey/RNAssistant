@@ -5,7 +5,6 @@ using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Domains.Excel;
 using RNAssistant.Office.Runtime;
-using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Office.Tools
 {
@@ -67,7 +66,7 @@ namespace RNAssistant.Office.Tools
                                 _toolId, context.Arguments,
                                 context.MarkDispatchPossible,
                                 cancellationToken);
-                        }, terminalOutcome => context.Complete(Result(terminalOutcome)), context.CompleteFailure)
+                        }, terminalOutcome => context.Complete(OfficeDomainResult.Project(terminalOutcome)), context.CompleteFailure)
                     : _runtime.ReadDocument(
                         target, cancellationToken, delegate
                         {
@@ -75,7 +74,7 @@ namespace RNAssistant.Office.Tools
                                 _toolId, context.Arguments, null,
                                 cancellationToken);
                         });
-                return Task.FromResult(Result(outcome));
+                return Task.FromResult(OfficeDomainResult.Project(outcome));
             }
             catch (OfficeDocumentGuardException ex)
                 when (!context.MayHaveDispatched)
@@ -86,37 +85,6 @@ namespace RNAssistant.Office.Tools
                 when (!context.MayHaveDispatched)
             {
                 return OfficeToolFailure.Lock(ex);
-            }
-        }
-
-        private static ToolHandlerResult Result(ExcelChartOutcome outcome)
-        {
-            if (outcome == null)
-                throw new InvalidOperationException(
-                    "Excel chart operation returned no outcome.");
-            RuntimeResult result;
-            if (outcome.Status == ExcelChartOutcomeStatus.Ok)
-                result = RuntimeResult.Ok(outcome.Message, outcome.DataJson);
-            else if (outcome.Status == ExcelChartOutcomeStatus.Unknown)
-                result = RuntimeResult.Unknown(outcome.Message, outcome.DataJson);
-            else result = RuntimeResult.Error(outcome.Message, outcome.DataJson);
-            return new ToolHandlerResult(result, Effect(outcome.Effect),
-                recovery: outcome.Status == ExcelChartOutcomeStatus.Error
-                    ? OfficeToolFailure.DefiniteDomain(outcome.Retryable) : null);
-        }
-
-        private static ToolEffectEvidence Effect(ExcelChartEffect effect)
-        {
-            switch (effect)
-            {
-                case ExcelChartEffect.VerifiedNoChange:
-                    return ToolEffectEvidence.VerifiedNoChange;
-                case ExcelChartEffect.VerifiedChange:
-                    return ToolEffectEvidence.VerifiedChange;
-                case ExcelChartEffect.Unknown:
-                    return ToolEffectEvidence.Unknown;
-                default:
-                    return ToolEffectEvidence.None;
             }
         }
 

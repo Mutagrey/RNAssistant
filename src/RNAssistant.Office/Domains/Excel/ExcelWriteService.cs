@@ -21,7 +21,7 @@ namespace RNAssistant.Office.Domains.Excel
             _backend = backend ?? throw new ArgumentNullException(nameof(backend));
         }
 
-        public ExcelWriteOutcome Write(ExcelWriteRequest request, Action markDispatchPossible,
+        public DomainOutcome Write(ExcelWriteRequest request, Action markDispatchPossible,
             CancellationToken cancellationToken)
         {
             var validation = ValidateAndNormalize(request);
@@ -42,7 +42,7 @@ namespace RNAssistant.Office.Domains.Excel
                 ValidateSnapshot(before, validation.Request.Kind, null);
                 var intended = IntendedState(validation.Request, before.Rows, before.Columns);
                 if (Matches(before, intended, validation.Request.Kind))
-                    return Success(before, validation.Request.Kind, ExcelWriteEffect.VerifiedNoChange);
+                    return Success(before, validation.Request.Kind, DomainEffect.VerifiedNoChange);
 
                 cancellationToken.ThrowIfCancellationRequested();
                 _backend.Apply(ApplyRequest(validation.Request, before), mark);
@@ -69,7 +69,7 @@ namespace RNAssistant.Office.Domains.Excel
                 if (!Matches(after, intended, validation.Request.Kind))
                     return Unknown("Excel write completed, but exact read-back did not match the intended state.",
                         "excel_write_verification_failed", after);
-                return Success(after, validation.Request.Kind, ExcelWriteEffect.VerifiedChange);
+                return Success(after, validation.Request.Kind, DomainEffect.VerifiedChange);
             }
             catch (OperationCanceledException)
             {
@@ -277,29 +277,30 @@ namespace RNAssistant.Office.Domains.Excel
             return matrix != null && matrix.Count == rows && matrix.All(row => row != null && row.Count == columns);
         }
 
-        private static ExcelWriteOutcome Success(ExcelWriteSnapshot snapshot, string kind, ExcelWriteEffect effect)
+        private static DomainOutcome Success(ExcelWriteSnapshot snapshot, string kind, DomainEffect effect)
         {
             var data = Coordinates(snapshot, kind);
-            data["verification"] = effect == ExcelWriteEffect.VerifiedChange ? "changed" : "no_change";
-            return ExcelWriteOutcome.Ok(
-                effect == ExcelWriteEffect.VerifiedChange
+            data["verification"] = effect == DomainEffect.VerifiedChange ? "changed" : "no_change";
+            return DomainOutcome.Verified(
+                effect == DomainEffect.VerifiedChange
                     ? "Excel range write verified: " + snapshot.Sheet + "!" + snapshot.Address + "."
                     : "Excel range already matched the intended state: " + snapshot.Sheet + "!" + snapshot.Address + ".",
-                data.ToString(Formatting.None), effect);
+                data.ToString(Formatting.None),
+                effect);
         }
 
-        private static ExcelWriteOutcome Failure(string message, string code, bool retryable, string detailsJson = null)
+        private static DomainOutcome Failure(string message, string code, bool retryable, string detailsJson = null)
         {
             var data = ErrorData(code, retryable, detailsJson);
-            return ExcelWriteOutcome.Error(message, data.ToString(Formatting.None), code, retryable);
+            return DomainOutcome.Error(message, data.ToString(Formatting.None), code, retryable);
         }
 
-        private static ExcelWriteOutcome Unknown(string message, string code, ExcelWriteSnapshot snapshot,
+        private static DomainOutcome Unknown(string message, string code, ExcelWriteSnapshot snapshot,
             string detailsJson = null)
         {
             var data = ErrorData(code, false, detailsJson);
             if (snapshot != null) data["target"] = Coordinates(snapshot, snapshot.Kind);
-            return ExcelWriteOutcome.Unknown(message, data.ToString(Formatting.None), code);
+            return DomainOutcome.Unknown(message, data.ToString(Formatting.None), code);
         }
 
         private static JObject Coordinates(ExcelWriteSnapshot snapshot, string kind)
@@ -339,7 +340,7 @@ namespace RNAssistant.Office.Domains.Excel
         private sealed class ExcelWriteValidation
         {
             internal ExcelWriteRequest Request { get; set; }
-            internal ExcelWriteOutcome Error { get; set; }
+            internal DomainOutcome Error { get; set; }
         }
     }
 }

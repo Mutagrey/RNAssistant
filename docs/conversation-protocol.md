@@ -1137,6 +1137,15 @@ remain opaque data. `ok` certifies the invocation outcome, not a verified change
 Dispatch/effect evidence and the cumulative runtime summary remain independent.
 See [ADR-0003](decisions/ADR-0003-tool-result-three-states.md#phase-4b-wire-gate).
 
+Office Excel/Word/PowerPoint/Outlook services share immutable `DomainOutcome`
+facts and one `OfficeDomainResult` projection into ToolRuntime. `Read` has no
+mutation effect; `Verified` accepts only verified change/no-change. Definite errors
+carry an explicit code and retry policy; `Unknown` always has unknown effect and
+cannot be retried automatically. Domain-specific backends, preparation, dispatch
+markers and exact read-back remain in their existing owners. This common value
+replaces nine result/status/effect definitions and nine handler conversions; it is
+not an executor or a second outcome authority. VBA retains its journal contract.
+
 `ToolResultRole` is independent from the instruction role and controls transport:
 
 - `user` (default) / `developer`: result JSON follows the `TOOL_RESULT:` prefix;

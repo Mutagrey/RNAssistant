@@ -215,7 +215,7 @@ namespace RNAssistant.Office.Domains.Excel
             catch (Exception ex) { return FindFailure(ex.Message, "office_tool_error", true); }
         }
 
-        public ExcelReplaceOutcome Replace(
+        public DomainOutcome Replace(
             ExcelReplaceRequest request,
             Action markDispatchPossible,
             CancellationToken cancellationToken)
@@ -337,12 +337,12 @@ namespace RNAssistant.Office.Domains.Excel
                     ["replacements"] = total,
                     ["scopeSha256"] = TextPatternEngine.Sha256(postHash.ToString())
                 };
-                return ExcelReplaceOutcome.Ok(
+                return DomainOutcome.Verified(
                     "Excel replacements completed: " + total + ".",
                     data.ToString(Formatting.None),
                     changes.Length == 0
-                        ? ExcelReplaceEffect.VerifiedNoChange
-                        : ExcelReplaceEffect.VerifiedChange);
+                        ? DomainEffect.VerifiedNoChange
+                        : DomainEffect.VerifiedChange);
             }
             catch (OperationCanceledException)
             {
@@ -464,18 +464,18 @@ namespace RNAssistant.Office.Domains.Excel
                 code, retryable);
         }
 
-        private static ExcelReplaceOutcome ReplaceFailure(
+        private static DomainOutcome ReplaceFailure(
             string message, string code, bool retryable, string detailsJson = null)
         {
-            return ExcelReplaceOutcome.Error(message,
+            return DomainOutcome.Error(message,
                 ErrorData(code, retryable, detailsJson).ToString(Formatting.None),
                 code, retryable);
         }
 
-        private static ExcelReplaceOutcome ReplaceUnknown(
+        private static DomainOutcome ReplaceUnknown(
             string message, string code, string detailsJson = null)
         {
-            return ExcelReplaceOutcome.Unknown(message,
+            return DomainOutcome.Unknown(message,
                 ErrorData(code, false, detailsJson).ToString(Formatting.None), code);
         }
 

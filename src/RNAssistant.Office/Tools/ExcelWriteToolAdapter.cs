@@ -1,3 +1,4 @@
+using RNAssistant.Office.Domains;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -16,7 +17,7 @@ namespace RNAssistant.Office.Tools
             _backend = backend ?? throw new ArgumentNullException(nameof(backend));
         }
 
-        internal ExcelWriteOutcome Execute(IDictionary<string, object> arguments,
+        internal DomainOutcome Execute(IDictionary<string, object> arguments,
             Action markDispatchPossible,
             CancellationToken cancellationToken)
         {

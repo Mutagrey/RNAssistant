@@ -6,7 +6,6 @@ using RNAssistant.Core.Tools;
 using RNAssistant.Office.Domains.Excel;
 using RNAssistant.Office.Runtime;
 using RNAssistant.Office.Services;
-using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Office.Tools
 {
@@ -95,8 +94,8 @@ namespace RNAssistant.Office.Tools
                             context.Arguments,
                             context.MarkDispatchPossible,
                             cancellationToken);
-                    }, terminalOutcome => context.Complete(ProjectReplace(terminalOutcome)), context.CompleteFailure);
-                return Task.FromResult(ProjectReplace(outcome));
+                    }, terminalOutcome => context.Complete(OfficeDomainResult.Project(terminalOutcome)), context.CompleteFailure);
+                return Task.FromResult(OfficeDomainResult.Project(outcome));
             }
             catch (OfficeDocumentGuardException ex) when (!context.MayHaveDispatched)
             {
@@ -105,34 +104,6 @@ namespace RNAssistant.Office.Tools
             catch (HostRuntime.MutationLockException ex) when (!context.MayHaveDispatched)
             {
                 return OfficeToolFailure.Lock(ex);
-            }
-        }
-
-        private static ToolHandlerResult ProjectReplace(ExcelReplaceOutcome outcome)
-        {
-            RuntimeResult result;
-            if (outcome.Status == ExcelReplaceOutcomeStatus.Ok)
-                result = RuntimeResult.Ok(outcome.Message, outcome.DataJson);
-            else if (outcome.Status == ExcelReplaceOutcomeStatus.Unknown)
-                result = RuntimeResult.Unknown(outcome.Message, outcome.DataJson);
-            else result = RuntimeResult.Error(outcome.Message, outcome.DataJson);
-            return new ToolHandlerResult(result, Effect(outcome.Effect),
-                recovery: outcome.Status == ExcelReplaceOutcomeStatus.Error
-                    ? OfficeToolFailure.DefiniteDomain(outcome.Retryable) : null);
-        }
-
-        private static ToolEffectEvidence Effect(ExcelReplaceEffect effect)
-        {
-            switch (effect)
-            {
-                case ExcelReplaceEffect.VerifiedNoChange:
-                    return ToolEffectEvidence.VerifiedNoChange;
-                case ExcelReplaceEffect.VerifiedChange:
-                    return ToolEffectEvidence.VerifiedChange;
-                case ExcelReplaceEffect.Unknown:
-                    return ToolEffectEvidence.Unknown;
-                default:
-                    return ToolEffectEvidence.None;
             }
         }
 

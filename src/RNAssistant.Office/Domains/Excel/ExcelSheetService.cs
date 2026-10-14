@@ -16,7 +16,7 @@ namespace RNAssistant.Office.Domains.Excel
             _backend = backend ?? throw new ArgumentNullException(nameof(backend));
         }
 
-        public ExcelSheetOutcome Add(
+        public DomainOutcome Add(
             ExcelAddSheetRequest request,
             Action markDispatchPossible,
             CancellationToken cancellationToken)
@@ -49,8 +49,7 @@ namespace RNAssistant.Office.Domains.Excel
                     return Unknown(
                         "Excel sheet may have been added, but exact read-back diverged.",
                         "excel_sheet_verification_failed");
-                return ExcelSheetOutcome.Ok(
-                    "Added sheet: " + name, null, ExcelSheetEffect.VerifiedChange);
+                return DomainOutcome.Verified("Added sheet: " + name, null, DomainEffect.VerifiedChange);
             }
             catch (OperationCanceledException)
             {
@@ -70,7 +69,7 @@ namespace RNAssistant.Office.Domains.Excel
             }
         }
 
-        public ExcelSheetOutcome Rename(
+        public DomainOutcome Rename(
             ExcelRenameSheetRequest request,
             Action markDispatchPossible,
             CancellationToken cancellationToken)
@@ -95,9 +94,10 @@ namespace RNAssistant.Office.Domains.Excel
                 var nameError = ValidateName(before.SheetNames, request.NewName, source);
                 if (nameError != null) return nameError;
                 if (string.Equals(source, request.NewName, StringComparison.Ordinal))
-                    return ExcelSheetOutcome.Ok(
+                    return DomainOutcome.Verified(
                         "Renamed sheet " + source + " to " + request.NewName,
-                        null, ExcelSheetEffect.VerifiedNoChange);
+                        null,
+                        DomainEffect.VerifiedNoChange);
 
                 _backend.Rename(new ExcelRenameSheetApplyRequest
                 {
@@ -118,9 +118,10 @@ namespace RNAssistant.Office.Domains.Excel
                     return Unknown(
                         "Excel sheet may have been renamed, but exact read-back diverged.",
                         "excel_sheet_verification_failed");
-                return ExcelSheetOutcome.Ok(
+                return DomainOutcome.Verified(
                     "Renamed sheet " + source + " to " + request.NewName,
-                    null, ExcelSheetEffect.VerifiedChange);
+                    null,
+                    DomainEffect.VerifiedChange);
             }
             catch (OperationCanceledException)
             {
@@ -160,7 +161,7 @@ namespace RNAssistant.Office.Domains.Excel
             };
         }
 
-        private static ExcelSheetOutcome ValidateName(
+        private static DomainOutcome ValidateName(
             IReadOnlyList<string> names, string name, string currentName)
         {
             if (!ExcelWorksheetNameRules.IsValid(name))
@@ -215,18 +216,18 @@ namespace RNAssistant.Office.Domains.Excel
             return remaining.Count == 0;
         }
 
-        private static ExcelSheetOutcome Failure(
+        private static DomainOutcome Failure(
             string message, string code, bool retryable, string detailsJson = null)
         {
-            return ExcelSheetOutcome.Error(message,
+            return DomainOutcome.Error(message,
                 ErrorData(code, retryable, detailsJson).ToString(Formatting.None),
                 code, retryable);
         }
 
-        private static ExcelSheetOutcome Unknown(
+        private static DomainOutcome Unknown(
             string message, string code, string detailsJson = null)
         {
-            return ExcelSheetOutcome.Unknown(message,
+            return DomainOutcome.Unknown(message,
                 ErrorData(code, false, detailsJson).ToString(Formatting.None), code);
         }
 

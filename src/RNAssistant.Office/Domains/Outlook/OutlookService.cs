@@ -133,7 +133,7 @@ namespace RNAssistant.Office.Domains.Outlook
             return new OutlookSearchSnapshot { MaximumItems = maxItems, BodyCaptured = includeBody, Folder = folder };
         }
 
-        internal static OutlookOutcome SearchMail(
+        internal static DomainOutcome SearchMail(
             OutlookSearchSnapshot snapshot,
             OutlookSearchMailRequest request,
             CancellationToken cancellationToken)
@@ -198,7 +198,7 @@ namespace RNAssistant.Office.Domains.Outlook
                     fields.Contains("body") && folder.Messages.Any(mail => mail.BodyTruncated) ||
                     fields.Contains("sender") && folder.Messages.Any(mail => mail.SenderEmailTruncated) ||
                     fields.Contains("recipients") && folder.Messages.Any(mail => mail.RecipientsTruncated);
-                return OutlookOutcome.Ok(
+                return DomainOutcome.Read(
                     "Mail search matches: " + total,
                     new JObject
                     {
@@ -209,8 +209,7 @@ namespace RNAssistant.Office.Domains.Outlook
                         ["returnedCount"] = matches.Count,
                         ["truncated"] = total > matches.Count || sourceTruncated,
                         ["matches"] = matches
-                    }.ToString(Formatting.None),
-                    OutlookEffect.None);
+                    }.ToString(Formatting.None));
             }
             catch (OperationCanceledException) { throw; }
             catch (TextPatternException ex)
@@ -265,7 +264,7 @@ namespace RNAssistant.Office.Domains.Outlook
             return snapshot;
         }
 
-        public OutlookOutcome CreateDraft(
+        public DomainOutcome CreateDraft(
             OutlookCreateDraftRequest request,
             Action markDispatchPossible,
             CancellationToken cancellationToken)
@@ -304,32 +303,33 @@ namespace RNAssistant.Office.Domains.Outlook
                 }
                 var result = _backend.CreateDraft(request, mark);
                 if (!dispatched)
-                    return OutlookOutcome.Unknown(
+                    return DomainOutcome.Unknown(
                         "Outlook draft backend returned without a dispatch boundary.",
                         DraftData(result),
                         "outlook_draft_dispatch_boundary_missing");
                 cancellationToken.ThrowIfCancellationRequested();
                 if (result == null || !result.Verified || !result.Changed ||
                     !result.Displayed || !DraftVerified(request, result))
-                    return OutlookOutcome.Unknown(
+                    return DomainOutcome.Unknown(
                         "Outlook draft may have been created, but exact read-back diverged.",
                         DraftData(result),
                         "outlook_draft_verification_failed");
-                return OutlookOutcome.Ok(
-                    DraftMessage(request.Kind), DraftData(result),
-                    OutlookEffect.VerifiedChange);
+                return DomainOutcome.Verified(
+                    DraftMessage(request.Kind),
+                    DraftData(result),
+                    DomainEffect.VerifiedChange);
             }
             catch (OperationCanceledException)
             {
                 if (!dispatched) throw;
-                return OutlookOutcome.Unknown(
+                return DomainOutcome.Unknown(
                     "Cancellation was observed after the Outlook draft dispatch boundary; inspect open drafts before retrying.",
                     null, "outlook_effect_unknown");
             }
             catch (OutlookBackendException ex)
             {
                 return dispatched
-                    ? OutlookOutcome.Unknown(
+                    ? DomainOutcome.Unknown(
                         "Outlook draft final state is unknown. " + ex.Message,
                         ex.DetailsJson, "outlook_effect_unknown")
                     : Failure(
@@ -338,7 +338,7 @@ namespace RNAssistant.Office.Domains.Outlook
             catch (Exception ex)
             {
                 return dispatched
-                    ? OutlookOutcome.Unknown(
+                    ? DomainOutcome.Unknown(
                         "Outlook draft final state is unknown. " + ex.Message,
                         null, "outlook_effect_unknown")
                     : Failure(
@@ -347,7 +347,7 @@ namespace RNAssistant.Office.Domains.Outlook
             }
         }
 
-        public OutlookOutcome UpdateMail(
+        public DomainOutcome UpdateMail(
             OutlookUpdateMailRequest request,
             Action markDispatchPossible,
             CancellationToken cancellationToken)
@@ -387,41 +387,43 @@ namespace RNAssistant.Office.Domains.Outlook
                         before.Categories ?? string.Empty, request.Categories,
                         StringComparison.Ordinal)) ||
                     (request.Kind == "markread" && !before.Unread))
-                    return OutlookOutcome.Ok(
+                    return DomainOutcome.Verified(
                         request.Kind == "categories"
                             ? "Mail categories are unchanged."
                             : "Mail is already marked as read.",
-                        UpdateData(before), OutlookEffect.VerifiedNoChange);
+                        UpdateData(before),
+                        DomainEffect.VerifiedNoChange);
                 request.ExpectedTargetToken = before.StateToken;
                 var result = _backend.UpdateMail(request, mark);
                 if (!dispatched)
-                    return OutlookOutcome.Unknown(
+                    return DomainOutcome.Unknown(
                         "Outlook update backend returned without a dispatch boundary.",
                         result == null ? null : UpdateData(result.After),
                         "outlook_update_dispatch_boundary_missing");
                 cancellationToken.ThrowIfCancellationRequested();
                 if (!UpdateVerified(request, before, result))
-                    return OutlookOutcome.Unknown(
+                    return DomainOutcome.Unknown(
                         "Outlook mail may have changed, but exact read-back diverged.",
                         result == null ? null : UpdateData(result.After),
                         "outlook_update_verification_failed");
-                return OutlookOutcome.Ok(
+                return DomainOutcome.Verified(
                     request.Kind == "categories"
                         ? "Mail categories updated."
                         : "Mail marked as read.",
-                    UpdateData(result.After), OutlookEffect.VerifiedChange);
+                    UpdateData(result.After),
+                    DomainEffect.VerifiedChange);
             }
             catch (OperationCanceledException)
             {
                 if (!dispatched) throw;
-                return OutlookOutcome.Unknown(
+                return DomainOutcome.Unknown(
                     "Cancellation was observed after the Outlook update dispatch boundary; inspect the mail before retrying.",
                     null, "outlook_effect_unknown");
             }
             catch (OutlookBackendException ex)
             {
                 return dispatched
-                    ? OutlookOutcome.Unknown(
+                    ? DomainOutcome.Unknown(
                         "Outlook update final state is unknown. " + ex.Message,
                         ex.DetailsJson, "outlook_effect_unknown")
                     : Failure(
@@ -430,7 +432,7 @@ namespace RNAssistant.Office.Domains.Outlook
             catch (Exception ex)
             {
                 return dispatched
-                    ? OutlookOutcome.Unknown(
+                    ? DomainOutcome.Unknown(
                         "Outlook update final state is unknown. " + ex.Message,
                         null, "outlook_effect_unknown")
                     : Failure(
@@ -481,7 +483,7 @@ namespace RNAssistant.Office.Domains.Outlook
                 !string.IsNullOrWhiteSpace(result.StateToken);
         }
 
-        private static OutlookOutcome DraftSize(OutlookCreateDraftRequest request)
+        private static DomainOutcome DraftSize(OutlookCreateDraftRequest request)
         {
             if (request.Body.Length > MaxBodyChars)
                 return Failure(
@@ -495,7 +497,7 @@ namespace RNAssistant.Office.Domains.Outlook
             return null;
         }
 
-        internal static OutlookOutcome Fields(
+        internal static DomainOutcome Fields(
             string text, out HashSet<string> fields)
         {
             fields = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -600,7 +602,7 @@ namespace RNAssistant.Office.Domains.Outlook
                 : value.Trim().ToLowerInvariant();
         }
 
-        private static OutlookOutcome Failure(
+        private static DomainOutcome Failure(
             string message, string code, bool retryable,
             string detailsJson = null)
         {
@@ -611,7 +613,7 @@ namespace RNAssistant.Office.Domains.Outlook
                     ["code"] = code,
                     ["retryable"] = retryable
                 }.ToString(Formatting.None);
-            return OutlookOutcome.Error(
+            return DomainOutcome.Error(
                 message, data, code, retryable);
         }
     }

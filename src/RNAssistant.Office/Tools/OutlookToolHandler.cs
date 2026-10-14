@@ -87,8 +87,8 @@ namespace RNAssistant.Office.Tools
                                 _toolId, context.Arguments,
                                 context.MarkDispatchPossible,
                                 cancellationToken);
-                        }, terminalOutcome => context.Complete(Result(terminalOutcome)), context.CompleteFailure);
-                return Task.FromResult(Result(outcome));
+                        }, terminalOutcome => context.Complete(OfficeDomainResult.Project(terminalOutcome)), context.CompleteFailure);
+                return Task.FromResult(OfficeDomainResult.Project(outcome));
             }
             catch (OfficeDocumentGuardException ex)
                 when (!context.MayHaveDispatched)
@@ -161,37 +161,6 @@ namespace RNAssistant.Office.Tools
                 DateTimeStyles.None, out parsed))
                 throw new OutlookBackendException(name + " must use yyyy-MM-dd.", "invalid_arguments", false);
             return DateTime.SpecifyKind(parsed, DateTimeKind.Utc);
-        }
-
-        private static ToolHandlerResult Result(OutlookOutcome outcome)
-        {
-            if (outcome == null)
-                throw new InvalidOperationException(
-                    "Outlook operation returned no outcome.");
-            RuntimeResult result;
-            if (outcome.Status == OutlookOutcomeStatus.Ok)
-                result = RuntimeResult.Ok(outcome.Message, outcome.DataJson);
-            else if (outcome.Status == OutlookOutcomeStatus.Unknown)
-                result = RuntimeResult.Unknown(outcome.Message, outcome.DataJson);
-            else result = RuntimeResult.Error(outcome.Message, outcome.DataJson);
-            return new ToolHandlerResult(result, Effect(outcome.Effect),
-                recovery: outcome.Status == OutlookOutcomeStatus.Error
-                    ? OfficeToolFailure.DefiniteDomain(outcome.Retryable) : null);
-        }
-
-        private static ToolEffectEvidence Effect(OutlookEffect effect)
-        {
-            switch (effect)
-            {
-                case OutlookEffect.VerifiedNoChange:
-                    return ToolEffectEvidence.VerifiedNoChange;
-                case OutlookEffect.VerifiedChange:
-                    return ToolEffectEvidence.VerifiedChange;
-                case OutlookEffect.Unknown:
-                    return ToolEffectEvidence.Unknown;
-                default:
-                    return ToolEffectEvidence.None;
-            }
         }
 
         private static OfficeDocumentExecutionExpectation Target(

@@ -1,3 +1,4 @@
+using RNAssistant.Office.Domains;
 using System;
 using System.Collections.Generic;
 using System.Threading;
@@ -48,7 +49,7 @@ namespace RNAssistant.Office.Services
                     ToolArgumentReader.Int32(arguments, "maxResults", 50),
                     ToolArgumentReader.Int32(arguments, "contextChars", 80), cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
-                if (outcome.Status != WordOutcomeStatus.Ok)
+                if (outcome.Status != DomainOutcomeStatus.Ok)
                     return new ToolHandlerResult(
                         RuntimeResult.Error(outcome.Message, outcome.DataJson),
                         ToolEffectEvidence.None,

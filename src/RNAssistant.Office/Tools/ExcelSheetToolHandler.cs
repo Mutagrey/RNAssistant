@@ -5,7 +5,6 @@ using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Domains.Excel;
 using RNAssistant.Office.Runtime;
-using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Office.Tools
 {
@@ -66,8 +65,8 @@ namespace RNAssistant.Office.Tools
                                 context.Arguments,
                                 context.MarkDispatchPossible,
                                 cancellationToken);
-                    }, terminalOutcome => context.Complete(Result(terminalOutcome)), context.CompleteFailure);
-                return Task.FromResult(Result(outcome));
+                    }, terminalOutcome => context.Complete(OfficeDomainResult.Project(terminalOutcome)), context.CompleteFailure);
+                return Task.FromResult(OfficeDomainResult.Project(outcome));
             }
             catch (OfficeDocumentGuardException ex) when (!context.MayHaveDispatched)
             {
@@ -76,37 +75,6 @@ namespace RNAssistant.Office.Tools
             catch (HostRuntime.MutationLockException ex) when (!context.MayHaveDispatched)
             {
                 return OfficeToolFailure.Lock(ex);
-            }
-        }
-
-        private static ToolHandlerResult Result(ExcelSheetOutcome outcome)
-        {
-            if (outcome == null)
-                throw new InvalidOperationException(
-                    "Excel sheet operation returned no outcome.");
-            RuntimeResult result;
-            if (outcome.Status == ExcelSheetOutcomeStatus.Ok)
-                result = RuntimeResult.Ok(outcome.Message, outcome.DataJson);
-            else if (outcome.Status == ExcelSheetOutcomeStatus.Unknown)
-                result = RuntimeResult.Unknown(outcome.Message, outcome.DataJson);
-            else result = RuntimeResult.Error(outcome.Message, outcome.DataJson);
-            return new ToolHandlerResult(result, Effect(outcome.Effect),
-                recovery: outcome.Status == ExcelSheetOutcomeStatus.Error
-                    ? OfficeToolFailure.DefiniteDomain(outcome.Retryable) : null);
-        }
-
-        private static ToolEffectEvidence Effect(ExcelSheetEffect effect)
-        {
-            switch (effect)
-            {
-                case ExcelSheetEffect.VerifiedNoChange:
-                    return ToolEffectEvidence.VerifiedNoChange;
-                case ExcelSheetEffect.VerifiedChange:
-                    return ToolEffectEvidence.VerifiedChange;
-                case ExcelSheetEffect.Unknown:
-                    return ToolEffectEvidence.Unknown;
-                default:
-                    return ToolEffectEvidence.None;
             }
         }
 

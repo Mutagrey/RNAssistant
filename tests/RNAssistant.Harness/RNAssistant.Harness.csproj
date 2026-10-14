@@ -86,6 +86,7 @@
       Exclude="..\..\src\RNAssistant.Core\Storage\ProtectedSecretStore.cs"
       Link="Core\Storage\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Office\Contracts\*.cs" Link="Office\Contracts\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\RNAssistant.Office\Domains\*.cs" Link="Office\Domains\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Office\Domains\Excel\*.cs" Link="Office\Domains\Excel\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Office\Domains\Word\*.cs" Link="Office\Domains\Word\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Office\Domains\PowerPoint\*.cs" Link="Office\Domains\PowerPoint\%(Filename)%(Extension)" />
@@ -129,6 +130,7 @@
     <Compile Include="..\..\src\RNAssistant.Office\Runtime\OfficeDocumentExecutionGuard.cs" Link="Office\Runtime\OfficeDocumentExecutionGuard.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Runtime\OfficeDocumentMetadata.cs" Link="Office\Runtime\OfficeDocumentMetadata.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Runtime\OfficeToolFailure.cs" Link="Office\Runtime\OfficeToolFailure.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Runtime\OfficeDomainResult.cs" Link="Office\Runtime\OfficeDomainResult.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Runtime\OfficeStaDispatcher.cs" Link="Office\Runtime\OfficeStaDispatcher.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Runtime\NativeToolRuntimeAdapter.cs" Link="Office\Runtime\NativeToolRuntimeAdapter.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Runtime\HostRuntime.cs" Link="Office\Runtime\HostRuntime.cs" />

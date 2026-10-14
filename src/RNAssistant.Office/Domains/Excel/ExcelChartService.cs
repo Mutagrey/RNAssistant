@@ -22,7 +22,7 @@ namespace RNAssistant.Office.Domains.Excel
             _backend = backend ?? throw new ArgumentNullException(nameof(backend));
         }
 
-        public ExcelChartOutcome CreateChatChart(
+        public DomainOutcome CreateChatChart(
             ExcelChatChartRequest request,
             CancellationToken cancellationToken)
         {
@@ -53,10 +53,9 @@ namespace RNAssistant.Office.Domains.Excel
                     },
                     request.Title,
                     request.ChartType);
-                return ExcelChartOutcome.Ok(
+                return DomainOutcome.Read(
                     "Chat chart artifact created: " + artifact.Title,
-                    JsonConvert.SerializeObject(artifact),
-                    ExcelChartEffect.None);
+                    JsonConvert.SerializeObject(artifact));
             }
             catch (OperationCanceledException)
             {
@@ -75,7 +74,7 @@ namespace RNAssistant.Office.Domains.Excel
             }
         }
 
-        public ExcelChartOutcome Mutate(
+        public DomainOutcome Mutate(
             ExcelChartMutationRequest request,
             Action markDispatchPossible,
             CancellationToken cancellationToken)
@@ -94,7 +93,7 @@ namespace RNAssistant.Office.Domains.Excel
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var discovery = ReadSnapshot(null);
-                ExcelChartOutcome planningFailure;
+                DomainOutcome planningFailure;
                 var plan = Plan(request, discovery, out planningFailure);
                 if (planningFailure != null) return planningFailure;
 
@@ -117,7 +116,7 @@ namespace RNAssistant.Office.Domains.Excel
                     MatchesPlan(target, plan))
                     return Success(
                         "Chart already matches: " + target.Name,
-                        target, ExcelChartEffect.VerifiedNoChange);
+                        target, DomainEffect.VerifiedNoChange);
 
                 _backend.Apply(new ExcelChartApplyRequest
                 {
@@ -146,7 +145,7 @@ namespace RNAssistant.Office.Domains.Excel
                         return Unknown(
                             "Excel chart may have been deleted, but exact read-back diverged.",
                             "excel_chart_verification_failed", after);
-                    return ExcelChartOutcome.Ok(
+                    return DomainOutcome.Verified(
                         "Chart deleted: " + plan.ChartName,
                         new JObject
                         {
@@ -154,7 +153,7 @@ namespace RNAssistant.Office.Domains.Excel
                             ["chartName"] = plan.ChartName,
                             ["verification"] = "changed"
                         }.ToString(Formatting.None),
-                        ExcelChartEffect.VerifiedChange);
+                        DomainEffect.VerifiedChange);
                 }
 
                 ExcelChartState changed;
@@ -190,7 +189,7 @@ namespace RNAssistant.Office.Domains.Excel
                     plan.Kind == ExcelChartMutationKind.Create
                         ? "Chart added: " + changed.Name
                         : "Chart updated: " + changed.Name,
-                    changed, ExcelChartEffect.VerifiedChange);
+                    changed, DomainEffect.VerifiedChange);
             }
             catch (OperationCanceledException)
             {
@@ -237,7 +236,7 @@ namespace RNAssistant.Office.Domains.Excel
         private static ExcelChartMutationPlan Plan(
             ExcelChartMutationRequest request,
             ExcelChartCollectionSnapshot snapshot,
-            out ExcelChartOutcome failure)
+            out DomainOutcome failure)
         {
             failure = null;
             var delete = string.Equals(
@@ -640,15 +639,17 @@ namespace RNAssistant.Office.Domains.Excel
                     .ToString(Formatting.None));
         }
 
-        private static ExcelChartOutcome Success(
-            string message, ExcelChartState chart, ExcelChartEffect effect)
+        private static DomainOutcome Success(
+            string message, ExcelChartState chart, DomainEffect effect)
         {
-            return ExcelChartOutcome.Ok(message,
-                ChartData(chart, effect).ToString(Formatting.None), effect);
+            return DomainOutcome.Verified(
+                message,
+                ChartData(chart, effect).ToString(Formatting.None),
+                effect);
         }
 
         private static JObject ChartData(
-            ExcelChartState chart, ExcelChartEffect effect)
+            ExcelChartState chart, DomainEffect effect)
         {
             return new JObject
             {
@@ -663,21 +664,21 @@ namespace RNAssistant.Office.Domains.Excel
                 ["top"] = chart.Top,
                 ["width"] = chart.Width,
                 ["height"] = chart.Height,
-                ["verification"] = effect == ExcelChartEffect.VerifiedNoChange
+                ["verification"] = effect == DomainEffect.VerifiedNoChange
                     ? "no_change" : "changed"
             };
         }
 
-        private static ExcelChartOutcome Failure(
+        private static DomainOutcome Failure(
             string message, string code, bool retryable,
             string detailsJson = null)
         {
-            return ExcelChartOutcome.Error(message,
+            return DomainOutcome.Error(message,
                 ErrorData(code, retryable, detailsJson).ToString(Formatting.None),
                 code, retryable);
         }
 
-        private static ExcelChartOutcome Unknown(
+        private static DomainOutcome Unknown(
             string message, string code, ExcelChartCollectionSnapshot snapshot,
             string detailsJson = null)
         {
@@ -688,7 +689,7 @@ namespace RNAssistant.Office.Domains.Excel
                 data["chartCount"] = snapshot.Charts == null
                     ? 0 : snapshot.Charts.Count;
             }
-            return ExcelChartOutcome.Unknown(
+            return DomainOutcome.Unknown(
                 message, data.ToString(Formatting.None), code);
         }
 

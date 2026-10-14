@@ -43,7 +43,7 @@ namespace RNAssistant.Office.Domains.Word
 
         internal WordSearchSnapshot CaptureSearch(string scope, CancellationToken cancellationToken)
         {
-            WordOutcome failure;
+            DomainOutcome failure;
             scope = Scope(scope, out failure);
             if (failure != null) throw new WordBackendException(failure.Message, "word_scope_invalid", false);
             cancellationToken.ThrowIfCancellationRequested();
@@ -71,7 +71,7 @@ namespace RNAssistant.Office.Domains.Word
             }
         }
 
-        internal static WordOutcome Find(
+        internal static DomainOutcome Find(
             WordSearchSnapshot snapshot,
             WordReplaceRequest request,
             int maxResults,
@@ -81,7 +81,7 @@ namespace RNAssistant.Office.Domains.Word
             request = request ?? new WordReplaceRequest();
             if (string.IsNullOrWhiteSpace(request.Find))
                 return Failure("query is required.", "invalid_arguments", false);
-            WordOutcome scopeFailure;
+            DomainOutcome scopeFailure;
             var scope = Scope(request.Scope, out scopeFailure);
             if (scopeFailure != null) return scopeFailure;
             request.Scope = scope;
@@ -116,7 +116,7 @@ namespace RNAssistant.Office.Domains.Word
                         });
                     }
                 }
-                return WordOutcome.Ok(
+                return DomainOutcome.Read(
                     "Text matches found: " + total,
                     new JObject
                     {
@@ -126,8 +126,7 @@ namespace RNAssistant.Office.Domains.Word
                         ["returnedCount"] = matches.Count,
                         ["truncated"] = total > matches.Count,
                         ["matches"] = matches
-                    }.ToString(Formatting.None),
-                    WordEffect.None);
+                    }.ToString(Formatting.None));
             }
             catch (OperationCanceledException) { throw; }
             catch (TextPatternException ex)
@@ -146,7 +145,7 @@ namespace RNAssistant.Office.Domains.Word
             }
         }
 
-        public WordOutcome Inspect(
+        public DomainOutcome Inspect(
             WordInspectRequest request, CancellationToken cancellationToken)
         {
             request = request ?? new WordInspectRequest();
@@ -169,20 +168,18 @@ namespace RNAssistant.Office.Domains.Word
                         "Word inspection backend returned no snapshot.",
                         "word_inspect_snapshot_missing", true);
                 if (kind == "headings")
-                    return WordOutcome.Ok(
+                    return DomainOutcome.Read(
                         "Headings read: " + Count(snapshot.Headings),
-                        HeadingJson(snapshot.Headings), WordEffect.None);
+                        HeadingJson(snapshot.Headings));
                 if (kind == "tables")
-                    return WordOutcome.Ok(
+                    return DomainOutcome.Read(
                         "Tables read: " + Count(snapshot.Tables),
-                        TableJson(snapshot.Tables), WordEffect.None);
+                        TableJson(snapshot.Tables));
                 if (kind == "comments")
-                    return WordOutcome.Ok(
+                    return DomainOutcome.Read(
                         "Comments listed: " + Count(snapshot.Comments),
-                        CommentJson(snapshot.Comments), WordEffect.None);
-                return WordOutcome.Ok(
-                    "Document stats collected.",
-                    StatisticsJson(snapshot.Statistics), WordEffect.None);
+                        CommentJson(snapshot.Comments));
+                return DomainOutcome.Read("Document stats collected.", StatisticsJson(snapshot.Statistics));
             }
             catch (OperationCanceledException) { throw; }
             catch (WordBackendException ex)
@@ -197,7 +194,7 @@ namespace RNAssistant.Office.Domains.Word
             }
         }
 
-        public WordOutcome Write(
+        public DomainOutcome Write(
             WordWriteRequest request, Action markDispatchPossible,
             CancellationToken cancellationToken)
         {
@@ -224,14 +221,14 @@ namespace RNAssistant.Office.Domains.Word
                 markDispatchPossible, cancellationToken);
         }
 
-        public WordOutcome Replace(
+        public DomainOutcome Replace(
             WordReplaceRequest request, Action markDispatchPossible,
             CancellationToken cancellationToken)
         {
             request = request ?? new WordReplaceRequest();
             if (string.IsNullOrWhiteSpace(request.Find))
                 return Failure("find is required.", "invalid_arguments", false);
-            WordOutcome scopeFailure;
+            DomainOutcome scopeFailure;
             var scope = Scope(request.Scope, out scopeFailure);
             if (scopeFailure != null) return scopeFailure;
             request.Scope = scope;
@@ -254,10 +251,10 @@ namespace RNAssistant.Office.Domains.Word
                 if (replacements == 0 || plans.All(plan =>
                     string.Equals(plan.ExpectedText, plan.ResultText,
                         StringComparison.Ordinal)))
-                    return WordOutcome.Ok(
+                    return DomainOutcome.Verified(
                         "Word replacements completed: " + replacements + ".",
                         ReplaceData(replacements, ScopeHash(before)),
-                        WordEffect.VerifiedNoChange);
+                        DomainEffect.VerifiedNoChange);
 
                 _backend.ApplyReplacement(new WordReplaceApplyRequest
                 {
@@ -265,33 +262,33 @@ namespace RNAssistant.Office.Domains.Word
                     Stories = plans
                 }, mark);
                 if (!dispatched)
-                    return WordOutcome.Unknown(
+                    return DomainOutcome.Unknown(
                         "Word replacement backend returned without a dispatch boundary.",
                         ReplaceData(replacements, ScopeHash(before)),
                         "word_replace_dispatch_boundary_missing");
                 cancellationToken.ThrowIfCancellationRequested();
                 var after = ReadStories(scope);
                 if (!ReplacementVerified(before, after, plans))
-                    return WordOutcome.Unknown(
+                    return DomainOutcome.Unknown(
                         "Word text may have been replaced, but exact read-back diverged.",
                         ReplaceData(replacements, ScopeHash(after)),
                         "word_replace_verification_failed");
-                return WordOutcome.Ok(
+                return DomainOutcome.Verified(
                     "Word replacements completed: " + replacements + ".",
                     ReplaceData(replacements, ScopeHash(after)),
-                    WordEffect.VerifiedChange);
+                    DomainEffect.VerifiedChange);
             }
             catch (OperationCanceledException)
             {
                 if (!dispatched) throw;
-                return WordOutcome.Unknown(
+                return DomainOutcome.Unknown(
                     "Cancellation was observed after the Word replacement dispatch boundary; inspect the target before retrying.",
                     null, "word_effect_unknown");
             }
             catch (TextPatternException ex)
             {
                 return dispatched
-                    ? WordOutcome.Unknown(
+                    ? DomainOutcome.Unknown(
                         "Word replacement final state is unknown. " + ex.Message,
                         null, "word_effect_unknown")
                     : Failure(ex.Message, ex.ErrorCode, false);
@@ -299,7 +296,7 @@ namespace RNAssistant.Office.Domains.Word
             catch (WordBackendException ex)
             {
                 return dispatched
-                    ? WordOutcome.Unknown(
+                    ? DomainOutcome.Unknown(
                         "Word replacement final state is unknown. " + ex.Message,
                         ex.DetailsJson, "word_effect_unknown")
                     : Failure(ex.Message, ex.ErrorCode, ex.Retryable, ex.DetailsJson);
@@ -307,7 +304,7 @@ namespace RNAssistant.Office.Domains.Word
             catch (Exception ex)
             {
                 return dispatched
-                    ? WordOutcome.Unknown(
+                    ? DomainOutcome.Unknown(
                         "Word replacement final state is unknown. " + ex.Message,
                         null, "word_effect_unknown")
                     : Failure(
@@ -316,7 +313,7 @@ namespace RNAssistant.Office.Domains.Word
             }
         }
 
-        public WordOutcome Format(
+        public DomainOutcome Format(
             WordFormatRequest request, Action markDispatchPossible,
             CancellationToken cancellationToken)
         {
@@ -359,7 +356,7 @@ namespace RNAssistant.Office.Domains.Word
                 markDispatchPossible, cancellationToken);
         }
 
-        public WordOutcome AddTable(
+        public DomainOutcome AddTable(
             WordTableRequest request, Action markDispatchPossible,
             CancellationToken cancellationToken)
         {
@@ -399,7 +396,7 @@ namespace RNAssistant.Office.Domains.Word
                 markDispatchPossible, cancellationToken);
         }
 
-        public WordOutcome InsertPageBreak(
+        public DomainOutcome InsertPageBreak(
             Action markDispatchPossible, CancellationToken cancellationToken)
         {
             return Mutate(
@@ -412,7 +409,7 @@ namespace RNAssistant.Office.Domains.Word
                 markDispatchPossible, cancellationToken);
         }
 
-        public WordOutcome AddComment(
+        public DomainOutcome AddComment(
             WordCommentRequest request, Action markDispatchPossible,
             CancellationToken cancellationToken)
         {
@@ -424,7 +421,7 @@ namespace RNAssistant.Office.Domains.Word
                 markDispatchPossible, cancellationToken);
         }
 
-        private WordOutcome Mutate(
+        private DomainOutcome Mutate(
             Func<Action, WordMutationBackendResult> operation,
             string successMessage,
             Func<WordMutationBackendResult, string> data,
@@ -446,39 +443,39 @@ namespace RNAssistant.Office.Domains.Word
                 var result = operation(mark);
                 if (result == null)
                     return dispatched
-                        ? WordOutcome.Unknown(
+                        ? DomainOutcome.Unknown(
                             "Word backend returned no mutation result.",
                             null, "word_effect_unknown")
                         : Failure(
                             "Word backend returned no mutation result.",
                             "word_mutation_result_missing", true);
                 if (result.Changed && !dispatched)
-                    return WordOutcome.Unknown(
+                    return DomainOutcome.Unknown(
                         "Word backend reported a change without a dispatch boundary.",
                         null, "word_dispatch_boundary_missing");
                 cancellationToken.ThrowIfCancellationRequested();
                 if (!result.Verified)
-                    return WordOutcome.Unknown(
+                    return DomainOutcome.Unknown(
                         "Word document may have changed, but exact read-back diverged.",
                         null, "word_verification_failed");
-                return WordOutcome.Ok(
+                return DomainOutcome.Verified(
                     successMessage,
                     data == null ? null : data(result),
                     result.Changed
-                        ? WordEffect.VerifiedChange
-                        : WordEffect.VerifiedNoChange);
+                        ? DomainEffect.VerifiedChange
+                        : DomainEffect.VerifiedNoChange);
             }
             catch (OperationCanceledException)
             {
                 if (!dispatched) throw;
-                return WordOutcome.Unknown(
+                return DomainOutcome.Unknown(
                     "Cancellation was observed after the Word dispatch boundary; inspect the target before retrying.",
                     null, "word_effect_unknown");
             }
             catch (WordBackendException ex)
             {
                 return dispatched
-                    ? WordOutcome.Unknown(
+                    ? DomainOutcome.Unknown(
                         "Word document final state is unknown. " + ex.Message,
                         ex.DetailsJson, "word_effect_unknown")
                     : Failure(ex.Message, ex.ErrorCode, ex.Retryable, ex.DetailsJson);
@@ -486,7 +483,7 @@ namespace RNAssistant.Office.Domains.Word
             catch (Exception ex)
             {
                 return dispatched
-                    ? WordOutcome.Unknown(
+                    ? DomainOutcome.Unknown(
                         "Word document final state is unknown. " + ex.Message,
                         null, "word_effect_unknown")
                     : Failure(
@@ -674,7 +671,7 @@ namespace RNAssistant.Office.Domains.Word
             }.ToString(Formatting.None);
         }
 
-        private static string Scope(string value, out WordOutcome failure)
+        private static string Scope(string value, out DomainOutcome failure)
         {
             failure = null;
             var scope = Normalize(value, "main");
@@ -698,7 +695,7 @@ namespace RNAssistant.Office.Domains.Word
                 : value.Trim().ToLowerInvariant();
         }
 
-        private static WordOutcome Failure(
+        private static DomainOutcome Failure(
             string message, string code, bool retryable,
             string detailsJson = null)
         {
@@ -715,7 +712,7 @@ namespace RNAssistant.Office.Domains.Word
             }
             data["code"] = code;
             data["retryable"] = retryable;
-            return WordOutcome.Error(
+            return DomainOutcome.Error(
                 message, data.ToString(Formatting.None), code, retryable);
         }
     }

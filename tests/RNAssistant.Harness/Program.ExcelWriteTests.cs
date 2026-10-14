@@ -1,3 +1,4 @@
+using RNAssistant.Office.Domains;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -124,7 +125,7 @@ namespace RNAssistant.Harness
                 Kind = "table", Sheet = "Data", Address = "A1",
                 Values = new IReadOnlyList<object>[] { oversizedRow }
             }, delegate { }, CancellationToken.None);
-            AssertEqual(ExcelWriteOutcomeStatus.Error, oversized.Status, "oversized table is rejected");
+            AssertEqual(DomainOutcomeStatus.Error, oversized.Status, "oversized table is rejected");
             AssertEqual("excel_write_table_invalid", oversized.ErrorCode,
                 "per-row bound is explicit before host allocation");
             AssertEqual(0, backend.ReadCount + backend.ApplyCount,

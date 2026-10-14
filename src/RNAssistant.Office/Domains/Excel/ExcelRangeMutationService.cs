@@ -17,7 +17,7 @@ namespace RNAssistant.Office.Domains.Excel
             _backend = backend ?? throw new ArgumentNullException(nameof(backend));
         }
 
-        public ExcelRangeMutationOutcome Clear(
+        public DomainOutcome Clear(
             ExcelClearRangeRequest request,
             Action markDispatchPossible,
             CancellationToken cancellationToken)
@@ -36,7 +36,7 @@ namespace RNAssistant.Office.Domains.Excel
             }, markDispatchPossible, cancellationToken);
         }
 
-        public ExcelRangeMutationOutcome Sort(
+        public DomainOutcome Sort(
             ExcelSortRangeRequest request,
             Action markDispatchPossible,
             CancellationToken cancellationToken)
@@ -55,7 +55,7 @@ namespace RNAssistant.Office.Domains.Excel
             }, markDispatchPossible, cancellationToken);
         }
 
-        public ExcelRangeMutationOutcome Filter(
+        public DomainOutcome Filter(
             ExcelFilterRangeRequest request,
             Action markDispatchPossible,
             CancellationToken cancellationToken)
@@ -73,7 +73,7 @@ namespace RNAssistant.Office.Domains.Excel
             }, markDispatchPossible, cancellationToken);
         }
 
-        public ExcelRangeMutationOutcome Format(
+        public DomainOutcome Format(
             ExcelFormatRangeRequest request,
             Action markDispatchPossible,
             CancellationToken cancellationToken)
@@ -114,7 +114,7 @@ namespace RNAssistant.Office.Domains.Excel
             }, markDispatchPossible, cancellationToken);
         }
 
-        private ExcelRangeMutationOutcome Execute(
+        private DomainOutcome Execute(
             ExcelRangeMutationSpec spec,
             Action markDispatchPossible,
             CancellationToken cancellationToken)
@@ -139,7 +139,7 @@ namespace RNAssistant.Office.Domains.Excel
                 ValidateSnapshot(before, spec, null);
                 ValidateSelectors(before, spec);
                 if (before.Satisfied)
-                    return Success(before, ExcelRangeMutationEffect.VerifiedNoChange);
+                    return Success(before, DomainEffect.VerifiedNoChange);
 
                 cancellationToken.ThrowIfCancellationRequested();
                 _backend.Apply(new ExcelRangeMutationApplyRequest
@@ -177,8 +177,8 @@ namespace RNAssistant.Office.Domains.Excel
                         "excel_range_mutation_verification_failed", after);
                 return Success(after,
                     string.Equals(before.StateToken, after.StateToken, StringComparison.Ordinal)
-                        ? ExcelRangeMutationEffect.VerifiedNoChange
-                        : ExcelRangeMutationEffect.VerifiedChange);
+                        ? DomainEffect.VerifiedNoChange
+                        : DomainEffect.VerifiedChange);
             }
             catch (OperationCanceledException)
             {
@@ -257,27 +257,28 @@ namespace RNAssistant.Office.Domains.Excel
                     "Excel range read-back resolved a different target rectangle.");
         }
 
-        private static ExcelRangeMutationOutcome Success(
+        private static DomainOutcome Success(
             ExcelRangeMutationSnapshot snapshot,
-            ExcelRangeMutationEffect effect)
+            DomainEffect effect)
         {
             var operation = Operation(snapshot.Kind);
             var data = Coordinates(snapshot);
             data["operation"] = operation;
-            data["verification"] = effect == ExcelRangeMutationEffect.VerifiedChange
+            data["verification"] = effect == DomainEffect.VerifiedChange
                 ? "changed" : "no_change";
-            return ExcelRangeMutationOutcome.Ok(
+            return DomainOutcome.Verified(
                 Message(snapshot, operation, effect),
-                data.ToString(Formatting.None), effect);
+                data.ToString(Formatting.None),
+                effect);
         }
 
         private static string Message(
             ExcelRangeMutationSnapshot snapshot,
             string operation,
-            ExcelRangeMutationEffect effect)
+            DomainEffect effect)
         {
             var target = snapshot.Sheet + "!" + snapshot.Address;
-            if (effect == ExcelRangeMutationEffect.VerifiedNoChange)
+            if (effect == DomainEffect.VerifiedNoChange)
                 return "Excel range already matched " + operation +
                     " state: " + target + ".";
             switch (snapshot.Kind)
@@ -316,23 +317,23 @@ namespace RNAssistant.Office.Domains.Excel
             };
         }
 
-        private static ExcelRangeMutationOutcome Failure(
+        private static DomainOutcome Failure(
             string message, string code, bool retryable,
             string detailsJson = null)
         {
-            return ExcelRangeMutationOutcome.Error(message,
+            return DomainOutcome.Error(message,
                 ErrorData(code, retryable, detailsJson).ToString(Formatting.None),
                 code, retryable);
         }
 
-        private static ExcelRangeMutationOutcome Unknown(
+        private static DomainOutcome Unknown(
             string message, string code,
             ExcelRangeMutationSnapshot snapshot,
             string detailsJson = null)
         {
             var data = ErrorData(code, false, detailsJson);
             if (snapshot != null) data["target"] = Coordinates(snapshot);
-            return ExcelRangeMutationOutcome.Unknown(
+            return DomainOutcome.Unknown(
                 message, data.ToString(Formatting.None), code);
         }
 
