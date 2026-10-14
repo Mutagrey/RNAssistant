@@ -1177,6 +1177,10 @@ The built-in Excel/Word/PowerPoint replacement results remove their internal
 `scopeSha256` from the model projection. Outlook draft/update results likewise
 remove `EntryId` and state-token fields. Semantic outcome fields remain, while
 durable tool records retain exact diagnostic data.
+Excel and native VBA model projections build detached results directly from the
+parsed source. VBA selects permitted fields and sanitizes diagnostic text in one
+recursive pass, without cloning intermediate subtrees. Field selection, nested
+array values, invocation status and durable evidence are unchanged.
 `RUNTIME_CONTEXT.active_plan` likewise contains only user-visible title/status;
 the internal Plan id and exact revision remain runtime-owned.
 Retained structured claims and compaction input reapply the same runtime-URI

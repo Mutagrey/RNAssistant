@@ -80,6 +80,59 @@ namespace RNAssistant.Harness
             }
         }
 
+        private static void ModelProjectionPreservesNestedOfficeResults()
+        {
+            var vba = JToken.Parse(@"{
+                'code':'fixture_failure', 'moduleName':'Module1', 'rootMessage':null,
+                'failure':{'message':'Failed request-secret', 'requestId':'request-secret'},
+                'operations':[{'changed':true,'operationData':{'startLine':7,'ignored':'hidden'}},
+                    null,7,['literal',{'newLength':5,'requestId':'nested-secret'}]],
+                'details':'Retry request-secret', 'restore':{}, 'diagnostics':{'trace':'hidden'}
+            }");
+            var visibleVba = JToken.Parse(@"{
+                'code':'fixture_failure', 'moduleName':'Module1',
+                'failure':{'message':'Failed [runtime value]'},
+                'operations':[{'changed':true,'operationData':{'startLine':7}},
+                    null,7,['literal',{'newLength':5}]],
+                'details':'Retry [runtime value]', 'restore':{}
+            }");
+            var fixtures = new[]
+            {
+                new { Tool = ExcelReadToolIds.Inspect, Source = JToken.Parse(@"{
+                    'sheet':'Data','rows':[{'id':7,'revision':'edition-2','nested':{'hash':null}}],
+                    'details':{'code':'fixture_failure','message':'Inspect cells.','scopeSha256':'hidden'},
+                    'diagnostics':{'trace':'hidden'}
+                }"), Expected = JToken.Parse(@"{
+                    'sheet':'Data','rows':[{'id':7,'revision':'edition-2','nested':{'hash':null}}],
+                    'details':{'code':'fixture_failure','message':'Inspect cells.'}
+                }") },
+                new { Tool = VbaToolCatalog.WriteModule, Source = vba, Expected = visibleVba },
+                new { Tool = VbaToolCatalog.WriteModule,
+                    Source = (JToken)new JArray(vba.DeepClone(), null, "literal"),
+                    Expected = (JToken)new JArray(visibleVba.DeepClone(), null, "literal") },
+                new { Tool = VbaToolCatalog.WriteModule, Source = JToken.Parse("null"), Expected = JToken.Parse("null") }
+            };
+            foreach (var fixture in fixtures)
+            foreach (var role in new[] { ToolResultRoles.User, ToolResultRoles.Developer, ToolResultRoles.Tool })
+            {
+                var command = Command(fixture.Tool); command.ToolCallId = "nested_projection";
+                var source = AgentJsonProtocol.CreateToolResultMessage(command,
+                    TerminalToolResult.Unknown("Inspect the target.", fixture.Source.ToString(Newtonsoft.Json.Formatting.None)), role);
+                var original = source.Content;
+                List<ContextMessagePresentation> presentation = null;
+                var projected = ModelToolResultProjection.Project(source, recordPresentation: parts => presentation = parts);
+                ToolResultWireReadResult wire; string error;
+                AssertTrue(ToolResultHistoryReader.TryRead(projected, out wire, out error), "nested Office result remains strict");
+                AssertTrue(JToken.DeepEquals(fixture.Expected, ToolResultWire.ParseData(wire.Result.DataJson)),
+                    fixture.Tool + " preserves exact nested values, array nulls and diagnostic filtering in " + role);
+                AssertEqual(RNAssistant.Core.Tools.Contracts.ToolResultStatus.Unknown, wire.Result.Status,
+                    "projection cannot upgrade an unknown effect");
+                AssertEqual(original, source.Content, "projection preserves durable evidence");
+                AssertEqual(JToken.DeepEquals(fixture.Source, fixture.Expected), presentation.Any(part => part.Kind == "data"),
+                    "presentation compares the unchanged parsed source with the projected result");
+            }
+        }
+
         private static void ModelProjectionHidesRuntimeEvidence()
         {
             var reference = new ResourceRef(

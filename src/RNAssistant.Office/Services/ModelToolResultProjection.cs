@@ -78,7 +78,7 @@ namespace RNAssistant.Office.Services
             if (!IsCapabilityResult(name) && !IsPlanningResult(name) && !IsHtmlResult(name) &&
                 !IsAuthoringResult(name) && !IsVbaResult(name) && !IsExcelResult(name))
                 return GenericForModel(name, source);
-            var data = source.Data.DeepClone();
+            var data = IsExcelResult(name) || IsVbaResult(name) ? source.Data : source.Data.DeepClone();
             var status = source.Result.Status;
             var message = source.Result.Message;
             if (IsCapabilityResult(name) && status == ToolResultStatus.Ok &&
@@ -450,28 +450,33 @@ namespace RNAssistant.Office.Services
             return result;
         }
 
+        private static readonly HashSet<string> VbaModelFields = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "code", "retryable", "target", "moduleName", "componentType",
+            "changed", "created", "mode", "macroName", "argumentCount", "previousModuleName", "newModuleName",
+            "nameNormalized", "requestedModuleName", "normalizedModuleName", "requestedNewModuleName", "normalizedNewModuleName",
+            "currentType", "targetComponentType", "backupType", "actualExists", "actualSourceExists", "actualTargetExists",
+            "actualSourceComponentType", "expectedSourceComponentType", "expectedSourceExists", "expectedTargetExists",
+            "vbeNormalized", "lineCount", "expectedLineCount", "actualLineCount", "expectedComponentType", "actualComponentType",
+            "hunkIndex", "findMatchCount", "matchCount", "matchMode", "startLine", "startColumn", "locations", "locationsComplete",
+            "oldLength", "newLength", "operations", "operationData", "stage", "rollbackDisposition", "failure", "rollbackFailure",
+            "message", "rootMessage", "errorCode", "rootCode", "rootType", "details", "restore",
+            "inspectTool", "discoveryScope", "requiredRepresentation", "completeSourceRequired", "retryAfterRefresh",
+            "retrySameTool", "reconcileBeforeOverwrite", "reloadEditor", "creationTool", "creationMode", "discoveryTool", "patchTool", "suggestedMode"
+        };
+
         private static JToken ProjectVbaData(JToken data, IEnumerable<string> runtimeValues)
         {
             var array = data as JArray;
             if (array != null) return new JArray(array.Select(item => ProjectVbaData(item, runtimeValues)));
             if (!(data is JObject)) return data?.DeepClone();
-            var result = ModelResultProjection.SelectFields(data, "code", "retryable", "target", "moduleName", "componentType",
-                "changed", "created", "mode", "macroName", "argumentCount", "previousModuleName", "newModuleName",
-                "nameNormalized", "requestedModuleName", "normalizedModuleName", "requestedNewModuleName", "normalizedNewModuleName",
-                "currentType", "targetComponentType", "backupType", "actualExists", "actualSourceExists", "actualTargetExists",
-                "actualSourceComponentType", "expectedSourceComponentType", "expectedSourceExists", "expectedTargetExists",
-                "vbeNormalized", "lineCount", "expectedLineCount", "actualLineCount", "expectedComponentType", "actualComponentType",
-                "hunkIndex", "findMatchCount", "matchCount", "matchMode", "startLine", "startColumn", "locations", "locationsComplete",
-                "oldLength", "newLength", "operations", "operationData", "stage", "rollbackDisposition", "failure", "rollbackFailure",
-                "message", "rootMessage", "errorCode", "rootCode", "rootType", "details", "restore",
-                "inspectTool", "discoveryScope", "requiredRepresentation", "completeSourceRequired", "retryAfterRefresh",
-                "retrySameTool", "reconcileBeforeOverwrite", "reloadEditor", "creationTool", "creationMode", "discoveryTool", "patchTool", "suggestedMode");
-            foreach (var property in result.Properties())
-                if (property.Value is JContainer) property.Value = ProjectVbaData(property.Value, runtimeValues);
-                else if ((property.Name == "message" || property.Name == "rootMessage" || property.Name == "details") &&
-                    property.Value.Type == JTokenType.String)
-                    property.Value = SanitizeVbaMessage((string)property.Value, runtimeValues);
-            return result;
+            return new JObject(((JObject)data).Properties()
+                .Where(property => VbaModelFields.Contains(property.Name) && property.Value.Type != JTokenType.Null)
+                .Select(property => new JProperty(property.Name,
+                    property.Value.Type == JTokenType.String &&
+                        (property.Name == "message" || property.Name == "rootMessage" || property.Name == "details")
+                    ? new JValue(SanitizeVbaMessage((string)property.Value, runtimeValues))
+                    : ProjectVbaData(property.Value, runtimeValues))));
         }
 
         private static string SanitizeVbaMessage(

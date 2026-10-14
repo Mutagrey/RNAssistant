@@ -182,6 +182,7 @@ namespace RNAssistant.Harness
                 Test("agent: new skill and tool are readable in same run", SimpleAgentPublishesNewSkillAndToolInSameRun),
                 Test("agent: model projection hides runtime evidence", ModelProjectionHidesRuntimeEvidence),
                 Test("agent: model projection preserves resource table payload", ModelProjectionPreservesResourceTablePayload),
+                Test("agent: model projection preserves nested Office results", ModelProjectionPreservesNestedOfficeResults),
                 Test("agent: rejects oversized capability evidence explicitly", AgentRejectsOversizedCapabilityEvidenceExplicitly),
                 Test("agent: prompt skips invalid tool schemas", SimpleAgentPromptSkipsInvalidToolSchema),
                 Test("agent: default prompts are structured Markdown", DefaultPromptsAreStructuredMarkdown),
