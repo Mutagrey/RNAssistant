@@ -100,6 +100,30 @@ namespace RNAssistant.Harness
                 AssertEqual(ArtifactLibraryResourceClasses.ImmutableOriginal,
                     ArtifactLibraryProjectionService.Project(session).Heads.Single(item => item.ArtifactId == upload.Id).ResourceClass,
                     "uploaded originals retain their separate viewer and import policy");
+                var rawHash = copy.ContentSha256;
+                store.Save(session);
+                restarted = new ChatStore(FixturePaths.Value).Load(session.Id);
+                var retained = restarted.Artifacts.Single(item => item.Id == copy.Id);
+                AssertTrue(retained.InlineText == null, "opening a chat leaves authored file bodies lazy");
+                AssertTrue(store.LoadArtifactBody(restarted, copy.Id), "explicit authored-file read uses its owner");
+                AssertEqual(uploadedText, retained.InlineText, "UTF-16 text survives restart");
+                store.Save(restarted);
+                restarted = new ChatStore(FixturePaths.Value).Load(session.Id);
+                retained = restarted.Artifacts.Single(item => item.Id == copy.Id);
+                AssertEqual(rawHash, retained.ContentSha256, "saving decoded text cannot replace original bytes");
+                AssertTrue(store.DocumentArtifacts.ExportBytes(restarted, ChatResourceUri.CreateArtifactRevision(restarted, retained))
+                    .SequenceEqual(bytes), "UTF-16 BOM and bytes survive hydration and another save");
+                assertSource(restarted, retained, uploadedText);
+                var rawPath = System.IO.Path.Combine(FixturePaths.Value.ChatBlobDirectory,
+                    rawHash.Substring(0, 2), rawHash + ".blob");
+                System.IO.File.Move(rawPath, rawPath + ".held");
+                try
+                {
+                    restarted = new ChatStore(FixturePaths.Value).Load(session.Id);
+                    AssertTrue(restarted != null, "a missing authored body does not hide the conversation");
+                    AssertTrue(!store.LoadArtifactBody(restarted, copy.Id), "missing exact body cannot silently fall back");
+                }
+                finally { System.IO.File.Move(rawPath + ".held", rawPath); }
             });
         }
 

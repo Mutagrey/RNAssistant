@@ -160,7 +160,7 @@ namespace RNAssistant.Core.Storage
             {
                 foreach (var artifact in (session.Artifacts ?? new List<ChatArtifact>()).Where(ShouldHydrateForActiveSession))
                 {
-                    HydrateArtifact(artifact);
+                    HydrateArtifact(session, artifact);
                 }
             }
             LogPerformance("sessionMaterialize", timer.ElapsedMilliseconds,

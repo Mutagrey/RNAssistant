@@ -548,7 +548,7 @@ namespace RNAssistant.Core.Storage
         {
             if (session == null || string.IsNullOrWhiteSpace(artifactId)) return false;
             var artifact = FindArtifact(session, artifactId);
-            return HydrateArtifact(artifact);
+            return HydrateArtifact(session, artifact);
         }
 
         public void LoadArtifactBodies(ChatSession session, IEnumerable<string> artifactIds)

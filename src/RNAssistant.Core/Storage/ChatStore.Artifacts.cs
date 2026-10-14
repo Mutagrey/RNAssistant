@@ -15,7 +15,9 @@ namespace RNAssistant.Core.Storage
         {
             foreach (var artifact in session.Artifacts ?? new List<ChatArtifact>())
             {
-                if (artifact == null || string.IsNullOrEmpty(artifact.InlineText)) continue;
+                // Published document/workspace bodies belong to DocumentArtifactStore.
+                // A decoded display projection must never replace its original bytes.
+                if (artifact == null || HasArtifactOwner(artifact) || string.IsNullOrEmpty(artifact.InlineText)) continue;
                 if (CanReuseArtifactBody(artifact)) continue;
                 Interlocked.Increment(ref _artifactCasExternalizationCount);
                 var reference = _blobs.StoreText(artifact.InlineText,
@@ -104,7 +106,7 @@ namespace RNAssistant.Core.Storage
                 var artifact = (session.Artifacts ?? new List<ChatArtifact>()).LastOrDefault(item => item != null &&
                     referencedIds.Contains(item.Id) &&
                     string.Equals(item.Kind, ChatArtifactKinds.Chart, StringComparison.OrdinalIgnoreCase));
-                if (artifact == null || !HydrateArtifact(artifact)) continue;
+                if (artifact == null || !HydrateArtifact(session, artifact)) continue;
                 message.Activity.DataJson = artifact.InlineText;
             }
         }
@@ -149,7 +151,7 @@ namespace RNAssistant.Core.Storage
                     false);
                 return;
             }
-            if (!HydrateArtifact(active))
+            if (!HydrateArtifact(session, active))
             {
                 session.HtmlWorkspace = new HtmlWorkspace();
                 session.HtmlWorkspaceRecovery = HtmlWorkspaceNavigationService.CreateRecoveryState(
@@ -210,7 +212,7 @@ namespace RNAssistant.Core.Storage
                     string.Equals(item.Kind, ChatArtifactKinds.Compaction, StringComparison.OrdinalIgnoreCase))
                 .OrderBy(item => item.CreatedUtc))
             {
-                if (!HydrateArtifact(artifact)) continue;
+                if (!HydrateArtifact(session, artifact)) continue;
                 try
                 {
                     var checkpoint = JsonConvert.DeserializeObject<ContextCheckpoint>(artifact.InlineText);
@@ -239,13 +241,32 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        private bool HydrateArtifact(ChatArtifact artifact)
+        private static bool HasArtifactOwner(ChatArtifact artifact)
+        {
+            return !string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId) ||
+                !string.IsNullOrWhiteSpace(artifact.WorkspaceId);
+        }
+
+        private bool HydrateArtifact(ChatSession session, ChatArtifact artifact)
         {
             // Originals retain raw bytes here; their extracted text is a separate
             // resource view, even when the MIME contains "text" or "xml".
             if (artifact == null || artifact.OriginalAttachment != null) return false;
             if (!string.IsNullOrEmpty(artifact.InlineText)) return true;
             if (string.IsNullOrWhiteSpace(artifact.ContentSha256) || !artifact.ContentByteLength.HasValue) return false;
+            if (HasArtifactOwner(artifact))
+            {
+                try
+                {
+                    artifact.InlineText = DocumentArtifacts.Read(session,
+                        ChatResourceUri.CreateArtifactRevision(session, artifact)).InlineText;
+                }
+                catch (System.IO.InvalidDataException) { return false; }
+                catch (System.IO.IOException) { return false; }
+                catch (JsonException) { return false; }
+                catch (UnauthorizedAccessException) { return false; }
+                return artifact.InlineText != null;
+            }
             artifact.InlineText = _blobs.ReadText(ArtifactBodyReference(artifact));
             if (artifact.InlineText == null) return false;
             RememberArtifactBody(artifact);
@@ -275,7 +296,9 @@ namespace RNAssistant.Core.Storage
 
         private static bool ShouldHydrateForActiveSession(ChatArtifact artifact)
         {
-            if (artifact == null || artifact.RemovedFromDocument || MarkdownDocumentIdentity.LogicalId(artifact.Id) != null || string.Equals(artifact.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase))
+            if (artifact == null || artifact.RemovedFromDocument ||
+                artifact.Kind == ChatArtifactKinds.File && HasArtifactOwner(artifact) ||
+                MarkdownDocumentIdentity.LogicalId(artifact.Id) != null || string.Equals(artifact.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase))
             {
                 return false;
             }

@@ -1098,6 +1098,13 @@ explicitly. Raw export uses the verified exact body and filename, so an uploaded
 `common.markdown_save`'s 200,000-character argument. That older whole-body limit
 still applies to standalone Markdown authoring.
 
+Chat reopening keeps authored `File` bodies lazy, independently of MIME.
+Explicit body loading uses `DocumentArtifactStore` and its encoding-aware exact
+revision reader. A missing body makes that selection unavailable without preventing
+chat reopening. Decoded `InlineText` is a display/read projection: ordinary chat
+saves never re-encode document/workspace-owned bytes or replace their CAS reference.
+UTF-16 save/reopen/read/save/export preserves the original BOM and byte hash.
+
 Resource parts, search and outline cover authored files. The viewer can page
 through up to 20 MiB of authored-file text, rendering one page at a time; its
 full-source copy remains limited to 512,000 characters. Run Changes presents
