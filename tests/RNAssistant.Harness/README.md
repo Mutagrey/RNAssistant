@@ -467,6 +467,16 @@ after a successful build. It creates temporary 30/50 MiB JSONL fixtures with 6,0
 messages and HTML revisions, then reports cold/warm load, save, library, context
 usage and HTML metadata times. The normal harness run skips this expensive fixture.
 
+For request compilation profiling, run
+`RNA_CONTEXT_PERF=1 RNA_CONTEXT_PERF_OUTPUT=/tmp/rna-context-perf.json dotnet run --no-build --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj -- "context perf: request compilation"`.
+The 72 cases cover short/long histories, three result roles, media, calibration,
+generous/tight/impossible budgets. JSON records content fingerprints, receipt costs,
+refusals and median compile time; compare saved before/after binaries on identical
+fixtures. `context perf: remaining hotspots` separately measures mandatory
+working-set restoration and HTML snapshot parsing/one-item metadata pages. These
+fixtures are opt-in and have no timing gates. `context budget:` checks incremental
+costs against the whole-request estimator, including removal of the last media.
+
 Permanent test policy is defined in
 [development rules §9](../../docs/development-rules.md#9-тестирование-по-риску);
 the active stabilization application remains

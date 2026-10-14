@@ -1,6 +1,6 @@
 # Stabilization risk register
 
-Current triage is in [PROGRESS](PROGRESS.md#current-operating-status--2026-09-30).
+Current triage is at the beginning of [PROGRESS](PROGRESS.md).
 The dated incident notes distinguish observed symptoms, reproduced host-neutral
 causes and remaining Windows/target-model evidence. The R-number table retains
 the severity assigned when each risk was opened; a row marked fixed host-neutral,
@@ -47,6 +47,14 @@ universal model weakness or complete context correctness from this comparison.
 The local Gemma preflight separately fails memory admission. Profiles, unchanged
 budgets, failed outcomes and closure priorities are in
 [PROGRESS](PROGRESS.md#real-v7-model-regression-and-shared-response-contract--2026-10-13).
+
+The 2026-10-14 prompt/context optimization smoke reproduces the CSV gap: both runs
+pass 24/24 browser checks, but final reads vary from 3/3 (accepted) to 0/3 (failed).
+The initial HTTP request is identical and CLI's response contract is unchanged;
+the pair cannot attribute this variation to prompt simplification. Automatic Task
+List selection also remains absent in the passing fake-Office workflow. The
+[paired evidence](PROGRESS.md#prompt-simplification-and-incremental-context-cost--2026-10-14)
+does not close model completion or real Office qualification.
 
 ## Skill and resource workflow regressions — 2026-10-13
 

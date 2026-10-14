@@ -495,6 +495,13 @@ results and then checks the complete request budget. The durable event stream ke
 original calls/results; filtering never deletes them. Search results are bounded
 discovery metadata/snippets, not proof that the underlying body was read.
 
+During budget folding/omission, `ModelContextCompiler` measures each projected atom
+once and updates only changed atom costs. These values live only in that compile
+call. Request-level calibration/intercept and the existing media rounding branch
+remain unchanged, including removal of the last media message. The final complete
+request still passes through `ModelContextBudget.EstimateMessagesTokens`; cached
+costs neither select evidence nor grant authority.
+
 When a completed call/result is folded (including repeated reads and stale-source
 receipts), its nonempty first-call narration remains a separate assistant update
 with the original accepted-message identity. It is budgeted once, carries no tool

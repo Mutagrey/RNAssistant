@@ -21,6 +21,7 @@ namespace RNAssistant.Core.Services
         internal bool BodyOmitted;
         internal bool KeepPair;
         internal bool FoldForBudget;
+        internal ModelContextBudget.MessageTokenCost TokenCost;
         internal Dictionary<string, List<ContextMessagePresentation>> BodyParts = new Dictionary<string, List<ContextMessagePresentation>>();
         internal ContextNoteRole ContextRole;
         internal string ContextTitle;
@@ -415,42 +416,51 @@ namespace RNAssistant.Core.Services
                 atom.BodyParts.Clear();
                 receipt.Deduplicated++;
             }
-            var messages = atoms.SelectMany(item => item.PromptMessages).ToList();
+            var cost = new ModelContextBudget.MessageTokenCost();
+            Action<ContextAtom> measure = atom =>
+            {
+                var updated = ModelContextBudget.MeasureMessages(atom.PromptMessages, settings);
+                cost.Replace(atom.TokenCost, updated);
+                atom.TokenCost = updated;
+            };
+            foreach (var atom in atoms) measure(atom);
             // Old write arguments are often the largest historical bodies. Fold
             // whole older frames only when needed; short receipts remain complete.
             foreach (var atom in atoms.Where(a => a.Kind == "terminal-mutation" && !a.KeepPair && a.Messages.Count == 2))
             {
-                if (!atom.FoldForBudget && (!enforceBudget || ModelContextBudget.EstimateMessagesTokens(messages, settings) <= budget)) continue;
+                if (!atom.FoldForBudget && (!enforceBudget || cost.Estimate(settings) <= budget)) continue;
                 ToolResultWireReadResult wire; string error;
                 var result = atom.Messages[1];
                 if (!ToolResultHistoryReader.TryRead(result, out wire, out error)) continue;
                 var folded = CompleteOperation(result, wire, call: atom.Messages[0]);
                 var original = atom.Messages;
                 FoldInteraction(atom, folded);
-                if (!atom.FoldForBudget && ModelContextBudget.EstimateMessagesTokens(atom.PromptMessages, settings) >=
-                    ModelContextBudget.EstimateMessagesTokens(original, settings))
+                var foldedCost = ModelContextBudget.MeasureMessages(atom.PromptMessages, settings);
+                if (!atom.FoldForBudget && foldedCost.Estimate(settings) >= atom.TokenCost.Estimate(settings))
                 { atom.Messages = original; atom.Narration = null; continue; }
                 atom.BodyParts.Clear();
-                messages = atoms.SelectMany(item => item.PromptMessages).ToList();
+                cost.Replace(atom.TokenCost, foldedCost);
+                atom.TokenCost = foldedCost;
             }
-            if (enforceBudget && ModelContextBudget.EstimateMessagesTokens(messages, settings) > budget)
+            if (enforceBudget && cost.Estimate(settings) > budget)
             {
                 var invariantCost = ModelContextBudget.EstimateMessagesTokens(atoms.Where(a => a.Kind == "system-invariant" ||
                     a.Kind == "user-instruction").SelectMany(a => a.PromptMessages), settings);
-                foreach (var atom in atoms.Where(a => ModelContextBudget.EstimateMessagesTokens(a.PromptMessages, settings) + invariantCost > budget))
-                    if (!OmitSourceBody(atom)) ReplaceOversizedExactReadEvidence(atom);
-                messages = atoms.SelectMany(item => item.PromptMessages).ToList();
+                foreach (var atom in atoms.Where(a => a.TokenCost.Estimate(settings) + invariantCost > budget))
+                {
+                    if (OmitSourceBody(atom) || ReplaceOversizedExactReadEvidence(atom)) measure(atom);
+                }
                 // Individually affordable reads can overflow as a batch. Evict
                 // older complete bodies, retaining each call/result and an explicit
                 // omission; unresolved effects and diagnostics are never candidates.
                 foreach (var atom in atoms.Where(a => a.Messages.Count > 0 &&
                     (a.Kind == "tool-interaction" || a.Kind == "current-source")))
                 {
-                    if (ModelContextBudget.EstimateMessagesTokens(messages, settings) <= budget) break;
-                    if (OmitSourceBody(atom, aggregateBudget: true))
-                        messages = atoms.SelectMany(item => item.PromptMessages).ToList();
+                    if (cost.Estimate(settings) <= budget) break;
+                    if (OmitSourceBody(atom, aggregateBudget: true)) measure(atom);
                 }
             }
+            var messages = atoms.SelectMany(item => item.PromptMessages).ToList();
             receipt.Messages = DescribeMessages(atoms, required, facts);
             receipt.OperationReceipts = messages.Count(message => message.CompletedOperation != null);
             receipt.EstimatedTokens = ModelContextBudget.EstimateMessagesTokens(messages, settings);

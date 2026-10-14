@@ -1,5 +1,39 @@
 # Stabilization progress
 
+## Prompt simplification and incremental context cost — 2026-10-14
+
+Owner: Core prompt/context compiler; Office Task Tracking guidance. Prompt schema
+47 removes duplicate completion/call rules and keeps Task List procedure details
+in its skill. Default Agent general/tools/skills instructions shrink from 15,770
+to 12,678 characters (19.6%); existing archived prompt migration applies.
+The compiler updates request-local atom costs during folding/omission and still
+checks the final whole request. Evidence selection, durable storage and runtime
+completion policy are unchanged.
+
+Paired host-neutral fixtures produce matching content fingerprints, checked receipt
+fields and refusals in all 72 cases. For 96 interactions, grouped median compile
+time is 7.75 → 4.01 ms with a generous budget and 9.85 → 6.50 ms with a tight budget;
+four-interaction fixtures remain about 0.63 ms. These are local synthetic profiles,
+not CI thresholds or Windows qualification. All 24 focused budget, continuity,
+aggregate omission, prompt migration and skill checks pass on an isolated copy of
+this task's source changes, excluding concurrent resource-reading changes.
+
+Real `gemma4:cloud`, digest
+`ef09f235533c96cd75e8deed88c628335cb69e2b3ce96275d0d7a67fe9887aba`,
+`json_object`: the fake-Office HTML/CSS/JS/VBA workflow passes exact final-source
+acceptance before/after (11/9 requests), while spontaneous Task List selection
+remains absent. CLI CSV passes 24/24 browser checks in both runs; before has 3/3
+required final reads and passes, after has 0/3 and fails acceptance. Their first
+HTTP requests are identical: CLI uses the unchanged shared response contract.
+This single pair does not establish a quality regression or improvement; premature
+completion remains open. No runtime `done` gate was added.
+
+Evidence, profiles, original compiler, paired binaries and live traces:
+`/tmp/rna-context-opt-20261014-3hodfzht/`. P1 remains real-model completion/skill
+adherence; measured working-set and HTML metadata costs are bounded P2 follow-ups
+in [BACKLOG](BACKLOG.md#measured-context-and-html-metadata-costs--2026-10-14).
+Large/structural reading is a separate workstream. Office/VSTO/WebView2 was not run.
+
 ## Working resource links and verified-effect boundary — 2026-10-14
 
 Skill/tool publication audit: a scripted Agent run now creates a new skill and

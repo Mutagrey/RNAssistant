@@ -260,11 +260,7 @@ namespace RNAssistant.Core.Llm
             string model = null)
         {
             var source = (messages ?? new ChatMessage[0]).ToList();
-            var hasMedia = source.Any(message => message != null &&
-                (message.Attachments ?? new List<ChatAttachment>()).Any(attachment => attachment != null &&
-                    !IsAnalyzedAttachment(message, attachment) &&
-                    (string.Equals(attachment.Kind, "image", StringComparison.OrdinalIgnoreCase) ||
-                     string.Equals(attachment.Kind, "audio", StringComparison.OrdinalIgnoreCase))));
+            var hasMedia = source.Any(HasUnanalyzedMedia);
             if (!hasMedia)
             {
                 var baseTotal = source.Sum(message =>
@@ -278,6 +274,50 @@ namespace RNAssistant.Core.Llm
                 total += EstimateMessageTokens(message, includeExtractedAttachments, settings, model);
             }
             return TokenEstimateCalibration.AddPromptIntercept(settings, total, model);
+        }
+
+        // Additive costs before request-level calibration. A part with no media
+        // still needs its scaled cost when another part contains media.
+        internal struct MessageTokenCost
+        {
+            internal long BaseTokens;
+            internal int MediaTokens;
+            internal int MediaMessages;
+
+            internal void Replace(MessageTokenCost before, MessageTokenCost after)
+            {
+                BaseTokens = checked(BaseTokens - before.BaseTokens + after.BaseTokens);
+                MediaTokens = unchecked(MediaTokens - before.MediaTokens + after.MediaTokens);
+                MediaMessages += after.MediaMessages - before.MediaMessages;
+            }
+
+            internal int Estimate(AppSettings settings, string model = null)
+            {
+                return MediaMessages == 0
+                    ? TokenEstimateCalibration.PredictPromptTokens(settings, checked((int)BaseTokens), model)
+                    : TokenEstimateCalibration.AddPromptIntercept(settings, MediaTokens, model);
+            }
+        }
+
+        internal static MessageTokenCost MeasureMessages(IEnumerable<ChatMessage> messages,
+            AppSettings settings, string model = null)
+        {
+            var cost = new MessageTokenCost();
+            foreach (var message in messages)
+            {
+                cost.BaseTokens = checked(cost.BaseTokens + EstimateMessageTokens(message, true, null, model));
+                cost.MediaTokens = unchecked(cost.MediaTokens + EstimateMessageTokens(message, true, settings, model));
+                if (HasUnanalyzedMedia(message)) cost.MediaMessages++;
+            }
+            return cost;
+        }
+
+        private static bool HasUnanalyzedMedia(ChatMessage message)
+        {
+            return message != null && (message.Attachments ?? new List<ChatAttachment>()).Any(attachment =>
+                attachment != null && !IsAnalyzedAttachment(message, attachment) &&
+                (string.Equals(attachment.Kind, "image", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(attachment.Kind, "audio", StringComparison.OrdinalIgnoreCase)));
         }
 
         public static int EstimateMessageTokens(ChatMessage message, bool includeExtractedAttachments = true)
