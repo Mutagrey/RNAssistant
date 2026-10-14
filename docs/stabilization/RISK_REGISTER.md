@@ -8,6 +8,65 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## CAS and resource fabric review — 2026-10-14
+
+Three open defects reproduced with isolated temporary stores against the existing
+host-neutral Harness assembly; source reviewed at `4c5dd000` plus the working-tree
+changes. This review changes no production code and does not attribute an actual
+user incident to the artificial filesystem-damage scenario below.
+
+- **P1 / Core CAS maintenance and resource authority:**
+  `ResourceAuthorityStore.ScanCasReferences` enumerates only top-level authority,
+  revision and view journals. Moving a valid authority/revision pair into a nested
+  directory under `resource-authority` makes its payload disappear from the root
+  set without making reachability incomplete. Control: one referenced blob, no
+  orphans. Misplaced journals: `ReachabilityComplete=true`, zero references, one
+  orphan; `Collect` deletes that blob. Audit must discover misplaced sources and
+  block collection, using the existing safe filesystem traversal and canonical
+  source validation. Do not repair or relocate user journals during GC.
+- **P1 / Core evidence reducer:** `EvidenceStateReducer.Reduce` handles Unknown
+  and Unavailable heads, then dereferences `head.Revision.Revision`; Removed has
+  no revision. Both a directly removed resource and a removed current-state
+  dependency produce `NullReferenceException`. A retained observation can therefore
+  break subsequent compilation/working-set restoration after Library removal.
+  Handle every head state explicitly for both own and dependency heads; retain
+  exact historical bytes and represent the observation's unavailability normally.
+- **P2 / Core context working set and result projection:** archived operation
+  receipts call `ModelResultProjection.Project` before hydrating `ResultPayload`.
+  Projection clears that reference, so the compiler can no longer recover the
+  original diagnostic. A paired valid tool-result fixture retains `code` and
+  `field` inline but loses them with the ordinary CAS header for a >8,192-character
+  result, despite ample budget and intact CAS. Keep exact result provenance until
+  one owner materializes the bounded operation receipt; test inline/CAS parity
+  across a checkpoint. Recovery metadata already held in `ExecutionProgress`
+  does not restore arbitrary diagnostic fields from the omitted body.
+
+The separate [authored UTF-16 reopening failure](#authored-utf-16-file-blocks-chat-reopening--2026-10-14)
+remains open: raw bytes and decoded text views need distinct hydration ownership.
+
+Architectural follow-up, **Office retained-reader owner**, observed by source
+inspection: `ResourceSnapshotReadService.Read` hydrates and verifies the whole CAS
+body for every 32,000-character page, while `ResourceGatewayService.ReadWhole`
+reassembles those pages; `ReadLines` also takes this whole-read route. Thus one
+2,000,000-character retained view can require 63 full body reads. No latency claim
+or benchmark is made. Materialize an exact bounded body once per operation and
+slice it, or use the existing indexed-view owner where applicable; remove the
+page-to-whole-to-page reconstruction without adding a persistent body cache.
+
+The broader simplification opportunity is one compiler-owned selection,
+hydration and model-projection path for active and archived facts. Working-set
+restoration should supply candidates with exact provenance rather than a second
+early result projection and independent body policy. Keep the existing CAS,
+authority/publication barriers and append-only events. This is a design proposal,
+not a changed runtime contract or an authorization to replay operations.
+
+Validation: existing `storage: CAS` 7/7 and `context continuity:` 10/10 pass without
+rebuilding the project. A small separate probe reproduces the three gaps above;
+its code, output and source/assembly fingerprints are retained at
+`/var/folders/k9/hr_94nt142x1f43jr6g0wr_00000gp/T/rna-cas-review-20261014-y33vnjl6/`.
+Only that probe was compiled. No full suite, model HTTP, Office/VSTO or Windows
+qualification was performed.
+
 ## VBA patching and completion photos — 2026-10-14
 
 **Reproduced discovery/presentation defects fixed; model and Office attribution
