@@ -158,6 +158,113 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void CasGcRejectsMisplacedResourceJournals()
+        {
+            foreach (var scenario in new[] { "published-all", "published-view", "pending-revision", "pending-view" })
+            WithTempPaths(paths =>
+            {
+                var blobs = new ChatBlobStore(paths);
+                var authority = new ResourceAuthorityStore(paths);
+                var scope = new ResourceAuthorityScopeId("conversation", "misplaced");
+                var exact = new ResourceRef("rna://state/conversation/misplaced/source", "r1");
+                var body = PayloadRef.FromBlob(blobs.StoreText("retained source", "text/plain"));
+                var part = PayloadRef.FromBlob(blobs.StoreText("retained view part", "text/plain"));
+                authority.RegisterRevision(scope, new ResourceRevisionMetadata(exact, body.Sha256, body));
+                authority.RegisterView(scope, new ResourceRevisionView(exact, "index", body.Sha256,
+                    body, ResourceCoverage.Whole(), new[] { part }));
+                if (scenario.StartsWith("published", StringComparison.Ordinal))
+                    authority.Publish(ResourceAuthorityCommit.Create(scope, 0, null,
+                        new[] { new ResourceHeadChange(exact.Identity, null, ResourceHeadState.Known(exact, 1)) },
+                        AuthorityCommitReason.InitialObservation));
+                var orphan = blobs.StoreText("unreferenced crash leftover", "text/plain");
+                var service = CasService(paths, new ChatStore(paths), new VbaJournalStore(paths), () => StorageProtector.None);
+                var control = service.Audit();
+                AssertTrue(control.ReachabilityComplete, scenario + ": canonical roots are complete");
+                AssertEqual(2, control.ReferencedBlobCount, scenario + ": source and view part are roots");
+                AssertEqual(1, control.OrphanBlobCount, scenario + ": only the crash leftover is orphaned");
+
+                var suffix = scenario.EndsWith("view", StringComparison.Ordinal) ? ".views.jsonl" : ".revisions.jsonl";
+                var moved = Directory.GetFiles(paths.ResourceAuthorityDirectory, "*.jsonl")
+                    .Where(path => scenario == "published-all" || path.EndsWith(suffix, StringComparison.Ordinal))
+                    .ToDictionary(path => path, File.ReadAllText);
+                var nested = Path.Combine(paths.ResourceAuthorityDirectory, "misplaced", "nested");
+                Directory.CreateDirectory(nested);
+                foreach (var entry in moved)
+                    File.Move(entry.Key, Path.Combine(nested, Path.GetFileName(entry.Key)));
+
+                var report = service.Audit();
+                AssertTrue(!report.ReachabilityComplete && !report.CanGarbageCollect,
+                    scenario + ": misplaced journals block reachability and collection");
+                AssertTrue(report.Issues.Any(item => item.SourceType == "resource-authority" &&
+                    item.SourceId.Contains("misplaced") && item.BlocksGarbageCollection),
+                    scenario + ": the misplaced source is identified");
+                var result = service.Collect();
+                AssertTrue(!result.Completed && result.DeletedBlobCount == 0, scenario + ": collection refuses all deletion");
+                AssertEqual("retained source", blobs.ReadText(body.ToBlobReference()), scenario + ": source survives");
+                AssertEqual("retained view part", blobs.ReadText(part.ToBlobReference()), scenario + ": view part survives");
+                AssertTrue(File.Exists(blobs.PathFor(orphan.Sha256)), scenario + ": even the true orphan is retained");
+                foreach (var entry in moved)
+                {
+                    var misplaced = Path.Combine(nested, Path.GetFileName(entry.Key));
+                    AssertEqual(entry.Value, File.ReadAllText(misplaced), scenario + ": GC does not rewrite sources");
+                    AssertTrue(!File.Exists(entry.Key), scenario + ": GC does not relocate sources");
+                    File.Move(misplaced, entry.Key);
+                }
+                var recovered = service.Collect();
+                AssertTrue(recovered.Completed && recovered.DeletedBlobCount == 1,
+                    scenario + ": canonical roots allow only the true orphan to be deleted");
+                AssertEqual(2, recovered.Health.ReferencedBlobCount, scenario + ": retained roots remain intact");
+            });
+        }
+
+        private static void CasGcRejectsResourceJournalLinks()
+        {
+            foreach (var directoryLink in new[] { false, true })
+            WithTempPaths(paths =>
+            {
+                var blobs = new ChatBlobStore(paths);
+                var authority = new ResourceAuthorityStore(paths);
+                var scope = new ResourceAuthorityScopeId("conversation", "linked");
+                var evidence = PublishContinuitySource(authority, blobs, scope, "source", "retained linked source");
+                authority.RegisterView(scope, new ResourceRevisionView(evidence.Resource, "text",
+                    evidence.Payload.Sha256, evidence.Payload, ResourceCoverage.Whole()));
+                var viewPath = Directory.GetFiles(paths.ResourceAuthorityDirectory, "*.views.jsonl").Single();
+                var viewText = File.ReadAllText(viewPath);
+                var external = Path.Combine(Path.GetTempPath(), "RNAssistant.Harness.LinkedJournals." + Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(external);
+                var externalView = Path.Combine(external, Path.GetFileName(viewPath));
+                var link = directoryLink ? Path.Combine(paths.ResourceAuthorityDirectory, "linked") : viewPath;
+                try
+                {
+                    File.Move(viewPath, externalView);
+                    try
+                    {
+                        if (directoryLink) Directory.CreateSymbolicLink(link, external);
+                        else File.CreateSymbolicLink(link, externalView);
+                    }
+                    catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is PlatformNotSupportedException)
+                    { return; }
+                    var orphan = blobs.StoreText("orphan blocked by linked source", "text/plain");
+                    var service = CasService(paths, new ChatStore(paths), new VbaJournalStore(paths), () => StorageProtector.None);
+                    var report = service.Audit();
+                    AssertTrue(!report.ReachabilityComplete && report.Issues.Any(item =>
+                        item.Kind == CasHealthIssueKinds.SourceUnreadable && item.SourceType == "resource-authority"),
+                        "linked resource source is unreadable and blocks reachability");
+                    var result = service.Collect();
+                    AssertTrue(!result.Completed && result.DeletedBlobCount == 0, "linked journals block all collection");
+                    AssertEqual("retained linked source", blobs.ReadText(evidence.Payload.ToBlobReference()), "referenced bytes survive");
+                    AssertTrue(File.Exists(blobs.PathFor(orphan.Sha256)), "orphan is retained while a source is linked");
+                    AssertEqual(viewText, File.ReadAllText(externalView), "external journal is unchanged");
+                }
+                finally
+                {
+                    if (directoryLink && Directory.Exists(link)) Directory.Delete(link);
+                    else if (!directoryLink && File.Exists(link)) File.Delete(link);
+                    Directory.Delete(external, true);
+                }
+            });
+        }
+
         private static void CasHealthScansProtectedStreams()
         {
             WithTempPaths(paths =>

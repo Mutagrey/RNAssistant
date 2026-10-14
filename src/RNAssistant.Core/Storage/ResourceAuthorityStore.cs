@@ -388,7 +388,26 @@ namespace RNAssistant.Core.Storage
             lock (_sync)
             using (AcquireLock())
             {
-                foreach (var path in Directory.EnumerateFiles(_directory, "*.authority.jsonl"))
+                var incomplete = false;
+                var paths = StorageFileSystem.GetFilesRecursive(_directory, "*.jsonl", (path, message) =>
+                {
+                    incomplete = true;
+                    scan.AddSourceIssue(CasHealthIssueKinds.SourceUnreadable, "resource-authority",
+                        CasMaintenanceService.RelativePath(_directory, path), message);
+                }).ToArray();
+                foreach (var path in paths)
+                {
+                    if (string.Equals(Path.GetDirectoryName(Path.GetFullPath(path)),
+                        Path.GetFullPath(_directory), StringComparison.Ordinal)) continue;
+                    incomplete = true;
+                    scan.AddSourceIssue("resource_authority_invalid", "resource-authority",
+                        CasMaintenanceService.RelativePath(_directory, path),
+                        "Resource journals must be stored directly in the resource authority directory.");
+                }
+                // Load opens companion journals too. Do not replay any scope when traversal
+                // could not verify that all journal paths are regular and canonical.
+                if (incomplete) return;
+                foreach (var path in paths.Where(path => path.EndsWith(".authority.jsonl", StringComparison.Ordinal)))
                 {
                     try
                     {
@@ -416,7 +435,7 @@ namespace RNAssistant.Core.Storage
                 }
                 // Revision/view bodies may be durable before the first head commit.
                 // A crash in that interval must not turn their CAS parts into garbage.
-                foreach (var path in Directory.EnumerateFiles(_directory, "*.jsonl")
+                foreach (var path in paths
                     .Where(path => path.EndsWith(".revisions.jsonl", StringComparison.Ordinal) || path.EndsWith(".views.jsonl", StringComparison.Ordinal)))
                 {
                     var isView = path.EndsWith(".views.jsonl", StringComparison.Ordinal);

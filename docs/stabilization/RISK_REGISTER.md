@@ -21,20 +21,22 @@ writer is tracked in [MIGRATION_MAP](MIGRATION_MAP.md#runtime-commit-boundary--2
 
 ## CAS and resource fabric review — 2026-10-14
 
-Three open defects reproduced with isolated temporary stores against the existing
+Three defects were reproduced with isolated temporary stores against the existing
 host-neutral Harness assembly; source reviewed at `4c5dd000` plus the working-tree
-changes. This review changes no production code and does not attribute an actual
+changes. The original review changed no production code and did not attribute an actual
 user incident to the artificial filesystem-damage scenario below.
 
-- **P1 / Core CAS maintenance and resource authority:**
-  `ResourceAuthorityStore.ScanCasReferences` enumerates only top-level authority,
-  revision and view journals. Moving a valid authority/revision pair into a nested
-  directory under `resource-authority` makes its payload disappear from the root
-  set without making reachability incomplete. Control: one referenced blob, no
+- **P1 / Core CAS maintenance and resource authority — fixed host-neutral 2026-10-15:**
+  `ResourceAuthorityStore.ScanCasReferences` previously enumerated only top-level
+  authority, revision and view journals. Moving a valid authority/revision pair
+  into a nested directory under `resource-authority` made its payload disappear
+  from the root set without making reachability incomplete. Control: one referenced blob, no
   orphans. Misplaced journals: `ReachabilityComplete=true`, zero references, one
-  orphan; `Collect` deletes that blob. Audit must discover misplaced sources and
-  block collection, using the existing safe filesystem traversal and canonical
-  source validation. Do not repair or relocate user journals during GC.
+  orphan; `Collect` deleted that blob. One safe recursive inventory now rejects
+  misplaced journals and unreadable/linked paths before authority replay, blocking
+  all collection. Published and unpublished source/view roots, file/directory
+  links, unchanged journals and collection after explicit path restoration are
+  covered. Journals are never repaired or relocated by GC.
 - **P1 / Core evidence reducer:** `EvidenceStateReducer.Reduce` handles Unknown
   and Unavailable heads, then dereferences `head.Revision.Revision`; Removed has
   no revision. Both a directly removed resource and a removed current-state
@@ -71,7 +73,7 @@ early result projection and independent body policy. Keep the existing CAS,
 authority/publication barriers and append-only events. This is a design proposal,
 not a changed runtime contract or an authorization to replay operations.
 
-Validation: existing `storage: CAS` 7/7 and `context continuity:` 10/10 pass without
+Original review validation: existing `storage: CAS` 7/7 and `context continuity:` 10/10 passed without
 rebuilding the project. A small separate probe reproduces the three gaps above;
 its code, output and source/assembly fingerprints are retained at
 `/var/folders/k9/hr_94nt142x1f43jr6g0wr_00000gp/T/rna-cas-review-20261014-y33vnjl6/`.

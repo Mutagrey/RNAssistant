@@ -1,5 +1,18 @@
 # Stabilization progress
 
+## CAS collection rejects misplaced resource journals — 2026-10-15
+
+Owner: Core resource authority and CAS maintenance. One safe recursive inventory
+replaces the two top-level source enumerations. Misplaced published or unpublished
+journals and linked paths make reachability incomplete before companion journals
+are opened. Collection then deletes nothing and does not rewrite or relocate sources.
+The reproduced data-loss risk is closed host-neutral; evidence removal and archived
+receipt projection remain open in [RISK_REGISTER](RISK_REGISTER.md#cas-and-resource-fabric-review--2026-10-14).
+
+Nine focused CAS checks and unpublished-root retention pass on the host-neutral
+Harness; the new misplaced-journal regression failed before the fix.
+No Office/VSTO validation or product-version change is involved.
+
 ## Architectural simplification — 2026-10-14
 
 Implemented host-neutral on 2026-10-15 within the user-authorized scope. Existing
