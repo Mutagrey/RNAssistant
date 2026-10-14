@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
@@ -311,18 +310,7 @@ namespace RNAssistant.Office
             var artifactPresentation = ArtifactLibraryProjectionService.ProjectState(session, visibleMessages);
             var preflight = HtmlWorkspaceToolService.InspectForPreview(
                 session, CancellationToken.None);
-            HtmlWorkspacePreflightDto preflightDto;
-            try
-            {
-                preflightDto = string.IsNullOrWhiteSpace(preflight.DataJson)
-                    ? new HtmlWorkspacePreflightDto()
-                    : JsonConvert.DeserializeObject<HtmlWorkspacePreflightDto>(
-                        preflight.DataJson) ?? new HtmlWorkspacePreflightDto();
-            }
-            catch (JsonException)
-            {
-                preflightDto = new HtmlWorkspacePreflightDto();
-            }
+            var preflightDto = preflight.Data.ToObject<HtmlWorkspacePreflightDto>();
             preflightDto.Status = preflight.Status ==
                 HtmlWorkspaceOutcomeStatus.Ok ? "ok" : "error";
             preflightDto.Message = preflight.Message;

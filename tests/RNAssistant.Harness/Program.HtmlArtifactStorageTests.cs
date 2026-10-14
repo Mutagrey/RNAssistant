@@ -349,7 +349,7 @@ namespace RNAssistant.Harness
                 Role = "assistant",
                 RunId = "html-origin-run",
                 HtmlWorkspaceCheckpoint = HtmlCheckpoint(session, revisionId),
-                Activity = new ChatActivity { ToolId = write.ToolId, DataJson = writeResult.DataJson }
+                Activity = new ChatActivity { ToolId = write.ToolId, DataJson = writeResult.Data.ToString(Newtonsoft.Json.Formatting.None) }
             };
             var published = session.Artifacts.Single(item => item.Id == revisionId);
             published.RunId = writeMessage.RunId;
@@ -381,7 +381,7 @@ namespace RNAssistant.Harness
                 Role = "assistant",
                 RunId = writeMessage.RunId,
                 HtmlWorkspaceCheckpoint = HtmlCheckpoint(session, revisionId),
-                Activity = new ChatActivity { ToolId = HtmlWorkspaceToolCatalog.WriteFileToolId, DataJson = writeResult.DataJson }
+                Activity = new ChatActivity { ToolId = HtmlWorkspaceToolCatalog.WriteFileToolId, DataJson = writeResult.Data.ToString(Newtonsoft.Json.Formatting.None) }
             };
             session.Messages.Add(writeMessage);
             session.Messages.Add(duplicateMutationMessage);

@@ -75,8 +75,8 @@ namespace RNAssistant.Office.Tools
                             observed[item.Id + "@" + item.Version] = item.Revision;
                     return HtmlWorkspaceToolOutcome.Ok(
                         "Local HTML assets listed. Inspect purpose and files; import only a selected package when it helps the task.",
-                        JsonConvert.SerializeObject(page, new JsonSerializerSettings
-                        { ContractResolver = new CamelCasePropertyNamesContractResolver() }),
+                        JObject.FromObject(page, JsonSerializer.Create(new JsonSerializerSettings
+                        { ContractResolver = new CamelCasePropertyNamesContractResolver() })),
                         HtmlWorkspaceEffect.None);
                 }
 
@@ -145,13 +145,13 @@ namespace RNAssistant.Office.Tools
                         .Select(item => item.Path).OrderBy(item => item, StringComparer.OrdinalIgnoreCase)
                         .Take(12).ToArray();
                     return WithAutomaticPreflight(session,
-                        HtmlWorkspaceToolOutcome.Ok(
+                        WorkspaceResult(session,
                             (changed ? "HTML workspace file saved: " : "HTML workspace file unchanged: ") + file.Path +
                             ". Current files (" + session.HtmlWorkspace.Files.Count + "): " +
                             string.Join(", ", files) +
                             (session.HtmlWorkspace.Files.Count > files.Length ? ", ..." : ".") +
                             " Continue from this saved state. Reuse included complete current source; read before replacement only if the needed source is absent or invalidated.",
-                            WorkspaceMutationJson(session, "file", file.Path, changed: changed),
+                            WorkspaceMutationData(session, "file", file.Path, changed: changed),
                             changed ? HtmlWorkspaceEffect.VerifiedChange : HtmlWorkspaceEffect.VerifiedNoChange),
                         cancellationToken);
                 }
@@ -168,10 +168,10 @@ namespace RNAssistant.Office.Tools
                     mark();
                     var data = UpsertDataSource(session, name, json);
                     return WithAutomaticPreflight(session,
-                        HtmlWorkspaceToolOutcome.Ok(
+                        WorkspaceResult(session,
                             "HTML workspace data saved and bound: " + data.Name +
                             ". RN.resources.open(name) is ready with view=text; no additional bind is needed.",
-                            WorkspaceMutationJson(session, "data", data.Name),
+                            WorkspaceMutationData(session, "data", data.Name),
                             HtmlWorkspaceEffect.VerifiedChange),
                         cancellationToken);
                 }
@@ -205,10 +205,10 @@ namespace RNAssistant.Office.Tools
                         ? DeleteFile(session, file.Path).Path
                         : DeleteDataSource(session, data.Name).Name;
                     return WithAutomaticPreflight(session,
-                        HtmlWorkspaceToolOutcome.Ok(
+                        WorkspaceResult(session,
                             "HTML workspace " + deletedType + " deleted: " +
                                 deletedName,
-                            WorkspaceMutationJson(
+                            WorkspaceMutationData(
                                 session, deletedType, deletedName),
                             HtmlWorkspaceEffect.VerifiedChange),
                         cancellationToken);
@@ -488,11 +488,11 @@ namespace RNAssistant.Office.Tools
             return data;
         }
 
-        private static string WorkspaceMutationJson(ChatSession session, string itemType, string itemId,
+        private static JObject WorkspaceMutationData(ChatSession session, string itemType, string itemId,
             ResourceDescriptor boundSource = null, bool? changed = null)
         {
             var workspace = NormalizedWorkspaceCopy(session == null ? null : session.HtmlWorkspace);
-            var result = AddWorkspaceResourceRefs(session, new JObject
+            var result = new JObject
             {
                 ["type"] = "rnassistant.htmlWorkspaceMutation",
                 ["version"] = 2,
@@ -505,7 +505,7 @@ namespace RNAssistant.Office.Tools
                 ["dataSourceCount"] = workspace.DataSources.Count,
                 ["boundDataSourceCount"] = workspace.DataSources.Count(item => item != null && item.Binding != null),
                 ["updatedUtc"] = workspace.UpdatedUtc
-            });
+            };
             if (changed.HasValue) { result["changed"] = changed.Value; result["saved"] = changed.Value; }
             var source = itemType == "data" ? workspace.DataSources.SingleOrDefault(item => item.Name == itemId) : null;
             if (source?.Binding != null)
@@ -519,10 +519,11 @@ namespace RNAssistant.Office.Tools
                 }
                 result["binding"] = JToken.FromObject(HtmlResourceBindingInfo.Create(source.Name, source.Binding, boundSource));
             }
-            return result.ToString(Formatting.None);
+            return result;
         }
 
-        private static JObject AddWorkspaceResourceRefs(ChatSession session, JObject data)
+        private static HtmlWorkspaceToolOutcome WorkspaceResult(
+            ChatSession session, string message, JObject data, HtmlWorkspaceEffect effect)
         {
             var artifact = (session == null ? null : session.Artifacts ?? new List<ChatArtifact>())
                 .Where(item => item != null && string.Equals(
@@ -536,22 +537,23 @@ namespace RNAssistant.Office.Tools
                 ? null
                 : ChatResourceUri.CreateArtifactRevision(session, exactArtifact);
             var members = exactArtifact == null
-                ? new object[0]
-                : new ChatHtmlResourceCatalog(null).DescribeMembers(session, exactArtifact)
-                    .Select(item => (object)new
-                    {
-                        memberType = string.Equals(item.Kind, ChatHtmlResourceCatalog.FileKind, StringComparison.Ordinal)
-                            ? "file" : "data",
-                        path = item.Title,
-                        target = ResourceGatewayService.IntentTarget(item),
-                        uri = item.Reference.Uri,
-                        revision = item.Reference.Revision
-                    })
-                    .ToArray();
-            data = data ?? new JObject();
+                ? Array.Empty<ResourceDescriptor>()
+                : new ChatHtmlResourceCatalog(null).DescribeMembers(session, exactArtifact).ToArray();
             data["artifactRef"] = artifactRef == null ? JValue.CreateNull() : JToken.FromObject(artifactRef);
-            data["members"] = JArray.FromObject(members);
-            return data;
+            data["members"] = new JArray(members.Select(item => new JObject
+            {
+                ["memberType"] = string.Equals(item.Kind, ChatHtmlResourceCatalog.FileKind, StringComparison.Ordinal)
+                    ? "file" : "data",
+                ["path"] = item.Title,
+                ["target"] = ResourceGatewayService.IntentTarget(item),
+                ["uri"] = item.Reference.Uri,
+                ["revision"] = item.Reference.Revision
+            }));
+            var resources = (artifactRef == null ? Array.Empty<ResourceRef>() : new[] { artifactRef })
+                .Concat(members.Select(item => item.Reference))
+                .GroupBy(item => item.Uri + "\n" + (item.Revision ?? string.Empty), StringComparer.Ordinal)
+                .Select(group => group.First()).ToArray();
+            return HtmlWorkspaceToolOutcome.Ok(message, data, effect, resources: resources);
         }
 
         private static List<HtmlWorkspaceSnapshot> NormalizeSnapshots(List<HtmlWorkspaceSnapshot> snapshots)

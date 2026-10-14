@@ -168,21 +168,19 @@ namespace RNAssistant.Office.Tools
                 if (!changed)
                 {
                     preview["revisionArtifactId"] = session.ActiveHtmlArtifactId;
-                    return HtmlWorkspaceToolOutcome.Ok(
+                    return WorkspaceResult(session,
                         "HTML workspace patch made no content changes: " +
                         file.Path + ".",
-                        AddWorkspaceResourceRefs(session, preview)
-                            .ToString(Formatting.None),
+                        preview,
                         HtmlWorkspaceEffect.VerifiedNoChange);
                 }
 
                 markDispatchPossible();
                 var saved = UpsertFile(session, file.Path, file.Kind, patch.Text, false);
                 preview["revisionArtifactId"] = session.ActiveHtmlArtifactId;
-                return HtmlWorkspaceToolOutcome.Ok(
+                return WorkspaceResult(session,
                     "HTML workspace patch applied: " + saved.Path + ".",
-                    AddWorkspaceResourceRefs(session, preview)
-                        .ToString(Formatting.None),
+                    preview,
                     HtmlWorkspaceEffect.VerifiedChange);
             }
             catch (StructuredTextPatchException ex)
@@ -238,7 +236,7 @@ namespace RNAssistant.Office.Tools
                             ? "Use the complete current source in recovery to revise the patch."
                             : "Read current source with common.resources_read or find a unique snippet with common.resources_find, then revise the patch.") +
                         " Do not repeat the same patch unchanged.",
-                        details.ToString(Formatting.None),
+                        details,
                         ex.ErrorCode, true, recovery);
                 }
                 return HtmlWorkspaceToolOutcome.Error(

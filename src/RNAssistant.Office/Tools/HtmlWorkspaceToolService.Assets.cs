@@ -56,8 +56,8 @@ namespace RNAssistant.Office.Tools
             return HtmlWorkspaceToolOutcome.Ok(
                 "Published local HTML asset package " + package.Id + "@" +
                 package.Version + " for reuse across workspaces.",
-                JsonConvert.SerializeObject(summary, new JsonSerializerSettings
-                { ContractResolver = new CamelCasePropertyNamesContractResolver() }),
+                JObject.FromObject(summary, JsonSerializer.Create(new JsonSerializerSettings
+                { ContractResolver = new CamelCasePropertyNamesContractResolver() })),
                 HtmlWorkspaceEffect.VerifiedChange,
                 new[] { _assets.CapturePublishedPackage(package) });
         }
@@ -111,10 +111,10 @@ namespace RNAssistant.Office.Tools
             session.HtmlWorkspace = workspace;
             HtmlWorkspaceArtifactService.CaptureCurrent(session,
                 "HTML assets: " + package.Id + "@" + package.Version);
-            return HtmlWorkspaceToolOutcome.Ok(
+            return WorkspaceResult(session,
                 "Imported " + package.Files.Count + " local HTML asset file(s) from " +
                 package.Id + "@" + package.Version + " into this workspace. Review preflight and use the imported files deliberately.",
-                WorkspaceMutationJson(session, "asset-package", package.Id + "@" + package.Version),
+                WorkspaceMutationData(session, "asset-package", package.Id + "@" + package.Version),
                 HtmlWorkspaceEffect.VerifiedChange);
         }
     }

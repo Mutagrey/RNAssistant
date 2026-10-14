@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
-using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
@@ -60,25 +59,13 @@ namespace RNAssistant.Office.Tools
                     { "includeWarnings", true },
                     { "maxIssues", 25 }
                 }, cancellationToken);
-            JObject data;
-            try
-            {
-                data = string.IsNullOrWhiteSpace(outcome.DataJson)
-                    ? new JObject()
-                    : JObject.Parse(outcome.DataJson);
-            }
-            catch (JsonException)
-            {
-                data = new JObject { ["result"] = outcome.DataJson };
-            }
-
             if (inspection.Status == HtmlWorkspaceOutcomeStatus.Ok)
             {
-                data["preflight"] = JObject.Parse(inspection.DataJson);
+                outcome.Data["preflight"] = inspection.Data;
             }
             else
             {
-                data["preflight"] = new JObject
+                outcome.Data["preflight"] = new JObject
                 {
                     ["passed"] = false,
                     ["status"] = "error",
@@ -87,12 +74,7 @@ namespace RNAssistant.Office.Tools
                 };
             }
 
-            var json = data.ToString(Formatting.None);
-            return outcome.Status == HtmlWorkspaceOutcomeStatus.Unknown
-                ? HtmlWorkspaceToolOutcome.Unknown(
-                    outcome.Message, json, outcome.ErrorCode)
-                : HtmlWorkspaceToolOutcome.Ok(
-                    outcome.Message, json, outcome.Effect);
+            return outcome;
         }
 
         private static HtmlWorkspaceToolOutcome InspectWorkspace(
@@ -170,7 +152,7 @@ namespace RNAssistant.Office.Tools
                     ["truncated"] = errors + (includeWarnings ? warnings : 0) > collector.Returned.Count,
                     ["warningsIncluded"] = includeWarnings,
                     ["issues"] = new JArray(collector.Returned)
-                }.ToString(Formatting.None), HtmlWorkspaceEffect.None);
+                }, HtmlWorkspaceEffect.None);
             }
             catch (RegexMatchTimeoutException)
             {

@@ -58,8 +58,8 @@ namespace RNAssistant.Office.Tools
             if (previous != null && previous.Policy == binding.Policy && previous.View == binding.View &&
                 previous.ViewPath == binding.ViewPath && previous.Resource.Uri == binding.Resource.Uri &&
                 previous.Resource.Revision == binding.Resource.Revision)
-                return HtmlWorkspaceToolOutcome.Ok("HTML resource is already bound: " + name + ".",
-                    WorkspaceMutationJson(session, "data", name, target.Descriptor), HtmlWorkspaceEffect.VerifiedNoChange);
+                return WorkspaceResult(session, "HTML resource is already bound: " + name + ".",
+                    WorkspaceMutationData(session, "data", name, target.Descriptor), HtmlWorkspaceEffect.VerifiedNoChange);
             ValidateWorkspaceCapacity(workspace, null, null, id, null);
             markDispatchPossible();
             session.HtmlWorkspace = NormalizeWorkspace(session.HtmlWorkspace);
@@ -72,8 +72,8 @@ namespace RNAssistant.Office.Tools
             data.Binding = binding; data.UpdatedUtc = DateTime.UtcNow;
             session.HtmlWorkspace.UpdatedUtc = data.UpdatedUtc;
             HtmlWorkspaceArtifactService.CaptureCurrent(session, "HTML resource binding: " + name);
-            return HtmlWorkspaceToolOutcome.Ok("HTML resource bound: " + name + ".",
-                WorkspaceMutationJson(session, "data", name, target.Descriptor), HtmlWorkspaceEffect.VerifiedChange);
+            return WorkspaceResult(session, "HTML resource bound: " + name + ".",
+                WorkspaceMutationData(session, "data", name, target.Descriptor), HtmlWorkspaceEffect.VerifiedChange);
         }
 
         private HtmlWorkspaceToolOutcome RefreshDataSources(ChatSession session,
@@ -87,8 +87,8 @@ namespace RNAssistant.Office.Tools
             foreach (var source in targets) ReadBinding(session, source.Binding, cancellationToken);
             // A read may observe source drift; only source authority publishes it.
             // No workspace payload/status refresh and no new workspace revision.
-            return HtmlWorkspaceToolOutcome.Ok("Resource bindings resolved. Reopen handles to read their current revisions.",
-                WorkspaceMutationJson(session, "data", name), HtmlWorkspaceEffect.VerifiedNoChange);
+            return WorkspaceResult(session, "Resource bindings resolved. Reopen handles to read their current revisions.",
+                WorkspaceMutationData(session, "data", name), HtmlWorkspaceEffect.VerifiedNoChange);
         }
 
         private HtmlWorkspaceToolOutcome FreezeDataSource(ChatSession session,
@@ -98,16 +98,16 @@ namespace RNAssistant.Office.Tools
             var name = ToolArgumentReader.String(arguments, "name", string.Empty);
             var source = FindDataSource(NormalizedWorkspaceCopy(session.HtmlWorkspace), name);
             if (source.Binding.Policy == "exact")
-                return HtmlWorkspaceToolOutcome.Ok("Resource is already revision-pinned.",
-                    WorkspaceMutationJson(session, "data", name), HtmlWorkspaceEffect.VerifiedNoChange);
+                return WorkspaceResult(session, "Resource is already revision-pinned.",
+                    WorkspaceMutationData(session, "data", name), HtmlWorkspaceEffect.VerifiedNoChange);
             var exact = ReadBinding(session, source.Binding, CancellationToken.None).Resource.Reference;
             markDispatchPossible();
             var current = FindDataSource(session.HtmlWorkspace, name);
             current.Binding.Resource = exact.Copy(); current.Binding.Policy = "exact";
             current.UpdatedUtc = DateTime.UtcNow;
             HtmlWorkspaceArtifactService.CaptureCurrent(session, "HTML resource frozen: " + name);
-            return HtmlWorkspaceToolOutcome.Ok("Resource pinned to an exact revision: " + name + ".",
-                WorkspaceMutationJson(session, "data", name), HtmlWorkspaceEffect.VerifiedChange);
+            return WorkspaceResult(session, "Resource pinned to an exact revision: " + name + ".",
+                WorkspaceMutationData(session, "data", name), HtmlWorkspaceEffect.VerifiedChange);
         }
 
         private ResourceReadResult ReadBinding(ChatSession session, HtmlWorkspaceDataBinding binding, CancellationToken cancellationToken)

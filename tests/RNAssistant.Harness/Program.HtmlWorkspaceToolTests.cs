@@ -161,12 +161,18 @@ namespace RNAssistant.Harness
                     AssertTrue(upsert.Result.Message.IndexOf("SHA-256",
                             StringComparison.OrdinalIgnoreCase) < 0,
                         "HTML write does not put a runtime content hash in the visible result");
-                    AssertTrue(upsert.Result.Resources.Any(reference =>
-                            reference.Uri.IndexOf("/artifact/",
-                                StringComparison.Ordinal) >= 0),
-                        "HTML mutation exposes the exact revision resource");
-                    AssertTrue(JObject.Parse(upsert.Result.DataJson)
-                            ["preflight"] != null,
+                    var upsertData = JObject.Parse(upsert.Result.DataJson);
+                    var durableReferences = new[] { upsertData["artifactRef"] }
+                        .Concat((JArray)upsertData["members"]);
+                    var resultReferences = upsert.Result.Resources;
+                    AssertTrue(resultReferences.Count > 0 &&
+                        resultReferences.All(reference => reference.IsExact),
+                        "HTML mutation references remain revision-pinned after preflight");
+                    AssertTrue(durableReferences.All(expected => resultReferences.Any(reference =>
+                            reference.Uri == (string)expected["uri"] &&
+                            reference.Revision == (string)expected["revision"])),
+                        "terminal result retains all durable workspace and member references");
+                    AssertTrue(upsertData["preflight"] != null,
                         "HTML write runs static preflight automatically");
 
                     var projectedInvocation = new ToolInvocation
@@ -299,6 +305,8 @@ namespace RNAssistant.Harness
                     var data = JObject.Parse(failed.Result.DataJson);
                     AssertEqual("text_patch_not_found", (string)data["code"],
                         "mismatch has a precise code");
+                    AssertTrue((bool)data["retryable"],
+                        "structured failure retains the existing retry flag");
                     AssertEqual(2, (int)data["hunkIndex"],
                         "mismatch identifies the failed hunk");
                     AssertEqual(source, failed.Recovery.CurrentContent,

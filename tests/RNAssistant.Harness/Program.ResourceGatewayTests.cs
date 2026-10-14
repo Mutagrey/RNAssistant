@@ -1008,7 +1008,7 @@ namespace RNAssistant.Harness
                 CancellationToken.None);
             AssertEqual(HtmlWorkspaceOutcomeStatus.Ok, mutation.Status,
                 "HTML mutation succeeds before canonical-ref assertions");
-            var mutationData = JObject.Parse(mutation.DataJson);
+            var mutationData = mutation.Data;
             AssertEqual(2, (int)mutationData["version"], "HTML mutation result version");
             var mutationArtifactUri = (string)mutationData.SelectToken("artifactRef.uri");
             AssertTrue(!string.IsNullOrWhiteSpace(mutationArtifactUri),

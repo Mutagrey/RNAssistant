@@ -826,6 +826,13 @@ semantic target должен выдерживать round-trip: target из find
 `success/ok` рядом или заставлять таблицу и VBA source иметь одинаковое содержимое
 не нужно.
 
+В HTML-контуре `HtmlWorkspaceToolService` передаёт в outcome структурированный
+`JObject` и отдельный список `ResourceRef`, полученный из каталога workspace.
+Preflight дополняет тот же outcome, сохраняя effect, recovery и read-back;
+`HtmlWorkspaceToolHandler` сериализует данные один раз при создании Tool Result.
+Handler не восстанавливает resource-ссылки из JSON. Durable `artifactRef`/`members`
+и внешний Tool Result v1 сохраняются; preview получает typed DTO напрямую из дерева.
+
 Слабая граница — `data` как произвольный JSON плюс независимые metadata paths.
 `ModelToolResultProjection` знает семейства по именам и рекурсивно удаляет ключи,
 похожие на runtime state. Для business table rows уже требуется специальное

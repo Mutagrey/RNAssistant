@@ -506,7 +506,7 @@ namespace RNAssistant.Harness
                     inspectSession, CancellationToken.None);
                 AssertEqual(HtmlWorkspaceOutcomeStatus.Ok, inspectResult.Status,
                     "internal HTML static inspection succeeds even when findings exist");
-                var inspection = JObject.Parse(inspectResult.DataJson);
+                var inspection = inspectResult.Data;
                 AssertTrue(!(bool)inspection["runtimeExecuted"], "HTML inspection identifies static-only scope");
                 AssertTrue(!(bool)inspection["passed"], "HTML inspection fails preflight when errors exist");
                 AssertTrue((int)inspection["errorCount"] >= 5, "HTML inspection reports assembly, CSP and missing-data errors");

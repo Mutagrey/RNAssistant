@@ -88,6 +88,8 @@ namespace RNAssistant.Harness
                         ["files"] = new JArray("helper.js") });
                 AssertEqual(ToolExecutionOutcome.Ok, published.Outcome,
                     "agent can publish selected existing source");
+                AssertEqual(1, published.ResourceReadBack.Count,
+                    "asset publication retains its verified read-back through terminal projection");
                 AssertTrue(JObject.Parse(published.Result.DataJson)["revision"] == null,
                     "publish does not expose runtime revision as a model argument");
                 AssertTrue(File.Exists(Path.Combine(FixturePaths.Value.Root,
