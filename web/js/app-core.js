@@ -36,6 +36,7 @@ var state = {
   activeChatMode: "agent",
   activeChatReasoning: false,
   bridgeToken: "",
+  bridgeOperations: null,
   messages: [],
   messageStartIndex: 0,
   messageTotalCount: 0,
@@ -235,6 +236,48 @@ function setControlBusy(target, busy) {
   delete control.dataset.busyWasDisabled;
 }
 
+var bridgeContractVersion = 1;
+
+function acceptBridgeContract(contract) {
+  if (!contract || contract.version !== bridgeContractVersion || !Array.isArray(contract.operations)) {
+    throw new Error("WebView bridge contract mismatch. Reload the panel.");
+  }
+  var operations = Object.create(null);
+  contract.operations.forEach(function (operation) {
+    if (!operation || typeof operation.name !== "string" || !operation.name || operations[operation.name] ||
+        !Number.isInteger(operation.idleTimeoutMs) || operation.idleTimeoutMs <= 0 ||
+        typeof operation.cancellable !== "boolean") {
+      throw new Error("Invalid WebView bridge operation contract.");
+    }
+    operations[operation.name] = operation;
+  });
+  if (!operations.init) throw new Error("Missing WebView bridge init contract.");
+  state.bridgeOperations = operations;
+}
+
+function takeBridgePending(id) {
+  var pending = state.pending[id];
+  if (pending) {
+    clearTimeout(pending.timer);
+    delete state.pending[id];
+  }
+  return pending;
+}
+
+function refreshBridgeWait(id) {
+  var pending = state.pending[id];
+  if (!pending) return;
+  clearTimeout(pending.timer);
+  pending.timer = setTimeout(function () {
+    if (state.pending[id] !== pending) return;
+    takeBridgePending(id);
+    var error = new Error("Ответ Office не получен. Обновите состояние перед повтором операции.");
+    error.code = "bridge_response_timeout";
+    error.resultUncertain = true;
+    pending.reject(error);
+  }, pending.idleTimeoutMs);
+}
+
 function send(type, payload) {
   var id = String(state.seq++);
   var promise = new Promise(function (resolve, reject) {
@@ -245,11 +288,19 @@ function send(type, payload) {
 
     var normalizedPayload = payload || {};
     var post = function () {
-      state.pending[id] = { resolve: resolve, reject: reject, type: type, payload: normalizedPayload };
+      var operation = type === "init" ? { idleTimeoutMs: 30000 } : state.bridgeOperations && state.bridgeOperations[type];
+      if (!operation) {
+        reject(new Error("Unknown WebView bridge operation: " + type));
+        return;
+      }
+      state.pending[id] = { resolve: resolve, reject: reject, type: type, payload: normalizedPayload,
+        idleTimeoutMs: operation.idleTimeoutMs };
+      refreshBridgeWait(id);
       try {
-        window.chrome.webview.postMessage({ id: id, type: type, bridgeToken: state.bridgeToken || null, payload: normalizedPayload });
+        window.chrome.webview.postMessage({ contractVersion: bridgeContractVersion, id: id, type: type,
+          bridgeToken: state.bridgeToken || null, payload: normalizedPayload });
       } catch (error) {
-        delete state.pending[id];
+        takeBridgePending(id);
         reject(error);
       }
     };
@@ -284,10 +335,9 @@ function failBridgeTransport(response, cause) {
   error.transportFailure = true;
   state.bridgeUnavailable = true;
   state.bridgeToken = "";
+  state.bridgeOperations = null;
   Object.keys(state.pending).forEach(function (id) {
-    var pending = state.pending[id];
-    delete state.pending[id];
-    pending.reject(error);
+    takeBridgePending(id).reject(error);
   });
   if (typeof applyBridgeUnavailableState === "function") {
     applyBridgeUnavailableState(error);
@@ -399,17 +449,18 @@ if (window.chrome && window.chrome.webview) {
     if (response && response.type === "progress") {
       var progress = response.payload || {};
       var progressPending = state.pending[response.id];
+      if (progressPending) refreshBridgeWait(response.id);
       var isChatProgress = String(response.id || "").indexOf("inbox:") === 0 || progressPending && (progressPending.type === "sendChat" || progressPending.type === "confirmAgentTool" || progressPending.type === "editMessage");
-      var progressChatId = progress.chatId || progress.ChatId || (progressPending && progressPending.payload && progressPending.payload.chatId) || "";
-      var progressRunId = progress.runId || progress.RunId || "";
+      var progressChatId = progress.chatId || (progressPending && progressPending.payload && progressPending.payload.chatId) || "";
+      var progressRunId = progress.runId || "";
       if (progressChatId && isChatProgress) {
-        trackChatProgressRun(progressChatId, progressRunId).phase = progress.phase || progress.Phase || "working";
+        trackChatProgressRun(progressChatId, progressRunId).phase = progress.phase || "working";
       }
-      var contentReset = !!(progress.contentReset || progress.ContentReset);
-      var reasoningReset = !!(progress.reasoningReset || progress.ReasoningReset);
-      var contentDelta = progress.contentDelta || progress.ContentDelta || "";
-      var reasoningDelta = progress.reasoningDelta || progress.ReasoningDelta || "";
-      var reasoningComplete = !!(progress.reasoningComplete || progress.ReasoningComplete);
+      var contentReset = !!(progress.contentReset);
+      var reasoningReset = !!(progress.reasoningReset);
+      var contentDelta = progress.contentDelta || "";
+      var reasoningDelta = progress.reasoningDelta || "";
+      var reasoningComplete = !!(progress.reasoningComplete);
       var hasReasoningProgress = !!(reasoningDelta || reasoningComplete);
       if ((contentReset || reasoningReset) && isChatProgress) {
         // Keep the previous attempt visible until the next attempt has real output to replace it.
@@ -477,7 +528,7 @@ if (window.chrome && window.chrome.webview) {
         return;
       }
       if (isChatProgress) {
-        var activityPhase = String(progress.phase || progress.Phase || "").toLowerCase();
+        var activityPhase = String(progress.phase || "").toLowerCase();
         if ((activityPhase === "acting" || activityPhase === "tool_running") && progressChatId) {
           state.chatRuns[progressChatId].stream = "";
           state.chatRuns[progressChatId].streamResetPending = false;
@@ -503,12 +554,18 @@ if (window.chrome && window.chrome.webview) {
       applyPushedChatState(response);
       return;
     }
-    var pending = state.pending[response.id];
-    if (!pending) {
-      return;
-    }
-    delete state.pending[response.id];
+    var pending = takeBridgePending(response.id);
+    if (!pending) return;
     if (response.ok) {
+      if (pending.type === "init" || pending.type === "clearRuntimeData") {
+        try { acceptBridgeContract(response.payload && response.payload.bridgeContract); }
+        catch (error) {
+          error.code = "bridge_contract_mismatch";
+          pending.reject(error);
+          failBridgeTransport({ error: error.message, errorCode: error.code });
+          return;
+        }
+      }
       pending.resolve(response.payload);
     } else {
       var error = new Error(response.error || "Bridge error");
@@ -517,6 +574,7 @@ if (window.chrome && window.chrome.webview) {
       error.transportFailure = !!response.transportFailure;
       error.cancelled = !!response.cancelled;
       pending.reject(error);
+      if (error.code === "bridge_contract_mismatch") failBridgeTransport(response);
     }
   });
 }

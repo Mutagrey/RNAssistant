@@ -1,65 +1,20 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
+using RNAssistant.Office.Contracts;
 
 namespace RNAssistant.Office.WebView
 {
     internal sealed class BridgeRequestCancellationRegistry : IDisposable
     {
-        private static readonly HashSet<string> CancellableTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "sendChat",
-            "runTool",
-            "runVbaMacro",
-            "htmlFetch",
-            "resourceDataOpen",
-            "beginChatResourceUpload",
-            "completeChatResourceUpload",
-            "getChatTrajectory",
-            "exportChatTrajectory",
-            "getChatEventPayload",
-            "getModelContext",
-            "getModelContextPayload",
-            "getVbaModule",
-            "readSkillSource",
-            "readToolSource",
-            "readPromptSource",
-            "beginPromptMutationUpload",
-            "beginHtmlWorkspaceMutationUpload",
-            "readHtmlWorkspaceSource",
-            "saveHtmlWorkspaceFile",
-            "saveHtmlWorkspaceData",
-            "saveSettings",
-            "getToolDocumentation",
-            "beginSkillMutationUpload",
-            "beginToolMutationUpload",
-            "saveTools",
-            "saveSkills",
-            "saveSkillReference",
-            "beginVbaModuleUpload",
-            "saveVbaModule",
-            "createVbaModule",
-            "readArtifactViewerPage",
-            "readArtifactImage",
-            "readArtifactImageThumbnail",
-            "readArtifactPdfPage",
-            "readArtifactPdfThumbnail",
-            "compactChatContext",
-            "editMessage",
-            "confirmAgentTool",
-            "testModelConnection",
-            "getModelCatalog",
-            "testModelCompatibility"
-        };
-
         private readonly object _sync = new object();
         private readonly Dictionary<string, CancellationTokenSource> _sources =
             new Dictionary<string, CancellationTokenSource>(StringComparer.OrdinalIgnoreCase);
         private bool _disposed;
 
-        public CancellationTokenSource Create(string requestId, string requestType)
+        public CancellationTokenSource Create(string requestId, BridgeOperationDescriptor operation)
         {
-            if (string.IsNullOrWhiteSpace(requestId) || !CancellableTypes.Contains(requestType ?? string.Empty))
+            if (string.IsNullOrWhiteSpace(requestId) || operation == null || !operation.Cancellable)
             {
                 return null;
             }

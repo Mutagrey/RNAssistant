@@ -1,3 +1,4 @@
+using RNAssistant.Office.Contracts;
 using RNAssistant.Office.WebView;
 
 namespace RNAssistant.Harness
@@ -18,7 +19,7 @@ namespace RNAssistant.Harness
             AssertTrue(!WebViewSecurityPolicy.CanOpenExternally("file:///C:/secret.txt"), "file external link rejected");
 
             var cancellations = new BridgeRequestCancellationRegistry();
-            var source = cancellations.Create("request-1", "editMessage");
+            var source = cancellations.Create("request-1", BridgeOperationCatalog.Resolve("editMessage"));
             AssertTrue(source != null, "long bridge request tracked");
             AssertTrue(cancellations.Cancel("request-1"), "tracked bridge request cancelled");
             AssertTrue(source.IsCancellationRequested, "bridge cancellation token signalled");
@@ -27,13 +28,13 @@ namespace RNAssistant.Harness
 
             foreach (var type in new[] { "beginChatResourceUpload", "completeChatResourceUpload", "exportChatTrajectory", "getChatEventPayload", "getVbaModule", "beginVbaModuleUpload", "saveVbaModule", "createVbaModule", "readSkillSource", "beginSkillMutationUpload", "beginToolMutationUpload", "saveTools", "saveSkills", "saveSkillReference" })
             {
-                var uploadSource = cancellations.Create(type, type);
+                var uploadSource = cancellations.Create(type, BridgeOperationCatalog.Resolve(type));
                 AssertTrue(uploadSource != null && cancellations.Cancel(type) && uploadSource.IsCancellationRequested,
                     "upload control lifecycle participates in bridge cancellation");
                 cancellations.Release(type, uploadSource);
             }
 
-            var shutdownSource = cancellations.Create("request-2", "sendChat");
+            var shutdownSource = cancellations.Create("request-2", BridgeOperationCatalog.Resolve("sendChat"));
             cancellations.Dispose();
             AssertTrue(shutdownSource.IsCancellationRequested, "bridge disposal cancels active requests");
             cancellations.Release("request-2", shutdownSource);

@@ -99,12 +99,16 @@ namespace RNAssistant.Office.WebView
             {
                 if (request == null) throw new InvalidOperationException("WebView bridge request is missing.");
                 id = request.Id;
-                var type = (request.Type ?? string.Empty).Trim();
+                if (request.ContractVersion != BridgeOperationCatalog.Version)
+                    return SerializeFailure(id, "WebView bridge contract mismatch. Reload the panel.",
+                        "The UI and host must use the same bridge contract.", "bridge_contract_mismatch", false);
+                var operation = BridgeOperationCatalog.Resolve(request.Type);
+                var type = operation.Id;
                 lock (_hostSwitchSync)
                 {
                     if (_disposed) throw new OperationCanceledException("Bridge is closing.");
-                    var telemetry = string.Equals(type, "reportClientTiming", StringComparison.Ordinal);
-                    var needsExclusiveBinding = string.Equals(type, "createOfficeHostChat", StringComparison.Ordinal);
+                    var telemetry = type == BridgeOperationId.ReportClientTiming;
+                    var needsExclusiveBinding = type == BridgeOperationId.CreateOfficeHostChat;
                     if (!telemetry && (_hostSwitchPending || (needsExclusiveBinding && _requestsInFlight != 0)))
                         throw new BridgeSwitchBusyException();
                     if (!telemetry)
@@ -116,12 +120,12 @@ namespace RNAssistant.Office.WebView
                 }
                 var timer = Stopwatch.StartNew();
                 var payload = request.Payload ?? JValue.CreateNull();
-                if (RequiresBridgeToken(type) && !string.Equals(request.BridgeToken, _bridgeToken, StringComparison.Ordinal))
+                if (type != BridgeOperationId.Init && !string.Equals(request.BridgeToken, _bridgeToken, StringComparison.Ordinal))
                 {
                     throw new InvalidOperationException("Invalid WebView bridge token.");
                 }
                 object responsePayload;
-                if (string.Equals(type, "cancelRequest", StringComparison.OrdinalIgnoreCase))
+                if (type == BridgeOperationId.CancelRequest)
                 {
                     responsePayload = new CancellationResponse
                     {
@@ -129,7 +133,7 @@ namespace RNAssistant.Office.WebView
                     };
                     return Success(id, responsePayload);
                 }
-                if (string.Equals(type, "cancelChatRun", StringComparison.OrdinalIgnoreCase))
+                if (type == BridgeOperationId.CancelChatRun)
                 {
                     var cancelRun = Payload<CancelChatRunPayload>(payload);
                     responsePayload = new CancellationResponse
@@ -139,13 +143,13 @@ namespace RNAssistant.Office.WebView
                     return Success(id, responsePayload);
                 }
 
-                try { cancellationSource = _cancellations.Create(id, type); }
+                try { cancellationSource = _cancellations.Create(id, operation); }
                 catch (ObjectDisposedException) { throw new OperationCanceledException("Bridge is closing."); }
                 var cancellationToken = cancellationSource == null ? CancellationToken.None : cancellationSource.Token;
 
                 switch (type)
                 {
-                    case "reportClientTiming":
+                    case BridgeOperationId.ReportClientTiming:
                         var clientTiming = Payload<ClientTimingPayload>(payload);
                         if ((string.Equals(clientTiming.Kind, "startup", StringComparison.Ordinal) ||
                                 string.Equals(clientTiming.Kind, "chatResponse", StringComparison.Ordinal) ||
@@ -161,48 +165,48 @@ namespace RNAssistant.Office.WebView
                                 clientTiming.RenderMs + "ms, messages=" + clientTiming.Messages + ".");
                         responsePayload = null;
                         break;
-                    case "init":
+                    case BridgeOperationId.Init:
                         responsePayload = await RunBridgeWorkAsync(
                             () => WithBridgeToken(_controller.Initialize()),
                             cancellationToken).ConfigureAwait(false);
                         break;
-                    case "listChats":
+                    case BridgeOperationId.ListChats:
                         responsePayload = await RunBridgeWorkAsync(
                             () => _controller.ListChats(),
                             cancellationToken).ConfigureAwait(false);
                         break;
-                    case "getChatState":
+                    case BridgeOperationId.GetChatState:
                         var getChat = Payload<ChatPayload>(payload);
                         responsePayload = await RunBridgeWorkAsync(
                             () => _controller.GetChatDetail(getChat.ChatId),
                             cancellationToken).ConfigureAwait(false);
                         break;
-                    case "getPreviousChatMessages":
+                    case BridgeOperationId.GetPreviousChatMessages:
                         var previousMessages = Payload<ChatMessagePagePayload>(payload);
                         responsePayload = await RunBridgeWorkAsync(
                             () => _controller.GetPreviousChatMessages(
                                 previousMessages.ChatId, previousMessages.BeforeIndex),
                             cancellationToken).ConfigureAwait(false);
                         break;
-                    case "getChatTrajectory":
+                    case BridgeOperationId.GetChatTrajectory:
                         var trajectoryRequest = Payload<ChatTrajectoryRequest>(payload);
                         responsePayload = await RunBridgeWorkAsync(
                             () => _controller.GetChatTrajectory(trajectoryRequest),
                             cancellationToken).ConfigureAwait(false);
                         break;
-                    case "exportChatTrajectory":
+                    case BridgeOperationId.ExportChatTrajectory:
                         responsePayload = await _controller.ExportChatTrajectoryAsync(Payload<ChatTrajectoryExportRequest>(payload), cancellationToken).ConfigureAwait(false);
                         break;
-                    case "getChatEventPayload":
+                    case BridgeOperationId.GetChatEventPayload:
                         var chatEventPayload = Payload<ChatEventPayloadRequest>(payload);
                         responsePayload = await _controller.GetChatEventPayloadAsync(chatEventPayload.ChatId, chatEventPayload.EventId, cancellationToken).ConfigureAwait(false);
                         break;
-                    case "createChat":
+                    case BridgeOperationId.CreateChat:
                         var createChat = Payload<CreateChatPayload>(payload);
                         responsePayload = await RunBridgeWorkAsync(
                             () => _controller.CreateChat(createChat.Title), cancellationToken).ConfigureAwait(false);
                         break;
-                    case "createDocumentChat":
+                    case BridgeOperationId.CreateDocumentChat:
                         var createDocumentChat = Payload<CreateDocumentChatPayload>(payload);
                         responsePayload = await RunBridgeWorkAsync(() => _controller.CreateDocumentChat(
                             createDocumentChat.Title,
@@ -211,7 +215,7 @@ namespace RNAssistant.Office.WebView
                             createDocumentChat.DocumentTitle,
                             createDocumentChat.DocumentPath), cancellationToken).ConfigureAwait(false);
                         break;
-                    case "selectChat":
+                    case BridgeOperationId.SelectChat:
                         var selectChat = Payload<ChatPayload>(payload);
                         if (OfficeChatSelectionRequested == null)
                             responsePayload = await RunBridgeWorkAsync(
@@ -251,15 +255,15 @@ namespace RNAssistant.Office.WebView
                             responsePayload = selectedOfficeChat;
                         }
                         break;
-                    case "openDocument":
+                    case BridgeOperationId.OpenDocument:
                         responsePayload = await RunBridgeWorkAsync(
                             () => _controller.OpenDocument(Payload<ChatPayload>(payload).ChatId), cancellationToken).ConfigureAwait(false);
                         break;
-                    case "activateDocument":
+                    case BridgeOperationId.ActivateDocument:
                         responsePayload = await RunBridgeWorkAsync(
                             () => _controller.ActivateDocument(Payload<DocumentPayload>(payload).DocumentKey), cancellationToken).ConfigureAwait(false);
                         break;
-                    case "attachOutlookMailbox":
+                    case BridgeOperationId.AttachOutlookMailbox:
                         var mailbox = Payload<OutlookMailboxNavigationPayload>(payload);
                         if (MailboxNavigationRequested == null || string.IsNullOrWhiteSpace(mailbox.DocumentKey) ||
                             !mailbox.DocumentKey.StartsWith("outlook-mailbox:", StringComparison.Ordinal))
@@ -267,7 +271,7 @@ namespace RNAssistant.Office.WebView
                         MailboxNavigationRequested(mailbox.DocumentKey, mailbox.ChatId, mailbox.CreateNew);
                         responsePayload = new OutlookMailboxNavigationResponse { Scheduled = true };
                         break;
-                    case "createOfficeHostChat":
+                    case BridgeOperationId.CreateOfficeHostChat:
                         var hostChat = Payload<OfficeHostChatPayload>(payload);
                         if (OfficeHostChatRequested == null || !IsSupportedOfficeHost(hostChat.Host))
                             throw new InvalidOperationException("Office host chat creation is unavailable.");
@@ -285,85 +289,85 @@ namespace RNAssistant.Office.WebView
                             throw new InvalidOperationException("Office host binding does not match the created chat.");
                         responsePayload = createdHostChat;
                         break;
-                    case "deleteDocument":
+                    case BridgeOperationId.DeleteDocument:
                         var deleteDocument = Payload<DocumentPayload>(payload);
                         responsePayload = await RunBridgeWorkAsync(
                             () => _controller.DeleteDocument(deleteDocument.Host, deleteDocument.DocumentKey), cancellationToken).ConfigureAwait(false);
                         break;
-                    case "renameChat":
+                    case BridgeOperationId.RenameChat:
                         var renameChat = Payload<RenameChatPayload>(payload);
                         responsePayload = await RunBridgeWorkAsync(
                             () => _controller.RenameChat(renameChat.ChatId, renameChat.Title), cancellationToken).ConfigureAwait(false);
                         break;
-                    case "setChatModel":
+                    case BridgeOperationId.SetChatModel:
                         var setChatModel = Payload<SetChatModelPayload>(payload);
                         responsePayload = await RunBridgeWorkAsync(
                             () => _controller.SetChatModel(setChatModel.ChatId, setChatModel.Model), cancellationToken).ConfigureAwait(false);
                         break;
-                    case "setChatMode":
+                    case BridgeOperationId.SetChatMode:
                         var setChatMode = Payload<SetChatModePayload>(payload);
                         responsePayload = await RunBridgeWorkAsync(
                             () => _controller.SetChatMode(setChatMode.ChatId, setChatMode.Mode), cancellationToken).ConfigureAwait(false);
                         break;
-                    case "setChatMutationPolicy":
+                    case BridgeOperationId.SetChatMutationPolicy:
                         var setChatPolicy = Payload<SetChatMutationPolicyPayload>(payload);
                         responsePayload = await RunBridgeWorkAsync(
                             () => _controller.SetChatMutationPolicy(setChatPolicy.ChatId, setChatPolicy.MutationPolicy), cancellationToken).ConfigureAwait(false);
                         break;
-                    case "setChatReasoning":
+                    case BridgeOperationId.SetChatReasoning:
                         var setChatReasoning = Payload<SetChatReasoningPayload>(payload);
                         responsePayload = await RunBridgeWorkAsync(
                             () => _controller.SetChatReasoning(setChatReasoning.ChatId, setChatReasoning.Enabled == true), cancellationToken).ConfigureAwait(false);
                         break;
-                    case "allowHtmlNetworkOrigin":
+                    case BridgeOperationId.AllowHtmlNetworkOrigin:
                         responsePayload = _controller.AllowHtmlNetworkOrigin(Payload<HtmlOriginPayload>(payload).Origin);
                         break;
-                    case "htmlFetch":
+                    case BridgeOperationId.HtmlFetch:
                         responsePayload = await _controller.HtmlFetchAsync(Payload<HtmlFetchRequest>(payload), cancellationToken);
                         break;
-                    case "clearChat":
+                    case BridgeOperationId.ClearChat:
                         responsePayload = await RunBridgeWorkAsync(
                             () => _controller.ClearChat(Payload<ChatPayload>(payload).ChatId), cancellationToken).ConfigureAwait(false);
                         break;
-                    case "compactChatContext":
+                    case BridgeOperationId.CompactChatContext:
                         var compactChat = Payload<ChatPayload>(payload);
                         responsePayload = await _controller.CompactChatContextAsync(
                             compactChat.ChatId,
                             (phase, message, activity) => ReportProgress(id, compactChat.ChatId, string.Empty, phase, message, activity),
                             cancellationToken).ConfigureAwait(false);
                         break;
-                    case "deleteChat":
+                    case BridgeOperationId.DeleteChat:
                         responsePayload = await RunBridgeWorkAsync(
                             () => _controller.DeleteChat(Payload<ChatPayload>(payload).ChatId), cancellationToken).ConfigureAwait(false);
                         break;
-                    case "stopChatInbox":
+                    case BridgeOperationId.StopChatInbox:
                         responsePayload = await RunBridgeWorkAsync(() => _controller.StopChatInbox(Payload<ChatPayload>(payload).ChatId), cancellationToken).ConfigureAwait(false);
                         break;
-                    case "getChatInbox":
+                    case BridgeOperationId.GetChatInbox:
                         responsePayload = await RunBridgeWorkAsync(() => _controller.GetChatInbox(Payload<ChatPayload>(payload).ChatId), cancellationToken).ConfigureAwait(false);
                         break;
-                    case "submitChatInput":
+                    case BridgeOperationId.SubmitChatInput:
                         var inboxInput = Payload<SubmitChatInputPayload>(payload);
                         responsePayload = await RunBridgeWorkAsync(() => _controller.SubmitChatInput(inboxInput,
                             (nextRun, phase, message, activity) => ReportProgress("inbox:" + inboxInput.ChatId, inboxInput.ChatId, nextRun, phase, message, activity),
                             ReportChatState), cancellationToken).ConfigureAwait(false);
                         break;
-                    case "editChatInput":
-                    case "removeChatInput":
-                    case "steerChatInput":
+                    case BridgeOperationId.EditChatInput:
+                    case BridgeOperationId.RemoveChatInput:
+                    case BridgeOperationId.SteerChatInput:
                         var inboxUpdate = Payload<UpdateChatInputPayload>(payload);
                         responsePayload = await RunBridgeWorkAsync(() => _controller.UpdateChatInput(inboxUpdate,
-                            type == "removeChatInput" ? "remove" : type == "steerChatInput" ? "steer" : "edit",
+                            type == BridgeOperationId.RemoveChatInput ? "remove" : type == BridgeOperationId.SteerChatInput ? "steer" : "edit",
                             (nextRun, phase, message, activity) => ReportProgress("inbox:" + inboxUpdate.ChatId, inboxUpdate.ChatId, nextRun, phase, message, activity),
                             ReportChatState), cancellationToken).ConfigureAwait(false);
                         break;
-                    case "resumeChatInbox":
+                    case BridgeOperationId.ResumeChatInbox:
                         var inboxChat = Payload<ChatPayload>(payload).ChatId;
                         responsePayload = await RunBridgeWorkAsync(() => _controller.ResumeChatInbox(inboxChat,
                             (nextRun, phase, message, activity) => ReportProgress("inbox:" + inboxChat, inboxChat, nextRun, phase, message, activity),
                             ReportChatState), cancellationToken).ConfigureAwait(false);
                         break;
-                    case "sendChat":
+                    case BridgeOperationId.SendChat:
                         var sendChat = Payload<SendChatPayload>(payload);
                         var runId = Guid.NewGuid().ToString("N");
                         responsePayload = await Task.Run(() => _controller.SendChatAsync(
@@ -376,29 +380,29 @@ namespace RNAssistant.Office.WebView
                                 runId),
                             cancellationToken).ConfigureAwait(false);
                         break;
-                    case "beginChatResourceUpload":
+                    case BridgeOperationId.BeginChatResourceUpload:
                         responsePayload = _controller.BeginChatResourceUpload(Payload<ResourceUploadOpenRequest>(payload), cancellationToken);
                         break;
-                    case "completeChatResourceUpload":
+                    case BridgeOperationId.CompleteChatResourceUpload:
                         responsePayload = await _controller.CompleteChatResourceUploadAsync(Payload<ResourceUploadLeaseRequest>(payload), cancellationToken).ConfigureAwait(false);
                         break;
-                    case "cancelChatResourceUpload":
+                    case BridgeOperationId.CancelChatResourceUpload:
                         responsePayload = _controller.CancelChatResourceUpload(Payload<ResourceUploadLeaseRequest>(payload));
                         break;
-                    case "discardChatResourceDraft":
+                    case BridgeOperationId.DiscardChatResourceDraft:
                         var discardResource = Payload<DiscardChatResourceDraftPayload>(payload);
                         responsePayload = _controller.DiscardChatResourceDraft(discardResource.ChatId, discardResource.Id);
                         break;
-                    case "deleteMessage":
+                    case BridgeOperationId.DeleteMessage:
                         var deleteMessage = Payload<MessageActionPayload>(payload);
                         responsePayload = _controller.DeleteMessage(deleteMessage.Id, deleteMessage.Index ?? -1, deleteMessage.ChatId);
                         break;
-                    case "forkChat":
+                    case BridgeOperationId.ForkChat:
                         var forkChat = Payload<MessageActionPayload>(payload);
                         responsePayload = await RunBridgeWorkAsync(
                             () => _controller.ForkChat(forkChat.Id, forkChat.Index ?? -1, forkChat.ChatId), cancellationToken).ConfigureAwait(false);
                         break;
-                    case "editMessage":
+                    case BridgeOperationId.EditMessage:
                         var editMessage = Payload<EditMessagePayload>(payload);
                         var editRunId = Guid.NewGuid().ToString("N");
                         responsePayload = await _controller.EditMessageAsync(
@@ -411,99 +415,99 @@ namespace RNAssistant.Office.WebView
                             cancellationToken,
                             editRunId);
                         break;
-                    case "updateMessageActivityData":
+                    case BridgeOperationId.UpdateMessageActivityData:
                         var updateActivityData = Payload<UpdateMessageActivityDataPayload>(payload);
                         responsePayload = _controller.UpdateMessageActivityData(
                             updateActivityData.MessageId,
                             updateActivityData.DataJson,
                             updateActivityData.ChatId);
                         break;
-                    case "getSettings":
+                    case BridgeOperationId.GetSettings:
                         responsePayload = _controller.GetSettings();
                         break;
-                    case "getCasHealth":
+                    case BridgeOperationId.GetCasHealth:
                         responsePayload = _controller.GetCasHealth();
                         break;
-                    case "collectCasGarbage":
+                    case BridgeOperationId.CollectCasGarbage:
                         responsePayload = _controller.CollectCasGarbage();
                         break;
-                    case "getModelCatalog":
+                    case BridgeOperationId.GetModelCatalog:
                         var modelCatalog = Payload<ModelCatalogPayload>(payload);
                         responsePayload = await Task.Run(() => _controller.GetModelCatalogAsync(
                             modelCatalog.Settings, modelCatalog.ApiKey, cancellationToken), cancellationToken).ConfigureAwait(false);
                         break;
-                    case "saveSettings":
+                    case BridgeOperationId.SaveSettings:
                         responsePayload = _controller.SaveSettings(payload.ToObject<SaveSettingsPayload>(JsonSerializer.Create(
                             new JsonSerializerSettings { MissingMemberHandling = MissingMemberHandling.Error })), cancellationToken);
                         break;
-                    case "readPromptSource":
+                    case BridgeOperationId.ReadPromptSource:
                         responsePayload = await _controller.ReadPromptSourceAsync(Payload<PromptSourceReadRequest>(payload), cancellationToken).ConfigureAwait(false);
                         break;
-                    case "beginPromptMutationUpload":
+                    case BridgeOperationId.BeginPromptMutationUpload:
                         responsePayload = _controller.BeginPromptMutationUpload(Payload<PromptMutationUploadRequest>(payload), cancellationToken);
                         break;
-                    case "cancelPromptMutationUpload":
+                    case BridgeOperationId.CancelPromptMutationUpload:
                         responsePayload = _controller.CancelPromptMutationUpload(Payload<ResourceUploadLeaseRequest>(payload));
                         break;
-                    case "testModelCompatibility":
+                    case BridgeOperationId.TestModelCompatibility:
                         responsePayload = await _controller.TestModelCompatibilityAsync(cancellationToken).ConfigureAwait(false);
                         break;
-                    case "testModelConnection":
+                    case BridgeOperationId.TestModelConnection:
                         responsePayload = await _controller.TestModelConnectionAsync(cancellationToken).ConfigureAwait(false);
                         break;
-                    case "clearRuntimeData":
+                    case BridgeOperationId.ClearRuntimeData:
                         responsePayload = WithBridgeToken(_controller.ClearRuntimeData());
                         break;
-                    case "getTools":
+                    case BridgeOperationId.GetTools:
                         responsePayload = _controller.GetTools();
                         break;
-                    case "getToolDocumentation":
+                    case BridgeOperationId.GetToolDocumentation:
                         responsePayload = await _controller.GetToolDocumentationAsync(
                             Payload<ToolLibraryDocumentationRequest>(payload), cancellationToken).ConfigureAwait(false);
                         break;
-                    case "saveTools":
+                    case BridgeOperationId.SaveTools:
                         responsePayload = await _controller.SaveToolsAsync(Payload<ToolMutationWriteRequest>(payload), cancellationToken).ConfigureAwait(false);
                         break;
-                    case "readToolSource":
+                    case BridgeOperationId.ReadToolSource:
                         responsePayload = await _controller.ReadToolSourceAsync(Payload<ToolSourceReadRequest>(payload), cancellationToken).ConfigureAwait(false);
                         break;
-                    case "beginToolMutationUpload":
+                    case BridgeOperationId.BeginToolMutationUpload:
                         responsePayload = _controller.BeginToolMutationUpload(Payload<ToolMutationUploadRequest>(payload), cancellationToken);
                         break;
-                    case "cancelToolMutationUpload":
+                    case BridgeOperationId.CancelToolMutationUpload:
                         responsePayload = _controller.CancelToolMutationUpload(Payload<ResourceUploadLeaseRequest>(payload));
                         break;
-                    case "installVbaTool":
+                    case BridgeOperationId.InstallVbaTool:
                         var installVbaTool = Payload<VbaToolPackagePayload>(payload);
                         responsePayload = _controller.InstallVbaTool(installVbaTool.Id, installVbaTool.DryRun);
                         break;
-                    case "uninstallVbaTool":
+                    case BridgeOperationId.UninstallVbaTool:
                         responsePayload = _controller.UninstallVbaTool(Payload<VbaToolPackagePayload>(payload).Id);
                         break;
-                    case "getSkills":
+                    case BridgeOperationId.GetSkills:
                         responsePayload = _controller.GetSkills();
                         break;
-                    case "saveSkills":
+                    case BridgeOperationId.SaveSkills:
                         responsePayload = await _controller.SaveSkillsAsync(Payload<SkillMutationWriteRequest>(payload), cancellationToken).ConfigureAwait(false);
                         break;
-                    case "beginSkillMutationUpload":
+                    case BridgeOperationId.BeginSkillMutationUpload:
                         responsePayload = _controller.BeginSkillMutationUpload(Payload<SkillMutationUploadRequest>(payload), cancellationToken);
                         break;
-                    case "cancelSkillMutationUpload":
+                    case BridgeOperationId.CancelSkillMutationUpload:
                         responsePayload = _controller.CancelSkillMutationUpload(Payload<ResourceUploadLeaseRequest>(payload));
                         break;
-                    case "readSkillSource":
+                    case BridgeOperationId.ReadSkillSource:
                         responsePayload = await _controller.ReadSkillSourceAsync(Payload<SkillSourceReadRequest>(payload), cancellationToken).ConfigureAwait(false);
                         break;
-                    case "saveSkillReference":
+                    case BridgeOperationId.SaveSkillReference:
                         responsePayload = await _controller.SaveSkillReferenceAsync(Payload<SkillMutationWriteRequest>(payload), cancellationToken).ConfigureAwait(false);
                         break;
-                    case "deleteSkillReference":
+                    case BridgeOperationId.DeleteSkillReference:
                         var deleteSkillReference = Payload<SkillReferencePayload>(payload);
                         responsePayload = _controller.DeleteSkillReference(
                             deleteSkillReference);
                         break;
-                    case "runTool":
+                    case BridgeOperationId.RunTool:
                         var runTool = Payload<RunToolPayload>(payload);
                         var runArguments = ToArguments(runTool.Arguments);
                         responsePayload = await RunBridgeWorkAsync(
@@ -516,7 +520,7 @@ namespace RNAssistant.Office.WebView
                                 cancellationToken),
                             cancellationToken).ConfigureAwait(false);
                         break;
-                    case "confirmAgentTool":
+                    case BridgeOperationId.ConfirmAgentTool:
                         var confirmAgentTool = Payload<PendingAgentToolPayload>(payload);
                         var confirmRunId = Guid.NewGuid().ToString("N");
                         responsePayload = await Task.Run(() => _controller.ConfirmAgentToolAsync(
@@ -528,202 +532,202 @@ namespace RNAssistant.Office.WebView
                                 ReportChatState),
                             cancellationToken).ConfigureAwait(false);
                         break;
-                    case "cancelAgentTool":
+                    case BridgeOperationId.CancelAgentTool:
                         var cancelAgentTool = Payload<PendingAgentToolPayload>(payload);
                         responsePayload = _controller.CancelAgentTool(cancelAgentTool.PendingId, cancelAgentTool.ChatId);
                         break;
-                    case "getVbaProject":
+                    case BridgeOperationId.GetVbaProject:
                         responsePayload = _controller.GetVbaProject();
                         break;
-                    case "getVbaModule":
+                    case BridgeOperationId.GetVbaModule:
                         responsePayload = await _controller.GetVbaModuleAsync(Payload<VbaEditorReadRequest>(payload), cancellationToken).ConfigureAwait(false);
                         break;
-                    case "getVbaMutations":
+                    case BridgeOperationId.GetVbaMutations:
                         responsePayload = _controller.GetVbaMutations(Payload<VbaMutationQueryPayload>(payload));
                         break;
-                    case "getToolResultPresentation":
+                    case BridgeOperationId.GetToolResultPresentation:
                         responsePayload = await RunBridgeWorkAsync(
                             () => _controller.ReadToolResultPresentation(Payload<ToolResultPresentationRequest>(payload)),
                             cancellationToken).ConfigureAwait(false);
                         break;
-                    case "getRunChanges":
+                    case BridgeOperationId.GetRunChanges:
                         responsePayload = await RunBridgeWorkAsync(
                             () => _controller.ReadRunChanges(Payload<RunChangesRequest>(payload)),
                             cancellationToken).ConfigureAwait(false);
                         break;
-                    case "getVbaMutationDetail":
+                    case BridgeOperationId.GetVbaMutationDetail:
                         responsePayload = _controller.GetVbaMutationDetail(
                             Payload<VbaMutationDetailPayload>(payload).MutationId);
                         break;
-                    case "saveVbaModule":
+                    case BridgeOperationId.SaveVbaModule:
                         responsePayload = await _controller.SaveVbaModuleAsync(Payload<VbaModulePayload>(payload), cancellationToken).ConfigureAwait(false);
                         break;
-                    case "createVbaModule":
+                    case BridgeOperationId.CreateVbaModule:
                         responsePayload = await _controller.CreateVbaModuleAsync(Payload<VbaCreateModulePayload>(payload), cancellationToken).ConfigureAwait(false);
                         break;
-                    case "beginVbaModuleUpload":
+                    case BridgeOperationId.BeginVbaModuleUpload:
                         responsePayload = _controller.BeginVbaModuleUpload(Payload<VbaEditorUploadRequest>(payload), cancellationToken);
                         break;
-                    case "cancelVbaModuleUpload":
+                    case BridgeOperationId.CancelVbaModuleUpload:
                         responsePayload = _controller.CancelVbaModuleUpload(Payload<ResourceUploadLeaseRequest>(payload));
                         break;
-                    case "deleteVbaModule":
+                    case BridgeOperationId.DeleteVbaModule:
                         var deleteVbaModule = Payload<VbaDeleteModulePayload>(payload);
                         responsePayload = _controller.DeleteVbaModule(deleteVbaModule.ModuleName);
                         break;
-                    case "restoreVbaBackup":
+                    case BridgeOperationId.RestoreVbaBackup:
                         var restoreVba = Payload<RestoreVbaBackupPayload>(payload);
                         responsePayload = _controller.RestoreVbaBackup(restoreVba.BackupId, restoreVba.ModuleName);
                         break;
-                    case "runVbaMacro":
+                    case BridgeOperationId.RunVbaMacro:
                         responsePayload = _controller.RunVbaMacro(
                             Payload<RunVbaMacroPayload>(payload).MacroName,
                             cancellationToken);
                         break;
-                    case "resourceDataOpen":
+                    case BridgeOperationId.ResourceDataOpen:
                         responsePayload = _controller.OpenResourceData(Payload<ResourceDataOpenRequest>(payload), cancellationToken);
                         break;
-                    case "resourceDataClose":
+                    case BridgeOperationId.ResourceDataClose:
                         responsePayload = _controller.CloseResourceData(Payload<ResourceDataCloseRequest>(payload));
                         break;
-                    case "getHtmlWorkspace":
+                    case BridgeOperationId.GetHtmlWorkspace:
                         responsePayload = _controller.GetHtmlWorkspace(Payload<ChatPayload>(payload).ChatId);
                         break;
-                    case "readHtmlWorkspaceSource":
+                    case BridgeOperationId.ReadHtmlWorkspaceSource:
                         responsePayload = await _controller.ReadHtmlWorkspaceSourceAsync(Payload<HtmlWorkspaceSourceRequest>(payload), cancellationToken).ConfigureAwait(false);
                         break;
-                    case "saveHtmlWorkspaceFile":
+                    case BridgeOperationId.SaveHtmlWorkspaceFile:
                         responsePayload = _controller.SaveHtmlWorkspaceFile(
                             payload.ToObject<HtmlWorkspaceFilePayload>(JsonSerializer.Create(
                                 new JsonSerializerSettings { MissingMemberHandling = MissingMemberHandling.Error })), cancellationToken);
                         break;
-                    case "saveHtmlWorkspaceData":
+                    case BridgeOperationId.SaveHtmlWorkspaceData:
                         responsePayload = _controller.SaveHtmlWorkspaceData(
                             payload.ToObject<HtmlWorkspaceDataPayload>(JsonSerializer.Create(
                                 new JsonSerializerSettings { MissingMemberHandling = MissingMemberHandling.Error })), cancellationToken);
                         break;
-                    case "beginHtmlWorkspaceMutationUpload":
+                    case BridgeOperationId.BeginHtmlWorkspaceMutationUpload:
                         responsePayload = _controller.BeginHtmlWorkspaceMutationUpload(Payload<HtmlWorkspaceMutationUploadRequest>(payload), cancellationToken);
                         break;
-                    case "cancelHtmlWorkspaceMutationUpload":
+                    case BridgeOperationId.CancelHtmlWorkspaceMutationUpload:
                         responsePayload = _controller.CancelHtmlWorkspaceMutationUpload(Payload<ResourceUploadLeaseRequest>(payload));
                         break;
-                    case "listArtifactCatalog":
+                    case BridgeOperationId.ListArtifactCatalog:
                         responsePayload = _controller.ListArtifactCatalog(Payload<ArtifactCatalogRequest>(payload));
                         break;
-                    case "getArtifactLibraryPage":
+                    case BridgeOperationId.GetArtifactLibraryPage:
                         var libraryPage = Payload<ArtifactLibraryPageRequest>(payload);
                         responsePayload = await RunBridgeWorkAsync(
                             () => _controller.GetArtifactLibraryPage(libraryPage), cancellationToken).ConfigureAwait(false);
                         break;
-                    case "getArtifactLibraryHistory":
+                    case BridgeOperationId.GetArtifactLibraryHistory:
                         var libraryHistory = Payload<ArtifactLibraryHistoryRequest>(payload);
                         responsePayload = await RunBridgeWorkAsync(
                             () => _controller.GetArtifactLibraryHistory(libraryHistory), cancellationToken).ConfigureAwait(false);
                         break;
-                    case "exportArtifact":
+                    case BridgeOperationId.ExportArtifact:
                         responsePayload = _controller.ExportArtifact(Payload<ArtifactTransferRequest>(payload), cancellationToken);
                         break;
-                    case "copyArtifact":
+                    case BridgeOperationId.CopyArtifact:
                         responsePayload = _controller.CopyArtifact(Payload<ArtifactTransferRequest>(payload), cancellationToken);
                         break;
-                    case "beginArtifactImport":
+                    case BridgeOperationId.BeginArtifactImport:
                         responsePayload = _controller.BeginArtifactImport(Payload<ResourceUploadOpenRequest>(payload), cancellationToken);
                         break;
-                    case "importArtifact":
+                    case BridgeOperationId.ImportArtifact:
                         responsePayload = _controller.ImportArtifact(Payload<ArtifactTransferRequest>(payload), cancellationToken);
                         break;
-                    case "closeArtifactTransfer":
+                    case BridgeOperationId.CloseArtifactTransfer:
                         responsePayload = _controller.CloseArtifactTransfer(Payload<ResourceUploadLeaseRequest>(payload));
                         break;
-                    case "changeArtifactLink":
+                    case BridgeOperationId.ChangeArtifactLink:
                         responsePayload = _controller.ChangeArtifactLink(Payload<ArtifactLinkChangeRequest>(payload));
                         break;
-                    case "deleteDocumentArtifact":
+                    case BridgeOperationId.DeleteDocumentArtifact:
                         responsePayload = _controller.DeleteDocumentArtifact(Payload<ArtifactDeleteRequest>(payload));
                         break;
-                    case "readArtifactViewerPage":
+                    case BridgeOperationId.ReadArtifactViewerPage:
                         var artifactViewerPage = Payload<ArtifactViewerPagePayload>(payload);
                         responsePayload = _controller.ReadArtifactViewerPage(
                             artifactViewerPage.ChatId,
                             artifactViewerPage.ResourceUri,
                             artifactViewerPage.Cursor, cancellationToken);
                         break;
-                    case "readArtifactImage":
+                    case BridgeOperationId.ReadArtifactImage:
                         var artifactImage = Payload<ArtifactImageViewerPayload>(payload);
                         responsePayload = _controller.ReadArtifactImage(
                             artifactImage.ChatId,
                             artifactImage.ResourceUri, cancellationToken);
                         break;
-                    case "readArtifactImageThumbnail":
+                    case BridgeOperationId.ReadArtifactImageThumbnail:
                         var artifactImageThumbnail = Payload<ArtifactImageThumbnailPayload>(payload);
                         responsePayload = _controller.ReadArtifactImageThumbnail(
                             artifactImageThumbnail.ChatId,
                             artifactImageThumbnail.ResourceUri, cancellationToken);
                         break;
-                    case "readArtifactPdfInfo":
+                    case BridgeOperationId.ReadArtifactPdfInfo:
                         var artifactPdf = Payload<ArtifactPdfViewerPayload>(payload);
                         responsePayload = _controller.ReadArtifactPdfInfo(
                             artifactPdf.ChatId,
                             artifactPdf.ResourceUri);
                         break;
-                    case "readArtifactPdfPage":
+                    case BridgeOperationId.ReadArtifactPdfPage:
                         var artifactPdfPage = Payload<ArtifactPdfPagePayload>(payload);
                         responsePayload = _controller.ReadArtifactPdfPage(
                             artifactPdfPage.ChatId,
                             artifactPdfPage.ResourceUri,
                             artifactPdfPage.PageIndex, cancellationToken);
                         break;
-                    case "readArtifactPdfThumbnail":
+                    case BridgeOperationId.ReadArtifactPdfThumbnail:
                         var artifactPdfThumbnail = Payload<ArtifactPdfPagePayload>(payload);
                         responsePayload = _controller.ReadArtifactPdfThumbnail(
                             artifactPdfThumbnail.ChatId,
                             artifactPdfThumbnail.ResourceUri,
                             artifactPdfThumbnail.PageIndex, cancellationToken);
                         break;
-                    case "importUploadedHtmlToWorkspace":
+                    case BridgeOperationId.ImportUploadedHtmlToWorkspace:
                         var htmlImport = Payload<HtmlWorkspaceImportPayload>(payload);
                         responsePayload = _controller.ImportUploadedHtmlToWorkspace(htmlImport);
                         break;
-                    case "prepareHtmlWorkspaceExport":
+                    case BridgeOperationId.PrepareHtmlWorkspaceExport:
                         var htmlExport = Payload<HtmlWorkspaceExportPayload>(payload);
                         responsePayload = _controller.PrepareHtmlWorkspaceExport(htmlExport, cancellationToken);
                         break;
-                    case "deleteHtmlWorkspaceFile":
+                    case BridgeOperationId.DeleteHtmlWorkspaceFile:
                         var deleteHtmlFile = Payload<HtmlWorkspaceDeleteFilePayload>(payload);
                         responsePayload = _controller.DeleteHtmlWorkspaceFile(deleteHtmlFile);
                         break;
-                    case "deleteHtmlWorkspaceData":
+                    case BridgeOperationId.DeleteHtmlWorkspaceData:
                         var deleteHtmlData = Payload<HtmlWorkspaceDeleteDataPayload>(payload);
                         responsePayload = _controller.DeleteHtmlWorkspaceData(deleteHtmlData);
                         break;
-                    case "setActiveHtmlWorkspaceFile":
+                    case BridgeOperationId.SetActiveHtmlWorkspaceFile:
                         var htmlActive = Payload<HtmlWorkspaceActiveFilePayload>(payload);
                         responsePayload = _controller.SetActiveHtmlWorkspaceFile(htmlActive);
                         break;
-                    case "restoreHtmlWorkspaceSnapshot":
+                    case BridgeOperationId.RestoreHtmlWorkspaceSnapshot:
                         var htmlRestore = Payload<HtmlWorkspaceRestorePayload>(payload);
                         responsePayload = _controller.RestoreHtmlWorkspaceSnapshot(htmlRestore);
                         break;
-                    case "redoHtmlWorkspaceSnapshot":
+                    case BridgeOperationId.RedoHtmlWorkspaceSnapshot:
                         var htmlRedo = Payload<HtmlWorkspaceRestorePayload>(payload);
                         responsePayload = _controller.RedoHtmlWorkspaceSnapshot(htmlRedo);
                         break;
-                    case "getContext":
+                    case BridgeOperationId.GetContext:
                         responsePayload = _controller.GetContext(Payload<ChatPayload>(payload).ChatId);
                         break;
-                    case "getModelContext":
+                    case BridgeOperationId.GetModelContext:
                         responsePayload = await _controller.GetModelContextAsync(Payload<ModelContextQuery>(payload), cancellationToken).ConfigureAwait(false);
                         break;
-                    case "getModelContextPayload":
+                    case BridgeOperationId.GetModelContextPayload:
                         responsePayload = await _controller.GetModelContextPayloadAsync(Payload<ModelContextPayloadQuery>(payload), cancellationToken).ConfigureAwait(false);
                         break;
-                    case "inspectModelContextPreview":
+                    case BridgeOperationId.InspectModelContextPreview:
                         var modelPreview = Payload<PromptContextInspectorPayload>(payload);
                         responsePayload = _controller.InspectPromptContext(modelPreview.ChatId, modelPreview.Text,
                             modelPreview.ResourceDraftIds, true, true);
                         break;
-                    case "inspectPromptContext":
+                    case BridgeOperationId.InspectPromptContext:
                         var inspectContext = Payload<PromptContextInspectorPayload>(payload);
                         responsePayload = _controller.InspectPromptContext(
                             inspectContext.ChatId,
@@ -731,18 +735,18 @@ namespace RNAssistant.Office.WebView
                             inspectContext.ResourceDraftIds,
                             inspectContext.IncludeRaw);
                         break;
-                    case "getAgentArsenal":
+                    case BridgeOperationId.GetAgentArsenal:
                         responsePayload = _controller.GetAgentArsenal(Payload<AgentArsenalPayload>(payload));
                         break;
-                    case "stageSelectionInput":
+                    case BridgeOperationId.StageSelectionInput:
                         var stagedSelection = Payload<SelectionContextPayload>(payload);
                         responsePayload = _controller.StageSelectionInput(stagedSelection.Mode, stagedSelection.ChatId);
                         break;
-                    case "addSelectionContext":
+                    case BridgeOperationId.AddSelectionContext:
                         var selectionContext = Payload<SelectionContextPayload>(payload);
                         responsePayload = _controller.AddSelectionContextFromBridge(selectionContext.Mode, selectionContext.ChatId);
                         break;
-                    case "addTextContext":
+                    case BridgeOperationId.AddTextContext:
                         var textContext = Payload<TextContextPayload>(payload);
                         responsePayload = _controller.AddTextContext(
                             textContext.Role,
@@ -753,14 +757,14 @@ namespace RNAssistant.Office.WebView
                             textContext.DetailsJson,
                             textContext.ChatId);
                         break;
-                    case "removeContextItem":
+                    case BridgeOperationId.RemoveContextItem:
                         var removeContextItem = Payload<RemoveContextItemPayload>(payload);
                         responsePayload = _controller.RemoveContextItem(removeContextItem.Id, removeContextItem.ChatId);
                         break;
-                    case "clearContext":
+                    case BridgeOperationId.ClearContext:
                         responsePayload = _controller.ClearContext(Payload<ChatPayload>(payload).ChatId);
                         break;
-                    case "quickAction":
+                    case BridgeOperationId.QuickAction:
                         responsePayload = await _controller.RunQuickActionAsync(Payload<QuickActionPayload>(payload).Action);
                         break;
                     default:
@@ -770,12 +774,12 @@ namespace RNAssistant.Office.WebView
                 var handleMs = timer.ElapsedMilliseconds;
                 var serialized = Success(id, responsePayload);
                 var serializeMs = timer.ElapsedMilliseconds - handleMs;
-                if ((string.Equals(type, "init", StringComparison.OrdinalIgnoreCase) &&
+                if ((type == BridgeOperationId.Init &&
                         handleMs + serializeMs >= 500) ||
-                    ((handleMs + serializeMs >= 250) && (string.Equals(type, "sendChat", StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(type, "getChatState", StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(type, "selectChat", StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(type, "listChats", StringComparison.OrdinalIgnoreCase))))
+                    ((handleMs + serializeMs >= 250) && (type == BridgeOperationId.SendChat ||
+                        type == BridgeOperationId.GetChatState ||
+                        type == BridgeOperationId.SelectChat ||
+                        type == BridgeOperationId.ListChats)))
                     RuntimeLog.Info("Bridge response timing: type=" + type + ", handle=" + handleMs +
                         "ms, serialize=" + serializeMs + "ms, chars=" + serialized.Length + ".");
                 return serialized;
@@ -810,11 +814,6 @@ namespace RNAssistant.Office.WebView
                     }
                 }
             }
-        }
-
-        private static bool RequiresBridgeToken(string type)
-        {
-            return !string.Equals(type, "init", StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool IsSupportedOfficeHost(string host)

@@ -80,7 +80,7 @@ namespace RNAssistant.Harness
                 var payload = new JObject { ["chatId"] = "chat-html", ["expectedSessionRevision"] = 17,
                     ["expectedActiveHtmlArtifactId"] = "html-r3", ["path"] = "index.html", ["name"] = "sales",
                     ["snapshotId"] = "selected", ["sourceResourceUri"] = "rna://exact/original", ["targetPath"] = "import.html" };
-                var response = JObject.Parse(bridge.HandleMessageAsync(new JObject { ["id"] = method, ["type"] = method,
+                var response = JObject.Parse(bridge.HandleMessageAsync(new JObject { ["contractVersion"] = BridgeOperationCatalog.Version, ["id"] = method, ["type"] = method,
                     ["bridgeToken"] = BridgeToken(bridge), ["payload"] = payload }.ToString()).GetAwaiter().GetResult());
                 AssertTrue(response["ok"].Value<bool>(), method + " routes typed controls");
                 AssertEqual("chat-html", controller.LastHtmlAction.ChatId, method + " preserves source chat");

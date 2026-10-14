@@ -12,6 +12,9 @@ namespace RNAssistant.Office.Contracts
 {
     public sealed class BridgeRequest
     {
+        [JsonProperty("contractVersion")]
+        public int ContractVersion { get; set; }
+
         [JsonProperty("id")]
         public string Id { get; set; }
 
@@ -931,6 +934,9 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("quickAction")]
         public string QuickAction { get; set; }
+
+        [JsonProperty("bridgeContract")]
+        public BridgeContractDto BridgeContract { get { return new BridgeContractDto(); } }
 
         [JsonProperty("bridgeToken")]
         public string BridgeToken { get; set; }

@@ -212,7 +212,7 @@ namespace RNAssistant.Harness
         {
             var controller = new AssistantController(); var bridge = new AssistantWebBridge(controller, null); var token = BridgeToken(bridge);
             Func<string, JObject, JObject> send = (action, payload) => JObject.Parse(bridge.HandleMessageAsync(new JObject {
-                ["id"] = Guid.NewGuid().ToString("N"), ["type"] = action, ["bridgeToken"] = token, ["payload"] = payload }.ToString()).GetAwaiter().GetResult());
+                ["contractVersion"] = BridgeOperationCatalog.Version, ["id"] = Guid.NewGuid().ToString("N"), ["type"] = action, ["bridgeToken"] = token, ["payload"] = payload }.ToString()).GetAwaiter().GetResult());
             var controls = new JObject { ["chatId"] = "html-chat", ["expectedActiveHtmlArtifactId"] = "", ["uploadLeaseId"] = new string('a', 64), ["sha256"] = new string('b', 64) };
             foreach (var action in new[] { "saveHtmlWorkspaceFile", "saveHtmlWorkspaceData" })
             {
@@ -226,7 +226,7 @@ namespace RNAssistant.Harness
             AssertTrue(send("cancelHtmlWorkspaceMutationUpload", new JObject { ["chatId"] = "html-chat", ["leaseId"] = new string('a', 64) })["ok"].Value<bool>(), "typed close is routed");
             using (var registry = new BridgeRequestCancellationRegistry())
                 foreach (var action in new[] { "beginHtmlWorkspaceMutationUpload", "saveHtmlWorkspaceFile", "saveHtmlWorkspaceData" })
-                    AssertTrue(registry.Create(action, action) != null, "each in-flight HTML request is cancellable");
+                    AssertTrue(registry.Create(action, BridgeOperationCatalog.Resolve(action)) != null, "each in-flight HTML request is cancellable");
         }
     }
 }

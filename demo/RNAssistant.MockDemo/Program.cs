@@ -182,6 +182,7 @@ namespace RNAssistant.MockDemo
                 }).ConfigureAwait(false);
                 var request = JsonConvert.SerializeObject(new
                 {
+                    contractVersion = BridgeOperationCatalog.Version,
                     id = "failure-send",
                     type = "sendChat",
                     bridgeToken = token,
@@ -446,6 +447,7 @@ namespace RNAssistant.MockDemo
         {
             var request = JsonConvert.SerializeObject(new
             {
+                contractVersion = BridgeOperationCatalog.Version,
                 id = id,
                 type = type,
                 bridgeToken = token,

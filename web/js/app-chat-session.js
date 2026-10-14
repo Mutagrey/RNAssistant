@@ -46,11 +46,11 @@ function navigateChat(type, payload) {
     var bridgeMs = (window.performance && window.performance.now ? window.performance.now() : Date.now()) - startedAt;
     // Apply each completed switch before dispatching the next. If the next request
     // fails, the visible chat still matches the controller's committed binding.
-    var selectedState = response && (response.state || response.State || response);
+    var selectedState = response && (response.state || response);
     var appliedNavigation = true;
     if (type === "init" || response.init) applyInitState(response.init || response);
-    else if (response.state || response.State) appliedNavigation = applyChatNavigationState(selectedState, version);
-    else if (response.activeChatId !== undefined || response.ActiveChatId !== undefined)
+    else if (response.state) appliedNavigation = applyChatNavigationState(selectedState, version);
+    else if (response.activeChatId !== undefined)
       appliedNavigation = applyChatNavigationState(selectedState, version);
     if (type === "selectChat" && !appliedNavigation && state.chatDetailPending &&
         state.activeChatId === payload.chatId) {
@@ -199,7 +199,7 @@ async function loadPreviousChatMessages(event) {
       if (id && !knownArtifacts[id]) { state.artifacts.push(artifact); knownArtifacts[id] = true; }
     });
     var library = state.artifactLibrary || {};
-    var removed = library.removedResourceUris || library.RemovedResourceUris || [];
+    var removed = library.removedResourceUris || [];
     var knownRemoved = Object.create(null);
     removed.forEach(function (uri) { knownRemoved[String(uri).toLowerCase()] = true; });
     (page.removedResourceUris || []).forEach(function (uri) {
@@ -433,7 +433,7 @@ function applyInitState(init) {
   state.chatStateApplyVersion = (state.chatStateApplyVersion || 0) + 1;
   init = init || {};
   var previousChatId = state.activeChatId || "";
-  var nextChatId = init.activeChatId || init.ActiveChatId || "";
+  var nextChatId = init.activeChatId || "";
   var chatChanged = previousChatId !== nextChatId;
   if (chatChanged) {
     captureChatDraft(previousChatId);
@@ -443,20 +443,20 @@ function applyInitState(init) {
   state.bridgeUnavailable = false;
   document.body.classList.remove("bridge-unavailable");
   resetMessageEditState();
-  state.appVersion = init.appVersion || init.AppVersion || "";
+  state.appVersion = init.appVersion || "";
   state.host = init.host;
-  state.officeHostChatAvailable = !!(init.officeHostChatAvailable || init.OfficeHostChatAvailable);
+  state.officeHostChatAvailable = !!(init.officeHostChatAvailable);
   state.title = init.title;
   state.officeContext = init.officeContext || null;
-  state.bridgeToken = init.bridgeToken || init.BridgeToken || state.bridgeToken || "";
+  state.bridgeToken = init.bridgeToken || "";
   state.settings = init.settings || {};
   if (typeof resetModelCatalog === "function") resetModelCatalog();
   state.prompts = init.prompts;
   if (typeof releasePromptEditorContext === "function") releasePromptEditorContext();
   if (typeof window.cancelHtmlWorkspaceWrite === "function") window.cancelHtmlWorkspaceWrite();
   if (typeof window.cancelHtmlWorkspaceRead === "function") window.cancelHtmlWorkspaceRead();
-  state.hasApiKey = !!(init.hasApiKey || init.HasApiKey);
-  state.hasHistorySecret = !!(init.hasHistorySecret || init.HasHistorySecret);
+  state.hasApiKey = !!(init.hasApiKey);
+  state.hasHistorySecret = !!(init.hasHistorySecret);
   if (typeof cancelToolLibraryWrite === "function") cancelToolLibraryWrite();
   if (typeof cancelToolSourceRead === "function") cancelToolSourceRead();
   if (typeof cancelToolDocumentationRead === "function") cancelToolDocumentationRead();
@@ -470,7 +470,7 @@ function applyInitState(init) {
   state.skillsPath = init.skillsPath || "";
   state.context = init.context || {};
   state.contextUsage = init.contextUsage || {};
-  state.htmlWorkspace = init.htmlWorkspace || init.HtmlWorkspace || { activeFileId: "", files: [], dataSources: [], history: [], redoHistory: [], redoBranches: [], recovery: { status: "empty", canMutate: true, candidates: [] } };
+  state.htmlWorkspace = init.htmlWorkspace || { activeFileId: "", files: [], dataSources: [], history: [], redoHistory: [], redoBranches: [], recovery: { status: "empty", canMutate: true, candidates: [] } };
   state.htmlWorkspaceDirty = false;
   state.activeChatId = nextChatId;
   state.chatDetailPending = false;
@@ -483,22 +483,22 @@ function applyInitState(init) {
   state.activeRunViewState = window.RNAssistantRunViewState.normalize(
     init.runViewState !== undefined ? init.runViewState : init.RunViewState);
   state.activeChatModel = init.activeChatModel || "";
-  state.activeChatMode = init.activeChatMode || init.ActiveChatMode || "agent";
+  state.activeChatMode = init.activeChatMode || "agent";
   state.mutationPolicy = init.mutationPolicy || "Ask";
   state.chatReadOnly = init.chatReadOnly === true;
-  state.activeChatReasoning = !!(init.activeChatReasoning || init.ActiveChatReasoning);
+  state.activeChatReasoning = !!(init.activeChatReasoning);
   state.chats = window.RNAssistantRunViewState.mergeCatalog(
-    [], init.chats || init.Chats || [], state.chatProjectionRevisions);
-  state.documents = init.documents || init.Documents || [];
+    [], init.chats || [], state.chatProjectionRevisions);
+  state.documents = init.documents || [];
   state.messages = init.messages || [];
-  state.messageStartIndex = init.messageStartIndex || init.MessageStartIndex || 0;
-  state.messageTotalCount = init.messageTotalCount || init.MessageTotalCount || state.messages.length;
-  state.artifacts = init.artifacts || init.Artifacts || [];
-  state.artifactLibrary = init.artifactLibrary || init.ArtifactLibrary || { sessionRevision: 0, heads: [] };
-  state.activeContextCheckpointId = init.activeContextCheckpointId || init.ActiveContextCheckpointId || "";
-  state.activeHtmlArtifactId = init.activeHtmlArtifactId || init.ActiveHtmlArtifactId || "";
-  state.activeTaskListArtifactId = init.activeTaskListArtifactId || init.ActiveTaskListArtifactId || "";
-  state.activePlanDocumentArtifactId = init.activePlanDocumentArtifactId || init.ActivePlanDocumentArtifactId || "";
+  state.messageStartIndex = init.messageStartIndex || 0;
+  state.messageTotalCount = init.messageTotalCount || state.messages.length;
+  state.artifacts = init.artifacts || [];
+  state.artifactLibrary = init.artifactLibrary || { sessionRevision: 0, heads: [] };
+  state.activeContextCheckpointId = init.activeContextCheckpointId || "";
+  state.activeHtmlArtifactId = init.activeHtmlArtifactId || "";
+  state.activeTaskListArtifactId = init.activeTaskListArtifactId || "";
+  state.activePlanDocumentArtifactId = init.activePlanDocumentArtifactId || "";
   if (chatChanged) restoreChatDraft(state.activeChatId);
   $("toolsPath").textContent = state.toolsPath ? "Хранилище: " + state.toolsPath : "";
   if ($("skillsPath")) $("skillsPath").textContent = state.skillsPath ? "Хранилище: " + state.skillsPath : "";
@@ -528,6 +528,7 @@ function applyBridgeUnavailableState(error) {
   if (typeof cancelToolSourceRead === "function") cancelToolSourceRead();
   if (typeof cancelToolDocumentationRead === "function") cancelToolDocumentationRead();
   state.bridgeToken = "";
+  state.bridgeOperations = null;
   if (typeof releasePromptEditorContext === "function") releasePromptEditorContext();
   if (typeof window.cancelHtmlWorkspaceWrite === "function") window.cancelHtmlWorkspaceWrite();
   if (typeof window.cancelHtmlWorkspaceRead === "function") window.cancelHtmlWorkspaceRead();
@@ -583,10 +584,10 @@ function applyBridgeUnavailableState(error) {
 }
 
 function chatNavigationSignature(payload) {
-  var chats = payload.chats || payload.Chats || [];
-  var documents = payload.documents || payload.Documents || [];
+  var chats = payload.chats || [];
+  var documents = payload.documents || [];
   return JSON.stringify({
-    activeChatId: payload.activeChatId || payload.ActiveChatId || "",
+    activeChatId: payload.activeChatId || "",
     chats: chats.map(function (chat) {
       var runView = window.RNAssistantRunViewState.fromChatSummary(chat);
       return [
@@ -607,11 +608,11 @@ function chatNavigationSignature(payload) {
 
 function payloadActiveChatId(payload) {
   payload = payload || {};
-  return payload.activeChatId || payload.ActiveChatId || "";
+  return payload.activeChatId || "";
 }
 
 function catalogChatSummary(payload, id) {
-  var chats = (payload && (payload.chats || payload.Chats)) || [];
+  var chats = (payload && (payload.chats)) || [];
   for (var index = 0; index < chats.length; index++) {
     if (chatId(chats[index]) === id) return chats[index];
   }

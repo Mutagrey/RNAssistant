@@ -12,10 +12,12 @@ const chatSessionSource = fs.readFileSync(path.join(root, "web/js/app-chat-sessi
 function createContext() {
   const posted = [];
   let messageListener = null;
+  let timerId = 0;
+  const timers = new Map();
   const context = vm.createContext({
     console,
-    setTimeout,
-    clearTimeout
+    setTimeout: (callback, delay) => { const id = ++timerId; timers.set(id, { callback, delay }); return id; },
+    clearTimeout: id => timers.delete(id)
   });
   context.window = context;
   context.document = {
@@ -30,7 +32,11 @@ function createContext() {
     }
   };
   vm.runInContext(source, context, { filename: "app-core.js" });
-  return { context, posted, deliver: data => messageListener({ data }) };
+  const contract = { version: 1, operations: ["init", "listChats", "getChatState", "runTool", "clearRuntimeData"].map(name =>
+    ({ name, idleTimeoutMs: name === "init" ? 30000 : 120000, cancellable: name === "runTool" })) };
+  context.acceptBridgeContract(contract);
+  return { context, posted, contract, timers, deliver: data => messageListener({ data }),
+    expire: id => { const timer = timers.get(id); assert.ok(timer); timers.delete(id); timer.callback(); } };
 }
 
 (async function () {
@@ -53,6 +59,7 @@ function createContext() {
     assert.equal(posted.length, 1);
     assert.equal(posted[0].type, "listChats");
     assert.equal(posted[0].bridgeToken, "token-1");
+    assert.equal(posted[0].contractVersion, 1);
     assert.deepEqual(posted[0].payload, { marker: true });
     assert.equal(promise.requestId, posted[0].id);
     console.log("PASS bridge bootstrap: host calls wait for init token before posting");
@@ -170,7 +177,48 @@ function createContext() {
     console.log("PASS bridge bootstrap: post failure settles and cleans only its request (" + phase + ")");
   }
 
-  console.log("OK 10/10");
+  {
+    const { context, posted, timers, expire, deliver } = createContext();
+    context.state.bridgeToken = "token";
+    const promise = context.send("runTool", {});
+    const id = promise.requestId;
+    const before = context.state.pending[id].timer;
+    deliver({ id, type: "progress", payload: {} });
+    assert.ok(!timers.has(before), "progress replaces the idle timer");
+    const rejection = assert.rejects(promise, error => error.code === "bridge_response_timeout" && error.resultUncertain);
+    expire(context.state.pending[id].timer);
+    await rejection;
+    assert.equal(Object.keys(context.state.pending).length, 0);
+    assert.equal(timers.size, 0);
+    deliver({ id, ok: true, payload: { changed: true } });
+    assert.equal(posted.length, 1, "missing/late replies never replay an operation");
+    assert.equal(context.state.bridgeToken, "token", "read-back remains available");
+    const read = context.send("getChatState", {});
+    deliver({ id: read.requestId, ok: true, payload: {} });
+    await read;
+    assert.equal(timers.size, 0, "successful replies release timers");
+    console.log("PASS bridge bootstrap: lost and late replies settle without effect replay");
+  }
+
+  for (const version of [0, 2, undefined]) {
+    const { context, posted, deliver, contract, timers } = createContext();
+    const init = context.send("init", {});
+    deliver({ id: posted[0].id, ok: true, payload: { bridgeToken: "token", bridgeContract: { ...contract, version } } });
+    await assert.rejects(init, error => error.code === "bridge_contract_mismatch");
+    assert.equal(context.state.bridgeToken, "");
+    assert.equal(context.state.bridgeOperations, null);
+    assert.equal(timers.size, 0);
+  }
+  {
+    const { context, deliver, contract } = createContext();
+    const init = context.send("init", {});
+    deliver({ id: init.requestId, ok: true, payload: { bridgeToken: "token", bridgeContract: contract } });
+    await init;
+    context.state.bridgeToken = "token";
+    await assert.rejects(context.send("retiredOperation", {}), /Unknown WebView bridge operation/);
+    console.log("PASS bridge bootstrap: exact version and operation catalog required");
+  }
+  console.log("OK bridge bootstrap");
 }()).catch(error => {
   console.error(error.stack || error);
   process.exitCode = 1;

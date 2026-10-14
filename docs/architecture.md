@@ -240,6 +240,29 @@ runtime.
 
 See [conversation-protocol.md](conversation-protocol.md).
 
+## Bridge operation contract
+
+`Contracts/BridgeOperationCatalog` owns the closed operation vocabulary, cancellation
+policy and UI idle-wait limits. `AssistantWebBridge` resolves it once and dispatches
+by `BridgeOperationId` to the existing typed payload handlers. The cancellation
+registry consumes the same descriptor; its separate string list is removed.
+Application requests require `contractVersion: 1`; the pane-local focus signal is
+handled separately by its host adapter. `init` publishes the matching version and
+operation policies before Web can send ordinary operations. Unknown operations and
+version mismatch fail before dispatch; incompatible UI must reload explicitly.
+
+The shared `send` boundary starts an idle timer (init: 30 seconds; ordinary
+operations: 120 seconds; cancellable operations: 300 seconds). Correlated progress
+renews it. Reply, send failure or transport failure releases the timer. A missing
+reply rejects that request with `bridge_response_timeout` and an uncertain result;
+late replies cannot settle it or replay the operation. This wait bound does not
+cancel a physical mutation or close a kernel run. Read-back remains available.
+
+Init, navigation and progress envelopes use their typed camelCase fields without
+PascalCase aliases. Embedded Core projections retain their declared wire shape;
+the remaining projection-specific adapters are tracked in D03 / MIGRATION_MAP.
+Windows/Office/WebView2 delivery is a separate qualification gate.
+
 ## Important boundaries
 
 - Controller files coordinate bridge requests; reusable behavior stays in services and executor logic stays in `RNAssistant.Office/Tools`.
