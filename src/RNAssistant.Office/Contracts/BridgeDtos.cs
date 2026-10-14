@@ -683,8 +683,7 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool ExcludeFromModelContext { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public RunViewState RunViewState { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public IReadOnlyList<ChatAttachmentViewDto> Attachments { get; set; }
-        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public IReadOnlyList<ResourceRef> ResourceRefs { get; set; }
-        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public ResourceRef HtmlWorkspaceCheckpoint { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public IReadOnlyList<string> ArtifactIds { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public ChatActivity Activity { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public int? PromptTokens { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public int? CompletionTokens { get; set; }

@@ -1055,9 +1055,18 @@ revision, collection fingerprint, kind, head and offset. Stale or mismatched pag
 disposable transport projection, not another authority or store. Source enumeration
 still scans replayed metadata; no claim of bounded cold replay or journal IO follows.
 
-Message cards resolve their pinned revision even when a newer head exists. If the
-resource was explicitly removed, the message shows a stable `Resource removed`
-placeholder rather than falling forward to another revision.
+Message cards resolve their pinned revision even when a newer head exists. The
+bridge sends `ChatMessageViewDto.ArtifactIds`: deduplicated immutable snapshot IDs
+resolved from the message's durable `ResourceRefs` and `HtmlWorkspaceCheckpoint`.
+`ChatCloneService` validates the exact chat/document owner, revision and unique
+artifact once; the Library projection uses these same IDs to include historical
+cards on both recent and older message pages. A checkpoint-only message therefore
+retains its historical HTML card without depending on the loaded Library heads.
+The browser joins these IDs to `artifacts[]`; it neither parses resource URIs nor
+receives the message's runtime references. Durable evidence is unchanged. Card and
+history URIs remain opaque addresses for existing viewer/export operations.
+If the resource was explicitly removed, the message shows a stable `Resource
+removed` placeholder rather than falling forward to another revision.
 
 ### Authored text/code files — 2026-10-14
 

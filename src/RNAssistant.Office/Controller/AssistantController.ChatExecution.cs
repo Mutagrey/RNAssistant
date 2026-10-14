@@ -726,8 +726,7 @@ namespace RNAssistant.Office
             var chats = _chatSessions.GetChatSummaries(activeId);
             var chatsMs = timer.ElapsedMilliseconds - toolsMs - skillsMs;
             int messageStartIndex;
-            var bridgeMessages = ChatCloneService.CloneRecentMessagesForBridge(
-                session == null ? null : session.Messages, out messageStartIndex);
+            var bridgeMessages = ChatCloneService.CloneRecentMessagesForBridge(session, out messageStartIndex);
             var artifactPresentation = ArtifactLibraryProjectionService.ProjectState(session, bridgeMessages);
             var response = new SendChatResponse
             {

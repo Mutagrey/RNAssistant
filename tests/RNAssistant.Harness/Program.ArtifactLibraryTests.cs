@@ -83,14 +83,51 @@ namespace RNAssistant.Harness
             AssertEqual("branch", htmlHistory.Items.Single(item => item.ArtifactId == htmlRight.Id).Relation, "HTML alternative branch relation");
             AssertTrue(htmlHistory.Items.All(item => item.ResourceUri.Contains("/artifact/" + item.ArtifactId + "/revision/")),
                 "history URIs stay exact per artifact");
-            var visible = new ChatMessageViewDto { ResourceRefs = new[] { ChatResourceUri.CreateArtifactRevision(session, htmlRight) } };
-            var state = ArtifactLibraryProjectionService.ProjectState(session, new[] { visible });
+            var message = new ChatMessage { Id = "branch-message", Role = "assistant" };
+            message.ResourceRefs.Add(ChatResourceUri.CreateArtifactRevision(session, htmlRight));
+            var visible = ChatCloneService.CloneMessagesForBridge(session, new[] { message });
+            var state = ArtifactLibraryProjectionService.ProjectState(session, visible);
             var pinned = state.Artifacts.Single(item => item.Id == htmlRight.Id);
             AssertEqual(htmlLeft.Id, pinned.LibraryHead.ArtifactId, "pinned HTML card knows the selected branch head");
             AssertTrue(pinned.ResourceUri.EndsWith("/artifact/html-right-r3/revision/3", StringComparison.Ordinal),
                 "pinned HTML card keeps its exact branch URI");
             AssertTrue(pinned.LibraryRevision.ParentResourceUri.EndsWith("/artifact/html-r1/revision/1", StringComparison.Ordinal),
                 "pinned HTML card keeps its exact parent relation");
+
+            var shared = Artifact("artifact_shared-note", ChatArtifactKinds.Markdown, 2, null, 6);
+            shared.DocumentAuthorityId = session.DocumentAuthorityId = "document-owner";
+            session.Artifacts.Add(shared);
+            var checkpoint = ChatResourceUri.CreateArtifactRevision(session, html1);
+            var exactShared = ChatResourceUri.CreateArtifactRevision(session, shared);
+            var member = new ResourceRef(checkpoint.Uri + "/member/file/index.html", checkpoint.Revision);
+            var invalid = new ChatMessage { Id = "invalid-links", Role = "user" };
+            invalid.ResourceRefs.Add(new ResourceRef(
+                ResourceUri.Create("chat", "foreign", "artifact", htmlLeft.Id, "revision", "2"), "2"));
+            invalid.ResourceRefs.Add(new ResourceRef(exactShared.Uri, "1"));
+            invalid.ResourceRefs.Add(new ResourceRef(
+                ResourceUri.Create("chat", session.Id, "artifact", shared.Id, "revision", "2"), "2"));
+            invalid.ResourceRefs.Add(new ResourceRef(
+                ResourceUri.Create("chat", session.Id, "artifact", htmlLeft.Id, "revision", "1"), "1"));
+            var historical = new ChatMessage { Id = "checkpoint-only", Role = "user",
+                HtmlWorkspaceCheckpoint = checkpoint };
+            var references = new ChatMessage { Id = "shared-and-member", Role = "assistant" };
+            references.ResourceRefs.AddRange(new[] { exactShared, exactShared.Copy(), member });
+            references.HtmlWorkspaceCheckpoint = checkpoint;
+            var pageMessages = ChatCloneService.CloneMessagesForBridge(session, new[] { historical, references, invalid });
+            AssertEqual(html1.Id, pageMessages[0].ArtifactIds.Single(), "checkpoint-only message pins its historical snapshot");
+            AssertEqual(shared.Id + "," + html1.Id, string.Join(",", pageMessages[1].ArtifactIds),
+                "document resources, HTML members and checkpoints share deduplicated exact snapshot identities");
+            AssertTrue(pageMessages[2].ArtifactIds == null, "foreign owners and mismatched revisions cannot attach a loaded card");
+            var page = ArtifactLibraryProjectionService.ProjectMessagePage(session, pageMessages);
+            AssertEqual(2, page.Artifacts.Count, "older message page includes exactly its pinned snapshots");
+            AssertEqual(1, page.Artifacts.Single(item => item.Id == html1.Id).Revision,
+                "checkpoint card never falls forward to the active HTML branch");
+            shared.RemovedFromDocument = true;
+            var removed = ArtifactLibraryProjectionService.ProjectMessagePage(session, pageMessages);
+            AssertTrue(removed.Library.RemovedResourceUris.Contains(exactShared.Uri),
+                "an exact removed message resource retains its tombstone placeholder");
+            AssertEqual(checkpoint.Uri, historical.HtmlWorkspaceCheckpoint.Uri, "durable checkpoint is unchanged");
+            AssertEqual(3, references.ResourceRefs.Count, "durable evidence is not deduplicated by presentation");
         }
 
         private static void ArtifactLibraryProjectsDerivedResources()

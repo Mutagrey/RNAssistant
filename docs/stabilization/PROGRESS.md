@@ -1,5 +1,25 @@
 # Stabilization progress
 
+## Exact message artifact IDs replace UI URI parsing — 2026-10-14
+
+Owner: Office bridge presentation / Web artifact UI. `ChatMessageViewDto.ArtifactIds`
+replaces message `ResourceRefs` and `HtmlWorkspaceCheckpoint` in browser transport.
+The existing Core resolver validates the owner, revision and unique immutable
+snapshot once; recent/older-page Library projection and UI use the same IDs.
+Checkpoint-only messages now include their historical HTML card even outside the
+loaded heads. Durable evidence and opaque viewer/export URIs remain unchanged.
+The UI parser and duplicate deduplication are removed: 51 fewer production C#/JS
+lines, with no new service, store or fallback. This is no end-to-end latency claim.
+
+Nine focused host-neutral checks pass: Library classes/history/transport/cursors,
+message wire projection, older SQLite tombstones, chat paging and lifecycle.
+Eleven Node checks and three Chromium image checks pass. Exact historical versions,
+shared document resources, member/checkpoint deduplication and rejection of foreign
+owners or mismatched revisions are covered. Source/evidence:
+`/tmp/rna-artifact-links-20261014-cnwbpv6y/`, isolated `95a1d036` plus this change.
+Version format is checked before commit. Real Windows/Office/WebView2 delivery and
+performance remain open; these checks do not qualify Office behavior.
+
 ## Repeated CAS checks reuse verified encodings — 2026-10-14
 
 Owner: Core `ChatBlobStore`/`CasBlobCodec`. One volatile fingerprint remembers the

@@ -960,7 +960,9 @@ namespace RNAssistant.Harness
                         ExtractedText = extractedText } },
                     ResourceRefs = new List<ResourceRef> { new ResourceRef("rna://chat/chat-1/artifact/a/revision/1", "1") } }
             };
-            var projected = ChatCloneService.CloneMessagesForBridge(messages);
+            var session = new ChatSession { Id = "chat-1" };
+            session.Artifacts.Add(new ChatArtifact { Id = "a", Revision = 1 });
+            var projected = ChatCloneService.CloneMessagesForBridge(session, messages);
             var json = JsonConvert.SerializeObject(projected);
             var wire = JArray.Parse(json);
 
@@ -975,7 +977,9 @@ namespace RNAssistant.Harness
             AssertEqual("report.txt", (string)wire[1]["Attachments"][0]["FileName"], "attachment label retained");
             AssertTrue(wire[1]["Attachments"][0]["ExtractedText"] == null && !json.Contains(extractedText),
                 "extracted attachment text stays out of browser state");
-            AssertTrue(wire[1]["ResourceRefs"][0] != null, "artifact reference retained");
+            AssertEqual("a", (string)wire[1]["ArtifactIds"][0], "exact artifact identity retained");
+            AssertTrue(wire[1]["ResourceRefs"] == null && wire[1]["HtmlWorkspaceCheckpoint"] == null &&
+                !json.Contains("rna://"), "message links do not duplicate runtime resource references");
             AssertTrue(json.Length < hiddenBody.Length / 20,
                 "browser response stays bounded when hidden and extracted bodies grow");
             AssertTrue(!object.ReferenceEquals(messages[1].Activity, projected[1].Activity),
@@ -986,8 +990,8 @@ namespace RNAssistant.Harness
                 "runtime guard and catalog hash stay out of browser activity");
             AssertEqual("Unknown", (string)wire[1]["Activity"]["ExecutionEvidence"]["Effect"],
                 "browser activity retains source-owned effect for the warning color");
-            AssertTrue(!object.ReferenceEquals(messages[1].ResourceRefs[0], projected[1].ResourceRefs[0]),
-                "artifact reference is detached from live session");
+            messages[1].ResourceRefs.Clear();
+            AssertEqual("a", projected[1].ArtifactIds.Single(), "message links are detached from live session");
             AssertEqual(hiddenBody, messages[0].Content, "bridge projection does not mutate durable input");
         }
 

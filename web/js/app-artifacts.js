@@ -131,14 +131,6 @@
     return normalized ? artifactProjection().artifactById[normalized] || null : null;
   }
 
-  function messageResourceRefs(message) {
-    return value(message, "ResourceRefs", "resourceRefs", []) || [];
-  }
-
-  function resourceRefUri(reference) {
-    return value(reference, "Uri", "uri", "") || "";
-  }
-
   function artifactResourceUri(artifact) {
     var direct = value(artifact, "ResourceUri", "resourceUri", "") || "";
     if (direct) return direct;
@@ -148,25 +140,6 @@
   function isImageArtifact(artifact) {
     var mimeType = String(value(artifact, "MimeType", "mimeType", "") || "").split(";", 1)[0].toLowerCase();
     return artifactKind(artifact) === "image" || /^image\/(?:jpeg|png|gif|webp)$/.test(mimeType);
-  }
-
-  function artifactIdentityFromReference(reference) {
-    var uri = resourceRefUri(reference);
-    if (uri.indexOf("rna://chat/") !== 0) return null;
-    var path = uri.slice("rna://chat/".length).split("/");
-    if (path.length < 5 || path[1] !== "artifact" || path[3] !== "revision") return null;
-    try {
-      return { id: decodeURIComponent(path[2]), revision: Number(path[4] || 0) };
-    } catch (error) {
-      return null;
-    }
-  }
-
-  function artifactByReference(reference) {
-    var identity = artifactIdentityFromReference(reference);
-    if (!identity) return null;
-    var artifact = artifactById(identity.id);
-    return artifact && artifactRevision(artifact) === identity.revision ? artifact : null;
   }
 
   function artifactScopeLabel(artifact) {
@@ -554,29 +527,14 @@
   }
 
   function messageArtifacts(message) {
-    var references = messageResourceRefs(message).slice();
-    var checkpoint = value(message, "HtmlWorkspaceCheckpoint", "htmlWorkspaceCheckpoint", null);
-    if (checkpoint) references.push(checkpoint);
-    var seen = {};
-    return references.map(artifactByReference).filter(Boolean).filter(function (artifact) {
+    return (message.ArtifactIds || []).map(artifactById).filter(Boolean).filter(function (artifact) {
       var kind = artifactKind(artifact);
-      if (kind === "attachment" || kind === "image" || kind === "audio") return false;
-      var key = String(artifactId(artifact)).toLowerCase();
-      if (seen[key]) return false;
-      seen[key] = true;
-      return true;
+      return kind !== "attachment" && kind !== "image" && kind !== "audio";
     });
   }
 
   function messageImageArtifacts(message) {
-    var seen = {};
-    return messageResourceRefs(message).map(artifactByReference).filter(Boolean).filter(function (artifact) {
-      if (!isImageArtifact(artifact)) return false;
-      var uri = artifactResourceUri(artifact);
-      if (!uri || seen[uri]) return false;
-      seen[uri] = true;
-      return true;
-    });
+    return (message.ArtifactIds || []).map(artifactById).filter(Boolean).filter(isImageArtifact);
   }
 
   function imageAttachmentId(artifact) {
@@ -1023,7 +981,6 @@
   window.renderArtifactThumbnailNode = renderArtifactThumbnailNode;
   window.updateArtifactThumbnailViews = updateArtifactThumbnailViews;
   window.loadArtifactThumbnail = loadArtifactThumbnail;
-  window.messageResourceRefs = messageResourceRefs;
   window.messageImageAttachmentIds = messageImageAttachmentIds;
   window.appendMessageMediaGallery = appendMessageMediaGallery;
   window.resetMessageMediaThumbnails = resetMessageMediaThumbnails;

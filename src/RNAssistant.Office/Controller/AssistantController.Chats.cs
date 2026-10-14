@@ -366,7 +366,7 @@ namespace RNAssistant.Office
                 var window = _conversationStore.ReadMessageWindow(chatId, beforeIndex, 80);
                 if (window != null)
                 {
-                    var visible = ChatCloneService.CloneMessagesForBridge(window.PageMessages);
+                    var visible = ChatCloneService.CloneMessagesForBridge(window.Session, window.PageMessages);
                     var presentation = ArtifactLibraryProjectionService.ProjectMessagePage(window.Session, visible);
                     return new ChatMessagePageDto
                     {
@@ -381,8 +381,7 @@ namespace RNAssistant.Office
                 }
             }
             var session = LoadAddressedSession(chatId);
-            var page = ChatCloneService.ClonePreviousMessagesForBridge(
-                session.Id, session.Revision, session.Messages, beforeIndex);
+            var page = ChatCloneService.ClonePreviousMessagesForBridge(session, beforeIndex);
             var artifactPresentation = ArtifactLibraryProjectionService.ProjectMessagePage(session, page.Messages);
             page.Artifacts = artifactPresentation.Artifacts;
             page.RemovedResourceUris = artifactPresentation.Library.RemovedResourceUris;
@@ -710,7 +709,7 @@ namespace RNAssistant.Office
             var timer = Stopwatch.StartNew();
             var activeId = session.Id;
             int messageStartIndex;
-            var bridgeMessages = ChatCloneService.CloneRecentMessagesForBridge(session.Messages, out messageStartIndex);
+            var bridgeMessages = ChatCloneService.CloneRecentMessagesForBridge(session, out messageStartIndex);
             var messagesMs = timer.ElapsedMilliseconds;
             var artifactPresentation = ArtifactLibraryProjectionService.ProjectState(session, bridgeMessages);
             var artifactsMs = timer.ElapsedMilliseconds - messagesMs;

@@ -82,7 +82,7 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-artifacts.js"), "utf
 const parent = new Element("article");
 domRoots.push(parent);
 const message = {
-  resourceRefs: context.state.artifacts.map(artifact => ({ uri: artifact.resourceUri }))
+  ArtifactIds: context.state.artifacts.map(artifact => artifact.id)
 };
 context.appendMessageMediaGallery(parent, message);
 assert.equal(parent.querySelectorAll(".chat-media-item").length, 4, "chat mosaic renders at most four cells");

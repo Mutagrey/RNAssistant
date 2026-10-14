@@ -14,28 +14,30 @@ namespace RNAssistant.Office.Services
         private const int BridgeMessagePageSize = 80;
 
         public static IReadOnlyList<ChatMessageViewDto> CloneRecentMessagesForBridge(
-            IReadOnlyList<ChatMessage> messages, out int startIndex)
+            ChatSession session, out int startIndex)
         {
+            var messages = session == null ? null : session.Messages;
             var count = messages == null ? 0 : messages.Count;
             startIndex = Math.Max(0, count - BridgeMessagePageSize);
-            return CloneMessagesForBridge(messages == null
+            return CloneMessagesForBridge(session, messages == null
                 ? null : messages.Skip(startIndex));
         }
 
         public static ChatMessagePageDto ClonePreviousMessagesForBridge(
-            string chatId, long revision, IReadOnlyList<ChatMessage> messages, int beforeIndex)
+            ChatSession session, int beforeIndex)
         {
+            var messages = session == null ? null : session.Messages;
             var count = messages == null ? 0 : messages.Count;
             if (beforeIndex < 0 || beforeIndex > count)
                 throw new ArgumentOutOfRangeException(nameof(beforeIndex));
             var start = Math.Max(0, beforeIndex - BridgeMessagePageSize);
             return new ChatMessagePageDto
             {
-                ChatId = chatId,
-                SessionRevision = revision,
+                ChatId = session == null ? null : session.Id,
+                SessionRevision = session == null ? 0 : session.Revision,
                 StartIndex = start,
                 TotalCount = count,
-                Messages = CloneMessagesForBridge(messages == null
+                Messages = CloneMessagesForBridge(session, messages == null
                     ? null : messages.Skip(start).Take(beforeIndex - start))
             };
         }
@@ -120,16 +122,16 @@ namespace RNAssistant.Office.Services
                 : messages.Select(CloneMessage).ToList();
         }
 
-        public static IReadOnlyList<ChatMessageViewDto> CloneMessagesForBridge(IEnumerable<ChatMessage> messages)
+        public static IReadOnlyList<ChatMessageViewDto> CloneMessagesForBridge(ChatSession session, IEnumerable<ChatMessage> messages)
         {
             return (messages ?? new ChatMessage[0])
                 .Select(message =>
                 {
                     var view = ChatMessageViewDto.From(message);
                     if (view == null || view.ProtocolMessage) return view;
-                    var references = CloneResourceRefs(message.ResourceRefs);
-                    view.ResourceRefs = references.Count == 0 ? null : references;
-                    view.HtmlWorkspaceCheckpoint = CloneResourceRef(message.HtmlWorkspaceCheckpoint);
+                    var ids = ChatResourceUri.CurrentArtifactIds(session,
+                        (message.ResourceRefs ?? new List<ResourceRef>()).Concat(new[] { message.HtmlWorkspaceCheckpoint }));
+                    view.ArtifactIds = ids.Count == 0 ? null : ids;
                     view.Activity = CloneActivity(message.Activity, true);
                     return view;
                 })

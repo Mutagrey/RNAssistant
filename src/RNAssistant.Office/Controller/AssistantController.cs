@@ -267,7 +267,7 @@ namespace RNAssistant.Office
             var skillsMs = timer.ElapsedMilliseconds - sessionMs - contextMs - officeMs - chatsMs - documentsMs - promptsMs - toolsMs;
             var librariesMs = promptsMs + toolsMs + skillsMs;
             int messageStartIndex;
-            var bridgeMessages = ChatCloneService.CloneRecentMessagesForBridge(session.Messages, out messageStartIndex);
+            var bridgeMessages = ChatCloneService.CloneRecentMessagesForBridge(session, out messageStartIndex);
             var artifactPresentation = ArtifactLibraryProjectionService.ProjectState(session, bridgeMessages);
             var response = new InitResponse
             {

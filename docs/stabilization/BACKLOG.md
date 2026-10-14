@@ -470,11 +470,13 @@ This is a bounded future guard, not a verified lost write in the current model p
 
 ## Remaining bridge duplication — 2026-09-29
 
-Owner: Office bridge presentation / Web artifact UI. Message artifact links still
-expose `ResourceRef` URIs that Web parses to identify revisions; move that
-association into typed artifact/message ids before removing those refs. Check
-the exact artifact cards and compare response size on the affected Windows chat
-before assigning this duplication as a main stall.
+**Closed host-neutral — 2026-10-14.** Owner: Office bridge presentation / Web
+artifact UI. Messages now expose exact `ArtifactIds`, including HTML checkpoints.
+The backend validates owner/revision once and includes those cards in each page;
+the UI URI parser and duplicated message runtime refs are removed. Exact history,
+tombstones and media checks pass. Measure response size and rendering on the
+affected Windows chat before attributing its stalls to this former duplication;
+Windows/Office/WebView2 delivery remains unqualified.
 
 ## Structural debt
 

@@ -307,7 +307,7 @@ namespace RNAssistant.Office
         private static HtmlWorkspaceResponse HtmlWorkspaceState(ChatSession session, bool redoChoiceRequired = false)
         {
             int messageStartIndex;
-            var visibleMessages = ChatCloneService.CloneRecentMessagesForBridge(session.Messages, out messageStartIndex);
+            var visibleMessages = ChatCloneService.CloneRecentMessagesForBridge(session, out messageStartIndex);
             var artifactPresentation = ArtifactLibraryProjectionService.ProjectState(session, visibleMessages);
             var preflight = HtmlWorkspaceToolService.InspectForPreview(
                 session, CancellationToken.None);

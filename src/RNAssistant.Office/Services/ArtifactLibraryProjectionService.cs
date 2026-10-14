@@ -34,7 +34,7 @@ namespace RNAssistant.Office.Services
         public static ArtifactLibraryProjectionDto Project(ChatSession session)
         {
             int startIndex;
-            var messages = ChatCloneService.CloneRecentMessagesForBridge(session == null ? null : session.Messages, out startIndex);
+            var messages = ChatCloneService.CloneRecentMessagesForBridge(session, out startIndex);
             return ProjectState(session, messages).Library;
         }
 
@@ -52,14 +52,7 @@ namespace RNAssistant.Office.Services
         {
             var visibleIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var message in visibleMessages ?? new ChatMessageViewDto[0])
-            {
-                foreach (var reference in message.ResourceRefs ?? new ResourceRef[0])
-                {
-                    string id;
-                    if (ChatResourceUri.TryGetCurrentArtifactId(session, reference, out id))
-                        visibleIds.Add(id);
-                }
-            }
+                if (message != null) visibleIds.UnionWith(message.ArtifactIds ?? new string[0]);
             var build = Build(session, visibleIds);
             var library = includeHeads ? InitialPage(session, build) : new ArtifactLibraryProjectionDto
             {

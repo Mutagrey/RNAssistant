@@ -88,14 +88,10 @@ context.renderHtmlWorkspace = () => {};
 vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-artifacts.js"), "utf8"), context,
   { filename: "app-artifacts.js" });
 
-function ref(id, revision) {
-  return { uri: "rna://chat/chat-a/artifact/" + id + "/revision/" + revision };
-}
-
 {
   const parent = new Element("div");
   context.appendAgentRunResourceCards(parent, [
-    { message: { resourceRefs: [ref("chart-r1", 1), ref("html-r2", 2)] } }
+    { message: { ArtifactIds: ["chart-r1", "html-r2"] } }
   ], null);
   assert.equal(parent.querySelectorAll(".chat-artifact-card").length, 1);
   assert.match(parent.textContent, /Динамика продаж/);
@@ -107,7 +103,7 @@ function ref(id, revision) {
 {
   const parent = new Element("div");
   context.appendAgentRunResourceCards(parent, [
-    { message: { resourceRefs: [ref("html-r2", 2)] } }
+    { message: { ArtifactIds: ["html-r2"] } }
   ], null);
   assert.equal(parent.querySelectorAll(".chat-artifact-card").length, 1);
   assert.match(parent.textContent, /HTML bound data: sampleData/);
@@ -125,11 +121,15 @@ function ref(id, revision) {
     ] }];
   old.libraryHead = context.state.artifactLibrary.heads[0];
   const parent = new Element("div");
-  const messages = [current, old, independent].map(item => ({ message: { resourceRefs: [ref(item.id, item.revision)] } }));
+  const messages = [current, old, independent].map(item => ({ message: { ArtifactIds: [item.id] } }));
   context.appendAgentRunResourceCards(parent, messages, null);
   assert.deepEqual(parent.querySelectorAll(".chat-artifact-card").map(node => node.dataset.artifactId),
     ["html-r3", "other-html"]);
-  assert.equal(messages[1].message.resourceRefs[0].uri, ref(old.id, 1).uri);
+  assert.equal(messages[1].message.ArtifactIds[0], old.id);
+  const history = new Element("div");
+  context.appendMessageArtifactCards(history, { ArtifactIds: [old.id, "missing-snapshot"] });
+  assert.deepEqual(history.querySelectorAll(".chat-artifact-card").map(node => node.dataset.artifactId), [old.id],
+    "a historical message resolves its exact snapshot without a URI or a current-head fallback");
   assert.match(parent.textContent, /Только этот чат/);
   current.documentScoped = true;
   assert.equal(context.RNAssistantArtifactVisuals.scopeLabel(current), "Общий для чатов документа");

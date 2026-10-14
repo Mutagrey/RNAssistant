@@ -35,7 +35,7 @@ const read = file => fs.readFileSync(path.join(root, "web", file), "utf8");
       };
       window.jpeg = await makeJpeg(320, 80);
       const uri = "rna://chat/chat-image/artifact/image/revision/1";
-      window.state = { activeChatId: "chat-image", messages: [{ resourceRefs: [{ uri }] }],
+      window.state = { activeChatId: "chat-image", messages: [{ ArtifactIds: ["image"] }],
         artifacts: [{ id: "image", kind: "image", title: "panorama.jpeg", revision: 1,
           mimeType: "image/jpeg", resourceUri: uri }],
         artifactLibrary: { heads: [{ artifactId: "image", resourceClass: "immutable_original",

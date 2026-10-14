@@ -611,12 +611,12 @@ namespace RNAssistant.Harness
                     Id = "message-" + index, Role = "user", Content = "text-" + index
                 }).ToList();
                 int startIndex;
-                var recent = ChatCloneService.CloneRecentMessagesForBridge(history, out startIndex);
+                session.Messages = history;
+                var recent = ChatCloneService.CloneRecentMessagesForBridge(session, out startIndex);
                 AssertEqual(101, startIndex, "bridge opens at bounded recent history");
                 AssertEqual(80, recent.Count, "bridge recent page size");
                 AssertEqual("message-101", recent[0].Id, "bridge recent page boundary");
-                var previous = ChatCloneService.ClonePreviousMessagesForBridge(
-                    session.Id, session.Revision, history, startIndex);
+                var previous = ChatCloneService.ClonePreviousMessagesForBridge(session, startIndex);
                 AssertEqual(21, previous.StartIndex, "older page start");
                 AssertEqual(181, previous.TotalCount, "older page retains total count");
                 AssertEqual("message-100", previous.Messages.Last().Id, "older page does not overlap");

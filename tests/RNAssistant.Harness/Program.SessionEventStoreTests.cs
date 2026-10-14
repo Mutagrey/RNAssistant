@@ -737,9 +737,9 @@ namespace RNAssistant.Harness
                 var full = reader.Load(chat.Id);
                 var page = reader.ReadMessageWindow(chat.Id, 190, 80);
                 var expected = ArtifactLibraryProjectionService.ProjectMessagePage(full,
-                    ChatCloneService.CloneMessagesForBridge(full.Messages.Skip(110)));
+                    ChatCloneService.CloneMessagesForBridge(full, full.Messages.Skip(110)));
                 var actual = ArtifactLibraryProjectionService.ProjectMessagePage(page.Session,
-                    ChatCloneService.CloneMessagesForBridge(page.PageMessages));
+                    ChatCloneService.CloneMessagesForBridge(page.Session, page.PageMessages));
                 AssertEqual(80, page.PageMessages.Count, "the bridge page stays bounded");
                 AssertTrue(expected.Library.RemovedResourceUris.Count > 0,
                     "the fixture exposes a removed resource on the requested page");
@@ -976,7 +976,7 @@ namespace RNAssistant.Harness
                     AssertTrue(reader.SqliteProjectionHitCount >= 1,
                         "large projected chat uses the durable indexed cursor");
                     int startIndex;
-                    var visible = ChatCloneService.CloneRecentMessagesForBridge(loaded.Messages, out startIndex);
+                    var visible = ChatCloneService.CloneRecentMessagesForBridge(loaded, out startIndex);
                     timer.Restart();
                     ArtifactLibraryProjectionService.ProjectState(loaded, visible);
                     var libraryMs = timer.ElapsedMilliseconds;
@@ -3267,7 +3267,7 @@ namespace RNAssistant.Harness
                 var bridge = JObject.FromObject(new ChatStateResponse
                 {
                     RunViewState = RunViewStateProjector.Create(loaded),
-                    Messages = ChatCloneService.CloneMessagesForBridge(loaded.Messages)
+                    Messages = ChatCloneService.CloneMessagesForBridge(loaded, loaded.Messages)
                 });
                 AssertTrue(bridge["executionSummary"] == null && bridge["runViewState"] == null,
                     "a run without KernelState cannot fabricate a typed UI outcome");
