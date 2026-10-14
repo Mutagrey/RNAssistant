@@ -20,8 +20,7 @@ namespace RNAssistant.Office.Services
     internal static class ModelToolResultProjection
     {
         internal static readonly RNAssistant.Core.Services.ModelResultProjection Instance =
-            new RNAssistant.Core.Services.ModelResultProjection((name, source, tools, skills) =>
-                CanonicalSwitchedName(name) != null ? ForModel(name, source, tools, skills) : GenericForModel(name, source));
+            new RNAssistant.Core.Services.ModelResultProjection(ForModel);
 
         internal static ChatMessage Project(ChatMessage source, IEnumerable<ToolCatalogEntry> tools = null,
             IEnumerable<SkillDefinition> skills = null, Action<List<ContextMessagePresentation>> recordPresentation = null)
@@ -29,12 +28,14 @@ namespace RNAssistant.Office.Services
 
         private static ToolResultMaterialization GenericForModel(string name, ToolResultMaterialization source)
         {
-            var projected = RNAssistant.Core.Services.ModelResultProjection.GenericForModel(name, source);
-            RemoveOfficeRuntimeState(name, projected.Data);
-            var result = new ToolResult(projected.Result.Status,
-                IsOfficeRuntimeStateResult(name) ? SanitizeOperationalText(projected.Result.Message) : projected.Result.Message,
-                projected.Data.ToString(Formatting.None), new ResourceRef[0]);
-            return new ToolResultMaterialization(result, projected.ModelAttachments, data: projected.Data);
+            var data = RNAssistant.Core.Services.ModelResultProjection.ProjectGenericData(name, source);
+            RemoveOfficeRuntimeState(name, data);
+            var message = RNAssistant.Core.Services.ModelResultProjection.RemoveRuntimeResourceValues(
+                source.Result.Message, source.Result.Resources);
+            var result = new ToolResult(source.Result.Status,
+                IsOfficeRuntimeStateResult(name) ? SanitizeOperationalText(message) : message,
+                data.ToString(Formatting.None), new ResourceRef[0]);
+            return new ToolResultMaterialization(result, source.ModelAttachments, data: data);
         }
 
         private static bool IsOfficeRuntimeStateResult(string name)
@@ -67,14 +68,16 @@ namespace RNAssistant.Office.Services
         internal static string SanitizeClaimText(StructuredContextClaim claim)
         { return RNAssistant.Core.Services.ModelResultProjection.SanitizeClaimText(claim); }
 
-        internal static ToolResultMaterialization ForModel(
+        private static ToolResultMaterialization ForModel(
             string name,
             ToolResultMaterialization source,
             IEnumerable<ToolCatalogEntry> tools = null,
             IEnumerable<SkillDefinition> skills = null)
         {
             if (source == null) throw new ArgumentNullException(nameof(source));
-            if (CanonicalSwitchedName(name) == null) return source;
+            if (!IsCapabilityResult(name) && !IsPlanningResult(name) && !IsHtmlResult(name) &&
+                !IsAuthoringResult(name) && !IsVbaResult(name) && !IsExcelResult(name))
+                return GenericForModel(name, source);
             var data = source.Data.DeepClone();
             var status = source.Result.Status;
             var message = source.Result.Message;
@@ -85,10 +88,6 @@ namespace RNAssistant.Office.Services
                 status = ToolResultStatus.Error;
                 message = "Capability evidence no longer matches the current catalog. Read the exact id again.";
                 data = StaleCapabilityData(data);
-            }
-            else if (IsResourceResult(name))
-            {
-                data = RNAssistant.Core.Services.ModelResultProjection.ProjectResourceData(name, data);
             }
             else if (IsPlanningResult(name))
             {
@@ -133,14 +132,6 @@ namespace RNAssistant.Office.Services
                 new ResourceRef[0]);
             return new ToolResultMaterialization(
                 result, source.ModelAttachments, data: data);
-        }
-
-        private static string CanonicalSwitchedName(string name)
-        {
-            if (IsResourceResult(name) || IsCapabilityResult(name) ||
-                IsPlanningResult(name) || IsHtmlResult(name) ||
-                IsAuthoringResult(name) || IsVbaResult(name) || IsExcelResult(name)) return name;
-            return null;
         }
 
         internal static bool ValidateAcceptedCall(ToolCall call, out string error)
@@ -324,12 +315,6 @@ namespace RNAssistant.Office.Services
                     StringComparison.Ordinal))
                 return "target";
             return null;
-        }
-
-        private static bool IsResourceResult(string name)
-        {
-            return string.Equals(name, ResourceToolCatalog.FindToolId, StringComparison.Ordinal) ||
-                string.Equals(name, ResourceToolCatalog.ReadToolId, StringComparison.Ordinal);
         }
 
         private static bool IsCapabilityResult(string name)

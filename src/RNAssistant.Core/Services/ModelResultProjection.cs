@@ -201,6 +201,19 @@ namespace RNAssistant.Core.Services
             string name,
             ToolResultMaterialization source)
         {
+            var data = ProjectGenericData(name, source);
+            var result = new RNAssistant.Core.Tools.Contracts.ToolResult(
+                source.Result.Status,
+                RemoveRuntimeResourceValues(source.Result.Message, source.Result.Resources),
+                data.ToString(Formatting.None),
+                new ResourceRef[0]);
+            return new ToolResultMaterialization(
+                result, source.ModelAttachments, data: data);
+        }
+
+        // Shared data projection; domain owners finish their metadata before serialization.
+        public static JToken ProjectGenericData(string name, ToolResultMaterialization source)
+        {
             var data = source.Data.DeepClone();
             RemoveQuestionRuntimeState(name, data);
             RemoveTaskListRuntimeState(name, data);
@@ -215,13 +228,7 @@ namespace RNAssistant.Core.Services
                 objectData["hint"] =
                     "The complete result is stored durably. Find its semantic target with common.resources_find before reading it; do not use runtime resource references.";
             }
-            var result = new RNAssistant.Core.Tools.Contracts.ToolResult(
-                source.Result.Status,
-                RemoveRuntimeResourceValues(source.Result.Message, source.Result.Resources),
-                data.ToString(Formatting.None),
-                new ResourceRef[0]);
-            return new ToolResultMaterialization(
-                result, source.ModelAttachments, data: data);
+            return data;
         }
 
         private static void RemoveRuntimeResourceValues(

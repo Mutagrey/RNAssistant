@@ -1991,6 +1991,9 @@ Core владеет закрытой проекцией оболочек `common
 `files.create/patch/replace/copy/move/delete/restore`. Office дополняет её закрытой
 проекцией Excel и штатных VBA mutations/macro результатов. Compiler, compactor и
 inspector используют одну проекцию; inspector отражает реально выбранные поля.
+Общие resource results обрабатываются только Core. Для остальных результатов
+общая проекция данных и доменная очистка выполняются до единственной
+сериализации model-facing `DataJson`; промежуточный `ToolResult` не создаётся.
 Diagnostic trees, runtime refs, hashes и journal IDs не копируются в эти модельные
 оболочки. Text/table payloads и значения пользовательских колонок сохраняются
 дословно, включая пользовательские поля `id`, `hash`, `revision`.
