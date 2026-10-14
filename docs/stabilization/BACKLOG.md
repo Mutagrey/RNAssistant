@@ -24,6 +24,19 @@ mode/skill/permission setup and result-order assumptions in a separate change,
 then run that suite. Their negative completion controls now have explicit budgets.
 Evidence: `/tmp/rna-completion-gate-20261014-8e_qd7c5/{task-list,plan,skills}.log`.
 
+## Replay confirmation fixtures — 2026-10-15
+
+Owner: host-neutral conversation tests. The `kernel replay` cases for confirmation,
+cancelled confirmation and preparation failure stop before their intended boundary:
+the skill-write fixture reaches Completed without a pending confirmation. The same
+3 failures reproduce on the pre-change `863d2ece` and the explicit-commit implementation;
+7 other replay cases pass in both. Refresh the fixture's tool admission/source
+contract without changing runtime permission rules. Current native Office approval,
+paired batch replay and question continuation checks pass independently.
+`application_requests_smoke.py` also assumes its initial file write auto-executes;
+it currently stops at AwaitingConfirmation. Refresh its declared approval policy
+before using it as application-request evidence.
+
 ## Transcript browser fixture dependency — 2026-10-14
 
 Owner: Web chat tests. `chat-transcript-layout.test.js` currently fails in Chromium
@@ -517,7 +530,7 @@ Windows/Office/WebView2 delivery remains unqualified.
 |---|---|---|---|
 | D01 — compact current docs | Documentation owners. `architecture.md`, master plan и `PROGRESS.md` всё ещё содержат длинную историю и повторяют часть domain docs | После R61 или при изменении соответствующего canonical contract; historical master/progress archive — только после 16.1 с полным backlink inventory | `architecture.md` оставляет только layers/owners/flows; история остаётся evidence, но исчезает из default reading path. Проверка всех local links/anchors |
 | D02 — single composition path | Application. `AssistantController` одновременно orchestrates и конструирует concrete storage/runtime/model/catalog/session/diagnostics graph | Следующее изменение production lifecycle/dependency graph после текущих R61/WQ gates | Один существующий application-owned path владеет construction и dispose order. Не добавлять factory/interface только ради DI; новый composition type допустим лишь при удалении нескольких concrete construction paths и отрицательном production LOC. Targeted lifecycle + architecture checks |
-| D03 — versioned bridge operation catalog | Bridge. Большой string switch не гарантирует C#/JS parity и единый JSON casing | Следующее versioned bridge изменение после qualification текущего WebView path | Typed catalog/handlers, handshake version и один canonical casing; удалены ad-hoc operation routing и dual Pascal/camel reads. C#/JS parity, serialization/error-envelope и Windows WebView checks |
+| D03 — typed bridge projections | Office Contracts / Web. Versioned operation catalog, shared cancellation/waits and init/navigation/progress casing are implemented in A3; embedded Core DTOs still have both-case readers | Next change to the specific embedded projection, with exact C#/JS shape identified | Switch the typed producer and consumers together, delete aliases, preserve opaque tool JSON. Remaining seam and removal gate: [MIGRATION_MAP](MIGRATION_MAP.md#runtime-commit-boundary--2026-10-15); Windows WebView delivery stays separate |
 | D04 — change-driven hotspot extraction | Владельцы Controller, ToolRuntime, prompts, storage и UI. Крупные файлы затрудняют локальные изменения, но не доказывают смешение ответственности | Только когда ближайший approved change требует чтения несвязанного behavior | Извлекается один тематический owner из `AssistantController*`, `OfficeToolExecutor`, `PromptContextInspectorService`, `ChatStore*` или крупного `app-*.js`; старый path удаляется, targeted tests сохраняют контракт |
 
 Не проводить общий предварительный split/rename, массовый namespace move, новый
@@ -560,13 +573,6 @@ transport alone does not qualify source allocation.
   runtime identity still fails explicitly. Per-resource projections cannot invent
   lost authority records. Reconcile only from validated durable evidence; no latest
   fallback, automatic mutation replay or data deletion.
-
-## Existing defects outside the completed cutover
-
-- Bridge UI transport: define pending termination for a silent transport loss;
-  an operation-specific wait limit must not imply physical mutation cancellation
-  or trigger automatic replay. Explicit `postMessage` exceptions are now handled
-  by the shared send boundary; ready/queued/init regressions pass host-neutral.
 
 ## Chat / diagnostics UX follow-ups — 2026-09-07
 

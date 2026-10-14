@@ -6,7 +6,7 @@
 и краткий [PROGRESS](PROGRESS.md); новые временные adapters добавляются сюда только
 с owner, consumers и условием удаления.
 
-ModelProtocol работает на v6; старые streams требуют explicit new/reset, pipelines отключены. Phase 3B2 подключает
+ModelProtocol работает на v7; старые streams требуют explicit new/reset, pipelines отключены. Phase 3B2 подключает
 `AgentKernel` к production start/confirmation через Office model/tool/store ports.
 Новый summary replay проверен на существующих events; старый loop, builder,
 mutable ID bookkeeping и Failure.Cause удалены без fallback. Phases 4/8/9 и
@@ -17,6 +17,13 @@ gates; active tool compatibility adapter отсутствует. Windows/Office 
 не закрыта. Resource direct cutover завершён host-neutral вместе с отдельной
 проверкой resource-consumer cleanup (2026-09-07). Порядок задаёт
 [Resource MASTER](resource-cutover/MASTER.md), владельцев — [Resource Fabric](../resource-fabric.md).
+
+## Runtime commit boundary — 2026-10-15
+
+| Temporary path | Owner / remaining consumers | Removal gate |
+|---|---|---|
+| `ChatStore.Save` general snapshot-diff writer and `ResolveUpsertType` | Core conversation persistence; user/inbox admission, controller metadata/edit/clear/fork, compaction, artifact and non-runtime service checkpoints. Kernel facts in Office/Runtime use explicit `ConversationRunCommit`; they no longer infer lifecycle operations from message shape | Move remaining mutation commands to explicit operations, retain one JSONL/CAS revision barrier and replay parity, then delete generic message diff/classification. No hidden fallback from a failed runtime commit |
+| Existing JS casing adapters for embedded Core projections | Office Contracts / Web feature owners; chat summaries, settings, message/activity and document/resource projections. Transport version, operation policies and typed init/navigation/progress envelopes are cut over | Replace each embedded shape with its exact typed contract and switch its consumers together; delete both-case readers and verify serialization/consumer parity. Do not apply global casing conversion to opaque tool data or stored history |
 
 ## Model result families — 2026-10-07
 

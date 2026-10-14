@@ -8,6 +8,17 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## Runtime final response classified as tool result — 2026-10-14
+
+**Fixed host-neutral — 2026-10-15 / Core conversation persistence and Runtime adapter.**
+The old `ChatStore.ResolveUpsertType` classified protocol-formatted final responses
+without calls as `tool.result.recorded`, producing an unknown-tool row. Office and
+Runtime now commit runtime facts explicitly; exact call correlation distinguishes
+results from protocol media helpers. Final done/blocked/needs_input replay and
+causal queries pass, as do paired batch, paused-view and media-release checks.
+Existing historical streams are not rewritten. The remaining non-runtime snapshot
+writer is tracked in [MIGRATION_MAP](MIGRATION_MAP.md#runtime-commit-boundary--2026-10-15).
+
 ## CAS and resource fabric review — 2026-10-14
 
 Three open defects reproduced with isolated temporary stores against the existing
@@ -42,7 +53,7 @@ user incident to the artificial filesystem-damage scenario below.
   does not restore arbitrary diagnostic fields from the omitted body.
 
 The separate [authored UTF-16 reopening failure](#authored-utf-16-file-blocks-chat-reopening--2026-10-14)
-remains open: raw bytes and decoded text views need distinct hydration ownership.
+is fixed host-neutral through separate raw-byte ownership and lazy decoded views.
 
 Architectural follow-up, **Office retained-reader owner**, observed by source
 inspection: `ResourceSnapshotReadService.Read` hydrates and verifies the whole CAS
@@ -155,16 +166,14 @@ and Chromium layout checks do not qualify COM/WebView2 or arbitrary model behavi
 
 ## Authored UTF-16 file blocks chat reopening — 2026-10-14
 
-**Open / Core ChatStore hydration.** Import a UTF-16 LE BOM HTML attachment,
-copy it with `common.file_copy`, then save and reopen the chat with `ChatStore.Load`.
-The authored file's exact Gateway/viewer pages and raw export work, but active
-artifact hydration calls `ChatBlobStore.ReadText` on its original UTF-16 bytes and
-throws `DecoderFallbackException` on `FF` in `ChatStore.Artifacts.cs:HydrateArtifact`.
-The retained bytes remain intact; ordinary chat reopening is blocked. Reproduced
-host-neutral while extending `authored file: HTML viewer and revision history`.
-Fix hydration through the existing encoding-aware authored-file owner and cover
-restart separately. The HTML upload/authored classification fix does not close
-this risk; its restart coverage is for files created in UTF-8.
+**Fixed host-neutral — 2026-10-15 / Core ChatStore hydration.** A copied UTF-16
+LE BOM HTML file previously blocked `ChatStore.Load`: MIME-driven eager hydration
+used `ChatBlobStore.ReadText` on raw UTF-16 bytes. Authored files now stay lazy;
+explicit reads use the existing encoding-aware `DocumentArtifactStore` owner.
+Ordinary Save cannot re-encode owned bytes. The extended authored-HTML check covers
+reopen, explicit read, repeated save, byte-identical BOM/hash/export and missing-body
+isolation. No user bytes or historical events were rewritten. Windows viewer/delivery
+qualification remains separate.
 
 ## Cross-host chat creation from Excel — 2026-10-14
 

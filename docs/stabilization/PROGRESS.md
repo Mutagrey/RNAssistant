@@ -1,5 +1,37 @@
 # Stabilization progress
 
+## Architectural simplification — 2026-10-14
+
+Implemented host-neutral on 2026-10-15 within the user-authorized scope. Existing
+events/CAS remain authoritative. No new store, generic Office executor,
+product-version change or automatic effect replay was introduced.
+
+| Slice | Owner and concrete change | Removed path / verification | State |
+|---|---|---|---|
+| A1 | Core artifact storage: authored bodies stay lazy and use their encoding-aware owner | MIME-driven authored-file hydration and re-encoding; UTF-16 reopen/read/save/export and missing-body isolation pass | Verified host-neutral |
+| A2 | Core persistence / Office and Runtime adapters: explicit runtime commits | Runtime message-shape classification and full message-body diff; final responses, paired batches, paused views, released media, durable-before-dispatch and append failure checked | Runtime cutover verified; general writer remains tracked |
+| A3 | Office bridge / Web: versioned catalog for 129 operations, shared cancellation and idle waits | Separate cancellation list and init/navigation/progress casing aliases; missing/late replies, mismatch and no replay checked | Transport cutover verified; embedded projections remain tracked |
+| A4 | Office domain boundary: shared immutable `DomainOutcome` and one ToolRuntime conversion | Nine outcome/status/effect definitions and nine handler converters removed; 36 domain/read-back/dispatch checks pass | Verified host-neutral |
+
+Canonical contracts: [Session events](../session-events.md),
+[Artifact Library](../artifact-library.md), [Architecture](../architecture.md#bridge-operation-contract)
+and [Conversation protocol](../conversation-protocol.md#tool-result).
+The remaining general `Save` writer and embedded projection adapters have explicit
+owners, consumers and removal gates in [MIGRATION_MAP](MIGRATION_MAP.md#runtime-commit-boundary--2026-10-15).
+This does not claim constant-time saves or complete removal of all bridge adapters.
+
+Harness, CLI and MockDemo host-neutral builds pass. The real-controller fake-host
+unified-agent scenario passes approval/restart and policy changes. Focused checks include 37 bridge
+cases, 36 domain cases, 6 permission cases, paired read batches, native question
+continuation, 3 media routes, authored UTF-16 and 7 shared-HTML cases. Web bootstrap,
+chat synchronization, per-chat requests, Office chat navigation and Library
+projection suites pass. Controlled CLI turn decisions pass for both response modes
+and user/tool result roles. Seven kernel-replay cases pass; three confirmation
+fixtures fail identically on the pre-change HEAD and this implementation. Those
+fixtures and the older application-request smoke's missing approval policy are
+tracked in [BACKLOG](BACKLOG.md#replay-confirmation-fixtures--2026-10-15).
+Windows/Office/WebView2 delivery remains open; no Office/VSTO validation was run.
+
 ## VBA recovery, question delivery and step presentation — 2026-10-14
 
 Owners: Office capability discovery/context, Core provider transport, Web run

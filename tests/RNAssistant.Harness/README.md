@@ -1,5 +1,18 @@
 # RNAssistant Harness
 
+Architectural simplification: `storage: runtime commits`,
+`authored file: HTML viewer and revision history`, `agent: native read batch`,
+`plan mode: native question` and the three `agent:` resource-media cases cover the
+explicit persistence boundary. `bridge:` covers contract version, cancellation and
+typed routing; `tests/web/bridge-bootstrap.test.js` uses controlled timers for lost
+and late replies without replay. The nine domain slices (`excel write:`,
+`excel find replace:`, `excel sheet:`, `excel range mutation:`, `excel table:`,
+`excel chart:`, `word tools:`, `powerpoint tools:`, `outlook tools:`) cover the shared
+outcome contract through real domain services and fake backends. Three older
+confirmation replay fixtures fail on the baseline too; see
+[BACKLOG](../../docs/stabilization/BACKLOG.md#replay-confirmation-fixtures--2026-10-15).
+
+
 VBA patching incident: `skill packages: VBA schema inspection does not loop`
 exercises the production conversation through project/source reads, skill-only
 discovery before and after selection, and one verified fake-host patch. Discovery
