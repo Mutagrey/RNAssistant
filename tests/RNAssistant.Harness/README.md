@@ -282,6 +282,9 @@ corrupt/missing payloads and the existing mutation/recovery guards.
 `workspace files: exact raw and image views` additionally covers shared identity
 across text/raw, binary drift, snapshot reads after deletion/restart, foreign refs,
 publication barriers, CAS GC/corruption, size bounds and unresolved effects.
+The `binary_resource_smoke.py` acceptance cases also assert browser-state metadata
+with no read minimum: an externally changed PNG invalidates the next model context
+even when that intervening model read only targets HTML.
 After the CLI build, `python3 -B tests/cli/binary_resource_smoke.py` checks PNG/JPEG
 metadata and exact byte export, model authority separation, real browser asset
 delivery/historical replay, MIME mismatch and broken image decoding. Its controlled
@@ -312,7 +315,13 @@ no-op handler, historical broken bytes after repair, missing browser, wrong entr
 and ambiguous selector. `python3 tests/cli/web_checks_runtime_smoke.py` uses a
 scripted HTTP model through the production runtime for verify/read/patch/read/
 verify/done, frozen admission checks and rejection of a source edit after the last
-passing verification. This is deterministic contract evidence, not LLM quality.
+passing verification. It checks `webAcceptance.currentSnapshotVerified` in actual
+HTTP: absent/failed verification, passing snapshot, invalidation after a patch and
+successful re-verification, including native tool-result transport. An edit during
+the final model wait leaves the format-repair context frozen but fails final
+acceptance. Browser-only requirements also appear without a read minimum. The
+fixture selects the published browser skill and explicitly enables auto-confirm
+for its isolated operations. This is deterministic contract evidence, not LLM quality.
 It also checks failed verification → blocked identical retry, unrelated write,
 fresh source read and no-op write → still blocked → verified dependency repair →
 one passing re-verification. Only two browser records may be published, and runtime

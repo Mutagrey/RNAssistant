@@ -102,22 +102,29 @@ def browser(s):
     print("PASS binary browser: exact snapshot routes/MIME, historical replay, mismatch and broken decode")
 
 
-def acceptance(s, changed):
+def acceptance(s, changed, late=False):
     setup(s)
-    s.responses.extend([call("web.verify", entryPath="index.html"), DONE])
+    s.responses.extend([call("common.skills_load", id="workspace.web_verify_repair"),
+                        call("web.verify", entryPath="index.html"),
+                        call("common.resources_read", target="index.html"), DONE])
     def before_response():
-        if len(s.requests) == 2 and changed:
+        if len(s.requests) == (4 if late else 3) and changed:
             (s.workspace / "picture.png").write_bytes(png(bytes([0, 255, 0])))
     s.before_response = before_response
     result = s.json("run", "--message", "Verify the existing project.", "--require-web-verify",
-                    "--expect-files", "index.html", "--max-iterations", "3", "--max-tool-steps", "3", code=5 if changed else 0)
+                    "--auto-confirm", "on", "--expect-files", "index.html", "--max-iterations", "4", "--max-tool-steps", "4", code=5 if changed else 0)
     assert result["webSnapshotVerified"] == (not changed), result
+    assert len(s.requests) == 4
+    for request, expected in zip(s.requests, [False, False, True, not changed or late]):
+        context = json.loads(request["messages"][-1]["content"].split("\n", 1)[1])
+        assert context["webAcceptance"] == {"currentSnapshotVerified": expected}
+        assert "readAcceptance" not in context
     assert "rna://" not in json.dumps(s.requests) and not s.errors
-    print("PASS binary acceptance:", "external image edit rejects done" if changed else "unchanged image evidence accepted")
+    print("PASS binary acceptance:", "final-wait image edit rejects done" if late else "external image edit rejects done" if changed else "unchanged image evidence accepted")
 
 
 def main():
-    for check in [views, browser, lambda s: acceptance(s, False), lambda s: acceptance(s, True)]:
+    for check in [views, browser, lambda s: acceptance(s, False), lambda s: acceptance(s, True), lambda s: acceptance(s, True, late=True)]:
         with tempfile.TemporaryDirectory(prefix="rna-binary-smoke-") as directory:
             scenario = Scenario(Path(directory))
             try:

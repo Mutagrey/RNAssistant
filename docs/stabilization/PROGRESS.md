@@ -1,5 +1,42 @@
 # Stabilization progress
 
+## Current browser acceptance is visible to the model — 2026-10-14
+
+Owner: workspace conversation/context. Runs requiring browser verification now
+receive `RUNTIME_CONTEXT.webAcceptance.currentSnapshotVerified` alongside final-read
+state, after current tool results. The projection and final acceptance reuse one
+predicate for the accepted run/session/call, exact checks, expected-file coverage
+and all snapshot dependencies. Model preparation uses frozen request authority;
+final assessment refreshes checked files after the last model wait. Format repair
+retains the frozen value. No new store, service, completion gate or automatic loop;
+Office and requests without browser requirements keep their existing behavior.
+
+Eleven focused CLI cases pass: failed/current/stale/reverified browser state, frozen
+repair with an external edit during the final wait, exact recovery guards,
+unchanged/externally changed PNG dependencies and the three existing final-read
+cases. They cover user/native tool-result transport and browser-only requirements
+without a read minimum. Browser fixtures now explicitly select their published
+skill and authorize their isolated operations; the earlier direct unselected
+`web.verify` assumption no longer matches the runtime. The CLI build passes.
+
+A fresh full CSV run on the normal thinking-on profile passes 3/3 final reads,
+3 verified writes and 24/24 browser checks: 7 iterations, 8 tool steps, 5 format
+repairs. All 7 fresh HTTP requests carry the state last; all 5 repairs preserve it.
+The state becomes true only after the accepted successful browser verification.
+This passing scenario does not establish improved autonomous completion.
+In a separate replay of the prior failing thinking-off request, both original and
+new context still produce premature `done` in 3/3 attempts. The new metadata and
+its description add 59 input tokens in that request; it executes no tools.
+The visibility gap is closed, but semantic completion and Gemma's JSON suffix
+failures remain open. Do not infer that another prompt clause will fix them.
+
+Profile: Ollama 0.35.0, `gemma4:cloud` / remote `gemma4:31b`, same digest as the
+preceding experiment; 32K/4096, temperature 0.2, top-p 1, developer instructions,
+user results and `json_object`. The full run requests medium reasoning; the
+paired replay retains the original `none`. Evidence/source: isolated `9f484d0d`
+plus this change, `/tmp/rna-web-acceptance-20261014-5msuuw64/` (exact profile/digest,
+request/SSE pairs, checks and full live event/CAS trace). No Office validation.
+
 ## Gemma cloud JSON terminator failures diagnosed — 2026-10-14
 
 Owner: Core model protocol / CLI evaluation. All five format failures in the prior

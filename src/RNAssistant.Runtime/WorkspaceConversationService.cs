@@ -396,7 +396,7 @@ namespace RNAssistant.Runtime
                 var frozen = _files.CaptureAuthority(completeReads.Select(read => read.Evidence));
                 acceptance.AcceptedCompleteFileReads = CurrentCompleteFileReads(completeReads, frozen).Count;
                 acceptance.VerifiedWebSnapshot = acceptance.RequireWebVerification &&
-                    AssessWebVerification(workspace, session, summary.RunId, acceptance);
+                    AssessWebVerification(_files, _webSnapshots, workspace, session, summary.RunId, acceptance, null);
                 if (waiting)
                 {
                     acceptance.State = WorkspaceAcceptanceState.Pending;
@@ -453,6 +453,7 @@ namespace RNAssistant.Runtime
         private sealed class WorkspaceModelContext
         {
             [JsonProperty("readAcceptance", NullValueHandling = NullValueHandling.Ignore)] public WorkspaceReadAcceptance ReadAcceptance { get; set; }
+            [JsonProperty("webAcceptance", NullValueHandling = NullValueHandling.Ignore)] public WorkspaceWebAcceptance WebAcceptance { get; set; }
             [JsonProperty("active_plan", NullValueHandling = NullValueHandling.Ignore)] public WorkspacePlanState ActivePlan { get; set; }
             [JsonProperty("active_task_list", NullValueHandling = NullValueHandling.Ignore)] public TaskListStateProjection ActiveTaskList { get; set; }
         }
@@ -463,6 +464,11 @@ namespace RNAssistant.Runtime
             [JsonProperty("minimumCompleteFileReads")] public int MinimumCompleteFileReads { get; set; }
             [JsonProperty("remainingCompleteFileReads")] public int RemainingCompleteFileReads { get; set; }
             [JsonProperty("expectedFilesWithoutCurrentRead")] public IReadOnlyList<string> ExpectedFilesWithoutCurrentRead { get; set; }
+        }
+
+        private sealed class WorkspaceWebAcceptance
+        {
+            [JsonProperty("currentSnapshotVerified")] public bool CurrentSnapshotVerified { get; set; }
         }
 
         private sealed class WebVerificationToolData
@@ -481,8 +487,9 @@ namespace RNAssistant.Runtime
             public IReadOnlyList<WebCheckResult> Checks { get; set; }
         }
 
-        private bool AssessWebVerification(WorkspaceDescriptor workspace, ChatSession session,
-            string runId, WorkspaceRunAcceptance acceptance)
+        private static bool AssessWebVerification(WorkspaceFileService files, WorkspaceWebSnapshotStore snapshots,
+            WorkspaceDescriptor workspace, ChatSession session, string runId, WorkspaceRunAcceptance acceptance,
+            ResourceAuthoritySnapshotSet frozen)
         {
             var fact = session.Messages.LastOrDefault(item => item.RunId == runId &&
                 item.ProtocolMessage && item.ToolName == "web.verify" &&
@@ -491,23 +498,28 @@ namespace RNAssistant.Runtime
             var wire = ToolResultWire.Read(fact.Content);
             if (!wire.Success || wire.Result.Status != ToolResultStatus.Ok) return false;
             if (wire.Result.Resources.Count != 1) return false;
-            var record = _webSnapshots.ReadVerification(workspace, wire.Result.Resources.Single());
+            var record = snapshots.ReadVerification(workspace, wire.Result.Resources.Single());
             if (record.State != WebVerificationState.Passed || record.Historical ||
                 record.Origin?.SessionId != session.Id || record.Origin.RunId != runId ||
                 record.Origin.ToolCallId != fact.ToolCallId || record.Checks?.Sha256 != acceptance.WebChecks?.Sha256 ||
                 record.CheckedFiles.Count != (fact.ResourceEvidence?.Count ?? 0) ||
                 acceptance.ExpectedFiles.Any(path => !record.CheckedFiles.Contains(path, StringComparer.Ordinal))) return false;
-            var snapshot = _webSnapshots.ReadSnapshot(workspace, record.SnapshotId);
+            var snapshot = snapshots.ReadSnapshot(workspace, record.SnapshotId);
             if (snapshot.Files.Any(file => !fact.ResourceEvidence.Any(evidence =>
                 evidence?.Resource?.Uri == file.Reference.Uri && evidence.Resource.Revision == file.Reference.Revision &&
                 evidence.Payload?.Sha256 == file.Payload.Sha256))) return false;
-            foreach (var path in record.CheckedFiles)
+            // Model projection uses the exact request authority. Final assessment
+            // refreshes it after the last model wait, including non-text assets.
+            if (frozen == null)
             {
-                try { _files.ReadBytes(workspace, path); }
-                catch (FileNotFoundException) { return false; }
-                catch (DirectoryNotFoundException) { return false; }
+                foreach (var path in record.CheckedFiles)
+                {
+                    try { files.ReadBytes(workspace, path); }
+                    catch (FileNotFoundException) { return false; }
+                    catch (DirectoryNotFoundException) { return false; }
+                }
+                frozen = files.CaptureAuthority(fact.ResourceEvidence);
             }
-            var frozen = _files.CaptureAuthority(fact.ResourceEvidence);
             var reducer = new EvidenceStateReducer();
             return fact.ResourceEvidence.All(evidence => evidence != null && evidence.Complete &&
                 reducer.Reduce(evidence, frozen).State == EvidenceState.Current);
@@ -950,8 +962,14 @@ namespace RNAssistant.Runtime
                             reads.Select(read => read.Target), StringComparer.Ordinal).ToArray()
                     };
                 }
+                if (_acceptance?.RequireWebVerification == true)
+                    context.WebAcceptance = new WorkspaceWebAcceptance
+                    {
+                        CurrentSnapshotVerified = AssessWebVerification(_files, _webSnapshots, _workspace,
+                            _session, request.RunId, _acceptance, authority.Resources)
+                    };
                 ChatMessage runtimeContext = null;
-                if (context.ActiveTaskList != null || context.ActivePlan != null || context.ReadAcceptance != null)
+                if (context.ActiveTaskList != null || context.ActivePlan != null || context.ReadAcceptance != null || context.WebAcceptance != null)
                 {
                     runtimeContext = new ChatMessage { Role = _settings.SystemPromptRole,
                         Content = "RUNTIME_CONTEXT:\n" + JsonConvert.SerializeObject(context) };
@@ -965,7 +983,7 @@ namespace RNAssistant.Runtime
                         AcceptedFacts(_session.Messages.Where(ContextCompactionRuntime.IsReplayMessage).ToArray()));
                 return _compiler.Compile(authority, required, facts.Concat(workingSet.Messages).ToArray(), null, _catalog, _settings,
                     budget, retainedBodies: workingSet.IncludedBodies, evictedBodies: workingSet.OmittedBodies, skillSurface: _skillSurface,
-                    trailingRequiredMessageId: context.ReadAcceptance == null ? null : runtimeContext.Id);
+                    trailingRequiredMessageId: context.ReadAcceptance == null && context.WebAcceptance == null ? null : runtimeContext.Id);
             }
 
             private ResourceAuthoritySnapshotSet CaptureContextAuthority(string runId, CancellationToken cancellationToken)
@@ -1097,6 +1115,8 @@ namespace RNAssistant.Runtime
                         "The minimum counts distinct files read with common.resources_read at their final revision; a later edit invalidates that read. " +
                         "Creation, mutation read-back and web.verify do not count as these reads. Before done, satisfy remainingCompleteFileReads by reading the final files. " +
                         "This summary contains no source bytes and grants no permission to overwrite. " : string.Empty) +
+                    (_acceptance?.RequireWebVerification == true ? "RUNTIME_CONTEXT.webAcceptance reports whether this run's required browser checks passed on the current snapshot. " +
+                        "If currentSnapshotVerified is false, repair as needed and run web.verify before done. Changes to checked files invalidate prior verification. " : string.Empty) +
                     AgentPromptDefaults.StructuredResponseContract +
                     "Mutation policy: " + _mode.MutationPolicy + ". Plan and Deny forbid writes and code execution except built-in Plan save and Task List updates. " +
                     (_mode.AutoConfirmsToolActions ? "The user enabled automatic approval for this run. Guards and verification still apply. " :

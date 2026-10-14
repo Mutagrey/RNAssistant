@@ -264,10 +264,17 @@ passed to `ModelContextCompiler`. Creation, mutation read-back, browser source
 evidence and previous runs do not increase this count. A later edit invalidates
 the earlier read. The projection is required context, participates in budgeting
 and survives format repair unchanged; it carries no source body or write authority.
-For requests with a read minimum, the compiler moves this existing required message
-behind history and current tool results, before budget selection and receipt
-projection. Its text and reserved budget stay unchanged; format repair appends its
-notice after the frozen snapshot. Other requests retain their existing order.
+When browser verification is required, the same block includes typed
+`webAcceptance.currentSnapshotVerified`. It reuses final acceptance's exact
+run/session/call origin, admitted checks, expected-file coverage and snapshot
+currency predicate with the request's frozen authority. Failed/historical results
+and changed checked files do not count. Final assessment refreshes checked files
+after the last model wait. The projection exposes no runtime IDs or source bytes.
+For requests with a read minimum or required browser verification, the compiler
+places this required message behind history and current tool results, before
+budget selection and receipt projection. Format repair appends its notice after
+the frozen snapshot without recalculating either projection. Other requests retain
+their existing order.
 The compiler still controls source delivery/omission and mutation prerequisites.
 This is derived metadata, not another durable read model or a completion gate.
 A premature `done` still terminates the kernel and fails the separate assessment.

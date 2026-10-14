@@ -81,9 +81,12 @@ prompt clarification, contract placement, instruction-role changes and thinking
 off all retain failures; the strict parser and current defaults remain unchanged.
 Thinking off reduces format repairs in one full CSV run but fails final acceptance:
 after a failed browser check the model edits, reads and returns `done` without
-verifying the new snapshot. Read acceptance alone is insufficient. Next owner/scope:
-workspace context projection of the existing browser-verification currency evidence;
-evaluate it without a second store, model judge or automatic completion loop.
+verifying the new snapshot. Read acceptance alone is insufficient. The
+[current browser-acceptance projection](PROGRESS.md#current-browser-acceptance-is-visible-to-the-model--2026-10-14)
+now exposes existing verification currency evidence without another store or loop.
+Deterministic state/repair/invalidation checks and one normal-profile full CSV run
+pass; the paired thinking-off replay still terminates early in 3/3 attempts on
+both sides. Visibility is verified; improved model completion is not established.
 
 ## Skill and resource workflow regressions — 2026-10-13
 

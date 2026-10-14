@@ -16,7 +16,7 @@ from read_acceptance_context_smoke import read_progress
 from interactive_smoke import Scenario
 
 
-def run_case(root, change_after_verify):
+def run_case(root, ending):
     workspace, state, checks = root / "work", root / "state", root / "checks.json"
     shutil.copytree(REPO / "tests/cli/fixtures/counter-repair", workspace)
     shutil.copyfile(REPO / "tests/cli/counter_checks.json", checks)
@@ -27,13 +27,23 @@ def run_case(root, change_after_verify):
                 "tool_calls": [{"name": name, "arguments": arguments}]}
 
     responses = [
+        call("common.skills_load", {"id": "workspace.web_verify_repair"}),
         call("web.verify", {"entryPath": "index.html"}),
         call("common.resources_read", {"target": "app.js"}),
         call("files.patch", {"relativePath": "app.js", "oldText": "count += increment", "newText": "count += 1"}),
         call("common.resources_read", {"target": "app.js"}),
         call("web.verify", {"entryPath": "index.html"}),
-        {"message": "Verified repair.", "action": "done", "tool_calls": []},
     ]
+    if ending in ("stale", "reverified"):
+        responses.extend([
+            call("files.patch", {"relativePath": "app.js", "oldText": "count += 1", "newText": "count += 1 /* revised */"}),
+            call("common.resources_read", {"target": "app.js"}),
+        ])
+        if ending == "reverified":
+            responses.append(call("web.verify", {"entryPath": "index.html"}))
+    if ending == "late_edit":
+        responses.append("invalid JSON")
+    responses.append({"message": "Verified repair.", "action": "done", "tool_calls": []})
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_args):
@@ -43,16 +53,16 @@ def run_case(root, change_after_verify):
             requests.append(json.loads(self.rfile.read(int(self.headers["Content-Length"]))))
             index = len(requests) - 1
             assert self.path == "/v1/chat/completions" and index < len(responses)
-            if index == 1:
+            if index == 2:
                 checks.write_text("{}")  # The admitted contract must not be reread.
                 # Only app.js is read next. The failed verification must still
                 # refresh its other source dependencies before compiling context.
                 style = workspace / "styles.css"
                 style.write_text(style.read_text() + "\n/* external edit after verification */\n")
-            if index == 5 and change_after_verify:
+            if index == 6 and ending == "late_edit":
                 script = workspace / "app.js"
                 script.write_text(script.read_text().replace("count += 1", "count += 0"))
-            body = json.dumps({"choices": [{"message": {"role": "assistant", "content": json.dumps(responses[index])}}]}).encode()
+            body = json.dumps({"choices": [{"message": {"role": "assistant", "content": responses[index] if isinstance(responses[index], str) else json.dumps(responses[index])}}]}).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
@@ -63,21 +73,38 @@ def run_case(root, change_after_verify):
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
-        env = dict(os.environ, RNA_STATE_ROOT=str(state), RNA_BASE_URL=f"http://127.0.0.1:{server.server_port}",
+        env = {key: value for key, value in os.environ.items() if not key.startswith("RNA_")}
+        env.update(RNA_STATE_ROOT=str(state), RNA_BASE_URL=f"http://127.0.0.1:{server.server_port}",
                    RNA_MODEL="scripted", RNA_API_KEY="test")
         run = subprocess.run(["dotnet", str(CLI), "run", "--workspace", str(workspace),
             "--task-file", str(REPO / "tests/cli/counter_repair_task.md"), "--web-checks", str(checks),
             "--min-reads", "1", "--min-writes", "1", "--expect-files", "index.html,styles.css,app.js",
-            "--max-iterations", "8", "--max-tool-steps", "8", "--jsonl"],
+            "--auto-confirm", "on", "--tool-result-role", "tool" if ending == "reverified" else "user",
+            "--max-iterations", "12", "--max-tool-steps", "12", "--jsonl"],
             cwd=REPO, env=env, capture_output=True, text=True, timeout=90, check=False)
         assert run.stdout.strip(), run.stderr
         result = json.loads(run.stdout.splitlines()[-1])["data"]
-        assert run.returncode == (5 if change_after_verify else 0), (run.stdout, run.stderr)
-        assert result["acceptance"] == ("failed" if change_after_verify else "passed"), result
-        assert result["webSnapshotVerified"] == (not change_after_verify), result
-        assert result["webCheckCount"] == 9 and len(requests) == 6, result
-        assert [read_progress(request)["currentCompleteFileReads"] for request in requests] == [0, 0, 1, 0, 1, 1], \
+        passed = ending in ("passed", "reverified")
+        assert run.returncode == (0 if passed else 5), (run.stdout, run.stderr)
+        assert result["acceptance"] == ("passed" if passed else "failed"), result
+        assert result["webSnapshotVerified"] == passed, result
+        assert result["webCheckCount"] == 9 and len(requests) == len(responses), result
+        initial_context = json.loads(requests[0]["messages"][-1]["content"].split("\n", 1)[1])
+        assert initial_context["webAcceptance"] == {"currentSnapshotVerified": False}
+        requests = requests[1:]  # The selected skill exposes web.verify for the workflow below.
+        read_counts = [0, 0, 1, 0, 1, 1] + ({"passed": [], "late_edit": [1], "stale": [0, 1], "reverified": [0, 1, 1]}[ending])
+        assert [read_progress(request)["currentCompleteFileReads"] for request in requests] == read_counts, \
             "Browser evidence and mutation read-back must not count as accepted final file reads"
+        web_states = [False, False, False, False, False, True] + ({"passed": [], "late_edit": [True], "stale": [False, False], "reverified": [False, False, True]}[ending])
+        for index, (request, expected) in enumerate(zip(requests, web_states)):
+            messages = request["messages"]
+            contexts = [m for m in messages if m.get("content", "").startswith("RUNTIME_CONTEXT:\n")]
+            assert len(contexts) == 1
+            assert json.loads(contexts[0]["content"].split("\n", 1)[1])["webAcceptance"] == {"currentSnapshotVerified": expected}
+            assert messages[-2 if ending == "late_edit" and index == 6 else -1] == contexts[0]
+        if ending == "late_edit":
+            assert requests[6]["messages"][:-1] == requests[5]["messages"], "Repair must preserve frozen verification state"
+            assert requests[6]["messages"][-1]["content"].startswith("FORMAT_REPAIR:")
         assert "rna://" not in json.dumps(requests), "Runtime references leaked into the model context"
         def receipts(request, tool):
             return [body for message in request["messages"]
@@ -86,26 +113,28 @@ def run_case(root, change_after_verify):
                     if body["tool"] == tool]
 
         original_error = [message["content"] for message in requests[1]["messages"]
-                          if message.get("content", "").startswith("TOOL_RESULT") and '"name":"web.verify"' in message["content"]]
+                          if (message.get("role") == "tool" or message.get("content", "").startswith("TOOL_RESULT")) and '"name":"web.verify"' in message["content"]]
         assert len(original_error) == 1 and "ReferenceError" in original_error[0], original_error
         historical = receipts(requests[2], "web.verify")
         assert len(historical) == 1 and historical[0]["outcome"] == "Error", historical
         assert historical[0]["observation"]["state"] == "Superseded", historical
         assert historical[0]["targets"] == ["index.html"] and historical[0]["data"]["checks"], historical
-        writes = [json.loads(message["content"].split("\n", 1)[1]) for message in requests[3]["messages"]
-                  if message.get("content", "").startswith("TOOL_RESULT") and '"name":"files.patch"' in message["content"]]
+        writes = [json.loads(message["content"] if message.get("role") == "tool" else message["content"].split("\n", 1)[1])
+                  for message in requests[3]["messages"]
+                  if (message.get("role") == "tool" or message.get("content", "").startswith("TOOL_RESULT")) and '"name":"files.patch"' in message["content"]]
         assert len(writes) == 1 and writes[0]["data"]["path"] == "app.js", writes
         assert writes[0]["status"] == "ok" and writes[0]["data"]["changed"], writes
         assert not receipts(requests[3], "files.patch"), "a recent patch remains a call/result pair"
         current_read = [message["content"] for message in requests[4]["messages"]
-                        if message.get("content", "").startswith("TOOL_RESULT") and '"target":"app.js"' in message["content"]]
+                        if (message.get("role") == "tool" or message.get("content", "").startswith("TOOL_RESULT")) and '"target":"app.js"' in message["content"]]
         assert len(current_read) == 1 and "count += 1" in current_read[0] and "count += increment" not in current_read[0], current_read
         saved = record(workspace, state)["Items"]
-        assert len(saved) == 2 and {item["State"] for item in saved} == {"Passed", "Failed"}, saved
+        assert len(saved) == (3 if ending == "reverified" else 2) and {item["State"] for item in saved} == {"Passed", "Failed"}, saved
         assert all(len(item["Checks"]["steps"]) == 9 for item in saved), saved
         passed = next(item for item in saved if item["State"] == "Passed")
         assert all(step["status"] == "Passed" for step in passed["CheckResults"]), passed
         assert passed["Origin"]["RunId"] == result["RunId"], passed
+        print(f"PASS browser acceptance context: {ending}")
     finally:
         server.shutdown()
         server.server_close()
@@ -115,9 +144,9 @@ def run_case(root, change_after_verify):
 def main():
     with tempfile.TemporaryDirectory(prefix="rna-checks-runtime-") as folder:
         root = Path(folder)
-        for name, changed in [("repair", False), ("stale", True)]:
-            (root / name).mkdir()
-            run_case(root / name, changed)
+        for ending in ("passed", "late_edit", "stale", "reverified"):
+            (root / ending).mkdir()
+            run_case(root / ending, ending)
         run_recovery_guards(root / "recovery-guards")
     print("PASS scripted production runtime: verify/read/repair/read/verify/done, frozen checks, stale final evidence rejected")
 
@@ -133,7 +162,7 @@ def run_recovery_guards(root):
                     "tool_calls": [{"name": name, "arguments": arguments}]}
         verify = tool("web.verify", entryPath="index.html")
         scenario.responses.extend([
-            verify, verify,
+            tool("common.skills_load", id="workspace.web_verify_repair"), verify, verify,
             tool("files.create", relativePath="unrelated.txt", text="not a dependency"), verify,
             tool("common.resources_read", target="app.js"), verify,
             tool("files.replace", relativePath="app.js", text=original), verify,
@@ -142,8 +171,8 @@ def run_recovery_guards(root):
             {"message": "Verified repair.", "action": "done", "tool_calls": []},
         ])
         output = scenario.cli("run", "--message", "Repair the counter and verify its checked snapshot.",
-                              "--web-checks", str(REPO / "tests/cli/counter_checks.json"),
-                              "--min-reads", "1", "--min-writes", "1", "--max-iterations", "16",
+                              "--auto-confirm", "on", "--web-checks", str(REPO / "tests/cli/counter_checks.json"),
+                              "--min-writes", "1", "--max-iterations", "16",
                               "--max-tool-steps", "16", "--jsonl")
         events = [json.loads(line) for line in output.stdout.splitlines()]
         verifications = [event["data"]["activity"]["Outcome"] for event in events
@@ -151,10 +180,13 @@ def run_recovery_guards(root):
         assert verifications == ["Error", *(["NotDispatched"] * 4), "Ok"], verifications
         result = events[-1]["data"]
         assert result["acceptance"] == "passed" and result["webSnapshotVerified"]
-        assert result["ToolStepsUsed"] == 7 and result["IterationsUsed"] == 12, result
+        assert result["ToolStepsUsed"] == 8 and result["IterationsUsed"] == 13, result
         assert result["presentation"]["LatestVerification"]["PassedChecks"] == 9
         assert scenario.json("verifications")["Total"] == 2, "Rejected repeats must not start browsers or publish results"
-        assert len(scenario.requests) == 12 and not scenario.responses and not scenario.errors
+        assert len(scenario.requests) == 13 and not scenario.responses and not scenario.errors
+        for request in scenario.requests:
+            context = json.loads(request["messages"][-1]["content"].split("\n", 1)[1])
+            assert "readAcceptance" not in context and "webAcceptance" in context
         wire = json.dumps(scenario.requests)
         assert "ChangeRequired" in wire and "rna://" not in wire and "ChangeDependencies" not in wire
         assert (scenario.workspace / "app.js").read_text() == original.replace("count += increment", "count += 1")
