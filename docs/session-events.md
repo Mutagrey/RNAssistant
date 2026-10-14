@@ -398,11 +398,13 @@ running markers cannot leave separate active cards after failure. A changed
 `RunViewState` on an existing message also invalidates its rendered unit. Step
 narration is rendered once. During active work, silent steps continue the preceding
 comment and completed actions may be collapsed below it; current work and attention
-states stay visible. This presentation preserves original step/call identities and
-the terminal run's full expandable history; see [Conversation protocol](conversation-protocol.md).
+states stay visible. Completion, failure, cancellation and reload preserve nonempty
+model comments outside the collapsed technical history, without duplicating them
+when it is opened. This presentation preserves original step/call identities and
+the terminal run's full expandable activity history; see [Conversation protocol](conversation-protocol.md).
 An applied user input splits the transcript into ordered segments of the same run.
-Earlier segments stay before that input; only the last segment merges with live
-activities, excluding already represented prefix steps. A full history refresh
+Earlier segments and their visible comments stay before that input; only the last
+segment merges with live activities, excluding already represented prefix steps. A full history refresh
 restores the same run's transient output before painting, and applies its inbox
 projection with the messages in one render. Pending echoes bridge the interval
 between an intake receipt, queue removal and the corresponding history projection;

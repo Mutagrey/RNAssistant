@@ -22,6 +22,13 @@ class Element {
   get textContent() { return this._text + this.innerHTML + this.childNodes.map(n => n.textContent).join(""); }
 }
 const walk = node => [node].concat(node.childNodes.flatMap(walk));
+const visibleStepMessages = root => walk(root).filter(node => {
+  if (!node.classList.contains("agent-step-message")) return false;
+  for (let parent = node.parentNode; parent; parent = parent.parentNode) {
+    if (parent.tagName === "details" && !parent.open) return false;
+  }
+  return true;
+}).map(node => node.textContent);
 const box = new Element("main");
 const ctx = vm.createContext({
   state: { activeChatId: "chat", messages: [], chatRuns: {}, editingMessageIndex: -1 },
@@ -98,7 +105,11 @@ assert.equal(walk(box).filter(n => n.classList.contains("agent-final-step")).len
 const completedOverview = walk(box).find(n => n.classList.contains("agent-run-overview"));
 assert.ok(completedOverview, "completed run keeps its expandable action history");
 assert.equal(completedOverview.open, false);
+assert.deepEqual(visibleStepMessages(box), ["Narration s1", "Narration s2"],
+  "completing a run preserves its model comments outside collapsed actions");
 completedOverview.open = true; completedOverview.listeners.toggle();
+assert.deepEqual(visibleStepMessages(box), ["Narration s1", "Narration s2"],
+  "expanding actions does not repeat model comments");
 assert.equal(walk(completedOverview).filter(n => n.classList.contains("agent-model-step-history")).length, 2);
 assert.equal(walk(completedOverview).filter(n => n.classList.contains("kind-tool")).length, 3);
 completedOverview.open = false; completedOverview.listeners.toggle();
@@ -106,6 +117,9 @@ assert.equal(completedOverview.childNodes.length, 1, "collapse releases rendered
 completedOverview.open = true; completedOverview.listeners.toggle();
 assert.equal(walk(completedOverview).filter(n => n.classList.contains("agent-model-step-history")).length, 2,
   "every saved step can be reopened after completion");
+ctx.resetRenderedMessageUnits(box); render();
+assert.deepEqual(visibleStepMessages(box), ["Narration s1", "Narration s2"],
+  "restoring the saved transcript retains comments without relying on prior DOM state");
 // Distinct transcript segments of one logical run must not share a DOM cache key.
 ctx.state.liveAgentRun = null; ctx.state.liveActivity = null; ctx.state.liveStreamContent = null; ctx.state.chatRuns = {};
 ctx.state.messages = [message(action("s1", "a", "completed", null), 0),
@@ -126,6 +140,8 @@ assert.equal(box.childNodes[2].messageUnitKey, "live:agent-run");
 assert.equal(ctx.liveAgentTailActivities().map(a => a.StepId).join("|"), "s2|s2",
   "live replay cannot move earlier narration or actions below the applied steer");
 const prefix = box.childNodes[0], reply = box.childNodes[1];
+assert.deepEqual(visibleStepMessages(prefix), ["Narration s1"],
+  "applying a steer preserves the earlier comment above the user input");
 ctx.state.liveAgentRun.push(action("s2", "c", "running", "{}"));
 ctx.reconcileMessageUnits(box, ctx.buildLiveMessageUnits(), true);
 assert.equal(box.childNodes[0], prefix); assert.equal(box.childNodes[1], reply);
@@ -169,8 +185,10 @@ assert.equal(walk(box).filter(n => n.classList.contains("status-running")).lengt
   "terminal failure does not leave earlier progress cards running");
 const overview = walk(box).find(n => n.classList.contains("agent-run-overview"));
 assert.ok(overview, "no-tool progress remains inspectable");
+assert.deepEqual(visibleStepMessages(box), ["Narration s1", "Narration s2"],
+  "a failed run preserves accepted comments outside the diagnostic history");
 overview.open = true; overview.listeners.toggle();
-assert.equal(walk(overview).filter(n => n.classList.contains("agent-step-message")).length, 2);
+assert.equal(walk(overview).filter(n => n.classList.contains("agent-step-message")).length, 0);
 assert.equal(walk(overview).filter(n => n.classList.contains("kind-step")).length, 0,
   "step text is not repeated inside its own activity row");
 
@@ -219,6 +237,8 @@ const preparation = [0, 1, 2].map(index => {
 });
 for (const active of [true, false]) {
   const article = ctx.renderAgentRunArticle({ live: active, items: preparation });
+  assert.deepEqual(visibleStepMessages(article), ["Inspect the styles before choosing a change."],
+    "silent steps cannot hide the comment when the feed becomes saved history");
   if (!active) {
     const overview = article.querySelector(".agent-run-overview");
     overview.open = true; overview.listeners.toggle();
@@ -256,5 +276,13 @@ const nextFinding = action("new-finding", "inspect", "running", '{}');
 nextFinding.StepMessage = "The stylesheet is loaded; inspect the affected selector.";
 const nextArticle = ctx.renderAgentRunArticle({ live: true, items: preparation.concat({ activity: nextFinding }) });
 assert.equal(nextArticle.querySelectorAll(".agent-model-step").length, 2, "a new comment starts a new visible group");
+nextFinding.StepMessage = preparation[0].activity.StepMessage;
+for (const lifecycle of ["completed", "cancelled"]) {
+  const article = ctx.renderAgentRunArticle({ items: preparation.concat({ activity: nextFinding }),
+    finalMessage: { message: { Id: "terminal", Role: "assistant", RunId: "r", Content: "Final answer",
+      RunViewState: Object.assign({}, view, { Lifecycle: lifecycle }) }, index: 4 } });
+  assert.deepEqual(visibleStepMessages(article), [nextFinding.StepMessage, nextFinding.StepMessage],
+    "distinct model steps keep repeated comments after " + lifecycle);
+}
 assert.equal(JSON.stringify(preparation), originalPreparation, "presentation never changes the stored step identities or comments");
 console.log("PASS live projection: silent steps fold below commentary while active work and attention stay visible");

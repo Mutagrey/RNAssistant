@@ -131,7 +131,8 @@
   min-width: 0;
 }
 
-.agent-model-step + .agent-model-step { margin-top: 12px; }
+.agent-model-step + .agent-model-step,
+.agent-model-step + .agent-run-overview { margin-top: 12px; }
 
 .agent-run-actions.has-actions {
   padding-bottom: 6px;

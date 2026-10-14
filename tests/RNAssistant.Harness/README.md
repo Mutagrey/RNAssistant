@@ -501,7 +501,10 @@ to check immediate Steer/Queue visibility, empty-queue/history races, exact-ID h
 and manual scrolling after submission. It uses the same Playwright environment as
 the layout test below. `node tests/web/live-run-projection.test.js` covers transcript
 order across applied steers, silent-step grouping under commentary, preserved
-disclosure state and visible active/attention rows. `node tests/web/chat-transcript-layout.test.js` uses
+disclosure state and visible active/attention rows. Accepted comments stay visible
+after completion, cancellation, failure, reload and steer; opening technical history
+does not duplicate them. `node tests/web/agent-activity-layout.test.js` checks that
+visibility in Chromium at wide/narrow widths. `node tests/web/chat-transcript-layout.test.js` uses
 the bundled Playwright (`NODE_PATH`, optional `BROWSER_EXECUTABLE` and
 `LAYOUT_SCREENSHOT`) to check narrow light/dark bubbles, safe full text, editor
 focus, manual/follow scrolling, deferred gestures and history anchoring.

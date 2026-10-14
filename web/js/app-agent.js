@@ -355,6 +355,7 @@ function appendAgentRunOverview(parent, steps, timeline, stats) {
   if (!actionCount && !(timeline || []).some(function (item) {
     return activityKind(item.activity) === "step";
   })) return null;
+  if (!(steps || []).some(function (step) { return step.items && step.items.length; })) return null;
   var details = document.createElement("details");
   details.className = "agent-run-history agent-run-overview status-" + stats.status;
   details.setAttribute("data-disclosure-key", "overview");
@@ -390,16 +391,14 @@ function appendAgentRunOverview(parent, steps, timeline, stats) {
     content = document.createElement("div");
     content.className = "agent-run-history-content agent-run-overview-content";
     (steps || []).forEach(function (step) {
-      var section = document.createElement("section");
-      section.className = "agent-model-step agent-model-step-history";
-      appendAgentStepMessage(section, step.message);
       var historyItems = (step.items || []).filter(function (item) {
         return activityKind(item.activity) !== "step";
       });
-      if (historyItems.length) {
-        section.appendChild(buildAgentRunTranscript(
-          historyItems, historyItems, agentRunStats(historyItems, true, null)));
-      }
+      if (!historyItems.length) return;
+      var section = document.createElement("section");
+      section.className = "agent-model-step agent-model-step-history";
+      section.appendChild(buildAgentRunTranscript(
+        historyItems, historyItems, agentRunStats(historyItems, true, null)));
       content.appendChild(section);
     });
     if (!content.childNodes.length) {
@@ -477,18 +476,17 @@ function renderAgentRunArticle(run) {
   var process = document.createElement("div");
   process.className = "agent-run-actions" + (agentToolCallCount(timeline) ? " has-actions" : "");
   var expanded = !run.continued && (run.live || (runViewState && ["running", "awaiting_user", "awaiting_confirmation"].indexOf(runViewState.lifecycle) >= 0));
-  if (expanded) {
-    var updates = groupAgentRunUpdates(steps);
-    updates.forEach(function (step, stepIndex) {
-      var section = document.createElement("section");
-      section.className = "agent-model-step";
-      appendAgentStepMessage(section, step.message);
-      appendLiveAgentStep(section, step, stepIndex === updates.length - 1);
-      process.appendChild(section);
-    });
-  } else {
-    appendAgentRunOverview(process, steps, timeline, stats);
-  }
+  // Accepted model comments remain in the transcript when actions are folded.
+  var updates = expanded ? groupAgentRunUpdates(steps) : steps;
+  updates.forEach(function (step, stepIndex) {
+    if (!expanded && !String(step.message || "").trim()) return;
+    var section = document.createElement("section");
+    section.className = "agent-model-step";
+    appendAgentStepMessage(section, step.message);
+    if (expanded) appendLiveAgentStep(section, step, stepIndex === updates.length - 1);
+    process.appendChild(section);
+  });
+  if (!expanded) appendAgentRunOverview(process, steps, timeline, stats);
   if (process.childNodes.length) body.appendChild(process);
   // This warning is outside collapsed trace and never derived from the model's prose.
   if (!run.live) appendAgentRunViewState(body, runViewState, agentRunId(items, finalMessage));

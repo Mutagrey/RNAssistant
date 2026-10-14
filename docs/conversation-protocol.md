@@ -1562,11 +1562,14 @@ comments remain separate even when their text repeats. Explicit expansion surviv
 live updates by activity identity; rendering never merges model steps or stored
 calls. Groups without silent steps retain the ordinary visible action rows.
 The current running action owns the text shimmer; an icon-free thinking status
-appears between calls. Waiting typed lifecycles keep the feed open. A terminal run
-folds the complete process into the existing `Действия · N` overview, whose expanded
-history shows every original step; a zero-call run emits no empty overview. Independent
-runtime warnings remain visible. Progress phase names (`thinking`, `working`) are
-not target captions. A nonempty action block ends with a thin divider and a 6 px
+appears between calls. Waiting typed lifecycles keep the feed open. Accepted nonempty
+model comments remain visible in order after completion, failure, cancellation,
+reload and an applied user input that splits the run. Only technical activities
+fold into the existing `Действия · N` overview; expanding it shows the original
+activities without repeating those comments. Silent steps add no paragraph, and
+equal comments from distinct steps remain distinct. A zero-call run emits no empty
+overview. Independent runtime warnings remain visible. Progress phase names
+(`thinking`, `working`) are not target captions. A nonempty action block ends with a thin divider and a 6 px
 gap before the answer. Assistant footer buttons start at the left, with copy first
 and message count/usage immediately after the buttons; user footer buttons stay
 on the right. DOM order matches the visual and keyboard order. Changed live units retain explicit detail-disclosure

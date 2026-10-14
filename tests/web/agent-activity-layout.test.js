@@ -150,6 +150,8 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       assert.equal(await page.locator("#failed-no-calls .agent-run-overview").count(), 0);
       assert.equal(await page.locator("#failed-no-calls [data-runtime-health]").count(), 1, "zero actions still explains failure");
       assert.match(await page.locator("#failed-no-calls").innerText(), /Не удалось получить ответ/);
+      assert.equal(await page.locator("#failed-run .agent-step-message:visible").count(), 1,
+        "a failed run retains its comment outside collapsed diagnostics");
       await page.locator("#failed-run .agent-run-overview").evaluate(node => { node.open = true; });
       const visible = await page.locator("#failed-run").innerText();
       assert.ok(!visible.includes("Endpoint:") && !visible.includes("MaxTokens:"), "raw diagnostics stay out of the main transcript");
@@ -243,6 +245,37 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       assert.equal(await page.locator("#sparse-run .kind-tool:visible").count(), 6, "refresh preserves explicit expansion");
       assert.ok(await page.locator("#sparse-run").evaluate(node => node.scrollWidth <= node.clientWidth + 1), "group fits narrow chat");
     }
-    console.log("PASS activity layout: action/target/result, Markdown, diagnostics, narrow wrapping and accessible silent-step groups");
+    await page.evaluate(() => {
+      const items = JSON.parse(JSON.stringify(sparseItems));
+      items[items.length - 1].activity.StepMessage = items[0].activity.StepMessage;
+      items.forEach(item => { item.activity.Status = "completed"; item.message.RunViewState.Lifecycle = "completed"; });
+      const finalMessage = { index: items.length, message: { Id: "sparse-final", Role: "assistant", RunId: "sparse",
+        Content: "Проверка завершена.", RunViewState: items[0].message.RunViewState } };
+      window.savedCommentRun = { items, finalMessage };
+      const previous = document.getElementById("sparse-run");
+      const completed = renderAgentRunArticle(savedCommentRun); completed.id = "sparse-run";
+      previous.replaceWith(completed);
+    });
+    for (const width of [740, 360]) {
+      await page.setViewportSize({ width, height: 920 });
+      const run = page.locator("#sparse-run");
+      assert.equal(await run.locator(".agent-step-message:visible").count(), 2,
+        "completion retains both comments, even when their text repeats");
+      assert.equal(await run.locator(".agent-run-final:visible").count(), 1);
+      assert.equal(await run.locator(".kind-tool:visible").count(), 0);
+      await run.locator(".agent-run-overview > summary").click();
+      await run.locator(".kind-tool").first().waitFor({ state: "visible" });
+      assert.equal(await run.locator(".kind-tool:visible").count(), 6);
+      assert.equal(await run.locator(".agent-step-message:visible").count(), 2,
+        "opening the action history does not duplicate comments");
+      assert.ok(await run.evaluate(node => node.scrollWidth <= node.clientWidth + 1), "saved comments fit narrow chat");
+      await page.evaluate(() => {
+        const previous = document.getElementById("sparse-run");
+        const restored = renderAgentRunArticle(JSON.parse(JSON.stringify(savedCommentRun))); restored.id = "sparse-run";
+        previous.replaceWith(restored);
+      });
+      assert.equal(await run.locator(".agent-step-message:visible").count(), 2, "reload preserves comments with action history closed");
+    }
+    console.log("PASS activity layout: action/target/result, Markdown, diagnostics, narrow wrapping, silent-step groups and persistent comments");
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });
