@@ -261,6 +261,10 @@ namespace RNAssistant.Office.Services
                 request.Representation != null && request.Representation != "auto" && request.Representation != "text" ||
                 !string.IsNullOrEmpty(request.Cursor) || request.ViewPath != null || request.Fields != null || request.RowOffset != 0 || request.MaxRows != 0))
                 throw new ResourceRequestException("Section reads support document Markdown text only, without row selectors or cursors.", "resource_section_unsupported", false);
+            if (request.PartNumber.HasValue && (!(provider is ChatArtifactResourceProvider) || request.PartNumber.Value < 1 ||
+                !string.IsNullOrEmpty(request.Cursor) || request.Section != null ||
+                request.Representation != "text" && request.Representation != "source"))
+                throw new ResourceRequestException("Part reads require a positive partNumber on an exact text/source artifact.", "resource_part_unsupported", false);
             var outlook = provider as LiveDocumentResourceProvider;
             if (outlook?.IsOutlookAttachment(request.Reference.Uri) == true)
                 return ReadOutlookAttachment(session, request, outlook);
@@ -279,10 +283,11 @@ namespace RNAssistant.Office.Services
                 request = new ResourceReadRequest { Reference = identityResolver.ResolveIdentity(session, request.Reference.Identity),
                     Section = request.Section,
                     Representation = request.Representation, Cursor = request.Cursor, MaxChars = request.MaxChars,
-                    MaxRows = request.MaxRows, RowOffset = request.RowOffset, ViewPath = request.ViewPath, Fields = request.Fields };
+                    MaxRows = request.MaxRows, RowOffset = request.RowOffset, ViewPath = request.ViewPath, Fields = request.Fields,
+                    PartNumber = request.PartNumber };
             }
             if (IsBinaryView(request.Representation)) return ReadBinaryView(session, request);
-            var retained = _authority == null ? null : _authority.ReadRetained(session, request, live);
+            var retained = _authority == null || request.PartNumber.HasValue ? null : _authority.ReadRetained(session, request, live);
             if (retained != null) return retained;
             return WithProvider(provider, session, delegate
             {

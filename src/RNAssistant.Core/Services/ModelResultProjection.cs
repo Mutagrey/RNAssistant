@@ -136,7 +136,9 @@ namespace RNAssistant.Core.Services
         public static bool IsResourceEvidence(string name)
         {
             return string.Equals(name, "common.resources_find", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(name, "common.resources_read", StringComparison.OrdinalIgnoreCase);
+                string.Equals(name, "common.resources_read", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(name, "common.resources_search", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(name, "common.resources_outline", StringComparison.OrdinalIgnoreCase);
         }
 
         public static bool IsExactReadEvidence(string name)
@@ -152,6 +154,7 @@ namespace RNAssistant.Core.Services
             var data = IsWorkspaceMutation(name)
                 ? SelectFields(source.Data, "path", "targetPath", "changed", "restored", "moved", "deleted", "code")
                 : ProjectResourceData(name, source.Data);
+            if (IsResourceEvidence(name)) SanitizeResourceEnvelope(data, source.Result.Resources);
             var result = new ToolResult(source.Result.Status,
                 SanitizeOperationalText(RemoveRuntimeResourceValues(source.Result.Message, source.Result.Resources)),
                 data.ToString(Formatting.None), new ResourceRef[0]);
@@ -181,12 +184,28 @@ namespace RNAssistant.Core.Services
         {
             var result = name == "common.resources_find"
                 ? SelectFields(data, "scope", "query", "items", "total", "complete", "availabilityHint", "unavailableScopes", "directory", "code", "retryable")
-                : SelectFields(data, "version", "historical", "startLine", "requestedLines", "section", "kind", "target", "type", "scope",
-                    "representation", "text", "table", "coverage", "offset", "returnedCharacters", "totalCharacters", "complete",
+                : name == "common.resources_search"
+                ? SelectFields(data, "target", "query", "matches", "totalMatches", "scanComplete", "sourceComplete", "code", "retryable")
+                : name == "common.resources_outline"
+                ? SelectFields(data, "target", "partCount", "totalLines", "nextPart", "sourceComplete", "symbolLanguage", "symbolsComplete", "parts", "code", "retryable")
+                : SelectFields(data, "version", "historical", "startLine", "requestedLines", "section", "partNumber", "partCount", "kind", "target", "type", "scope",
+                    "representation", "text", "table", "returnedCharacters", "totalCharacters", "complete", "sourceComplete",
                     "rawContentIncluded", "references", "claims", "claimsUnavailable", "usage", "code", "retryable");
             if (name == "common.resources_find" && result["items"] is JArray)
                 result["items"] = new JArray(((JArray)result["items"]).Select(item => SelectFields(item,
                     "target", "type", "title", "representations", "sectionTitle", "description", "usage", "snippet")));
+            if (name == "common.resources_search" && result["matches"] is JArray)
+                result["matches"] = new JArray(((JArray)result["matches"]).Select(item => SelectFields(item,
+                    "snippet", "partNumber", "sectionTitle")));
+            if (name == "common.resources_outline" && result["parts"] is JArray)
+                result["parts"] = new JArray(((JArray)result["parts"]).Select(item =>
+                {
+                    var projected = SelectFields(item, "partNumber", "firstLine", "lastLine", "characters", "symbols");
+                    if (projected["symbols"] is JArray)
+                        projected["symbols"] = new JArray(((JArray)projected["symbols"])
+                            .Select(symbol => SelectFields(symbol, "name", "kind", "line")));
+                    return projected;
+                }));
             if (result["unavailableScopes"] is JArray && !result["unavailableScopes"].HasValues) result.Remove("unavailableScopes");
             if ((string)result["type"] == "shared context" && result["text"] != null)
             {
@@ -218,7 +237,8 @@ namespace RNAssistant.Core.Services
             RemoveQuestionRuntimeState(name, data);
             RemoveTaskListRuntimeState(name, data);
             RemovePlanRuntimeState(name, data);
-            RemoveRuntimeResourceValues(data, source.Result.Resources);
+            if (IsResourceEvidence(name)) SanitizeResourceEnvelope(data, source.Result.Resources);
+            else RemoveRuntimeResourceValues(data, source.Result.Resources);
             var objectData = data as JObject;
             if (objectData != null && source.ResultResource != null &&
                 (JToken.DeepEquals(objectData["payload_externalized"], new JValue(true)) ||
@@ -246,6 +266,20 @@ namespace RNAssistant.Core.Services
             }
             foreach (var child in token.Children())
                 RemoveRuntimeResourceValues(child, references);
+        }
+
+        // Exact resource text and snippets are user data. Redacting URI-shaped
+        // literals there would make the model observe different source bytes.
+        public static void SanitizeResourceEnvelope(JToken data, IEnumerable<ResourceRef> references)
+        {
+            var root = data as JObject;
+            if (root == null) return;
+            foreach (var property in root.Properties())
+            {
+                if (property.Name == "text" || property.Name == "table" || property.Name == "items" ||
+                    property.Name == "matches" || property.Name == "parts") continue;
+                RemoveRuntimeResourceValues(property.Value, references);
+            }
         }
 
         public static string RemoveRuntimeResourceValues(

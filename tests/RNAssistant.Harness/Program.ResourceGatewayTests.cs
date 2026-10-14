@@ -553,8 +553,7 @@ namespace RNAssistant.Harness
                 foreach (var retired in new[]
                 {
                     "common.resources_list",
-                    "common.resources_resolve",
-                    "common.resources_search"
+                    "common.resources_resolve"
                 })
                 {
                     AssertTrue(tools.All(item => !string.Equals(item.Id, retired, StringComparison.Ordinal)),
@@ -562,6 +561,8 @@ namespace RNAssistant.Harness
                     AssertTrue(runtime.Describe(new ToolCall("retired", retired, "{}")) == null,
                         retired + " has no runtime alias");
                 }
+                AssertTrue(tools.Any(item => item.Id == ResourceToolCatalog.SearchToolId),
+                    "in-resource search is published through the native catalog");
                 var invalidManual = executor.ExecuteManual(Command(ResourceToolCatalog.FindToolId, "provider", "chat"), tools,
                     new AppSettings(), false, true, session);
                 AssertTrue(!invalidManual.Success && invalidManual.ErrorCode == "invalid_arguments",

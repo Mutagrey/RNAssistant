@@ -14,6 +14,76 @@ namespace RNAssistant.Office.Services
         private const int MaximumIntentResults = 20;
         private const int IntentSnippetCharacters = 600;
 
+        internal ResourceWithinSearchPage SearchWithin(ChatSession session, string target, string query,
+            int limit, bool matchCase, System.Threading.CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(query) || query.Length > 500 || limit < 1 || limit > 50)
+                throw new ResourceRequestException("Use a literal query of at most 500 characters and limit from 1 to 50.",
+                    "resource_search_invalid", false);
+            var selected = ResolveIntentTarget(session, target);
+            var page = new ResourceWithinSearchPage { Target = selected.Target, Query = query,
+                ExactReference = selected.Reference.Copy() };
+            var artifactProvider = ProviderFor(selected.Reference.Uri) as ChatArtifactResourceProvider;
+            var artifact = artifactProvider == null ? null : artifactProvider.ResolveArtifact(session, selected.Reference.Uri);
+            if (artifact != null && !string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId) &&
+                (artifact.OriginalAttachment != null || artifact.Kind == ChatArtifactKinds.Markdown ||
+                artifact.Kind == ChatArtifactKinds.PlanDocument))
+            {
+                var found = artifactProvider.SearchOccurrences(session, selected.Reference, query, limit, matchCase);
+                page.TotalMatches = found.TotalMatches;
+                page.ScanComplete = !found.ScanTruncated;
+                page.SourceComplete = !(artifact.OriginalAttachment?.TextTruncated == true ||
+                    artifact.OriginalAttachment?.Kind == "pdf" && artifact.OriginalAttachment.PageCount >
+                    (artifact.OriginalAttachment.PageTextLengths?.Count ?? 0));
+                page.Matches = found.Matches.Select(match => new ResourceWithinSearchItem {
+                    Snippet = match.Snippet, PartNumber = match.PartNumber, SectionTitle = match.SectionTitle
+                }).ToList();
+                return page;
+            }
+            var reference = selected.Descriptor.Mutable ? new ResourceRef(selected.Reference.Uri) : selected.Reference;
+            var representation = selected.Descriptor.Representations.Contains("source") ? "source" : "text";
+            var read = ReadWhole(session, reference, representation, cancellationToken).Result;
+            if (read.Text == null)
+                throw new ResourceRequestException("This target has no searchable text representation.", "resource_search_unsupported", false);
+            page.ExactReference = read.Resource.Reference.Copy();
+            page.SourceComplete = read.SourceComplete != false;
+            page.ScanComplete = page.SourceComplete;
+            for (var position = 0; position <= read.Text.Length - query.Length;)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var hit = read.Text.IndexOf(query, position,
+                    matchCase ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase);
+                if (hit < 0) break;
+                page.TotalMatches++;
+                if (page.Matches.Count < limit)
+                {
+                    var start = Math.Max(0, hit - 200);
+                    page.Matches.Add(new ResourceWithinSearchItem { Snippet = read.Text.Substring(start,
+                        Math.Min(600, read.Text.Length - start)) });
+                }
+                position = hit + 1;
+            }
+            return page;
+        }
+
+        internal ResourceTextOutline Outline(ChatSession session, string target, int fromPart, int limit)
+        {
+            if (fromPart < 1 || limit < 1 || limit > 50)
+                throw new ResourceRequestException("Select a positive fromPart and limit from 1 to 50.",
+                    "resource_outline_invalid", false);
+            var selected = ResolveIntentTarget(session, target);
+            var provider = ProviderFor(selected.Reference.Uri) as ChatArtifactResourceProvider;
+            var artifact = provider?.ResolveArtifact(session, selected.Reference.Uri);
+            if (artifact == null || string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId) ||
+                artifact.OriginalAttachment == null && artifact.Kind != ChatArtifactKinds.Markdown &&
+                artifact.Kind != ChatArtifactKinds.PlanDocument)
+                throw new ResourceRequestException("This target has no indexed text outline.",
+                    "resource_outline_unsupported", false);
+            var outline = provider.OutlineText(session, selected.Reference, fromPart, limit);
+            outline.Target = selected.Target;
+            return outline;
+        }
+
         public ResourceFindPage Find(
             ChatSession session,
             string query,

@@ -413,6 +413,56 @@ namespace RNAssistant.Office.Services
                     ResourceReadRequest.MaximumCharacters,
                     maxChars <= 0 ? ResourceReadRequest.DefaultCharacters : maxChars));
 
+            if (request.PartNumber.HasValue)
+            {
+                if (request.PartNumber.Value < 1 || !string.IsNullOrEmpty(request.Cursor) ||
+                    request.Section != null || representation != "text" && representation != "source")
+                    throw new ResourceRequestException("Invalid text part selection.", "resource_part_invalid", false);
+                if (_documentArtifacts != null && !string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId) &&
+                    representation == "text" && (artifact.OriginalAttachment != null ||
+                    artifact.Kind == ChatArtifactKinds.Markdown || artifact.Kind == ChatArtifactKinds.PlanDocument))
+                {
+                    ResourceReadResult indexed;
+                    try { indexed = _documentArtifacts.ReadIndexedTextPart(session, exactReference, request.PartNumber.Value); }
+                    catch (System.IO.InvalidDataException error)
+                    { throw new ResourceRequestException(error.Message, "RESOURCE_SNAPSHOT_UNAVAILABLE", false); }
+                    indexed.Resource = Describe(session, artifact, false);
+                    return new ResourceReadSelection { Result = indexed, ResourceRefs = new[] { exactReference } };
+                }
+                var body = ReadText(session, artifact, int.MaxValue);
+                if (body == null)
+                    throw new ResourceRequestException("The exact text representation is unavailable.", "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
+                var starts = new List<int> { 0 };
+                while (starts[starts.Count - 1] < body.Length)
+                {
+                    var end = Math.Min(body.Length, starts[starts.Count - 1] + ResourceReadRequest.MaximumCharacters);
+                    if (end < body.Length && char.IsHighSurrogate(body[end - 1]) && char.IsLowSurrogate(body[end])) end--;
+                    starts.Add(end);
+                }
+                var partCount = starts.Count - 1;
+                if (partCount == 0) partCount = 1;
+                if (request.PartNumber.Value > partCount)
+                    throw new ResourceRequestException("partNumber is past the end of this representation.", "resource_part_invalid", false);
+                var start = starts[request.PartNumber.Value - 1];
+                var endPart = request.PartNumber.Value < starts.Count ? starts[request.PartNumber.Value] : 0;
+                var partOriginal = FindExactAttachment(session, artifact);
+                var partSourceComplete = partOriginal == null || !(partOriginal.TextTruncated ||
+                    partOriginal.Kind == "pdf" && partOriginal.PageCount > (partOriginal.PageTextLengths?.Count ?? 0));
+                return new ResourceReadSelection
+                {
+                    Result = new ResourceReadResult
+                    {
+                        Resource = Describe(session, artifact, false), Representation = representation,
+                        ContentSha256 = TextRepresentationSha256(artifact, partOriginal), Text = body.Substring(start, endPart - start),
+                        Offset = start, ReturnedCharacters = endPart - start, TotalCharacters = body.Length,
+                        PartNumber = request.PartNumber, PartCount = partCount, Complete = false,
+                        SourceComplete = partSourceComplete, Truncated = true, RawContentIncluded = true,
+                        Coverage = new ResourceCoverage(ResourceCoverageKinds.CharacterRange, start: start, end: endPart)
+                    },
+                    ResourceRefs = new[] { exactReference }
+                };
+            }
+
             if (representation == "metadata")
             {
                 ResourceReadCursor.RejectCursor(request);
@@ -474,6 +524,9 @@ namespace RNAssistant.Office.Services
             var length = Math.Min(maxChars, content.Length - offset);
             var selected = content.Substring(offset, length);
             var nextOffset = offset + length;
+            var original = FindExactAttachment(session, artifact);
+            var sourceComplete = original == null || !(original.TextTruncated ||
+                original.Kind == "pdf" && original.PageCount > (original.PageTextLengths?.Count ?? 0));
             return new ResourceReadSelection
             {
                 Result = new ResourceReadResult
@@ -486,6 +539,7 @@ namespace RNAssistant.Office.Services
                     TotalCharacters = content.Length,
                     Text = selected,
                     Complete = nextOffset >= content.Length,
+                    SourceComplete = sourceComplete,
                     Truncated = nextOffset < content.Length,
                     RawContentIncluded = true,
                     NextCursor = nextOffset < content.Length
@@ -494,6 +548,27 @@ namespace RNAssistant.Office.Services
                 },
                 ResourceRefs = new[] { exactReference }
             };
+        }
+
+        internal ResourceSearchResult SearchOccurrences(ChatSession session, ResourceRef reference,
+            string query, int limit, bool matchCase)
+        {
+            if (_documentArtifacts == null)
+                throw new ResourceRequestException("Document text index is unavailable.", "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
+            try { return _documentArtifacts.SearchTextOccurrences(session, reference, query, limit, matchCase); }
+            catch (System.IO.InvalidDataException error)
+            { throw new ResourceRequestException(error.Message, "RESOURCE_SNAPSHOT_UNAVAILABLE", false); }
+        }
+
+        internal ResourceTextOutline OutlineText(ChatSession session, ResourceRef reference, int fromPart, int limit)
+        {
+            if (_documentArtifacts == null)
+                throw new ResourceRequestException("Document text index is unavailable.", "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
+            try { return _documentArtifacts.OutlineText(session, reference, fromPart, limit); }
+            catch (System.IO.InvalidDataException error)
+            { throw new ResourceRequestException(error.Message, "RESOURCE_SNAPSHOT_UNAVAILABLE", false); }
+            catch (ArgumentOutOfRangeException error)
+            { throw new ResourceRequestException(error.Message, "resource_part_invalid", false); }
         }
 
         private ResourceDescriptor Describe(ChatSession session, ChatArtifact artifact, bool compact)

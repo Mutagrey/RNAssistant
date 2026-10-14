@@ -104,6 +104,14 @@ namespace RNAssistant.Office.Runtime
                 {
                     handler = new ResourceReadToolHandler(gateway, session, CaptureResourceReadAttachments);
                 }
+                else if (string.Equals(registration.Descriptor.Id, ResourceToolCatalog.SearchToolId, StringComparison.Ordinal))
+                {
+                    handler = new ResourceSearchToolHandler(gateway, session);
+                }
+                else if (string.Equals(registration.Descriptor.Id, ResourceToolCatalog.OutlineToolId, StringComparison.Ordinal))
+                {
+                    handler = new ResourceOutlineToolHandler(gateway, session);
+                }
                 else if (string.Equals(registration.Descriptor.Id, JsToolHandler.RunId, StringComparison.Ordinal))
                 {
                     handler = new JsToolHandler(gateway, session);
@@ -299,6 +307,8 @@ namespace RNAssistant.Office.Runtime
         {
             return toolId == SkillLoadToolHandler.ToolId || string.Equals(toolId, ResourceToolCatalog.FindToolId, StringComparison.Ordinal) ||
                 string.Equals(toolId, ResourceToolCatalog.ReadToolId, StringComparison.Ordinal) ||
+                string.Equals(toolId, ResourceToolCatalog.SearchToolId, StringComparison.Ordinal) ||
+                string.Equals(toolId, ResourceToolCatalog.OutlineToolId, StringComparison.Ordinal) ||
                 string.Equals(toolId, JsToolHandler.RunId, StringComparison.Ordinal) ||
                 ResourceDefinitionToolHandler.Owns(toolId) ||
                 ExcelReadToolIds.Owns(toolId) || ExcelWriteToolIds.Owns(toolId) ||

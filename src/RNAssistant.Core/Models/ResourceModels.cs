@@ -120,6 +120,8 @@ namespace RNAssistant.Core.Models
     {
         [Newtonsoft.Json.JsonProperty("section", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public string Section { get; set; }
+        [Newtonsoft.Json.JsonIgnore]
+        public int? PartNumber { get; set; }
         public const int MinimumCharacters = 128;
         public const int DefaultCharacters = 2048;
         public const int MaximumCharacters = 32000;
@@ -174,6 +176,10 @@ namespace RNAssistant.Core.Models
         public string LeaseId { get; set; }
         [Newtonsoft.Json.JsonIgnore]
         public int Offset { get; set; }
+        [Newtonsoft.Json.JsonIgnore]
+        public int? PartNumber { get; set; }
+        [Newtonsoft.Json.JsonIgnore]
+        public int? PartCount { get; set; }
         [Newtonsoft.Json.JsonProperty("returnedCharacters")]
         public int ReturnedCharacters { get; set; }
         [Newtonsoft.Json.JsonProperty("totalCharacters")]
@@ -182,6 +188,9 @@ namespace RNAssistant.Core.Models
         public string NextCursor { get; set; }
         [Newtonsoft.Json.JsonProperty("complete")]
         public bool Complete { get; set; }
+        // A retained extraction may end normally while covering only part of the original.
+        [Newtonsoft.Json.JsonProperty("sourceComplete", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public bool? SourceComplete { get; set; }
         [Newtonsoft.Json.JsonProperty("truncated")]
         public bool Truncated { get; set; }
         [Newtonsoft.Json.JsonProperty("hydratedForNextModelStep")]
@@ -284,6 +293,8 @@ namespace RNAssistant.Core.Models
         public int SnippetOffset { get; set; }
         [Newtonsoft.Json.JsonProperty("snippet")]
         public string Snippet { get; set; }
+        [Newtonsoft.Json.JsonProperty("partNumber", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public int? PartNumber { get; set; }
     }
 
     public sealed class ResourceSearchResult
@@ -301,6 +312,8 @@ namespace RNAssistant.Core.Models
         public List<ResourceSearchMatch> Matches { get; set; }
         [Newtonsoft.Json.JsonProperty("scannedCharacters")]
         public int ScannedCharacters { get; set; }
+        [Newtonsoft.Json.JsonProperty("totalMatches")]
+        public int TotalMatches { get; set; }
         [Newtonsoft.Json.JsonProperty("scanTruncated")]
         public bool ScanTruncated { get; set; }
 

@@ -28,6 +28,8 @@ namespace RNAssistant.Office.Tools
             { "common.questions_ask", new ToolDisplayMetadata("Уточнение задачи", "Готовлю уточнение", ToolDisplayOperation.Question) },
             { "common.resources_find", new ToolDisplayMetadata("Поиск", "Ищу", ToolDisplayOperation.Search) },
             { "common.resources_read", new ToolDisplayMetadata("Чтение", "Читаю", ToolDisplayOperation.Read) },
+            { "common.resources_search", new ToolDisplayMetadata("Поиск в ресурсе", "Ищу в ресурсе", ToolDisplayOperation.Search) },
+            { "common.resources_outline", new ToolDisplayMetadata("Структура ресурса", "Строю карту ресурса", ToolDisplayOperation.Read) },
             { "common.task_list_set", new ToolDisplayMetadata("Обновление шагов задачи", "Обновляю шаги задачи", ToolDisplayOperation.Plan) },
             { "common.vba_delete", new ToolDisplayMetadata("Удаление VBA-модуля", "Удаляю VBA-модуль", ToolDisplayOperation.Delete) },
             { "common.vba_patch", new ToolDisplayMetadata("Изменение VBA-модуля", "Изменяю VBA-модуль", ToolDisplayOperation.Write) },

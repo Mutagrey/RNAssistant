@@ -118,7 +118,7 @@ namespace RNAssistant.Office.Services
             var snapshot = _authority.Capture(scope);
             return new[] { new ResourceEvidence("ev_" + Guid.NewGuid().ToString("N"), scope,
                 result.Resource.Reference, result.Representation ?? "content",
-                result.Coverage ?? CoverageFor(result), result.Complete, result.AuthorityGeneration ?? snapshot.Generation,
+                result.Coverage ?? CoverageFor(result), result.Complete && result.SourceComplete != false, result.AuthorityGeneration ?? snapshot.Generation,
                 result.Payload, result.Resource.Dependencies, immutable: IsImmutable(scope, result.Resource),
                 contentSha256: result.ContentSha256 ?? result.Resource.ContentSha256) };
         }
@@ -219,7 +219,7 @@ namespace RNAssistant.Office.Services
                 Cursor = string.IsNullOrEmpty(position.Revision) ? null :
                     ResourceReadCursor.CreateRevisionBound(position.Offset, metadata.ContentSha256, binding),
                 MaxChars = request.MaxChars, MaxRows = request.MaxRows, RowOffset = request.RowOffset,
-                ViewPath = request.ViewPath, Fields = request.Fields
+                ViewPath = request.ViewPath, Fields = request.Fields, PartNumber = request.PartNumber
             };
         }
 
@@ -268,7 +268,7 @@ namespace RNAssistant.Office.Services
                 var currentMetadata = _revisions.GetView(scope, head.Revision, result.Representation);
                 // Domain guards may normalize text (for example VBA line endings).
                 // Equal guards cannot certify equal immutable source bytes.
-                var wholeHash = result.CompleteViewPayload?.Sha256 ??
+                var wholeHash = result.SourceComplete == false ? null : result.CompleteViewPayload?.Sha256 ??
                     (result.Offset == 0 && result.Complete && result.Text != null ? TextPatternEngine.Sha256(result.Text) : null);
                 var bytesDiffer = currentMetadata?.Coverage.Kind == ResourceCoverageKinds.Whole &&
                     currentMetadata.Payload != null && wholeHash != null && currentMetadata.Payload.Sha256 != wholeHash;
@@ -395,7 +395,7 @@ namespace RNAssistant.Office.Services
         private static ResourceCoverage CoverageFor(ResourceReadResult result)
         {
             if (result == null) return ResourceCoverage.Whole();
-            if (result.Offset == 0 && result.Complete) return ResourceCoverage.Whole();
+            if (result.Offset == 0 && result.Complete && result.SourceComplete != false) return ResourceCoverage.Whole();
             return new ResourceCoverage(ResourceCoverageKinds.CharacterRange, start: result.Offset,
                 end: result.Offset + Math.Max(0, result.ReturnedCharacters));
         }

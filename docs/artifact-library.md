@@ -475,16 +475,17 @@ Artifact metadata search selects public title, kind, MIME and authored descripti
 runtime artifact IDs and raw metadata JSON never populate snippets. User-authored
 body content remains searchable without recursive key filtering.
 
-Document Markdown and Plan content search now uses `artifact-text-index-v1`, a
+Document Markdown and Plan content search now uses `artifact-text-index-v3`, a
 deterministic `ResourceRevisionView` over the exact published body. Its manifest
 and 32,000-character text parts live in the existing CAS/revision journal, using
 the same retention/GC edges. It publishes no heads, observation or read guard and
 introduces no library database or second currentness projection.
 
-First materialization reads one exact source bounded to 2 million characters;
-subsequent searches read retained parts under the existing 1-million-character
-query budget. Authored Markdown/Plans no longer stop at the old per-artifact
-128,000-character prefix. This is a section/chunk view, not an inverted full-text
+First materialization verifies one exact source bounded to 20 MiB and builds
+parts incrementally through the protected CAS decoder. Discovery still uses its
+existing 1-million-character cross-resource query budget; explicit selected-target
+search scans the retained source completely. Authored Markdown/Plans no longer stop
+at the old per-artifact 128,000-character prefix. This is a section/chunk view, not an inverted full-text
 index: an uncached build reads the bounded source and negative queries scan parts.
 One occurrence per resource suffices for discovery; a budget-limited negative
 remains incomplete. Matches spanning parts preserve exact UTF-16 source offsets,
@@ -514,7 +515,7 @@ open. No model-generated synopsis or embedding publication is added.
 ### Implemented uploaded text discovery views — 2026-09-08
 
 `DocumentArtifactStore.SearchText` also indexes the original's retained extraction
-through `artifact-extracted-text-index-v1`. The exact resource still identifies the
+through `artifact-extracted-text-index-v3`. The exact resource still identifies the
 immutable upload; the view hash binds its **extracted text**, independently of the
 original binary payload hash. The existing manifest/parts/CAS mechanism, source
 bounds, source-page generation guards and repair path are reused. There is no
@@ -575,10 +576,10 @@ Remaining title markup is literal. The selected text includes its heading and
 nested subsections until the next heading of equal or lesser depth. Fenced code
 headings are ignored; Setext/HTML headings are not supported by this grammar.
 
-One `MarkdownHeadingScanner` drives discovery and section selection; the existing
-v1 index manifest/label bytes are preserved. Section resolution reads the exact CAS
-text under the existing 2-million-character source bound and scans at most 4096
-headings. It does not infer uniqueness from a clipped index or incomplete extraction.
+An incremental counterpart of `MarkdownHeadingScanner` drives index headings;
+section selection uses the complete-source scanner and never trusts a clipped label.
+Section resolution reads the exact CAS text under the 20 MiB source bound and scans
+at most 4096 headings. It does not infer uniqueness from incomplete extraction.
 Missing/repeated headings, truncated extraction, unsupported resources, oversized
 sections and generation drift fail explicitly with recovery guidance. A selected
 section is bounded to 32000 characters; there is no silent truncation or whole-read

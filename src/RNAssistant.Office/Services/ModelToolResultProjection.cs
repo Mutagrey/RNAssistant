@@ -148,8 +148,7 @@ namespace RNAssistant.Office.Services
             {
                 case "common.resources_list":
                 case "common.resources_resolve":
-                case "common.resources_search":
-                    error = "Public resource list/resolve/search calls were retired by 11O1.";
+                    error = "Public resource list/resolve calls were retired by 11O1.";
                     return false;
                 case "common.plan_doc_create":
                 case "common.plan_doc_update":
@@ -210,6 +209,12 @@ namespace RNAssistant.Office.Services
                     break;
                 case ResourceToolCatalog.ReadToolId:
                     schema = ResourceReadToolHandler.Descriptor.ParametersJson;
+                    break;
+                case ResourceToolCatalog.SearchToolId:
+                    schema = ResourceSearchToolHandler.Descriptor.ParametersJson;
+                    break;
+                case ResourceToolCatalog.OutlineToolId:
+                    schema = ResourceOutlineToolHandler.Descriptor.ParametersJson;
                     break;
                 case CapabilityToolCatalog.SearchToolId:
                     schema = CapabilityCatalogService.SearchSchema();

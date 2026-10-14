@@ -25,6 +25,33 @@ P2 registration/bridge simplification remains separate: exact native binding
 validation must be retained, and canonical bridge casing needs a bounded typed
 contract cutover and its WebView2 evidence.
 
+## Large document text navigation — 2026-10-14 (host-neutral)
+
+Owner: Core CAS/`DocumentArtifactStore` and Office Resource Gateway. Document-owned
+original text/code and authored Markdown/Plans now retain a v3 derived index with
+32,000-character parts and line ranges. Cold materialization consumes verified CAS
+bytes incrementally without plaintext scratch files. Exact in-resource search
+scans up to 20 MiB and reports both scan and source completeness; `resources_read`
+supports part numbers, and `resources_outline` pages line ranges with bounded
+Markdown headings/advisory code names. Complete retained PDF text no longer proves
+complete source extraction. Model projections hide runtime refs/coordinates while
+preserving literal URI-shaped source text.
+
+Focused host-neutral cases cover a >10 MiB one-line source with a surrogate pair at
+a part boundary, late/negative and case-sensitive search, full part reconstruction,
+corrupt derived-part repair, partial PDF extraction, C#/VBA/TS navigation, native
+tool binding and both model projection paths. Editable copies and guarded partial
+mutation of large originals, 20 MiB CLI/live-Office parity, and warm repeated
+part-read cost remain open with owners in [BACKLOG](BACKLOG.md#large-source-mutation-and-provider-parity--2026-10-14).
+No Windows/Office/WebView2 qualification is claimed.
+
+The local >10 MiB one-line fixture with exhaustive read-back of every indexed
+part passes in about 3 s wall time and peaks near 280 MiB RSS for the harness
+process (macOS, .NET 8). This includes staging, cold indexing, searches and 329
+part reads; it is not an Office or model latency measurement. Each part read still
+re-verifies the full source CAS payload, so a complete pass performs repeated
+source hashing and does not scale linearly with file size.
+
 ## HTML metadata hashes follow the requested page — 2026-10-14
 
 Owner: Office `ChatHtmlResourceCatalog`. Listing still validates the complete

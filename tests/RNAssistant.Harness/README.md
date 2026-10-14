@@ -1264,13 +1264,15 @@ is unchanged.
 See [2C3B evidence](../../docs/stabilization/PHASE_2C3B_PROMPT_REVIEW.md).
 
 Phase 8D moved the original resource data plane to native handlers. R61/11O1 now
-publishes only semantic `common.resources_find/read`, keeping provider routing,
+publishes semantic `common.resources_find/read/search/outline`, keeping provider routing,
 revision-pinned `ResourceRef` and continuation state inside runtime/durable evidence.
 Use `tool runtime: native resource tools`, `resources:`, the focused model-projection,
 media/replay cases, and `harness: production projects include all source files` to
 cover the intent boundary, internal guards and old-style project inclusion. See
 [8D evidence](../../docs/stabilization/PHASE_8D_RESOURCE_DATA_PLANE.md) and the
 [R61 audit](../../docs/stabilization/R61_TOOL_CONTRACT_AUDIT.md).
+`resources: original text` covers >10 MiB one-line navigation, extraction completeness,
+cross-part search, derived-view repair and C#/VBA/TS outline hints.
 
 The schema-20 correction makes `common.resources_read` return one complete bounded
 representation or an explicit error. Broad VBA inspection starts from

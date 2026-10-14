@@ -120,7 +120,7 @@ namespace RNAssistant.Office.Services
                     throw new ResourceRequestException(
                         "The complete resource representation exceeds the " +
                         MaximumWholeReadCharacters +
-                        "-character whole-read safety bound. Use a narrower semantic resource or a domain-specific read.",
+                        "-character whole-read safety bound. For artifact text/source read partNumber=1, then follow partCount; otherwise choose a narrower semantic target.",
                         "resource_whole_read_too_large",
                         false);
                 }
@@ -171,6 +171,7 @@ namespace RNAssistant.Office.Services
                     TotalCharacters = last.TotalCharacters,
                     Complete = true,
                     Truncated = false,
+                    SourceComplete = first.SourceComplete,
                     HydratedForNextModelStep = hydratedForNextModelStep,
                     RawContentIncluded = rawContentIncluded,
                     Related = related

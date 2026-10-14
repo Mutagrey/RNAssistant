@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.IO.Compression;
+using System.Runtime.ExceptionServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
@@ -114,8 +115,39 @@ namespace RNAssistant.Core.Storage
                     ? prefix.ToArray() : null;
         }
 
+        internal static bool VisitVerifiedFile(string path, long expectedLength, string expectedHash,
+            StorageProtector protector, string purpose, Action<byte[], int> visit, Action reset,
+            CancellationToken token)
+        {
+            if (visit == null || reset == null || expectedLength < 0 || expectedLength > 20L * 1024 * 1024)
+                throw new ArgumentException("A bounded verified visitor is required.");
+            try
+            {
+                return VerifyFile(path, expectedLength, expectedHash, protector, purpose,
+                    null, 0, token, visit, reset);
+            }
+            catch (VisitorFailure error)
+            {
+                ExceptionDispatchInfo.Capture(error.InnerException).Throw();
+                throw;
+            }
+        }
+
+        private sealed class VisitorFailure : Exception
+        {
+            internal VisitorFailure(Exception error) : base("CAS visitor failed.", error) { }
+        }
+
+        private static void Visit(Action<byte[], int> visitor, byte[] bytes, int length)
+        {
+            if (visitor == null) return;
+            try { visitor(bytes, length); }
+            catch (Exception error) { throw new VisitorFailure(error); }
+        }
+
         private static bool VerifyFile(string path, long expectedPlaintextLength, string expectedSha256,
-            StorageProtector protector, string purpose, MemoryStream capture, int maximumBytes, CancellationToken token)
+            StorageProtector protector, string purpose, Stream capture, int maximumBytes, CancellationToken token,
+            Action<byte[], int> visit = null, Action reset = null)
         {
             token.ThrowIfCancellationRequested();
             if (string.IsNullOrWhiteSpace(path) || expectedPlaintextLength < 0 ||
@@ -129,19 +161,22 @@ namespace RNAssistant.Core.Storage
                 {
                     if (capture != null && stored.Length > protector.StoredByteLength(checked(expectedPlaintextLength + HeaderLength))) return false;
                     using (var plaintext = protector.OpenUnprotectedReadStream(stored, purpose, token))
-                        result = VerifyPlaintextStream(plaintext, expectedPlaintextLength, expectedSha256, capture, maximumBytes, token);
+                        result = VerifyPlaintextStream(plaintext, expectedPlaintextLength, expectedSha256,
+                            capture, maximumBytes, token, visit);
                 }
                 if (result != VerificationResult.RetryAsRaw)
                 {
                     return result == VerificationResult.Valid;
                 }
                 if (capture != null) { capture.SetLength(0); capture.Position = 0; }
+                reset?.Invoke();
                 using (var stored = new FileStream(
                     path, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, FileOptions.SequentialScan))
                 {
                     if (capture != null && stored.Length > protector.StoredByteLength(checked(expectedPlaintextLength + HeaderLength))) return false;
                     using (var plaintext = protector.OpenUnprotectedReadStream(stored, purpose, token))
-                        return VerifyRawStream(null, 0, plaintext, expectedPlaintextLength, expectedSha256, capture, maximumBytes, token);
+                        return VerifyRawStream(null, 0, plaintext, expectedPlaintextLength, expectedSha256,
+                            capture, maximumBytes, token, visit);
                 }
             }
             catch (IOException)
@@ -267,7 +302,8 @@ namespace RNAssistant.Core.Storage
         private static VerificationResult VerifyPlaintextStream(
             Stream plaintext,
             long expectedLength,
-            string expectedSha256, MemoryStream capture, int maximumBytes, CancellationToken token)
+            string expectedSha256, Stream capture, int maximumBytes, CancellationToken token,
+            Action<byte[], int> visit)
         {
             var prefix = new byte[HeaderLength];
             var prefixLength = ReadUpTo(plaintext, prefix, 0, prefix.Length);
@@ -275,7 +311,8 @@ namespace RNAssistant.Core.Storage
             if (prefixLength != HeaderLength || !TryParseHeaderPrefix(prefix, out header) ||
                 header.PlaintextLength != expectedLength)
             {
-                return VerifyRawStream(prefix, prefixLength, plaintext, expectedLength, expectedSha256, capture, maximumBytes, token)
+                return VerifyRawStream(prefix, prefixLength, plaintext, expectedLength, expectedSha256,
+                    capture, maximumBytes, token, visit)
                     ? VerificationResult.Valid
                     : VerificationResult.Invalid;
             }
@@ -291,7 +328,8 @@ namespace RNAssistant.Core.Storage
                     bool hashMatches;
                     using (var gzip = new GZipStream(payload, CompressionMode.Decompress, true))
                     {
-                        hashMatches = HashStream(gzip, expectedLength, expectedSha256, capture, maximumBytes, token);
+                        hashMatches = HashStream(gzip, expectedLength, expectedSha256,
+                            capture, maximumBytes, token, visit);
                     }
                     Drain(payload, token);
                     if (payload.Remaining != 0)
@@ -317,7 +355,8 @@ namespace RNAssistant.Core.Storage
             int prefixLength,
             Stream remainder,
             long expectedLength,
-            string expectedSha256, MemoryStream capture, int maximumBytes, CancellationToken token)
+            string expectedSha256, Stream capture, int maximumBytes, CancellationToken token,
+            Action<byte[], int> visit)
         {
             using (var sha = SHA256.Create())
             {
@@ -327,6 +366,7 @@ namespace RNAssistant.Core.Storage
                     if (prefixLength > expectedLength) return false;
                     sha.TransformBlock(prefix, 0, prefixLength, prefix, 0);
                     CapturePrefix(capture, maximumBytes, prefix, prefixLength);
+                    Visit(visit, prefix, prefixLength);
                     total = prefixLength;
                 }
                 var buffer = new byte[81920];
@@ -338,6 +378,7 @@ namespace RNAssistant.Core.Storage
                     if (total > expectedLength - read) return false;
                     sha.TransformBlock(buffer, 0, read, buffer, 0);
                     CapturePrefix(capture, maximumBytes, buffer, read);
+                    Visit(visit, buffer, read);
                     total += read;
                 }
                 if (total != expectedLength) return false;
@@ -349,7 +390,8 @@ namespace RNAssistant.Core.Storage
         private static bool HashStream(
             Stream stream,
             long expectedLength,
-            string expectedSha256, MemoryStream capture, int maximumBytes, CancellationToken token)
+            string expectedSha256, Stream capture, int maximumBytes, CancellationToken token,
+            Action<byte[], int> visit)
         {
             using (var sha = SHA256.Create())
             {
@@ -366,6 +408,7 @@ namespace RNAssistant.Core.Storage
                     }
                     sha.TransformBlock(buffer, 0, read, buffer, 0);
                     CapturePrefix(capture, maximumBytes, buffer, read);
+                    Visit(visit, buffer, read);
                     total += read;
                 }
                 if (total != expectedLength)
@@ -389,7 +432,7 @@ namespace RNAssistant.Core.Storage
             return total;
         }
 
-        private static void CapturePrefix(MemoryStream capture, int maximumBytes, byte[] bytes, int count)
+        private static void CapturePrefix(Stream capture, int maximumBytes, byte[] bytes, int count)
         {
             if (capture == null || capture.Length >= maximumBytes) return;
             capture.Write(bytes, 0, (int)Math.Min(count, maximumBytes - capture.Length));

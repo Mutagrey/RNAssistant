@@ -10,6 +10,8 @@ namespace RNAssistant.Office.Tools
     {
         public const string FindToolId = "common.resources_find";
         public const string ReadToolId = "common.resources_read";
+        public const string SearchToolId = "common.resources_search";
+        public const string OutlineToolId = "common.resources_outline";
 
         internal static IEnumerable<ToolCatalogEntry> GetControllerTools()
         {
@@ -17,6 +19,10 @@ namespace RNAssistant.Office.Tools
                 ResourceFindToolHandler.Descriptor, ResourceFindToolHandler.Policy, "resources_find");
             yield return ControllerToolCatalogEntry.CreateReadProjection(
                 ResourceReadToolHandler.Descriptor, ResourceReadToolHandler.Policy, "resources_read");
+            yield return ControllerToolCatalogEntry.CreateReadProjection(
+                ResourceSearchToolHandler.Descriptor, ResourceSearchToolHandler.Policy, "resources_search");
+            yield return ControllerToolCatalogEntry.CreateReadProjection(
+                ResourceOutlineToolHandler.Descriptor, ResourceOutlineToolHandler.Policy, "resources_outline");
             foreach (var tool in ResourceDefinitionToolHandler.Catalog()) yield return tool;
         }
     }

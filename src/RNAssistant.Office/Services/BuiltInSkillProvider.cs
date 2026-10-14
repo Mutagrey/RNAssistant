@@ -127,7 +127,7 @@ namespace RNAssistant.Office.Services
 
             foreach (var skill in result)
             {
-                var ids = new List<string> { "common.resources_find", "common.resources_read" };
+                var ids = new List<string> { "common.resources_find", "common.resources_read", "common.resources_search", "common.resources_outline" };
                 switch (skill.Id)
                 {
                     case "common.task_tracking": ids.Add("common.task_list_set"); break;

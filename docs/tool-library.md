@@ -60,6 +60,13 @@ separate owners, stores, version rules and model transports:
 
 ## Current implementation
 
+Office publishes `common.resources_find/read/search/outline` as direct, read-only
+semantic resource tools. Search operates inside one discovered target; outline
+pages indexed document text parts. `resources_read.partNumber` is a bounded
+source/text selector, not a raw URI, cursor or mutation guard. The exact
+provider/index limits and incomplete-source semantics are owned by
+[Resource Fabric](resource-fabric.md#large-document-text-navigation--2026-10-14).
+
 ### Workspace CLI file tools (development)
 
 The independent CLI advertises `common.resources_find/read` and the exact

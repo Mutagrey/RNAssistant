@@ -73,6 +73,8 @@ namespace RNAssistant.Core.Models
         [JsonProperty("startLine", NullValueHandling = NullValueHandling.Ignore)] public int? StartLine { get; set; }
         [JsonProperty("requestedLines", NullValueHandling = NullValueHandling.Ignore)] public int? RequestedLines { get; set; }
         [JsonProperty("section", NullValueHandling = NullValueHandling.Ignore)] public string Section { get; set; }
+        [JsonProperty("partNumber", NullValueHandling = NullValueHandling.Ignore)] public int? PartNumber { get; set; }
+        [JsonProperty("partCount", NullValueHandling = NullValueHandling.Ignore)] public int? PartCount { get; set; }
         [JsonProperty("kind")] public string Kind { get; set; } = "resource-read";
         [JsonProperty("target")] public string Target { get; set; }
         [JsonProperty("snapshotTarget", NullValueHandling = NullValueHandling.Ignore)] public string SnapshotTarget { get; set; }
@@ -86,6 +88,7 @@ namespace RNAssistant.Core.Models
         [JsonProperty("returnedCharacters")] public int ReturnedCharacters { get; set; }
         [JsonProperty("totalCharacters")] public int TotalCharacters { get; set; }
         [JsonProperty("complete")] public bool Complete { get; set; }
+        [JsonProperty("sourceComplete", NullValueHandling = NullValueHandling.Ignore)] public bool? SourceComplete { get; set; }
         [JsonProperty("hydratedForNextModelStep")] public bool HydratedForNextModelStep { get; set; }
         [JsonProperty("rawContentIncluded")] public bool RawContentIncluded { get; set; }
         [JsonProperty("references", NullValueHandling = NullValueHandling.Ignore)]
@@ -98,7 +101,9 @@ namespace RNAssistant.Core.Models
                 Representation = result.Representation, Text = result.Text, Table = result.Table,
                 Coverage = result.Coverage, Offset = result.Offset,
                 ReturnedCharacters = result.ReturnedCharacters, TotalCharacters = result.TotalCharacters,
-                Complete = result.Complete, HydratedForNextModelStep = result.HydratedForNextModelStep,
+                Complete = result.Complete, SourceComplete = result.SourceComplete,
+                PartNumber = result.PartNumber, PartCount = result.PartCount,
+                HydratedForNextModelStep = result.HydratedForNextModelStep,
                 RawContentIncluded = result.RawContentIncluded };
         }
     }
@@ -107,6 +112,53 @@ namespace RNAssistant.Core.Models
     {
         [JsonProperty("path")] public string Path { get; set; }
         [JsonProperty("byteLength")] public long ByteLength { get; set; }
+    }
+
+    public sealed class ResourceWithinSearchPage
+    {
+        [JsonIgnore] public ResourceRef ExactReference { get; set; }
+        [JsonProperty("target")] public string Target { get; set; }
+        [JsonProperty("query")] public string Query { get; set; }
+        [JsonProperty("matches")] public List<ResourceWithinSearchItem> Matches { get; set; } = new List<ResourceWithinSearchItem>();
+        [JsonProperty("totalMatches")] public int TotalMatches { get; set; }
+        [JsonProperty("scanComplete")] public bool ScanComplete { get; set; }
+        [JsonProperty("sourceComplete")] public bool SourceComplete { get; set; }
+    }
+
+    public sealed class ResourceWithinSearchItem
+    {
+        [JsonProperty("snippet")] public string Snippet { get; set; }
+        [JsonProperty("partNumber", NullValueHandling = NullValueHandling.Ignore)] public int? PartNumber { get; set; }
+        [JsonProperty("sectionTitle", NullValueHandling = NullValueHandling.Ignore)] public string SectionTitle { get; set; }
+    }
+
+    public sealed class ResourceTextOutline
+    {
+        [JsonIgnore] public ResourceRef ExactReference { get; set; }
+        [JsonProperty("target")] public string Target { get; set; }
+        [JsonProperty("partCount")] public int PartCount { get; set; }
+        [JsonProperty("totalLines")] public int TotalLines { get; set; }
+        [JsonProperty("nextPart", NullValueHandling = NullValueHandling.Ignore)] public int? NextPart { get; set; }
+        [JsonProperty("sourceComplete")] public bool SourceComplete { get; set; }
+        [JsonProperty("symbolLanguage", NullValueHandling = NullValueHandling.Ignore)] public string SymbolLanguage { get; set; }
+        [JsonProperty("symbolsComplete")] public bool SymbolsComplete { get; set; }
+        [JsonProperty("parts")] public List<ResourceTextOutlinePart> Parts { get; set; } = new List<ResourceTextOutlinePart>();
+    }
+
+    public sealed class ResourceTextOutlinePart
+    {
+        [JsonProperty("partNumber")] public int PartNumber { get; set; }
+        [JsonProperty("firstLine")] public int FirstLine { get; set; }
+        [JsonProperty("lastLine")] public int LastLine { get; set; }
+        [JsonProperty("characters")] public int Characters { get; set; }
+        [JsonProperty("symbols")] public List<ResourceTextOutlineSymbol> Symbols { get; set; } = new List<ResourceTextOutlineSymbol>();
+    }
+
+    public sealed class ResourceTextOutlineSymbol
+    {
+        [JsonProperty("name")] public string Name { get; set; }
+        [JsonProperty("kind")] public string Kind { get; set; }
+        [JsonProperty("line", NullValueHandling = NullValueHandling.Ignore)] public int? Line { get; set; }
     }
 
     // A provider read and the evidence delivered with that same observation.

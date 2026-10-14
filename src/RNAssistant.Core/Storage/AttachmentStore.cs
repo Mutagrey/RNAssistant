@@ -12,7 +12,8 @@ namespace RNAssistant.Core.Storage
         public const int MaxFilesPerMessage = 10;
         public const long MaxFileBytes = 20L * 1024L * 1024L;
         public const long MaxMessageBytes = 50L * 1024L * 1024L;
-        private const int MaxExtractedChars = 1000000;
+        private const int MaxExtractedChars = 20 * 1024 * 1024;
+        private const int MaxExtractedTextBytes = 20 * 1024 * 1024;
         private const int MaxInlinePreviewChars = 4000;
         private static readonly HashSet<string> TextExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -351,12 +352,11 @@ namespace RNAssistant.Core.Storage
         private void SetExtractedText(ChatAttachment attachment, string sourcePath, string text)
         {
             text = text ?? string.Empty;
-            attachment.TextTruncated = text.Length > MaxExtractedChars;
-            if (attachment.TextTruncated)
-            {
-                text = text.Substring(0, MaxExtractedChars);
-                attachment.ExtractionWarning = "Extracted text was truncated at 1,000,000 characters.";
-            }
+            bool truncated;
+            text = BoundExtractedText(text, out truncated);
+            attachment.TextTruncated = truncated;
+            if (truncated)
+                attachment.ExtractionWarning = "Extracted text exceeds the 20 MiB text representation limit.";
             attachment.ExtractedCharCount = text.Length;
             attachment.ExtractedText = text.Length > MaxInlinePreviewChars
                 ? text.Substring(0, MaxInlinePreviewChars)
@@ -502,14 +502,31 @@ namespace RNAssistant.Core.Storage
             }
             if (kind == "office")
                 result.Text = OfficeAttachmentTextExtractor.Extract(fileName, bytes, MaxExtractedChars);
-            if (result.Text != null && result.Text.Length > MaxExtractedChars)
+            if (result.Text != null)
             {
-                result.Text = result.Text.Substring(0, MaxExtractedChars);
-                result.TextTruncated = true;
+                bool truncated;
+                result.Text = BoundExtractedText(result.Text, out truncated);
+                result.TextTruncated |= truncated;
             }
             if (result.TextTruncated)
-                result.Warning = "Extracted text was truncated at 1,000,000 characters. " + result.Warning;
+                result.Warning = "Extracted text exceeds the 20 MiB text representation limit or has unextracted pages. " + result.Warning;
             return result;
+        }
+
+        private static string BoundExtractedText(string text, out bool truncated)
+        {
+            truncated = text.Length > MaxExtractedChars || Encoding.UTF8.GetByteCount(text) > MaxExtractedTextBytes;
+            if (!truncated) return text;
+            var high = Math.Min(text.Length, MaxExtractedChars);
+            var low = 0;
+            while (low < high)
+            {
+                var middle = low + (high - low + 1) / 2;
+                if (Encoding.UTF8.GetByteCount(text, 0, middle) <= MaxExtractedTextBytes) low = middle;
+                else high = middle - 1;
+            }
+            if (low < text.Length && low > 0 && char.IsHighSurrogate(text[low - 1])) low--;
+            return text.Substring(0, low);
         }
 
         private static string DetectKind(string name, string contentType, byte[] bytes)

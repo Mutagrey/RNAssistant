@@ -212,6 +212,24 @@ namespace RNAssistant.Core.Storage
             return bytes == null ? null : StrictUtf8.GetString(bytes);
         }
 
+        // Only deterministic derived-view builders may consume these provisional
+        // plaintext bytes. The caller publishes no view until full CAS verification
+        // succeeds; a failed source may leave only unreferenced CAS parts.
+        internal void VisitVerifiedTextBytes(ChatBlobReference reference,
+            Action<byte[], int> visit, Action reset)
+        {
+            if (visit == null || reset == null) throw new ArgumentNullException();
+            if (!ValidReference(reference) || reference.ByteLength > 20L * 1024 * 1024)
+                throw new InvalidDataException("The bounded text source is unavailable.");
+            var protector = Protection();
+            if (!ProtectionMatches(reference, protector))
+                throw new InvalidDataException("The protected text source is unavailable.");
+            if (!CasBlobCodec.VisitVerifiedFile(PathFor(reference.Sha256), reference.ByteLength,
+                reference.Sha256, protector, BlobPurpose(reference.Sha256, reference.ByteLength),
+                visit, reset, CancellationToken.None))
+                throw new InvalidDataException("The exact text source failed CAS verification.");
+        }
+
         public byte[] ReadBytes(ChatBlobReference reference)
         {
             if (!ValidReference(reference)) return null;

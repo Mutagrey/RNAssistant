@@ -3,6 +3,8 @@ using System;
 using System.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
+using RNAssistant.Core.ModelProtocol;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
 
@@ -27,6 +29,56 @@ namespace RNAssistant.Harness
             AssertEqual(false, ResourceUri.TryParse("rna://chat/a%2Fb", out ignored), "encoded slash rejected");
             AssertEqual(false, ResourceUri.TryParse("rna://chat/a?revision=2", out ignored), "query rejected");
             AssertEqual(false, ResourceUri.TryParse("RNA://chat/a", out ignored), "non-canonical scheme rejected");
+        }
+
+        private static void ResourceProjectionPreservesLiteralSource()
+        {
+            var exact = new ResourceRef("rna://chat/private/source", "r_private");
+            var literal = "const example = 'rna://literal/in/source';";
+            var result = RNAssistant.Core.Tools.Contracts.ToolResult.Ok("Read " + exact.Uri,
+                new JObject { ["target"] = "Source file", ["text"] = literal,
+                    ["offset"] = 32768, ["coverage"] = new JObject { ["start"] = 32768 },
+                    ["sourceComplete"] = true, ["complete"] = false }.ToString(), new[] { exact });
+            var source = RNAssistant.Office.Services.AgentJsonProtocol.CreateToolResultMessage(
+                new ToolInvocation { ToolId = "common.resources_read", ToolCallId = "projection-source" },
+                new ToolResultMaterialization(result));
+            foreach (var projection in new[] { new ModelResultProjection().Project(source),
+                RNAssistant.Office.Services.ModelToolResultProjection.Project(source) })
+            {
+                ToolResultWireReadResult wire; string error;
+                AssertTrue(ToolResultHistoryReader.TryRead(projection, out wire, out error), "projected read is valid wire");
+                var data = ToolResultWire.ParseData(wire.Result.DataJson);
+                AssertEqual(literal, (string)data["text"], "literal source is never redacted");
+                AssertTrue(data["offset"] == null && data["coverage"] == null &&
+                    !wire.Result.Message.Contains(exact.Uri), "runtime coordinates and references stay private");
+            }
+            foreach (var variant in new[] {
+                new { Name = "common.resources_search", Data = new JObject {
+                    ["target"] = "Source file", ["matches"] = new JArray(new JObject { ["snippet"] = literal,
+                        ["partNumber"] = 1, ["reference"] = exact.Uri }) } },
+                new { Name = "common.resources_outline", Data = new JObject {
+                    ["target"] = "Source file", ["parts"] = new JArray(new JObject { ["partNumber"] = 1,
+                        ["symbols"] = new JArray(new JObject { ["name"] = literal, ["kind"] = "heading", ["reference"] = exact.Uri }) }) } }
+            })
+            {
+                var materialized = RNAssistant.Core.Tools.Contracts.ToolResult.Ok("Read " + exact.Uri,
+                    variant.Data.ToString(), new[] { exact });
+                var tool = RNAssistant.Office.Services.AgentJsonProtocol.CreateToolResultMessage(
+                    new ToolInvocation { ToolId = variant.Name, ToolCallId = "projection-literal" },
+                    new ToolResultMaterialization(materialized));
+                foreach (var projection in new[] { new ModelResultProjection().Project(tool),
+                    RNAssistant.Office.Services.ModelToolResultProjection.Project(tool) })
+                {
+                    ToolResultWireReadResult wire; string error;
+                    AssertTrue(ToolResultHistoryReader.TryRead(projection, out wire, out error), "projected navigation is valid wire");
+                    var data = ToolResultWire.ParseData(wire.Result.DataJson);
+                    var body = variant.Name == "common.resources_search"
+                        ? (string)data["matches"][0]["snippet"] : (string)data["parts"][0]["symbols"][0]["name"];
+                    AssertEqual(literal, body, "source-owned snippets and headings preserve literal URI-shaped text");
+                    AssertTrue(!wire.Result.DataJson.Contains(exact.Uri) && !wire.Result.Message.Contains(exact.Uri),
+                        "runtime reference fields do not reach the model");
+                }
+            }
         }
 
         private static void ResourceReferencePinsRevision()

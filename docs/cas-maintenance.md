@@ -17,6 +17,14 @@ verification views retain the manifest payload. Both pending and terminal revisi
 remain roots. No recursive JSON body scan or second snapshot-specific GC index is
 required. Focused workspace snapshot tests verify collection preserves these roots.
 
+The document text index v3 is also a derived authority view: its manifest retains
+every 32,000-character CAS part and the exact source/extraction payload. A failed
+build can leave unreferenced derived parts, which the ordinary orphan audit may
+collect. Indexing consumes protected CAS bytes in memory and publishes the view
+only after the source hash is verified; it writes no plaintext scratch file.
+Failures in the derived-view consumer propagate as consumer failures; they are not
+reinterpreted as malformed compressed CAS bytes or retried as legacy raw blobs.
+
 The report distinguishes missing referenced blobs, corrupt/unreadable referenced blobs, harmless orphans, malformed CAS paths, reference conflicts, and invalid sources. Protected history is audited with the current DPAPI-backed API-key/custom-secret protector; secrets are never returned through Diagnostics.
 
 ## Fail-closed collection

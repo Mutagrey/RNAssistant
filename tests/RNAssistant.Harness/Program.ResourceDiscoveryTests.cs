@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
@@ -135,6 +136,17 @@ namespace RNAssistant.Harness
                 var scope = ResourceAuthorityScopeId.Document(new DocumentAuthorityId(session.DocumentAuthorityId));
                 var owner = new DocumentArtifactStore(authority, authority, executor.Payloads);
                 var provider = new ChatArtifactResourceProvider(payloads: executor.Payloads, documentArtifacts: owner);
+                foreach (var source in new[] { "short raw text", new string('x', 4096) })
+                {
+                    var blob = executor.Payloads.StoreText(source, "text/plain; charset=utf-8");
+                    var visits = 0;
+                    var resets = 0;
+                    var visitorError = RuntimeThrows<IOException>(() => executor.Payloads.VisitVerifiedTextBytes(blob,
+                        (bytes, length) => { visits++; throw new IOException("derived view write failed"); }, () => resets++));
+                    AssertEqual("derived view write failed", visitorError.Message,
+                        "a consumer failure is not reported as CAS source corruption");
+                    AssertTrue(visits == 1 && resets == 0, "a derived-view failure does not retry source decoding");
+                }
                 var found = provider.Search(other, "uploaded-late-marker", "document-artifact", 20, 600);
                 AssertTrue(found.Matches.Count == 2 && !found.ScanTruncated && found.UnavailableResources == 0, "late uploaded text is searchable from another empty chat");
                 var markdown = found.Matches.Single(item => item.Title == "Reference.md");
@@ -143,22 +155,158 @@ namespace RNAssistant.Harness
                 var selected = provider.Read(other, new ResourceReadRequest { Reference = markdown.Reference, Representation = "text",
                     Cursor = ResourceReadCursor.CreateImmutable(markdown.SnippetOffset, ResourceReadCursor.ReadBinding(markdown.Reference.Uri, "text")), MaxChars = markdown.Snippet.Length });
                 AssertEqual(markdown.Snippet, selected.Result.Text, "uploaded search snippet round-trips through the exact resource read");
-                var view = authority.GetView(scope, markdown.Reference, "artifact-extracted-text-index-v1");
+                var parts = new List<string>();
+                for (var number = 1; ; number++)
+                {
+                    var part = provider.Read(other, new ResourceReadRequest { Reference = markdown.Reference,
+                        Representation = "text", PartNumber = number }).Result;
+                    AssertTrue(part.Coverage.Kind == ResourceCoverageKinds.CharacterRange && !part.Complete,
+                        "a part is exact excerpt evidence, not whole-source authority");
+                    parts.Add(part.Text);
+                    if (number == part.PartCount) break;
+                }
+                AssertEqual(text, string.Concat(parts), "parts reconstruct a long single-line source without gaps");
+                var semanticTarget = new ResourceGatewayService(new[] { provider }).Find(other, "Reference.md", "document")
+                    .Items.Single(item => item.Title == "Reference.md").Target;
+                var searched = new ResourceGatewayService(new[] { provider }).SearchWithin(other,
+                    semanticTarget, "uploaded-late-marker", 20, false, CancellationToken.None);
+                AssertTrue(searched.ScanComplete && searched.SourceComplete && searched.TotalMatches == 1 &&
+                    searched.Matches.Single().PartNumber.HasValue,
+                    "in-resource search covers the exact indexed text and returns a readable part");
+                var outline = new ResourceGatewayService(new[] { provider }).Outline(other, semanticTarget, 1, 10);
+                AssertEqual(3, outline.TotalLines, "outline counts lines independently from character parts");
+                AssertTrue(outline.Parts.SelectMany(item => item.Symbols).Any(item => item.Kind == "heading" && item.Name == "Uploaded section"),
+                    "Markdown heading is placed in its exact source part");
+                var searchTool = executor.GetControllerTools().Single(item => item.Id == ResourceToolCatalog.SearchToolId);
+                var runtime = executor.CreateNativeRuntime(other, new[] { searchTool }, new AppSettings(), ChatModes.Agent,
+                    false, manualRun: true);
+                var call = new ToolCall(Guid.NewGuid().ToString("N"), searchTool.Id,
+                    new Newtonsoft.Json.Linq.JObject { ["target"] = semanticTarget, ["query"] = "uploaded-late-marker" }.ToString());
+                var native = ExecuteNative(runtime, call, runtime.Describe(call));
+                AssertEqual(ToolExecutionOutcome.Ok, native.Outcome, "native in-resource search is admitted");
+                var nativeData = Newtonsoft.Json.Linq.JObject.Parse(native.Result.DataJson);
+                AssertEqual(1, (int)nativeData["totalMatches"], "native search returns typed bounded results");
+                AssertTrue(!native.Result.DataJson.Contains("rna://"), "native search does not expose exact runtime references");
+                var outlineTool = executor.GetControllerTools().Single(item => item.Id == ResourceToolCatalog.OutlineToolId);
+                var outlineRuntime = executor.CreateNativeRuntime(other, new[] { outlineTool }, new AppSettings(), ChatModes.Agent,
+                    false, manualRun: true);
+                var outlineCall = new ToolCall(Guid.NewGuid().ToString("N"), outlineTool.Id,
+                    new Newtonsoft.Json.Linq.JObject { ["target"] = semanticTarget }.ToString());
+                var outlined = ExecuteNative(outlineRuntime, outlineCall, outlineRuntime.Describe(outlineCall));
+                AssertEqual(ToolExecutionOutcome.Ok, outlined.Outcome, "native outline is admitted");
+                AssertTrue(!outlined.Result.DataJson.Contains("rna://"), "native outline keeps exact references private");
+                var absent = new ResourceGatewayService(new[] { provider }).SearchWithin(other,
+                    semanticTarget, "no-such-late-marker", 20, false, CancellationToken.None);
+                AssertTrue(absent.ScanComplete && absent.TotalMatches == 0,
+                    "a complete negative scan establishes absence in the exact text representation");
+                var view = authority.GetView(scope, markdown.Reference, "artifact-extracted-text-index-v3");
                 var original = owner.Read(other, markdown.Reference, false).OriginalAttachment;
                 AssertEqual(original.ExtractedTextSha256, view.ContentSha256, "index binds the retained extracted representation");
                 File.Delete(executor.Payloads.PathFor(view.Payload.Sha256));
                 AssertEqual(2, provider.Search(other, "uploaded-late-marker", "document-artifact", 20, 600).Matches.Count, "derived manifest repair uses original extraction");
                 File.WriteAllText(executor.Payloads.PathFor(view.Parts[0].Sha256), "corrupt text part");
                 AssertEqual(2, provider.Search(other, "uploaded-late-marker", "document-artifact", 20, 600).Matches.Count, "derived part repair preserves uploaded text");
+                File.WriteAllText(executor.Payloads.PathFor(view.Parts[2].Sha256), "corrupt later text part");
+                AssertEqual(1, owner.SearchTextOccurrences(other, markdown.Reference,
+                    "uploaded-late-marker", 20, false).TotalMatches,
+                    "exhaustive search repairs a corrupt later part before reporting absence or matches");
+                File.WriteAllText(executor.Payloads.PathFor(view.Parts[0].Sha256), "corrupt directly read part");
+                AssertEqual(text.Substring(0, Math.Min(32000, text.Length)),
+                    owner.ReadIndexedTextPart(other, markdown.Reference, 1).Text,
+                    "direct indexed read repairs a corrupt derived part from the exact source");
                 var gc = CasService(paths, chats, new VbaJournalStore(paths), () => StorageProtector.None).Collect();
                 AssertTrue(gc.Completed && gc.Health.MissingBlobCount == 0, "published originals and text views have complete GC retention edges");
                 var restarted = new ResourceAuthorityStore(paths);
                 AssertEqual(1, new DocumentArtifactStore(restarted, restarted, executor.Payloads)
                     .SearchText(other, markdown.Reference, "uploaded-late-marker", 1000000, 600).Matches.Count, "derived text survives GC and restart");
                 File.Delete(executor.Payloads.PathFor(original.ExtractedTextSha256));
+                RuntimeThrows<InvalidDataException>(() => owner.ReadIndexedTextPart(other, markdown.Reference, 1));
                 found = provider.Search(other, "uploaded-late-marker", "document-artifact", 20, 600);
                 AssertTrue(found.UnavailableResources > 0 && found.Matches.Count == 0, "a warm index cannot conceal missing extraction shared by both originals");
                 AssertTrue(provider.List(other, "document-artifact", null, 50).Items.Count == 2, "missing text never removes original metadata from discovery");
+            });
+        }
+
+        private static void OriginalTextIndexStreamsLargeOneLine()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>
+            {
+                var session = NewSession(adapter); session.DocumentAuthorityId = DocumentAuthorityId.Create().Id;
+                var paths = FixturePaths.Value;
+                var chats = new ChatStore(paths);
+                var ingestion = new ChatResourceIngestionService(new AttachmentStore(paths), chats.DocumentArtifacts);
+                var prefixLength = ((10 * 1024 * 1024 / 32000) + 1) * 32000 - 1;
+                var text = new string('x', prefixLength) + "😀late-needle";
+                var draft = ingestion.Stage(session, "single-line.js", "text/javascript", Encoding.UTF8.GetBytes(text));
+                var message = new ChatMessage { Role = "user", Attachments = ingestion.LoadDrafts(session, new[] { draft.Id }).ToList() };
+                session.Messages.Add(message); ingestion.CommitAndLink(session, message, session.Messages.Count - 1);
+                var authority = new ResourceAuthorityStore(paths);
+                var owner = new DocumentArtifactStore(authority, authority, executor.Payloads);
+                var provider = new ChatArtifactResourceProvider(payloads: executor.Payloads, documentArtifacts: owner);
+                var other = NewSession(adapter); other.DocumentAuthorityId = session.DocumentAuthorityId;
+                var gateway = new ResourceGatewayService(new[] { provider });
+                var target = gateway.Find(other, "single-line.js", "document").Items.Single().Target;
+                var searched = gateway.SearchWithin(other, target, "late-needle", 10, true, CancellationToken.None);
+                AssertTrue(searched.ScanComplete && searched.TotalMatches == 1 &&
+                    searched.Matches.Single().PartNumber > 300,
+                    "cold index finds a late hit in a ten-megabyte one-line source");
+                var result = owner.SearchTextOccurrences(other, searched.ExactReference, "late-needle", 10, true);
+                AssertEqual(1, result.TotalMatches, "exhaustive case-sensitive scan covers the long line");
+                AssertEqual(1, owner.SearchTextOccurrences(other, searched.ExactReference, "x😀late-needle", 10, true).TotalMatches,
+                    "search spans the surrogate-safe part boundary");
+                AssertEqual(0, owner.SearchTextOccurrences(other, searched.ExactReference, "LATE-NEEDLE", 10, true).TotalMatches,
+                    "case-sensitive negative covers the full source");
+                var finalPart = owner.ReadIndexedTextPart(other, searched.ExactReference, searched.Matches.Single().PartNumber.Value);
+                AssertContains(finalPart.Text, "😀late-needle", "surrogate pairs and the late hit survive indexed part reads");
+                var outline = gateway.Outline(other, target, searched.Matches.Single().PartNumber.Value, 1);
+                AssertEqual(1, outline.TotalLines, "one-line source has one logical line regardless of part count");
+                AssertTrue(outline.PartCount > 300 && outline.SymbolLanguage == "javascript" && !outline.SymbolsComplete,
+                    "long minified line retains an exact part map but does not claim a complete symbol map");
+                var consumed = 0;
+                for (var partNumber = 1; partNumber <= outline.PartCount; partNumber++)
+                {
+                    var part = owner.ReadIndexedTextPart(other, searched.ExactReference, partNumber);
+                    AssertEqual(consumed, part.Offset, "all indexed parts have contiguous source offsets");
+                    AssertEqual(0, string.CompareOrdinal(text, consumed, part.Text, 0, part.Text.Length),
+                        "all indexed parts reproduce the exact one-line source");
+                    consumed += part.Text.Length;
+                }
+                AssertEqual(text.Length, consumed, "indexed parts cover the complete ten-megabyte source");
+            });
+        }
+
+        private static void OriginalTextOutlineFindsCodeDeclarations()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>
+            {
+                var session = NewSession(adapter); session.DocumentAuthorityId = DocumentAuthorityId.Create().Id;
+                var paths = FixturePaths.Value;
+                var chats = new ChatStore(paths);
+                var ingestion = new ChatResourceIngestionService(new AttachmentStore(paths), chats.DocumentArtifacts);
+                var cases = new[] {
+                    new { Name = "Worker.cs", Body = "// comment\npublic class Worker {\n public void Run() { }\n}\n", Symbol = "Worker", Language = "csharp" },
+                    new { Name = "worker.ts", Body = "/* comment */\nexport function work() {}\nconst item = 1;\n", Symbol = "work", Language = "typescript" },
+                    new { Name = "Module.bas", Body = "' comment\r\nPublic Sub Execute()\r\nEnd Sub\r\n", Symbol = "Execute", Language = "vba" }
+                };
+                foreach (var sample in cases)
+                {
+                    var draft = ingestion.Stage(session, sample.Name, "text/plain", Encoding.UTF8.GetBytes(sample.Body));
+                    var message = new ChatMessage { Role = "user", Attachments = ingestion.LoadDrafts(session, new[] { draft.Id }).ToList() };
+                    session.Messages.Add(message); ingestion.CommitAndLink(session, message, session.Messages.Count - 1);
+                }
+                var authority = new ResourceAuthorityStore(paths);
+                var owner = new DocumentArtifactStore(authority, authority, executor.Payloads);
+                var provider = new ChatArtifactResourceProvider(payloads: executor.Payloads, documentArtifacts: owner);
+                var other = NewSession(adapter); other.DocumentAuthorityId = session.DocumentAuthorityId;
+                var gateway = new ResourceGatewayService(new[] { provider });
+                foreach (var sample in cases)
+                {
+                    var target = gateway.Find(other, sample.Name, "document").Items.Single(item => item.Title == sample.Name).Target;
+                    var outline = gateway.Outline(other, target, 1, 10);
+                    AssertTrue(!outline.SymbolsComplete && outline.SymbolLanguage == sample.Language &&
+                        outline.Parts.SelectMany(item => item.Symbols).Any(item => item.Name == sample.Symbol && item.Line == 2),
+                        sample.Language + " source declaration is mapped to its part and line");
+                }
             });
         }
 
@@ -185,8 +333,12 @@ namespace RNAssistant.Harness
                     var reference = ChatResourceUri.CreateArtifactRevision(session, artifact);
                     var found = owner.SearchText(session, reference, "partial-marker", 1000000, 600);
                     AssertTrue(found.ScanTruncated && found.Matches.Count == 1, "explicit truncation or omitted PDF pages remain partial even on a hit");
+                    var part = owner.ReadIndexedTextPart(session, reference, 1);
+                    AssertEqual(false, part.SourceComplete, "complete retained extraction does not prove the PDF source complete");
+                    AssertEqual(ResourceCoverageKinds.CharacterRange, part.Coverage.Kind,
+                        "part read does not publish whole PDF authority");
                     AssertEqual(null, found.Matches.Single().SectionTitle, "PDF extraction does not invent Markdown section semantics");
-                    var view = authority.GetView(scope, reference, "artifact-extracted-text-index-v1");
+                    var view = authority.GetView(scope, reference, "artifact-extracted-text-index-v3");
                     AssertTrue(view.ContentSha256 == extracted.Sha256 && view.ContentSha256 != raw.Sha256, "extraction hash cannot be confused with the binary source hash");
                     AssertTrue(view.Coverage.Kind == ResourceCoverageKinds.CharacterRange && view.Coverage.End == text.Length,
                         "a bounded extraction is not retained as whole-source coverage");
@@ -244,7 +396,7 @@ namespace RNAssistant.Harness
                 AssertEqual("Purpose and complete document scope", candidate.Description, "description survives discovery projection");
                 AssertTrue(candidate.Evidence == null || candidate.Evidence.Count == 0, "search snippet does not grant whole-read evidence");
 
-                var view = authority.GetView(scope, reference, "artifact-text-index-v1");
+                var view = authority.GetView(scope, reference, "artifact-text-index-v3");
                 File.Delete(executor.Payloads.PathFor(view.Payload.Sha256));
                 AssertEqual(1, provider.Search(other, "late-content-marker", "document-artifact", 20, 600).Matches.Count, "missing index is reconstructed from the same source");
                 File.WriteAllText(executor.Payloads.PathFor(view.Parts[0].Sha256), "corrupt part");
@@ -283,7 +435,7 @@ namespace RNAssistant.Harness
                 var counted = new DiscoveryPageStore(authority);
                 counted.ViewRegistered = view =>
                 {
-                    if (view.View != "artifact-text-index-v1") return;
+                    if (view.View != "artifact-text-index-v3") return;
                     counted.ViewRegistered = null;
                     var scope = ResourceAuthorityScopeId.Document(new DocumentAuthorityId(session.DocumentAuthorityId));
                     var before = authority.Capture(scope);

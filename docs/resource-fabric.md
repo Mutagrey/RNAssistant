@@ -354,6 +354,50 @@ Domain owners retain typed guard/dispatch/read-back responsibilities.
 
 ## Domain model
 
+### Large document text navigation — 2026-10-14
+
+Document-owned uploaded text/code and authored Markdown/Plans retain a deterministic
+`artifact-(extracted-)?text-index-v3` view under their exact revision. Its CAS
+manifest holds 32,000-character parts, UTF-16 character coverage, line ranges,
+bounded Markdown headings and advisory C#/VBA/JS/TS declarations. The source is
+verified through the protected CAS decoder while the index is built incrementally;
+no plaintext temporary file, head, second store or read evidence is created.
+The index supports up to 20 MiB of retained UTF-8 text and a single line of that
+size. Derived parts remain CAS retention roots. A missing/corrupt part is rebuilt
+from the same exact source; unavailable source bytes fail closed.
+
+`common.resources_find` discovers semantic targets under its existing bounded
+cross-resource budget. `common.resources_search(target, query)` scans one selected
+indexed text completely within the 20 MiB source bound and returns bounded literal
+snippets, a total match count, `scanComplete`, `sourceComplete` and a matching
+`partNumber`. A negative result proves absence only when `scanComplete=true`.
+`common.resources_outline(target, fromPart, limit)` pages exact part/line ranges;
+Markdown heading names and code declarations are navigation hints. The code
+symbol grammar is deliberately partial (`symbolsComplete=false`), including
+minified/very long lines. `common.resources_read` accepts `partNumber` for indexed
+artifact text/source and returns at most 32,000 characters with `partCount` and
+character-range evidence. Neither a part nor a search/outline result grants
+whole-source mutation authority. Other provider families retain their own bounds;
+this contract does not claim 20 MiB Office live, HTML-member or CLI file reads.
+
+The shared layer currently owns identity, exact revision, view capabilities,
+coverage (`character-range`, `line-range`, `page-range`, `cell-range`,
+`record-range`), bounded reads and cursors. It does not yet expose one provider
+navigation contract. `resources_outline` is an indexed document-text operation;
+PDF page rendering selects `pageIndex` separately, while PDF extracted text is
+one flattened text view. `PageTextLengths` is not an exact page-to-text offset map.
+Adding shared navigation requires a typed optional provider capability with
+coordinate kind, exact covered range, completeness and bounded continuation;
+page extraction must record exact offsets before PDF text pages can use it.
+
+`sourceComplete` distinguishes a complete retained text representation from a
+complete original. A clipped extraction or PDF with unextracted pages cannot
+produce whole-source evidence even when all retained text was read. Model result
+projection exposes semantic targets and typed bounded content fields; exact
+`rna://` references, revisions, cursors, source hashes and coverage coordinates
+remain runtime-only. Literal URI-shaped text inside source, snippets or headings
+is preserved as user content, while operational envelopes are sanitized.
+
 Model `common.resources_read` may select an exact unique ATX heading with `section`
 and `representation=text` for document Markdown/Plans and complete uploaded
 Markdown. This uses the same provider/authority/evidence path and retains only

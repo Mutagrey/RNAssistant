@@ -12,6 +12,51 @@
 новая возможность требует явной задачи, scope и owner; дефекты работающей системы
 приоритетнее расширения без конкретного пользовательского результата.
 
+## Large-source mutation and provider parity — 2026-10-14
+
+Owner: Core `DocumentArtifactStore`/workspace file owner, Office Resource Gateway
+and managed mutation observer. Indexed document originals are immutable: a 3–5 MiB
+upload can now be found, searched and read by exact parts, but it cannot yet be
+edited as a separate versioned Library document. Implement explicit copy from an
+exact original, retain source provenance and original encoding/BOM/newlines, then
+guard a unique bounded patch against the current authored head. Prepare before
+dispatch, publish only verified read-back, and leave possible effects unknown
+without replay. Existing Markdown Save's 200,000-character whole-body contract
+must not be used as a hidden fallback for this path.
+
+For a 10 MiB code transformation, model intent must become a bounded edit plan:
+read exact source regions, select unique anchored hunks against one pinned head,
+apply ordered hunks once, and publish a new immutable version only after full
+byte-level read-back. Preserve the original bytes as a separate artifact. Record
+before/after hashes and a bounded diff manifest so UI/model can inspect changes
+without a 10 MiB tool result. A compiler/parser or syntax check is language-specific
+validation; passing it cannot prove semantic equivalence or that every unnecessary
+operation was removed. The current `RunChangesService` comparison cap is 128,000
+characters, so a full-file visual diff is not available for this source size.
+
+Owner: CLI `WorkspaceFileService`/provider and Office live providers. The CLI file
+owner still has a 1 MiB whole-file bound and 16,000-character model read; live
+Word/VBA/PowerPoint captures remain independently bounded near 1 MiB. Extend
+these providers through semantic selectors and exact bounded windows before
+advertising 20 MiB support or large one-line editing there. Measure repeated
+indexed part reads: each currently re-verifies the full source CAS blob, preserving
+fail-closed source availability but doing avoidable work across many parts. A
+replacement must retain cryptographic exactness and missing/corrupt-source refusal;
+file metadata alone is not authority. Validate with a 3–5 MiB edit/restart/race
+fixture and focused provider tests; Windows/Office qualification remains separate.
+
+Owner: Resource Gateway and provider-specific navigation owners. `ResourceCoverage`
+and exact cursors already support text, pages, cells and records, but `resources_outline`
+currently navigates only indexed document text. PDF rendering has a page selector;
+extracted PDF text is flattened with page labels and `PageTextLengths`, without
+exact page-to-text ranges. Add an optional typed navigation capability at the
+provider/Gateway boundary, with coordinate kinds, total/coverage completeness and
+bounded continuation. Derive PDF page text offsets during extraction, then route
+page text and page render through the same exact revision and page coordinate.
+Keep provider-specific selectors and extraction/render owners; do not add a second
+cursor store or put CAS references in model-facing output. Validate partial and
+scanned PDFs, page boundaries, stale revisions and cross-provider pagination.
+
 ## Artifact UI check fixture drift — 2026-10-13
 
 Owner: test fixtures. During the artifact tree/removal slice, existing checks had
