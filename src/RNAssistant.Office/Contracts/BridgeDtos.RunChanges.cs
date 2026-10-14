@@ -34,5 +34,17 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("intendedAfter")] public string IntendedAfter { get; set; }
         [JsonProperty("intendedAfterExists")] public bool? IntendedAfterExists { get; set; }
         [JsonProperty("availability")] public string Availability { get; set; }
+        [JsonProperty("hunks", NullValueHandling = NullValueHandling.Ignore)]
+        public List<RunTextHunkDto> Hunks { get; set; }
+    }
+
+    public sealed class RunTextHunkDto
+    {
+        [JsonProperty("version")] public int Version { get; set; }
+        [JsonProperty("offset")] public int Offset { get; set; }
+        [JsonProperty("removed")] public int Removed { get; set; }
+        [JsonProperty("inserted")] public int Inserted { get; set; }
+        [JsonProperty("before")] public string Before { get; set; }
+        [JsonProperty("after")] public string After { get; set; }
     }
 }

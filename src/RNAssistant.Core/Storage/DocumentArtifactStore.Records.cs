@@ -74,13 +74,22 @@ namespace RNAssistant.Core.Storage
             ResourceRef restoredFrom = null, IEnumerable<ResourceDependency> dependencies = null,
             ResourceAuthorityScopeId ownerScope = null)
         {
+            if (artifact == null || text == null) throw new InvalidDataException("An exact artifact body is required for retention.");
+            return RetainRecordPayload(session, artifact, PayloadRef.FromBlob(_payloads.StoreText(text, artifact.MimeType)),
+                recordView, recordMimeType, attemptId, operationKey, restoredFrom, dependencies, ownerScope);
+        }
+
+        private ResourceMutationReadBack RetainRecordPayload(ChatSession session, ChatArtifact artifact, PayloadRef body,
+            string recordView, string recordMimeType, string attemptId, string operationKey,
+            ResourceRef restoredFrom = null, IEnumerable<ResourceDependency> dependencies = null,
+            ResourceAuthorityScopeId ownerScope = null, string resultView = "text")
+        {
             var scope = ownerScope ?? Scope(session);
-            if (artifact == null || artifact.Revision < 1 || string.IsNullOrEmpty(artifact.Id) || text == null ||
+            if (artifact == null || artifact.Revision < 1 || string.IsNullOrEmpty(artifact.Id) || body == null ||
                 string.IsNullOrEmpty(attemptId) || string.IsNullOrEmpty(operationKey))
                 throw new InvalidDataException("An exact artifact and prepared operation are required for retention.");
             var item = Clone(artifact);
             AssignOwner(item, scope);
-            var body = PayloadRef.FromBlob(_payloads.StoreText(text, item.MimeType));
             item.ContentSha256 = body.Sha256;
             item.ContentByteLength = body.ByteLength;
             item.InlineText = null;
@@ -98,7 +107,7 @@ namespace RNAssistant.Core.Storage
             AssignOwner(artifact, scope);
             artifact.ContentSha256 = body.Sha256;
             artifact.ContentByteLength = body.ByteLength;
-            return new ResourceMutationReadBack(exact.Identity, true, "text", body.Sha256, body,
+            return new ResourceMutationReadBack(exact.Identity, true, resultView, body.Sha256, body,
                 revision: exact, restoredFrom: restoredFrom, dependencies: dependencies);
         }
 
@@ -121,7 +130,17 @@ namespace RNAssistant.Core.Storage
                 item.ContentSha256 != body.Sha256 || item.ContentByteLength != body.ByteLength)
                 throw new InvalidDataException("The retained artifact does not match its exact snapshot.");
             if (includeBody)
-                item.InlineText = _payloads.ReadText(body.ToBlobReference()) ?? throw new InvalidDataException("The artifact body is unavailable.");
+            {
+                if (item.Kind == ChatArtifactKinds.File && FileEncoding(item) != null)
+                {
+                    var bytes = _payloads.ReadBytes(body.ToBlobReference());
+                    string encoding = null;
+                    item.InlineText = bytes == null ? null : DecodeFileText(bytes, out encoding);
+                    if (item.InlineText == null || encoding != FileEncoding(item))
+                        throw new InvalidDataException("The artifact body is unavailable.");
+                }
+                else item.InlineText = _payloads.ReadText(body.ToBlobReference()) ?? throw new InvalidDataException("The artifact body is unavailable.");
+            }
             return item;
         }
 

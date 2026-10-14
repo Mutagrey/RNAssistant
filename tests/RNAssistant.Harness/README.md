@@ -1295,6 +1295,12 @@ cover the intent boundary, internal guards and old-style project inclusion. See
 [R61 audit](../../docs/stabilization/R61_TOOL_CONTRACT_AUDIT.md).
 `resources: original text` covers >10 MiB one-line navigation, extraction completeness,
 cross-part search, derived-view repair and C#/VBA/TS outline hints.
+`authored file:` covers 10 MiB copy/patch/export, code copied under a requested `.md`
+name with exact bytes, immutable originals, stale and
+ambiguous edits, large `.md`, UTF-16 BOM/CRLF, semantic navigation, viewer paging,
+bounded Run Changes hunks and restart. `run changes:` retains the smaller-source
+contracts; `node tests/web/run-changes-layout.test.js` checks hunk rendering when
+Playwright is available.
 
 The schema-20 correction makes `common.resources_read` return one complete bounded
 representation or an explicit error. Broad VBA inspection starts from

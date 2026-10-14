@@ -1059,6 +1059,27 @@ Message cards resolve their pinned revision even when a newer head exists. If th
 resource was explicitly removed, the message shows a stable `Resource removed`
 placeholder rather than falling forward to another revision.
 
+### Authored text/code files — 2026-10-14
+
+Agent `common.file_create`, `common.file_copy` and `common.file_patch` publish
+document-owned versioned `File` artifacts through the existing mutation observer,
+CAS and revision journal. Copy preserves the source filename by default or uses
+an explicit output filename/extension, while retaining the exact raw bytes;
+patch applies bounded exact unique fragments to a pinned current revision.
+The original upload remains immutable. New versions preserve UTF-8/UTF-16/UTF-32
+encoding, BOM and untouched line endings; unsupported or lossy decoding fails
+explicitly. Raw export uses the verified exact body and filename, so an uploaded
+10 MiB code file can become an editable/exportable `.md` without placing its body in
+`common.markdown_save`'s 200,000-character argument. That older whole-body limit
+still applies to standalone Markdown authoring.
+
+Resource parts, search and outline cover authored files. The viewer can page
+through up to 20 MiB of authored-file text, rendering one page at a time; its
+full-source copy remains limited to 512,000 characters. Run Changes presents
+verified bounded hunk previews for large files instead of claiming a full-file
+visual diff. Export is the exact full-file path. This feature does not validate
+code semantics or extend live Office and CLI provider limits.
+
 ### Collections, thumbnails and sequences
 
 Collection cards load media lazily near the viewport. Image thumbnails use a
@@ -1095,7 +1116,8 @@ are preview frames, never child artifacts or independently durable revisions.
 ## Viewer contracts
 
 - Text/source: fixed 32,000-character pages within a 512,000-character viewer
-  document bound, line numbers, page search/copy and exact full copy/download only
+  document bound (up to 20 MiB navigation for authored `File`), line numbers,
+  page search/copy and exact full copy/download only
   after a contiguous stable-URI/hash/total read. A truncated extracted source or an
   over-limit document remains explicitly partial.
 - Markdown: rendered/sanitized view plus exact Source. Rendering is disabled until

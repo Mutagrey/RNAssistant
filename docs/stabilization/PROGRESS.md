@@ -42,6 +42,33 @@ Checked against isolated `63cc75fc` source plus this change. The duplicated SDK
 backlog entries and completed tool-binding item are reconciled. Evidence:
 `/tmp/rna-source-cas-20261014-2k1033j4/`. Version format passes before commit.
 
+## Authored large text/code files — 2026-10-14 (host-neutral)
+
+Owner: Core `DocumentArtifactStore`, Office Resource Gateway and managed mutation
+observer. Agent file create/copy/patch now creates versioned Library `File`
+artifacts with source provenance, the original or requested output extension and lossless supported
+encoding/BOM/newlines. A 10 MiB one-line original can be copied, patched by a
+unique bounded fragment and exported as exact bytes; stale and ambiguous patches
+are refused. A large uploaded code file can also be copied exactly under a `.md`
+name. A large uploaded `.md` no longer needs the 200,000-character
+whole-body Markdown save path. Indexed resource parts and bounded Run Changes
+hunks support inspection; the authored-file viewer pages beyond the earlier
+512,000-character navigation ceiling without enabling full-body copy.
+
+The focused 10 MiB copy/patch fixture covers exact export, immutable original,
+late search, viewer continuation, stale/ambiguous refusal, restart, 10 MiB code-to-`.md` copy, >200,000
+character `.md`, UTF-16 BOM/CRLF and bounded diff. Host-neutral Harness build and
+the focused authored-file, shared Markdown and Run Changes checks pass. Real model
+optimization quality, language-specific syntax checks, CLI/live Office parity and
+Windows/Office/WebView2 qualification remain open.
+The combined fixture takes about 2.1–2.7 s wall time and measured roughly
+0.5–1.1 GiB peak RSS across macOS/.NET 8 runs; this includes import, repeated
+reads, Library exports, viewer pages, restart and extra format cases, not an
+isolated patch or Office latency measurement. Peak memory needs an isolated
+per-stage profile before setting a production budget.
+Corrupt derived CAS parts now re-store from verified exact source bytes rather
+than failing the whole search with an unhandled length mismatch.
+
 ## Direct tool bindings and canonical run-view reads — 2026-10-14
 
 Owners: Office tool catalogs/native runtime and bridge/UI run-view projection.

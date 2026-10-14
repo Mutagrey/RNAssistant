@@ -26,7 +26,8 @@ namespace RNAssistant.Office.Services
             new ConversationResourceMutationDomain(), new OfficeResourceMutationDomain() };
 
         internal static bool IsDocumentArtifactOperation(string operation)
-        { return PlanDocumentToolCatalog.Owns(operation) || HtmlWorkspacePublication.Owns(operation) || MarkdownDocumentToolCatalog.Owns(operation); }
+        { return PlanDocumentToolCatalog.Owns(operation) || HtmlWorkspacePublication.Owns(operation) ||
+            MarkdownDocumentToolCatalog.Owns(operation) || AuthoredFileToolCatalog.Owns(operation); }
 
         internal static ResourceAuthorityScopeId Scope(ResourceAuthorityService authority, ChatSession session, string operation)
         {

@@ -311,6 +311,7 @@
     <Compile Include="Services\HtmlWorkspaceArtifactService.cs" />
     <Compile Include="Services\HtmlWorkspacePublication.cs" />
     <Compile Include="Services\MarkdownDocumentService.cs" />
+    <Compile Include="Services\AuthoredFileService.cs" />
     <Compile Include="Services\HtmlWorkspaceActionGuard.cs" />
     <Compile Include="Services\HtmlWorkspaceExportService.cs" />
     <Compile Include="Services\UploadedHtmlResourceService.cs" />
@@ -362,6 +363,8 @@
     <Compile Include="Tools\DocumentTaskListToolHandler.cs" />
     <Compile Include="Tools\MarkdownDocumentToolCatalog.cs" />
     <Compile Include="Tools\MarkdownDocumentToolHandler.cs" />
+    <Compile Include="Tools\AuthoredFileToolCatalog.cs" />
+    <Compile Include="Tools\AuthoredFileToolHandler.cs" />
     <Compile Include="Tools\OfficePlanDocumentToolHandler.cs" />
     <Compile Include="Tools\ToolSafetyPolicy.cs" />
     <Compile Include="Tools\VbaToolExecutor.cs" />

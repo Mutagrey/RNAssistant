@@ -308,6 +308,7 @@ namespace RNAssistant.Office.Services
                             }
                             if (!string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId) &&
                                 (artifact.Kind == ChatArtifactKinds.Markdown || artifact.Kind == ChatArtifactKinds.PlanDocument ||
+                                artifact.Kind == ChatArtifactKinds.File && DocumentArtifactStore.FileEncoding(artifact) != null ||
                                 artifact.OriginalAttachment != null && HasTextHint(artifact, artifact.OriginalAttachment)))
                             {
                                 var indexed = _documentArtifacts.SearchText(session, ChatResourceUri.CreateArtifactRevision(session, artifact),
@@ -420,7 +421,8 @@ namespace RNAssistant.Office.Services
                     throw new ResourceRequestException("Invalid text part selection.", "resource_part_invalid", false);
                 if (_documentArtifacts != null && !string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId) &&
                     representation == "text" && (artifact.OriginalAttachment != null ||
-                    artifact.Kind == ChatArtifactKinds.Markdown || artifact.Kind == ChatArtifactKinds.PlanDocument))
+                    artifact.Kind == ChatArtifactKinds.Markdown || artifact.Kind == ChatArtifactKinds.PlanDocument ||
+                    artifact.Kind == ChatArtifactKinds.File && DocumentArtifactStore.FileEncoding(artifact) != null))
                 {
                     ResourceReadResult indexed;
                     try { indexed = _documentArtifacts.ReadIndexedTextPart(session, exactReference, request.PartNumber.Value); }
@@ -511,6 +513,16 @@ namespace RNAssistant.Office.Services
                 return structure;
             }
 
+            if (representation == ResourceRepresentations.Text && _documentArtifacts != null &&
+                artifact.Kind == ChatArtifactKinds.File && DocumentArtifactStore.FileEncoding(artifact) != null)
+            {
+                var indexed = _documentArtifacts.ReadIndexedTextWindow(session, exactReference, offset, maxChars);
+                indexed.Resource = Describe(session, artifact, false);
+                var next = indexed.Offset + indexed.ReturnedCharacters;
+                indexed.NextCursor = indexed.Complete ? null : ResourceReadCursor.CreateImmutable(next, cursorBinding);
+                return new ResourceReadSelection { Result = indexed, ResourceRefs = new[] { exactReference } };
+            }
+
             var content = ReadText(session, artifact, int.MaxValue);
             if (content == null)
             {
@@ -594,6 +606,8 @@ namespace RNAssistant.Office.Services
                 CreatedUtc = artifact.CreatedUtc
             };
             if (!string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId)) result.Metadata["scope"] = "document";
+            if (artifact.Kind == ChatArtifactKinds.File && DocumentArtifactStore.FileEncoding(artifact) != null)
+                result.Metadata["authoredFile"] = "true";
             if (!string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId) && (artifact.Kind == ChatArtifactKinds.Markdown ||
                 artifact.Kind == ChatArtifactKinds.PlanDocument || DocumentArtifactStore.IsMarkdownOriginal(attachment) && !attachment.TextTruncated))
                 result.Metadata["sectionRead"] = "atx-heading";
@@ -750,6 +764,8 @@ namespace RNAssistant.Office.Services
                  string.Equals(artifact.Kind, ChatArtifactKinds.Markdown, StringComparison.OrdinalIgnoreCase) ||
                  string.Equals(artifact.Kind, ChatArtifactKinds.File, StringComparison.OrdinalIgnoreCase) &&
                     (string.Equals(artifact.MimeType, "application/json", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(artifact.MimeType, "application/javascript", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(artifact.MimeType, "application/xml", StringComparison.OrdinalIgnoreCase) ||
                      artifact.MimeType?.StartsWith("text/", StringComparison.OrdinalIgnoreCase) == true) ||
                  string.Equals(artifact.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase) ||
                  string.Equals(artifact.Kind, ChatArtifactKinds.Compaction, StringComparison.OrdinalIgnoreCase) ||

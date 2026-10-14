@@ -25,25 +25,16 @@ of a production PowerPoint or COM failure.
 
 ## Large-source mutation and provider parity — 2026-10-14
 
-Owner: Core `DocumentArtifactStore`/workspace file owner, Office Resource Gateway
-and managed mutation observer. Indexed document originals are immutable: a 3–5 MiB
-upload can now be found, searched and read by exact parts, but it cannot yet be
-edited as a separate versioned Library document. Implement explicit copy from an
-exact original, retain source provenance and original encoding/BOM/newlines, then
-guard a unique bounded patch against the current authored head. Prepare before
-dispatch, publish only verified read-back, and leave possible effects unknown
-without replay. Existing Markdown Save's 200,000-character whole-body contract
-must not be used as a hidden fallback for this path.
-
-For a 10 MiB code transformation, model intent must become a bounded edit plan:
-read exact source regions, select unique anchored hunks against one pinned head,
-apply ordered hunks once, and publish a new immutable version only after full
-byte-level read-back. Preserve the original bytes as a separate artifact. Record
-before/after hashes and a bounded diff manifest so UI/model can inspect changes
-without a 10 MiB tool result. A compiler/parser or syntax check is language-specific
-validation; passing it cannot prove semantic equivalence or that every unnecessary
-operation was removed. The current `RunChangesService` comparison cap is 128,000
-characters, so a full-file visual diff is not available for this source size.
+Owner: Core `DocumentArtifactStore` and Office Resource Gateway. Document-owned
+copy/patch and bounded hunk preview are implemented for supported text/code files.
+Remaining work is a measured real-model 10 MiB optimization run, language-specific
+syntax checks where suitable compilers/parsers are available, and efficient random
+viewer navigation: the current viewer retains preceding text pages while advancing.
+Profile peak memory by import/copy/patch/index/view/export stage; the combined
+host-neutral fixture varies between roughly 0.5 and 1.1 GiB RSS.
+Neither a verified byte-level patch nor a syntax pass proves semantic equivalence
+or that all unnecessary operations were removed. The 128,000-character whole-file
+comparison cap remains; large files show verified bounded hunks instead.
 
 Owner: CLI `WorkspaceFileService`/provider and Office live providers. The CLI file
 owner still has a 1 MiB whole-file bound and 16,000-character model read; live
@@ -54,8 +45,8 @@ encoding fingerprint; every call still hashes all current stored bytes. The loca
 >10 MiB/329-part fixture is about 40% faster. Larger/weakly compressed encodings
 retain full streaming verification; full traversal is not generally linear in
 source size. Further changes need measured representative sources and must retain
-missing/corrupt-source refusal; file metadata alone is not authority. Validate with a 3–5 MiB edit/restart/race
-fixture and focused provider tests; Windows/Office qualification remains separate.
+missing/corrupt-source refusal; file metadata alone is not authority. Add a 3–5 MiB cross-chat race fixture and
+focused provider tests; Windows/Office qualification remains separate.
 
 Owner: Resource Gateway and provider-specific navigation owners. `ResourceCoverage`
 and exact cursors already support text, pages, cells and records, but `resources_outline`

@@ -90,11 +90,12 @@ namespace RNAssistant.Office.Services
             var source = Source(actor, request.DocumentId);
             var reference = ChatResourceUri.ArtifactSnapshot(new ResourceRef(request.ResourceUri));
             if (reference.Uri != request.ResourceUri) throw new InvalidDataException("Требуется точная ссылка артефакта.");
-            var artifact = _artifacts.Read(source, reference);
+            var artifact = _artifacts.Read(source, reference, false);
             if (_artifacts.IsRemoved(source, artifact)) throw new InvalidOperationException("Артефакт удалён из документа.");
             if (!CanTransfer(artifact) && !request.Preview) throw new InvalidOperationException("Перенос этого типа пока не поддерживается.");
             if (artifact.Kind == ChatArtifactKinds.HtmlWorkspace)
             {
+                artifact = _artifacts.Read(source, reference);
                 var project = CaptureProject(source, artifact);
                 project.Origin = new ArtifactTransferOrigin { ResourceUri = reference.Uri, ContentSha256 = artifact.ContentSha256 };
                 return new ArtifactTransferContent { Kind = "html_workspace", FileName = SafeName(artifact.Title + ".rna-html.zip"),

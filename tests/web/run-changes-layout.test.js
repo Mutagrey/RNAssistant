@@ -101,9 +101,21 @@ const read = file => fs.readFileSync(path.join(__dirname, '../../web', file), 'u
     await page.locator('.run-changes-unavailable').waitFor();
     assert.equal(await page.locator('.run-changes-planned').count(), 1);
     assert.equal(await page.locator('.run-changes-summary .run-change-counts').count(), 0, 'missing sources have no invented total');
+    await page.evaluate(() => {
+      document.getElementById('output').textContent = '';
+      window.state.chatProjectionRevisions.chat = 5;
+      window.fixture = {...window.fixture, items: [{id:'large',title:'large.js',scope:'Файл',availability:'hunks',
+        beforeExists:true,afterExists:true,hunks:[{version:2,offset:10485000,removed:18,inserted:11,
+          before:'slow(slow(value))',after:'fast(value)'}]}]};
+      window.appendRunChanges(document.getElementById('output'), 'chat', 'run');
+    });
+    await page.locator('.run-change-file-summary').click();
+    await page.waitForFunction(() => document.querySelector('.run-change-diff').textContent.includes('fast(value)'));
+    assert.match(await page.locator('.run-change-file-summary').textContent(), /Проверенные фрагменты/);
+    assert.equal(await page.locator('.run-changes-unavailable').count(), 0, 'verified hunks do not claim missing changes');
     // A late result must not attach to a different chat after navigation.
     await page.evaluate(() => {
-      window.state.chatProjectionRevisions.chat = 5;
+      window.state.chatProjectionRevisions.chat = 6;
       window.send = () => new Promise(resolve => window.resolveChanges = resolve);
       document.getElementById('output').textContent = '';
       window.appendRunChanges(document.getElementById('output'), 'chat', 'run');

@@ -71,7 +71,8 @@ namespace RNAssistant.Office.Runtime
             Func<ToolExecutionContext, ToolPreparationResult, string> pendingRegistrar = null,
             bool trace = true,
             IToolMutationObserver mutationObserver = null, MarkdownDocumentService markdownDocuments = null,
-            ConversationRunPolicy runPolicy = null, Func<ToolExecutionContext, string> dispatchGuard = null)
+            ConversationRunPolicy runPolicy = null, Func<ToolExecutionContext, string> dispatchGuard = null,
+            AuthoredFileService authoredFiles = null)
         {
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
             var registry = new ToolHandlerRegistry();
@@ -230,6 +231,11 @@ namespace RNAssistant.Office.Runtime
                     binding = MarkdownDocumentToolCatalog.BindingFor(registration.Descriptor.Id);
                     handler = new MarkdownDocumentToolHandler(markdownDocuments, session);
                 }
+                else if (AuthoredFileToolCatalog.Owns(registration.Descriptor.Id))
+                {
+                    binding = AuthoredFileToolCatalog.BindingFor(registration.Descriptor.Id);
+                    handler = new AuthoredFileToolHandler(authoredFiles, session);
+                }
                 else if (PlanDocumentToolCatalog.Owns(
                     registration.Descriptor.Id))
                 {
@@ -345,7 +351,7 @@ namespace RNAssistant.Office.Runtime
                 OutlookToolIds.Owns(toolId) || VbaToolCatalog.Owns(toolId) ||
                 string.Equals(toolId, UserQuestionToolCatalog.AskToolId,
                     StringComparison.Ordinal) ||
-                MarkdownDocumentToolCatalog.Owns(toolId) || PlanDocumentToolCatalog.Owns(toolId) ||
+                MarkdownDocumentToolCatalog.Owns(toolId) || AuthoredFileToolCatalog.Owns(toolId) || PlanDocumentToolCatalog.Owns(toolId) ||
                 TaskListToolCatalog.Owns(toolId) ||
                 HtmlWorkspaceToolCatalog.Owns(toolId) ||
                 CapabilityToolCatalog.Owns(toolId) ||

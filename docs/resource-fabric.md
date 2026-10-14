@@ -356,7 +356,7 @@ Domain owners retain typed guard/dispatch/read-back responsibilities.
 
 ### Large document text navigation — 2026-10-14
 
-Document-owned uploaded text/code and authored Markdown/Plans retain a deterministic
+Document-owned uploaded text/code, authored text/code files and authored Markdown/Plans retain a deterministic
 `artifact-(extracted-)?text-index-v3` view under their exact revision. Its CAS
 manifest holds 32,000-character parts, UTF-16 character coverage, line ranges,
 bounded Markdown headings and advisory C#/VBA/JS/TS declarations. The source is
@@ -379,6 +379,22 @@ artifact text/source and returns at most 32,000 characters with `partCount` and
 character-range evidence. Neither a part nor a search/outline result grants
 whole-source mutation authority. Other provider families retain their own bounds;
 this contract does not claim 20 MiB Office live, HTML-member or CLI file reads.
+
+Agent `common.file_create` creates a small text/code file with an explicit extension;
+`common.file_copy` creates an independent authored `File` from an exact complete
+uploaded or authored text source (up to 20 MiB); `common.file_patch` replaces 1–16
+unique non-overlapping exact fragments on the selected current authored revision.
+Copy accepts an optional output filename to choose an extension such as `.md`;
+the rename does not alter the source bytes.
+Each call carries at most 32,000 replacement characters in total. The tool never
+accepts a runtime URI or a 10 MiB whole-body argument. Copy retains source
+provenance and exact bytes; patch preserves supported UTF-8/UTF-16/UTF-32 encoding,
+BOM and untouched line endings, rejecting unroundtrippable text. The runtime
+checks the selected head before dispatch and verifies the complete new CAS bytes
+at read-back before publishing a new immutable version. Unknown possible effects
+are not replayed. The model receives a bounded hunk manifest and semantic target;
+the original bytes, hashes and exact references remain runtime evidence. Large
+authored files use the same indexed parts for subsequent reads/search/outline.
 
 The shared layer currently owns identity, exact revision, view capabilities,
 coverage (`character-range`, `line-range`, `page-range`, `cell-range`,

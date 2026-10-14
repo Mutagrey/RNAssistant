@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
+using RNAssistant.Core.Storage;
 
 namespace RNAssistant.Office.Services
 {
@@ -27,7 +28,8 @@ namespace RNAssistant.Office.Services
             var artifact = artifactProvider == null ? null : artifactProvider.ResolveArtifact(session, selected.Reference.Uri);
             if (artifact != null && !string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId) &&
                 (artifact.OriginalAttachment != null || artifact.Kind == ChatArtifactKinds.Markdown ||
-                artifact.Kind == ChatArtifactKinds.PlanDocument))
+                artifact.Kind == ChatArtifactKinds.PlanDocument || artifact.Kind == ChatArtifactKinds.File &&
+                DocumentArtifactStore.FileEncoding(artifact) != null))
             {
                 var found = artifactProvider.SearchOccurrences(session, selected.Reference, query, limit, matchCase);
                 page.TotalMatches = found.TotalMatches;
@@ -76,7 +78,8 @@ namespace RNAssistant.Office.Services
             var artifact = provider?.ResolveArtifact(session, selected.Reference.Uri);
             if (artifact == null || string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId) ||
                 artifact.OriginalAttachment == null && artifact.Kind != ChatArtifactKinds.Markdown &&
-                artifact.Kind != ChatArtifactKinds.PlanDocument)
+                artifact.Kind != ChatArtifactKinds.PlanDocument &&
+                !(artifact.Kind == ChatArtifactKinds.File && DocumentArtifactStore.FileEncoding(artifact) != null))
                 throw new ResourceRequestException("This target has no indexed text outline.",
                     "resource_outline_unsupported", false);
             var outline = provider.OutlineText(session, selected.Reference, fromPart, limit);
@@ -796,6 +799,8 @@ namespace RNAssistant.Office.Services
                 return "Read text for compact conversation groups ranked by message count. Grouping without ConversationID is approximate; samples do not prove decisions or complete issue coverage. Open cited archive pages and rows for evidence.";
             if (type == "Excel search scope")
                 return "Discovery only: use excel.find_cells with a query. Do not read this target to enumerate worksheet data; read an Excel range, table, or name target instead.";
+            if (type == "file")
+                return "Current authored text/code file. Use resources_search and resources_outline to locate exact parts, resources_read with partNumber for bounded source, then file_patch with unique exact fragments. Download preserves the original extension and encoding.";
             if (descriptor.Metadata.ContainsKey("sectionRead"))
                 return "Use representation=text and section with an exact unique ATX heading title (without leading #) to read that section and nested subsections, up to 32000 characters. Omit section to read the whole text. Discovery descriptions/snippets are not whole-read evidence.";
             if (!string.IsNullOrWhiteSpace(IntentRecordsPath(descriptor)))
@@ -1037,6 +1042,8 @@ namespace RNAssistant.Office.Services
         internal static string IntentType(ResourceDescriptor descriptor)
         {
             var kind = (descriptor.Kind ?? string.Empty).Trim().ToLowerInvariant();
+            if (kind == ChatArtifactKinds.File && descriptor.Metadata != null &&
+                descriptor.Metadata.ContainsKey("authoredFile")) return "file";
             switch (kind)
             {
                 case RNAssistant.Core.Storage.DocumentArtifactStore.SharedContextKind: return "shared context";

@@ -397,12 +397,12 @@ namespace RNAssistant.Core.Storage
 
         private bool Matches(string path, string expectedHash, long expectedLength, StorageProtector protector)
         {
-            return CasBlobCodec.VerifyFile(
-                path,
-                expectedLength,
-                expectedHash,
-                protector,
-                BlobPurpose(expectedHash, expectedLength));
+            try
+            {
+                return CasBlobCodec.VerifyFile(path, expectedLength, expectedHash, protector,
+                    BlobPurpose(expectedHash, expectedLength));
+            }
+            catch (InvalidDataException) { return false; }
         }
 
         private bool HasStoredReference(ChatBlobReference reference, StorageProtector protector)

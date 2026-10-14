@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Storage;
 using RNAssistant.Office.Contracts;
 
 namespace RNAssistant.Office.Services
@@ -92,6 +93,21 @@ namespace RNAssistant.Office.Services
                 {
                     if (!string.IsNullOrEmpty(first.ParentArtifactId) && (parent == null || !Same(parent.Kind, first.Kind) || visited.Contains(parent.Id)))
                         throw new InvalidOperationException("Missing retained baseline.");
+                    if (tip.Kind == ChatArtifactKinds.File && DocumentArtifactStore.FileEncoding(tip) != null &&
+                        tip.ContentByteLength > MaximumSourceCharacters * 4L)
+                    {
+                        var hunks = visited.Select(id => all[id]).OrderBy(item => item.Revision)
+                            .SelectMany(item => (JsonConvert.DeserializeObject<AuthoredFileMetadata>(item.MetadataJson ?? "{}")?.Changes ??
+                                new List<AuthoredFileChange>()).Select(change => new RunTextHunkDto {
+                                    Version = item.Revision, Offset = change.Offset, Removed = change.Removed,
+                                    Inserted = change.Inserted, Before = change.Before, After = change.After }))
+                            .Take(101).ToList();
+                        if (hunks.Count > 100) throw new InvalidOperationException("The bounded file diff is incomplete.");
+                        Add(result, new RunTextChangeDto { Id = tip.Id, Title = tip.Title, BeforeTitle = parent?.Title,
+                            Scope = "Файл", BeforeExists = parent != null, AfterExists = true,
+                            Availability = hunks.Count == 0 && parent == null ? "copied" : "hunks", Hunks = hunks });
+                        continue;
+                    }
                     var beforeExists = parent != null && !PlanDocumentService.IsTombstone(parent);
                     var afterExists = !PlanDocumentService.IsTombstone(tip);
                     var before = beforeExists ? ReadSource(parent) : null;
@@ -111,10 +127,12 @@ namespace RNAssistant.Office.Services
             var remaining = MaximumTotalCharacters;
             foreach (var item in result.Items)
             {
-                var length = (item.Before?.Length ?? 0) + (item.After?.Length ?? 0) + (item.IntendedAfter?.Length ?? 0);
+                var length = (item.Before?.Length ?? 0) + (item.After?.Length ?? 0) + (item.IntendedAfter?.Length ?? 0) +
+                    (item.Hunks?.Sum(hunk => (hunk.Before?.Length ?? 0) + (hunk.After?.Length ?? 0)) ?? 0);
                 if (length > remaining)
                 {
                     item.Before = item.After = item.IntendedAfter = null;
+                    item.Hunks = null;
                     if (item.Availability != "unverified") item.Availability = "too_large";
                 }
                 else remaining -= length;

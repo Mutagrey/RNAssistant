@@ -21,6 +21,8 @@
   }
   function availability(item) {
     return item.availability === "unverified" ? "Результат не подтверждён" :
+      item.availability === "hunks" ? "Проверенные фрагменты" :
+      item.availability === "copied" ? "Создана точная копия" :
       item.availability === "too_large" ? "Исходник превышает лимит сравнения" : "Исходник для сравнения недоступен";
   }
   function render(parent, result) {
@@ -37,7 +39,8 @@
         typeof item.intendedAfter === "string" && typeof item.intendedAfterExists === "boolean";
       var diff = item.availability === "available" ? window.RNAssistantTextDiff.format(item.before, item.after) :
         preview ? window.RNAssistantTextDiff.format(item.before, item.intendedAfter) : null;
-      if (diff && diff.complete && !preview) { added += diff.added; removed += diff.removed; compared++; }
+      if (item.availability === "hunks" || item.availability === "copied") compared++;
+      else if (diff && diff.complete && !preview) { added += diff.added; removed += diff.removed; compared++; }
       else if (diff && diff.complete && preview) { plannedAdded += diff.added; plannedRemoved += diff.removed; planned++; }
       else uncertain = true;
       return { item: item, diff: diff, preview: preview };
@@ -71,7 +74,18 @@
       row.addEventListener("toggle", function () {
         if (!row.open || rendered) return;
         rendered = true;
-        if (diff) {
+        if (item.availability === "copied") {
+          body.appendChild(element("p", "run-changes-caption", "Новый файл сохранён из точного исходного ресурса. Скачивание доступно в Library."));
+        } else if (item.availability === "hunks") {
+          body.appendChild(element("p", "run-changes-caption", "Полный файл проверен после записи. Здесь показаны изменённые фрагменты; длинные фрагменты сокращены."));
+          (item.hunks || []).forEach(function (hunk) {
+            var block = element("div", "run-change-preview-source");
+            block.appendChild(element("p", "run-changes-caption", "Версия " + hunk.version + " · символ " + hunk.offset + " · −" + hunk.removed + " / +" + hunk.inserted));
+            var fragment = window.RNAssistantTextDiff.format(hunk.before || "", hunk.after || "");
+            if (fragment) window.RNAssistantTextDiff.render(block, fragment);
+            body.appendChild(block);
+          });
+        } else if (diff) {
           var output = body;
           if (entry.preview) {
             body.appendChild(element("p", "run-changes-caption run-change-preview-notice",

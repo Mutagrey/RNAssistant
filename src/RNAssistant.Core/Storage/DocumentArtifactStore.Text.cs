@@ -78,7 +78,8 @@ namespace RNAssistant.Core.Storage
                 throw new ArgumentException("A bounded text search is required.");
             var artifact = Read(session, reference, false);
             var original = artifact.OriginalAttachment;
-            if (original == null && artifact.Kind != ChatArtifactKinds.Markdown && artifact.Kind != ChatArtifactKinds.PlanDocument)
+            if (original == null && artifact.Kind != ChatArtifactKinds.Markdown && artifact.Kind != ChatArtifactKinds.PlanDocument &&
+                !(artifact.Kind == ChatArtifactKinds.File && FileEncoding(artifact) != null))
                 throw new InvalidDataException("This index requires a retained original text, Markdown or Plan snapshot.");
             var scope = Scope(session);
             var body = _revisions.GetRevision(scope, reference)?.Payload;
@@ -92,13 +93,16 @@ namespace RNAssistant.Core.Storage
                     throw new InvalidDataException("The exact original text extraction is unavailable.");
                 body = new PayloadRef(original.ExtractedTextSha256, original.ExtractedTextByteLength.Value, "text/plain; charset=utf-8");
             }
+            else if (artifact.Kind == ChatArtifactKinds.File)
+                body = FileTextPayload(session, reference, artifact, body);
             if (!_payloads.HasVerifiedReference(body.ToBlobReference()))
                 throw new InvalidDataException("The exact text source is unavailable.");
             var sourceIncomplete = original != null && (original.TextTruncated ||
                 original.Kind == "pdf" && original.PageCount > (original.PageTextLengths?.Count ?? 0));
             var coverage = sourceIncomplete ? new ResourceCoverage(ResourceCoverageKinds.CharacterRange, start: 0, end: original.ExtractedCharCount) : ResourceCoverage.Whole();
             var view = original == null ? TextIndexView : ExtractedTextIndexView;
-            var markdown = original == null || IsMarkdownOriginal(original);
+            var markdown = original == null ? artifact.Kind != ChatArtifactKinds.File ||
+                string.Equals(Path.GetExtension(artifact.Title), ".md", StringComparison.OrdinalIgnoreCase) : IsMarkdownOriginal(original);
             var result = SearchTextView(scope, reference, artifact, body, view, coverage, markdown, original?.ExtractedCharCount,
                 query, characterBudget, snippetCharacters, null, maximumMatches, scanAll, matchCase);
             result.ScanTruncated |= sourceIncomplete;
@@ -119,7 +123,8 @@ namespace RNAssistant.Core.Storage
             if (partNumber < 1) throw new ArgumentOutOfRangeException(nameof(partNumber));
             var artifact = Read(session, reference, false);
             var original = artifact.OriginalAttachment;
-            if (original == null && artifact.Kind != ChatArtifactKinds.Markdown && artifact.Kind != ChatArtifactKinds.PlanDocument)
+            if (original == null && artifact.Kind != ChatArtifactKinds.Markdown && artifact.Kind != ChatArtifactKinds.PlanDocument &&
+                !(artifact.Kind == ChatArtifactKinds.File && FileEncoding(artifact) != null))
                 throw new InvalidDataException("This resource has no indexed text representation.");
             var scope = Scope(session);
             var source = _revisions.GetRevision(scope, reference)?.Payload;
@@ -132,6 +137,8 @@ namespace RNAssistant.Core.Storage
                     throw new InvalidDataException("The exact extraction is unavailable.");
                 source = new PayloadRef(original.ExtractedTextSha256, original.ExtractedTextByteLength.Value, "text/plain; charset=utf-8");
             }
+            else if (artifact.Kind == ChatArtifactKinds.File)
+                source = FileTextPayload(session, reference, artifact, source);
             if (source.ByteLength > MaximumIndexedBytes || !_payloads.HasVerifiedReference(source.ToBlobReference()))
                 throw new InvalidDataException("The exact text source is unavailable or exceeds 20 MiB.");
             var sourceComplete = original == null || !(original.TextTruncated ||
@@ -145,7 +152,9 @@ namespace RNAssistant.Core.Storage
                 throw new InvalidDataException("The text index does not match its source.");
             if (captured == null)
                 captured = MaterializeTextIndex(scope, reference, source, view, coverage,
-                    original == null || IsMarkdownOriginal(original), original?.ExtractedCharCount, null, artifact.Title);
+                    original == null ? artifact.Kind != ChatArtifactKinds.File ||
+                        string.Equals(Path.GetExtension(artifact.Title), ".md", StringComparison.OrdinalIgnoreCase) : IsMarkdownOriginal(original),
+                    original?.ExtractedCharCount, null, artifact.Title);
             try { return ReadIndexedTextPartFromView(captured, source, sourceComplete, partNumber); }
             catch (Exception error) when (error is IOException || error is InvalidDataException || error is JsonException)
             {
@@ -153,9 +162,49 @@ namespace RNAssistant.Core.Storage
                 // verified source. Rebuild only this exact view once, then read
                 // from the repaired CAS part; never switch to a live head.
                 captured = MaterializeTextIndex(scope, reference, source, view, coverage,
-                    original == null || IsMarkdownOriginal(original), original?.ExtractedCharCount, null, artifact.Title);
+                    original == null ? artifact.Kind != ChatArtifactKinds.File ||
+                        string.Equals(Path.GetExtension(artifact.Title), ".md", StringComparison.OrdinalIgnoreCase) : IsMarkdownOriginal(original),
+                    original?.ExtractedCharCount, null, artifact.Title);
                 return ReadIndexedTextPartFromView(captured, source, sourceComplete, partNumber);
             }
+        }
+
+        public ResourceReadResult ReadIndexedTextWindow(ChatSession session, ResourceRef reference, int offset, int maxCharacters)
+        {
+            if (offset < 0 || maxCharacters < 1 || maxCharacters > ResourceReadRequest.MaximumCharacters)
+                throw new ArgumentOutOfRangeException(nameof(offset));
+            var first = ReadIndexedTextPart(session, reference, 1);
+            if (offset > first.TotalCharacters)
+                throw new ArgumentOutOfRangeException(nameof(offset));
+            if (offset == first.TotalCharacters)
+                return new ResourceReadResult { Representation = ResourceRepresentations.Text,
+                    Text = string.Empty, ContentSha256 = first.ContentSha256, Offset = offset,
+                    ReturnedCharacters = 0, TotalCharacters = first.TotalCharacters,
+                    SourceComplete = first.SourceComplete, Complete = true, RawContentIncluded = true,
+                    Coverage = new ResourceCoverage(ResourceCoverageKinds.CharacterRange, start: offset, end: offset) };
+            var number = Math.Min(first.PartCount.Value, Math.Max(1, offset / TextPartCharacters + 1));
+            var part = number == 1 ? first : ReadIndexedTextPart(session, reference, number);
+            while (offset < part.Offset && number > 1)
+                part = ReadIndexedTextPart(session, reference, --number);
+            while (offset >= part.Offset + part.ReturnedCharacters && number < first.PartCount.Value)
+                part = ReadIndexedTextPart(session, reference, ++number);
+            if (offset < part.Offset || offset >= part.Offset + part.ReturnedCharacters)
+                throw new InvalidDataException("The indexed file window is unavailable.");
+            var local = offset - part.Offset;
+            if (local > 0 && char.IsLowSurrogate(part.Text[local]) && char.IsHighSurrogate(part.Text[local - 1]))
+                throw new InvalidDataException("The requested window splits a UTF-16 character.");
+            var length = Math.Min(maxCharacters, part.Text.Length - local);
+            if (local + length < part.Text.Length && char.IsHighSurrogate(part.Text[local + length - 1]) &&
+                char.IsLowSurrogate(part.Text[local + length])) length--;
+            if (length == 0) throw new InvalidDataException("The requested window splits a UTF-16 character.");
+            var selected = part.Text.Substring(local, length);
+            var end = offset + selected.Length;
+            return new ResourceReadResult { Representation = ResourceRepresentations.Text,
+                Text = selected, ContentSha256 = part.ContentSha256, Offset = offset,
+                ReturnedCharacters = selected.Length, TotalCharacters = part.TotalCharacters,
+                SourceComplete = part.SourceComplete, Complete = end == part.TotalCharacters,
+                Truncated = end < part.TotalCharacters, RawContentIncluded = true,
+                Coverage = new ResourceCoverage(ResourceCoverageKinds.CharacterRange, start: offset, end: end) };
         }
 
         private ResourceReadResult ReadIndexedTextPartFromView(ResourceRevisionView captured,
@@ -213,7 +262,8 @@ namespace RNAssistant.Core.Storage
                 throw new InvalidDataException("The exact text outline is unavailable.");
             var count = Math.Max(1, index.Parts.Count);
             if (fromPart > count) throw new ArgumentOutOfRangeException(nameof(fromPart));
-            var markdown = artifact.OriginalAttachment == null || IsMarkdownOriginal(artifact.OriginalAttachment);
+            var markdown = artifact.OriginalAttachment == null ? artifact.Kind != ChatArtifactKinds.File ||
+                string.Equals(Path.GetExtension(artifact.Title), ".md", StringComparison.OrdinalIgnoreCase) : IsMarkdownOriginal(artifact.OriginalAttachment);
             var result = new ResourceTextOutline {
                 ExactReference = reference.Copy(), PartCount = count, TotalLines = index.TotalLines,
                 SourceComplete = verified.SourceComplete != false,

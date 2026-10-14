@@ -6,6 +6,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
+using RNAssistant.Core.Storage;
 using RNAssistant.Office.Contracts;
 using SkiaSharp;
 
@@ -203,7 +204,9 @@ namespace RNAssistant.Office.Services
             }
             var text = result.Text ?? string.Empty;
             var offset = result.Offset;
-            if (offset >= MaximumDocumentCharacters || text.Length > MaximumDocumentCharacters - offset)
+            var navigationLimit = artifact.Kind == ChatArtifactKinds.File && DocumentArtifactStore.FileEncoding(artifact) != null
+                ? ArtifactTransferPackage.MaximumBytes : MaximumDocumentCharacters;
+            if (offset >= navigationLimit || text.Length > navigationLimit - offset)
             {
                 throw new InvalidOperationException("Artifact viewer continuation exceeds the bounded document limit.");
             }
@@ -231,7 +234,7 @@ namespace RNAssistant.Office.Services
                 ((attachment.PageTextLengths ?? new List<int>()).Count == attachment.PageCount);
             var sourceComplete = attachment == null || (!attachment.TextTruncated && pdfSourceComplete);
             var nextOffset = offset + text.Length;
-            var viewerLimitReached = !result.Complete && nextOffset >= MaximumDocumentCharacters;
+            var viewerLimitReached = !result.Complete && nextOffset >= navigationLimit;
             var complete = result.Complete && sourceComplete;
             return new ArtifactViewerPageDto
             {
@@ -243,7 +246,7 @@ namespace RNAssistant.Office.Services
                 Offset = offset,
                 ReturnedCharacters = text.Length,
                 TotalCharacters = result.TotalCharacters,
-                NextCursor = !result.Complete && nextOffset < MaximumDocumentCharacters
+                NextCursor = !result.Complete && nextOffset < navigationLimit
                     ? result.NextCursor
                     : null,
                 Complete = complete,
@@ -251,7 +254,7 @@ namespace RNAssistant.Office.Services
                 SourceComplete = sourceComplete,
                 FullReadAllowed = sourceComplete && result.TotalCharacters <= MaximumDocumentCharacters,
                 ViewerLimitReached = viewerLimitReached || !sourceComplete,
-                MaximumDocumentCharacters = MaximumDocumentCharacters
+                MaximumDocumentCharacters = navigationLimit
             };
         }
 

@@ -441,6 +441,9 @@ namespace RNAssistant.Office.Services
                     : RNAssistant.Office.Tools.MarkdownDocumentToolCatalog.Owns(context.Call.Name)
                         ? MarkdownDocumentService.PreparePublication(_session, context, preparedStateJson,
                             new DocumentArtifactStore(_authority.Store, _authority.Revisions, _payloads), _authority)
+                    : RNAssistant.Office.Tools.AuthoredFileToolCatalog.Owns(context.Call.Name)
+                        ? AuthoredFileService.PreparePublication(_session, context, preparedStateJson,
+                            new DocumentArtifactStore(_authority.Store, _authority.Revisions, _payloads), _authority)
                     : HtmlWorkspacePublication.Owns(context.Call.Name)
                         ? HtmlWorkspacePublication.Prepare(_session, context, arguments,
                             new DocumentArtifactStore(_authority.Store, _authority.Revisions, _payloads), _authority)
@@ -495,6 +498,9 @@ namespace RNAssistant.Office.Services
                             new DocumentArtifactStore(_authority.Store, _authority.Revisions, _payloads), _payloads));
                     else if (record.Evidence?.Effect == ToolEffectEvidence.VerifiedChange && RNAssistant.Office.Tools.MarkdownDocumentToolCatalog.Owns(attempt.Operation))
                         readBack.AddRange(MarkdownDocumentService.ReadBack(_session, attempt, record, preparedStateJson,
+                            new DocumentArtifactStore(_authority.Store, _authority.Revisions, _payloads), _payloads));
+                    else if (record.Evidence?.Effect == ToolEffectEvidence.VerifiedChange && RNAssistant.Office.Tools.AuthoredFileToolCatalog.Owns(attempt.Operation))
+                        readBack.AddRange(AuthoredFileService.ReadBack(_session, attempt, record, preparedStateJson,
                             new DocumentArtifactStore(_authority.Store, _authority.Revisions, _payloads), _payloads));
                     else if (record.Evidence?.Effect == ToolEffectEvidence.VerifiedChange)
                         readBack.AddRange(PlanDocumentPublication.Retain(_session, attempt, documentOperationKey,
