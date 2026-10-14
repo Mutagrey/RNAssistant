@@ -80,7 +80,7 @@ def run_case(root, ending):
         return subprocess.run(["dotnet", str(CLI), "run", "--workspace", str(workspace),
             "--message", "Update and read both final files.",
             *([] if ending == "late_edit" else ["--expect-files", "app.txt,other.txt"]),
-            "--min-reads", "2", "--tool-result-role", "tool" if ending == "repair" else "user",
+            "--min-reads", "2", "--auto-confirm", "on", "--tool-result-role", "tool" if ending == "repair" else "user",
             "--max-iterations", "12", "--max-tool-steps", "12", "--jsonl", *extra],
             cwd=REPO, env=env, text=True, capture_output=True, timeout=45, check=False)
 
@@ -92,7 +92,11 @@ def run_case(root, ending):
         assert final["completeFileReads"] == (2 if ending == "repair" else 1), final
         assert len(requests) == first_run_requests, "A premature done must not start another loop or model repair"
         expected = [0, 0, 0, 1, 1, 2, 1] + ([1, 1, 2] if ending != "early" else [])
-        for request, count in zip(requests, expected):
+        for index, (request, count) in enumerate(zip(requests, expected)):
+            # Repair adds its notice after the same frozen request; all fresh
+            # decisions see one required read-state block after the tool results.
+            position = -2 if ending != "early" and index == 7 else -1
+            assert request["messages"][position]["content"].startswith("RUNTIME_CONTEXT:\n"), request["messages"][-2:]
             progress = read_progress(request)
             assert progress["currentCompleteFileReads"] == count, progress
             assert progress["minimumCompleteFileReads"] == 2, progress

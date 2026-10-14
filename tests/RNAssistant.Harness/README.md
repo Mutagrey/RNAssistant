@@ -348,10 +348,14 @@ still require approval. A separate-process approval test proves that recovery
 survives accepted-history restoration and an unrelated verified deletion does not
 clear the target's failed call. These use scripted HTTP models, not real-model quality evidence.
 `python3 -B tests/cli/read_acceptance_context_smoke.py` checks the dynamic final-read
-projection: distinct counts, invalidation after edits, frozen JSON repair, native
-result transport and no credit from an earlier run. Premature `done` remains
-terminal and fails acceptance. An external edit during the final model wait is
-rejected even with only `--min-reads` and no `--expect-files`. The browser runtime
+projection: distinct counts, invalidation after edits, the single required block
+after current results, frozen JSON repair, native result transport and no credit
+from an earlier run. Its isolated writes explicitly use `--auto-confirm on`.
+The focused `context continuity: preserves recent pair` Harness check also verifies
+trailing-context budgeting, receipt indices and frozen repair across result roles.
+Premature `done` remains terminal and fails acceptance. An external edit during
+the final model wait is rejected even with only `--min-reads` and no
+`--expect-files`. The browser runtime
 smoke confirms that verification/read-back do not add file reads; the omitted-read
 smoke confirms that this metadata does not grant overwrite authority.
 `python3 -B tests/cli/task_list_smoke.py` verifies shared Task Lists in Plan/user

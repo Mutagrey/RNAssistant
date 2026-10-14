@@ -68,6 +68,13 @@ List selection also remains absent in the passing fake-Office workflow. The
 [paired evidence](PROGRESS.md#prompt-simplification-and-incremental-context-cost--2026-10-14)
 does not close model completion or real Office qualification.
 
+The bounded 2026-10-14 placement change moves read requirements after current
+results without expanding the prompt or adding a completion gate. A small replay
+comparison favors that order and one fresh CSV run passes 3/3 final reads plus
+24/24 browser checks; it still requires five JSON format repairs. The
+[placement evidence](PROGRESS.md#final-read-requirements-follow-current-results--2026-10-14)
+is preliminary; autonomous completion and format reliability remain open.
+
 ## Skill and resource workflow regressions — 2026-10-13
 
 **Fixed reproduced causes; incident qualification remains open / Core skill/runtime,

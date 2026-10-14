@@ -64,7 +64,7 @@ namespace RNAssistant.Core.Services
             IReadOnlyList<ChatMessage> required, IReadOnlyList<ChatMessage> facts,
             IReadOnlyList<ContextNote> notes, IReadOnlyList<ToolCatalogEntry> tools,
             AppSettings settings, int budget, bool enforceBudget = true, int retainedBodies = 0, int evictedBodies = 0,
-            SkillRequestSurface skillSurface = null)
+            SkillRequestSurface skillSurface = null, string trailingRequiredMessageId = null)
         {
             if (skillSurface != null)
             {
@@ -415,6 +415,14 @@ namespace RNAssistant.Core.Services
                     }) });
                 atom.BodyParts.Clear();
                 receipt.Deduplicated++;
+            }
+            if (trailingRequiredMessageId != null)
+            {
+                // Move the existing invariant, preserving its budget, provenance and frozen repair input.
+                var trailing = atoms.Single(atom => atom.Kind == "system-invariant" && atom.Messages.Count == 1 &&
+                    string.Equals(atom.Messages[0].Id, trailingRequiredMessageId, StringComparison.Ordinal));
+                atoms.Remove(trailing);
+                atoms.Add(trailing);
             }
             var cost = new ModelContextBudget.MessageTokenCost();
             Action<ContextAtom> measure = atom =>

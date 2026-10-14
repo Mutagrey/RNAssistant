@@ -1,5 +1,40 @@
 # Stabilization progress
 
+## Final-read requirements follow current results — 2026-10-14
+
+Owner: Core context compiler / workspace conversation. Requests with an explicit
+read minimum move the existing required `RUNTIME_CONTEXT` behind current history
+and tool results. No instruction text, extra message, store or completion gate is
+added. Budgeting, receipt order and frozen format repair share this one placement;
+ordinary requests and Office retain their existing order. A premature `done` still
+ends the run and fails separate acceptance.
+
+A small replay comparison of the same saved final CSV request produced valid
+requests for all three remaining reads in 1/3 original-order responses and 3/3
+trailing-context responses. The two original-order failures concatenated tool and
+done objects; the strict parser rejects them, so they are format failures rather
+than accepted premature completion. Replays execute no proposed tools. Both arms
+used 10,704 prompt tokens. One completed-state control returned `done` without
+extra reads. This sample does not establish a completion rate or general causality.
+
+One fresh production CLI/Chromium CSV run passed: 3/3 distinct final file reads,
+3 verified file changes and 24/24 browser checks, across 7 kernel iterations and
+8 tool steps. Five earlier responses required JSON format repair. HTTP audit
+confirms the block ends all 7 fresh requests and all 5 repairs preserve their
+frozen request before appending the repair notice. Format reliability remains open.
+Three focused Harness checks (continuity, exact budget, correctness before budget)
+and all three read-acceptance CLI cases pass, including terminal early `done` and
+an external edit during the final wait.
+
+Profile: Ollama 0.35.0, `gemma4:cloud` → remote `gemma4:31b`, digest
+`ef09f235533c96cd75e8deed88c628335cb69e2b3ce96275d0d7a67fe9887aba`;
+32,768-token context, 4,096 response tokens, temperature 0.2, top-p 1, medium
+reasoning effort, developer instructions/user tool results, `json_object`.
+Source/evidence: isolated `9394b7b6` plus this change, under
+`/tmp/rna-completion-prompt-20261014-7n8ybkwg/` (`profile.json`, `audit-summary.json`,
+replay payloads and complete live event/CAS trace). Other tasks/models and actual
+Windows/Office/WebView2 qualification remain open.
+
 ## Exact message artifact IDs replace UI URI parsing — 2026-10-14
 
 Owner: Office bridge presentation / Web artifact UI. `ChatMessageViewDto.ArtifactIds`

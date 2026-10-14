@@ -950,9 +950,13 @@ namespace RNAssistant.Runtime
                             reads.Select(read => read.Target), StringComparer.Ordinal).ToArray()
                     };
                 }
+                ChatMessage runtimeContext = null;
                 if (context.ActiveTaskList != null || context.ActivePlan != null || context.ReadAcceptance != null)
-                    required.Add(new ChatMessage { Role = _settings.SystemPromptRole,
-                        Content = "RUNTIME_CONTEXT:\n" + JsonConvert.SerializeObject(context) });
+                {
+                    runtimeContext = new ChatMessage { Role = _settings.SystemPromptRole,
+                        Content = "RUNTIME_CONTEXT:\n" + JsonConvert.SerializeObject(context) };
+                    required.Add(runtimeContext);
+                }
                 var budget = Math.Max(1, ModelContextBudget.InputBudgetTokens(_settings) - fixedTokens);
                 var facts = AcceptedFacts(ContextCompactionRuntime.BuildActiveWindow(_session));
                 var workingSet = ContextWorkingSet.Restore(_session, facts, authority, _settings,
@@ -960,7 +964,8 @@ namespace RNAssistant.Runtime
                     archive: ContextCompactionRuntime.ActiveCheckpoint(_session) == null ? null :
                         AcceptedFacts(_session.Messages.Where(ContextCompactionRuntime.IsReplayMessage).ToArray()));
                 return _compiler.Compile(authority, required, facts.Concat(workingSet.Messages).ToArray(), null, _catalog, _settings,
-                    budget, retainedBodies: workingSet.IncludedBodies, evictedBodies: workingSet.OmittedBodies, skillSurface: _skillSurface);
+                    budget, retainedBodies: workingSet.IncludedBodies, evictedBodies: workingSet.OmittedBodies, skillSurface: _skillSurface,
+                    trailingRequiredMessageId: context.ReadAcceptance == null ? null : runtimeContext.Id);
             }
 
             private ResourceAuthoritySnapshotSet CaptureContextAuthority(string runId, CancellationToken cancellationToken)

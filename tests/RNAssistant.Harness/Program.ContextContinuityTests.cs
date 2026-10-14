@@ -60,6 +60,21 @@ namespace RNAssistant.Harness
                 var repaired = new LlmMessageBuilder().Build(compiler.CompileRepair(snapshot,
                     new ChatMessage { Role = "user", Content = "Repair format only." }), new AppSettings()).Messages;
                 AssertTrue(JToken.DeepEquals(request, JArray.FromObject(repaired.Take(2))), "format repair reuses the frozen pair in every role");
+
+                var context = new ChatMessage { Role = "developer", Content = "Current required reads: 0/3." };
+                var withContext = compiler.Compile(authority, new[] { context }, new[] { call, result }, null,
+                    new ToolCatalogEntry[0], new AppSettings(), 10000, trailingRequiredMessageId: context.Id);
+                AssertEqual(3, withContext.Messages.Count, "required context is moved, never duplicated");
+                AssertEqual(context.Id, withContext.Messages[2].Id, "current requirements follow the complete causal pair");
+                AssertEqual(2, withContext.Receipt.Messages.Single(item => item.SourceMessageId == context.Id).MessageIndex,
+                    "receipt describes the actual delivered order");
+                AssertEqual(ModelContextBudget.EstimateMessagesTokens(withContext.Messages, new AppSettings()),
+                    withContext.Receipt.EstimatedTokens, "trailing required context participates in the exact request budget");
+                var withContextWire = JArray.FromObject(new LlmMessageBuilder().Build(withContext.Messages, new AppSettings()).Messages);
+                AssertTrue(JToken.DeepEquals(request, new JArray(withContextWire.Take(2))), "moving context preserves tool pairing and result roles");
+                var frozenRepair = compiler.CompileRepair(withContext, new ChatMessage { Role = "user", Content = "Repair format only." });
+                context.Content = "Changed after compilation.";
+                AssertEqual("Current required reads: 0/3.", frozenRepair[2].Content, "repair retains the frozen trailing requirement");
             }
         }
 
