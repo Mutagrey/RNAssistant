@@ -53,6 +53,12 @@ namespace RNAssistant.Harness
             AssertEqual(0, bounded.NoChangeWrites, "overlapping effect evidence is capped by runtime count");
             AssertEqual(1, bounded.UnknownEffects, "inconsistent source evidence is visible as unknown");
 
+            var olderWire = JObject.FromObject(bounded);
+            olderWire.Remove("GoalVerification");
+            var olderView = olderWire.ToObject<RunViewState>();
+            AssertEqual(RunGoalVerification.NotAssessed, olderView.GoalVerification,
+                "run views saved before goal verification remain readable and conservatively unassessed");
+
             var failedNoChange = RunViewSession(new RunSummary(
                 "run-failed-no-change", "turn-failed-no-change", RunLifecycle.Completed,
                 new ToolCounts(writeError: 1), 1, 1, "Write failed.", null, null));

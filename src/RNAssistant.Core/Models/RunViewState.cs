@@ -83,6 +83,9 @@ namespace RNAssistant.Core.Models
             PendingConfirmationViewState pendingConfirmation, string reason, string currentAction,
             DateTime startedUtc, string goalVerification = RunGoalVerification.NotAssessed)
         {
+            // Json.NET passes null for this field in durable run views written before
+            // goal verification was added; optional parameter defaults do not apply.
+            if (goalVerification == null) goalVerification = RunGoalVerification.NotAssessed;
             if (string.IsNullOrWhiteSpace(runId) || string.IsNullOrWhiteSpace(turnId))
                 throw new ArgumentException("Run and turn ids are required.");
             if (!RunViewLifecycles.IsKnown(lifecycle))
