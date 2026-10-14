@@ -1,5 +1,20 @@
 # Stabilization progress
 
+## Authored HTML source viewer repaired — 2026-10-14
+
+Owner: Office Artifact Library/viewer and Web artifact detail. Created HTML files
+were classified as immutable uploads, causing source reads to require a nonexistent
+message attachment. Retained `fileEncoding` now identifies versioned authored
+documents; their lineage shares one head, and HTML opens as inert exact source.
+Upload evidence checks and explicit workspace import remain in place.
+
+Eight focused host-neutral checks and four focused Web suites pass, including created
+and patched HTML history/restart, copied UTF-16 source paging and upload import.
+Windows/Office/WebView2 qualification remains open. A separate UTF-16 chat-reopen
+failure is recorded in [RISK_REGISTER](RISK_REGISTER.md#authored-utf-16-file-blocks-chat-reopening--2026-10-14);
+an existing stale cache-key failure in `plan-document.test.js` is recorded in
+[BACKLOG](BACKLOG.md#plan-browser-test-cache-key-assertion--2026-10-14).
+
 ## Current browser acceptance is visible to the model — 2026-10-14
 
 Owner: workspace conversation/context. Runs requiring browser verification now

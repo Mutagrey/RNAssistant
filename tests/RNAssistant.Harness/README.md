@@ -1314,6 +1314,11 @@ ambiguous edits, large `.md`, UTF-16 BOM/CRLF, semantic navigation, viewer pagin
 bounded Run Changes hunks and restart. `run changes:` retains the smaller-source
 contracts; `node tests/web/run-changes-layout.test.js` checks hunk rendering when
 Playwright is available.
+`authored file: HTML viewer` covers created/patched HTML and its historical reads
+after restart, version grouping, and exact source pages of a copied UTF-16 HTML.
+UTF-16 chat reopening remains a separate [open risk](../../docs/stabilization/RISK_REGISTER.md#authored-utf-16-file-blocks-chat-reopening--2026-10-14).
+`node tests/web/artifact-json-viewer.test.js` also checks automatic inert source
+loading for authored HTML without uploaded-original controls.
 
 The schema-20 correction makes `common.resources_read` return one complete bounded
 representation or an explicit error. Broad VBA inspection starts from

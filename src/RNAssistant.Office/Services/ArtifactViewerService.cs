@@ -173,7 +173,7 @@ namespace RNAssistant.Office.Services
             var descriptor = _gateway.Resolve(session, resourceUri).Resource;
             var viewerKind = ViewerKind(descriptor, artifact);
             ChatAttachment exactTextAttachment = null;
-            if (IsUploadedHtmlSource(artifact))
+            if (IsHtmlFileSource(artifact) && DocumentArtifactStore.FileEncoding(artifact) == null)
             {
                 exactTextAttachment = ChatArtifactResourceProvider.FindExactAttachment(session, artifact);
                 if (exactTextAttachment == null || !string.Equals(exactTextAttachment.Kind, "text", StringComparison.OrdinalIgnoreCase) ||
@@ -260,9 +260,9 @@ namespace RNAssistant.Office.Services
 
         private static string ViewerKind(ResourceDescriptor descriptor, ChatArtifact artifact)
         {
-            // An uploaded original is always inert source, even when its title also
-            // resembles Markdown. Executable workspace previews remain separate.
-            if (IsUploadedHtmlSource(artifact)) return ArtifactViewerKinds.Text;
+            // HTML files are inert source, whether uploaded or authored, even when
+            // their title resembles Markdown. Executable workspace previews remain separate.
+            if (IsHtmlFileSource(artifact)) return ArtifactViewerKinds.Text;
             var mimeType = NormalizeMimeType(descriptor == null ? null : descriptor.MimeType);
             var kind = artifact == null ? string.Empty : (artifact.Kind ?? string.Empty).Trim().ToLowerInvariant();
             var extension = Path.GetExtension(descriptor == null ? null : descriptor.Title ?? string.Empty) ?? string.Empty;
@@ -294,7 +294,7 @@ namespace RNAssistant.Office.Services
             throw new InvalidOperationException("Artifact has no admitted text/source viewer representation.");
         }
 
-        private static bool IsUploadedHtmlSource(ChatArtifact artifact)
+        private static bool IsHtmlFileSource(ChatArtifact artifact)
         {
             if (artifact == null || (!string.Equals(artifact.Kind, ChatArtifactKinds.Attachment, StringComparison.OrdinalIgnoreCase) &&
                 !string.Equals(artifact.Kind, ChatArtifactKinds.File, StringComparison.OrdinalIgnoreCase))) return false;

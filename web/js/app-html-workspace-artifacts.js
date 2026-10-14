@@ -75,7 +75,7 @@
   }
 
   function artifactViewerKind(artifact) {
-    if (isUploadedHtmlArtifact(artifact)) return "text";
+    if (isHtmlFileArtifact(artifact)) return "text";
     var mediaType = artifactMimeType(artifact).split(";", 1)[0].trim();
     var kind = artifactKind(artifact);
     var title = String(prop(artifact, "Title", "title", "") || "");
@@ -410,16 +410,18 @@
     })[0] || null;
   }
 
-  function isUploadedHtmlArtifact(artifact) {
-    var head = libraryHead(artifact);
-    var resourceClass = String(prop(head, "ResourceClass", "resourceClass", "") || "").toLowerCase();
+  function isHtmlFileArtifact(artifact) {
     var kind = artifactKind(artifact);
     var mediaType = artifactMimeType(artifact).split(";", 1)[0].trim();
     var title = String(prop(artifact, "Title", "title", "") || "");
     var htmlName = /\.html?$/i.test(title);
-    return resourceClass === "immutable_original" &&
-      (kind === "attachment" || kind === "file") &&
+    return (kind === "attachment" || kind === "file") &&
       (mediaType === "text/html" || htmlName);
+  }
+
+  function isUploadedHtmlArtifact(artifact) {
+    var resourceClass = String(prop(libraryHead(artifact), "ResourceClass", "resourceClass", "") || "").toLowerCase();
+    return resourceClass === "immutable_original" && isHtmlFileArtifact(artifact);
   }
 
   function uploadedHtmlTargetPath(artifact) {

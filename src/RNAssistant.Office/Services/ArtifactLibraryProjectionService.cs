@@ -6,6 +6,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
+using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Contracts;
 
@@ -421,6 +422,8 @@ namespace RNAssistant.Office.Services
                 return MetadataText(artifact, "taskListId") ?? LineageRoot(artifact, kind, byId);
             if (string.Equals(kind, ChatArtifactKinds.Markdown, StringComparison.OrdinalIgnoreCase))
                 return MarkdownDocumentIdentity.LogicalId(artifact.Id) ?? MetadataText(artifact, "documentId", "logicalId") ?? LineageRoot(artifact, kind, byId);
+            if (DocumentArtifactStore.FileEncoding(artifact) != null)
+                return LineageRoot(artifact, kind, byId);
             return artifact == null ? string.Empty : artifact.Id;
         }
 
@@ -448,7 +451,8 @@ namespace RNAssistant.Office.Services
             var kind = NormalizeKind(artifact == null ? null : artifact.Kind);
             if (string.Equals(kind, ChatArtifactKinds.PlanDocument, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(kind, ChatArtifactKinds.Markdown, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(kind, ChatArtifactKinds.TaskList, StringComparison.OrdinalIgnoreCase))
+                string.Equals(kind, ChatArtifactKinds.TaskList, StringComparison.OrdinalIgnoreCase) ||
+                DocumentArtifactStore.FileEncoding(artifact) != null)
                 return ArtifactLibraryResourceClasses.VersionedDocument;
             if (string.Equals(kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase))
                 return ArtifactLibraryResourceClasses.VersionedAggregate;
@@ -469,7 +473,8 @@ namespace RNAssistant.Office.Services
                 return ArtifactLibraryGroups.GeneratedSnapshots;
             if (string.Equals(kind, ChatArtifactKinds.PlanDocument, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(kind, ChatArtifactKinds.Markdown, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase))
+                string.Equals(kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase) ||
+                DocumentArtifactStore.FileEncoding(artifact) != null)
                 return ArtifactLibraryGroups.AuthoredDocuments;
             if (string.Equals(kind, ChatArtifactKinds.TaskList, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(kind, ChatArtifactKinds.Compaction, StringComparison.OrdinalIgnoreCase) ||

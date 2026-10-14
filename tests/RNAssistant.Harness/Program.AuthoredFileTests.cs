@@ -6,6 +6,7 @@ using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
+using RNAssistant.Core.Tools;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
@@ -14,6 +15,94 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void AuthoredHtmlViewerReadsRetainedRevisions()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>
+            {
+                var session = NewSession(adapter);
+                session.DocumentAuthorityId = DocumentAuthorityId.Create().Id;
+                var store = new ChatStore(FixturePaths.Value);
+                var tools = executor.GetControllerTools().ToList();
+                var source = "<!doctype html><main>Пример🙂 before</main><script>window.run()</script>";
+                var created = executor.ExecuteManual(Command(AuthoredFileToolCatalog.CreateToolId,
+                    "name", "index.html", "content", source), tools, new AppSettings(), false, false, session);
+                AssertTrue(created.Success, "HTML creation succeeds: " + created.Message);
+                var original = session.Artifacts.Single(item => item.Title == "index.html");
+                AssertTrue(ChatArtifactResourceProvider.FindExactAttachment(session, original) == null,
+                    "created HTML has retained file bytes, not an uploaded attachment");
+                var viewer = new ArtifactViewerService(executor.ResourceGateway);
+                Action<ChatSession, ChatArtifact, string> assertSource = (owner, artifact, expected) =>
+                {
+                    using (var plane = new ResourceDataPlaneService(executor.ResourceGateway))
+                    {
+                        var text = new StringBuilder();
+                        var uri = ChatResourceUri.CreateArtifactRevisionUri(owner, artifact);
+                        string cursor = null;
+                        do
+                        {
+                            var page = viewer.ReadPage(owner, uri, cursor, plane);
+                            AssertEqual(ArtifactViewerKinds.Text, page.ViewerKind, "HTML is always inert source");
+                            AssertEqual(uri, page.ResourceUri, "viewer preserves the selected revision");
+                            AssertEqual(TextPatternEngine.Sha256(expected), page.ContentSha256, "viewer pins decoded text");
+                            AssertEqual(text.Length, page.Offset, "HTML pages are contiguous");
+                            AssertEqual(expected.Length, page.TotalCharacters, "HTML total is exact");
+                            text.Append(ReadViewerBatch(plane, page));
+                            plane.Close(owner.Id, "viewer", page.Data.LeaseId);
+                            cursor = page.NextCursor;
+                            if (cursor == null) AssertTrue(page.Complete && page.SourceComplete, "HTML source is complete");
+                            else AssertTrue(text.Length < expected.Length, "HTML continuation makes bounded progress");
+                        } while (cursor != null);
+                        AssertEqual(expected, text.ToString(), "viewer returns exact saved HTML");
+                    }
+                };
+                assertSource(session, original, source);
+                var patched = executor.ExecuteManual(Command(AuthoredFileToolCatalog.PatchToolId,
+                    "target", (string)JObject.Parse(created.DataJson)["target"],
+                    "patches", new[] { new { find = "before", replace = "after" } }),
+                    tools, new AppSettings(), false, false, session);
+                AssertTrue(patched.Success, "HTML patch succeeds: " + patched.Message);
+                var latest = session.Artifacts.Single(item => item.Title == "index.html" && item.Revision == 2);
+                var changed = source.Replace("before", "after");
+                assertSource(session, latest, changed);
+                assertSource(session, original, source);
+
+                var projection = ArtifactLibraryProjectionService.Project(session);
+                var head = projection.Heads.Single(item => item.Title == "index.html");
+                AssertEqual(latest.Id, head.ArtifactId, "one authored-file head selects the latest version");
+                AssertEqual(ArtifactLibraryResourceClasses.VersionedDocument, head.ResourceClass, "authored HTML is not an upload");
+                AssertEqual(ArtifactLibraryGroups.AuthoredDocuments, head.Group, "authored HTML belongs with documents");
+                AssertEqual("v2", head.VersionLabel, "authored file has a version label");
+                var history = ArtifactLibraryProjectionService.History(session, new ArtifactLibraryHistoryRequest
+                { ChatId = session.Id, ExpectedSessionRevision = session.Revision, HeadArtifactId = head.ArtifactId });
+                AssertEqual(2, history.Items.Count, "both exact HTML revisions remain accessible");
+                store.Save(session);
+                var restarted = store.Load(session.Id);
+                assertSource(restarted, restarted.Artifacts.Single(item => item.Id == original.Id), source);
+                assertSource(restarted, restarted.Artifacts.Single(item => item.Id == latest.Id), changed);
+
+                var uploadedText = source + new string('x', 33000);
+                var bytes = Encoding.Unicode.GetPreamble().Concat(Encoding.Unicode.GetBytes(uploadedText)).ToArray();
+                var ingestion = new ChatResourceIngestionService(new AttachmentStore(FixturePaths.Value), store.DocumentArtifacts);
+                var draft = ingestion.Stage(session, "copy.htm", "text/html", bytes);
+                var message = new ChatMessage { Role = "user", Attachments = ingestion.LoadDrafts(session, new[] { draft.Id }).ToList() };
+                session.Messages.Add(message);
+                ingestion.CommitAndLink(session, message, session.Messages.Count - 1);
+                var upload = session.Artifacts.Single(item => item.Title == "copy.htm");
+                var target = executor.ResourceGateway.Find(session, "copy.htm", "document").Items.Single().Target;
+                var copied = executor.ExecuteManual(Command(AuthoredFileToolCatalog.CopyToolId,
+                    "source", target), tools, new AppSettings(), false, false, session);
+                AssertTrue(copied.Success, "HTML upload copies as an authored file: " + copied.Message);
+                var copy = session.Artifacts.Single(item => item.Title == "copy.htm" && item.Kind == ChatArtifactKinds.File);
+                AssertEqual("text/html", copy.MimeType, "copied HTML retains its MIME type");
+                assertSource(session, copy, uploadedText);
+                AssertTrue(store.DocumentArtifacts.ExportBytes(session, ChatResourceUri.CreateArtifactRevision(session, copy))
+                    .SequenceEqual(bytes), "source viewing preserves UTF-16 file bytes");
+                AssertEqual(ArtifactLibraryResourceClasses.ImmutableOriginal,
+                    ArtifactLibraryProjectionService.Project(session).Heads.Single(item => item.ArtifactId == upload.Id).ResourceClass,
+                    "uploaded originals retain their separate viewer and import policy");
+            });
+        }
+
         private static void AuthoredFileLargeCopyPatch()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>

@@ -68,7 +68,7 @@ vm.runInContext(source, context, { filename: "app-html-workspace-artifacts.js" }
   assert.ok(index.includes("app-artifacts.js?v=artifact-library-lazy-20261002-1"), "artifact cards use the lazy library cache key");
   assert.ok(index.includes("app-artifact-viewer-actions.js?v=binary-chunks-20260906-1"),
     "artifact actions have the current artifact cache key");
-  assert.ok(index.includes("app-html-workspace-artifacts.js?v=artifact-library-lazy-20261002-1"),
+  assert.ok(index.includes("app-html-workspace-artifacts.js?v=authored-html-viewer-20261014-1"),
     "artifact detail has the current artifact cache key");
   assert.ok(index.includes("app-html-workspace-editor.js?v=html-memory-20261002-1"));
   assert.ok(index.includes("app-agent-activity.js?v=agent-continuity-20261002-1"));

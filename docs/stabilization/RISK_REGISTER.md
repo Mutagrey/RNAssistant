@@ -8,6 +8,19 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## Authored UTF-16 file blocks chat reopening — 2026-10-14
+
+**Open / Core ChatStore hydration.** Import a UTF-16 LE BOM HTML attachment,
+copy it with `common.file_copy`, then save and reopen the chat with `ChatStore.Load`.
+The authored file's exact Gateway/viewer pages and raw export work, but active
+artifact hydration calls `ChatBlobStore.ReadText` on its original UTF-16 bytes and
+throws `DecoderFallbackException` on `FF` in `ChatStore.Artifacts.cs:HydrateArtifact`.
+The retained bytes remain intact; ordinary chat reopening is blocked. Reproduced
+host-neutral while extending `authored file: HTML viewer and revision history`.
+Fix hydration through the existing encoding-aware authored-file owner and cover
+restart separately. The HTML upload/authored classification fix does not close
+this risk; its restart coverage is for files created in UTF-8.
+
 ## Cross-host chat creation from Excel — 2026-10-14
 
 **Contained UI / open Windows evidence.** Reported symptom: clicking PowerPoint

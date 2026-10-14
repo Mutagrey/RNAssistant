@@ -1105,6 +1105,13 @@ verified bounded hunk previews for large files instead of claiming a full-file
 visual diff. Export is the exact full-file path. This feature does not validate
 code semantics or extend live Office and CLI provider limits.
 
+Library classifies files with retained `fileEncoding` as versioned documents and
+groups their revision lineage under one current head. Authored `.html`/`.htm`
+files open as inert exact source through the same text viewer, using their retained
+file bytes without requiring a source-message attachment. They do not expose the
+uploaded-original import action. Uploaded HTML keeps its exact attachment checks
+and explicit workspace import; authored source is never executed in the main DOM.
+
 ### Collections, thumbnails and sequences
 
 Collection cards load media lazily near the viewport. Image thumbnails use a

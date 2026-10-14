@@ -23,6 +23,14 @@ The separate `chat-input-delivery.test.js` passes with the installed Chrome.
 This fixture gap is separate from Office host-chat creation and is not evidence
 of a production PowerPoint or COM failure.
 
+## Plan browser test cache-key assertion — 2026-10-14
+
+Owner: Web chat tests. `plan-document.test.js` stops at its existing expectation
+that `app-artifacts.js` uses `artifact-library-lazy-20261002-1`; `web/index.html`
+already ships `artifact-links-20261014-1-image-display-1-artifact-tree-20261013-1`.
+Align stale asset-key assertions with the shipped graph, then rerun this test.
+The authored-HTML viewer/import regression checks pass independently.
+
 ## Large-source mutation and provider parity — 2026-10-14
 
 Owner: Core `DocumentArtifactStore` and Office Resource Gateway. Document-owned

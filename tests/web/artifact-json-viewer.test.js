@@ -216,6 +216,33 @@ function render(item, actions) {
   assert.equal(imported[0].targetPath, "landing.html");
   console.log("PASS artifact JSON viewer: uploaded HTML stays escaped and inert until explicit import");
 
+  const authoredUri = "rna://chat/document/artifact/authored-html/revision/2";
+  const authoredHtml = {
+    id: "authored-html", Kind: "file", Title: "index.html", MimeType: "text/html",
+    ResourceUri: authoredUri, libraryHead: { ResourceClass: "versioned_document" }
+  };
+  const loaded = [];
+  const pendingHtml = render(authoredHtml, {
+    artifactViewerState() { return null; },
+    loadArtifactViewer(request) { loaded.push(request.resourceUri); }
+  });
+  assert.deepEqual(loaded, [authoredUri], "authored HTML loads its exact source automatically");
+  assert.equal(pendingHtml.querySelector(".artifact-inert-html-note"), null);
+  for (const mimeType of ["text/html", "text/plain"]) {
+    const authored = render(Object.assign({}, authoredHtml, { MimeType: mimeType }), {
+      artifactViewerState() {
+        return { status: "ready", resourceUri: authoredUri, viewerKind: "text", complete: true,
+          sourceComplete: true, fullText: hostileHtml,
+          pages: [{ text: hostileHtml, offset: 0, totalCharacters: hostileHtml.length }] };
+      }
+    });
+    assert.equal(context.RNAssistantHtmlWorkspaceArtifacts.isUploadedHtmlArtifact(authoredHtml), false);
+    assert.equal(authored.querySelector(".rn-text-viewer-content").textContent, hostileHtml);
+    assert.equal(authored.querySelector("script"), null, "authored HTML source never executes");
+    assert.equal(button(authored, "Импортировать в HTML workspace"), undefined);
+  }
+  console.log("PASS artifact detail: authored HTML loads inert source without upload actions");
+
   const oldHost = fullHost;
   context.RNAssistantHtmlWorkspaceArtifacts.renderDetail(full, {
     type: "artifact",
@@ -226,5 +253,5 @@ function render(item, actions) {
   assert.equal(/JSON\.stringify\(JSON\.parse\(content\)/.test(source), false);
   assert.equal(/createElement\("pre"\)[\s\S]{0,120}JSON\.parse\(content\)/.test(source), false);
   console.log("PASS artifact JSON viewer: re-render unmounts viewer and old pretty/pre path is removed");
-  console.log("OK 8/8");
+  console.log("OK 9/9");
 })().catch(error => { console.error(error); process.exitCode = 1; });
