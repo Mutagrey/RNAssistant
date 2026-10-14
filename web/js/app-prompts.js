@@ -24,12 +24,16 @@
     if (!library || library.type !== "rnassistant.promptLibrary" || library.contractVersion !== 1 ||
         !library.publication || library.publication.uri !== "rna://catalog/prompts" ||
         typeof library.publication.revision !== "string" || !library.publication.revision ||
-        !Array.isArray(library.items) || library.items.length !== promptDefinitions.length ||
+        !Array.isArray(library.items) || library.items.some(function (item) {
+          return !item || typeof item.key !== "string" || !item.key ||
+            library.items.filter(function (candidate) { return candidate && candidate.key === item.key; }).length !== 1 ||
+            !sameResource(item.resource,
+              { uri: "rna://catalog/prompts/" + item.key, revision: library.publication.revision }) ||
+            Object.keys(item).some(function (key) { return key !== "key" && key !== "resource"; });
+        }) ||
         promptDefinitions.some(function (def) {
           var matches = library.items.filter(function (item) { return item && item.key === def.key; });
-          return matches.length !== 1 || !sameResource(matches[0].resource,
-            { uri: "rna://catalog/prompts/" + def.key, revision: library.publication.revision }) ||
-            Object.keys(matches[0]).some(function (key) { return key !== "key" && key !== "resource"; });
+          return matches.length !== 1;
         })) throw new Error("Некорректный metadata-only contract библиотеки промптов.");
     return library;
   }

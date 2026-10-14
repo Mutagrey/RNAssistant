@@ -72,6 +72,16 @@ function fixture(loadPrompts = true) {
 }
 (async () => {
   {
+    const f = fixture();
+    const extended = metadata();
+    extended.items.push({ key: "systemPromptRole", resource: { uri: "rna://catalog/prompts/systemPromptRole", revision: "r1" } });
+    assert.doesNotThrow(() => f.context.renderPromptSettings(extended));
+    extended.items[8].resource.uri = "rna://catalog/prompts/systemPrompt";
+    f.context.renderPromptSettings(extended);
+    assert.match(f.errors.pop(), /metadata-only contract/);
+    console.log("PASS prompt library tolerates only well-formed extra metadata");
+  }
+  {
     const f = fixture(); assert.equal(f.calls.length, 0); await f.context.persistSettingsFromForm();
     assert.equal(f.saves()[0].payload.uploadLeaseId, null); assert.equal(f.saves()[0].payload.reviewAgentPrompts, undefined); assert.equal(f.saves()[0].payload.settings.AgentPromptSchemaVersion, 0);
     console.log("PASS settings metadata does not prefetch or clear unloaded prompts");
