@@ -139,7 +139,7 @@ namespace RNAssistant.Harness
                 {
                     AssertTrue(NativeToolRuntimeAdapter.Owns(tool.Id),
                         tool.Id + " is owned by native ToolRuntime");
-                    var binding = DirectToolBindingCatalog.Resolve(tool.Id);
+                    var binding = tool.Binding;
                     AssertTrue(binding != null && binding.HandlerId.StartsWith(
                             "vba.public.", StringComparison.Ordinal) &&
                             binding.HandlerId.IndexOf(".intent.",

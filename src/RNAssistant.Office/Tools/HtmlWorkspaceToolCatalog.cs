@@ -143,6 +143,7 @@ namespace RNAssistant.Office.Tools
                     false, true, new[] { "agent" }, riskLevel);
             return ControllerToolCatalogEntry.CreateTypedProjection(
                 new ToolDescriptor(id, description, schema), policy,
+                HtmlWorkspaceToolHandler.BindingFor(id),
                 name: name, scope: scope,
                 mutatesLocalState: mutation);
         }

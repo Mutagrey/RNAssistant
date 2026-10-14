@@ -70,6 +70,7 @@ namespace RNAssistant.Office.Tools
                 new ToolDescriptor(id, description, schema),
                 new ToolPolicy(effect, verification, true, false,
                     new[] { "agent" }, 3),
+                VbaToolHandler.BindingFor(id),
                 mutatesDocument: true);
         }
     }

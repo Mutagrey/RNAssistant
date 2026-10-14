@@ -224,7 +224,7 @@ namespace RNAssistant.Harness
                 AssertEqual(before, adapter.PowerPointSourceMaterializationCount, "retained source never reads Office");
                 string error;
                 AssertTrue(!ModelToolResultProjection.ValidateAcceptedCall(new ToolCall("old", "powerpoint.read_slides", "{}"), out error) &&
-                    DirectToolBindingCatalog.Resolve("powerpoint.read_slides") == null, "old reader has no replay or native alias");
+                    !NativeToolRuntimeAdapter.Owns("powerpoint.read_slides"), "old reader has no replay or native alias");
                 var removed = executor.ExecuteManual(Command("powerpoint.read_slides"), tools, new AppSettings(), false, false, session);
                 AssertEqual("unknown_tool", removed.ErrorCode, "old manual reader has no fallback");
             });

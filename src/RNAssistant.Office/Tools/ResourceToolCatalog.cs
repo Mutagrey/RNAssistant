@@ -16,13 +16,13 @@ namespace RNAssistant.Office.Tools
         internal static IEnumerable<ToolCatalogEntry> GetControllerTools()
         {
             yield return ControllerToolCatalogEntry.CreateReadProjection(
-                ResourceFindToolHandler.Descriptor, ResourceFindToolHandler.Policy, "resources_find");
+                ResourceFindToolHandler.Descriptor, ResourceFindToolHandler.Policy, ResourceFindToolHandler.Binding, "resources_find");
             yield return ControllerToolCatalogEntry.CreateReadProjection(
-                ResourceReadToolHandler.Descriptor, ResourceReadToolHandler.Policy, "resources_read");
+                ResourceReadToolHandler.Descriptor, ResourceReadToolHandler.Policy, ResourceReadToolHandler.Binding, "resources_read");
             yield return ControllerToolCatalogEntry.CreateReadProjection(
-                ResourceSearchToolHandler.Descriptor, ResourceSearchToolHandler.Policy, "resources_search");
+                ResourceSearchToolHandler.Descriptor, ResourceSearchToolHandler.Policy, ResourceSearchToolHandler.Binding, "resources_search");
             yield return ControllerToolCatalogEntry.CreateReadProjection(
-                ResourceOutlineToolHandler.Descriptor, ResourceOutlineToolHandler.Policy, "resources_outline");
+                ResourceOutlineToolHandler.Descriptor, ResourceOutlineToolHandler.Policy, ResourceOutlineToolHandler.Binding, "resources_outline");
             foreach (var tool in ResourceDefinitionToolHandler.Catalog()) yield return tool;
         }
     }

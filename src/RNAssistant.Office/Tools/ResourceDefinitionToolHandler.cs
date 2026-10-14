@@ -45,6 +45,7 @@ namespace RNAssistant.Office.Tools
                     "Create a derived resource from an exact mapping: virtual computes bounded rows on demand; materialized stores an immutable bounded CAS output. Provenance never grants activation authority.";
                 yield return ControllerToolCatalogEntry.CreateTypedProjection(new ToolDescriptor(id, action, Schema(id)),
                     new ToolPolicy(ToolEffect.Write, ToolVerification.Tool, false, false, new[] { "agent" }, 1),
+                    BindingFor(id),
                     name: id.Substring("common.".Length), scope: "session", mutatesLocalState: true);
             }
         }

@@ -37,6 +37,7 @@ namespace RNAssistant.Office.Tools
                 new ToolDescriptor(id, description, schema),
                 new ToolPolicy(ToolEffect.Read, ToolVerification.None,
                     false, true, new[] { "agent", "plan" }),
+                CapabilityToolHandler.BindingFor(id),
                 name: name, scope: "session");
         }
     }

@@ -325,7 +325,6 @@
     <Compile Include="Tools\OfficeToolCatalog.cs" />
     <Compile Include="Tools\ControllerToolCatalogEntry.cs" />
     <Compile Include="Tools\ToolDisplayCatalog.cs" />
-    <Compile Include="Tools\DirectToolBindingCatalog.cs" />
     <Compile Include="Tools\SkillAuthoringCatalog.cs" />
     <Compile Include="Tools\SkillAuthoringCatalog.Schemas.cs" />
     <Compile Include="Tools\SkillAuthoringContracts.cs" />

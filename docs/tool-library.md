@@ -168,6 +168,9 @@ VBA component storage and execution remain separate.
 Source-owned host and controller catalogs are captured in one immutable execution
 snapshot. Mutable `ToolCatalogEntry` values are catalog/package projections only;
 their exact policy/binding is required at capture and missing authority fails closed.
+Catalog owners supply bindings directly, without a shared tool-ID resolver. The
+native runtime checks the pinned handler ID and entry point against the selected
+handler before registration; scope and host remain pinned by the snapshot.
 Agent receives a finite core plus a compact exact-id catalog; optional
 schemas are admitted atomically at model-step boundaries. Chat cannot execute tools,
 Plan is restricted to its own read-only/Plan-local set, and Agent execution remains

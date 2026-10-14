@@ -34,6 +34,7 @@ namespace RNAssistant.Office.Tools
                 true, false, new[] { "agent" }, 1);
             return ControllerToolCatalogEntry.CreateTypedProjection(
                 new ToolDescriptor(id, description, schema), policy,
+                PromptSaveToolHandler.Binding,
                 name: name, scope: "global",
                 mutatesLocalState: true);
         }

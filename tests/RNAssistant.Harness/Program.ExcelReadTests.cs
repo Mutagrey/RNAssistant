@@ -87,7 +87,7 @@ namespace RNAssistant.Harness
                 AssertTrue(runtime.Describe(new ToolCall("inspect", ExcelReadToolIds.Inspect, "{\"kind\":\"sheets\"}")) != null,
                     "composed inspect handler is described");
                 AssertTrue(!tools.Any(tool => tool.Id == "excel.read_range") &&
-                    DirectToolBindingCatalog.Resolve("excel.read_range") == null &&
+                    !NativeToolRuntimeAdapter.Owns("excel.read_range") &&
                     runtime.Describe(new ToolCall("range", "excel.read_range", "{}")) == null,
                     "static ownership does not create a handler absent from the captured catalog");
 

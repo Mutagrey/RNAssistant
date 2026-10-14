@@ -982,8 +982,8 @@ namespace RNAssistant.Harness
                             .ToUpperInvariant(), "{}")) == null,
                     "tool authoring has no case alias");
                 AssertEqual("tools.upsert.intent.v1",
-                    DirectToolBindingCatalog.Resolve(
-                        ToolAuthoringCatalog.UpsertToolId).HandlerId,
+                    executor.GetControllerTools().Single(tool =>
+                        tool.Id == ToolAuthoringCatalog.UpsertToolId).Binding.HandlerId,
                     "tool upsert binding");
 
                 var stringifiedComponents = ExecuteToolAuthoringNative(
@@ -1331,8 +1331,8 @@ namespace RNAssistant.Harness
                         "{}")) == null,
                     "skill authoring has no case alias");
                 AssertEqual("skills.core-upsert.intent.v1",
-                    DirectToolBindingCatalog.Resolve(
-                        SkillAuthoringCatalog.UpsertToolId).HandlerId,
+                    executor.GetControllerTools().Single(tool =>
+                        tool.Id == SkillAuthoringCatalog.UpsertToolId).Binding.HandlerId,
                     "skill upsert binding");
 
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();

@@ -627,13 +627,13 @@ namespace RNAssistant.Harness
                     "OfficeToolCatalog.cs")) &&
                 File.Exists(Path.Combine(officeRoot, "Tools",
                     "ControllerToolCatalogEntry.cs")) &&
-                File.Exists(Path.Combine(officeRoot, "Tools",
+                !File.Exists(Path.Combine(officeRoot, "Tools",
                     "DirectToolBindingCatalog.cs")) &&
                 File.Exists(Path.Combine(officeRoot, "Contracts",
                     "BridgeDtos.Tools.cs")) &&
                 File.Exists(Path.Combine(officeRoot, "Contracts",
                     "ToolRunResult.cs")),
-                "direct catalog, binding and typed Tool Library contracts must be explicit sources");
+                "source-owned catalogs and typed Tool Library contracts need no global binding resolver");
             AssertTrue(
                 typeof(RNAssistant.Office.IOfficeApplicationAdapter).GetMethod(
                     "GetBuiltInTools") == null &&

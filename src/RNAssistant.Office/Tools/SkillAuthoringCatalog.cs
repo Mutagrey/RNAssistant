@@ -79,6 +79,7 @@ namespace RNAssistant.Office.Tools
                 new ToolPolicy(ToolEffect.Write,
                     ToolVerification.Tool, true, false,
                     new[] { "agent" }, 1),
+                SkillAuthoringToolHandler.BindingFor(id),
                 name: name, scope: "global",
                 mutatesLocalState: true);
         }

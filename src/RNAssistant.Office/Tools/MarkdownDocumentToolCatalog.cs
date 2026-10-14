@@ -39,6 +39,7 @@ namespace RNAssistant.Office.Tools
                         ? "Create or revise a standalone document-owned Markdown artifact (documentation, report or specification) only when the user requests a document. Omit target to create; supply an exact discovered target to edit. Multiple documents coexist across chats. Ordinary Markdown answers remain messages. Read an existing document before replacing its complete body; stale targets are rejected."
                         : "On explicit user request, restore a historical Markdown version as a new causal revision. Other chats and historical messages retain exact references.", schema.ToString(Formatting.None)),
                     new ToolPolicy(ToolEffect.Write, ToolVerification.Tool, false, false, new[] { "agent" }, 0),
+                    BindingFor(id),
                     name: save ? "markdown_save" : "markdown_restore", scope: "session", mutatesLocalState: true);
             }
         }

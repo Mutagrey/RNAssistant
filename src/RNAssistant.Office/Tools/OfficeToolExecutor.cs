@@ -164,7 +164,7 @@ namespace RNAssistant.Office.Tools
                 ResourceToolCatalog.GetControllerTools());
             RegisterControllerTools(controllerTools, new[] {
                 ControllerToolCatalogEntry.CreateReadProjection(JsToolHandler.Descriptor,
-                    JsToolHandler.Policy, "JavaScript computation") });
+                    JsToolHandler.Policy, JsToolHandler.Binding, "JavaScript computation") });
             RegisterControllerTools(controllerTools,
                 HtmlWorkspaceToolCatalog.GetTools(_htmlWorkspaceService));
             RegisterControllerTools(controllerTools,

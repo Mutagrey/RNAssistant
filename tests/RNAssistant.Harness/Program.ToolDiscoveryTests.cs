@@ -842,6 +842,29 @@ namespace RNAssistant.Harness
                 AssertTrue(described != null && described.Matches(snapshot.Describe(ExcelReadToolIds.Inspect)),
                     "native runtime registers the exact captured authority");
 
+                var backendCalls = adapter.TotalBackendCallCount;
+                foreach (var registered in snapshot.Registrations.Where(item => NativeToolRuntimeAdapter.Owns(item.Descriptor.Id)))
+                {
+                    foreach (var forgedBinding in new[]
+                    {
+                        new ToolBinding(registered.Binding.HandlerId + ".forged", registered.Binding.EntryPoint,
+                            registered.Binding.Scope, registered.Binding.Host),
+                        new ToolBinding(registered.Binding.HandlerId, "forged-entry-point",
+                            registered.Binding.Scope, registered.Binding.Host)
+                    })
+                    {
+                        var forged = new ToolPackSnapshot("forged-native", "agent", adapter.HostName,
+                            new[] { ToolPackSnapshot.Capture(registered.Descriptor, registered.Policy,
+                                forgedBinding, registered.PackageMetadata) });
+                        var rejected = RuntimeThrows<InvalidOperationException>(() => executor.CreateNativeRuntime(
+                            session, forged, new AppSettings { EnableAgentJavaScript = true }, "agent", false));
+                        AssertEqual("Pinned native binding does not match its handler: " + registered.Descriptor.Id,
+                            rejected.Message, "native factory rejects an altered handler identity or entry point");
+                    }
+                }
+                AssertEqual(backendCalls, adapter.TotalBackendCallCount,
+                    "forged native bindings never reach a backend");
+
                 var originalPackRevision = snapshot.Revision;
                 var definition = catalog.Single(tool => tool.Id == ExcelReadToolIds.Inspect);
                 definition.Description += " changed after capture";

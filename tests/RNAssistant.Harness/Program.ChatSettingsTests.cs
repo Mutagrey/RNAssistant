@@ -55,7 +55,7 @@ namespace RNAssistant.Harness
                 loads = 0;
                 var retired = new ToolCall("retired", "common.prompts_read", "{\"includeDefaults\":true}");
                 AssertTrue(tools.All(item => item.Id != retired.Name) && native.Describe(retired) == null &&
-                    DirectToolBindingCatalog.Resolve(retired.Name) == null, "old prompt reader has no catalog entry, binding or alias");
+                    !NativeToolRuntimeAdapter.Owns(retired.Name), "old prompt reader has no catalog entry, binding or alias");
                 string error;
                 AssertTrue(!ModelToolResultProjection.ValidateAcceptedCall(retired, out error), "old direct-settings reads cannot replay as current model evidence");
                 var found = ExecutePromptNative(native, ResourceToolCatalog.FindToolId, new JObject { ["scope"] = "catalogs", ["query"] = "systemPrompt" });

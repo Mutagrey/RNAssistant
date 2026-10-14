@@ -83,57 +83,60 @@ namespace RNAssistant.Office.Runtime
                      JsToolHandler.Owns(registration)))
                     continue;
                 var packageRegistration = VbaPackageToolHandler.Owns(registration) || JsToolHandler.Owns(registration);
-                var binding = packageRegistration
-                    ? registration.Binding
-                    : DirectToolBindingCatalog.Resolve(
-                        registration.Descriptor.Id);
-                if (binding == null ||
-                    !string.Equals(binding.HandlerId, registration.Binding.HandlerId, StringComparison.Ordinal) ||
-                    !string.Equals(binding.EntryPoint, registration.Binding.EntryPoint, StringComparison.Ordinal))
-                    throw new InvalidOperationException("Pinned native binding does not match its handler: " + registration.Descriptor.Id);
+                ToolBinding binding;
                 IToolHandler handler;
                 if (registration.Descriptor.Id == SkillLoadToolHandler.ToolId)
                 {
+                    binding = SkillLoadToolHandler.Binding;
                     handler = new SkillLoadToolHandler(session, () => new SkillCatalogSnapshot(skillCatalog), () => snapshot, settings);
                 }
                 else if (string.Equals(registration.Descriptor.Id, ResourceToolCatalog.FindToolId, StringComparison.Ordinal))
                 {
+                    binding = ResourceFindToolHandler.Binding;
                     handler = new ResourceFindToolHandler(gateway, session);
                 }
                 else if (string.Equals(registration.Descriptor.Id, ResourceToolCatalog.ReadToolId, StringComparison.Ordinal))
                 {
+                    binding = ResourceReadToolHandler.Binding;
                     handler = new ResourceReadToolHandler(gateway, session, CaptureResourceReadAttachments);
                 }
                 else if (string.Equals(registration.Descriptor.Id, ResourceToolCatalog.SearchToolId, StringComparison.Ordinal))
                 {
+                    binding = ResourceSearchToolHandler.Binding;
                     handler = new ResourceSearchToolHandler(gateway, session);
                 }
                 else if (string.Equals(registration.Descriptor.Id, ResourceToolCatalog.OutlineToolId, StringComparison.Ordinal))
                 {
+                    binding = ResourceOutlineToolHandler.Binding;
                     handler = new ResourceOutlineToolHandler(gateway, session);
                 }
                 else if (string.Equals(registration.Descriptor.Id, JsToolHandler.RunId, StringComparison.Ordinal))
                 {
+                    binding = JsToolHandler.Binding;
                     handler = new JsToolHandler(gateway, session);
                 }
                 else if (JsToolHandler.Owns(registration))
                 {
+                    binding = registration.Binding;
                     handler = new JsToolHandler(gateway, session, registration.PackageMetadata?.Source);
                 }
                 else if (ExcelReadToolIds.Owns(registration.Descriptor.Id))
                 {
                     if (excelReads == null || hostRuntime == null)
                         throw new InvalidOperationException("Excel read handler dependencies are unavailable.");
+                    binding = ExcelReadToolHandler.BindingFor(registration.Descriptor.Id);
                     handler = new ExcelReadToolHandler(registration.Descriptor.Id, excelReads, hostRuntime, session);
                 }
                 else if (ResourceDefinitionToolHandler.Owns(registration.Descriptor.Id))
                 {
+                    binding = ResourceDefinitionToolHandler.BindingFor(registration.Descriptor.Id);
                     handler = new ResourceDefinitionToolHandler(gateway, session, registration.Descriptor.Id);
                 }
                 else if (ExcelFindReplaceToolIds.Owns(registration.Descriptor.Id))
                 {
                     if (excelFindReplace == null || hostRuntime == null)
                         throw new InvalidOperationException("Excel find/replace handler dependencies are unavailable.");
+                    binding = ExcelFindReplaceToolHandler.BindingFor(registration.Descriptor.Id);
                     handler = new ExcelFindReplaceToolHandler(
                         registration.Descriptor.Id, excelFindReplace, hostRuntime, session, gateway);
                 }
@@ -142,6 +145,7 @@ namespace RNAssistant.Office.Runtime
                     if (excelSheets == null || hostRuntime == null)
                         throw new InvalidOperationException(
                             "Excel sheet handler dependencies are unavailable.");
+                    binding = ExcelSheetToolHandler.BindingFor(registration.Descriptor.Id);
                     handler = new ExcelSheetToolHandler(
                         registration.Descriptor.Id, excelSheets, hostRuntime, session);
                 }
@@ -150,6 +154,7 @@ namespace RNAssistant.Office.Runtime
                     if (excelRangeMutations == null || hostRuntime == null)
                         throw new InvalidOperationException(
                             "Excel range mutation handler dependencies are unavailable.");
+                    binding = ExcelRangeMutationToolHandler.BindingFor(registration.Descriptor.Id);
                     handler = new ExcelRangeMutationToolHandler(
                         registration.Descriptor.Id, excelRangeMutations,
                         hostRuntime, session);
@@ -159,6 +164,7 @@ namespace RNAssistant.Office.Runtime
                     if (excelTables == null || hostRuntime == null)
                         throw new InvalidOperationException(
                             "Excel table handler dependencies are unavailable.");
+                    binding = ExcelTableToolHandler.Binding;
                     handler = new ExcelTableToolHandler(
                         excelTables, hostRuntime, session);
                 }
@@ -167,6 +173,7 @@ namespace RNAssistant.Office.Runtime
                     if (excelCharts == null || hostRuntime == null)
                         throw new InvalidOperationException(
                             "Excel chart handler dependencies are unavailable.");
+                    binding = ExcelChartToolHandler.BindingFor(registration.Descriptor.Id);
                     handler = new ExcelChartToolHandler(
                         registration.Descriptor.Id, excelCharts,
                         hostRuntime, session);
@@ -176,6 +183,7 @@ namespace RNAssistant.Office.Runtime
                     if (wordTools == null || hostRuntime == null)
                         throw new InvalidOperationException(
                             "Word handler dependencies are unavailable.");
+                    binding = WordToolHandler.BindingFor(registration.Descriptor.Id);
                     handler = new WordToolHandler(
                         registration.Descriptor.Id, wordTools,
                         hostRuntime, session, gateway);
@@ -185,6 +193,7 @@ namespace RNAssistant.Office.Runtime
                     if (powerPointTools == null || hostRuntime == null)
                         throw new InvalidOperationException(
                             "PowerPoint handler dependencies are unavailable.");
+                    binding = PowerPointToolHandler.BindingFor(registration.Descriptor.Id);
                     handler = new PowerPointToolHandler(
                         registration.Descriptor.Id, powerPointTools,
                         hostRuntime, session, gateway);
@@ -194,6 +203,7 @@ namespace RNAssistant.Office.Runtime
                     if (outlookTools == null || hostRuntime == null)
                         throw new InvalidOperationException(
                             "Outlook handler dependencies are unavailable.");
+                    binding = OutlookToolHandler.BindingFor(registration.Descriptor.Id);
                     handler = new OutlookToolHandler(
                         registration.Descriptor.Id, outlookTools,
                         hostRuntime, session, gateway);
@@ -203,6 +213,7 @@ namespace RNAssistant.Office.Runtime
                     if (vbaTools == null || hostRuntime == null)
                         throw new InvalidOperationException(
                             "VBA handler dependencies are unavailable.");
+                    binding = VbaToolHandler.BindingFor(registration.Descriptor.Id);
                     handler = new VbaToolHandler(
                         registration.Descriptor.Id, vbaTools,
                         hostRuntime, session);
@@ -211,21 +222,25 @@ namespace RNAssistant.Office.Runtime
                     UserQuestionToolCatalog.AskToolId,
                     StringComparison.Ordinal))
                 {
+                    binding = UserQuestionToolHandler.Binding;
                     handler = new UserQuestionToolHandler();
                 }
                 else if (MarkdownDocumentToolCatalog.Owns(registration.Descriptor.Id))
                 {
+                    binding = MarkdownDocumentToolCatalog.BindingFor(registration.Descriptor.Id);
                     handler = new MarkdownDocumentToolHandler(markdownDocuments, session);
                 }
                 else if (PlanDocumentToolCatalog.Owns(
                     registration.Descriptor.Id))
                 {
+                    binding = PlanDocumentToolHandler.BindingFor(registration.Descriptor.Id);
                     handler = new OfficePlanDocumentToolHandler(
                         registration.Descriptor.Id, session);
                 }
                 else if (TaskListToolCatalog.Owns(
                     registration.Descriptor.Id))
                 {
+                    binding = TaskListToolHandler.BindingFor(registration.Descriptor.Id);
                     handler = new DocumentTaskListToolHandler(
                         registration.Descriptor.Id, session);
                 }
@@ -235,6 +250,7 @@ namespace RNAssistant.Office.Runtime
                     if (htmlWorkspaceTools == null)
                         throw new InvalidOperationException(
                             "HTML workspace handler dependencies are unavailable.");
+                    binding = HtmlWorkspaceToolHandler.BindingFor(registration.Descriptor.Id);
                     handler = new HtmlWorkspaceToolHandler(
                         registration.Descriptor.Id, session,
                         htmlWorkspaceTools);
@@ -245,6 +261,7 @@ namespace RNAssistant.Office.Runtime
                     if (capabilityTools == null)
                         throw new InvalidOperationException(
                             "Capability handler dependencies are unavailable.");
+                    binding = CapabilityToolHandler.BindingFor(registration.Descriptor.Id);
                     handler = new CapabilityToolHandler(
                         registration.Descriptor.Id, capabilityTools,
                         discoveryCatalog, skillCatalog, session, manualRun);
@@ -255,6 +272,7 @@ namespace RNAssistant.Office.Runtime
                     if (promptTools == null)
                         throw new InvalidOperationException(
                             "Prompt handler dependencies are unavailable.");
+                    binding = PromptSaveToolHandler.Binding;
                     handler = new PromptSaveToolHandler(promptTools);
                 }
                 else if (ToolAuthoringCatalog.Owns(
@@ -263,6 +281,7 @@ namespace RNAssistant.Office.Runtime
                     if (toolAuthoring == null)
                         throw new InvalidOperationException(
                             "Tool authoring handler dependencies are unavailable.");
+                    binding = ToolAuthoringMutationToolHandler.BindingFor(registration.Descriptor.Id);
                     handler = new ToolAuthoringMutationToolHandler(
                         registration.Descriptor.Id, toolAuthoring);
                 }
@@ -272,6 +291,7 @@ namespace RNAssistant.Office.Runtime
                     if (skillAuthoring == null)
                         throw new InvalidOperationException(
                             "Skill authoring handler dependencies are unavailable.");
+                    binding = SkillAuthoringToolHandler.BindingFor(registration.Descriptor.Id);
                     handler = new SkillAuthoringToolHandler(
                         registration.Descriptor.Id, skillAuthoring);
                 }
@@ -280,6 +300,7 @@ namespace RNAssistant.Office.Runtime
                     if (vbaTools == null || hostRuntime == null)
                         throw new InvalidOperationException(
                             "VBA package handler dependencies are unavailable.");
+                    binding = registration.Binding;
                     handler = new VbaPackageToolHandler(
                         ToolPackageSource.Capture(registration), vbaTools,
                         hostRuntime, session, dryRun);
@@ -288,8 +309,13 @@ namespace RNAssistant.Office.Runtime
                 {
                     if (excelWrites == null || hostRuntime == null)
                         throw new InvalidOperationException("Excel write handler dependencies are unavailable.");
+                    binding = ExcelWriteToolHandler.Binding;
                     handler = new ExcelWriteToolHandler(excelWrites, hostRuntime, session);
                 }
+                if (binding == null ||
+                    !string.Equals(binding.HandlerId, registration.Binding.HandlerId, StringComparison.Ordinal) ||
+                    !string.Equals(binding.EntryPoint, registration.Binding.EntryPoint, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Pinned native binding does not match its handler: " + registration.Descriptor.Id);
                 registry.Register(registration, handler);
                 _ownedToolIds.Add(registration.Descriptor.Id);
             }

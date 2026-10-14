@@ -233,7 +233,7 @@ namespace RNAssistant.Harness
                 };
                 var retired = new ToolCall("retired", "common.tools_definition_read", "{\"id\":\"excel.resource_source\"}");
                 AssertTrue(tools.All(item => item.Id != retired.Name) && runtime.Describe(retired) == null &&
-                    DirectToolBindingCatalog.Resolve(retired.Name) == null, "retired definition reader has no catalog, handler or alias");
+                    !NativeToolRuntimeAdapter.Owns(retired.Name), "retired definition reader has no catalog, handler or alias");
                 string error;
                 AssertTrue(!ModelToolResultProjection.ValidateAcceptedCall(retired, out error), "old untracked definition reads cannot replay as current model context");
 

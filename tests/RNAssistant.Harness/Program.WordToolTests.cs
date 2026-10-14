@@ -142,7 +142,7 @@ namespace RNAssistant.Harness
                     Reference = evidence.Resource, Representation = "text", Cursor = old.NextCursor, MaxChars = 32000 }).Result;
                 AssertEqual(source.Substring(32000, 32000), continuation.Text, "historical continuation stays pinned");
                 AssertEqual(count, adapter.WordTextMaterializationCount, "historical pages perform no Word reads");
-                AssertTrue(!tools.Any(tool => tool.Id == "word.read_text") && DirectToolBindingCatalog.Resolve("word.read_text") == null,
+                AssertTrue(!tools.Any(tool => tool.Id == "word.read_text") && !NativeToolRuntimeAdapter.Owns("word.read_text"),
                     "legacy catalog and native binding are gone");
                 string error;
                 AssertTrue(!ModelToolResultProjection.ValidateAcceptedCall(new ToolCall("old", "word.read_text", "{}"), out error),

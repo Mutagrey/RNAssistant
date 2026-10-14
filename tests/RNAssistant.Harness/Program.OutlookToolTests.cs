@@ -380,7 +380,7 @@ namespace RNAssistant.Harness
                 AssertEqual(source.Substring(32000, 32000), next.Text, "retained continuation remains exact");
                 AssertEqual(count, adapter.OutlookBodyMaterializationCount, "historical mail performs no body reads");
                 string error;
-                AssertTrue(!tools.Any(tool => tool.Id == "outlook.read_mail") && DirectToolBindingCatalog.Resolve("outlook.read_mail") == null &&
+                AssertTrue(!tools.Any(tool => tool.Id == "outlook.read_mail") && !NativeToolRuntimeAdapter.Owns("outlook.read_mail") &&
                     !ModelToolResultProjection.ValidateAcceptedCall(new ToolCall("old", "outlook.read_mail", "{}"), out error),
                     "old reader has no catalog, binding or replay alias");
                 var removed = executor.ExecuteManual(Command("outlook.read_mail"), tools, new AppSettings(), false, false, session);
@@ -464,7 +464,7 @@ namespace RNAssistant.Harness
                     tools, new AppSettings(), false, false, session);
                 AssertTrue(bound.Success, "HTML binds the same resource records");
                 string error;
-                AssertTrue(!tools.Any(tool => tool.Id == "outlook.collect_mail") && DirectToolBindingCatalog.Resolve("outlook.collect_mail") == null &&
+                AssertTrue(!tools.Any(tool => tool.Id == "outlook.collect_mail") && !NativeToolRuntimeAdapter.Owns("outlook.collect_mail") &&
                     !ModelToolResultProjection.ValidateAcceptedCall(new ToolCall("old-collection", "outlook.collect_mail", "{}"), out error),
                     "removed collection has no catalog, binding or replay alias");
                 AssertEqual("unknown_tool", executor.ExecuteManual(Command("outlook.collect_mail"), tools,
