@@ -129,6 +129,26 @@ namespace RNAssistant.Office.Services
             return _htmlResources.ResolveMemberPath(session, artifact, memberPath, memberType);
         }
 
+        internal ResourceDescriptor ResolveMessageAttachmentTarget(ChatSession session, string target)
+        {
+            var binding = ChatResourceReferenceService.ResolveMessageAttachment(session, target);
+            // Resolve only this original through its publication and removal guards.
+            // A local message is an address, never a substitute for retained metadata.
+            var projected = ProjectSession(session, binding.Reference.Uri);
+            var address = ParseAddress(projected, binding.Reference.Uri);
+            var artifact = FindExactArtifact(projected, address.ArtifactId);
+            EnsureRevision(artifact, address.Revision);
+            EnsureNotRemoved(projected, artifact, binding.Reference.Uri);
+            var original = FindExactAttachment(projected, artifact);
+            var expected = binding.Attachment;
+            if (original == null || original.Id != expected.Id || original.FileName != expected.FileName ||
+                original.CreatedUtc != expected.CreatedUtc || original.ContentSha256 != expected.ContentSha256 ||
+                original.ContentByteLength != expected.ContentByteLength)
+                throw new ResourceRequestException("The selected attachment metadata does not match its committed original.",
+                    "resource_attachment_binding_invalid", false);
+            return Describe(projected, artifact, false);
+        }
+
         internal ResourceDescriptor ResolveHtmlTarget(ChatSession session, string target)
         {
             if (target == ChatHtmlResourceCatalog.CurrentWorkspaceTarget ||

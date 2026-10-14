@@ -40,6 +40,15 @@ namespace RNAssistant.Office.Services
             if (artifacts.Count == 0 && unavailable == 0 || maxTokens <= 0) return string.Empty;
 
             var preferredIds = new List<string>();
+            var messageTargets = ChatResourceReferenceService.MessageAttachmentTargets(session);
+            var currentInput = (session.Messages ?? new List<ChatMessage>()).LastOrDefault(message =>
+                message != null && !message.ProtocolMessage && string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase));
+            foreach (var reference in currentInput?.ResourceRefs ?? new List<ResourceRef>())
+            {
+                string id;
+                if (reference != null && messageTargets.ContainsKey(reference.Uri) &&
+                    ChatResourceUri.TryGetCurrentArtifactId(session, reference, out id)) AddPreferred(preferredIds, id);
+            }
             AddPreferred(preferredIds, session.ActiveHtmlArtifactId);
             AddPreferred(preferredIds, session.ActiveTaskListArtifactId);
             AddPreferred(preferredIds, session.ActivePlanDocumentArtifactId);
@@ -75,7 +84,9 @@ namespace RNAssistant.Office.Services
                     artifact.Id == session.ActiveContextCheckpointId ? "activeContextCheckpoint" : null;
                 // A semantic target is addressable text, not a truncatable label.
                 // JSON quoting preserves embedded whitespace without inventing a target.
-                var target = role == "activeHtml" &&
+                string messageTarget;
+                var target = messageTargets.TryGetValue(ChatResourceUri.CreateArtifactRevisionUri(session, artifact), out messageTarget)
+                    ? messageTarget : role == "activeHtml" &&
                     string.Equals(artifact.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase)
                     ? ChatHtmlResourceCatalog.CurrentWorkspaceTarget
                     : ResourceGatewayService.IntentTarget(descriptor);
@@ -116,7 +127,7 @@ namespace RNAssistant.Office.Services
             builder.AppendLine("showing=" + rows.Count + "/" + total +
                 (total > rows.Count ? "; additional artifacts omitted from this prompt" : string.Empty));
             builder.AppendLine("Snapshots may be historical; roles/descriptions do not prove currentness. Use common.resources_find for current/shared or omitted resources, then common.resources_read with the exact target and read representation before content claims.");
-            if (unavailable > 0) builder.AppendLine("unavailable=" + unavailable + "; retained references lack usable metadata. Do not infer titles/content or repeatedly retry discovery; ask the user to restore the resource metadata or unlink it in Resources.");
+            if (unavailable > 0) builder.AppendLine("unavailable=" + unavailable + "; some retained references lack usable metadata. Available message attachment targets can still be read directly. Do not infer unavailable titles/content or repeatedly retry discovery; restore or unlink only the unavailable resources.");
             foreach (var row in rows) builder.AppendLine(row);
             return builder.ToString().TrimEnd();
         }

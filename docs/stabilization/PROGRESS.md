@@ -32,6 +32,22 @@ No Office/VSTO validation or real-model run was performed. Attribution
 of the remaining SceneBuilder failures and autonomous Qwen source discovery stays
 open in [the incident record](RISK_REGISTER.md#vba-patching-and-completion-photos--2026-10-14).
 
+## Message attachments resolve independently of catalog completeness — 2026-10-14
+
+Owners: Office attachment resource binding and Gateway intent resolution. Committed
+user attachments expose message-scoped semantic targets derived from durable
+message metadata and exact resource links. Read/search/outline resolve only the
+selected original; unrelated unavailable metadata no longer causes
+`resource_scope_incomplete` for that target. Same-name uploads stay distinct after
+compaction/restart. Ownership, publication, ambiguity, removal and source-integrity
+guards remain in place; global discovery still reports incomplete coverage.
+
+Nine focused host-neutral checks pass: the native attachment path and refusal
+cases, >10 MiB initial prompt/navigation, attachment publication ordering, bounded
+prompt indexes and generic partial-discovery guards. The photographed incident's
+exact unavailable record remains unconfirmed. No Windows/Office or live-model
+qualification was performed.
+
 ## Large text attachments no longer block the initial request — 2026-10-14
 
 Owner: Core model-context compiler. Current text/code and extracted Office uploads

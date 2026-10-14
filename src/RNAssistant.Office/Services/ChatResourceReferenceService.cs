@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using Newtonsoft.Json;
@@ -12,6 +13,87 @@ namespace RNAssistant.Office.Services
 {
     internal static class ChatResourceReferenceService
     {
+        internal const string MessageAttachmentPrefix = "message attachment: ";
+
+        // Derived addresses of immutable user inputs, not a second registry. The
+        // message timestamp fixes the source message; a later upload cannot rebind it.
+        internal static string MessageAttachmentTarget(ChatMessage message, ChatAttachment attachment)
+        {
+            return MessageAttachmentPrefix + (attachment.FileName ?? string.Empty).Trim() +
+                " [sent " + message.CreatedUtc.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture) +
+                "; uploaded " + attachment.CreatedUtc.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture) + "]";
+        }
+
+        internal sealed class MessageAttachmentBinding
+        {
+            internal ChatMessage Message;
+            internal ChatAttachment Attachment;
+            internal string Target;
+            internal ResourceRef Reference;
+        }
+
+        private static IEnumerable<MessageAttachmentBinding> MessageAttachments(ChatSession session)
+        {
+            foreach (var message in (session?.Messages ?? new List<ChatMessage>()).AsEnumerable().Reverse())
+            {
+                if (message == null || message.ProtocolMessage || !string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase)) continue;
+                foreach (var attachment in message.Attachments ?? new List<ChatAttachment>())
+                    if (attachment != null)
+                        yield return new MessageAttachmentBinding { Message = message, Attachment = attachment,
+                            Target = MessageAttachmentTarget(message, attachment) };
+            }
+        }
+
+        internal static Dictionary<string, string> MessageAttachmentTargets(ChatSession session)
+        {
+            var targets = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var group in MessageAttachments(session).GroupBy(item => item.Target, StringComparer.Ordinal))
+            {
+                if (group.Count() != 1) continue;
+                var binding = group.Single();
+                try { BindMessageAttachment(session, binding); }
+                catch (ResourceRequestException) { continue; }
+                if (!targets.ContainsKey(binding.Reference.Uri)) targets.Add(binding.Reference.Uri, binding.Target);
+            }
+            return targets;
+        }
+
+        internal static MessageAttachmentBinding ResolveMessageAttachment(ChatSession session, string target)
+        {
+            var matches = MessageAttachments(session).Where(item => item.Target == target).Take(2).ToArray();
+            if (matches.Length == 0)
+                throw new ResourceRequestException("The selected attachment is not linked to a user message in this chat. Use a supplied message attachment target.",
+                    "resource_attachment_not_found", false);
+            if (matches.Length != 1)
+                throw new ResourceRequestException("Multiple message attachments have this target. Select an unambiguous attachment; no original was chosen.",
+                    "resource_target_ambiguous", false);
+            BindMessageAttachment(session, matches[0]);
+            return matches[0];
+        }
+
+        private static void BindMessageAttachment(ChatSession session, MessageAttachmentBinding binding)
+        {
+            var message = binding.Message;
+            var attachment = binding.Attachment;
+            if (string.IsNullOrWhiteSpace(session?.DocumentAuthorityId) || string.IsNullOrWhiteSpace(message.Id) ||
+                session.Messages.Count(item => item != null && item.Id == message.Id) != 1 ||
+                string.IsNullOrWhiteSpace(attachment.Id) || !string.IsNullOrWhiteSpace(attachment.DraftChatId) ||
+                string.IsNullOrWhiteSpace(attachment.ContentSha256) || !attachment.ContentByteLength.HasValue ||
+                message.Attachments.Count(item => item != null && item.Id == attachment.Id) != 1)
+                throw new ResourceRequestException("The selected message attachment has no unambiguous committed original.",
+                    "resource_attachment_binding_invalid", false);
+            var references = (message.ResourceRefs ?? new List<ResourceRef>()).Where(reference => {
+                string owner, id; int revision;
+                return reference?.IsExact == true && ChatResourceUri.TryParseArtifactRevision(reference, out owner, out id, out revision) &&
+                    owner == session.DocumentAuthorityId && id == "attachment_" + attachment.Id && revision == 1 &&
+                    reference.Revision == "1" && reference.Uri == ChatResourceUri.ArtifactSnapshot(reference).Uri;
+            }).GroupBy(reference => reference.Uri, StringComparer.Ordinal).Select(group => group.First()).ToArray();
+            if (references.Length != 1)
+                throw new ResourceRequestException("The selected message attachment is missing its exact document resource link.",
+                    "resource_attachment_binding_invalid", false);
+            binding.Reference = references[0].Copy();
+        }
+
         public static void LinkMessageResources(ChatSession session, int startIndex)
         {
             if (session == null || session.Messages == null) return;

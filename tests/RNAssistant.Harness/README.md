@@ -704,6 +704,11 @@ model-facing incomplete negatives. Use `resources:`, `document originals:` and
 `resources: document discovery` verifies healthy partial results with missing/corrupt
 current metadata, body loss, exact reads, metadata recovery, current-head selection
 without historical fallback, unknown original/logical heads and continuation drift.
+`attachments: message targets isolate exact originals` covers direct native reads,
+search and outline despite unrelated unavailable metadata, same-name uploads,
+compaction/restart, foreign ownership, missing links, ambiguous labels, selected
+metadata/byte loss and explicit removal. `resources: original text index streams a
+large one-line source` also checks its initial production prompt target at 32K.
 `resources: discovery preserves` covers completeness across pages/providers and
 unique-target refusal. Use `resources:`, `html`, `shared Markdown:` and
 `document Plan:` for affected consumers; this slice does not alter browser layout.

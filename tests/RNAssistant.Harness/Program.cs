@@ -491,6 +491,7 @@ namespace RNAssistant.Harness
                 Test("attachments: upload lease bounds cancellation and expiry", ResourceUploadLeaseLifecycle),
                 Test("attachments: upload discards cancelled completion", ResourceUploadDiscardsCancelledCompletion),
                 Test("attachments: resource link precedes model dispatch", AttachmentPromotionLinksResourceBeforeModelDispatch),
+                Test("attachments: message targets isolate exact originals", MessageAttachmentTargetsIsolateOriginals),
                 Test("document originals: survive origin deletion restart and GC", DocumentOriginalsSurviveChatDeletionAndRestart),
                 Test("document originals: idempotent concurrent publication", DocumentOriginalPublicationIsIdempotentAndConcurrent),
                 Test("attachments: immutable identity cannot be rebound", AttachmentIdentityCannotBeRebound),

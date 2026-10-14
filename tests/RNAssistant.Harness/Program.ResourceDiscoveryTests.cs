@@ -261,7 +261,8 @@ namespace RNAssistant.Harness
                         throw new Exception("Initial request must not hydrate the extracted text.");
                     }).Build(request.AcceptedMessages, settings, request.Options);
                     var wire = Newtonsoft.Json.JsonConvert.SerializeObject(body.Messages);
-                    AssertContains(wire, "single-line.js", "first request exposes the semantic resource target");
+                    AssertContains(wire, ChatResourceReferenceService.MessageAttachmentTarget(message, message.Attachments.Single()),
+                        "first request exposes the exact message attachment target");
                     AssertTrue(!wire.Contains(new string('x', 100)) && !wire.Contains("late-needle"),
                         "first request carries no uploaded source prefix or suffix");
                     AssertTrue(body.EstimatedPromptTokens < ModelContextBudget.InputBudgetTokens(settings),
@@ -283,6 +284,9 @@ namespace RNAssistant.Harness
                 var other = NewSession(adapter); other.DocumentAuthorityId = session.DocumentAuthorityId;
                 var gateway = new ResourceGatewayService(new[] { provider });
                 var target = gateway.Find(other, "single-line.js", "document").Items.Single().Target;
+                AssertEqual(message.ResourceRefs.Single().Uri, executor.ResourceGateway.ResolveIntentTarget(session,
+                    ChatResourceReferenceService.MessageAttachmentTarget(message, message.Attachments.Single())).Reference.Uri,
+                    "the production gateway resolves the ten-megabyte input by its committed message link");
                 var searched = gateway.SearchWithin(other, target, "late-needle", 10, true, CancellationToken.None);
                 AssertTrue(searched.ScanComplete && searched.TotalMatches == 1 &&
                     searched.Matches.Single().PartNumber > 300,

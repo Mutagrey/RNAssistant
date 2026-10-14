@@ -211,6 +211,105 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void MessageAttachmentTargetsIsolateOriginals()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                var paths = FixturePaths.Value;
+                var chats = new ChatStore(paths);
+                var session = NewSession(adapter); session.DocumentAuthorityId = DocumentAuthorityId.Create().Id;
+                var ingestion = new ChatResourceIngestionService(new AttachmentStore(paths), chats.DocumentArtifacts);
+                Func<ChatSession, string, string, ChatMessage> upload = (chat, name, text) => {
+                    var draft = ingestion.Stage(chat, name, "text/javascript", System.Text.Encoding.UTF8.GetBytes(text));
+                    var message = new ChatMessage { Role = "user", Content = "Analyze the attached file.",
+                        Attachments = ingestion.LoadDrafts(chat, new[] { draft.Id }).ToList() };
+                    chat.Messages.Add(message); ingestion.CommitAndLink(chat, message, chat.Messages.Count - 1);
+                    return message;
+                };
+                var sibling = NewSession(adapter); sibling.DocumentAuthorityId = session.DocumentAuthorityId;
+                var damaged = upload(sibling, "unavailable.js", "unrelated bytes");
+                var first = upload(session, "main.js", "function first() {}\n" + new string('x', 64000) + "\nlate-marker");
+                var firstRef = first.ResourceRefs.Single();
+                var firstTarget = ChatResourceReferenceService.MessageAttachmentTarget(first, first.Attachments.Single());
+                AssertContains(ChatResourcePromptIndex.Build(session, 600), firstTarget, "prompt advertises the exact message attachment");
+                chats.Save(session);
+                var authority = new ResourceAuthorityStore(paths);
+                var scope = ResourceAuthorityScopeId.Document(new DocumentAuthorityId(session.DocumentAuthorityId));
+                var badRecord = authority.GetView(scope, damaged.ResourceRefs.Single(), "artifact-original-record");
+                File.Delete(executor.Payloads.PathFor(badRecord.Payload.Sha256));
+
+                var gateway = executor.ResourceGateway;
+                var discovered = gateway.Find(session, "main.js", "document");
+                AssertTrue(discovered.Partial && !discovered.Complete, "discovery still reports the damaged sibling");
+                AssertEqual(firstTarget, discovered.Items.Single().Target, "find supplies the same message-bound address");
+                AssertEqual(firstRef.Uri, gateway.ResolveIntentTarget(session, firstTarget).Reference.Uri,
+                    "known input resolves independently of incomplete discovery");
+                AssertTrue(gateway.Find(session, firstTarget, "document").Complete, "exact input lookup does not scan the shared catalog");
+                AssertEqual(1, gateway.SearchWithin(session, firstTarget, "late-marker", 5, true, CancellationToken.None).TotalMatches,
+                    "bounded search uses the selected original");
+                AssertTrue(gateway.Outline(session, firstTarget, 1, 5).PartCount > 1, "outline uses the same original");
+                var readTool = executor.GetControllerTools().Single(item => item.Id == "common.resources_read");
+                Func<ChatSession, string, RNAssistant.Core.Tools.ToolExecutionRecord> read = (chat, target) => {
+                    var runtime = executor.CreateNativeRuntime(chat, new[] { readTool }, new AppSettings(), ChatModes.Agent, false, manualRun: true);
+                    var call = new RNAssistant.Core.Agent.ToolCall(Guid.NewGuid().ToString("N"), readTool.Id,
+                        JsonConvert.SerializeObject(new { target, representation = "text", partNumber = 1 }));
+                    return ExecuteNative(runtime, call, runtime.Describe(call));
+                };
+                var initialRead = read(session, firstTarget);
+                AssertEqual(RNAssistant.Core.Tools.ToolExecutionOutcome.Ok, initialRead.Outcome, "native read succeeds despite the damaged sibling");
+                AssertContains(initialRead.Result.DataJson, "function first()", "native read delivers the requested source");
+                AssertTrue(!initialRead.Result.DataJson.Contains("rna://"), "binding references remain runtime-only");
+                AssertTrue(initialRead.ResourceEvidence.All(item => !item.Complete), "a part never grants whole-file observation");
+
+                var second = upload(session, "main.js", "function second() {}");
+                var secondTarget = ChatResourceReferenceService.MessageAttachmentTarget(second, second.Attachments.Single());
+                AssertTrue(firstTarget != secondTarget, "a second same-name upload has a different semantic target");
+                AssertEqual(firstRef.Uri, gateway.ResolveIntentTarget(session, firstTarget).Reference.Uri, "later uploads cannot retarget an earlier request");
+                AssertContains(read(session, secondTarget).Result.DataJson, "function second()", "same-name uploads remain independently readable");
+                AssertTrue(ChatResourcePromptIndex.Build(session, 600).IndexOf(secondTarget, StringComparison.Ordinal) >= 0,
+                    "the latest attachment receives prompt priority");
+                var checkpoint = new ContextCheckpoint { ThroughMessageId = first.Id, Claims = new List<StructuredContextClaim> {
+                    new StructuredContextClaim { ClaimId = "task", Kind = "interpretation", Text = "Analyze the original.",
+                        SourceRoles = new List<string> { "user" }, SourceMessageIds = new List<string> { first.Id } } } };
+                session.ContextCheckpoints.Add(checkpoint); session.ActiveContextCheckpointId = checkpoint.Id;
+                AssertTrue(ContextCompactionService.BuildReplayTail(session).All(item => item.Id != first.Id), "first input is outside the compacted replay tail");
+                chats.Save(session);
+                var reopened = new ChatStore(paths).Load(session.Host, session.DocumentKey, session.Id);
+                AssertEqual(firstRef.Uri, gateway.ResolveIntentTarget(reopened, firstTarget).Reference.Uri, "restart recovers the original link after compaction");
+                AssertContains(read(reopened, firstTarget).Result.DataJson, "function first()", "cold native read preserves the original bytes");
+
+                var otherDocument = NewSession(adapter); otherDocument.DocumentAuthorityId = DocumentAuthorityId.Create().Id;
+                otherDocument.Messages.Add(first);
+                AssertEqual("resource_attachment_binding_invalid", RuntimeThrows<ResourceRequestException>(() =>
+                    gateway.ResolveIntentTarget(otherDocument, firstTarget)).ErrorCode, "foreign document links cannot authorize a read");
+                var savedRefs = first.ResourceRefs; first.ResourceRefs = new List<ResourceRef>();
+                AssertEqual("resource_attachment_binding_invalid", RuntimeThrows<ResourceRequestException>(() =>
+                    gateway.ResolveIntentTarget(session, firstTarget)).ErrorCode, "missing link does not fall back to a same-name original");
+                first.ResourceRefs = savedRefs;
+                var sent = second.CreatedUtc; var uploaded = second.Attachments.Single().CreatedUtc;
+                second.CreatedUtc = first.CreatedUtc; second.Attachments.Single().CreatedUtc = first.Attachments.Single().CreatedUtc;
+                AssertEqual("resource_target_ambiguous", RuntimeThrows<ResourceRequestException>(() =>
+                    gateway.ResolveIntentTarget(session, firstTarget)).ErrorCode, "colliding labels do not silently choose a resource");
+                second.CreatedUtc = sent; second.Attachments.Single().CreatedUtc = uploaded;
+
+                var ownRecord = authority.GetView(scope, firstRef, "artifact-original-record");
+                var recordPath = executor.Payloads.PathFor(ownRecord.Payload.Sha256); var recordBytes = File.ReadAllBytes(recordPath);
+                File.Delete(recordPath);
+                AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() =>
+                    gateway.ResolveIntentTarget(session, firstTarget)).ErrorCode, "missing selected metadata is a specific failure, never a message-body fallback");
+                File.WriteAllBytes(recordPath, recordBytes);
+                var rawPath = executor.Payloads.PathFor(first.Attachments.Single().ContentSha256); var rawBytes = File.ReadAllBytes(rawPath);
+                File.WriteAllText(rawPath, "corrupt stored source");
+                var corrupt = read(session, firstTarget);
+                AssertTrue(corrupt.Outcome != RNAssistant.Core.Tools.ToolExecutionOutcome.Ok &&
+                    !corrupt.Result.DataJson.Contains("resource_scope_incomplete"), "corrupt selected bytes fail independently of catalog availability");
+                File.WriteAllBytes(rawPath, rawBytes);
+                chats.DocumentArtifacts.Remove(session, firstRef);
+                AssertEqual("resource_removed", RuntimeThrows<ResourceRequestException>(() =>
+                    gateway.ResolveIntentTarget(session, firstTarget)).ErrorCode, "message binding cannot bypass explicit removal");
+            });
+        }
+
         private static void AttachmentIdentityCannotBeRebound()
         {
             var session = new ChatSession();

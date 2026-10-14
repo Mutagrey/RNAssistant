@@ -363,6 +363,25 @@ the bounded resource index supplies discovery targets, and content enters throug
 explicit resource reads. Durable originals and their extraction metadata remain
 intact. Current image/audio/PDF delivery keeps its existing routing.
 
+Committed attachments of user messages expose a scoped semantic target:
+`message attachment: <filename> [sent <UTC timestamp>; uploaded <UTC timestamp>]`.
+`ChatResourceReferenceService` derives it from the retained message and attachment
+metadata and binds it to that message's exact document `ResourceRef`; it creates
+no registry or durable alias. The prompt index prioritizes the latest input and
+discovery returns the same target for locally linked originals. Gateway resolves
+this target through `ChatArtifactResourceProvider` without enumerating the document
+catalog. Unavailable unrelated records therefore cannot block this selected input.
+Reads, within-file search, outline and copy share that resolution path.
+
+The provider still verifies document ownership, committed publication, original
+metadata and explicit removal; content reads retain exact hash/length checks.
+Missing links/metadata, ambiguous labels and damaged originals fail explicitly;
+there is no filename/latest-upload or message-body fallback. Same-name uploads
+have distinct targets, and an earlier target keeps its original after compaction
+and restart because full durable messages retain their resource links. Runtime
+URIs remain outside model projections. Incomplete global discovery still reports
+`complete=false`; it does not make explicit message attachment targets unreadable.
+
 Document-owned uploaded text/code, authored text/code files and authored Markdown/Plans retain a deterministic
 `artifact-(extracted-)?text-index-v3` view under their exact revision. Its CAS
 manifest holds 32,000-character parts, UTF-16 character coverage, line ranges,
@@ -606,6 +625,8 @@ the whole-index token budget; shown counts reflect admitted rows and omitted
 resources have a `common.resources_find` recovery route.
 The generic semantic-target resolver refuses incomplete enumeration with
 `resource_scope_incomplete` rather than assuming the observed name is unique.
+Explicit `message attachment:` targets instead resolve the selected message's
+committed original directly, with the binding and original guards described above.
 A `document: <title>` target is resolved against the live document provider's
 explicit document kind; the exact returned target/title and bound-session guards
 still apply. It no longer enumerates unrelated Excel names/tables or artifact

@@ -104,7 +104,8 @@ namespace RNAssistant.Office.Services
                     Type = IntentType(direct)
                 };
                 state.Scope = IntentScope(direct, state.Type);
-                state.Target = IntentTarget(direct);
+                state.Target = query.StartsWith(ChatResourceReferenceService.MessageAttachmentPrefix, StringComparison.Ordinal)
+                    ? query : IntentTarget(direct);
                 var candidate = ProjectIntentCandidate(state, null);
                 return new ResourceFindPage
                 {
@@ -144,6 +145,13 @@ namespace RNAssistant.Office.Services
             }
             AssignIntentTargets(states);
 
+            var messageTargets = ChatResourceReferenceService.MessageAttachmentTargets(session);
+            foreach (var state in states)
+            {
+                string messageTarget;
+                if (messageTargets.TryGetValue(state.Reference.Uri, out messageTarget)) state.Target = messageTarget;
+            }
+
             var selected = states
                 .Where(state => ScopeMatches(scope, state.Scope) || scope == "html" && state.Type == "HTML workspace")
                 .Where(state => query.Length == 0 ||
@@ -173,7 +181,7 @@ namespace RNAssistant.Office.Services
 
 
                 AvailabilityHint = unavailable.Count == 0 ? null :
-                    "Discovery is incomplete for unavailableScopes. Restore those sources or search a healthy scope. Repeat only after availability changes; do not infer absence or target uniqueness within an unavailable scope.",
+                    "Discovery is incomplete for unavailableScopes. Explicit message attachment targets can still be read directly. Restore unavailable sources or search a healthy scope; do not infer absence or generic target uniqueness within an unavailable scope. Repeat only after availability changes.",
 
                 UnavailableScopes = unavailable
                     .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
@@ -196,6 +204,8 @@ namespace RNAssistant.Office.Services
                 return ResolveIntentTarget(session, query).Descriptor;
             if (query.Length == 0 ||
                 scope != "all" && scope != "document") return null;
+            if (query.StartsWith(ChatResourceReferenceService.MessageAttachmentPrefix, StringComparison.Ordinal))
+                return ResolveIntentTarget(session, query).Descriptor;
             var excel = _registry.All().OfType<ExcelResourceProvider>()
                 .SingleOrDefault();
             if (query.StartsWith("Outlook collection: ", StringComparison.Ordinal))
@@ -283,6 +293,16 @@ namespace RNAssistant.Office.Services
                     "Resource URIs cannot be used as model targets. Copy one exact semantic target from RUNTIME_CONTEXT or common.resources_find; it never contains ://.",
                     "resource_target_runtime_owned",
                     true);
+            }
+            if (target.StartsWith(ChatResourceReferenceService.MessageAttachmentPrefix, StringComparison.Ordinal))
+            {
+                var provider = _registry.All().OfType<ChatArtifactResourceProvider>().SingleOrDefault();
+                if (provider == null)
+                    throw new ResourceRequestException("Attachment resource provider is unavailable.", "RESOURCE_PROVIDER_UNAVAILABLE", false);
+                var descriptor = WithProvider(provider, session, () => provider.ResolveMessageAttachmentTarget(session, target));
+                var type = IntentType(descriptor);
+                return new ResourceIntentTarget { Target = target, Type = type, Scope = IntentScope(descriptor, type),
+                    Descriptor = descriptor, Reference = descriptor.Reference };
             }
             if (IsHtmlIntentTarget(target))
             {
