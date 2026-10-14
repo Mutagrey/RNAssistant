@@ -17,6 +17,43 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void BuiltInSkillPackagesLoadForEveryOfficeHost()
+        {
+            foreach (var host in new[] { "Excel", "Word", "PowerPoint", "Outlook" })
+            WithTempPaths(paths =>
+            {
+                var adapter = FakeOfficeAdapter.ForHost(host);
+                var settings = new AppSettings();
+                var executor = new RNAssistant.Office.Tools.OfficeToolExecutor(adapter,
+                    new VbaJournalStore(paths), new SkillStore(paths), new ToolStore(paths),
+                    () => settings, value => settings = value, paths);
+                var publication = executor.CaptureCatalogs();
+                var skills = executor.CaptureSkills(publication);
+                var tools = new ToolCatalogService(adapter, executor).GetPublishedVisibleTools(publication.Tools);
+                var pack = new ToolPackSnapshot("host-skills", ChatModes.Agent, host, tools.Select(tool =>
+                    ToolPackSnapshot.Capture(new ToolDescriptor(tool.Id, tool.Description,
+                        tool.ArgumentSchemaJson, tool.Exposure, tool.ContractVersion), tool.Policy, tool.Binding)));
+                AssertTrue(skills.Skills.Any(skill => skill.Host == host), host + " publishes its host skill");
+                if (host == "Outlook")
+                    AssertTrue(!skills.Skills.Any(skill => skill.Id == "common.vba_code_editing" ||
+                        skill.Id == "common.vba_userform_authoring" || skill.Id == "common.tool_authoring"),
+                        "Outlook does not advertise unsupported VBA source or package authoring");
+                foreach (var skill in skills.Skills.Where(item => item.BuiltIn))
+                {
+                    foreach (var dependency in skill.Package.RequiredTools)
+                        AssertTrue(pack.Find(dependency.Id) != null,
+                            host + " skill " + skill.Id + " requires available tool " + dependency.Id);
+                    var session = NewSession(adapter);
+                    session.LastRun = new ChatRunRecord { RunId = "host-skill", TurnId = "host-skill",
+                        StartedUtc = DateTime.UtcNow, ConversationPolicy = ConversationRunPolicy.For(ChatModes.Agent) };
+                    var selected = SkillTaskService.Select(session, skill.Id, skills, pack, settings, "load");
+                    AssertEqual(skill.Id, selected.Id, host + " can select its advertised skill " + skill.Id);
+                    AssertTrue(selected.Tools.All(id => tools.Any(tool => tool.Id == id)),
+                        host + " selection binds only its published tools: " + skill.Id);
+                }
+            });
+        }
+
         private static ToolCatalogEntry PackageTool(string id = "fixture.special", ToolExposure exposure = ToolExposure.Skill,
             string binding = "fixture.handler")
         {

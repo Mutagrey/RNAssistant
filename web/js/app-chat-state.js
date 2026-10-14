@@ -510,7 +510,7 @@ function renderOfficeHostLaunchRows(list, query) {
   var hosts = ["Excel", "Word", "PowerPoint", "Outlook"].filter(function (host) {
     return !query || host.toLowerCase().indexOf(query) >= 0;
   });
-  if (!hosts.length) return;
+  if (!hosts.length && !state.officeHostChatPending && !state.officeHostChatError) return;
 
   var group = document.createElement("section");
   group.className = "chat-office-launch-list";
@@ -519,13 +519,23 @@ function renderOfficeHostLaunchRows(list, query) {
   heading.textContent = "Приложения Office";
   group.appendChild(heading);
 
+  var unavailable = officeHostChatUnavailableReason();
+  var statusText = state.officeHostChatError || unavailable;
+  if (statusText) {
+    var status = document.createElement("div");
+    status.className = "chat-office-launch-status" + (state.officeHostChatError ? " is-error" : "");
+    status.setAttribute("role", state.officeHostChatError ? "alert" : "status");
+    status.textContent = statusText;
+    group.appendChild(status);
+  }
+
   hosts.forEach(function (host) {
     var button = document.createElement("button");
     button.type = "button";
     button.className = "chat-office-launch-row" + documentHostClass(host);
-    button.disabled = !!state.bridgeUnavailable || !state.officeHostChatAvailable ||
-      !!state.officeHostChatPending || !!currentActiveSend() || !!hasActiveMessageEdit();
-    button.title = button.disabled ? "Создание чата недоступно" : "Создать чат в " + host;
+    button.disabled = !!unavailable;
+    button.title = unavailable || "Создать чат в " + host;
+    button.setAttribute("aria-busy", String(!!state.officeHostChatPending && state.officeHostChatTarget === host));
     button.innerHTML = "<span class=\"chat-document-icon\">" + documentHostIcon(host) + "</span>" +
       "<span class=\"chat-office-launch-name\"></span>" +
       "<span class=\"chat-office-launch-action\">Новый чат</span>";

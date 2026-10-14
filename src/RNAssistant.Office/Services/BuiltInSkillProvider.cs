@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using RNAssistant.Core.Models;
@@ -118,6 +119,14 @@ namespace RNAssistant.Office.Services
                     "- Network fetch requires explicit origin permission; no remote frames, credentials, `mode:no-cors`, or embedded secrets.\n" +
                     "- Definition of done: requested sources were inspected; required HTML/CSS/JS and reference bindings exist; no working requirement was dropped; preflight has zero errors; bindings have exact view/coverage evidence; claimed refresh has bounded read-back plus visible render evidence; controls have handlers; and each selected vendor loads locally and works with actual data. Static preflight does not prove browser execution or visual appearance; state unverified UI boundaries explicitly.")
             };
+
+            if (string.Equals(adapter.HostName, "Outlook", StringComparison.OrdinalIgnoreCase))
+            {
+                // Outlook has no supported VBA mutation/package route. Do not
+                // advertise procedures whose required tools cannot be loaded.
+                result.RemoveAll(skill => skill.Id == "common.vba_code_editing" ||
+                    skill.Id == "common.vba_userform_authoring" || skill.Id == "common.tool_authoring");
+            }
 
             var hostProvider = adapter as IOfficeBuiltInSkillProvider;
             if (hostProvider != null)

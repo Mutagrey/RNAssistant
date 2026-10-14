@@ -12,6 +12,17 @@
 новая возможность требует явной задачи, scope и owner; дефекты работающей системы
 приоритетнее расширения без конкретного пользовательского результата.
 
+## Transcript browser fixture dependency — 2026-10-14
+
+Owner: Web chat tests. `chat-transcript-layout.test.js` currently fails in Chromium
+at `applyChatInbox` with `ReferenceError: renderChatSessions is not defined`.
+Its isolated page does not provide that renderer, now called on inbox run-state
+transitions. Update the fixture to supply its intended sidebar boundary (or load
+the real renderer with its dependencies), then rerun this one browser test.
+The separate `chat-input-delivery.test.js` passes with the installed Chrome.
+This fixture gap is separate from Office host-chat creation and is not evidence
+of a production PowerPoint or COM failure.
+
 ## Large-source mutation and provider parity — 2026-10-14
 
 Owner: Core `DocumentArtifactStore`/workspace file owner, Office Resource Gateway

@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
@@ -6,6 +7,7 @@ using Microsoft.Office.Core;
 using RNAssistant.Core.Models;
 using RNAssistant.Office;
 using RNAssistant.Office.Contracts;
+using RNAssistant.Office.Diagnostics;
 using RNAssistant.OfficeHosts.Identity;
 using Excel = Microsoft.Office.Interop.Excel;
 using Outlook = Microsoft.Office.Interop.Outlook;
@@ -173,71 +175,97 @@ namespace RNAssistant.OfficeHosts
         {
             return Task.Run(async delegate
             {
-                using (var dispatcher = new OfficeStaDispatcher())
+                var timer = Stopwatch.StartNew();
+                var stage = "application";
+                object application = null;
+                var documentPrepared = false;
+                OfficeTargetDescriptor target = null;
+                var provider = new OfficeComAdapterProvider();
+                // Acquisition, discovery and the retained adapter share one owner
+                // STA and the same application, including before ROT registration.
+                var adapter = new DispatchedOfficeApplicationAdapter(
+                    owner => provider.Create(host, target, owner, application));
+                var dispatcher = adapter.StaDispatcher;
+                try
                 {
-                    dispatcher.Invoke(() => OfficeHostLauncher.OpenOrActivate(host));
-                    var provider = new OfficeComAdapterProvider();
+                    application = dispatcher.Invoke(() => OfficeHostLauncher.OpenOrActivate(host));
                     var deadline = DateTime.UtcNow.AddSeconds(20);
                     while (DateTime.UtcNow < deadline)
                     {
-                        var targets = dispatcher.Invoke(() => provider.ListOpenTargets(host)
-                            .Where(target => host != "Outlook" || (outlookMailbox
-                                ? !string.IsNullOrWhiteSpace(target.StoreId)
-                                : target.Hwnd != 0))
-                            .ToArray());
-                        if (targets.Length == 0 && host != "Outlook")
+                        if (application == null)
+                            application = dispatcher.Invoke(() => OfficeHostLauncher.TryGetRunningApplication(host));
+                        if (application == null)
                         {
-                            dispatcher.Invoke(delegate { TryCreateBlankDocument(host); });
-                            targets = dispatcher.Invoke(() => provider.ListOpenTargets(host).ToArray());
+                            await Task.Delay(750).ConfigureAwait(false);
+                            continue;
                         }
+                        stage = "document";
+                        if (host != "Outlook" && !documentPrepared)
+                        {
+                            dispatcher.Invoke(() => EnsureBlankDocument(host, application));
+                            documentPrepared = true;
+                        }
+                        var targets = dispatcher.Invoke(() => OfficeTargetEnumerator.ListOpenTargets(host, _ => application)
+                            .Where(item => host != "Outlook" || (outlookMailbox
+                                ? !string.IsNullOrWhiteSpace(item.StoreId)
+                                : item.Hwnd != 0))
+                            .ToArray());
                         if (targets.Length > 0)
                         {
-                            var target = dispatcher.Invoke(() => SelectTarget(host, targets, outlookMailbox));
+                            target = dispatcher.Invoke(() => SelectTarget(host, targets, outlookMailbox, application));
                             if (host == "Outlook" && !outlookMailbox &&
                                 string.IsNullOrWhiteSpace(target.EntryId) &&
                                 string.IsNullOrWhiteSpace(target.FolderPath))
                                 throw new InvalidOperationException(
                                     "Сохраните черновик Outlook перед созданием чата для письма.");
-                            var adapter = new DispatchedOfficeApplicationAdapter(
-                                owner => provider.Create(host, target, owner));
-                            try
+                            dispatcher.Invoke(() => NativeWindowInfo.BringToForeground(
+                                target.Hwnd != 0 ? target.Hwnd : ActiveWindowHwnd(host, application)));
+                            stage = "chat";
+                            using (var controller = new AssistantController(adapter))
                             {
-                                using (var controller = new AssistantController(adapter))
+                                var state = controller.CreatePersistentChat("Новый чат");
+                                RuntimeLog.Info("Office chat creation completed. Host=" + host +
+                                    ", elapsedMs=" + timer.ElapsedMilliseconds);
+                                return new OfficeHostChatCreation
                                 {
-                                    var state = controller.CreatePersistentChat("Новый чат");
-                                    return new OfficeHostChatCreation
-                                    {
-                                        Target = target,
-                                        ChatId = state.ActiveChatId,
-                                        DocumentKey = adapter.DocumentKey,
-                                        DocumentTitle = adapter.DocumentTitle,
-                                        Adapter = adapter
-                                    };
-                                }
+                                    Target = target,
+                                    ChatId = state.ActiveChatId,
+                                    DocumentKey = adapter.DocumentKey,
+                                    DocumentTitle = adapter.DocumentTitle,
+                                    Adapter = adapter
+                                };
                             }
-                            catch { adapter.Dispose(); throw; }
                         }
                         await Task.Delay(750).ConfigureAwait(false);
                     }
-                    throw new InvalidOperationException(host == "Outlook"
+                    throw new InvalidOperationException(application == null
+                        ? host + " запущен, но недоступен для подключения. Откройте документ, вернитесь в RN Assistant и повторите действие."
+                        : host == "Outlook"
                         ? outlookMailbox
                             ? "Outlook не предоставил почтовый ящик. Проверьте профиль и повторите действие."
                             : "Outlook не предоставил окно письма или папки. Откройте Outlook и повторите действие."
                         : host + " не предоставил документ для создания чата.");
                 }
+                catch (Exception ex)
+                {
+                    RuntimeLog.Error("Office chat creation failed. Host=" + host +
+                        ", stage=" + stage + ", elapsedMs=" + timer.ElapsedMilliseconds, ex);
+                    adapter.Dispose();
+                    throw;
+                }
             });
         }
 
         private static OfficeTargetDescriptor SelectTarget(
-            string host, OfficeTargetDescriptor[] targets, bool outlookMailbox)
+            string host, OfficeTargetDescriptor[] targets, bool outlookMailbox, object application)
         {
             if (host == "Outlook" && !outlookMailbox)
             {
-                var hwnd = ActiveWindowHwnd(host);
+                var hwnd = ActiveWindowHwnd(host, application);
                 var activeWindow = targets.Where(target => target.Hwnd == hwnd && hwnd != 0).ToArray();
                 if (activeWindow.Length == 1) return activeWindow[0];
             }
-            var activeIdentity = ActiveIdentity(host);
+            var activeIdentity = ActiveIdentity(host, application);
             if (!string.IsNullOrWhiteSpace(activeIdentity))
             {
                 var active = targets.Where(target => string.Equals(
@@ -246,7 +274,7 @@ namespace RNAssistant.OfficeHosts
                 if (active.Length == 1) return active[0];
                 if (active.Length > 1)
                 {
-                    var hwnd = ActiveWindowHwnd(host);
+                    var hwnd = ActiveWindowHwnd(host, application);
                     var window = active.Where(target => target.Hwnd == hwnd && hwnd != 0).ToArray();
                     if (window.Length == 1) return window[0];
                 }
@@ -257,28 +285,28 @@ namespace RNAssistant.OfficeHosts
                 ". Выберите нужный в приложении и повторите действие.");
         }
 
-        private static string ActiveIdentity(string host)
+        private static string ActiveIdentity(string host, object acquiredApplication)
         {
             try
             {
                 if (host == "Excel")
                 {
-                    var application = (Excel.Application)Marshal.GetActiveObject("Excel.Application");
+                    var application = (Excel.Application)acquiredApplication;
                     return application.ActiveWorkbook == null ? null : application.ActiveWorkbook.FullName;
                 }
                 if (host == "Word")
                 {
-                    var application = (Word.Application)Marshal.GetActiveObject("Word.Application");
+                    var application = (Word.Application)acquiredApplication;
                     return application.ActiveDocument == null ? null : application.ActiveDocument.FullName;
                 }
                 if (host == "PowerPoint")
                 {
-                    var application = (PowerPoint.Application)Marshal.GetActiveObject("PowerPoint.Application");
+                    var application = (PowerPoint.Application)acquiredApplication;
                     return application.ActivePresentation == null ? null : application.ActivePresentation.FullName;
                 }
                 if (host == "Outlook")
                 {
-                    var application = (Outlook.Application)Marshal.GetActiveObject("Outlook.Application");
+                    var application = (Outlook.Application)acquiredApplication;
                     var explorer = application.ActiveExplorer();
                     return explorer == null || explorer.CurrentFolder == null
                         ? null : explorer.CurrentFolder.StoreID;
@@ -288,22 +316,22 @@ namespace RNAssistant.OfficeHosts
             return null;
         }
 
-        private static long ActiveWindowHwnd(string host)
+        private static long ActiveWindowHwnd(string host, object acquiredApplication)
         {
             try
             {
                 if (host == "Excel")
                     return NativeWindowInfo.ReadLongMemberPath(
-                        Marshal.GetActiveObject("Excel.Application"), "ActiveWindow", "Hwnd");
+                        acquiredApplication, "ActiveWindow", "Hwnd");
                 if (host == "Word")
                     return NativeWindowInfo.ReadLongMemberPath(
-                        Marshal.GetActiveObject("Word.Application"), "ActiveWindow", "Hwnd");
+                        acquiredApplication, "ActiveWindow", "Hwnd");
                 if (host == "PowerPoint")
                     return NativeWindowInfo.ReadLongMemberPath(
-                        Marshal.GetActiveObject("PowerPoint.Application"), "ActiveWindow", "HWND");
+                        acquiredApplication, "ActiveWindow", "HWND");
                 if (host == "Outlook")
                 {
-                    var application = (Outlook.Application)Marshal.GetActiveObject("Outlook.Application");
+                    var application = (Outlook.Application)acquiredApplication;
                     return NativeWindowInfo.ReadOutlookWindowHandle(application.ActiveWindow());
                 }
             }
@@ -311,44 +339,38 @@ namespace RNAssistant.OfficeHosts
             return 0;
         }
 
-        private static bool TryCreateBlankDocument(string host)
+        private static void EnsureBlankDocument(string host, object acquiredApplication)
         {
-            try
+            if (host == "Excel")
             {
-                if (host == "Excel")
+                var application = (Excel.Application)acquiredApplication;
+                if (application.Workbooks.Count == 0)
                 {
-                    var application = (Excel.Application)Marshal.GetActiveObject("Excel.Application");
-                    if (application.Workbooks.Count == 0)
-                    {
-                        var workbook = application.Workbooks.Add(Type.Missing);
-                        EnsureNewDocumentIdentity("Excel", () => workbook.CustomDocumentProperties);
-                    }
-                    return true;
+                    var workbook = application.Workbooks.Add(Type.Missing);
+                    EnsureNewDocumentIdentity("Excel", () => workbook.CustomDocumentProperties);
                 }
-                if (host == "Word")
+                return;
+            }
+            if (host == "Word")
+            {
+                var application = (Word.Application)acquiredApplication;
+                if (application.Documents.Count == 0)
                 {
-                    var application = (Word.Application)Marshal.GetActiveObject("Word.Application");
-                    if (application.Documents.Count == 0)
-                    {
-                        object missing = Type.Missing;
-                        var document = application.Documents.Add(ref missing, ref missing, ref missing, ref missing);
-                        EnsureNewDocumentIdentity("Word", () => document.CustomDocumentProperties);
-                    }
-                    return true;
+                    object missing = Type.Missing;
+                    var document = application.Documents.Add(ref missing, ref missing, ref missing, ref missing);
+                    EnsureNewDocumentIdentity("Word", () => document.CustomDocumentProperties);
                 }
-                if (host == "PowerPoint")
+                return;
+            }
+            if (host == "PowerPoint")
+            {
+                var application = (PowerPoint.Application)acquiredApplication;
+                if (application.Presentations.Count == 0)
                 {
-                    var application = (PowerPoint.Application)Marshal.GetActiveObject("PowerPoint.Application");
-                    if (application.Presentations.Count == 0)
-                    {
-                        var presentation = application.Presentations.Add(MsoTriState.msoTrue);
-                        EnsureNewDocumentIdentity("PowerPoint", () => presentation.CustomDocumentProperties);
-                    }
-                    return true;
+                    var presentation = application.Presentations.Add(MsoTriState.msoTrue);
+                    EnsureNewDocumentIdentity("PowerPoint", () => presentation.CustomDocumentProperties);
                 }
             }
-            catch (COMException) { }
-            return false;
         }
 
         private static void EnsureNewDocumentIdentity(string host, Func<object> propertiesFactory)

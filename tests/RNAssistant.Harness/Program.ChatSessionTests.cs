@@ -979,9 +979,10 @@ namespace RNAssistant.Harness
 
         private static void OfficeHostRowPersistsEmptyChat()
         {
+            foreach (var host in new[] { "Excel", "Word", "PowerPoint", "Outlook" })
             WithTempPaths(delegate(AppDataPaths paths)
             {
-                var adapter = new FakeOfficeAdapter();
+                var adapter = FakeOfficeAdapter.ForHost(host);
                 var store = new ChatStore(paths);
                 var service = new ChatSessionService(adapter, ConversationStore(store));
                 var created = service.CreatePersistentChat("Новый чат");
@@ -995,6 +996,13 @@ namespace RNAssistant.Harness
                 AssertEqual(created.Id, new ChatStore(paths).LoadOrCreateActive(
                     adapter.HostName, adapter.DocumentKey, adapter.DocumentTitle).Id,
                     "new host chat remains active after reload");
+                var otherAdapter = FakeOfficeAdapter.ForHost(host == "Excel" ? "PowerPoint" : "Excel");
+                var other = new ChatSessionService(otherAdapter, ConversationStore(store));
+                var otherChat = other.CreatePersistentChat("Other host");
+                AssertTrue(other.TryLoadCurrentDocumentChat(created.Id) == null,
+                    "same-document navigation cannot bind another host's chat: " + host);
+                AssertEqual(otherChat.Id, other.GetActiveSession().Id, "refused selection preserves the other host chat");
+                AssertEqual(created.Id, service.GetActiveSession().Id, "original document chat stays selected");
             });
         }
 

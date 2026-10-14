@@ -635,6 +635,7 @@ namespace RNAssistant.Harness
                 Test("tools: typed library mutations are revision guarded", ToolLibraryMutationsAreRevisionGuarded),
                 Test("skills: CRUD preserves omitted fields", AgentSkillCrudPreservesOmittedFields),
                 Test("skill packages: selection deduplication compaction budget and scope", SkillPackagesSelectionAndBudget),
+                Test("skill packages: built-ins load for every Office host", BuiltInSkillPackagesLoadForEveryOfficeHost),
                 Test("skill packages: dependencies conflicts updates and revocation", SkillPackagesDependencyFailures),
                 Test("skill packages: exact request dispatch and next-step loading", SkillPackagesExactDispatch),
                 Test("skill packages: restart supporting files and inert arsenal", SkillPackagesRestartAndSupportingFiles),

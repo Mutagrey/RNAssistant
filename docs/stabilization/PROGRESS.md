@@ -50,6 +50,41 @@ reductions are established by the code change, not a measured latency claim.
 work. Version checks pass before each commit. No Office/WebView2 qualification.
 Evidence and scoped diffs: `/tmp/rna-simplify-20261014-4xxsvp4i/`.
 
+## Office chat creation and host skill availability — 2026-10-14
+
+Owner: Web chat navigation / OfficeHosts target coordinator / Office built-in skills.
+An enabled host-chat button silently ignored clicks during another navigation;
+creation now queues and shows progress, disabled reasons and errors beside the
+Office rows. The new four-host Node regression fails on the previous handler and
+passes with the fix, including explicit retry and duplicate-click isolation.
+
+Cold Excel/Word/PowerPoint creation now retains the COM-activated application on
+the adapter's owner STA through discovery and binding, removing shell-launch/ROT
+rediscovery from that route. Existing processes are not duplicated. Blank-document
+preparation is attempted once; errors propagate and startup logs identify the
+host, failed stage and elapsed time. This OfficeHosts change is source-reviewed,
+not compiled or exercised as Office/VSTO on this machine.
+
+The new published-package check exposed unsupported VBA procedures in Outlook's
+skill list. Those three built-ins are no longer advertised there; every remaining
+built-in selects successfully against its host's actual tool catalog. Focused
+PowerPoint (8), Word (8), Excel (39), Outlook (19), skill packages (5), skills (5),
+skill references (1), discovery (1), tool pack (8) and host bridge (1) checks pass.
+Node host-chat/navigation and skill contract/editor checks pass. Chromium checks
+actual PowerPoint clicks, queued progress, long error wrapping in narrow light/dark
+panes, explicit retry and target initialization; input delivery also passes.
+Changed UI assets have new cache keys. Empty host chats are checked for all four
+hosts, including refusal to select another host's chat without rebinding.
+Six focused session/navigation checks pass. The closed-document fixture now loads
+the required HTML skill before writing; it verifies local HTML in the selected
+chat, preservation of the other chat and refusal of live reads after closing.
+The transcript layout fixture stops on a missing renderer stub,
+recorded separately in [BACKLOG](BACKLOG.md#transcript-browser-fixture-dependency--2026-10-14).
+Real cold/warm
+launch, modal Office, multiple instances, Save As and panel rebinding remain open
+Windows/Office/WebView2 evidence; the reported installed-build issue is not yet
+qualified on the user's machine.
+
 ## Large document text navigation — 2026-10-14 (host-neutral)
 
 Owner: Core CAS/`DocumentArtifactStore` and Office Resource Gateway. Document-owned

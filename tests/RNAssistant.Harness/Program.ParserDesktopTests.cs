@@ -814,7 +814,7 @@ namespace RNAssistant.Harness
                             "closed matching identity is not advertised as a live document");
                         calls++;
                         return Task.FromResult(new LlmCompletionResult { Content = calls == 1
-                            ? LoadToolSchemaResponse(HtmlWorkspaceToolCatalog.WriteFileToolId)
+                            ? LoadSkillResponse("common.html_workspace_authoring")
                             : calls == 2
                                 ? "{\"message\":\"Creating HTML.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.html_workspace_write_file\",\"arguments\":{\"path\":\"index.html\",\"content\":\"<main>Offline</main>\"}}]}"
                                 : "{\"message\":\"Done.\",\"action\":\"done\",\"tool_calls\":[]}" });
@@ -823,6 +823,7 @@ namespace RNAssistant.Harness
                         ChatModes.Agent, "Create HTML", selected, new DocumentContext(), new AppSettings(),
                         tools, null, null, null, CancellationToken.None).GetAwaiter().GetResult();
                     AssertEqual("Done.", result.AssistantText, "local run completes after bound document closes");
+                    AssertEqual(3, calls, "closed chat loads its HTML skill, writes once and completes without repair");
                     AssertTrue(selected.HtmlWorkspace.Files.Any(file => file.Path == "index.html"),
                         "local HTML belongs to the selected closed chat");
                     AssertEqual(0, store.Load(second.Host, second.DocumentKey, second.Id).HtmlWorkspace.Files.Count,

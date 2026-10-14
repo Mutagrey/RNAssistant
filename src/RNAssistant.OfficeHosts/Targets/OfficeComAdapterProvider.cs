@@ -23,9 +23,27 @@ namespace RNAssistant.OfficeHosts
             IOfficeStaDispatcher dispatcher)
         {
             host = NormalizeHost(host, target);
+            object application;
+            if (string.Equals(host, "Excel", StringComparison.OrdinalIgnoreCase)) application = ResolveExcelApplication(target);
+            else if (string.Equals(host, "Word", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(host, "PowerPoint", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(host, "Outlook", StringComparison.OrdinalIgnoreCase))
+                application = GetActiveOfficeObject(host + ".Application");
+            else throw new InvalidOperationException("Unsupported Office host: " + (host ?? string.Empty));
+            return Create(host, target, dispatcher, application);
+        }
+
+        internal IOfficeApplicationAdapter Create(
+            string host,
+            OfficeTargetDescriptor target,
+            IOfficeStaDispatcher dispatcher,
+            object acquiredApplication)
+        {
+            if (acquiredApplication == null) throw new ArgumentNullException("acquiredApplication");
+            host = NormalizeHost(host, target);
             if (string.Equals(host, "Excel", StringComparison.OrdinalIgnoreCase))
             {
-                var application = ResolveExcelApplication(target);
+                var application = (Excel.Application)acquiredApplication;
                 ValidateTargetWindow("Excel", application, target);
                 var workbook = ResolveExcelWorkbook(application, target);
                 return new ExcelAdapter(
@@ -36,7 +54,7 @@ namespace RNAssistant.OfficeHosts
 
             if (string.Equals(host, "Word", StringComparison.OrdinalIgnoreCase))
             {
-                var application = (Word.Application)GetActiveOfficeObject("Word.Application");
+                var application = (Word.Application)acquiredApplication;
                 ValidateTargetWindow("Word", application, target);
                 var document = ResolveWordDocument(application, target);
                 return new WordAdapter(
@@ -47,7 +65,7 @@ namespace RNAssistant.OfficeHosts
 
             if (string.Equals(host, "PowerPoint", StringComparison.OrdinalIgnoreCase))
             {
-                var application = (PowerPoint.Application)GetActiveOfficeObject("PowerPoint.Application");
+                var application = (PowerPoint.Application)acquiredApplication;
                 ValidateTargetWindow("PowerPoint", application, target);
                 var presentation = ResolvePowerPointPresentation(application, target);
                 var window = ResolvePowerPointWindow(presentation, target);
@@ -60,7 +78,7 @@ namespace RNAssistant.OfficeHosts
 
             if (string.Equals(host, "Outlook", StringComparison.OrdinalIgnoreCase))
             {
-                var application = (Outlook.Application)GetActiveOfficeObject("Outlook.Application");
+                var application = (Outlook.Application)acquiredApplication;
                 var binding = ResolveOutlookBinding(application, target);
                 return new OutlookAdapter(
                     application, binding.Mail, binding.Folder,

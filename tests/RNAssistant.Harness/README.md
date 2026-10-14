@@ -1,5 +1,21 @@
 # RNAssistant Harness
 
+Office chat navigation: `node tests/web/office-host-chat.test.js` covers queued
+creation for all four hosts, duplicate clicks, visible progress/refusal/error,
+preserved binding after failure and target initialization.
+`office-host-chat-layout.test.js` uses Playwright with shipped CSS/handlers to
+click PowerPoint, observe queued progress/error, check narrow light/dark error
+wrapping, and explicitly retry into target initialization. Use `BROWSER_EXECUTABLE`
+for an installed Chromium browser. `chat-sync.test.js`
+covers navigation/catalog ordering; `bridge: Office chat` covers the typed bridge.
+`chat sessions: Office host row` checks empty-chat persistence for all four hosts
+and refuses current-document selection of a different host's chat.
+`skill packages: built-ins` selects every visible built-in against each host's
+published catalog and rejects unsupported Outlook VBA procedures. Tool/backend
+slices are `powerpoint`, `word `, `excel ` and `outlook `; the trailing space narrows
+the latter three. These use fake hosts. Cold COM activation, retained STA/RCW
+lifetime and real cross-host panel switching still require Windows qualification.
+
 Resource-workflow regression: after building MockDemo, run
 `dotnet demo/RNAssistant.MockDemo/bin/Debug/net8.0/RNAssistant.MockDemo.dll --resource-workflow-test`.
 This uses the actual controller with a fake Excel host: create/read Library sources,

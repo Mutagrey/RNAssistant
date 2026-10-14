@@ -8,6 +8,18 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## Cross-host chat creation from Excel — 2026-10-14
+
+**Contained UI / open Windows evidence.** Reported symptom: clicking PowerPoint
+from Excel has no visible effect. A host-neutral regression reproduces an enabled
+button silently dropping clicks during navigation; queued creation and inline
+status/error fix that path. Cold activation now retains the returned application
+and adapter STA instead of shell-launch followed by ROT rediscovery. The latter
+remains source-reviewed only; verify installed native/VSTO/Desktop builds on
+Windows with PowerPoint closed/open, multiple documents, modal dialogs, Save As,
+exact tools/skills after switching and return to the original Excel chat. R52's
+multi-instance attach evidence remains open. Owner: Web navigation / OfficeHosts.
+
 ## Working source links and completion evidence — 2026-10-14
 
 **Residual / Resource Gateway, skill selection, run projection.** Current HTML

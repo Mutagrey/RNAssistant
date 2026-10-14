@@ -16,21 +16,39 @@ async function runQuickAction(action) {
 }
 
 async function createOfficeHostChat(host) {
-  if (state.bridgeUnavailable || !state.officeHostChatAvailable || state.officeHostChatPending ||
-      state.chatNavigationPending || currentActiveSend() || hasActiveMessageEdit()) return;
+  if (state.officeHostChatPending) return;
+  var unavailable = officeHostChatUnavailableReason();
+  if (unavailable) {
+    state.officeHostChatError = unavailable;
+    renderChatSessions();
+    return;
+  }
   if (typeof confirmDiscardHtmlWorkspaceChanges === "function" &&
       !confirmDiscardHtmlWorkspaceChanges("Создать новый чат")) return;
   state.officeHostChatPending = true;
+  state.officeHostChatTarget = host;
+  state.officeHostChatError = "";
   renderChatSessions();
   try {
     var result = await navigateChat("createOfficeHostChat", { host: host });
     log("Чат создан: " + host + (result.documentTitle ? " — " + result.documentTitle : "") + ".");
   } catch (error) {
-    log(error.detail || error.message, "error");
+    state.officeHostChatError = "Не удалось открыть чат " + host + ": " +
+      (error.detail || error.message || "неизвестная ошибка");
+    log(state.officeHostChatError, "error");
   } finally {
     state.officeHostChatPending = false;
     renderChatSessions();
   }
+}
+
+function officeHostChatUnavailableReason() {
+  if (state.bridgeUnavailable) return "Нет связи с Office. Повторно откройте панель RN Assistant.";
+  if (!state.officeHostChatAvailable) return "Создание Office-чата недоступно в этом окне.";
+  if (state.officeHostChatPending) return "Создаю чат в " + state.officeHostChatTarget + "…";
+  if (currentActiveSend()) return "Дождитесь завершения ответа или остановите текущую задачу.";
+  if (hasActiveMessageEdit()) return "Завершите редактирование сообщения перед созданием чата.";
+  return "";
 }
 
 async function saveChatMode(mode) {

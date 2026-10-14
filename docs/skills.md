@@ -34,6 +34,10 @@ archive installation are deferred. The core front matter contains `id`,
 The visible catalog is built-in first, then custom, filtered to `Common` plus the
 current host (`Workspace` for the independent CLI). A custom package cannot shadow a built-in id. Tool and skill
 ids share one namespace and a collision fails request construction.
+Outlook does not publish the built-in VBA editing, CodeOnly UserForm, or VBA tool
+authoring procedures: that host has no supported VBA mutation/package route.
+Host-neutral package checks select every advertised built-in against each host's
+actual published tool catalog, including default-off JavaScript.
 
 ### Manifest and task selection
 

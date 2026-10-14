@@ -336,6 +336,17 @@
   font-size: 10px;
 }
 
+.chat-office-launch-status {
+  padding: 4px 8px 8px;
+  color: var(--muted);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.chat-office-launch-status.is-error {
+  color: var(--danger);
+}
+
 .chat-office-launch-row {
   display: grid;
   grid-template-columns: 20px minmax(0, 1fr) auto;
