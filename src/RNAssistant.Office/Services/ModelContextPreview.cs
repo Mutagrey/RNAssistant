@@ -29,9 +29,9 @@ namespace RNAssistant.Office.Services
                 session?.Revision ?? 0);
             var budget = historyBudgetTokens > 0 ? historyBudgetTokens : ModelContextBudget.InputBudgetTokens(settings);
             var workingSet = ContextWorkingSet.Restore(session, history, authority, settings,
-                Math.Max(0, Math.Min(budget / 3, budget - ContextWorkingSet.EstimateCost(required.Concat(history), settings))), ModelToolResultProjection.Instance);
+                Math.Max(0, Math.Min(budget / 3, budget - ContextWorkingSet.EstimateCost(required.Concat(history), settings))));
             history.AddRange(workingSet.Messages);
-            var snapshot = compiler.Compile(authority, required, history, context?.Notes, tools, settings, budget, retainedBodies: workingSet.IncludedBodies, evictedBodies: workingSet.OmittedBodies);
+            var snapshot = compiler.Compile(authority, required, history, context?.Notes, tools, settings, budget, retainedBodies: workingSet.IncludedBodies, evictedBodies: workingSet.OmittedBodies, workingSet: workingSet);
             recordReceipt?.Invoke(snapshot.Receipt);
             return snapshot.Messages.ToList();
         }

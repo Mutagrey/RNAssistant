@@ -16,22 +16,21 @@ namespace RNAssistant.Core.Services
     public sealed class ContextWorkingSet
     {
         public readonly List<ChatMessage> Messages = new List<ChatMessage>();
+        internal readonly List<OperationCandidate> Operations = new List<OperationCandidate>();
+        internal int ReceiptBudget;
         public int IncludedBodies;
         public int OmittedBodies;
         private readonly List<string> _omittedTargets = new List<string>();
 
         public static ContextWorkingSet Restore(ChatSession session, IReadOnlyList<ChatMessage> active,
             ModelAuthoritySnapshot authority, AppSettings settings, int budget,
-            ModelResultProjection projection = null, IReadOnlyList<ChatMessage> archive = null)
+            IReadOnlyList<ChatMessage> archive = null)
         {
             var result = new ContextWorkingSet();
             if (ContextCompactionRuntime.ActiveCheckpoint(session) == null) return result;
-            projection = projection ?? new ModelResultProjection();
             var history = archive ?? session.Messages;
             var activeIds = new HashSet<string>(active.Select(item => item.Id), StringComparer.Ordinal);
             var runId = session.LastRun?.RunId ?? history.LastOrDefault(item => !string.IsNullOrEmpty(item.RunId))?.RunId;
-            var required = new List<ChatMessage>();
-            var optional = new List<ChatMessage>();
             var selected = new HashSet<string>(StringComparer.Ordinal);
             var laterSuccesses = new List<ChatMessage>();
             for (var index = history.Count - 1; index >= 0; index--)
@@ -52,32 +51,14 @@ namespace RNAssistant.Core.Services
                     !laterSuccesses.Any(later => recovery.IsSatisfiedBy(later.ResourceEvidence, later.ResourceEffect))) mandatory = true;
                 // Keep the latest receipt for an exact call, including resumed runs.
                 if (!selected.Add(wire.ToolCallId)) continue;
-                var projected = projection.Project(message);
-                if (!ToolResultHistoryReader.TryRead(projected, out wire, out error)) continue;
-                var receipt = ModelContextCompiler.CompleteOperation(projected, wire,
-                    new ResourceObservationNotice { BodyIncluded = false, State = EvidenceState.Unknown,
-                        Reason = "Historical operation; body not included." });
-                receipt.Id = "receipt_" + message.Id;
-                (mandatory ? required : optional).Add(receipt);
+                if (mandatory || budget > 0) result.Operations.Add(new OperationCandidate(message, mandatory));
             }
-            required.Reverse();
-            result.Messages.AddRange(required);
-            // Mandatory facts cannot be evicted by a body or residual budget. The
-            // compiler checks the whole request and fails explicitly if it cannot fit.
-            var remaining = Math.Max(0, budget - EstimateCost(required, settings));
-            var bodies = result.SelectBodies(history, active, authority.Resources, settings, remaining);
+            result.Operations.Reverse();
+            // Selection retains exact provenance. Only the compiler hydrates,
+            // projects and budgets receipts; mandatory facts cannot be evicted.
+            var bodies = result.SelectBodies(history, active, authority.Resources, settings, Math.Max(0, budget));
             result.Messages.AddRange(bodies);
-            var receiptBudget = Math.Min(2048, Math.Max(0, remaining - EstimateCost(bodies, settings)));
-            var receipts = new List<ChatMessage>();
-            foreach (var receipt in optional)
-            {
-                if (receipts.Count >= 24) break;
-                var cost = EstimateCost(new[] { receipt }, settings);
-                if (cost > receiptBudget) continue;
-                receiptBudget -= cost;
-                receipts.Add(receipt);
-            }
-            receipts.Reverse(); result.Messages.AddRange(receipts);
+            result.ReceiptBudget = Math.Max(0, budget - EstimateCost(bodies, settings));
             if (result.IncludedBodies + result.OmittedBodies > 0)
                 result.Messages.Add(new ChatMessage { Role = "user", ProtocolMessage = true,
                     Content = "WORKING_SET:\n" +
@@ -85,6 +66,13 @@ namespace RNAssistant.Core.Services
                             omittedTargets = result._omittedTargets,
                             instruction = "Omitted bodies are outside this request budget, not missing resources." }) });
             return result;
+        }
+
+        internal sealed class OperationCandidate
+        {
+            internal readonly ChatMessage Source;
+            internal readonly bool Required;
+            internal OperationCandidate(ChatMessage source, bool required) { Source = source; Required = required; }
         }
 
         private List<ChatMessage> SelectBodies(IReadOnlyList<ChatMessage> history, IReadOnlyList<ChatMessage> active,

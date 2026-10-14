@@ -1012,7 +1012,8 @@ namespace RNAssistant.Runtime
                         AcceptedFacts(_session.Messages.Where(ContextCompactionRuntime.IsReplayMessage).ToArray()));
                 return _compiler.Compile(authority, required, facts.Concat(workingSet.Messages).ToArray(), null, _catalog, _settings,
                     budget, retainedBodies: workingSet.IncludedBodies, evictedBodies: workingSet.OmittedBodies, skillSurface: _skillSurface,
-                    trailingRequiredMessageId: context.ReadAcceptance == null && context.WebAcceptance == null && context.CompletionFeedback == null ? null : runtimeContext.Id);
+                    trailingRequiredMessageId: context.ReadAcceptance == null && context.WebAcceptance == null && context.CompletionFeedback == null ? null : runtimeContext.Id,
+                    workingSet: workingSet);
             }
 
             private ResourceAuthoritySnapshotSet CaptureContextAuthority(string runId, CancellationToken cancellationToken)

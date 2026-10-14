@@ -1,5 +1,24 @@
 # Stabilization progress
 
+## Archived operation receipts retain exact diagnostics — 2026-10-15
+
+Owner: Core model-context compiler. Working-set restoration now supplies original
+operation candidates and priority, removing early projection of CAS headers. Active
+and archived results share bounded hydration and model projection; the compiler
+materializes and budgets receipts afterward. Office conversation, preview and
+Runtime consumers pass the candidate set. Inspector provenance and hydration
+counts reflect the original payload; unresolved outcomes remain mandatory.
+
+Eleven context-continuity checks pass, including inline/CAS parity after checkpoint,
+save and restart for three result roles, Core/Office projection and Error/Unknown.
+Missing selected payloads fail explicitly; omitted optional receipts do not read
+CAS. Harness and CLI host-neutral builds pass; two controlled CLI compaction/resume
+cases preserve the original run, external-drift guards and native call/result
+pairs. No real-model or Office/VSTO validation was run. All three reproduced defects from
+the [CAS/resource review](RISK_REGISTER.md#cas-and-resource-fabric-review--2026-10-14)
+are fixed host-neutral. Retained-reader page reconstruction remains a separate
+architectural follow-up; Windows/Office qualification remains open.
+
 ## Removed resources remain valid historical evidence — 2026-10-15
 
 Owner: Core evidence reducer. Only `Known` resource/dependency heads supply a
@@ -8,7 +27,7 @@ compilation or working-set restoration. Immutable-snapshot dependencies and
 retained historical bodies keep their existing meaning and storage.
 
 Twelve focused frozen-evidence, context-continuity and Library removal/restart
-checks pass host-neutral. The archived-receipt projection defect remains open in
+checks passed host-neutral for this change; see the separate receipt finding in
 [RISK_REGISTER](RISK_REGISTER.md#cas-and-resource-fabric-review--2026-10-14).
 
 ## CAS collection rejects misplaced resource journals — 2026-10-15

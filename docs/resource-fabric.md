@@ -1632,7 +1632,17 @@ Whole resource and core skill reads use the same bounded, revision-pinned Gatewa
 assembler; partial pages cannot masquerade as complete loads.
 
 After compaction `ContextWorkingSet` reuses current exact CAS evidence for source,
-text, structure and record coverage plus complete skill bodies. It never rereads
+text, structure and record coverage plus complete skill bodies. Archived operation
+selection supplies original result facts and mandatory/optional priority to
+`ModelContextCompiler`; it does not project or hydrate their bodies. The compiler
+uses the same bounded CAS hydration and model projection as active results, then
+creates receipts and applies their residual budget. Mandatory unresolved outcomes
+remain required, including with no optional budget. Optional receipts are selected
+newest first within the 24-receipt/2,048-token bound; an unaffordable candidate does
+not hide earlier affordable receipts. Missing selected diagnostic bodies fail
+explicitly rather than substituting an externalization header. The context receipt
+records actual hydration and each original payload, including omitted candidates.
+No operation is executed by this path. It never rereads
 Office to construct a prompt and never replays mutations. Bodies may leave the
 request budget without changing their original terminal outcome or existence.
 See the [continuity contract](conversation-protocol.md#agent-continuity-audit--2026-10-01).

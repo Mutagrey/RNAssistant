@@ -44,15 +44,16 @@ user incident to the artificial filesystem-damage scenario below.
   Frozen reduction, working-set restoration and compilation exclude removed
   current bodies without rewriting observations. Immutable-snapshot dependencies
   remain historical; existing Library removal/restart checks retain exact bytes.
-- **P2 / Core context working set and result projection:** archived operation
-  receipts call `ModelResultProjection.Project` before hydrating `ResultPayload`.
-  Projection clears that reference, so the compiler can no longer recover the
-  original diagnostic. A paired valid tool-result fixture retains `code` and
-  `field` inline but loses them with the ordinary CAS header for a >8,192-character
-  result, despite ample budget and intact CAS. Keep exact result provenance until
-  one owner materializes the bounded operation receipt; test inline/CAS parity
-  across a checkpoint. Recovery metadata already held in `ExecutionProgress`
-  does not restore arbitrary diagnostic fields from the omitted body.
+- **P2 / Core context working set and result projection — fixed host-neutral 2026-10-15:**
+  Archived operation receipts previously projected a CAS header before hydration,
+  losing `ResultPayload` and diagnostic fields. Working-set selection now passes
+  original facts and priority to the compiler's existing hydration/projection
+  path; only then are bounded receipts materialized and budgeted. Tests retain
+  `code`, `field` and exact inspector provenance through a checkpoint/save/restart,
+  with identical inline/CAS output for user/developer/tool roles and Error/Unknown
+  outcomes in Core and Office projection. Missing selected payloads fail explicitly;
+  unselected optional receipts perform no hydration. Unknown effects and unresolved
+  recovery remain mandatory. Durable headers and bodies are unchanged.
 
 The separate [authored UTF-16 reopening failure](#authored-utf-16-file-blocks-chat-reopening--2026-10-14)
 is fixed host-neutral through separate raw-byte ownership and lazy decoded views.
@@ -66,12 +67,12 @@ or benchmark is made. Materialize an exact bounded body once per operation and
 slice it, or use the existing indexed-view owner where applicable; remove the
 page-to-whole-to-page reconstruction without adding a persistent body cache.
 
-The broader simplification opportunity is one compiler-owned selection,
-hydration and model-projection path for active and archived facts. Working-set
-restoration should supply candidates with exact provenance rather than a second
-early result projection and independent body policy. Keep the existing CAS,
-authority/publication barriers and append-only events. This is a design proposal,
-not a changed runtime contract or an authorization to replay operations.
+The receipt boundary now has one compiler-owned hydration, model projection and
+final budget path for active and archived operation facts. Working-set restoration
+supplies candidates with exact provenance; the early result projection is removed.
+The separate retained-reader paging optimization above remains a proposal. CAS,
+authority/publication barriers and append-only events stay authoritative; this
+change grants no operation replay authority.
 
 Original review validation: existing `storage: CAS` 7/7 and `context continuity:` 10/10 passed without
 rebuilding the project. A small separate probe reproduces the three gaps above;

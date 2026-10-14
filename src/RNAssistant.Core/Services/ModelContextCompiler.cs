@@ -31,6 +31,7 @@ namespace RNAssistant.Core.Services
         { get { return Narration == null ? Messages : new[] { Narration }.Concat(Messages); } }
         internal List<ResourceEvidence> Evidence = new List<ResourceEvidence>();
         internal ResourceObservationNotice HistoricalFailure;
+        internal bool ArchivedOperation;
     }
 
     internal sealed class ToolInteractionFrame
@@ -64,7 +65,8 @@ namespace RNAssistant.Core.Services
             IReadOnlyList<ChatMessage> required, IReadOnlyList<ChatMessage> facts,
             IReadOnlyList<ContextNote> notes, IReadOnlyList<ToolCatalogEntry> tools,
             AppSettings settings, int budget, bool enforceBudget = true, int retainedBodies = 0, int evictedBodies = 0,
-            SkillRequestSurface skillSurface = null, string trailingRequiredMessageId = null)
+            SkillRequestSurface skillSurface = null, string trailingRequiredMessageId = null,
+            ContextWorkingSet workingSet = null)
         {
             if (skillSurface != null)
             {
@@ -171,9 +173,18 @@ namespace RNAssistant.Core.Services
             var recent = atoms.LastOrDefault(item => item.CausalFrameId != null);
             if (recent != null) recent.KeepPair = true;
 
+            if (workingSet != null)
+                foreach (var operation in workingSet.Operations)
+                {
+                    var atom = Atom("archived-operation", Clone(operation.Source), operation.Required);
+                    atom.ArchivedOperation = true;
+                    atoms.Add(atom);
+                }
+
             // Correctness before collapse, deduplication, relevance, hydration or budget.
             foreach (var atom in atoms)
             {
+                if (atom.ArchivedOperation) continue;
                 // Argument/dispatch failures have no source observation. A failed
                 // evaluation can carry exact source evidence: preserve its outcome
                 // while tracking the independent currency of that source snapshot.
@@ -277,8 +288,16 @@ namespace RNAssistant.Core.Services
             // Archival size is not a model-delivery limit. Generic read results need
             // their complete data just as resource/capability reads do. The final
             // request budget, including calibrated token cost, decides what fits.
-            foreach (var atom in atoms.Where(item => item.Kind != "resource-change" || item.KeepPair))
+            var receiptBudget = workingSet?.ReceiptBudget ?? 0;
+            var optionalReceipts = 0;
+            var materializationOrder = atoms.Where(item => !item.ArchivedOperation && (item.Kind != "resource-change" || item.KeepPair))
+                .Concat(atoms.Where(item => item.ArchivedOperation && item.MustKeep))
+                .Concat(atoms.Where(item => item.ArchivedOperation && !item.MustKeep).Reverse());
+            foreach (var atom in materializationOrder)
             {
+                if (atom.ArchivedOperation && !atom.MustKeep) receiptBudget = Math.Min(2048, receiptBudget);
+                if (atom.ArchivedOperation && !atom.MustKeep && (receiptBudget <= 0 || optionalReceipts >= 24))
+                { atom.Messages.Clear(); continue; }
                 for (var index = 0; index < atom.Messages.Count; index++)
                 {
                     var message = atom.Messages[index];
@@ -300,6 +319,8 @@ namespace RNAssistant.Core.Services
                     {
                         if (_payloads == null)
                         {
+                            if (atom.ArchivedOperation)
+                                throw new InvalidOperationException("Exact archived operation payload reader is unavailable.");
                             if (atom.Kind == "terminal-mutation")
                                 throw new InvalidOperationException("Exact mutation result payload reader is unavailable.");
                             if (atom.HistoricalFailure != null)
@@ -312,6 +333,12 @@ namespace RNAssistant.Core.Services
                         if (message.ResultPayload.ByteLength > maximumPayloadBytes &&
                             !(IsSharedContextRead(message) && message.ResultPayload.ByteLength <= 4L * 1024 * 1024))
                         {
+                            if (atom.ArchivedOperation)
+                            {
+                                if (atom.MustKeep)
+                                    throw new PromptBudgetExceededException("A required archived operation exceeds this request budget. Use a larger context window.", false);
+                                atom.Messages.Clear(); break;
+                            }
                             if (OmitSourceBody(atom)) break;
                             if (message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion &&
                                 !ModelResultProjection.IsExactReadEvidence(message.ToolName))
@@ -340,6 +367,8 @@ namespace RNAssistant.Core.Services
                         }
                         catch (Exception ex) when (ex is System.IO.IOException || ex is System.IO.InvalidDataException || ex is System.Security.Cryptography.CryptographicException)
                         {
+                            if (atom.ArchivedOperation)
+                                throw new InvalidOperationException("Exact archived operation payload is unavailable.", ex);
                             if (atom.Kind == "terminal-mutation")
                                 throw new InvalidOperationException("Exact mutation result payload is unavailable.", ex);
                             if (atom.HistoricalFailure != null)
@@ -373,6 +402,23 @@ namespace RNAssistant.Core.Services
                         message.ResourceRefs = new List<ResourceRef>();
                         message.HtmlWorkspaceCheckpoint = null;
                     }
+                }
+                if (atom.ArchivedOperation && atom.Messages.Count > 0)
+                {
+                    var projected = atom.Messages.Single();
+                    ToolResultWireReadResult wire; string error;
+                    if (!ToolResultHistoryReader.TryRead(projected, out wire, out error))
+                        throw new InvalidOperationException("Exact archived operation result is invalid: " + error);
+                    var completed = CompleteOperation(projected, wire,
+                        new ResourceObservationNotice { BodyIncluded = false, State = EvidenceState.Unknown,
+                            Reason = "Historical operation; body not included." });
+                    var receiptCost = ModelContextBudget.EstimateMessagesTokens(new[] { completed }, settings);
+                    atom.Messages.Clear();
+                    if (!atom.MustKeep && receiptCost > receiptBudget) continue;
+                    atom.Messages.Add(completed);
+                    atom.BodyParts.Clear();
+                    receiptBudget = Math.Max(0, receiptBudget - receiptCost);
+                    if (!atom.MustKeep) optionalReceipts++;
                 }
             }
             // Fold only after complete result hydration and model projection. Data
@@ -476,7 +522,8 @@ namespace RNAssistant.Core.Services
                 }
             }
             var messages = atoms.SelectMany(item => item.PromptMessages).ToList();
-            receipt.Messages = DescribeMessages(atoms, required, facts);
+            receipt.Messages = DescribeMessages(atoms, required, (facts ?? new ChatMessage[0])
+                .Concat(workingSet == null ? Enumerable.Empty<ChatMessage>() : workingSet.Operations.Select(item => item.Source)).ToArray());
             receipt.OperationReceipts = messages.Count(message => message.CompletedOperation != null);
             receipt.EstimatedTokens = ModelContextBudget.EstimateMessagesTokens(messages, settings);
             receipt.AtomCounts = atoms.GroupBy(item => item.Kind).ToDictionary(group => group.Key, group => group.Count());

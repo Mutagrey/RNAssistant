@@ -150,7 +150,7 @@ namespace RNAssistant.Harness
                     LastRun = new ChatRunRecord { RunId = "continuity" } };
                 Action restore = () => {
                     var set = ContextWorkingSet.Restore(session, new ChatMessage[0], authority, settings, 0);
-                    AssertEqual(count, set.Messages.Count, "all unresolved recoveries stay mandatory");
+                    AssertEqual(count, set.Operations.Count(item => item.Required), "all unresolved recoveries stay mandatory");
                 };
                 report["workingSet/" + count] = ProfileMedian(restore);
             }
