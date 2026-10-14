@@ -1,13 +1,24 @@
 # Stabilization progress
 
+## Removed resources remain valid historical evidence — 2026-10-15
+
+Owner: Core evidence reducer. Only `Known` resource/dependency heads supply a
+current revision. `Removed` now yields `Unavailable` instead of throwing during
+compilation or working-set restoration. Immutable-snapshot dependencies and
+retained historical bodies keep their existing meaning and storage.
+
+Twelve focused frozen-evidence, context-continuity and Library removal/restart
+checks pass host-neutral. The archived-receipt projection defect remains open in
+[RISK_REGISTER](RISK_REGISTER.md#cas-and-resource-fabric-review--2026-10-14).
+
 ## CAS collection rejects misplaced resource journals — 2026-10-15
 
 Owner: Core resource authority and CAS maintenance. One safe recursive inventory
 replaces the two top-level source enumerations. Misplaced published or unpublished
 journals and linked paths make reachability incomplete before companion journals
 are opened. Collection then deletes nothing and does not rewrite or relocate sources.
-The reproduced data-loss risk is closed host-neutral; evidence removal and archived
-receipt projection remain open in [RISK_REGISTER](RISK_REGISTER.md#cas-and-resource-fabric-review--2026-10-14).
+The reproduced data-loss risk is closed host-neutral; see the separate evidence
+and receipt findings in [RISK_REGISTER](RISK_REGISTER.md#cas-and-resource-fabric-review--2026-10-14).
 
 Nine focused CAS checks and unpublished-root retention pass on the host-neutral
 Harness; the new misplaced-journal regression failed before the fix.

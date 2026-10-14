@@ -1729,6 +1729,23 @@ namespace RNAssistant.Harness
             AssertEqual(EvidenceState.Current, reducer.Reduce(evidence, before).State, "read is current at captured generation");
             AssertEqual(EvidenceState.Superseded, reducer.Reduce(evidence, freeze(ResourceHeadState.Known(r2, 2))).State, "same-run write supersedes read");
             AssertEqual(EvidenceState.Unknown, reducer.Reduce(evidence, freeze(ResourceHeadState.Unknown(r1.Identity, 2, "ambiguous dispatch"))).State, "unknown effect cannot remain current");
+            AssertEqual(EvidenceState.Unavailable, reducer.Reduce(evidence, freeze(ResourceHeadState.Unavailable(r1.Identity, 2, "offline"))).State, "unavailable head cannot remain current");
+            AssertEqual(EvidenceState.Unavailable, reducer.Reduce(evidence, freeze(ResourceHeadState.Removed(r1.Identity, 2))).State, "removed head has no current revision");
+            var dependency = new ResourceRef("rna://vba/d/dependency", "r1");
+            foreach (var dependencyHead in new[] { ResourceHeadState.Known(dependency, 1),
+                ResourceHeadState.Unknown(dependency.Identity, 2, "unknown"),
+                ResourceHeadState.Unavailable(dependency.Identity, 2, "offline"),
+                ResourceHeadState.Removed(dependency.Identity, 2) })
+            foreach (var immutable in new[] { false, true })
+            {
+                var dependent = new ResourceEvidence("dependent", scope, r1, "source", ResourceCoverage.Whole(), true, 1,
+                    dependencies: new[] { new ResourceDependency(dependency, kind: immutable ? "immutable-snapshot" : "current-state") });
+                var frozen = new ResourceAuthoritySnapshotSet(new[] { new ResourceAuthoritySnapshot(scope, 2, null, 0,
+                    new[] { ResourceHeadState.Known(r1, 1), dependencyHead }) });
+                var expected = immutable || dependencyHead.Knowledge == HeadKnowledge.Known ? EvidenceState.Current :
+                    dependencyHead.Knowledge == HeadKnowledge.Unknown ? EvidenceState.Unknown : EvidenceState.Unavailable;
+                AssertEqual(expected, reducer.Reduce(dependent, frozen).State, "dependency state: " + dependencyHead.Knowledge + ", immutable: " + immutable);
+            }
             AssertEqual(EvidenceState.Current, reducer.Reduce(evidence, before).State, "reduction never changes observation");
             var matcher = new ExcelResourceImpactMatcher();
             AssertTrue(matcher.Intersects(new ResourceCoverage("cell-range", "Sheet1!A1:F500"), new ResourceCoverage("cell-range", "Sheet1!B4:B20")), "range intersection");

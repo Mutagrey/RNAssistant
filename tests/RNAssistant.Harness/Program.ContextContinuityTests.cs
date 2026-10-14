@@ -650,6 +650,17 @@ namespace RNAssistant.Harness
             AssertTrue(ToolResultHistoryReader.TryRead(retainedRows, out rowWire, out rowError), "restored row result retains its protocol frame");
             AssertEqual("business value", (string)JObject.Parse(rowWire.Result.DataJson).SelectToken("table.rows[0].revision"), "business field names are unchanged");
             AssertTrue(!retainedRows.ResourceEvidence.Single().Complete, "partial row selection cannot become whole-read evidence");
+            var removedAuthority = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new[] {
+                new ResourceAuthoritySnapshot(scope, 2, null, 0, new[] { ResourceHeadState.Removed(source.Identity, 2) }) }),
+                "pack", new SkillCatalogSnapshot(new[] { definition }), null, 4);
+            var removed = ContextWorkingSet.Restore(session, active, removedAuthority, new AppSettings(), 4000);
+            AssertEqual(0, removed.IncludedBodies, "removed resources do not restore current bodies");
+            var removedRequest = new ModelContextCompiler(projection: ModelToolResultProjection.Instance).Compile(removedAuthority,
+                new ChatMessage[0], active.Concat(restored.Messages).ToList(), null, new ToolCatalogEntry[0], new AppSettings(), 6000);
+            AssertTrue(removedRequest.Receipt.ExcludedUnavailable > 0, "compilation records removed evidence as unavailable");
+            AssertTrue(!removedRequest.Messages.Any(m => (m.Content ?? "").Contains("KEEP_COMPLETE_BODY")),
+                "a previously restored body cannot survive removal in the next frozen request");
+            AssertContains(skill.Content, "KEEP_COMPLETE_BODY", "removal does not rewrite historical observations");
             var oversized = ContinuityResult("large_receipt", "common.vba_write_module",
                 ToolResult.Error(new string('x', 24000)));
             session.Messages.Add(ContinuityCall(oversized)); session.Messages.Add(oversized);

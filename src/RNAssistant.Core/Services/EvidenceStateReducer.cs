@@ -101,7 +101,7 @@ namespace RNAssistant.Core.Services
             if (head != null)
             {
                 if (head.Knowledge == HeadKnowledge.Unknown) return Result(evidence, EvidenceState.Unknown, head.Cause ?? "head unknown");
-                if (head.Knowledge == HeadKnowledge.Unavailable) return Result(evidence, EvidenceState.Unavailable, head.Cause ?? "resource unavailable");
+                if (head.Knowledge != HeadKnowledge.Known) return Result(evidence, EvidenceState.Unavailable, head.Cause ?? "resource unavailable");
                 if (!string.Equals(head.Revision.Revision, evidence.Resource.Revision, StringComparison.Ordinal))
                     return Result(evidence, EvidenceState.Superseded, "head advanced");
             }
@@ -121,7 +121,7 @@ namespace RNAssistant.Core.Services
                     .FirstOrDefault(item => item != null);
                 if (dependencyHead == null || dependencyHead.Knowledge == HeadKnowledge.Unknown)
                     return Result(evidence, EvidenceState.Unknown, "dependency head unknown");
-                if (dependencyHead.Knowledge == HeadKnowledge.Unavailable)
+                if (dependencyHead.Knowledge != HeadKnowledge.Known)
                     return Result(evidence, EvidenceState.Unavailable, "dependency unavailable");
                 if (!string.Equals(dependencyHead.Revision.Revision, dependency.Resource.Revision, StringComparison.Ordinal))
                     return Result(evidence, EvidenceState.Superseded, "dependency changed");

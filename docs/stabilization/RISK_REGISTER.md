@@ -37,13 +37,13 @@ user incident to the artificial filesystem-damage scenario below.
   all collection. Published and unpublished source/view roots, file/directory
   links, unchanged journals and collection after explicit path restoration are
   covered. Journals are never repaired or relocated by GC.
-- **P1 / Core evidence reducer:** `EvidenceStateReducer.Reduce` handles Unknown
-  and Unavailable heads, then dereferences `head.Revision.Revision`; Removed has
-  no revision. Both a directly removed resource and a removed current-state
-  dependency produce `NullReferenceException`. A retained observation can therefore
-  break subsequent compilation/working-set restoration after Library removal.
-  Handle every head state explicitly for both own and dependency heads; retain
-  exact historical bytes and represent the observation's unavailability normally.
+- **P1 / Core evidence reducer — fixed host-neutral 2026-10-15:**
+  `EvidenceStateReducer.Reduce` previously dereferenced the absent revision of a
+  `Removed` head for both resources and current-state dependencies. The reducer
+  now compares revisions only for `Known` heads; removal becomes `Unavailable`.
+  Frozen reduction, working-set restoration and compilation exclude removed
+  current bodies without rewriting observations. Immutable-snapshot dependencies
+  remain historical; existing Library removal/restart checks retain exact bytes.
 - **P2 / Core context working set and result projection:** archived operation
   receipts call `ModelResultProjection.Project` before hydrating `ResultPayload`.
   Projection clears that reference, so the compiler can no longer recover the

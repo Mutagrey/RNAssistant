@@ -1166,7 +1166,11 @@ The compiler derives per-claim currentness; see
 [shared context](artifact-library.md#discovery-descriptions-and-model-context).
 
 `EvidenceStateReducer` classifies Current/Superseded/Unknown/Unavailable against
-frozen authority. Correctness filtering, terminal-write collapse and deduplication
+frozen authority. Only a `Known` head supplies a current revision. `Removed` maps
+to `Unavailable` for both the observation and its current-state dependencies;
+immutable-snapshot dependencies keep their exact historical meaning. Removal
+does not rewrite observations or delete retained bytes. Correctness filtering,
+terminal-write collapse and deduplication
 precede budget selection and CAS hydration. `ContextReceipt` records generations,
 exclusions and hydration. Compaction retains structured source-grounded claims;
 free summary prose cannot resurrect superseded resource bodies.
