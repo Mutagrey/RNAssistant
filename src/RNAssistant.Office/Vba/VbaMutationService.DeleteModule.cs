@@ -35,7 +35,7 @@ namespace RNAssistant.Office.Vba
             var correlation = request.Correlation ?? new VbaMutationCorrelation();
             var currentHash = CodeSha256(current.Code);
             string observedHash;
-            if (TryGetObservation(correlation, resolvedName, out observedHash) &&
+            if (TryGetGuardObservation(correlation, resolvedName, out observedHash) &&
                 !string.Equals(observedHash, currentHash, StringComparison.OrdinalIgnoreCase))
             {
                 correlation.ObserveExternalDrift?.Invoke(resolvedName);

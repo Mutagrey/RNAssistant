@@ -46,6 +46,8 @@ namespace RNAssistant.Harness
             inconsistent.Messages.Add(EffectMessage("run-inconsistent", "change", ToolEffectEvidence.VerifiedChange));
             inconsistent.Messages.Add(EffectMessage("run-inconsistent", "extra", ToolEffectEvidence.VerifiedNoChange));
             var bounded = RunViewStateProjector.Create(inconsistent);
+            AssertEqual(RunGoalVerification.NotAssessed, bounded.GoalVerification,
+                "tool effects do not establish whole-goal verification");
             AssertEqual(1, bounded.VerifiedWrites, "effect evidence cannot overstate successful writes");
             AssertEqual(0, bounded.NoChangeWrites, "overlapping effect evidence is capped by runtime count");
             AssertEqual(1, bounded.UnknownEffects, "inconsistent source evidence is visible as unknown");

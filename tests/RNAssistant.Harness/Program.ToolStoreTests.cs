@@ -433,6 +433,7 @@ namespace RNAssistant.Harness
             AssertTrue(!HasTool(outlook, "outlook.get_context"), "generic Outlook context uses document resources");
             AssertTrue(!HasTool(outlook, "outlook.collect_mail"), "Outlook collection uses document resources");
             AssertTrue(HasTool(outlook, "outlook.search_mail"), "outlook search visible");
+            AssertTrue(HasTool(outlook, "outlook.index_archive"), "outlook archive indexing visible");
             AssertTrue(HasTool(outlook, "outlook.create_draft"), "outlook draft facade visible");
             AssertTrue(FindTool(outlook, "outlook.update_mail").AgentCanRun, "outlook mail updates remain runnable");
 
@@ -446,7 +447,7 @@ namespace RNAssistant.Harness
             AssertEqual(14, excel.Count, "complete Excel tool count");
             AssertEqual(8, word.Count, "complete Word tool count");
             AssertEqual(8, powerpoint.Count, "complete PowerPoint tool count");
-            AssertEqual(3, outlook.Count, "complete Outlook tool count");
+            AssertEqual(4, outlook.Count, "complete Outlook tool count");
             foreach (var catalog in catalogs)
             {
                 AssertEqual(catalog.Value.Count, catalog.Value.Select(tool => tool.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count(), catalog.Key + " ids are unique");
@@ -562,11 +563,15 @@ namespace RNAssistant.Harness
                 var bindParameters = (JObject)promptTools.OfType<JObject>()
                     .Single(item => string.Equals((string)item.SelectToken("function.name"), HtmlWorkspaceToolCatalog.BindDataToolId, StringComparison.OrdinalIgnoreCase))
                     .SelectToken("function.parameters");
-                AssertTrue(bindParameters["properties"] is JObject &&
-                        bindParameters["anyOf"] == null,
-                    "prompt exposes one semantic HTML bind schema");
-                AssertTrue(bindParameters.SelectToken("properties.sourceTool") == null &&
-                        bindParameters.SelectToken("properties.sourceArguments") == null,
+                var bindBranches = bindParameters["anyOf"] as JArray;
+                AssertTrue(bindBranches != null && bindBranches.Count == 3 &&
+                        bindBranches.OfType<JObject>().All(branch =>
+                            branch.SelectToken("properties.name") != null &&
+                            branch.SelectToken("properties.target") != null &&
+                            branch.SelectToken("properties.view") != null),
+                    "prompt exposes semantic HTML bind branches with view-specific selectors");
+                AssertTrue(!bindParameters.ToString(Formatting.None).Contains("\"sourceTool\"") &&
+                        !bindParameters.ToString(Formatting.None).Contains("\"sourceArguments\""),
                     "prompt does not expose nested source execution");
 
                 var skillParameters = (JObject)promptTools.OfType<JObject>()

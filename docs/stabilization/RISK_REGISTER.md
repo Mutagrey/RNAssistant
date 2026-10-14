@@ -8,6 +8,27 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## Working source links and completion evidence — 2026-10-14
+
+**Residual / Resource Gateway, skill selection, run projection.** Current HTML
+targets and per-file heads remove the reproduced snapshot-link churn and sibling
+false staleness. Exact history remains bounded to 1,000 snapshot metadata entries;
+missing/corrupt history still fails closed. Old HTML publications without per-file
+heads use conservative aggregate staleness until a verified file publication.
+Large-workspace publication and resolver latency need measured fixtures; host-neutral
+tests do not establish WebView2 editor/preview behavior on Windows.
+
+`GoalVerification=not_assessed` makes model `done` visibly distinct from verified
+tool effects. It does not independently judge semantic completion. Gemma 4 selected
+both required authoring skills and passed 4/4 exact source comparisons in the new
+real-model fixture, but again omitted Task List without explicit instruction and
+made two refused VBA capability attempts before selecting its skill.
+Runtime requires selected skills for VBA edits and HTML operations; automatic Task
+List selection for multi-deliverable work remains a model adherence gap. A selected
+skill's own revision is stable under neighboring catalog changes, but catalog
+source observations still follow whole-publication revisions: a neighboring change
+can force a fresh semantic read even when the source bytes are unchanged.
+
 ## CLI response contract and live v7 completion — 2026-10-13
 
 **Instruction gap fixed; autonomous completion remains open / Core model protocol,
@@ -142,6 +163,9 @@ still expects the former wording. Owner: skill cutover / Harness fixtures; recon
 that assertion separately without suppressing the completion checks preceding it.
 The isolated commit candidate excludes those skill changes and passes no-tool
 3/3, prompt migration 3/3 and built-in guidance 1/1 with prompt schema 42.
+On 2026-10-14 the skill-policy assertion was reconciled with the current
+`common.skills_load` instruction; the complete Agent regression group passes
+53/53. This does not close the separate real-model premature-completion risk.
 Closure of this incident needs the accepted response, `RunSummary.Reason`, repair
 attempts if any, and a controlled reproduction on the reported DeepSeek model.
 Real Windows/Office/WebView2 behavior is unqualified.

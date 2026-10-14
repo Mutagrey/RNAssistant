@@ -50,6 +50,7 @@ namespace RNAssistant.Core.Models
         [JsonProperty("description", NullValueHandling = NullValueHandling.Ignore)] public string Description { get; set; }
         [JsonIgnore] public IReadOnlyList<ResourceEvidence> Evidence { get; set; }
         [JsonProperty("target")] public string Target { get; set; }
+        [JsonProperty("snapshotTarget", NullValueHandling = NullValueHandling.Ignore)] public string SnapshotTarget { get; set; }
         [JsonProperty("type")] public string Type { get; set; }
         [JsonProperty("scope")] public string Scope { get; set; }
         [JsonProperty("title")] public string Title { get; set; }
@@ -74,6 +75,7 @@ namespace RNAssistant.Core.Models
         [JsonProperty("section", NullValueHandling = NullValueHandling.Ignore)] public string Section { get; set; }
         [JsonProperty("kind")] public string Kind { get; set; } = "resource-read";
         [JsonProperty("target")] public string Target { get; set; }
+        [JsonProperty("snapshotTarget", NullValueHandling = NullValueHandling.Ignore)] public string SnapshotTarget { get; set; }
         [JsonProperty("type")] public string Type { get; set; }
         [JsonProperty("scope")] public string Scope { get; set; }
         [JsonProperty("representation")] public string Representation { get; set; }

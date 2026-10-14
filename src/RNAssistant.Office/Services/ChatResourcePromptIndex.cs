@@ -75,8 +75,11 @@ namespace RNAssistant.Office.Services
                     artifact.Id == session.ActiveContextCheckpointId ? "activeContextCheckpoint" : null;
                 // A semantic target is addressable text, not a truncatable label.
                 // JSON quoting preserves embedded whitespace without inventing a target.
-                var line = "- target=" + Newtonsoft.Json.JsonConvert.SerializeObject(
-                    ResourceGatewayService.IntentTarget(descriptor)) +
+                var target = role == "activeHtml" &&
+                    string.Equals(artifact.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase)
+                    ? ChatHtmlResourceCatalog.CurrentWorkspaceTarget
+                    : ResourceGatewayService.IntentTarget(descriptor);
+                var line = "- target=" + Newtonsoft.Json.JsonConvert.SerializeObject(target) +
                     " | type=" + ResourceGatewayService.IntentType(descriptor) +
                     " | scope=" + (string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId) ? "conversation" : "document") +
                     (role == null ? string.Empty : " | role=" + role) +

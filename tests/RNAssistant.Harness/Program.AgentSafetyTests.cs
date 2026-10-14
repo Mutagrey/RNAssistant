@@ -1233,7 +1233,8 @@ namespace RNAssistant.Harness
                 "skill prompt assigns package identity to runtime");
             AssertContains(settings.AgentSkillsPrompt, "SELECTED_SKILL", "skill prompt defines task-selected instructions");
             AssertContains(settings.AgentSkillsPrompt, "do not retry unchanged", "skill prompt prevents truncated skill loops");
-            AssertContains(settings.AgentSkillsPrompt, "referencePath", "skill prompt explains progressive reference reads");
+            AssertContains(settings.AgentSkillsPrompt, "Read supporting files only when needed",
+                "skill prompt explains progressive reference reads");
             AssertTrue(settings.ChatSystemPrompt.StartsWith("# RNAssistant Chat", StringComparison.Ordinal), "chat prompt Markdown heading");
             AssertContains(settings.ChatSystemPrompt, "common.resources_*", "chat prompt documents read-only resource access");
             AssertContains(settings.ChatSystemPrompt, "## Response contract", "chat uses the structured response envelope");
@@ -1369,7 +1370,7 @@ namespace RNAssistant.Harness
 
         private static void AgentSupportsSelectableResponseFormats()
         {
-            AssertEqual(6, AgentResponseProtocol.CurrentVersion,
+            AssertEqual(7, AgentResponseProtocol.CurrentVersion,
                 "conversation response protocol cutover version");
             var settings = new AppSettings { StreamResponses = false };
             var messages = new List<object> { new { role = "user", content = "test" } };
@@ -1839,7 +1840,7 @@ namespace RNAssistant.Harness
                 new ToolInvocation
                 {
                     ToolCallId = "generic_projection",
-                    ToolId = "excel.inspect"
+                    ToolId = "fixture.business_read"
                 },
                 TerminalToolResult.Ok(
                     "Stored " + genericReference.Uri + ".",
@@ -2117,7 +2118,8 @@ namespace RNAssistant.Harness
                 false);
             var foldedText = string.Join("\n", folded.Messages.Select(
                 item => item.Content));
-            AssertTrue(folded.Messages.Any(message => message.CompletedOperation?.ToolCallId == "mutation_projection"),
+            AssertTrue(folded.Messages.Any(message => message.ToolCallId == "mutation_projection" &&
+                message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion),
                 "completed mutation remains represented to the model");
             AssertTrue(foldedText.IndexOf(
                     genericReference.Uri,

@@ -710,6 +710,10 @@ namespace RNAssistant.Harness
                 var sourceTarget = (string)data["binding"]?["sourceTarget"];
                 var oldWorkspaceTarget = executor.ResourceGateway.Find(session, null, "all").Items
                     .Single(item => item.Type == "HTML workspace").Target;
+                var oldWorkspaceSnapshot = executor.ResourceGateway.Find(session, null, "all").Items
+                    .Single(item => item.Type == "HTML workspace").SnapshotTarget;
+                var oldMemberSnapshot = executor.ResourceGateway.Find(session, null, "html").Items
+                    .Single(item => item.Type == "HTML data").SnapshotTarget;
                 AssertTrue(!string.IsNullOrWhiteSpace(sourceTarget), "write returns a readable source target without rediscovery");
                 AssertEqual("text", (string)data["binding"]["view"], "write describes the actual automatic binding view");
                 AssertContains(saved.Result.Message, "no additional bind", "write prevents redundant self-binding");
@@ -722,7 +726,8 @@ namespace RNAssistant.Harness
                 ExecuteHtmlNative(runtime, HtmlWorkspaceToolCatalog.WriteFileToolId,
                     new JObject { ["path"] = "index.html", ["content"] = "<main>Dashboard</main>" });
                 var promptIndex = ChatResourcePromptIndex.Build(session, 4000);
-                AssertTrue(!promptIndex.Contains(oldWorkspaceTarget), "prompt index does not advertise superseded workspace targets");
+                AssertTrue(promptIndex.Contains(oldWorkspaceTarget) && !promptIndex.Contains(oldWorkspaceSnapshot),
+                    "prompt index keeps the working target but not a superseded snapshot");
                 var bindingRead = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
                     new JObject { ["target"] = memberTarget, ["representation"] = "text" });
                 AssertEqual(ToolExecutionOutcome.Ok, bindingRead.Outcome, "member target survives an unrelated HTML write");
@@ -745,7 +750,10 @@ namespace RNAssistant.Harness
                 AssertTrue(!manifest.ToString().Contains("rna://"), "model manifest has semantic targets, not opaque references");
                 var currentMemberTarget = executor.ResourceGateway.Find(session, null, "html").Items
                     .Single(item => item.Type == "HTML data").Target;
-                AssertTrue(currentMemberTarget != memberTarget, "each workspace snapshot qualifies its own member target");
+                AssertEqual(memberTarget, currentMemberTarget, "the working member target survives a sibling write");
+                AssertTrue(oldMemberSnapshot != executor.ResourceGateway.Find(session, null, "html").Items
+                    .Single(item => item.Type == "HTML data").SnapshotTarget,
+                    "explicit snapshot target identifies each retained workspace revision");
                 AssertTrue(((JArray)manifest["members"]).Any(item => (string)item["target"] == currentMemberTarget),
                     "manifest supplies directly readable member targets");
 
@@ -765,7 +773,7 @@ namespace RNAssistant.Harness
                 var rebound = ExecuteHtmlNative(runtime, HtmlWorkspaceToolCatalog.BindDataToolId, bindArgs);
                 AssertEqual(ToolExecutionOutcome.Ok, rebound.Outcome, "explicit source can be rebound as records");
                 var historicalBinding = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
-                    new JObject { ["target"] = memberTarget, ["representation"] = "text" });
+                    new JObject { ["target"] = oldMemberSnapshot, ["representation"] = "text" });
                 AssertEqual(ToolExecutionOutcome.Ok, historicalBinding.Outcome, "historical binding remains readable after rebind");
                 AssertEqual("text", (string)JObject.Parse((string)JObject.Parse(historicalBinding.Result.DataJson)["text"])["view"],
                     "historical member does not borrow the current binding view");

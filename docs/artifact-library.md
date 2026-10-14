@@ -239,6 +239,12 @@ retains its timestamp and active snapshot. The result is verified no-change, wit
 `changed=false` and `saved=false`, rather than another revision claiming an edit.
 Current-state validation/result projection clones current files and data only;
 it does not serialize and deserialize the full workspace/navigation history.
+Model-facing working HTML targets follow the selected current workspace and file
+identity. Discovery and reads also return `snapshotTarget` for exact retained
+history; the user can inspect an older source without moving the working link.
+File source authority is tracked per member, so changing CSS does not stale an
+unchanged HTML file observation. Normal file writes publish only the affected
+member head; restore/import or an unscoped UI mutation may inspect all members.
 
 Re-linking messages preserves existing exact runtime resource references, including
 HTML member reads and patch results. An archived or bounded activity body cannot

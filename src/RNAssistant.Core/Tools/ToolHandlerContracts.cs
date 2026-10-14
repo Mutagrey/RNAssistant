@@ -27,6 +27,14 @@ namespace RNAssistant.Core.Tools
         ChangeRequired
     }
 
+    [Newtonsoft.Json.JsonConverter(typeof(Newtonsoft.Json.Converters.StringEnumConverter))]
+    public enum ToolRecoveryReadScope
+    {
+        None,
+        Whole,
+        RelevantLines
+    }
+
     public sealed class ToolRecoveryContract
     {
         public ToolFailureKind FailureKind { get; private set; }
@@ -37,6 +45,7 @@ namespace RNAssistant.Core.Tools
         public string CurrentContent { get; private set; }
         public bool CurrentContentComplete { get; private set; }
         public string Diff { get; private set; }
+        public ToolRecoveryReadScope ReadScope { get; private set; }
         // Exact dependency versions of the failed observation. Runtime-only;
         // semantic targets, not these references, are delivered to the model.
         public IReadOnlyList<ResourceRef> ChangeDependencies { get; private set; }
@@ -46,12 +55,17 @@ namespace RNAssistant.Core.Tools
             ResourceIdentity resourceIdentity = null, string view = null,
             string semanticTarget = null, string currentContent = null,
             bool currentContentComplete = false, string diff = null,
-            IEnumerable<ResourceRef> changeDependencies = null)
+            IEnumerable<ResourceRef> changeDependencies = null,
+            ToolRecoveryReadScope readScope = ToolRecoveryReadScope.None)
         {
             if (!Enum.IsDefined(typeof(ToolFailureKind), failureKind))
                 throw new ArgumentOutOfRangeException(nameof(failureKind));
             if (!Enum.IsDefined(typeof(ToolRetryPolicy), retryPolicy))
                 throw new ArgumentOutOfRangeException(nameof(retryPolicy));
+            if (!Enum.IsDefined(typeof(ToolRecoveryReadScope), readScope) ||
+                readScope != ToolRecoveryReadScope.None &&
+                (resourceIdentity == null || string.IsNullOrWhiteSpace(semanticTarget)))
+                throw new ArgumentException("A recovery read requires an exact state and semantic target.");
             if (failureKind == ToolFailureKind.ConflictNoEffect &&
                 (resourceIdentity == null || string.IsNullOrWhiteSpace(view) ||
                  string.IsNullOrWhiteSpace(semanticTarget)))
@@ -82,6 +96,7 @@ namespace RNAssistant.Core.Tools
             CurrentContent = currentContent;
             CurrentContentComplete = currentContentComplete;
             Diff = diff;
+            ReadScope = readScope;
             ChangeDependencies = Array.AsReadOnly(dependencies.Select(item => item.Copy()).ToArray());
         }
 
@@ -138,6 +153,8 @@ namespace RNAssistant.Core.Tools
                 result["currentContentComplete"] = CurrentContentComplete;
             }
             if (!string.IsNullOrWhiteSpace(Diff)) result["changesSinceObservation"] = Diff;
+            if (ReadScope != ToolRecoveryReadScope.None)
+                result["readScope"] = ReadScope == ToolRecoveryReadScope.Whole ? "whole" : "relevant_lines";
             return result;
         }
     }

@@ -66,12 +66,16 @@ existing direct admissions and selected dependencies. The compiler injects compl
 `SELECTED_SKILL` instructions alongside exactly those schemas. Words in Markdown,
 a source read, attached files and historical results cannot select a skill.
 
-Default prompt schema 45 asks multi-deliverable/staged tasks to select
+Default prompt schema 46 asks multi-deliverable/staged tasks to select
 `common.task_tracking` and maintain its Task List. This is model guidance, not an
 automatic intent classifier or a completion gate. The compact Office catalog's
 `loadSkill` lists the packages that can expose a specialized tool; it never admits
 that tool by itself. The dynamically configured `common.tools_upsert` descriptor
-retains its skill-only exposure.
+retains its skill-only exposure. The five built-in VBA editing tools
+also require a selected package; `common.vba_code_editing` exposes them, while
+`common.vba_userform_authoring` can expose code-only form writes. A direct
+`capabilities_read` cannot admit a skill-only tool. `common.office_run_macro`
+remains an optional direct tool for requests to execute an existing macro.
 
 Selection belongs to one run. Existing `run.updated` events preserve it through
 compaction, confirmation and restart; a new independent turn starts empty. There
@@ -172,9 +176,11 @@ instead of reconciling a raw catalog, and consumes versioned mutation/reference
 results. Core, rename, delete and reference changes pass through the same
 `SkillAuthoringService`; the controller no longer owns or mutates `SkillStore`.
 There is no unversioned/PascalCase response fallback or storage-path identity in the
-UI. A mutation becomes available through a freshly built catalog on the next run
-boundary; it does not rewrite the immutable catalog of an already accepted model
-step.
+UI. A committed mutation becomes available at the next model-request boundary in
+an active Agent run, or at the next run boundary when starting from the Library.
+It does not rewrite an already accepted model step. A same-run regression creates
+and reads a new skill and tool, then selects the skill and admits the tool schema
+on later requests.
 A failed authoring-directory removal cannot be reported as a verified delete, even
 if catalog read-back no longer sees the skill.
 Cleanup of a replaced package directory also fails the save instead of silently

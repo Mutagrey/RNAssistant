@@ -79,7 +79,7 @@ namespace RNAssistant.Office.Tools
                     });
                 if (!prepared.Success)
                     return VbaNativePreparation.Failed(
-                        MutationOutcome(prepared.Error, correlation, moduleName));
+                        MutationOutcome(prepared.Error, correlation, moduleName, toolId));
                 state.ModuleName = prepared.ResolvedModuleName;
                 state.Guard = prepared.Guard;
                 preview = ExecutePreparedMutation(
@@ -97,7 +97,7 @@ namespace RNAssistant.Office.Tools
                     });
                 if (!prepared.Success)
                     return VbaNativePreparation.Failed(
-                        MutationOutcome(prepared.Error, correlation, moduleName));
+                        MutationOutcome(prepared.Error, correlation, moduleName, toolId));
                 state.ModuleName = prepared.ResolvedModuleName;
                 state.Guard = prepared.Guard;
                 preview = ExecutePreparedMutation(
@@ -117,7 +117,7 @@ namespace RNAssistant.Office.Tools
                     });
                 if (!prepared.Success)
                     return VbaNativePreparation.Failed(
-                        MutationOutcome(prepared.Error, correlation, moduleName));
+                        MutationOutcome(prepared.Error, correlation, moduleName, toolId));
                 state.ModuleName = prepared.ResolvedModuleName;
                 state.TargetModuleName = prepared.ResolvedTargetModuleName;
                 state.Guard = prepared.Guard;
@@ -136,7 +136,7 @@ namespace RNAssistant.Office.Tools
                     });
                 if (!prepared.Success)
                     return VbaNativePreparation.Failed(
-                        MutationOutcome(prepared.Error, correlation, moduleName));
+                        MutationOutcome(prepared.Error, correlation, moduleName, toolId));
                 state.ModuleName = prepared.ResolvedModuleName;
                 state.Guard = prepared.Guard;
                 preview = ExecutePreparedMutation(
@@ -159,7 +159,7 @@ namespace RNAssistant.Office.Tools
                     });
                 if (!prepared.Success)
                     return VbaNativePreparation.Failed(
-                        MutationOutcome(prepared.Error, correlation, moduleName));
+                        MutationOutcome(prepared.Error, correlation, moduleName, toolId));
                 state.BackupId = prepared.BackupId;
                 state.ModuleName = prepared.ModuleName;
                 state.RestoreGuard = prepared.Guard;
@@ -168,7 +168,7 @@ namespace RNAssistant.Office.Tools
                     cancellationToken);
             }
 
-            var outcome = MutationOutcome(preview, correlation, state.ModuleName);
+            var outcome = MutationOutcome(preview, correlation, state.ModuleName, toolId);
             if (toolId == VbaToolCatalog.RestoreBackup && outcome.Status == VbaNativeOutcomeStatus.Ok)
                 state.RestoredFrom = CaptureRestoreOrigin(session, state);
             return outcome.Status == VbaNativeOutcomeStatus.Ok
@@ -244,14 +244,15 @@ namespace RNAssistant.Office.Tools
                 var correlation = MutationCorrelation(execution, session);
                 return MutationOutcome(ExecutePreparedMutation(
                     toolId, arguments, state, correlation,
-                    false, cancellationToken), correlation, state.ModuleName);
+                    false, cancellationToken), correlation, state.ModuleName, toolId);
             }
         }
 
         private VbaNativeOutcome MutationOutcome(
             VbaMutationOutcome mutation,
             VbaMutationCorrelation correlation,
-            string fallbackModuleName)
+            string fallbackModuleName,
+            string toolId)
         {
             var outcome = VbaNativeOutcome.From(mutation);
             if (mutation == null || correlation == null ||
@@ -275,15 +276,18 @@ namespace RNAssistant.Office.Tools
             ReadCurrentSource(moduleName, data, out currentSource, out currentSourceComplete);
             var observedSource = currentSource == null ? null : ReadObservedSource(correlation, moduleName,
                 (string)data?["observedCodeSha256"]);
+            var patch = toolId == VbaToolCatalog.ApplyPatch;
+            var readScope = currentSourceComplete ? ToolRecoveryReadScope.None :
+                patch ? ToolRecoveryReadScope.RelevantLines : ToolRecoveryReadScope.Whole;
             return outcome.WithRecovery(new ToolRecoveryContract(
                 conflict ? ToolFailureKind.ConflictNoEffect : ToolFailureKind.RejectedNoEffect,
-                currentSourceComplete ? ToolRetryPolicy.Replan : ToolRetryPolicy.RefreshRequired,
+                patch || currentSourceComplete ? ToolRetryPolicy.Replan : ToolRetryPolicy.RefreshRequired,
                 VbaResourceProvider.ComponentIdentity(correlation.DocumentAuthorityId, moduleName),
                 ResourceRepresentations.Source,
                 "VBA module: " + moduleName,
                 currentSource,
                 currentSourceComplete,
-                ChangedSpan(observedSource, currentSource)));
+                ChangedSpan(observedSource, currentSource), readScope: readScope));
         }
 
         private void ReadCurrentSource(string moduleName, JObject data,
@@ -308,9 +312,8 @@ namespace RNAssistant.Office.Tools
                 currentSource = source;
                 complete = true;
             }
-            // A stitched head/tail is not an exact source view and can exhaust
-            // the context that must carry this refusal. Keep the semantic target
-            // and RefreshRequired policy; the next read can select exact lines.
+            // A stitched head/tail is not an exact source view. The typed recovery
+            // distinguishes a whole-write refresh from a patch's relevant lines.
         }
 
         private string ReadObservedSource(VbaMutationCorrelation correlation,

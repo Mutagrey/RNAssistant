@@ -656,7 +656,7 @@ namespace RNAssistant.Harness
                 "tool arguments are supplied at the schema root");
             AssertContains(defaults.AgentToolsPrompt, "Skills define domain workflow and quality criteria",
                 "tool policy defines authority between skill guidance and schemas");
-            AssertContains(defaults.AgentSkillsPrompt, "smallest complete set of clearly applicable skills",
+            AssertContains(defaults.AgentSkillsPrompt, "For a clearly applicable or explicitly named skill, use common.skills_load",
                 "Agent selects and loads applicable skills before domain mutation");
         }
 

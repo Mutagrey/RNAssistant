@@ -463,14 +463,18 @@ For HTML, `structure` belongs to the workspace root and lists members; an exact
 `HTML file` target exposes complete `source`. If a model requests `structure` on
 that file target, the model-facing reader explicitly returns complete `source`
 and reports the actual representation. Other unsupported views still fail.
-HTML file/data targets include their parent workspace's semantic target, including
-its creation time. Structure, discovery, mutation and recovery results use the same label.
-Reading that label resolves the retained parent snapshot, independently of the
-active workspace; edits or deleting a current file cannot redirect a historical
-read. Document-owned history uses a bounded, generation-checked metadata scan
-(at most 1,000 entries), with bodies loaded only for the selected workspace.
-Missing bodies, ambiguous labels and incomplete metadata fail explicitly. Old
-unqualified member labels require rediscovery; there is no current-file fallback.
+The selected workspace uses `HTML workspace: current`. Its file/data targets keep
+the member creation timestamp and name under that working parent. A working read
+resolves the selected published head directly; a sibling edit does not force a
+history scan or change that target. `snapshotTarget` in discovery/read results is
+the explicit retained version: it stays on its exact parent after later edits,
+deletion and restart. Historical lookup is bounded to 1,000 snapshot metadata
+records; missing bodies, ambiguous labels and incomplete metadata fail explicitly.
+Current file evidence depends on the file's published logical head. Verified
+changes advance the affected file head; equal unchanged siblings retain theirs.
+Delete/recreate gets a new file identity even with equal bytes, and restore
+advances affected heads. Older publications without file heads conservatively
+depend on the aggregate until that file receives a verified publication.
 This projection does not rewrite retained structure bytes or move logical heads.
 Ordinary filename/content discovery still searches current members; an exact
 qualified HTML query is a point lookup into retained snapshots. `backups` is the

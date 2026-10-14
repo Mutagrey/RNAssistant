@@ -417,7 +417,10 @@ function appendAgentRunOverview(parent, steps, timeline, stats) {
 function appendAgentRunViewState(parent, runViewState, runId) {
   var health = runViewState ? runViewState.executionHealth : "unknown";
   var uncertain = health === "unknown";
-  if (health === "clean" && runViewState && ["failed", "cancelled"].indexOf(runViewState.lifecycle) < 0) return;
+  var goalUnassessed = runViewState && runViewState.goalVerification === "not_assessed" &&
+    runViewState.lifecycle === "completed" && runViewState.reason === "model_done";
+  if (health === "clean" && runViewState && !goalUnassessed &&
+      ["failed", "cancelled"].indexOf(runViewState.lifecycle) < 0) return;
   var cause = runViewState && runViewState.lifecycle === "failed"
     ? window.RNAssistantRunViewState.failureReasonLabel(runViewState.reason)
     : runViewState && runViewState.lifecycle === "cancelled" ? "Выполнение отменено." : "";
@@ -433,6 +436,10 @@ function appendAgentRunViewState(parent, runViewState, runId) {
       ". Проверьте фактическое состояние перед повторной записью.";
   } else if (cause) {
     note.textContent = cause;
+  } else if (goalUnassessed) {
+    note.textContent = "Модель завершила задачу. Подтверждённые записи: " + runViewState.verifiedWrites +
+      "; без изменения: " + runViewState.noChangeWrites +
+      ". Соответствие всем требованиям автоматически не проверено.";
   } else {
     note.textContent = "В ходе работы были неудачные попытки.";
   }

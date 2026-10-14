@@ -118,8 +118,13 @@ namespace RNAssistant.Harness
                 }
                 else
                 {
-                    var error = RuntimeThrows<ResourceRequestException>(() => provider.Search(session, "needle", ChatHtmlResourceCatalog.FileKind, 20, 600));
-                    AssertEqual("resource_revision_changed", error.ErrorCode, "selection and authority drift invalidate member-only search");
+                    if (scenario == "selection")
+                    {
+                        var error = RuntimeThrows<ResourceRequestException>(() => provider.Search(session, "needle", ChatHtmlResourceCatalog.FileKind, 20, 600));
+                        AssertEqual("resource_revision_changed", error.ErrorCode, "selection change invalidates member-only search");
+                    }
+                    else AssertEqual(1, provider.Search(session, "needle", ChatHtmlResourceCatalog.FileKind, 20, 600).Matches.Count,
+                        "unrelated authority publication does not invalidate HTML search");
                 }
                 session.ActiveHtmlArtifactId = selected;
                 AssertEqual(1, provider.Search(session, "needle", ChatHtmlResourceCatalog.FileKind, 20, 600).Matches.Count, "fresh search succeeds after drift");

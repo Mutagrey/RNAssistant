@@ -716,6 +716,96 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void SimpleAgentPublishesNewSkillAndToolInSameRun()
+        {
+            Func<string, JObject, string> call = (name, arguments) => new JObject
+            {
+                ["message"] = "Продолжаю проверку пакета.",
+                ["action"] = "tool",
+                ["tool_calls"] = new JArray(new JObject { ["name"] = name, ["arguments"] = arguments })
+            }.ToString(Formatting.None);
+            const string skillId = "excel.in_run_skill";
+            const string toolId = "excel.in_run_tool";
+            const string body = "# In-run skill\n\nIN_RUN_SKILL_SENTINEL";
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var responses = new Queue<string>(new[]
+                {
+                    call("common.skills_load", new JObject { ["id"] = "common.skill_authoring" }),
+                    call("common.skills_upsert", new JObject {
+                        ["id"] = skillId, ["host"] = "Excel", ["name"] = "In-run skill",
+                        ["description"] = "Test newly published skill visibility.",
+                        ["version"] = "1.0.0", ["bodyMarkdown"] = body, ["enabled"] = true }),
+                    call("common.capabilities_read", new JObject { ["id"] = skillId }),
+                    call("common.skills_load", new JObject { ["id"] = skillId }),
+                    "{\"message\":\"Скилл создан и загружен.\",\"action\":\"done\",\"tool_calls\":[]}"
+                });
+                var requests = new List<IReadOnlyList<ChatMessage>>();
+                LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
+                {
+                    requests.Add(messages.ToList());
+                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                };
+                var session = NewSession(adapter);
+                var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
+                    ChatModes.Agent, "Create and load a skill in this run.", session, NewContext(adapter),
+                    new AppSettings { AutoConfirmToolActions = true, MaxAgentIterations = 8 },
+                    OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(),
+                    null).GetAwaiter().GetResult();
+                AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus,
+                    "same-run skill creation completes: " + result.AssistantText);
+                AssertEqual(5, requests.Count, "skill creation, source read and selection reach distinct requests");
+                AssertContains(FlattenSimple(requests[2]), "\"id\":\"" + skillId + "\"",
+                    "new skill is discoverable after its publication in the same run");
+                AssertContains(FlattenSimple(requests[3]), "IN_RUN_SKILL_SENTINEL",
+                    "new skill source is readable through the capability reader");
+                AssertContains(FlattenSimple(requests[4]), "IN_RUN_SKILL_SENTINEL",
+                    "newly selected instructions reach the next request");
+                AssertTrue(session.LastRun.SelectedSkills.Any(item => item.Id == skillId),
+                    "same-run selection remains in durable run state");
+            });
+
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var authored = CustomTool("Excel", toolId);
+                authored.Components[0].Code = authored.Components[0].Code
+                    .Replace("' <RNAssistantTool>", "<RNAssistantTool>")
+                    .Replace("' {\"protocolVersion\"", "{\"protocolVersion\"")
+                    .Replace("' </RNAssistantTool>", "</RNAssistantTool>");
+                var responses = new Queue<string>(new[]
+                {
+                    call("common.skills_load", new JObject { ["id"] = "common.tool_authoring" }),
+                    call("common.tools_upsert", new JObject {
+                        ["id"] = toolId, ["components"] = ToolComponentsPayload(authored) }),
+                    call("common.resources_read", new JObject { ["target"] = "tool source: " + toolId }),
+                    call("common.capabilities_read", new JObject { ["id"] = toolId }),
+                    "{\"message\":\"Инструмент создан и его схема прочитана.\",\"action\":\"done\",\"tool_calls\":[]}"
+                });
+                var requests = new List<IReadOnlyList<ChatMessage>>();
+                LlmCompletionDelegate completion = (settings, messages, requestOptions, stream, token) =>
+                {
+                    requests.Add(messages.ToList());
+                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                };
+                var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
+                    ChatModes.Agent, "Create and inspect a tool in this run.", NewSession(adapter), NewContext(adapter),
+                    new AppSettings { AutoConfirmToolActions = true, MaxAgentIterations = 8 },
+                    OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(),
+                    null).GetAwaiter().GetResult();
+                AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus,
+                    "same-run tool creation completes: " + result.AssistantText);
+                AssertEqual(5, requests.Count, "tool creation, source read and exact schema read reach distinct requests");
+                AssertContains(FlattenSimple(requests[2]), "\"id\":\"" + toolId + "\"",
+                    "new tool is discoverable after its publication in the same run");
+                AssertContains(FlattenSimple(requests[3]), "Public Function Run",
+                    "new tool source is readable through the resource reader");
+                AssertContains(FlattenSimple(requests[4]), "\"name\":\"" + toolId + "\"",
+                    "new tool schema is readable through the capability reader");
+                AssertContains(FlattenSimple(requests[4]), "\"parameters\":",
+                    "new direct tool retains its exact schema after admission");
+            });
+        }
+
         private static void SimpleAgentPromptSkipsInvalidToolSchema()
         {
             var adapter = FakeOfficeAdapter.ForHost("Excel");
@@ -931,8 +1021,8 @@ namespace RNAssistant.Harness
                 AssertEqual("write_rejected", (string)write["errorCode"], "actual failure code is preserved");
                 AssertTrue(!adapter.HasSheet("Report"), "the claimed sheet was not created");
                 AssertEqual(1, adapter.ExcelSheetRequests.Count(command => command.ToolId == "excel.add_sheet"), "failed write is not retried");
-                AssertContains(FlattenSimple(requests.Last()), "\"outcome\":\"Error\"",
-                    "the final model request saw the folded error outcome");
+                AssertContains(FlattenSimple(requests.Last()), "\"status\":\"error\"",
+                    "the final model request saw the failed tool result");
                 AssertContains(FlattenSimple(requests.Last()), "Write rejected before the effect.",
                     "the folded error retains its actionable message");
                 AssertContains(requests.Last().Last().Content, "unsupported root field: executionSummary", "model cannot inject runtime health into v7");
@@ -962,7 +1052,8 @@ namespace RNAssistant.Harness
                 var executor = new OfficeToolExecutor(adapter, journal, new SkillStore(paths));
                 var responses = new Queue<string>(new[]
                 {
-                    LoadToolSchemaResponse("common.vba_write_module"),
+                    "{\"message\":\"Читаю текущий модуль.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.resources_read\",\"arguments\":{\"target\":\"VBA module: Module1\",\"representation\":\"source\"}}]}",
+                    "{\"message\":\"Загружаю процедуру редактирования VBA.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.skills_load\",\"arguments\":{\"id\":\"common.vba_code_editing\"}}]}",
                     new JObject
                     {
                         ["message"] = "Обновляю модуль.",
@@ -1005,7 +1096,7 @@ namespace RNAssistant.Harness
                     journal.ListMutations(adapter.HostName, adapter.DocumentKey).Single().Terminal.Status, "durable journal also records unknown");
                 AssertContains(adapter.VbaModuleCode, "\"diverged\"", "fake host state matches neither before nor intended");
                 AssertEqual(1, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "unknown write is dispatched once");
-                AssertContains(FlattenSimple(requests.Last()), "\"outcome\":\"Unknown\"", "compiled causal frame preserves unknown outcome");
+                AssertContains(FlattenSimple(requests.Last()), "\"status\":\"unknown\"", "model receives the unknown tool result");
                 AssertContains(FlattenSimple(requests.Last()), "Final VBA state is unknown", "model receives the exact verification warning");
                 AssertEqual(RunViewLifecycles.Completed, result.RunViewState.Lifecycle, "loop completion is independent of execution health");
                 AssertRunViewState(result, session, "unknown", 0, 0, 1);
@@ -1649,9 +1740,9 @@ namespace RNAssistant.Harness
                     "invented VBA capability id is absent from the authoritative catalog");
                 var callableNames = ResponseSchemaCallNames(requestOptions.ResponseSchemaJson)
                     .ToList();
-                AssertTrue(callableNames.Contains("common.vba_apply_patch", StringComparer.OrdinalIgnoreCase) &&
-                    callableNames.Contains("common.vba_write_module", StringComparer.OrdinalIgnoreCase),
-                    "routine exact patch and intentional whole-source write stay in the VBA editing core");
+                AssertTrue(!callableNames.Contains("common.vba_apply_patch", StringComparer.OrdinalIgnoreCase) &&
+                    !callableNames.Contains("common.vba_write_module", StringComparer.OrdinalIgnoreCase),
+                    "VBA editing mutations require a selected skill before they are callable");
                 foreach (var optionalId in new[]
                 {
                     "common.vba_restore_backup", "common.vba_rename_module",
@@ -1754,10 +1845,10 @@ namespace RNAssistant.Harness
                     currentMessages, currentOptions, settings, repairReserve, continuationReserve);
                 var legacyTokens = ModelContextBudget.EstimateAdmittedRequestTokens(
                     legacyMessages, legacyOptions, settings, repairReserve, continuationReserve);
-                AssertEqual(21, currentPack.Tools.Count,
-                    "R61 Excel Agent core contains five bootstrap, fourteen Excel, and two VBA editing schemas");
-                AssertEqual(25, legacyCore.Length,
-                    "counterfactual post-11O5 Excel Agent core contains all six VBA/macro schemas");
+                AssertEqual(19, currentPack.Tools.Count,
+                    "Excel Agent core contains five bootstrap and fourteen Excel schemas; VBA editing requires a skill");
+                AssertEqual(23, legacyCore.Length,
+                    "counterfactual Excel core retains additional direct VBA schemas");
                 AssertTrue(currentTokens < legacyTokens,
                     "R61 core lowers deterministic initial input estimate; before=" +
                     legacyTokens + ", after=" + currentTokens);
@@ -2051,24 +2142,26 @@ namespace RNAssistant.Harness
                 {
                     step++;
                     string response;
-                    if (phase == 0 && step == 1)
+                    if (step == 1)
+                        response = LoadSkillResponse("common.vba_code_editing");
+                    else if (phase == 0 && step == 2)
                         response = call(VbaToolCatalog.WriteModule, new JObject {
                             ["moduleName"] = module, ["code"] = source, ["mode"] = "createOnly" });
-                    else if (phase == 0 && step == 2)
+                    else if (phase == 0 && step == 3)
                     {
                         AssertEqual("ok", (string)LastToolResult(messages, VbaToolCatalog.WriteModule)["status"],
                             "creation has verified source before the next read");
                         response = call(ResourceToolCatalog.ReadToolId, new JObject {
                             ["target"] = "VBA module: " + module, ["representation"] = "source" });
                     }
-                    else if (phase == 0 && step == 3)
+                    else if (phase == 0 && step == 4)
                     {
                         var read = LastToolResult(messages, ResourceToolCatalog.ReadToolId);
                         AssertEqual("ok", (string)read["status"], "large source reads across internal exact pages");
                         AssertEqual(source, (string)read["data"]["text"], "whole source preserves exact CRLF bytes");
                         response = ModelProtocolWire.Write("Created and read.", new ConversationToolCall[0]);
                     }
-                    else if (phase == 1 && step == 1)
+                    else if (phase == 1 && step == 2)
                     {
                         AssertTrue(messages.Any(message => message.SyntheticResourceObservation &&
                             message.ResourceEvidence.Count > 0 && (message.Content ?? string.Empty).Contains(source)),
@@ -2076,20 +2169,20 @@ namespace RNAssistant.Harness
                         response = call(VbaToolCatalog.WriteModule, new JObject {
                             ["moduleName"] = module, ["code"] = after, ["mode"] = "updateOnly" });
                     }
-                    else if (phase == 1 && step == 2)
+                    else if (phase == 1 && step == 3)
                     {
                         AssertEqual("ok", (string)LastToolResult(messages, VbaToolCatalog.WriteModule)["status"],
                             "restored source authorizes a whole-module edit without another read");
                         response = ModelProtocolWire.Write("Updated.", new ConversationToolCall[0]);
                     }
-                    else if (phase == 2 && step == 1)
+                    else if (phase == 2 && step == 2)
                     {
                         AssertTrue(!messages.Any(message => (message.Content ?? string.Empty).Contains(after)),
                             "large source is omitted from the constrained request");
                         response = call(VbaToolCatalog.WriteModule, new JObject { ["moduleName"] = module,
                             ["code"] = "Option Explicit\r\nSub Main()\r\nDebug.Print \"final\"\r\nEnd Sub", ["mode"] = "updateOnly" });
                     }
-                    else if (phase == 2 && step == 2)
+                    else if (phase == 2 && step == 3)
                     {
                         var rejected = LastToolResult(messages, VbaToolCatalog.WriteModule);
                         AssertEqual("error", (string)rejected["status"], "missing source blocks a destructive reconstruction");
@@ -2100,7 +2193,7 @@ namespace RNAssistant.Harness
                         response = call(ResourceToolCatalog.ReadToolId, new JObject { ["target"] = "VBA module: " + module,
                             ["representation"] = "source", ["startLine"] = 1, ["lineCount"] = 4 });
                     }
-                    else if (phase == 2 && step == 3)
+                    else if (phase == 2 && step == 4)
                     {
                         var read = LastToolResult(messages, ResourceToolCatalog.ReadToolId);
                         AssertEqual("ok", (string)read["status"], "bounded source recovery fits the constrained request");
@@ -2109,7 +2202,7 @@ namespace RNAssistant.Harness
                         response = call(VbaToolCatalog.ApplyPatch, new JObject { ["moduleName"] = module,
                             ["patch"] = new JArray(new JObject { ["find"] = "\"after\"", ["text"] = "\"final\"" }) });
                     }
-                    else if (phase == 2 && step == 4)
+                    else if (phase == 2 && step == 5)
                     {
                         AssertEqual("ok", (string)LastToolResult(messages, VbaToolCatalog.ApplyPatch)["status"],
                             "exact patch works without full source in model context");
@@ -2122,10 +2215,11 @@ namespace RNAssistant.Harness
                 var settings = new AppSettings { AutoConfirmToolActions = true,
                     ContextWindowOverrideTokens = 131072, MaxTokens = 16384 };
                 var tools = executor.GetControllerTools().Where(tool => VbaToolCatalog.Owns(tool.Id) ||
+                    tool.Id == SkillLoadToolHandler.ToolId ||
                     tool.Id == ResourceToolCatalog.ReadToolId || tool.Id == ResourceToolCatalog.FindToolId).ToList();
                 service.ExecuteWithApprovalsAsync(ChatModes.Agent, "Create and inspect ContextModule.", session,
                     NewContext(adapter), settings, tools, null).GetAwaiter().GetResult();
-                AssertEqual(3, step, "creation and read complete without repairs");
+                AssertEqual(4, step, "skill selection, creation and read complete without repairs");
                 AssertEqual(source, adapter.GetVbaModuleCode(module), "creation preserves the complete source");
 
                 Action compact = () => {
@@ -2145,7 +2239,7 @@ namespace RNAssistant.Harness
                 step = 0;
                 var continued = service.ExecuteWithApprovalsAsync(ChatModes.Agent, "Change before to after in ContextModule.", session,
                     NewContext(adapter), settings, tools, null).GetAwaiter().GetResult();
-                AssertEqual(2, step, "post-compaction edit needs no extra source read or repair: " + continued.AssistantText);
+                AssertEqual(3, step, "post-compaction edit needs only skill selection and no extra source read: " + continued.AssistantText);
                 AssertEqual(after, adapter.GetVbaModuleCode(module), "edit preserves all unrelated source after compaction");
                 AssertEqual(1, adapter.CountVbaCalls(FakeVbaOperation.CreateModule), "creation dispatches once");
                 AssertEqual(1, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "modification dispatches once");
@@ -2154,11 +2248,11 @@ namespace RNAssistant.Harness
                 step = 0;
                 // Keep room for the production prompts and causal frames while
                 // forcing the full module body out of the request.
-                settings.ContextWindowOverrideTokens = 24576;
+                settings.ContextWindowOverrideTokens = 32768;
                 settings.MaxTokens = 1024;
                 continued = service.ExecuteWithApprovalsAsync(ChatModes.Agent, "Change after to final in ContextModule using a focused edit.",
                     session, NewContext(adapter), settings, tools, null).GetAwaiter().GetResult();
-                AssertEqual(4, step, "small-context refusal recovers through one excerpt and one patch: " + continued.AssistantText);
+                AssertEqual(5, step, "small-context refusal recovers through skill selection, one excerpt and one patch: " + continued.AssistantText);
                 AssertEqual(after.Replace("\"after\"", "\"final\""), adapter.GetVbaModuleCode(module),
                     "small-context patch preserves all unrelated source");
                 AssertEqual(2, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "bounded recovery writes exactly once");
@@ -2178,8 +2272,7 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 var responses = new Queue<string>(new[]
                 {
-                    LoadToolSchemaResponse("common.vba_apply_patch"),
-                    LoadToolSchemaResponse("common.vba_write_module"),
+                    LoadSkillResponse("common.vba_code_editing"),
                     new JObject
                     {
                         ["message"] = "Добавляю диагностику и обновляю заголовок.",
@@ -2230,13 +2323,13 @@ namespace RNAssistant.Harness
                 {
                     modelRequests++;
                     sourceRequests.Add(messages.ToList());
-                    if (modelRequests == 4)
+                    if (modelRequests == 3)
                     {
                         AssertEqual(before, adapter.VbaModuleCode, "rejected batch performs no VBA mutation");
                         AssertEqual(0, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule),
                             "protocol repair precedes every dispatch");
                     }
-                    if (modelRequests == 5)
+                    if (modelRequests == 4)
                     {
                         AssertEqual(patched, adapter.VbaModuleCode, "first singleton patch is applied before read");
                         AssertEqual(1, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "only the patch dispatched");
@@ -2250,15 +2343,12 @@ namespace RNAssistant.Harness
                     session, NewContext(adapter), new AppSettings { AutoConfirmToolActions = true },
                     OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null)
                     .GetAwaiter().GetResult();
-                AssertEqual(7, modelRequests, "both mutations reach their next model decision");
+                AssertEqual(6, modelRequests, "both mutations reach their next model decision");
                 AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "model completes after both writes");
-                AssertContains(sourceRequests[4].Single(message => message.SyntheticResourceObservation).Content,
-                    patched, "next model decision sees the changed VBA source");
-                AssertContains(sourceRequests.Last().Single(message => message.SyntheticResourceObservation).Content,
-                    "' Version 2\n" + patched, "final model decision sees the latest whole-module source");
-                var writeFrame = sourceRequests.Last().Single(message =>
-                    message.CompletedOperation?.ToolName == "common.vba_write_module").CompletedOperation;
-                AssertEqual(RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok, writeFrame.Status,
+                AssertEqual(patched,
+                    (string)LastToolResult(sourceRequests[4], ResourceToolCatalog.ReadToolId)["data"]["text"],
+                    "next model decision sees the changed VBA source through its exact read");
+                AssertEqual("ok", (string)LastToolResult(sourceRequests.Last(), VbaToolCatalog.WriteModule)["status"],
                     "the write's superseded input observation cannot turn its verified result into an error");
                 var writes = result.ToolResults.Select(item => JObject.FromObject(item))
                     .Where(item => (string)item["toolId"] == "common.vba_write_module").ToList();
@@ -2317,8 +2407,8 @@ namespace RNAssistant.Harness
                 AssertContains(FlattenSimple(beforeSecondWrite), "Added sheet: First",
                     "first result reaches the model before the second write is authored");
                 var replay = FlattenSimple(finalRequest);
-                AssertEqual(2, finalRequest.Count(message => message.CompletedOperation?.ToolName == "excel.add_sheet"),
-                    "both execution results are folded after schema admission");
+                AssertContains(replay, "Added sheet: First", "first write result reaches the final request");
+                AssertContains(replay, "Added sheet: Second", "second write result reaches the final request");
                 var activities = session.Messages
                     .Where(message => message != null && message.Activity != null && message.Activity.Kind == "tool" &&
                         string.Equals(message.Activity.ToolId, "excel.add_sheet", StringComparison.OrdinalIgnoreCase))
@@ -2457,12 +2547,17 @@ namespace RNAssistant.Harness
                 AssertEqual(2, session.LastRun.ToolStepsUsed, "confirmed result replaces reserved logical tool step");
                 var replay = FlattenSimple(calls[2]);
                 AssertContains(replay, "RUNTIME_CONTEXT", "user-role continuation keeps runtime context");
-                AssertEqual(1, calls[2].Count(message =>
+                AssertEqual(2, calls[2].Count(message =>
                     message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion &&
                     !string.Equals(message.Role, "assistant", StringComparison.Ordinal)),
-                    "schema evidence remains typed while the completed mutation is folded");
-                AssertTrue(calls[2].Any(message => message.CompletedOperation?.ToolName == "common.skills_upsert"),
-                    "confirmed result is retained as a completed causal frame");
+                    "schema evidence and completed mutation remain separate typed results");
+                AssertEqual(1, calls[2].Count(message => message.ToolName == "common.skills_upsert" &&
+                    message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion &&
+                    !string.Equals(message.Role, "assistant", StringComparison.Ordinal)),
+                    "confirmed mutation is delivered once");
+                AssertTrue(calls[2].Any(message => message.ToolName == "common.skills_upsert" &&
+                    message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion),
+                    "confirmed result is retained as a typed tool result");
                 AssertContains(replay, "common.skills_upsert", "folded confirmation keeps its tool identity");
                 const string runtimeMarker = "RUNTIME_CONTEXT:\n";
                 var runtimeMessage = calls[2].First(message => (message.Content ?? string.Empty)
@@ -2472,20 +2567,21 @@ namespace RNAssistant.Harness
                 AssertTrue(((JArray)runtimeContext["capabilities"]["items"])
                         .OfType<JObject>().Any(item =>
                             (string)item["id"] == "common.skills_upsert" &&
-                            (bool?)item["schemaLoaded"] == false),
-                    "catalog-changing confirmation invalidates the prior optional pack");
-                AssertEqual("invalidated_to_core", (string)runtimeContext["capabilities"]["reconstructionStatus"],
-                    "continuation exposes exact callable-pack reconstruction status");
-                AssertTrue(calls[2].Any(message => (message.Content ?? string.Empty)
-                    .Contains("\"code\":\"tool_pack_chain_broken\"")),
-                    "continuation explains why the changed catalog requires explicit readmission");
+                            (bool?)item["schemaLoaded"] == true),
+                    "selected skill keeps its unchanged authoring schema after publication");
+                AssertTrue(((JArray)runtimeContext["capabilities"]["items"])
+                        .OfType<JObject>().Any(item =>
+                            (string)item["id"] == "common.test" && (string)item["kind"] == "skill"),
+                    "confirmed creation appears in the next exact catalog");
                 AssertTrue(replay.IndexOf("waiting_confirmation", StringComparison.OrdinalIgnoreCase) < 0, "no stale waiting result");
                 var replayMessages = calls[2].ToList();
                 var userIndex = replayMessages.FindIndex(message => message.Role == "user" && !message.ProtocolMessage &&
                     (message.Content ?? string.Empty).Contains("Create a test skill."));
-                var resultIndex = replayMessages.FindIndex(message => message.CompletedOperation?.ToolName == "common.skills_upsert");
+                var resultIndex = replayMessages.FindIndex(message => message.ToolName == "common.skills_upsert" &&
+                    message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion &&
+                    !string.Equals(message.Role, "assistant", StringComparison.Ordinal));
                 AssertTrue(userIndex >= 0 && userIndex < resultIndex,
-                    "user request precedes the folded completed interaction in replay");
+                    "user request precedes the completed tool result in replay");
             });
         }
 
@@ -2508,7 +2604,7 @@ namespace RNAssistant.Harness
                 }
                 var responses = new Queue<string>(new[]
                 {
-                    LoadToolSchemaResponse("common.vba_apply_patch"),
+                    LoadSkillResponse("common.vba_code_editing"),
                     new JObject { ["message"] = "Обновляю VBA.", ["action"] = "tool",
                         ["tool_calls"] = new JArray(new JObject { ["name"] = "common.vba_apply_patch",
                             ["arguments"] = new JObject { ["moduleName"] = "Module1", ["patch"] = patch } }) }.ToString(),
@@ -2600,9 +2696,11 @@ namespace RNAssistant.Harness
                     AssertTrue(loaded.Messages.Any(message => message.ToolName == VbaToolCatalog.ApplyPatch &&
                         message.ResultPayload != null), "large patch result exercises CAS archival");
                     var frame = calls.Last().SingleOrDefault(message =>
-                        message.CompletedOperation?.ToolCallId == terminal.ToolCallId);
-                    AssertTrue(frame != null && frame.Content.Contains("VerifiedChanged"),
-                        "the first request after confirmation contains the terminal effect");
+                        message.ToolCallId == terminal.ToolCallId &&
+                        message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion &&
+                        !string.Equals(message.Role, "assistant", StringComparison.Ordinal));
+                    AssertTrue(frame != null && frame.Content.Contains("\"status\":\"ok\""),
+                        "the first request after confirmation contains the verified terminal result");
                     AssertContains(frame.Content, "Module1", "terminal effect remains associated with its module");
                     var apiMessages = new LlmMessageBuilder().Build(calls.Last(), settings).Messages
                         .Select(item => JObject.FromObject(item)).ToList();
@@ -2619,7 +2717,7 @@ namespace RNAssistant.Harness
                     "1 операций записи завершились ошибкой",
                     "failed confirmed write remains explicit in the user-visible result");
                 AssertContains(FlattenSimple(calls.Last()),
-                    "The VBA module changed after this action was prepared",
+                    "The VBA module changed after the source was inspected",
                     "confirmed execution exposes the guarded stale-state outcome without runtime internals");
                 AssertContains(adapter.VbaModuleCode, "external",
                     "stale confirmed call does not overwrite live VBA");
@@ -2667,8 +2765,6 @@ namespace RNAssistant.Harness
                     "agent continues after confirmed policy drift");
                 AssertEqual(2, calls.Count, "confirmed policy drift triggers the next model turn");
                 var replay = FlattenSimple(calls[1]);
-                AssertTrue(calls[1].Any(message => message.CompletedOperation?.ToolName == "excel.clear_range"),
-                    "confirmed policy drift is retained in model context");
                 AssertContains(replay, "Tool policy changed; request a new call.",
                     "fingerprint failure is replayed without dispatch");
                 AssertTrue(replay.IndexOf("waiting_confirmation", StringComparison.OrdinalIgnoreCase) < 0, "waiting result is not replayed after failure");

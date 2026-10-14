@@ -42,6 +42,7 @@ function view(health, options = {}) {
   return {
     RunId: "run", TurnId: "turn", Narrative: "Все изменения применены.",
     Lifecycle: options.lifecycle || "completed", ExecutionHealth: health,
+    GoalVerification: options.goalVerification || "",
     SuccessfulReads: options.reads || 0, VerifiedWrites: options.verified || 0,
     NoChangeWrites: options.noChange || 0, UnverifiedWrites: options.unverified || 0,
     FailedCalls: options.failed || 0, UnknownEffects: options.unknown || 0,
@@ -76,6 +77,20 @@ function assertVisibleEvidence(node, health) {
 }
 
 const tests = [
+  ["model completion keeps effect counts separate from goal verification", () => {
+    const node = renderFinal(view("clean", { reason: "model_done", goalVerification: "not_assessed", verified: 1 }));
+    const note = assertVisibleEvidence(node, "clean");
+    assert.match(note.textContent, /Подтверждённые записи: 1/);
+    assert.match(note.textContent, /Соответствие всем требованиям автоматически не проверено/);
+    assert.equal(walk(node).find(item => item.className === "agent-final-step").textContent,
+      "Все изменения применены.", "model wording stays separate from runtime evidence");
+  }],
+  ["older run views also leave goal verification unassessed", () => {
+    const older = view("clean", { reason: "model_done" });
+    delete older.GoalVerification;
+    const note = assertVisibleEvidence(renderFinal(older), "clean");
+    assert.match(note.textContent, /Соответствие всем требованиям автоматически не проверено/);
+  }],
   ["completed run adds no counter summary to the model answer", () => {
     const node = renderFinal(view("clean", { verified: 1, noChange: 2 }));
     assert.equal(walk(node).some(item => item.attributes["data-run-result-card"]), false);

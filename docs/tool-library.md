@@ -651,8 +651,8 @@ contract is:
 - authoring preview and Library test use generated runtime fixtures behind the same
   preparation boundary. The author/model fills only the effective semantic form;
   exact prepared state may appear only in a human read-only diagnostic;
-- a catalog change becomes available only at the next run boundary and cannot
-  mutate the snapshot of an accepted run;
+- a committed catalog change becomes available at the next model-request boundary
+  or next run; it cannot mutate an already accepted request;
 - editor test executes through normal `ToolRuntime`, policy, confirmation,
   `DocumentSession` and result/effect evidence, using a disposable document or an
   explicitly approved copy for mutations;
@@ -776,7 +776,7 @@ enums и диапазоны уже используются. Критичная 
 |---|---|
 | Resource find/read — 2 | Сохранить отдельно discovery и content read. Exact known target читать напрямую; поиск не должен быть обязательным ритуалом. Не добавлять отдельные Excel/VBA/HTML readers поверх общего gateway |
 | Resource schema/mapping/derive — 4 | Оставить отдельным optional advanced workflow. Не требовать draft → publish → mapping → derive для обычного чтения диапазона или dashboard binding |
-| Capabilities — 2 | Search только фильтрует каталог; read загружает выбранный skill/schema. Пока сохранить оба, но показывать actual per-request inclusion/admission. Не заставлять искать известный id или заново читать уже callable schema |
+| Capabilities — 2 | Search только фильтрует каталог; read показывает исходник skill либо допускает прямую schema. Выбор skill выполняет только `common.skills_load`. Показывать actual per-request inclusion/admission; не заставлять искать известный id или заново читать уже callable schema |
 | HTML — 7 | Сохранить разделение file write/patch, JSON data write и live source binding. JSON write уже создаёт binding: эта атомарность полезна и должна быть видна в результате. Freeze/refresh оставить optional; не объединять их в универсальный action tool |
 | JS — 1 | Сохранить отдельный read-only worker с explicit resource inputs. Его `ok` не доказывает исполнение app.js в WebView или отрисовку страницы. Переиспользовать общий selector/batch contract с HTML runtime |
 | VBA/macro — 6 | Whole write, targeted patch, rename, delete, restore и arbitrary execution различаются effects/guards; объединять их нельзя. Согласовать reuse after-source для write/patch. Длинное описание patch сократить до выбора/правил/исправления ошибки; подробную грамматику оставить в нужном skill/reference |

@@ -31,6 +31,12 @@ namespace RNAssistant.Core.Models
         }
     }
 
+    public static class RunGoalVerification
+    {
+        // Execution read-back is evidence of an effect, not proof of the user's goal.
+        public const string NotAssessed = "not_assessed";
+    }
+
     public sealed class PendingConfirmationViewState
     {
         public string PendingId { get; private set; }
@@ -58,6 +64,7 @@ namespace RNAssistant.Core.Models
         public string Narrative { get; private set; }
         public string Lifecycle { get; private set; }
         public string ExecutionHealth { get; private set; }
+        public string GoalVerification { get; private set; }
         public int SuccessfulReads { get; private set; }
         public int VerifiedWrites { get; private set; }
         public int NoChangeWrites { get; private set; }
@@ -74,7 +81,7 @@ namespace RNAssistant.Core.Models
             string executionHealth, int successfulReads, int verifiedWrites, int noChangeWrites,
             int unverifiedWrites, int failedCalls, int unknownEffects,
             PendingConfirmationViewState pendingConfirmation, string reason, string currentAction,
-            DateTime startedUtc)
+            DateTime startedUtc, string goalVerification = RunGoalVerification.NotAssessed)
         {
             if (string.IsNullOrWhiteSpace(runId) || string.IsNullOrWhiteSpace(turnId))
                 throw new ArgumentException("Run and turn ids are required.");
@@ -82,6 +89,8 @@ namespace RNAssistant.Core.Models
                 throw new ArgumentOutOfRangeException(nameof(lifecycle));
             if (!RunViewHealth.IsKnown(executionHealth))
                 throw new ArgumentOutOfRangeException(nameof(executionHealth));
+            if (goalVerification != RunGoalVerification.NotAssessed)
+                throw new ArgumentOutOfRangeException(nameof(goalVerification));
             if (successfulReads < 0 || verifiedWrites < 0 || noChangeWrites < 0 ||
                 unverifiedWrites < 0 || failedCalls < 0 || unknownEffects < 0)
                 throw new ArgumentOutOfRangeException("Run view counts cannot be negative.");
@@ -97,6 +106,7 @@ namespace RNAssistant.Core.Models
             Narrative = narrative ?? string.Empty;
             Lifecycle = lifecycle;
             ExecutionHealth = executionHealth;
+            GoalVerification = goalVerification;
             SuccessfulReads = successfulReads;
             VerifiedWrites = verifiedWrites;
             NoChangeWrites = noChangeWrites;

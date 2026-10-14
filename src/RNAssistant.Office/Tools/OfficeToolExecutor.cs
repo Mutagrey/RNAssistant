@@ -977,7 +977,9 @@ namespace RNAssistant.Office.Tools
                 }
 
                 _controllerToolIds.Add(tool.Id);
-                if (HtmlWorkspaceToolCatalog.Owns(tool.Id) || SkillAuthoringCatalog.Owns(tool.Id) ||
+                if (HtmlWorkspaceToolCatalog.Owns(tool.Id) ||
+                    VbaToolCatalog.Owns(tool.Id) && tool.Id != VbaToolCatalog.RunMacro ||
+                    SkillAuthoringCatalog.Owns(tool.Id) ||
                     ToolAuthoringCatalog.Owns(tool.Id) || PromptToolCatalog.Owns(tool.Id))
                     tool.Exposure = ToolExposure.Skill;
                 target.Add(tool);

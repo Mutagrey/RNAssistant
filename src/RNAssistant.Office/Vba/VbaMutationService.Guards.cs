@@ -209,10 +209,13 @@ namespace RNAssistant.Office.Vba
         {
             var editor = string.Equals(operation, "editor", StringComparison.OrdinalIgnoreCase);
             var wholeWrite = string.Equals(operation, "write", StringComparison.OrdinalIgnoreCase);
+            var patch = string.Equals(operation, "patch", StringComparison.OrdinalIgnoreCase);
             var message = editor
                 ? "The VBA module changed after it was loaded in the editor. Reload it and reconcile the changes before saving."
                 : wholeWrite
                     ? "The VBA module changed after the source was inspected or this write was prepared. Obtain its complete current source and reconcile before replacing it. If the complete source does not fit in context, read the relevant source lines with startLine/lineCount and use common.vba_apply_patch. This conflict does not mean VBA access was denied."
+                    : patch
+                        ? "The VBA module changed after the source was inspected. Use current source supplied with this result, or read relevant lines with common.resources_read, then correct the patch anchors. Do not retry the unchanged patch."
                     : "The VBA module changed after this action was prepared. Retry the same tool so runtime can bind the current state; read it only if the intended action may no longer match.";
             return VbaMutationOutcome.Error(
                 message,
@@ -223,8 +226,8 @@ namespace RNAssistant.Office.Vba
                     ["observedCodeSha256"] = string.IsNullOrWhiteSpace(observedHash) ? null : observedHash,
                     ["actualExists"] = actualExists,
                     ["actualCodeSha256"] = string.IsNullOrWhiteSpace(actualHash) ? null : actualHash,
-                    ["retrySameTool"] = !editor && !wholeWrite,
-                    ["retryAfterRefresh"] = wholeWrite,
+                    ["retrySameTool"] = !editor && !wholeWrite && !patch,
+                    ["retryAfterRefresh"] = wholeWrite || patch,
                     ["reloadEditor"] = editor,
                     ["reconcileBeforeOverwrite"] = wholeWrite,
                     ["inspectTool"] = "common.resources_read",

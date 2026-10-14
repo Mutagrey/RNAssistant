@@ -118,6 +118,18 @@ namespace RNAssistant.Office.Vba
             return !string.IsNullOrWhiteSpace(hash);
         }
 
+        private static bool TryGetGuardObservation(VbaMutationCorrelation correlation, string moduleName, out string hash)
+        {
+            hash = correlation == null ? null : correlation.ExpectedContentSha256;
+            if (!string.IsNullOrWhiteSpace(hash)) return true;
+            // A read in another session can advance the shared document head. The
+            // calling session still owns its latest observation. An older read
+            // whose bytes happen to match the new head must not override it.
+            var evidence = ModuleEvidence(correlation, moduleName).LastOrDefault();
+            hash = evidence == null ? null : evidence.ContentSha256;
+            return !string.IsNullOrWhiteSpace(hash);
+        }
+
         private static bool RequiresObservationRefresh(VbaMutationCorrelation correlation, string moduleName)
         {
             string hash;

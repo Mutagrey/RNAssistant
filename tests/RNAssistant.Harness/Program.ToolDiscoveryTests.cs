@@ -885,7 +885,7 @@ namespace RNAssistant.Harness
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
-                var optionalTools = Enumerable.Range(1, 2)
+                var optionalTools = Enumerable.Range(1, 3)
                     .Select(index => new ToolCatalogEntry
                     {
                         Id = "fixture.dynamic_" + index,
@@ -914,20 +914,19 @@ namespace RNAssistant.Harness
                     AssertTrue(toolPack.Tools.Any(tool => tool.Id == id), "Excel core includes exact built-in " + id);
                 foreach (var id in new[]
                 {
-                    "common.vba_write_module", "common.vba_apply_patch"
-                })
-                    AssertTrue(toolPack.Tools.Any(tool => tool.Id == id), "VBA editing core includes exact public tool " + id);
-                foreach (var id in new[]
-                {
+                    "common.vba_write_module", "common.vba_apply_patch",
                     "common.vba_restore_backup", "common.vba_rename_module",
-                    "common.vba_delete_module", "common.office_run_macro"
+                    "common.vba_delete_module"
                 })
                 {
                     AssertTrue(!toolPack.Tools.Any(tool => tool.Id == id),
-                        "explicit rollback, identity, destructive, and execution intents stay optional: " + id);
+                        "VBA procedure tool requires a selected skill: " + id);
                     AssertTrue(toolPack.Catalog.Any(tool => tool.Id == id),
-                        "optional VBA intent remains in the exact runnable catalog: " + id);
+                        "VBA intent remains in the exact catalog: " + id);
                 }
+                AssertTrue(!toolPack.Tools.Any(tool => tool.Id == VbaToolCatalog.RunMacro) &&
+                    toolPack.Catalog.Any(tool => tool.Id == VbaToolCatalog.RunMacro),
+                    "macro execution remains an optional direct tool");
                 AssertTrue(!toolPack.Tools.Any(tool => tool.Id == "fixture.dynamic_1"),
                     "optional catalog schema is not injected into the core");
                 var capabilityContext = toolPack.CapabilityContext(null);
@@ -944,7 +943,11 @@ namespace RNAssistant.Harness
                     "compact catalog exposes the exact optional rename without publishing its schema");
 
                 var first = ReadSchemaEvidence(executor, catalog, "fixture.dynamic_1", "read_1");
-                var second = ReadSchemaEvidence(executor, catalog, "common.vba_rename_module", "read_2");
+                var blockedSkill = executor.ExecuteManual(Command(CapabilityToolCatalog.ReadToolId,
+                    "id", "common.vba_rename_module"), catalog, new AppSettings(), false, false);
+                AssertTrue(!blockedSkill.Success && blockedSkill.Message.Contains("selected procedure"),
+                    "direct schema read cannot admit a skill-only VBA tool");
+                var second = ReadSchemaEvidence(executor, catalog, "fixture.dynamic_2", "read_2");
                 first.RunId = runId;
                 second.RunId = runId;
                 AssertTrue(toolPack.StageReadResult(first), "first exact schema is staged");
@@ -953,7 +956,7 @@ namespace RNAssistant.Harness
                 var admitted = toolPack.PreparePending((tools, state) =>
                 {
                     AssertTrue(tools.Any(tool => tool.Id == "fixture.dynamic_1") &&
-                        tools.Any(tool => tool.Id == "common.vba_rename_module"),
+                        tools.Any(tool => tool.Id == "fixture.dynamic_2"),
                         "admission evaluates the complete candidate batch");
                     AssertContains(state.Content, "\"admitted\":true", "candidate state is evaluated before publication");
                     return true;
@@ -965,18 +968,18 @@ namespace RNAssistant.Harness
                 AssertTrue(admitted.Revision != originalRevision, "admission creates a new callable snapshot revision");
                 AssertEqual(admitted.Revision, toolPack.Revision, "published revision matches the admitted candidate");
                 AssertTrue(toolPack.Tools.Any(tool => tool.Id == "fixture.dynamic_1") &&
-                    toolPack.Tools.Any(tool => tool.Id == "common.vba_rename_module"),
+                    toolPack.Tools.Any(tool => tool.Id == "fixture.dynamic_2"),
                     "both schemas are published together");
                 var admittedRename = toolPack.Tools.Single(tool =>
-                    tool.Id == "common.vba_rename_module");
+                    tool.Id == "fixture.dynamic_2");
                 var catalogRename = catalog.Single(tool =>
-                    tool.Id == "common.vba_rename_module");
+                    tool.Id == "fixture.dynamic_2");
                 AssertTrue(admittedRename.Policy.Matches(catalogRename.Policy) &&
                     admittedRename.Binding.Matches(catalogRename.Binding),
-                    "optional admission preserves rename policy and native execution binding");
+                    "optional admission preserves policy and native execution binding");
                 AssertContains(admitted.StateMessage.Content, "No schema was evicted", "admission reports no eviction");
 
-                var third = ReadSchemaEvidence(executor, catalog, "fixture.dynamic_2", "read_3");
+                var third = ReadSchemaEvidence(executor, catalog, "fixture.dynamic_3", "read_3");
                 third.RunId = runId;
                 AssertTrue(toolPack.StageReadResult(third), "third schema is staged");
                 var retainedRevision = toolPack.Revision;
@@ -984,10 +987,10 @@ namespace RNAssistant.Harness
                 AssertTrue(!rejected.Admitted, "overflow rejects the whole extension");
                 toolPack.Publish(rejected);
                 AssertEqual(retainedRevision, toolPack.Revision, "rejection does not publish a revision");
-                AssertTrue(!toolPack.Tools.Any(tool => tool.Id == "fixture.dynamic_2"),
+                AssertTrue(!toolPack.Tools.Any(tool => tool.Id == "fixture.dynamic_3"),
                     "rejected schema is never partially published");
                 AssertTrue(toolPack.Tools.Any(tool => tool.Id == "fixture.dynamic_1") &&
-                    toolPack.Tools.Any(tool => tool.Id == "common.vba_rename_module"),
+                    toolPack.Tools.Any(tool => tool.Id == "fixture.dynamic_2"),
                     "rejection never removes admitted schemas");
                 AssertContains(rejected.StateMessage.Content, "tool_pack_budget_exceeded",
                     "visible state identifies admission failure");
@@ -998,14 +1001,14 @@ namespace RNAssistant.Harness
                     runId,
                     catalog);
                 AssertTrue(!recreated.Tools.Any(tool => tool.Id == "fixture.dynamic_1") &&
-                    !recreated.Tools.Any(tool => tool.Id == "common.vba_rename_module"),
+                    !recreated.Tools.Any(tool => tool.Id == "fixture.dynamic_2"),
                     "a recreated pack cannot infer an admission decision from raw read evidence");
                 third.RunId = "other-run";
                 AssertTrue(!recreated.StageReadResult(third),
                     "live evidence from another run cannot stage an extension");
 
                 var revisedCatalog = catalog.Select(tool => tool.Clone()).ToList();
-                revisedCatalog.Single(tool => tool.Id == "common.vba_rename_module").Description = "Changed revision";
+                revisedCatalog.Single(tool => tool.Id == "fixture.dynamic_2").Description = "Changed revision";
                 var revisionMismatch = CallableToolPack.Create(
                     ChatModes.Agent,
                     adapter.HostName,
@@ -1206,12 +1209,6 @@ namespace RNAssistant.Harness
                             {
                                 foreach (var tool in OfficeToolCatalog.ForHost(host))
                                     expected.Add(tool.Id);
-                            }
-                            if (string.Equals(mode, ChatModes.Agent, StringComparison.Ordinal) &&
-                                !string.Equals(host, "Outlook", StringComparison.Ordinal))
-                            {
-                                expected.Add("common.vba_write_module");
-                                expected.Add("common.vba_apply_patch");
                             }
                         }
 

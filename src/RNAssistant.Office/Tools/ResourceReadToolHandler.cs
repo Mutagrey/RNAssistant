@@ -74,10 +74,13 @@ namespace RNAssistant.Office.Tools
                     ViewPath = viewPath,
                     Fields = Fields(context.Arguments) }, cancellationToken)
                 : Gateway.ReadWhole(Session, reference, representation, cancellationToken);
+            if (selected.Descriptor.CurrentTarget != null)
+                Gateway.EnsureCurrentHtmlReference(Session, selected.Reference);
             var observation = new ResourceReadObservation(selection.Result,
                 Gateway.Evidence(Session, selection.Result));
             var projection = ResourceReadProjection.From(observation.Result,
                 selected.Target, selected.Type, selected.Scope);
+            projection.SnapshotTarget = selected.Descriptor.SnapshotTarget;
             projection.Section = section;
             if (lines) { projection.StartLine = ToolArgumentReader.Int32(context.Arguments, "startLine", 1);
                 projection.RequestedLines = ToolArgumentReader.Int32(context.Arguments, "lineCount", 100); }

@@ -115,7 +115,9 @@ namespace RNAssistant.Office.Services
             string scope)
         {
             if ((scope == "all" || scope == "html") && IsHtmlIntentTarget(query) &&
-                query.EndsWith("Z]", StringComparison.Ordinal) &&
+                (query.EndsWith("Z]", StringComparison.Ordinal) ||
+                    query == ChatHtmlResourceCatalog.CurrentWorkspaceTarget ||
+                    query.EndsWith(" in " + ChatHtmlResourceCatalog.CurrentWorkspaceTarget, StringComparison.Ordinal)) &&
                 (query.StartsWith("HTML workspace: ", StringComparison.Ordinal) ||
                     query.Contains(" in HTML workspace: ")))
                 return ResolveIntentTarget(session, query).Descriptor;
@@ -180,6 +182,14 @@ namespace RNAssistant.Office.Services
                     session, () => powerPoint.ResolvePowerPointSlide(session, query));
             }
             return null;
+        }
+
+        internal void EnsureCurrentHtmlReference(ChatSession session, ResourceRef reference)
+        {
+            var provider = _registry.All().OfType<ChatArtifactResourceProvider>().SingleOrDefault();
+            if (provider == null)
+                throw new ResourceRequestException("HTML resource provider is unavailable.", "RESOURCE_PROVIDER_UNAVAILABLE", false);
+            provider.EnsureCurrentHtmlReference(session, reference);
         }
 
         public ResourceIntentTarget ResolveIntentTarget(
@@ -675,6 +685,7 @@ namespace RNAssistant.Office.Services
             {
                 Description = description,
                 Target = state.Target,
+                SnapshotTarget = state.Descriptor.SnapshotTarget,
                 Type = state.Type,
                 Scope = state.Scope,
                 Title = state.Descriptor.Title,
@@ -767,6 +778,7 @@ namespace RNAssistant.Office.Services
         internal HtmlResourceMemberInfo DescribeHtmlMember(ChatSession session, ResourceDescriptor member, ResourceDescriptor workspace)
         {
             member.ParentTarget = IntentTarget(workspace);
+            if (workspace.CurrentTarget == null) member.CurrentTarget = null;
             var info = new HtmlResourceMemberInfo {
                 Target = IntentTarget(member), Type = IntentType(member), Name = member.Title,
                 Active = member.Metadata.ContainsKey("active") && member.Metadata["active"] == "true",
@@ -818,6 +830,7 @@ namespace RNAssistant.Office.Services
 
         internal static string IntentTarget(ResourceDescriptor descriptor)
         {
+            if (!string.IsNullOrWhiteSpace(descriptor?.CurrentTarget)) return descriptor.CurrentTarget;
             var value = IntentBaseTarget(descriptor);
             value = descriptor != null && descriptor.CreatedUtc.HasValue
                 ? value + " [created " + descriptor.CreatedUtc.Value

@@ -1,5 +1,50 @@
 # Stabilization progress
 
+## Working resource links and verified-effect boundary — 2026-10-14
+
+Skill/tool publication audit: a scripted Agent run now creates a new skill and
+tool, reads both through the published catalog in the same run, then receives
+the skill body and admitted tool schema on subsequent requests. Skill/package,
+tool and Agent groups pass 5/5, 4/4, 49/49 and 53/53. Cross-session VBA source
+advancement can no longer authorize delete or rename from an older observation;
+exact patch anchors continue to use current live source. The built-in contract
+inventory and v7/skill-only Agent expectations were reconciled. Windows/Office
+delivery and unprompted model skill selection remain open evidence.
+
+Owner: Resource Gateway/HTML authority, Core recovery contract, Office skill
+exposure and run projection. Working HTML targets now resolve the selected current
+workspace directly. `snapshotTarget` remains an explicit immutable history read.
+The prompt resource index advertises that working target for active HTML. A
+post-read currentness check compares the selected head without reloading the
+whole aggregate.
+Normal file mutations publish only the touched file's logical head; unchanged
+siblings retain current source evidence. Restore, deletion/recreation and a real
+same-file edit invalidate it. An unrelated document authority publication no
+longer aborts current HTML member discovery. No-op writes retain their snapshot.
+
+Large VBA patch refusals now project `readScope=relevant_lines` and require a
+corrected patch; whole-source overwrites still require complete current source.
+The five VBA editing tools require a selected skill; macro execution retains its
+direct optional schema route. Prompt schema 46 aligns direct `capabilities_read`
+with skill-only loading and scopes extra final-file reads to explicit CLI
+acceptance. `RunViewState.GoalVerification`
+explicitly remains `not_assessed`; clean tool health and model `done` do not certify
+the whole user goal. The UI shows verified write/no-change counts separately.
+
+Host-neutral evidence: HTML current/history, sibling/no-op/delete/recreate and
+equal-byte restore, shared HTML 6/6, VBA large-patch recovery, tool pack 8/8,
+skills 4/4, prompt migration 2/2, controller approval/compaction/restart, and
+web completion/HTML suites pass. Real `gemma4:cloud` / `gemma4:31b`, digest
+`ef09f235533c96cd75e8deed88c628335cb69e2b3ce96275d0d7a67fe9887aba`,
+`json_object`, 128K requested context: 11 model requests, exact HTML/CSS/JS/VBA
+source acceptance true after the Office/Core workflow corrections. Evidence:
+`/tmp/rna-workflow-20261014-final/` (`acceptance.json` passes, 11 requests).
+The model selected HTML and VBA skills but skipped Task List without an explicit
+instruction. It attempted one unavailable VBA tool and one direct schema read of
+that skill-only tool before loading the VBA skill; neither attempt wrote source.
+Source read-back is not Office execution or browser rendering.
+Windows/Office/WebView2 qualification and large-workspace latency remain open.
+
 ## Real v7 model regression and shared response contract — 2026-10-13
 
 Tested HEAD `9619aba4` plus the captured pending skill/resource fixes. Source

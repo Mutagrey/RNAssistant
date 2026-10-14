@@ -8,6 +8,13 @@ boundaries, preserved selected skills, HTML patch/full replacement/identical wri
 exact effect counts, immutable editor downloads and new-task reset. The Harness filters `skill packages:`,
 `html tools:`, `shared HTML:`, `tools: discovery is complete and exact`,
 `vba: confirmed mutation rejects stale snapshot` and `vba: patch` cover its owners.
+`resources: HTML semantic reads preserve workspace snapshot` checks working versus
+explicit historical targets, sibling/no-op/delete/recreate and restart.
+`resource cutover: HTML write publishes current member sources` checks per-file
+evidence, including equal-byte restore. `vba: large stale patch recovers from
+relevant lines` checks the typed recovery route.
+`tools: manual read-only run skips chat lease` checks that a read in another
+session does not authorize stale delete/rename or alter exact patch matching.
 
 The opt-in real-model fixture runs through the production conversation/runtime:
 set `RNA_BASE_URL`, `RNA_MODEL`, `RNA_RESPONSE_MODE` and `RNA_CONTEXT_TOKENS`, then run
@@ -25,7 +32,9 @@ Skill-package checks: after the normal host-neutral Harness build, filter by
 The package slice covers selection, next-request exposure, exact dispatch, shared
 dependencies, version conflicts/revocation, budget, compaction-independent state,
 restart and inert UI metadata. `tool pack:` includes the production HTML skill
-loader/local-write flow with a fake host. After building the CLI, run
+loader/local-write flow with a fake host. `agent: new skill and tool are readable in
+same run` covers publication, source/schema reads, selection and next-request
+exposure after creation. After building the CLI, run
 `python3 -B tests/cli/skill_packages_smoke.py` for the controlled HTTP pilot with
 two approval restarts; it makes no real-model quality claim.
 

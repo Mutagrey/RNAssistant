@@ -93,6 +93,11 @@ namespace RNAssistant.Core.Models
         // Runtime projection hint; retained structure bytes keep exact references.
         [Newtonsoft.Json.JsonIgnore]
         public string ParentTarget { get; set; }
+        // Model-facing working address. The exact Reference still names one retained revision.
+        [Newtonsoft.Json.JsonIgnore]
+        public string CurrentTarget { get; set; }
+        [Newtonsoft.Json.JsonIgnore]
+        public string SnapshotTarget { get; set; }
         [Newtonsoft.Json.JsonProperty("related")]
         public List<ResourceRef> Related { get; set; }
         [Newtonsoft.Json.JsonProperty("representations")]

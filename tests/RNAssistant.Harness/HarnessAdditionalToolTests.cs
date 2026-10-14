@@ -43,7 +43,7 @@ namespace RNAssistant.Harness
                 var staleAgent = executor.ExecuteManual(
                     Command("common.vba_apply_patch", "moduleName", "Module1", "patch", new JArray(new JObject
                     {
-                        ["find"] = "B",
+                        ["find"] = "A",
                         ["text"] = "C"
                     })),
                     tools,
@@ -51,8 +51,39 @@ namespace RNAssistant.Harness
                     false,
                     false,
                     agentSession);
-                AssertEqual("stale_vba_module", staleAgent.ErrorCode,
-                    "manual library read does not silently refresh the running agent snapshot");
+                AssertEqual("vba_patch_stale_source", staleAgent.ErrorCode,
+                    "exact patch cannot use an anchor absent from current live source");
+                AssertEqual("B", adapter.VbaModuleCode,
+                    "stale patch does not mutate the module");
+                var staleDelete = executor.ExecuteManual(
+                    Command("common.vba_delete_module", "moduleName", "Module1"),
+                    tools, new AppSettings { AutoConfirmToolActions = true },
+                    false, false, agentSession);
+                AssertEqual("stale_vba_module", staleDelete.ErrorCode,
+                    "manual library read does not authorize deletion in the older chat");
+                var staleRename = executor.ExecuteManual(
+                    Command("common.vba_rename_module", "moduleName", "Module1",
+                        "newModuleName", "RenamedModule"),
+                    tools, new AppSettings { AutoConfirmToolActions = true },
+                    false, false, agentSession);
+                AssertEqual("stale_vba_module", staleRename.ErrorCode,
+                    "manual library read does not authorize rename in the older chat");
+                AssertEqual("B", adapter.VbaModuleCode,
+                    "all stale operations leave current source unchanged");
+
+                AssertEqual("B", ReadVbaSource(executor, agentSession, "Module1").Text,
+                    "running chat obtains a newer observation");
+                adapter.VbaModuleCode = "A";
+                AssertEqual("A", ReadVbaSource(executor, manualSnapshot, "Module1").Text,
+                    "another session observes a return to the older source bytes");
+                var revertedDelete = executor.ExecuteManual(
+                    Command("common.vba_delete_module", "moduleName", "Module1"),
+                    tools, new AppSettings { AutoConfirmToolActions = true },
+                    false, false, agentSession);
+                AssertEqual("stale_vba_module", revertedDelete.ErrorCode,
+                    "an older matching observation cannot supersede the chat's latest stale read");
+                AssertEqual("A", adapter.VbaModuleCode,
+                    "reverted live source remains intact");
             });
         }
 
@@ -129,7 +160,7 @@ namespace RNAssistant.Harness
                 { "Excel", 14 },
                 { "Word", 8 },
                 { "PowerPoint", 8 },
-                { "Outlook", 3 }
+                { "Outlook", 4 }
             };
             foreach (var pair in expectedHostCounts)
             {

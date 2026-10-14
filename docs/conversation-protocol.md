@@ -147,6 +147,10 @@ when the required source body is absent or invalidated.
 Unknown mutation effects remain visible in cumulative run health and the terminal
 summary, but do not stop the current run by themselves. Schema 41 and v7 require
 an explicit model action: `tool`, `done`, `blocked` or `needs_input`.
+`RunViewState.GoalVerification=not_assessed` records that no independent general
+goal check occurred. The UI shows this separately from verified write/no-change
+counts when the model chooses `done`; clean execution health never certifies the
+requested outcome or Office/browser behavior.
 `ModelProtocolWire.MessageGuidance` gives defaults, response schema and repair one
 communication policy. Visible update frequency is independent of tool-call and
 Task List note frequency: a brief initial approach, then only new relevant

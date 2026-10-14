@@ -332,7 +332,17 @@ namespace RNAssistant.Office.Services
                         var source = _revisions.GetRevision(scope, logical.Revision)?.Dependencies.SingleOrDefault(item => item.Kind == "immutable-snapshot")?.Resource;
                         string sourceId;
                         if (source != null && ChatResourceUri.TryGetArtifactId(session, source, out sourceId) && sourceId == artifactId)
-                            result.Resource.Dependencies.Add(new ResourceDependency(logical.Revision, "text", ResourceCoverage.Whole(), "current-state"));
+                        {
+                            string memberKey;
+                            var member = result.Resource.Kind == ChatHtmlResourceCatalog.FileKind &&
+                                result.Resource.Metadata.TryGetValue("logicalMemberKey", out memberKey)
+                                    ? snapshot.GetHead(HtmlWorkspaceIdentity.MemberIdentity(session,
+                                        HtmlWorkspaceIdentity.LogicalId(artifactId), memberKey)) : null;
+                            result.Resource.Dependencies.Add(new ResourceDependency(
+                                member?.Knowledge == HeadKnowledge.Known ? member.Revision : logical.Revision,
+                                member?.Knowledge == HeadKnowledge.Known ? "source" : "text",
+                                ResourceCoverage.Whole(), "current-state"));
+                        }
                     }
                 }
                 if (ChatResourceUri.TryGetCurrentArtifactId(session, exact, out artifactId))
@@ -592,7 +602,9 @@ namespace RNAssistant.Office.Services
             {
                 var before = snapshot.GetHead(impact.Identity);
                 var captured = readBack.FirstOrDefault(item => item.Identity.Equals(impact.Identity));
-                if (changed && ConversationResourceMutationDomain.IsHistoryMutation(attempt.Operation) &&
+                if (changed && (ConversationResourceMutationDomain.IsHistoryMutation(attempt.Operation) ||
+                    outcome == ResourceEffectOutcome.VerifiedChanged && HtmlWorkspacePublication.Owns(attempt.Operation) &&
+                    HtmlWorkspaceIdentity.IsMemberIdentity(impact.Identity)) &&
                     SameCapturedState((IResourceRevisionStore)authority.Store, attempt.ScopeId, before, captured)) continue;
                 var exact = changed ? captured?.Revision ?? returned.FirstOrDefault(item => item.Identity.Equals(impact.Identity)) : null;
                 ResourceHeadState after = before;

@@ -54,6 +54,7 @@
       narrative: text(source, "Narrative", "narrative"),
       lifecycle: normalizedLifecycle,
       executionHealth: executionHealth,
+      goalVerification: text(source, "GoalVerification", "goalVerification") || "not_assessed",
       successfulReads: count(source, "SuccessfulReads", "successfulReads"),
       verifiedWrites: count(source, "VerifiedWrites", "verifiedWrites"),
       noChangeWrites: count(source, "NoChangeWrites", "noChangeWrites"),
@@ -66,6 +67,7 @@
       startedUtc: text(source, "StartedUtc", "startedUtc")
     };
     if (!result.runId || !result.turnId || !normalizedLifecycle || !healthValues[executionHealth] ||
+        result.goalVerification !== "not_assessed" ||
         result.successfulReads === null || result.verifiedWrites === null || result.noChangeWrites === null ||
         result.unverifiedWrites === null || result.failedCalls === null || result.unknownEffects === null ||
         executionHealth !== (result.unknownEffects > 0 ? "unknown" : (result.failedCalls > 0 ? "errors" : "clean")) ||

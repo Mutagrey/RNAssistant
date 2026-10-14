@@ -2736,6 +2736,43 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void VbaLargeStalePatchRecoversFromRelevantLines()
+        {
+            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                adapter.VbaModuleCode = "Option Explicit\nSub Main()\nDebug.Print \"before\"\nEnd Sub\n" +
+                    string.Join("\n", Enumerable.Range(1, 2500).Select(index => "' padding " + index));
+                var session = NewSession(adapter);
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName)
+                    .Concat(executor.GetControllerTools()).ToList();
+                var failed = PrepareVbaNative(executor, session,
+                    Command(VbaToolCatalog.ApplyPatch, "moduleName", "Module1",
+                        "patch", new JArray(new JObject {
+                            ["find"] = "\"missing\"", ["text"] = "\"after\""
+                        }))).Record;
+                AssertEqual("vba_patch_stale_source", ToolRunResultFactory.Create(failed).ErrorCode,
+                    "large patch refusal is definite and causes no write");
+                AssertTrue(failed.Recovery != null && failed.Recovery.RetryPolicy == ToolRetryPolicy.Replan &&
+                    failed.Recovery.ReadScope == ToolRecoveryReadScope.RelevantLines &&
+                    !failed.Recovery.CurrentContentComplete, "large patch requires relevant lines and corrected arguments");
+                var lines = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                    "target", failed.Recovery.SemanticTarget, "representation", "source",
+                    "startLine", 2, "lineCount", 3), tools, new AppSettings(), false, false, session);
+                AssertTrue(lines.Success && ((string)JObject.Parse(lines.DataJson)["text"]).Contains("\"before\""),
+                    "recovery target reads the current anchor");
+                var corrected = PrepareVbaNative(executor, session,
+                    Command(VbaToolCatalog.ApplyPatch, "moduleName", "Module1",
+                        "patch", new JArray(new JObject {
+                            ["find"] = "\"before\"", ["text"] = "\"after\""
+                        })));
+                AssertEqual(ToolExecutionOutcome.AwaitingConfirmation, corrected.Record.Outcome,
+                    "corrected patch prepares against current module");
+                AssertEqual(ToolExecutionOutcome.Ok, ConfirmVbaNative(corrected).Outcome,
+                    "corrected large-module patch verifies read-back");
+                AssertContains(adapter.VbaModuleCode, "\"after\"", "only the requested anchor changed");
+            });
+        }
+
         private static void VbaPatchRejectsAmbiguousExactSource()
         {
             foreach (var sample in new[]

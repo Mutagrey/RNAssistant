@@ -15,6 +15,7 @@ namespace RNAssistant.Office.Services
     {
         public const string FileKind = "html-file";
         public const string DataKind = "html-data";
+        internal const string CurrentWorkspaceTarget = "HTML workspace: current";
         private const int MaximumItems = 50;
         private const int MaximumSearchCharacters = 1000000;
         private const int MaximumSearchCharactersPerMember = 128000;
@@ -306,7 +307,14 @@ namespace RNAssistant.Office.Services
             }
             descriptor.Metadata["name"] = member.Title ?? string.Empty;
             descriptor.Metadata["revisionArtifactId"] = member.Artifact.Id;
+            if (member.MemberType == "file") descriptor.Metadata["logicalMemberKey"] = member.MemberKey;
             descriptor.ParentTarget = WorkspaceTarget(member.Artifact);
+            descriptor.SnapshotTarget = ResourceGatewayService.IntentTarget(descriptor);
+            if (member.Artifact.Id == member.Session.ActiveHtmlArtifactId)
+            {
+                descriptor.ParentTarget = CurrentWorkspaceTarget;
+                descriptor.CurrentTarget = CurrentMemberTarget(member.Kind, member.Title, member.CreatedUtc);
+            }
             descriptor.Metadata["active"] = member.Active ? "true" : "false";
             if (member.Binding != null)
             {
@@ -326,9 +334,18 @@ namespace RNAssistant.Office.Services
 
         internal static string FileTarget(ChatArtifact artifact, HtmlWorkspaceFile file)
         {
-            return artifact == null ? null : ResourceGatewayService.IntentTarget(new ResourceDescriptor {
-                Kind = FileKind, Title = file.Path, CreatedUtc = file.CreatedUtc, ParentTarget = WorkspaceTarget(artifact) });
+            return artifact == null ? null : CurrentMemberTarget(FileKind, file.Path, file.CreatedUtc);
         }
+
+        internal static string CurrentMemberTarget(string kind, string name, DateTime createdUtc)
+        {
+            return ResourceGatewayService.IntentTarget(new ResourceDescriptor {
+                Kind = kind, Title = name, CreatedUtc = createdUtc,
+                ParentTarget = CurrentWorkspaceTarget });
+        }
+
+        internal static string FileMemberKey(string fileId)
+        { return MemberKey("file", fileId); }
 
         private static ResourceRef Reference(HtmlMember member)
         {

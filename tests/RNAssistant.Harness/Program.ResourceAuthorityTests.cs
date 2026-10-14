@@ -2224,6 +2224,17 @@ namespace RNAssistant.Harness
                 AssertContains(text, "styles.css", "other file body keeps its file label");
                 var seen = compiled.Messages.Where(item => item.SyntheticResourceObservation)
                     .SelectMany(item => item.ResourceEvidence).ToList();
+                var indexEvidence = seen.Single(item => item.Resource.Uri ==
+                    ChatHtmlResourceCatalog.FileReference(session, artifact, session.HtmlWorkspace.Files.Single(file => file.Path == "index.html").Id).Uri);
+                var cssEvidence = seen.Single(item => item.Resource.Uri ==
+                    ChatHtmlResourceCatalog.FileReference(session, artifact, session.HtmlWorkspace.Files.Single(file => file.Path == "styles.css").Id).Uri);
+                executor.MutateLocalResources(session, HtmlWorkspaceToolCatalog.WriteFileToolId, null,
+                    () => HtmlWorkspaceToolService.UpsertFile(session, "styles.css", "css", "body{color:NEW_CSS}", true));
+                var afterSibling = executor.ResourceAuthority.CaptureMany(new[] { scope });
+                AssertEqual(EvidenceState.Current, new EvidenceStateReducer().Reduce(indexEvidence, afterSibling).State,
+                    "sibling change retains current HTML source evidence");
+                AssertEqual(EvidenceState.Superseded, new EvidenceStateReducer().Reduce(cssEvidence, afterSibling).State,
+                    "changed file source evidence becomes stale");
                 var definitions = OfficeToolCatalog.ForHost(adapter.HostName)
                     .Concat(executor.GetControllerTools()).ToList();
                 var runtime = executor.CreateNativeRuntime(session, definitions, new AppSettings(), "agent", false, manualRun: true);
@@ -2239,6 +2250,22 @@ namespace RNAssistant.Harness
                     "model-visible verified after-state authorizes the next whole-file write");
                 AssertContains(session.HtmlWorkspace.Files.Single(item => item.Path == "index.html").Content,
                     "UPDATED_HTML", "authorized replacement changes the current file");
+                var currentFile = session.HtmlWorkspace.Files.Single(item => item.Path == "index.html");
+                var currentTarget = ChatHtmlResourceCatalog.CurrentMemberTarget(ChatHtmlResourceCatalog.FileKind,
+                    currentFile.Path, currentFile.CreatedUtc);
+                var currentRead = executor.ResourceGateway.ReadWhole(session,
+                    executor.ResourceGateway.ResolveIntentTarget(session, currentTarget).Reference,
+                    ResourceRepresentations.Source);
+                var currentEvidence = executor.ResourceGateway.Evidence(session, currentRead.Result).Single();
+                var restoreSource = session.ActiveHtmlArtifactId;
+                executor.MutateLocalResources(session, "common.html_workspace_restore",
+                    new Dictionary<string, object> { ["snapshotId"] = restoreSource }, () => {
+                        HtmlWorkspaceArtifactService.RestoreAsRevision(session, restoreSource);
+                        return true;
+                    });
+                AssertEqual(EvidenceState.Superseded, new EvidenceStateReducer().Reduce(currentEvidence,
+                    executor.ResourceAuthority.CaptureMany(new[] { scope })).State,
+                    "restoring equal bytes still invalidates the prior current observation");
             });
         }
 

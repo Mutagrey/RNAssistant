@@ -656,11 +656,14 @@ namespace RNAssistant.Office.Services
             {
                 var source = file.Content ?? string.Empty;
                 var payload = PayloadRef.FromBlob(payloads.StoreText(source, "text/plain; charset=utf-8"));
+                var fileHead = frozenDocument.GetHead(HtmlWorkspaceIdentity.MemberIdentity(session, logicalId,
+                    ChatHtmlResourceCatalog.FileMemberKey(file.Id)));
                 message.ResourceEvidence.Add(new ResourceEvidence("ev_" + Guid.NewGuid().ToString("N"),
                     documentScope, ChatHtmlResourceCatalog.FileReference(session, current, file.Id),
                     ResourceRepresentations.Source, ResourceCoverage.Whole(), true, frozenDocument.Generation,
-                    payload, new[] { new ResourceDependency(logicalHeadState.Revision,
-                        kind: "current-html-workspace") }, immutable: true,
+                    payload, new[] { new ResourceDependency(fileHead?.Knowledge == HeadKnowledge.Known
+                        ? fileHead.Revision : logicalHeadState.Revision,
+                        kind: fileHead?.Knowledge == HeadKnowledge.Known ? "current-html-file" : "current-html-workspace") }, immutable: true,
                     contentSha256: TextPatternEngine.Sha256(source)));
             }
         }

@@ -46,29 +46,44 @@ namespace RNAssistant.Harness
                 var found = execute(ResourceToolCatalog.FindToolId, new { query = "styles.css", scope = "html" });
                 var workspaceTarget = (string)found["items"].Single(item => (string)item["type"] == "HTML workspace")["target"];
                 var structure = execute(ResourceToolCatalog.ReadToolId, new { target = workspaceTarget, representation = "structure" });
-                var originalTarget = (string)JObject.Parse((string)structure["text"])["members"].Single()["target"];
-                AssertEqual((string)found["items"].Single(item => (string)item["type"] == "HTML file")["target"], originalTarget,
+                var workingTarget = (string)JObject.Parse((string)structure["text"])["members"].Single()["target"];
+                var originalTarget = (string)found["items"].Single(item => (string)item["type"] == "HTML file")["snapshotTarget"];
+                var originalWorkspace = (string)found["items"].Single(item => (string)item["type"] == "HTML workspace")["snapshotTarget"];
+                AssertEqual((string)found["items"].Single(item => (string)item["type"] == "HTML file")["target"], workingTarget,
                     "discovery and workspace structure advertise the same member target");
+                var selectedBeforeEdit = executor.ResourceGateway.ResolveIntentTarget(session, workingTarget);
                 publish("body { color: blue; } /* replacement */");
+                AssertEqual("resource_revision_changed", RuntimeThrows<ResourceRequestException>(() =>
+                    executor.ResourceGateway.EnsureCurrentHtmlReference(session, selectedBeforeEdit.Reference)).ErrorCode,
+                    "a concurrent edit invalidates the selected working revision before its read is reported");
+                AssertEqual("body { color: blue; } /* replacement */", (string)execute(ResourceToolCatalog.ReadToolId,
+                    new { target = workingTarget, representation = "source" })["text"], "working target follows the current file");
+                executor.MutateLocalResources(session, HtmlWorkspaceToolCatalog.WriteFileToolId, null,
+                    () => HtmlWorkspaceToolService.UpsertFile(session, "app.js", "js", "const ready = true;", true));
+                AssertEqual("body { color: blue; } /* replacement */", (string)execute(ResourceToolCatalog.ReadToolId,
+                    new { target = workingTarget, representation = "source" })["text"], "sibling edit does not stale a working file target");
+                var siblingSnapshot = session.ActiveHtmlArtifactId;
+                publish("body { color: blue; } /* replacement */");
+                AssertEqual(siblingSnapshot, session.ActiveHtmlArtifactId, "identical source does not create a snapshot");
                 var read = execute(ResourceToolCatalog.ReadToolId, new { target = originalTarget, representation = "source" });
                 AssertEqual("body { color: red; } /* original */", (string)read["text"],
-                    "a member copied from historical structure cannot silently read the current file");
-                structure = execute(ResourceToolCatalog.ReadToolId, new { target = workspaceTarget, representation = "structure" });
+                    "explicit snapshot target keeps the historical source");
+                structure = execute(ResourceToolCatalog.ReadToolId, new { target = originalWorkspace, representation = "structure" });
                 AssertEqual(originalTarget, (string)JObject.Parse((string)structure["text"])["members"].Single()["target"],
                     "historical workspace still advertises the same exact member");
                 found = execute(ResourceToolCatalog.FindToolId, new { query = originalTarget, scope = "html" });
                 AssertEqual(originalTarget, (string)found["items"].Single()["target"], "exact historical search round-trips");
                 var currentTarget = (string)execute(ResourceToolCatalog.FindToolId, new { query = "styles.css", scope = "html" })["items"]
                     .Single(item => (string)item["type"] == "HTML file")["target"];
-                AssertTrue(originalTarget != currentTarget, "versions of the same file have different semantic targets");
+                AssertEqual(workingTarget, currentTarget, "current file keeps its semantic target across revisions");
                 AssertEqual("body { color: blue; } /* replacement */", (string)execute(ResourceToolCatalog.ReadToolId,
                     new { target = currentTarget, representation = "source" })["text"], "current discovery reads current bytes");
                 AssertEqual(currentTarget, (string)execute(ResourceToolCatalog.FindToolId,
                     new { query = "HTML file: styles.css", scope = "html" })["items"].Single()["target"],
                     "a partial human label remains a discovery query");
                 for (var revision = 0; revision < 26; revision++) publish("/* later revision " + revision + " */");
-                AssertEqual("body { color: blue; } /* replacement */", (string)execute(ResourceToolCatalog.ReadToolId,
-                    new { target = currentTarget, representation = "source" })["text"], "exact lookup consumes multiple metadata pages");
+                AssertEqual("/* later revision 25 */", (string)execute(ResourceToolCatalog.ReadToolId,
+                    new { target = currentTarget, representation = "source" })["text"], "current lookup follows many revisions without history scan");
                 var paths = FixturePaths.Value;
                 var chats = new ChatStore(paths);
                 chats.Save(session);
@@ -90,11 +105,17 @@ namespace RNAssistant.Harness
             var gateway = new ResourceGatewayService();
             HtmlWorkspaceToolService.UpsertFile(local, "styles.css", "css", "/* retained stylesheet */", true);
             var retained = local.Artifacts.Single(item => item.Id == local.ActiveHtmlArtifactId);
-            var oldTarget = gateway.Find(local, "styles.css", "html").Items.Single(item => item.Type == "HTML file").Target;
+            var oldTarget = gateway.Find(local, "styles.css", "html").Items.Single(item => item.Type == "HTML file").SnapshotTarget;
+            var workingFile = gateway.Find(local, "styles.css", "html").Items.Single(item => item.Type == "HTML file").Target;
             HtmlWorkspaceToolService.DeleteFile(local, "styles.css");
+            AssertEqual("resource_target_not_found", RuntimeThrows<ResourceRequestException>(() =>
+                gateway.ResolveIntentTarget(local, workingFile)).ErrorCode, "deleted working file does not resolve");
             var selected = gateway.ResolveIntentTarget(local, oldTarget);
             AssertEqual("/* retained stylesheet */", gateway.ReadWhole(local, selected.Reference, "source").Result.Text,
                 "a file removed from the active local workspace remains readable in its historical snapshot");
+            HtmlWorkspaceToolService.UpsertFile(local, "styles.css", "css", "/* retained stylesheet */", true);
+            AssertEqual("resource_target_not_found", RuntimeThrows<ResourceRequestException>(() =>
+                gateway.ResolveIntentTarget(local, workingFile)).ErrorCode, "recreated equal bytes have a new working identity");
             AssertEqual("resource_target_not_found", RuntimeThrows<ResourceRequestException>(() =>
                 gateway.ResolveIntentTarget(local, oldTarget.Substring(0, oldTarget.IndexOf(" in HTML workspace: ", StringComparison.Ordinal)))).ErrorCode,
                 "an unqualified historical label is not silently rebound");

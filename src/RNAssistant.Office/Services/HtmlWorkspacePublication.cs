@@ -70,7 +70,17 @@ namespace RNAssistant.Office.Services
                         throw new InvalidDataException("The selected HTML aggregate is invalid or unavailable.");
                 }
                 session.PreparedHtmlWorkspaceId = logicalId;
-                return new[] { new ResourceImpact(HtmlWorkspaceIdentity.Identity(session, logicalId), ResourceImpactRelation.Exact) };
+                var includeAllFiles = context.Call.Name == "common.html_workspace_restore" ||
+                    context.Call.Name == "common.html_workspace_redo" ||
+                    context.Call.Name == RNAssistant.Office.Tools.HtmlWorkspaceToolCatalog.ImportAssetToolId;
+                var path = ResourceMutationDomains.Argument(arguments, "path");
+                includeAllFiles |= string.IsNullOrWhiteSpace(path) && SourceFileOperation(context.Call.Name);
+                return new[] { new ResourceImpact(HtmlWorkspaceIdentity.Identity(session, logicalId), ResourceImpactRelation.Exact) }
+                    .Concat((session.HtmlWorkspace?.Files ?? new List<HtmlWorkspaceFile>()).Where(file => file != null)
+                        .Where(file => includeAllFiles || string.Equals(file.Path, path, StringComparison.OrdinalIgnoreCase))
+                        .Select(file => new ResourceImpact(HtmlWorkspaceIdentity.MemberIdentity(session, logicalId,
+                            ChatHtmlResourceCatalog.FileMemberKey(file.Id)), ResourceImpactRelation.Exact)))
+                    .ToArray();
             }
             catch (InvalidDataException ex) { throw new ToolMutationPreparationException("RESOURCE_SNAPSHOT_UNAVAILABLE", ex.Message); }
         }
@@ -132,8 +142,36 @@ namespace RNAssistant.Office.Services
                 restoredFrom: restoredFrom == null ? null : owner.LogicalRevisionForSnapshot(session, attempt.Target, restoredFrom)));
             result.Add(new ResourceMutationReadBack(OperationIdentity(session, operationKey), true, "text", link.Sha256, link,
                 dependencies: new[] { new ResourceDependency(exact, kind: "operation-result") }));
+            var allFiles = (snapshot.Files ?? new List<HtmlWorkspaceFile>()).Where(file => file != null).ToArray();
+            var includeAllFiles = context.Call.Name == "common.html_workspace_restore" ||
+                context.Call.Name == "common.html_workspace_redo" ||
+                context.Call.Name == RNAssistant.Office.Tools.HtmlWorkspaceToolCatalog.ImportAssetToolId;
+            var path = (string)JObject.Parse(context.Call.ArgumentsJson)["path"];
+            includeAllFiles |= string.IsNullOrWhiteSpace(path) && SourceFileOperation(context.Call.Name);
+            foreach (var file in allFiles.Where(file => includeAllFiles ||
+                string.Equals(file.Path, path, StringComparison.OrdinalIgnoreCase)))
+            {
+                var memberIdentity = HtmlWorkspaceIdentity.MemberIdentity(session, logicalId,
+                    ChatHtmlResourceCatalog.FileMemberKey(file.Id));
+                var source = PayloadRef.FromBlob(payloads.StoreText(file.Content ?? string.Empty, "text/plain; charset=utf-8"));
+                result.Add(new ResourceMutationReadBack(memberIdentity, true, ResourceRepresentations.Source,
+                    source.Sha256, source));
+            }
+            var currentMembers = new HashSet<string>(allFiles.Select(file =>
+                HtmlWorkspaceIdentity.MemberIdentity(session, logicalId,
+                    ChatHtmlResourceCatalog.FileMemberKey(file.Id)).Uri), StringComparer.Ordinal);
+            foreach (var old in attempt.IntendedImpacts.Where(item => HtmlWorkspaceIdentity.IsMemberIdentity(item.Identity) &&
+                !currentMembers.Contains(item.Identity.Uri)))
+                result.Add(new ResourceMutationReadBack(old.Identity, false));
             ArtifactWorkingSet.Set(session, artifact, false);
             return result.GroupBy(item => item.Identity.Uri).Select(group => group.First()).ToArray();
+        }
+
+        private static bool SourceFileOperation(string operation)
+        {
+            return operation == RNAssistant.Office.Tools.HtmlWorkspaceToolCatalog.WriteFileToolId ||
+                operation == RNAssistant.Office.Tools.HtmlWorkspaceToolCatalog.ApplyPatchToolId ||
+                operation == RNAssistant.Office.Tools.HtmlWorkspaceToolCatalog.DeleteToolId;
         }
     }
 }
