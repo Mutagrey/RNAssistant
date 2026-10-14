@@ -21,8 +21,12 @@ and CLI browser verification, are exposed through declared skill dependencies.
 
 `common.skills_load` is a direct bootstrap call in Agent and Plan. The loader
 captures exact compatible dependencies; they become callable on the next request.
-`common.capabilities_read` refuses direct admission for `Skill` exposure and gives
-related skill ids. `ConversationResponseParser` directs a guessed specialized call
+`common.capabilities_read` inspects direct schemas. For `Skill` exposure it returns
+successful bounded selection guidance with related skill ids, not a cached
+refusal. The selected request supplies the exact schema; discovery neither
+duplicates it into history nor admits the tool. An already selected tool can be
+called directly without another schema read.
+`ConversationResponseParser` directs a guessed specialized call
 to the loader. `ToolRuntime` checks the originating receipt before preparation and
 dispatch; schema presence alone grants no mutation permission. Manual Library and
 Tools UI actions keep their existing explicit authoring/confirmation guards.

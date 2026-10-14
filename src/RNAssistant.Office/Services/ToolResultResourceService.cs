@@ -28,6 +28,9 @@ namespace RNAssistant.Office.Services
                 return null;
             }
             if (IsExactReadEvidence(command)) return null;
+            // An interaction is retained by its call/result and activity CAS,
+            // not turned into a generic artifact that replaces the question body.
+            if (command?.ToolId == RNAssistant.Core.Tools.UserQuestionToolCatalog.AskToolId) return null;
 
             var chart = result.Data as JObject;
             var chartType = chart == null

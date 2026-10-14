@@ -56,7 +56,9 @@ const read = file => fs.readFileSync(path.join(__dirname, '../../web', file), 'u
     assert.equal(await page.locator('.run-change-file:visible').count(), 7);
     const planned = page.locator('.run-change-file').nth(4);
     assert.equal(await planned.locator('.run-change-added').textContent(), '+1');
-    assert.match(await planned.locator('.run-change-scope').textContent(), /Результат не подтверждён/);
+    assert.match(await planned.locator('.run-change-scope').textContent(), /Точный текст результата недоступен/);
+    assert.doesNotMatch(await planned.locator('.run-change-scope').textContent(), /Результат не подтверждён/,
+      'missing exact source does not contradict separately verified write evidence');
     assert.equal(await page.locator('.run-changes-planned .run-change-added').textContent(), '+1');
     assert.equal(await page.locator('.run-changes-summary .run-change-added').textContent(), '+8', 'planned additions included in overall total');
     assert.equal(await page.locator('.run-change-file').nth(5).locator('.run-change-counts').count(), 0, 'missing source has no fabricated counts');

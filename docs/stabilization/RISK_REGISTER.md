@@ -8,6 +8,92 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## VBA patching and completion photos — 2026-10-14
+
+**Reproduced discovery/presentation defects fixed; model and Office attribution
+open.** Photos 1/2/4 show `common.skills_load` alternating with an unchanged
+capability read refused as `skill_required`/`repeated_tool_failure`. The capability
+reader rejected every skill-only tool regardless of selection; the no-progress
+guard correctly retained that refusal. The reader now returns successful bounded
+selection guidance without direct admission or a duplicate schema body. The
+production conversation regression discovers/reads UniLoader, loads the VBA skill,
+reads the same capability again and applies one exact patch. Existing selection,
+revocation and confirmation dispatch guards pass.
+
+Photo 3's request for code already in the project is model behavior not established
+as a lost resource. Bound runtime context now describes the existing project/source
+read route before skill selection; this delivery is tested, autonomous Qwen use is
+not. Photo 5's `vba_code_invalid` and `vba_module_create_failed` cannot identify a
+validator/backend defect without the accepted arguments and terminal evidence.
+Their protections remain intact. A structurally valid Office `done` can still make
+unsupported narrative claims; the UI now keeps failed attempts visible and does
+not certify task completion. Exact-source preview labels no longer contradict
+separate VBE-equivalent write verification.
+
+The visible `3d_scene_authoring` enum error names an unpublished capability; no alias
+or fabricated skill is added. A separate reproduced transport defect ignored
+top-level SSE provider errors after answer deltas and could accept the accumulated
+completion. JSON/SSE errors now produce typed provider failure without format
+repair. The photo alone does not prove whether its error was an endpoint envelope
+or model-quoted text; quoted content is deliberately not classified by prose.
+
+The deeper audit found three additional boundary defects and fixed them:
+
+- A whole-module conflict with small complete `currentContent` was classified as
+  `Replan`. This diagnostic body had no canonical read evidence, while a later
+  actual source read could not satisfy `Replan`. The same write therefore remained
+  blocked after performing the required recovery. Whole-write conflicts for an
+  existing module now use `RefreshRequired`/`whole` regardless of diagnostic size. The previous domain test
+  retried manually and bypassed `AgentProgressTracker`; the new production
+  conversation case checks external drift, refusal, read and identical retry.
+- `AwaitingUser` suppressed terminal model materialization like a pending
+  confirmation. A recorded question set left an unclosed call in model history.
+  Its terminal result is now recorded before waiting; both native-tool and
+  user-role transports continue after reload without repeating the question.
+- Activity data above 8,192 characters moves to CAS during save; bridge metadata
+  omits that payload handle. Question rendering read only `DataJson` and silently
+  returned, leaving a waiting status without cards. Typed result presentation now
+  hydrates the exact question set; missing content produces a visible reload path.
+
+The completed transcript had deliberately rendered comments outside the action
+disclosure. The user requires a step to fold as one unit. The UI now folds both,
+and expansion shows original step/comment/call association; final answers and
+attention states remain separate.
+
+**Systemic conclusion:** the confirmed defects are mismatched consumer contracts,
+not evidence of one lost VBA snapshot store. Resource existence, known revision,
+body delivery in a particular request, callable admission, mutation effect and
+user interaction are separate facts. Diagnostic source text cannot stand in for
+a delivered observation; a successful skill load cannot satisfy an unrelated
+cached failure; a saved question payload cannot be assumed to be inline in UI.
+Existing `ContextReceipt`, `ToolRecoveryContract`, `UserQuestionSet`, runtime
+step/call identities and append-only events already own these facts. Another
+mutable memory/snapshot manager would introduce a competing authority.
+
+Owners should enforce these cross-boundary invariants in existing components:
+recovery metadata must name a condition that actually releases the rejected call;
+every completed call must retain its terminal result across waits/reload; a pending
+interaction must render its exact body or an explicit delivery failure; a progress
+comment and its actions must share one presentation lifecycle. Keep checks at the
+real conversation/compiler/store/UI seams, not only direct tool invocation.
+
+Source retention after writes/compaction and bounded VBA reads pass existing
+focused checks. Known authority is frozen per model request; an external Office
+edit is detected by a later read or mutation guard, not inferred from prompt text.
+Budget omission is explicit and does not delete the resource. Photo 3 still needs
+the actual `ContextReceipt` and serialized request to distinguish no discovery,
+omitted source, unresolved target and genuine host failure. Current default wire
+guidance already prohibits repeated/paraphrased progress. Prompt edits alone cannot
+resolve these contradictory recovery transitions. `needs_input` validates nonblank
+text, not whether it semantically contains a useful question; it cannot create
+cards without `UserQuestionSet`. Actual saved prompt overrides and Qwen behavior
+require the captured request, not an assumption from repository defaults.
+
+Owners: Office discovery/VBA, Core protocol and model evaluation, Web presentation.
+Next evidence: original model request/response and tool arguments/results for the
+affected chat, then the exact build on Windows x64 + Office x64. Host-neutral tests
+and Chromium layout checks do not qualify COM/WebView2 or arbitrary model behavior.
+
 ## Authored UTF-16 file blocks chat reopening — 2026-10-14
 
 **Open / Core ChatStore hydration.** Import a UTF-16 LE BOM HTML attachment,

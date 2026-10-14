@@ -149,6 +149,12 @@
   overflow-wrap: anywhere;
 }
 
+.agent-step-repeat {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 4px;
+}
+
 .agent-step-message.markdown > :first-child {
   margin-top: 0;
 }

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Newtonsoft.Json;
+using RNAssistant.Core.Models;
 
 namespace RNAssistant.Office.Contracts
 {
@@ -16,6 +17,8 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("runId")] public string RunId { get; set; }
         [JsonProperty("toolCallId")] public string ToolCallId { get; set; }
         [JsonProperty("blocks")] public List<ToolResultBlockDto> Blocks { get; set; } = new List<ToolResultBlockDto>();
+        [JsonProperty("questions")] public UserQuestionSet Questions { get; set; }
+        [JsonProperty("questionsUnavailableReason")] public string QuestionsUnavailableReason { get; set; }
     }
 
     public abstract class ToolResultBlockDto

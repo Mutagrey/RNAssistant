@@ -563,7 +563,8 @@ namespace RNAssistant.Office.Services
             }
 
             var id = (string)data["id"] ?? string.Empty;
-            if (string.Equals(kind, "tool-schema", StringComparison.Ordinal))
+            if (string.Equals(kind, "tool-schema", StringComparison.Ordinal) ||
+                string.Equals(kind, "skill-tool", StringComparison.Ordinal))
             {
                 var tool = toolCatalog.FirstOrDefault(item => item != null &&
                     string.Equals(item.Id, id, StringComparison.Ordinal));

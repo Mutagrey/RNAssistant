@@ -1,5 +1,37 @@
 # Stabilization progress
 
+## VBA recovery, question delivery and step presentation — 2026-10-14
+
+Owners: Office capability discovery/context, Core provider transport, Web run
+presentation. Skill-only capability reads no longer produce an unconditional
+`skill_required` error that remains blocked after selection. They return bounded
+selection guidance; the selected request remains the only source of callable
+schemas. A scripted UniLoader discovery/read/load/schema-read/patch sequence now
+applies the exact correction once without relaxing dispatch or mutation guards.
+Bound VBA context also directs source discovery before asking for module code.
+Whole-write conflicts for existing modules now require an exact complete resource
+read even when the error includes diagnostic source text. That read releases the cached failure. The
+production conversation test covers external drift, refused write, fresh read and
+an explicit identical retry with exactly one mutation dispatch.
+
+Questions now close their call/result exchange before awaiting an answer; native
+and user-role histories continue after reload. The Web interaction reads the exact
+typed question set through the existing result-presentation service, including CAS
+bodies externalized above 8,192 characters. Missing bodies are visible and retryable.
+
+Live repeated progress comments share one paragraph and a repeat count. Completed
+comments fold with their actions; expanded history retains original step pairing.
+Unassessed `done` no longer hides failed-attempt warnings or labels the
+task fulfilled. VBA diff previews distinguish unavailable exact text from action
+verification. Structured JSON/SSE provider errors fail the model step even after
+answer deltas, without accepting partial success or format-repair retry.
+
+Harness build and focused discovery, recovery, question and source-continuity
+checks pass; 27 Web checks and focused Chromium presentation suites pass.
+No Office/VSTO validation or real-model run was performed. Attribution
+of the remaining SceneBuilder failures and autonomous Qwen source discovery stays
+open in [the incident record](RISK_REGISTER.md#vba-patching-and-completion-photos--2026-10-14).
+
 ## Large text attachments no longer block the initial request — 2026-10-14
 
 Owner: Core model-context compiler. Current text/code and extracted Office uploads

@@ -277,11 +277,16 @@ namespace RNAssistant.Office.Tools
             var observedSource = currentSource == null ? null : ReadObservedSource(correlation, moduleName,
                 (string)data?["observedCodeSha256"]);
             var patch = toolId == VbaToolCatalog.ApplyPatch;
-            var readScope = currentSourceComplete ? ToolRecoveryReadScope.None :
+            // Diagnostic source text is not a published, delivered resource read.
+            // Whole-source guards still need that observation, and a matching
+            // read must release the failed call even when its arguments stay valid.
+            var refresh = !patch && (!currentSourceComplete || conflict &&
+                toolId == VbaToolCatalog.WriteModule && (bool?)data?["actualExists"] != false);
+            var readScope = refresh ? ToolRecoveryReadScope.Whole : currentSourceComplete ? ToolRecoveryReadScope.None :
                 patch ? ToolRecoveryReadScope.RelevantLines : ToolRecoveryReadScope.Whole;
             return outcome.WithRecovery(new ToolRecoveryContract(
                 conflict ? ToolFailureKind.ConflictNoEffect : ToolFailureKind.RejectedNoEffect,
-                patch || currentSourceComplete ? ToolRetryPolicy.Replan : ToolRetryPolicy.RefreshRequired,
+                refresh ? ToolRetryPolicy.RefreshRequired : ToolRetryPolicy.Replan,
                 VbaResourceProvider.ComponentIdentity(correlation.DocumentAuthorityId, moduleName),
                 ResourceRepresentations.Source,
                 "VBA module: " + moduleName,

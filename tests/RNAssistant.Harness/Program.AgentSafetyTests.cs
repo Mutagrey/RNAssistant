@@ -2609,6 +2609,47 @@ namespace RNAssistant.Harness
             }
         }
 
+        private static void ModelProviderErrorsRejectCompletion()
+        {
+            var answer = ModelProtocolWire.Write("Done.", new ConversationToolCall[0]);
+            var delta = new JObject { ["choices"] = new JArray(new JObject {
+                ["delta"] = new JObject { ["content"] = answer } }) }.ToString(Formatting.None);
+            const string error = "{\"error\":{\"message\":\"Unexpected value: 3d_scene_authoring\",\"type\":\"invalid_request\"}}";
+            var sse = "data: " + delta + "\n\ndata: " + error + "\n\ndata: [DONE]\n\n";
+            var parsed = RuntimeThrows<LlmRequestException>(() => LlmResponseParser.ParseStreamingResponse(sse));
+            AssertEqual(LlmFailureKind.InvalidResponse, parsed.Kind, "structured SSE errors are provider failures");
+            AssertContains(parsed.Message, "3d_scene_authoring", "provider cause is preserved");
+            RuntimeThrows<LlmRequestException>(() => LlmResponseParser.ParseCompletionResponse(error));
+            var mixed = JObject.Parse(error);
+            mixed["choices"] = new JArray(new JObject { ["message"] = new JObject { ["content"] = answer } });
+            RuntimeThrows<LlmRequestException>(() => LlmResponseParser.ParseCompletionResponse(mixed.ToString()));
+            var quoted = new JObject { ["choices"] = new JArray(new JObject {
+                ["message"] = new JObject { ["content"] = error } }) };
+            AssertEqual(error, LlmResponseParser.ParseCompletionResponse(quoted.ToString()).Content,
+                "quoted model content is never classified by error prose");
+
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                var session = NewSession(adapter);
+                var requests = 0;
+                LlmCompletionDelegate complete = async (settings, messages, options, progress, token) =>
+                {
+                    requests++;
+                    using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(sse)))
+                        return await LlmResponseParser.ReadStreamingOrJsonResponseAsync(stream, progress, token);
+                };
+                var result = CreateConversationRunService(adapter, executor, complete).ExecuteAsync(
+                    ChatModes.Agent, "Проверь и продолжи.", session, NewContext(adapter), new AppSettings(),
+                    OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null)
+                    .GetAwaiter().GetResult();
+                AssertEqual(1, requests, "a provider error spends no format-repair retries");
+                AssertEqual(RunLifecycle.Failed, session.LastRun.KernelState.Summary.Lifecycle,
+                    "a streamed answer followed by a provider error cannot complete the run");
+                AssertEqual("Provider", session.LastRun.KernelState.Summary.Reason, "provider failure retains its typed category");
+                AssertContains(result.AssistantText, "3d_scene_authoring", "the final answer exposes the real failure");
+            });
+        }
+
         private static void ModelDiagnosticsTrackerReportsOneTerminalLifecycle()
         {
             var requestUpdates = new List<LlmRequestDiagnosticUpdate>();

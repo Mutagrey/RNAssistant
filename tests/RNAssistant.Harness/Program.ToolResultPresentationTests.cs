@@ -12,6 +12,42 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void ToolPresentationQuestionsSurviveStorage()
+        {
+            WithTempPaths(paths => {
+                var store = new ChatStore(paths);
+                var payloads = new ChatBlobStore(paths);
+                var session = store.Create("Excel", "questions", "Book", "Questions");
+                var questions = new UserQuestionSet { QuestionSetId = "set", Questions = new List<UserQuestion> {
+                    new UserQuestion { Id = "q1", Header = "Scope", Prompt = "Choose scope " + new string('x', 10000),
+                        Selection = "single", Options = new List<UserQuestionOption> {
+                            new UserQuestionOption { Id = "a", Label = "Core", Description = "Core only" },
+                            new UserQuestionOption { Id = "b", Label = "UI", Description = "Include UI" } } } } };
+                var message = RNAssistant.Office.AgentTranscript.CreateLocalResultMessage(
+                    new ToolInvocation { ToolId = UserQuestionToolCatalog.AskToolId, ToolCallId = "ask" },
+                    ToolRunResult.AwaitingUser("Ответьте на вопросы.", JsonConvert.SerializeObject(questions)));
+                message.RunId = "run"; message.Activity.RunId = "run";
+                session.Messages.Add(message);
+                store.Save(session);
+                var loaded = store.Load(session.Id);
+                var saved = loaded.Messages.Single(m => m.Activity != null).Activity;
+                AssertTrue(saved.DataJson == null && saved.ResultPayload != null,
+                    "the question uses the normal externalized activity body after save/reload");
+                var bridge = ChatCloneService.CloneMessagesForBridge(loaded, loaded.Messages).Single(m => m.Activity != null);
+                AssertTrue(bridge.Activity.DataJson == null && bridge.Activity.ResultPayload == null,
+                    "metadata projection alone cannot deliver externalized questions");
+                var service = new ToolResultPresentationService(null, payloads);
+                var presentation = service.Read(loaded, "run", "ask");
+                AssertEqual(questions.Questions[0].Prompt, presentation.Questions.Questions[0].Prompt,
+                    "typed presentation hydrates complete questions from exact retained CAS");
+                AssertTrue(presentation.QuestionsUnavailableReason == null, "readable questions have no unavailable notice");
+                saved.ResultPayload = new PayloadRef(new string('e', 64), 20000, "application/json");
+                var unavailable = service.Read(loaded, "run", "ask");
+                AssertTrue(unavailable.Questions == null && !string.IsNullOrWhiteSpace(unavailable.QuestionsUnavailableReason),
+                    "missing question data is explicit, not an empty waiting card");
+            });
+        }
+
         private static void ToolPresentationCallChanges()
         {
             WithTempPaths(paths =>

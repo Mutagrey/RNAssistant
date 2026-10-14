@@ -33,6 +33,10 @@ This does not inspect prose or task-list status; see the
 [workspace acceptance contract](../conversation-protocol.md). `needs_input` preserves the question and waits for the user's
 next message; `common.questions_ask` remains available for structured questions
 and pauses through its typed `AwaitingUser` result. Neither path implies `done`.
+The question tool's accepted call has a terminal result before this pause, so an
+answer/restart retains a closed call/result exchange, including native tool history.
+`needs_input` remains a text decision: its nonblank message must contain the actual
+question. It does not manufacture structured question cards from a promise to ask.
 
 Choose the action from remaining work before composing the message. Feasible
 authorized work continues through the next needed call. If the requested answer

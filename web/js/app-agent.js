@@ -228,7 +228,7 @@ function groupAgentRunSteps(timeline) {
   return steps;
 }
 
-function appendAgentStepMessage(parent, text) {
+function appendAgentStepMessage(parent, text, count) {
   text = String(text || "").trim();
   if (!text) return;
   var message = document.createElement("div");
@@ -236,6 +236,12 @@ function appendAgentStepMessage(parent, text) {
   message.innerHTML = markdown(text);
   parent.appendChild(message);
   enhanceMarkdown(message, { enableJsonViewer: true, sourceText: text });
+  if (count > 1) {
+    var repeat = document.createElement("div");
+    repeat.className = "agent-step-repeat";
+    repeat.textContent = "Повторено: " + count;
+    parent.appendChild(repeat);
+  }
 }
 
 // Presentation groups follow comments; model-step and call identities stay intact.
@@ -244,13 +250,15 @@ function groupAgentRunUpdates(steps) {
   (steps || []).forEach(function (step) {
     var silent = !String(step.message || "").trim();
     var previous = groups[groups.length - 1];
-    if (previous && silent) {
+    var repeated = previous && !silent && String(previous.message || "").trim() === String(step.message || "").trim();
+    if (previous && (silent || repeated)) {
       previous.items = previous.items.concat(step.items || []);
       previous.ambient = step.ambient;
       previous.collapseCompleted = true;
+      if (repeated) previous.messageCount += 1;
     } else {
       groups.push({ message: step.message, items: (step.items || []).slice(),
-        ambient: step.ambient, collapseCompleted: silent });
+        ambient: step.ambient, collapseCompleted: silent, messageCount: silent ? 0 : 1 });
     }
   });
   return groups;
@@ -394,10 +402,11 @@ function appendAgentRunOverview(parent, steps, timeline, stats) {
       var historyItems = (step.items || []).filter(function (item) {
         return activityKind(item.activity) !== "step";
       });
-      if (!historyItems.length) return;
+      if (!historyItems.length && !String(step.message || "").trim()) return;
       var section = document.createElement("section");
       section.className = "agent-model-step agent-model-step-history";
-      section.appendChild(buildAgentRunTranscript(
+      appendAgentStepMessage(section, step.message);
+      if (historyItems.length) section.appendChild(buildAgentRunTranscript(
         historyItems, historyItems, agentRunStats(historyItems, true, null)));
       content.appendChild(section);
     });
@@ -437,7 +446,9 @@ function appendAgentRunViewState(parent, runViewState, runId) {
   } else if (cause) {
     note.textContent = cause;
   } else if (goalUnassessed) {
-    note.textContent = "Модель завершила задачу. Подтверждённые записи: " + runViewState.verifiedWrites +
+    note.textContent = (health === "errors"
+      ? "В ходе работы были неудачные попытки: " + runViewState.failedCalls + ". "
+      : "Модель завершила ответ. ") + "Подтверждённые записи: " + runViewState.verifiedWrites +
       "; без изменения: " + runViewState.noChangeWrites +
       ". Соответствие всем требованиям автоматически не проверено.";
   } else {
@@ -483,14 +494,14 @@ function renderAgentRunArticle(run) {
   var process = document.createElement("div");
   process.className = "agent-run-actions" + (agentToolCallCount(timeline) ? " has-actions" : "");
   var expanded = !run.continued && (run.live || (runViewState && ["running", "awaiting_user", "awaiting_confirmation"].indexOf(runViewState.lifecycle) >= 0));
-  // Accepted model comments remain in the transcript when actions are folded.
-  var updates = expanded ? groupAgentRunUpdates(steps) : steps;
+  // A step's narration and actions share the same disclosure. Final answers and
+  // pending interactions remain outside the completed history.
+  var updates = expanded ? groupAgentRunUpdates(steps) : [];
   updates.forEach(function (step, stepIndex) {
-    if (!expanded && !String(step.message || "").trim()) return;
     var section = document.createElement("section");
     section.className = "agent-model-step";
-    appendAgentStepMessage(section, step.message);
-    if (expanded) appendLiveAgentStep(section, step, stepIndex === updates.length - 1);
+    appendAgentStepMessage(section, step.message, step.messageCount);
+    appendLiveAgentStep(section, step, stepIndex === updates.length - 1);
     process.appendChild(section);
   });
   if (!expanded) appendAgentRunOverview(process, steps, timeline, stats);

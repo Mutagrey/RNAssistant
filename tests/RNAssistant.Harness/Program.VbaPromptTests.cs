@@ -2702,15 +2702,22 @@ namespace RNAssistant.Harness
                 AssertContains(blocked.Message, "startLine/lineCount", "missing source diagnostic offers bounded patch recovery");
                 AssertTrue(blockedExecution.Recovery != null &&
                     blockedExecution.Recovery.FailureKind == ToolFailureKind.ConflictNoEffect &&
-                    blockedExecution.Recovery.RetryPolicy == ToolRetryPolicy.Replan &&
+                    blockedExecution.Recovery.RetryPolicy == ToolRetryPolicy.RefreshRequired &&
+                    blockedExecution.Recovery.ReadScope == ToolRecoveryReadScope.Whole &&
                     blockedExecution.Recovery.ResourceIdentity.Equals(component.Reference.Identity) &&
                     blockedExecution.Recovery.View == ResourceRepresentations.Source &&
                     blockedExecution.Recovery.CurrentContentComplete,
-                    "conflict returns complete current source and requires semantic replanning");
+                    "whole-write conflict requires a published read even with complete diagnostic source");
                 AssertContains(blockedExecution.Recovery.CurrentContent, "\"second\"",
                     "recovery carries the current live module source");
                 AssertTrue(!string.IsNullOrWhiteSpace(blockedExecution.Recovery.Diff),
                     "recovery includes changes since the last model-visible snapshot");
+                var progress = new AgentProgressTracker();
+                progress.Observe(blockedExecution.Context.Call, ToolExecutionProgress.Capture(blockedExecution),
+                    blockedExecution.Message, blockedExecution.ResourceEvidence, blockedExecution.ResourceEffect);
+                string reason, message; int delay;
+                AssertTrue(!progress.CanDispatch(blockedExecution.Context.Call, out reason, out message, out delay),
+                    "diagnostic currentContent alone does not permit retry");
 
                 var refreshed = ReadResource(
                     executor.ResourceGateway,
@@ -2720,6 +2727,11 @@ namespace RNAssistant.Harness
                     null,
                     32000).Result;
                 AssertTrue(refreshed.Complete, "complete current source refreshes model authority");
+                progress.Observe(new ToolCall("refresh", ResourceToolCatalog.ReadToolId, "{}"),
+                    new ToolExecutionProgress(ToolExecutionOutcome.Ok), "refreshed",
+                    executor.ResourceGateway.Evidence(session, refreshed), null);
+                AssertTrue(progress.CanDispatch(blockedExecution.Context.Call, out reason, out message, out delay),
+                    "complete current read releases the same rejected whole-write arguments");
                 var whole = executor.ExecuteManual(
                     Command("common.vba_write_module",
                         "moduleName", "Module1",

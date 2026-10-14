@@ -82,8 +82,34 @@ const tests = [
     const note = assertVisibleEvidence(node, "clean");
     assert.match(note.textContent, /Подтверждённые записи: 1/);
     assert.match(note.textContent, /Соответствие всем требованиям автоматически не проверено/);
+    assert.doesNotMatch(note.textContent, /завершила задачу/, "turn completion does not certify the goal");
     assert.equal(walk(node).find(item => item.className === "agent-final-step").textContent,
       "Все изменения применены.", "model wording stays separate from runtime evidence");
+  }],
+  ["model done keeps failed attempts visible before optimistic prose", () => {
+    const node = renderFinal(view("errors", { reason: "model_done", goalVerification: "not_assessed", verified: 5, failed: 2 }));
+    const note = assertVisibleEvidence(node, "errors");
+    assert.match(note.textContent, /неудачные попытки: 2/);
+    assert.match(note.textContent, /Подтверждённые записи: 5/);
+    assert.doesNotMatch(note.textContent, /завершила задачу/);
+  }],
+  ["repeated progress comments collapse without losing actions or later distinct comments", () => {
+    const steps = [
+      { message: "Загружу схему.", items: [{ id: "a" }] },
+      { message: "", items: [{ id: "b" }] },
+      { message: "Загружу схему.", items: [{ id: "c" }] },
+      { message: "Проверяю исходник.", items: [{ id: "d" }] },
+      { message: "Загружу схему.", items: [{ id: "e" }] }
+    ];
+    const groups = context.groupAgentRunUpdates(steps);
+    assert.equal(groups.length, 3, "only consecutive visible repetitions collapse");
+    assert.equal(groups[0].messageCount, 2);
+    assert.equal(groups[0].items.map(item => item.id).join(","), "a,b,c");
+    assert.equal(groups[2].messageCount, 1);
+    assert.equal(steps[0].items.length, 1, "saved steps remain unchanged");
+    const parent = new Element("section");
+    context.appendAgentStepMessage(parent, groups[0].message, groups[0].messageCount);
+    assert.equal(parent.textContent, "Загружу схему.Повторено: 2");
   }],
   ["older run views also leave goal verification unassessed", () => {
     const older = view("clean", { reason: "model_done" });

@@ -2259,6 +2259,115 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void SimpleAgentVbaRefreshReleasesRejectedWrite()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                const string before = "Option Explicit\nSub Main()\nDebug.Print \"before\"\nEnd Sub";
+                const string after = "Option Explicit\nSub Main()\nDebug.Print \"after\"\nEnd Sub";
+                adapter.SetVbaModule("UniLoader", before, "StdModule");
+                var session = NewSession(adapter);
+                session.LastRun = new ChatRunRecord { RunId = "vba-refresh",
+                    DocumentRuntimeKey = adapter.RuntimeDocumentKey, StartedUtc = DateTime.UtcNow };
+                Func<string, JObject, string> call = (name, arguments) => ModelProtocolWire.Write("", new[]
+                { new ConversationToolCall { Name = name, Arguments = arguments } });
+                var read = call(ResourceToolCatalog.ReadToolId,
+                    new JObject { ["target"] = "VBA module: UniLoader", ["representation"] = "source" });
+                var write = call("common.vba_write_module",
+                    new JObject { ["moduleName"] = "UniLoader", ["code"] = after, ["mode"] = "updateOnly" });
+                var responses = new Queue<string>(new[] { read, LoadSkillResponse("common.vba_code_editing"),
+                    write, read, write, ModelProtocolWire.WriteAction("Изменение подтверждено.", ConversationResponse.DoneAction) });
+                var requests = 0;
+                var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
+                {
+                    requests++;
+                    if (requests == 3) adapter.SetVbaModule("UniLoader", before.Replace("before", "external"), "StdModule");
+                    if (requests == 4)
+                    {
+                        var failed = LastToolResult(messages.ToList(), "common.vba_write_module");
+                        AssertEqual("error", (string)failed["status"], "external drift rejects the first whole write");
+                        AssertEqual("RefreshRequired", (string)failed["data"]["recovery"]["retryPolicy"],
+                            "small diagnostic source still requires a canonical read");
+                        AssertEqual("whole", (string)failed["data"]["recovery"]["readScope"], "recovery names the actual guard requirement");
+                        AssertEqual(0, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "stale write never dispatches");
+                    }
+                    AssertTrue(responses.Count > 0, "refresh must not create a repair loop");
+                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                });
+                var result = service.ExecuteAsync(ChatModes.Agent, "Замени вывод UniLoader на after.", session,
+                    NewContext(adapter), new AppSettings { AutoConfirmToolActions = true },
+                    OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null)
+                    .GetAwaiter().GetResult();
+                AssertEqual(6, requests, "fresh read releases an explicit retry of the same arguments: " + result.AssistantText);
+                AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "recovery completes the run");
+                AssertEqual(after, adapter.GetVbaModuleCode("UniLoader"), "the reconciled whole write is applied");
+                AssertEqual(1, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "only the refreshed write dispatches");
+                AssertTrue(!session.Messages.Any(m => m.ExecutionProgress?.Outcome == ToolExecutionOutcome.NotDispatched),
+                    "no stale failure-cache rejection follows the successful refresh");
+            });
+        }
+
+        private static void SimpleAgentVbaSchemaInspectionDoesNotLoop()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                const string before = "Option Explicit\nSub Main()\nIf True Then\nDebug.Print 1\nEnd Sub";
+                const string after = "Option Explicit\nSub Main()\nIf True Then\nDebug.Print 1\nEnd If\nEnd Sub";
+                adapter.SetVbaModule("UniLoader", before, "StdModule");
+                var session = NewSession(adapter);
+                session.LastRun = new ChatRunRecord { RunId = "vba-inspection",
+                    DocumentRuntimeKey = adapter.RuntimeDocumentKey, StartedUtc = DateTime.UtcNow };
+                Func<string, JObject, string> call = (name, arguments) => ModelProtocolWire.Write("", new[]
+                { new ConversationToolCall { Name = name, Arguments = arguments } });
+                var schemaRead = call(CapabilityToolCatalog.ReadToolId, new JObject { ["id"] = "common.vba_apply_patch" });
+                var responses = new Queue<string>(new[] {
+                    call(ResourceToolCatalog.ReadToolId, new JObject {
+                        ["target"] = VbaResourceProvider.ProjectSemanticTarget(adapter.DocumentTitle), ["representation"] = "structure" }),
+                    call(ResourceToolCatalog.ReadToolId, new JObject { ["target"] = "VBA module: UniLoader", ["representation"] = "source" }),
+                    schemaRead,
+                    LoadSkillResponse("common.vba_code_editing"),
+                    schemaRead,
+                    call("common.vba_apply_patch", new JObject { ["moduleName"] = "UniLoader", ["patch"] = new JArray(
+                        new JObject { ["find"] = "End Sub", ["text"] = "End If\nEnd Sub" }) }),
+                    ModelProtocolWire.Write("Исходник исправлен; компиляция Office не проверялась.", new ConversationToolCall[0])
+                });
+                var requests = 0;
+                LlmCompletionDelegate complete = (settings, messages, options, stream, token) =>
+                {
+                    requests++;
+                    AssertTrue(responses.Count > 0, "schema inspection must not trigger a repair loop");
+                    var callable = session.LastContextReceipt.Arsenal.Tools.Select(tool => tool.Id).ToArray();
+                    AssertEqual(requests >= 5, callable.Contains("common.vba_apply_patch"),
+                        "only skill selection exposes patch on the next request");
+                    if (requests == 1)
+                        AssertTrue(FlattenSimple(messages).Contains("Inspect the bound project before asking"),
+                            "source discovery guidance is present before a skill is selected");
+                    if (requests == 4 || requests == 6)
+                    {
+                        var read = LastToolResult(messages.ToList(), CapabilityToolCatalog.ReadToolId);
+                        AssertEqual("ok", (string)read["status"], "schema inspection succeeds before and after selection");
+                        AssertContains(read.ToString(), "common.vba_code_editing", "inspection identifies the real selecting skill");
+                        AssertEqual("skill-tool", (string)read["data"]["kind"], "inspection returns bounded selection guidance");
+                        AssertTrue(read["data"]["descriptor"] == null && read["data"]["loaded"] == null,
+                            "discovery neither duplicates selected schemas nor claims admission");
+                        AssertEqual(0, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "inspection grants no mutation");
+                    }
+                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                };
+                var result = CreateConversationRunService(adapter, executor, complete).ExecuteAsync(
+                    ChatModes.Agent, "Исправь незакрытый If в UniLoader.", session, NewContext(adapter),
+                    new AppSettings { AutoConfirmToolActions = true },
+                    OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null)
+                    .GetAwaiter().GetResult();
+                AssertEqual(7, requests, "one discovery/load/inspect/patch sequence completes: " + result.AssistantText);
+                AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "patch run completes");
+                AssertEqual(after, adapter.GetVbaModuleCode("UniLoader"), "the exact correction is written");
+                AssertEqual(1, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "patch dispatches once");
+                AssertEqual(0, session.LastRun.KernelState.Summary.ToolCounts.ReadError, "no cached skill-required failure remains");
+                AssertEqual(1, session.LastRun.SelectedSkills.Count, "one skill selection is enough");
+            });
+        }
+
         private static void SimpleAgentVbaBatchReadCannotAuthorizeStaleOverwrite()
         {
             WithTempPaths(paths =>

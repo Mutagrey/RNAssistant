@@ -398,12 +398,13 @@ running markers cannot leave separate active cards after failure. A changed
 `RunViewState` on an existing message also invalidates its rendered unit. Step
 narration is rendered once. During active work, silent steps continue the preceding
 comment and completed actions may be collapsed below it; current work and attention
-states stay visible. Completion, failure, cancellation and reload preserve nonempty
-model comments outside the collapsed technical history, without duplicating them
-when it is opened. This presentation preserves original step/call identities and
+states stay visible. On completion, failure, cancellation, reload or a split at
+applied user input, progress comments fold together with their actions. Expanding
+the history renders each original comment beside its step's calls. Final answers,
+pending questions and runtime warnings stay visible. This presentation preserves original step/call identities and
 the terminal run's full expandable activity history; see [Conversation protocol](conversation-protocol.md).
 An applied user input splits the transcript into ordered segments of the same run.
-Earlier segments and their visible comments stay before that input; only the last
+Earlier segments and their expandable comments stay before that input; only the last
 segment merges with live activities, excluding already represented prefix steps. A full history refresh
 restores the same run's transient output before painting, and applies its inbox
 projection with the messages in one render. Pending echoes bridge the interval
@@ -422,6 +423,16 @@ control says “Отправить ответ”. This comes only from the typed
 from question marks or model prose. Sending, attachment preparation, message
 editing, navigation, unavailable chat detail or bridge hide the notice. It does
 not alter execution health, resume work automatically or represent tool approval.
+
+`common.questions_ask` completes its accepted call/result frame before the run
+waits for a user answer. The result records the question set, not its rendering or
+an answer. Question data follows ordinary activity CAS externalization
+above 8,192 characters. The Web interaction reads typed `questions` through
+`getToolResultPresentation` for the exact chat/run/call, for both inline and CAS
+bodies; it never depends on the metadata page retaining `DataJson`. Missing data
+produces a visible explanation and reload action instead of an empty waiting card.
+Question results are not converted to generic Tool Result artifacts: their existing
+call/result and activity payloads retain the interaction body.
 
 ## Inspection
 

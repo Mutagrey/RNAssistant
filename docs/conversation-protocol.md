@@ -151,6 +151,8 @@ an explicit model action: `tool`, `done`, `blocked` or `needs_input`.
 goal check occurred. The UI shows this separately from verified write/no-change
 counts when the model chooses `done`; clean execution health never certifies the
 requested outcome or Office/browser behavior.
+The notice says the model finished its response, not the task. Failed-attempt
+warnings remain visible when `model_done` also has unassessed goal verification.
 `ModelProtocolWire.MessageGuidance` gives defaults, response schema and repair one
 communication policy. Visible update frequency is independent of tool-call and
 Task List note frequency: a brief initial approach, then only new relevant
@@ -701,7 +703,10 @@ complete inventory. An unfiltered VBA browse pins the `VBA project` target first
 reading its `structure` returns the complete discovered component inventory.
 When the exact bound document supports VBA, `RUNTIME_CONTEXT.document.vba_project_target`
 publishes that same readable project target so a project-wide request can read it
-without a preceding find. `common.resources_read` accepts this runtime target or
+without a preceding find. Its `vba_source_policy` asks the model to inspect this
+project before asking for module code; omitted prompt content does not prove an
+access failure. This guidance is available before skill selection and is not a
+guarantee of real-model behavior. `common.resources_read` accepts this runtime target or
 one returned target plus an optional
 `metadata|text|structure|source|media` representation. Runtime supplies the exact
 reference, reads all internal provider pages under revision guards and publishes
@@ -1104,6 +1109,11 @@ requests can be made (maximum 23). Provider failures do not create format-repair
 messages or consume protocol response slots. This wrapper does not change the
 LLM adapter's HTTP classification, configure endpoint failover or retry tools.
 
+A non-null top-level provider `error` in JSON or an SSE chunk is an
+`InvalidResponse` provider failure, including after answer deltas. Accumulated
+content is not accepted as a successful completion and no format repair runs.
+Error-like text inside model content remains ordinary content.
+
 The `MaxAgentFormatRetries` settings/bridge key and its stored number are kept;
 the number now means total responses, not additional corrections. The form label
 and tooltip state that distinction. Default 10 and normalization to 1–20 remain.
@@ -1433,10 +1443,12 @@ the current call run owns the display. Only terminal exact actual/intended sourc
 agreement permits the verified `after` text. For an open/unknown record or
 comparable-only hash agreement, retained `before` and separately typed
 `intendedAfter`/`intendedAfterExists` expose the planned diff with the visible label
-«Результат не подтверждён». The expanded comparison explicitly identifies original
+«Точный текст результата недоступен». This is a source-comparison limitation,
+not a replacement for the action's separately verified or unknown effect.
+The expanded comparison explicitly identifies original
 → planned source; it never claims to show the actual resulting code. Planned line
 counts are available per entry and included in the overall header total. The
-«Не подтверждено» subtotal appears below only when unverified entries exist;
+«Предварительное сравнение» subtotal appears below only when unverified entries exist;
 the unavailable-comparison notice appears only when source/comparison coverage is
 incomplete. No explanatory caption is shown for fully available confirmed results. Planned creation/deletion use known absent sides;
 planned rename remains one comparison. Missing/corrupt/oversized source cannot be
@@ -1620,7 +1632,8 @@ User Markdown preserves entered single line breaks, including CRLF; model Markdo
 keeps normal paragraph/soft-break semantics. Lists and code fences use the same
 sanitized renderer. Plain diagnostic/tool text preserves newlines and wraps long
 lines. UI rendering does not rewrite stored content, copying or model context.
-Similar narration in separate model steps is not deduplicated by text heuristics.
+Stored narration and expanded history retain separate model steps. Live grouping
+only coalesces exact consecutive comments; similar prose is not inferred to be equal.
 
 These captions are UI-only: they do not replace or rewrite tool arguments, durable
 results or the model-facing result projection. Details label their JSON as journal
@@ -1635,17 +1648,20 @@ comment continue that group. Completed tool/control rows in such groups fold int
 `Действия · N` under the comment (or without a heading before the first comment).
 Contiguous completed rows are grouped in place: current/queued actions, waiting
 questions or confirmations, failures, warnings, partial results and unknown effects
-stay outside the disclosure in chronological order, including nested calls. New
-comments remain separate even when their text repeats. Explicit expansion survives
+stay outside the disclosure in chronological order, including nested calls. Consecutive
+identical visible comments share one paragraph and a repeat count; intervening
+silent steps preserve that group. Distinct comments start a new group. Explicit expansion survives
 live updates by activity identity; rendering never merges model steps or stored
 calls. Groups without silent steps retain the ordinary visible action rows.
 The current running action owns the text shimmer; an icon-free thinking status
-appears between calls. Waiting typed lifecycles keep the feed open. Accepted nonempty
-model comments remain visible in order after completion, failure, cancellation,
-reload and an applied user input that splits the run. Only technical activities
-fold into the existing `Действия · N` overview; expanding it shows the original
-activities without repeating those comments. Silent steps add no paragraph, and
-equal comments from distinct steps remain distinct. A zero-call run emits no empty
+appears between calls. Waiting typed lifecycles keep the feed open. On completion,
+failure, cancellation, reload and an applied user input that splits the run,
+accepted progress comments fold with their technical activities into the existing
+`Действия · N` overview. Expanding it restores each original comment with its own
+step's actions. The final answer, required interaction and runtime warning are
+separate visible elements. Silent steps add no paragraph, and live repeat grouping
+changes only presentation, retaining every original step and call.
+A zero-call run emits no empty
 overview. Independent runtime warnings remain visible. Progress phase names
 (`thinking`, `working`) are not target captions. A nonempty action block ends with a thin divider and a 6 px
 gap before the answer. Assistant footer buttons start at the left, with copy first

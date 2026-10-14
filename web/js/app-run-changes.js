@@ -20,7 +20,7 @@
     parent.appendChild(count);
   }
   function availability(item) {
-    return item.availability === "unverified" ? "Результат не подтверждён" :
+    return item.availability === "unverified" ? "Точный текст результата недоступен" :
       item.availability === "hunks" ? "Проверенные фрагменты" :
       item.availability === "copied" ? "Создана точная копия" :
       item.availability === "too_large" ? "Исходник превышает лимит сравнения" : "Исходник для сравнения недоступен";
@@ -48,7 +48,7 @@
     if (compared || planned) counts(summary, added + plannedAdded, removed + plannedRemoved);
     card.appendChild(summary);
     if (unverified) {
-      var plannedSummary = element("div", "run-changes-caption run-changes-planned", "Не подтверждено");
+      var plannedSummary = element("div", "run-changes-caption run-changes-planned", "Предварительное сравнение");
       if (planned) { plannedSummary.appendChild(document.createTextNode(": ")); counts(plannedSummary, plannedAdded, plannedRemoved); }
       card.appendChild(plannedSummary);
     }
@@ -89,12 +89,12 @@
           var output = body;
           if (entry.preview) {
             body.appendChild(element("p", "run-changes-caption run-change-preview-notice",
-              "План изменений: исходный → запланированный код. Фактический исходник результата не подтверждён."));
+              "План изменений: исходный → запланированный код. Точный текст результата недоступен. Статус действия указан в истории."));
             output = element("div", "run-change-preview-source"); body.appendChild(output);
           }
           window.RNAssistantTextDiff.render(output, diff);
         } else body.appendChild(element("p", "run-changes-caption", item.availability === "unverified" ?
-          "Результат не подтверждён. Исходник плана недоступен или превышает лимит сравнения." :
+          "Точный текст результата недоступен. Исходник плана недоступен или превышает лимит сравнения." :
           availability(item) + ". Счётчик строк не вычисляется."));
       });
       card.appendChild(row);

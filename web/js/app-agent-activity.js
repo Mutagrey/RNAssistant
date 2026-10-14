@@ -33,9 +33,37 @@ function appendQuestionCards(node, activity, context) {
   if (context && Number.isInteger(context.index) && (state.messages || []).slice(context.index + 1).some(function (message) {
     return String(messageRole(message) || "").toLowerCase() === "user";
   })) return;
-  var data;
-  try { data = JSON.parse(activityDataJson(activity) || "{}"); } catch (error) { return; }
-  if (!data || data.type !== "rnassistant.questions" || !Array.isArray(data.questions)) return;
+  var slot = document.createElement("div");
+  slot.className = "agent-question-slot";
+  slot.setAttribute("aria-live", "polite");
+  node.appendChild(slot);
+  slot.textContent = "Загрузка вопросов…";
+  if (typeof appendToolResultPreview !== "function") {
+    slot.textContent = "Не удалось загрузить вопросы. Обновите чат.";
+    return;
+  }
+  slot.textContent = "";
+  var loading = appendToolResultPreview(slot, activity, context, null, function (target, response) {
+    target.textContent = "";
+    if (!response.questions) {
+      target.textContent = response.questionsUnavailableReason || "Сохранённые вопросы недоступны.";
+      var retry = document.createElement("button");
+      retry.type = "button";
+      retry.className = "agent-action-button secondary";
+      retry.textContent = "Повторить загрузку";
+      retry.addEventListener("click", function () {
+        slot.remove();
+        appendQuestionCards(node, activity, context);
+      });
+      target.appendChild(retry);
+      return;
+    }
+    renderQuestionCards(target, response.questions);
+  });
+  if (!loading) slot.textContent = "Не удалось определить источник вопросов. Обновите чат.";
+}
+
+function renderQuestionCards(node, data) {
   var form = document.createElement("form");
   form.className = "plan-question-cards";
   data.questions.forEach(function (question) {

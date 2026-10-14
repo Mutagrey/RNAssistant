@@ -40,7 +40,9 @@ namespace RNAssistant.Office.Services
             else if (activity.ExecutionEvidence?.Effect == ToolEffectEvidence.Unknown ||
                 activity.ExecutionEvidence?.Effect == ToolEffectEvidence.VerifiedChange)
                 result.Blocks.Add(new ToolTextBlockDto { Title = "Сравнение", Text = "Сохранённое сравнение для этого вызова недоступно." });
-            if (activity.ResultPayload == null) AppendContent(result.Blocks, activity.DataJson);
+            var questions = activity.ToolId == UserQuestionToolCatalog.AskToolId;
+            if (questions) result.QuestionsUnavailableReason = "Сохранённые вопросы недоступны. Повторите загрузку; при повторной ошибке сообщите об этом в чат.";
+            if (activity.ResultPayload == null) AppendActivityContent(result, activity.DataJson, questions);
             else if (activity.ResultPayload.ByteLength > MaxSource * 4L) Notice(result.Blocks);
             else
             {
@@ -48,13 +50,33 @@ namespace RNAssistant.Office.Services
                 {
                     var content = _payloads?.ReadText(activity.ResultPayload.ToBlobReference());
                     if (content == null) Unavailable(result.Blocks);
-                    else AppendContent(result.Blocks, content);
+                    else AppendActivityContent(result, content, questions);
                 }
                 catch (Exception ex) when (ex is IOException || ex is System.Security.Cryptography.CryptographicException ||
                     ex is UnauthorizedAccessException)
                 { Unavailable(result.Blocks); }
             }
             return result;
+        }
+
+        private static void AppendActivityContent(ToolResultPresentationDto result, string source, bool questions)
+        {
+            if (!questions) { AppendContent(result.Blocks, source); return; }
+            if (string.IsNullOrWhiteSpace(source) || source.Length > MaxSource) return;
+            try
+            {
+                var data = JsonConvert.DeserializeObject<UserQuestionSet>(source, new JsonSerializerSettings {
+                    MaxDepth = 16, CheckAdditionalContent = true, TypeNameHandling = TypeNameHandling.None });
+                if (data?.Type != "rnassistant.questions" || string.IsNullOrWhiteSpace(data.QuestionSetId) ||
+                    data.Questions == null || data.Questions.Count < 1 || data.Questions.Count > 3 ||
+                    data.Questions.Any(q => q == null || string.IsNullOrWhiteSpace(q.Id) ||
+                        string.IsNullOrWhiteSpace(q.Prompt) || (q.Selection != "single" && q.Selection != "multiple") ||
+                        q.Options == null || q.Options.Count < 2 || q.Options.Count > 4 ||
+                        q.Options.Any(o => o == null || string.IsNullOrWhiteSpace(o.Id) || string.IsNullOrWhiteSpace(o.Label)))) return;
+                result.Questions = data;
+                result.QuestionsUnavailableReason = null;
+            }
+            catch (JsonException) { } // The typed unavailable reason remains visible.
         }
 
         private static void Unavailable(List<ToolResultBlockDto> blocks)

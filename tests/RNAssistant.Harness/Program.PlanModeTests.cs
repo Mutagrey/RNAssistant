@@ -282,6 +282,7 @@ namespace RNAssistant.Harness
 
         private static void PlanModeNativeQuestionPausesKernel()
         {
+            foreach (var resultRole in new[] { ToolResultRoles.User, ToolResultRoles.Tool })
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"),
                 delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
@@ -299,7 +300,7 @@ namespace RNAssistant.Harness
                                 ["questions"] = new JArray(new JObject
                                 {
                                     ["header"] = "Scope",
-                                    ["prompt"] = "Choose scope",
+                                    ["prompt"] = "Choose scope " + new string('x', 9000),
                                     ["selection"] = "single",
                                     ["options"] = new JArray(
                                         new JObject
@@ -317,10 +318,12 @@ namespace RNAssistant.Harness
                         }
                     })
                 });
+                IReadOnlyList<ChatMessage> lastRequest = null;
                 LlmCompletionDelegate completion =
                     (settings, messages, options, stream, cancellationToken) =>
                 {
                     calls++;
+                    lastRequest = messages.ToList();
                     return Task.FromResult(new LlmCompletionResult
                     {
                         Content = responses.Dequeue()
@@ -336,7 +339,7 @@ namespace RNAssistant.Harness
                         "Составь план и спроси только необходимое.",
                         session,
                         NewContext(adapter),
-                        new AppSettings(),
+                        new AppSettings { ToolResultRole = resultRole, ContextWindowOverrideTokens = 65536 },
                         tools,
                         null).GetAwaiter().GetResult();
 
@@ -352,13 +355,32 @@ namespace RNAssistant.Harness
                     message.Activity != null &&
                     message.Activity.ToolId ==
                         UserQuestionToolCatalog.AskToolId).Activity;
-                AssertContains(activity.DataJson, "rnassistant.questions",
-                    "typed question payload reaches the existing UI projection");
-                var projected = ModelToolResultProjection.Project(
-                    session.Messages.Last(message =>
-                        message.ToolName == UserQuestionToolCatalog.AskToolId));
-                AssertTrue(projected.Content.IndexOf("questionSetId", StringComparison.Ordinal) < 0 &&
-                    projected.Content.IndexOf("\"id\"", StringComparison.Ordinal) < 0,
+                AssertTrue(activity.DataJson == null && activity.ResultPayload != null,
+                    "large question uses the canonical activity payload");
+                var shown = new ToolResultPresentationService(null, executor.Payloads)
+                    .Read(session, session.LastRun.RunId, activity.ToolCallId);
+                AssertContains(shown.Questions.Questions.Single().Prompt, "Choose scope",
+                    "model result materialization does not replace the question with an artifact pointer");
+                var acceptedCall = session.Messages.Single(message => message.AcceptedCallOrigin != null &&
+                    message.ToolName == UserQuestionToolCatalog.AskToolId);
+                var terminal = session.Messages.Single(message => message.ToolCallId == acceptedCall.ToolCallId &&
+                    message.Role == resultRole);
+                var retained = terminal.ResultPayload == null ? terminal.Content :
+                    executor.Payloads.ReadText(terminal.ResultPayload.ToBlobReference());
+                AssertContains(retained, "Choose scope", "the question closes its accepted call before pausing");
+                var reloaded = new ChatStore(FixturePaths.Value).Load(session.Id);
+                responses.Enqueue(ModelProtocolWire.WriteAction("Учту выбранную область Core.", ConversationResponse.DoneAction));
+                var resumed = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
+                    ChatModes.Plan, "Core", reloaded, NewContext(adapter),
+                    new AppSettings { ToolResultRole = resultRole, ContextWindowOverrideTokens = 65536 }, tools, null).GetAwaiter().GetResult();
+                AssertEqual(3, calls, "an answer after reload continues without a repeated question or protocol repair");
+                AssertEqual(AgentResponseStatuses.Completed, resumed.ResponseStatus, "answered question can complete");
+                AssertTrue(lastRequest.Any(message => message.Role == resultRole && message.ToolCallId == acceptedCall.ToolCallId),
+                    "continued request retains the paired question result in its selected transport");
+                var replayed = lastRequest.Single(message => message.Role == resultRole && message.ToolCallId == acceptedCall.ToolCallId);
+                AssertContains(replayed.Content, "Choose scope", "continued model request hydrates the retained question result");
+                AssertTrue(replayed.Content.IndexOf("questionSetId", StringComparison.Ordinal) < 0 &&
+                    replayed.Content.IndexOf("\"id\"", StringComparison.Ordinal) < 0,
                     "model replay omits runtime question and option ids");
             });
         }

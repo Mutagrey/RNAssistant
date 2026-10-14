@@ -153,9 +153,9 @@ namespace RNAssistant.Office.Services
 
         private ToolResultMaterialization TerminalMaterialization(ToolExecutionRecord record)
         {
-            // Confirmation/user-input pauses have no terminal wire result. Proven
-            // non-dispatch is kept in the record, independently of the error payload.
-            if (record.Outcome == ToolExecutionOutcome.AwaitingConfirmation || record.AwaitingUser) return null;
+            // Confirmation is still a pending call. A question set is already
+            // recorded: close its call/result frame before waiting for an answer.
+            if (record.Outcome == ToolExecutionOutcome.AwaitingConfirmation) return null;
             ToolResultMaterialization result;
             if (_results.TryGetValue(record.Context.Call.Id, out result))
             {

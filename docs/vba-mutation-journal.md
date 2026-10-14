@@ -157,8 +157,14 @@ reads and binds current live source under the document gate, then validates ever
 exact hunk before confirmation/dispatch. Sequential patches therefore do not need a
 redundant whole-source read, while stale or ambiguous hunks fail with no effect.
 A whole-write conflict returns complete current source up to 16,384 characters
-and a changed-span diff in typed recovery. Larger/truncated sources return only
-the semantic target and `RefreshRequired`; no stitched head/tail body or synthetic
+and a changed-span diff in typed recovery. This diagnostic text is not a published
+resource-read observation. Whole-source conflicts for an existing module declare `RefreshRequired`
+with `readScope=whole`, even when that diagnostic body is complete. A successful
+complete read of the named module releases the previous failed call; the model
+can explicitly retry the reconciled arguments under normal guards. Classifying
+this as `Replan` would leave the identical call blocked after the requested read.
+Larger/truncated sources return only the semantic target and refresh requirement;
+no stitched head/tail body or synthetic
 diff is inserted into the mandatory error result. Such a body can itself exhaust
 the request budget and is not an exact resource view. Complete current after-state delivered by runtime, including a
 body restored after compaction, can authorize the next replacement. A successful

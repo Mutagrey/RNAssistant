@@ -56,17 +56,27 @@ namespace RNAssistant.Core.Llm
                 throw new InvalidOperationException("LLM response is not valid JSON: " + ex.Message, ex);
             }
 
+            ThrowIfProviderError(parsed);
             var message = parsed.SelectToken("choices[0].message") as JObject;
             if (message == null)
             {
-                var error = parsed.SelectToken("error.message");
-                var suffix = error != null && error.Type == JTokenType.String
-                    ? " Endpoint error: " + error.Value<string>()
-                    : string.Empty;
-                throw new InvalidOperationException("LLM response has no choices[0].message." + suffix);
+                throw new InvalidOperationException("LLM response has no choices[0].message.");
             }
 
             return BuildCompletionResult(message, parsed["usage"] as JObject);
+        }
+
+        private static void ThrowIfProviderError(JObject payload)
+        {
+            var error = payload["error"];
+            if (error == null || error.Type == JTokenType.Null) return;
+            var message = error.Type == JTokenType.String ? error.Value<string>() :
+                (error as JObject)?["message"]?.Type == JTokenType.String
+                    ? error["message"].Value<string>() : error.ToString(Formatting.None);
+            if (message.Length > MaxStoredRefusalChars) message = message.Substring(0, MaxStoredRefusalChars);
+            // A structured endpoint error is terminal even after content deltas.
+            // Do not accept the accumulated answer or spend format-repair retries.
+            throw new LlmRequestException(LlmFailureKind.InvalidResponse, "LLM endpoint error: " + message);
         }
 
         internal static async Task<LlmCompletionResult> ReadStreamingOrJsonResponseAsync(
@@ -284,6 +294,8 @@ namespace RNAssistant.Core.Llm
                 {
                     return;
                 }
+
+                ThrowIfProviderError(chunk);
 
                 var usage = chunk["usage"] as JObject;
                 if (usage != null)

@@ -78,7 +78,11 @@ that tool by itself. The dynamically configured `common.tools_upsert` descriptor
 retains its skill-only exposure. The five built-in VBA editing tools
 also require a selected package; `common.vba_code_editing` exposes them, while
 `common.vba_userform_authoring` can expose code-only form writes. A direct
-`capabilities_read` cannot admit a skill-only tool. `common.office_run_macro`
+`capabilities_read` returns bounded `loadSkill` guidance before or after selection
+but cannot admit a skill-only tool. The selected request owns its exact schema;
+discovery does not duplicate it into history or create a cached `skill_required`
+failure that would block another inspection after selection.
+`common.office_run_macro`
 remains an optional direct tool for requests to execute an existing macro.
 
 Selection belongs to one run. Existing `run.updated` events preserve it through

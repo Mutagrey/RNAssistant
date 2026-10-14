@@ -209,12 +209,6 @@ namespace RNAssistant.Office.Tools
             }
             if (tool != null)
             {
-                if (tool.Exposure == ToolExposure.Skill)
-                    return CapabilityToolOutcome.Error("This tool requires a selected procedure. Use common.skills_load.",
-                        new JObject { ["id"] = tool.Id, ["skills"] = new JArray(skills.Where(item =>
-                            (item.Package?.RequiredTools ?? new List<SkillToolDependency>()).Concat(
-                                item.Package?.OptionalTools ?? new List<SkillToolDependency>()).Any(dependency => dependency.Id == tool.Id))
-                            .Select(item => item.Id)) }.ToString(Formatting.None), "skill_required", true);
                 if (HasArgument(arguments, "referencePath") ||
                     HasArgument(arguments, "action"))
                 {
@@ -224,13 +218,32 @@ namespace RNAssistant.Office.Tools
                         "capability_reference_not_supported",
                         false);
                 }
-                return ReadTool(tool);
+                return ReadTool(tool, skills);
             }
             return ReadSkill(arguments, skill, session);
         }
 
-        private static CapabilityToolOutcome ReadTool(ToolCatalogEntry tool)
+        private static CapabilityToolOutcome ReadTool(ToolCatalogEntry tool, IReadOnlyList<SkillDefinition> skills)
         {
+            if (tool.Exposure == ToolExposure.Skill)
+            {
+                // Discovery succeeds without granting access or caching a refusal
+                // that survives selection. The selected request owns the schema;
+                // duplicating it in history wastes the budget needed for the skill.
+                return CapabilityToolOutcome.Ok("Tool schema is supplied by its selected skill: " + tool.Id +
+                    ". If already present in RUNTIME_CONTEXT.tools, call it directly. Otherwise select one listed loadSkill through common.skills_load. This read grants no tool access.",
+                    new JObject
+                    {
+                        ["kind"] = "skill-tool",
+                        ["id"] = tool.Id,
+                        ["revision"] = Revision(tool),
+                        ["loadSkill"] = new JArray(skills.Where(skill =>
+                            (skill.Package?.RequiredTools ?? new List<SkillToolDependency>()).Concat(
+                                skill.Package?.OptionalTools ?? new List<SkillToolDependency>())
+                                .Any(dependency => dependency != null && dependency.Id == tool.Id))
+                            .Select(skill => skill.Id).OrderBy(id => id, StringComparer.Ordinal))
+                    }.ToString(Formatting.None));
+            }
             var descriptor = Descriptor(tool);
             if (descriptor == null)
             {

@@ -68,11 +68,11 @@
     });
   }
   window.RNAssistantToolResultPresentation = { render: render };
-  window.appendToolResultPreview = function (parent, activity, context, disclosure) {
+  window.appendToolResultPreview = function (parent, activity, context, disclosure, renderResponse) {
     var chatId = state.activeChatId;
     var runId = activityValue(activity, "RunId", "runId", "") || (context && context.message ? messageRunId(context.message) : "");
     var toolCallId = activityToolCallId(activity);
-    if (!chatId || !runId || !toolCallId || !disclosure) return;
+    if (!chatId || !runId || !toolCallId) return false;
     var slot = node("div", "tool-result-slot"); parent.appendChild(slot);
     var generation = 0, requestId = null, revision = null;
     function currentRevision() { return (state.chatProjectionRevisions || {})[chatId] || 0; }
@@ -82,7 +82,7 @@
       if (requestId && typeof cancelBridgeRequest === "function") cancelBridgeRequest(requestId).catch(function () {});
       requestId = null;
     }
-    function active() { return slot.isConnected && disclosure.open && state.activeChatId === chatId; }
+    function active() { return slot.isConnected && (!disclosure || disclosure.open) && state.activeChatId === chatId; }
     function load() {
       if (!active()) return;
       cancel(); var ticket = generation; revision = currentRevision();
@@ -96,7 +96,7 @@
         if (revision !== currentRevision()) { load(); return; }
         if (!response || response.chatId !== chatId || response.runId !== runId || response.toolCallId !== toolCallId)
           throw new Error("Mismatched presentation source.");
-        render(slot, response);
+        (renderResponse || render)(slot, response);
       }).catch(function () {
         if (ticket !== generation || !active()) return;
         requestId = null; slot.textContent = "";
@@ -104,13 +104,14 @@
         retry.type = "button"; retry.addEventListener("click", load); slot.appendChild(retry);
       });
     }
-    disclosure.addEventListener("toggle", function () {
+    if (disclosure) disclosure.addEventListener("toggle", function () {
       if (disclosure.open) load(); else { cancel(); slot.textContent = ""; }
     });
-    // Start only once attached: creating a collapsed card must perform no read.
+    // Interactions load on attachment; ordinary closed details remain lazy.
     setTimeout(function () {
       if (!slot.isConnected) return;
-      if (disclosure.open && revision === null) load();
+      if ((!disclosure || disclosure.open) && revision === null) load();
     }, 0);
+    return true;
   };
 }());

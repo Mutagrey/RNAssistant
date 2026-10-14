@@ -1,5 +1,23 @@
 # RNAssistant Harness
 
+VBA patching incident: `skill packages: VBA schema inspection does not loop`
+exercises the production conversation through project/source reads, skill-only
+discovery before and after selection, and one verified fake-host patch. Discovery
+does not grant access or duplicate the schema into history. `model diagnostics:`
+covers JSON/SSE provider errors after answer deltas; `agent: model projection hides
+runtime evidence` checks capability projection. Web checks are
+`completion-guard.test.js`, `agent-activity-layout.test.js` and
+`run-changes-layout.test.js` (the latter two use Playwright). `vba: fresh read releases
+rejected model write` covers external drift and an identical retry through the
+production conversation, not just manual tool invocation. `vba: patch uses live
+state and whole write returns recovery` checks that diagnostic source alone cannot
+release the failure. `plan mode: native question` checks terminal pairing and
+answer continuation after reload in both result roles; `plan mode: question
+presentation` covers externalized and unavailable question data.
+`tool-result-presentation.test.js` uses Playwright to verify exact question loading,
+visible missing-body recovery and submitting the answer. These do not qualify
+Office or autonomous model behavior.
+
 Office chat navigation: `node tests/web/office-host-chat.test.js` covers queued
 creation for all four hosts, duplicate clicks, visible progress/refusal/error,
 preserved binding after failure and target initialization.
