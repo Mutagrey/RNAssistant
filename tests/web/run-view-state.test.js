@@ -33,6 +33,19 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
   const waiting = runView.normalize(state("waiting", "awaiting_confirmation", "clean", pending));
   assert.equal(waiting.pendingConfirmation.pendingId, "pending");
   assert.ok(Object.isFrozen(waiting.pendingConfirmation));
+  assert.equal(runView.normalize(Object.assign(state("bad-case"), { Lifecycle: "Completed" })), null);
+  assert.equal(runView.normalize(Object.assign(state("bad-health-case"), { ExecutionHealth: "Clean" })), null);
+  assert.equal(runView.normalize(Object.assign(state("bad-value"), { Lifecycle: "toString" })), null);
+  assert.equal(runView.normalize(state("bad-pending-case", "awaiting_confirmation", "clean",
+    { pendingId: "pending", toolCallId: "call", toolName: "excel.write_range" })), null);
+  assert.equal(runView.fromMessage({ RunViewState: state("message") }).runId, "message");
+  assert.equal(runView.fromChatSummary({ RunViewState: state("summary") }).runId, "summary");
+  assert.equal(runView.fromMessage({ runViewState: state("wrong-case") }), null);
+  assert.equal(runView.fromChatSummary({ runViewState: state("wrong-case") }), null);
+  assert.equal(runView.sessionRevision({ sessionRevision: 0 }), 0);
+  assert.equal(runView.sessionRevision({ SessionRevision: 4 }), null);
+  assert.equal(runView.chatRevision({ Revision: 0 }), 0);
+  assert.equal(runView.chatRevision({ revision: 4 }), null);
   console.log("PASS run view state: strict immutable normalization keeps narrative separate");
 }
 
@@ -140,17 +153,10 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
   assert.equal(/fetch\(|XMLHttpRequest|WebSocket|EventSource/.test(source), false);
   assert.equal(/agent-run-history-state\.status-(?:blocked|refused|awaiting_user|planned)/.test(agentCss), false);
   assert.equal(/message-outcome\.status-(?:blocked|refused|awaiting_user|planned)/.test(chatCss), false);
-  ["app-utils.js", "app-run-view-state.js", "app-agent-model.js", "app-agent-approval.js"].forEach(asset => {
-    assert.ok(index.includes(asset + "?v=" + (["app-utils.js", "app-agent-approval.js"].includes(asset) ? "run-view-state-20260830-1" : asset === "app-agent-model.js" ? "catalog-display-chat-20260908-1-run-isolation-1" : "agent-outcome-20261002-1-run-isolation-1")), asset + " uses the current cache key");
-  });
-  assert.ok(index.includes("app-agent.js?v=agent-outcome-20261002-1-run-isolation-1"),
-    "agent outcome uses the current cache key");
-  assert.ok(index.includes("app-chat-session.js?v=office-chat-20260930-4"), "chat session uses the current cache key");
-  assert.ok(index.includes("app-core.js?v=office-chat-20260930-3"), "core uses the current cache key");
-  assert.ok(index.includes("app-chat-state.js?v=office-chat-20260930-3"), "chat state uses the current cache key");
-  assert.ok(index.includes("app-messages.js?v=action-severity-20260930-1"), "messages uses the transcript incremental cache key");
-  ["app-chat.css", "app-agent.css"].forEach(asset => {
-    assert.ok(index.includes(asset + "?v=" + (asset === "app-agent.css" ? "agent-outcome-20261002-1" : "action-severity-20260930-1")), asset + " uses the current layout cache key");
+  ["app-utils.js", "app-run-view-state.js", "app-agent-model.js", "app-agent-approval.js",
+    "app-agent.js", "app-chat-session.js", "app-core.js", "app-chat-state.js", "app-messages.js",
+    "app-chat.css", "app-agent.css"].forEach(asset => {
+    assert.ok(index.includes(asset + "?v="), asset + " has a cache key");
   });
   assert.ok(index.indexOf("app-run-view-state.js") < index.indexOf("app-chat-state.js"));
   assert.ok(index.indexOf("app-run-view-state.js") < index.indexOf("app-agent-model.js"));

@@ -8,6 +8,7 @@ using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
+using RNAssistant.Office.Contracts;
 
 namespace RNAssistant.Harness
 {
@@ -88,6 +89,9 @@ namespace RNAssistant.Harness
             AssertEqual("excel.write_range", view.PendingConfirmation.ToolName, "tool name projected from kernel");
             AssertEqual(1, view.VerifiedWrites,
                 "confirmation continuation retains source evidence from the same logical turn");
+            var wire = JObject.FromObject(view);
+            AssertEqual("pending-1", (string)wire["PendingConfirmation"]["PendingId"],
+                "nested confirmation retains the canonical PascalCase contract");
         }
 
         private static void RunViewStateReplayEqualityAndImmutableWire()
@@ -110,6 +114,26 @@ namespace RNAssistant.Harness
                 session.Messages.Add(EffectMessage("run-replay-view", "write", ToolEffectEvidence.VerifiedChange));
                 RunViewStateProjector.StampCurrentRun(session);
                 var before = RunViewStateProjector.Create(session);
+                var payload = JObject.Parse(JsonConvert.SerializeObject(new BridgeResponse
+                {
+                    Id = "run-view-wire", Ok = true,
+                    Payload = new ChatStateResponse
+                    {
+                        ActiveChatId = session.Id, SessionRevision = 7, RunViewState = before,
+                        Chats = new[] { new ChatSessionSummary { Id = session.Id, Revision = 7, RunViewState = before } },
+                        Messages = new[] { new ChatMessageViewDto { RunViewState = before } }
+                    }
+                }))["payload"];
+                var wireView = (JObject)payload["runViewState"];
+                AssertTrue(wireView.Properties().All(property => char.IsUpper(property.Name[0])) &&
+                    (string)wireView["RunId"] == before.RunId && (string)wireView["Lifecycle"] == before.Lifecycle,
+                    "bridge run-view properties retain canonical PascalCase");
+                AssertTrue((long)payload["sessionRevision"] == 7 && payload["SessionRevision"] == null &&
+                    payload["RunViewState"] == null, "response envelope uses only its declared camelCase fields");
+                AssertTrue((string)payload["chats"][0]["Id"] == session.Id && (long)payload["chats"][0]["Revision"] == 7 &&
+                    JToken.DeepEquals(wireView, payload["chats"][0]["RunViewState"]) &&
+                    JToken.DeepEquals(wireView, payload["messages"][0]["RunViewState"]),
+                    "summary and message carry the same canonical view without aliases");
                 var store = new ChatStore(paths);
                 store.Save(session);
 

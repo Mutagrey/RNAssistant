@@ -2,43 +2,32 @@
   "use strict";
 
   var lifecycles = {
-    running: "running",
-    completed: "completed",
-    awaitingconfirmation: "awaiting_confirmation",
-    awaitinguser: "awaiting_user",
-    cancelled: "cancelled",
-    failed: "failed"
+    running: true,
+    completed: true,
+    awaiting_confirmation: true,
+    awaiting_user: true,
+    cancelled: true,
+    failed: true
   };
   var healthValues = { clean: true, errors: true, unknown: true };
 
-  function value(source, pascal, camel, fallback) {
-    source = source || {};
-    return source[pascal] !== undefined ? source[pascal] :
-      (source[camel] !== undefined ? source[camel] : fallback);
-  }
-
-  function text(source, pascal, camel) {
-    var result = value(source, pascal, camel, "");
+  function text(source, key) {
+    var result = source ? source[key] : null;
     return result === null || result === undefined ? "" : String(result);
   }
 
-  function count(source, pascal, camel) {
-    var result = value(source, pascal, camel, null);
+  function count(source, key) {
+    var result = source ? source[key] : null;
     return Number.isSafeInteger(result) && result >= 0 ? result : null;
   }
 
-  function lifecycle(source) {
-    var raw = text(source, "Lifecycle", "lifecycle").toLowerCase().replace(/[^a-z]/g, "");
-    return lifecycles[raw] || "";
-  }
-
   function pending(source) {
-    var raw = value(source, "PendingConfirmation", "pendingConfirmation", null);
+    var raw = source.PendingConfirmation;
     if (!raw) return null;
     var result = {
-      pendingId: text(raw, "PendingId", "pendingId"),
-      toolCallId: text(raw, "ToolCallId", "toolCallId"),
-      toolName: text(raw, "ToolName", "toolName")
+      pendingId: text(raw, "PendingId"),
+      toolCallId: text(raw, "ToolCallId"),
+      toolName: text(raw, "ToolName")
     };
     if (!result.pendingId || !result.toolCallId || !result.toolName) return null;
     return Object.freeze(result);
@@ -46,27 +35,28 @@
 
   function normalize(source) {
     if (!source) return null;
-    var normalizedLifecycle = lifecycle(source);
-    var executionHealth = text(source, "ExecutionHealth", "executionHealth").toLowerCase();
+    var normalizedLifecycle = text(source, "Lifecycle");
+    var executionHealth = text(source, "ExecutionHealth");
     var result = {
-      runId: text(source, "RunId", "runId"),
-      turnId: text(source, "TurnId", "turnId"),
-      narrative: text(source, "Narrative", "narrative"),
+      runId: text(source, "RunId"),
+      turnId: text(source, "TurnId"),
+      narrative: text(source, "Narrative"),
       lifecycle: normalizedLifecycle,
       executionHealth: executionHealth,
-      goalVerification: text(source, "GoalVerification", "goalVerification") || "not_assessed",
-      successfulReads: count(source, "SuccessfulReads", "successfulReads"),
-      verifiedWrites: count(source, "VerifiedWrites", "verifiedWrites"),
-      noChangeWrites: count(source, "NoChangeWrites", "noChangeWrites"),
-      unverifiedWrites: count(source, "UnverifiedWrites", "unverifiedWrites"),
-      failedCalls: count(source, "FailedCalls", "failedCalls"),
-      unknownEffects: count(source, "UnknownEffects", "unknownEffects"),
+      goalVerification: text(source, "GoalVerification") || "not_assessed",
+      successfulReads: count(source, "SuccessfulReads"),
+      verifiedWrites: count(source, "VerifiedWrites"),
+      noChangeWrites: count(source, "NoChangeWrites"),
+      unverifiedWrites: count(source, "UnverifiedWrites"),
+      failedCalls: count(source, "FailedCalls"),
+      unknownEffects: count(source, "UnknownEffects"),
       pendingConfirmation: pending(source),
-      reason: text(source, "Reason", "reason"),
-      currentAction: text(source, "CurrentAction", "currentAction"),
-      startedUtc: text(source, "StartedUtc", "startedUtc")
+      reason: text(source, "Reason"),
+      currentAction: text(source, "CurrentAction"),
+      startedUtc: text(source, "StartedUtc")
     };
-    if (!result.runId || !result.turnId || !normalizedLifecycle || !healthValues[executionHealth] ||
+    if (!result.runId || !result.turnId || lifecycles[normalizedLifecycle] !== true ||
+        healthValues[executionHealth] !== true ||
         result.goalVerification !== "not_assessed" ||
         result.successfulReads === null || result.verifiedWrites === null || result.noChangeWrites === null ||
         result.unverifiedWrites === null || result.failedCalls === null || result.unknownEffects === null ||
@@ -77,21 +67,19 @@
   }
 
   function fromMessage(message) {
-    return normalize(value(message, "RunViewState", "runViewState", null));
+    return normalize(message && message.RunViewState);
   }
 
   function fromChatSummary(chat) {
-    return normalize(value(chat, "RunViewState", "runViewState", null));
+    return normalize(chat && chat.RunViewState);
   }
 
   function sessionRevision(source) {
-    var revision = value(source, "SessionRevision", "sessionRevision", null);
-    return Number.isSafeInteger(revision) && revision >= 0 ? revision : null;
+    return count(source, "sessionRevision");
   }
 
   function chatRevision(chat) {
-    var revision = value(chat, "Revision", "revision", null);
-    return Number.isSafeInteger(revision) && revision >= 0 ? revision : null;
+    return count(chat, "Revision");
   }
 
   function accept(revisions, chatId, revision) {
@@ -107,19 +95,19 @@
   function mergeCatalog(current, incoming, revisions, preserveExisting) {
     var currentById = {};
     (current || []).forEach(function (chat) {
-      var id = text(chat, "Id", "id");
+      var id = text(chat, "Id");
       if (id) currentById[id] = chat;
     });
     var incomingById = {};
     var incomingOrder = [];
     (incoming || []).forEach(function (chat) {
-      var id = text(chat, "Id", "id");
+      var id = text(chat, "Id");
       if (id && !Object.prototype.hasOwnProperty.call(incomingById, id)) incomingOrder.push(id);
       if (id) incomingById[id] = chat;
     });
 
     function newest(chat, previous) {
-      var id = text(chat, "Id", "id");
+      var id = text(chat, "Id");
       var nextRevision = chatRevision(chat);
       var previousRevision = chatRevision(previous);
       var selected = previous && previousRevision !== null &&
@@ -137,7 +125,7 @@
 
     var seen = {};
     var merged = (current || []).map(function (chat) {
-      var id = text(chat, "Id", "id");
+      var id = text(chat, "Id");
       if (id) seen[id] = true;
       return id && incomingById[id] ? newest(incomingById[id], chat) : chat;
     });

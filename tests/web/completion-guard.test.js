@@ -170,10 +170,12 @@ const tests = [
     assert.equal(stats.status, "cancelled");
     assertVisibleEvidence(context.renderAgentRunArticle({ items }), "unknown");
   }],
-  ["camelCase bridge shape projects the same state", () => {
-    const camel = Object.fromEntries(Object.entries(view("errors", { reads: 2, failed: 1 }))
+  ["noncanonical run view fields fail closed", () => {
+    const source = view("errors", { reads: 2, failed: 1 });
+    const camel = Object.fromEntries(Object.entries(source)
       .map(([key, item]) => [key.charAt(0).toLowerCase() + key.slice(1), item]));
-    const normalized = context.RNAssistantRunViewState.normalize(camel);
+    assert.equal(context.RNAssistantRunViewState.normalize(camel), null);
+    const normalized = context.RNAssistantRunViewState.normalize(source);
     assert.equal(normalized.executionHealth, "errors");
     assert.equal(normalized.successfulReads, 2);
     const stats = context.agentRunStats([], true, normalized);

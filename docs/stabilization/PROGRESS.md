@@ -1,5 +1,34 @@
 # Stabilization progress
 
+## Direct tool bindings and canonical run-view reads — 2026-10-14
+
+Owners: Office tool catalogs/native runtime and bridge/UI run-view projection.
+Catalogs pass source-owned bindings directly. The global ID-to-binding resolver
+and its project include are removed; the selected native handler checks the pinned
+handler ID/entry point before registration. A forged binding reaches no backend.
+Read catalog entries reuse the typed projection builder.
+
+The run-view reader accepts the existing PascalCase DTO fields and exact lifecycle/
+health values; response session revision remains camelCase. Nested confirmations,
+message/summary views and per-chat ordering retain their typed contracts. Dual-case
+reads and value normalization aliases are removed from this bounded reader; the
+immutable internal UI projection remains camelCase. Storage and wire formats do
+not change. Other bridge operations/casing remain separate D03 work.
+
+These slices remove 49 C#/JS lines net plus one obsolete project include. No new
+registry, service or store. This is a reduced lookup/normalization path, not a
+measured end-to-end latency result. Canonical owners: [tools](../tool-library.md)
+and [conversation protocol](../conversation-protocol.md).
+
+Checks: 26 catalog/native/architecture and 4 run-view C# checks; 41 Node checks
+across run-view, completion guard, live projection and background completion.
+Source checks use an isolated `99525d14` archive plus these changes. The Office
+old-style project explicitly includes all 318 current source files. The broader
+source-inclusion Harness test still has the known SDK-project false positives
+(213 in this source); see [backlog](BACKLOG.md#source-inclusion-harness-guard-and-sdk-projects--2026-10-05).
+Version checks pass before commits. Real Windows/Office/WebView2 evidence stays open.
+Scoped patches/logs: `/var/folders/k9/hr_94nt142x1f43jr6g0wr_00000gp/T/rna-p2-20261014-e4669h8i/`.
+
 ## Bounded simplification of model preparation and editor transport — 2026-10-14
 
 Owners: Core model projection, Office editor data plane and Office/workspace model
@@ -20,10 +49,6 @@ reductions are established by the code change, not a measured latency claim.
 `47365ee8` source plus these changes, excluding concurrent large-reading and host/UI
 work. Version checks pass before each commit. No Office/WebView2 qualification.
 Evidence and scoped diffs: `/tmp/rna-simplify-20261014-4xxsvp4i/`.
-
-P2 registration/bridge simplification remains separate: exact native binding
-validation must be retained, and canonical bridge casing needs a bounded typed
-contract cutover and its WebView2 evidence.
 
 ## Large document text navigation — 2026-10-14 (host-neutral)
 

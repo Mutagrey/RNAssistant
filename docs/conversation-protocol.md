@@ -1473,6 +1473,12 @@ but cannot rewrite or repeat that invocation; effect verification remains whatev
 the source evidence proves.
 
 Visible run messages and replayed headers retain the same immutable `RunViewState`.
+At the UI boundary its fields and nested `PendingConfirmation` use the existing
+PascalCase DTO contract; lifecycle/health values are exact lowercase protocol
+strings. Message/summary fields are `RunViewState`, summary identity/revision are
+`Id`/`Revision`, and the response envelope uses `runViewState`/`sessionRevision`.
+The run-view reader does not accept alternate casing; its frozen internal UI
+projection remains camelCase. No persisted format changes or migration are needed.
 Full bridge responses carry the canonical session revision; static UI rejects a
 late per-chat projection instead of replacing newer history/outcome. The old
 `RunExecutionSummary` type, fields, getter and JS readers are removed. Unknown old
