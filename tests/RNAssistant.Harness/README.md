@@ -520,7 +520,9 @@ closure, final/approval races, durable FIFO editing, recovery and Stop behavior.
 checks first-chat intake, two controllers sharing one data root, actual controller execution and materialized model context
 without Office. Run `node tests/web/chat-inbox.test.js` for UI acknowledgement,
 idempotent retry, consumed-before-ack receipts, draft preservation, chat isolation
-and queue controls. `node tests/web/chat-input-delivery.test.js` uses real markup,
+and queue controls. `node tests/web/chat-run-completion.test.js` checks chat-list
+spinners after fast completion, background pushes and idle polling, including
+stale-inbox and pending-request isolation. `node tests/web/chat-input-delivery.test.js` uses real markup,
 the Send button and state/render handlers in Chromium with controlled bridge replies
 to check immediate Steer/Queue visibility, empty-queue/history races, exact-ID handoff
 and manual scrolling after submission. It uses the same Playwright environment as

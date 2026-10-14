@@ -394,6 +394,7 @@ function applyRevisionedChatSummaryState(response) {
 function applyChatCatalogState(response) {
   state.chatStateApplyVersion = (state.chatStateApplyVersion || 0) + 1;
   response = response || {};
+  if (response.inbox && typeof applyChatInbox === "function") applyChatInbox(response.inbox, true);
   if (response.chats !== undefined || response.Chats !== undefined) {
     state.chats = window.RNAssistantRunViewState.mergeCatalog(
       state.chats, response.chats || response.Chats || [], state.chatProjectionRevisions, true);

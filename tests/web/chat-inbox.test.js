@@ -19,7 +19,7 @@ const context = vm.createContext({
   document: { createElement: () => new Element() },
   $: id => { if (!elements.has(id)) elements.set(id, new Element()); return elements.get(id); },
   attachmentId: a => a.Id,
-  renderSendControls() {}, endChatRunTracking() {}, clearSendError() {}, log() {},
+  renderSendControls() {}, renderChatSessions() {}, endChatRunTracking() {}, clearSendError() {}, log() {},
   setPendingChatSubmit(id, pending) { context.state.pendingChatSubmits[id] = pending; },
   isPendingChatSubmit(id) { return !!context.state.pendingChatSubmits[id]; },
   setChatInputText(text) { context.$("chatInput").value = text; },

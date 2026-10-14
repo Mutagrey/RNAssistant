@@ -409,6 +409,11 @@ restores the same run's transient output before painting, and applies its inbox
 projection with the messages in one render. Pending echoes bridge the interval
 between an intake receipt, queue removal and the corresponding history projection;
 they are disposable UI state, never a durable queue or delivery authority.
+An accepted idle inbox snapshot clears its chat's transient progress even if the
+chat is in the background or no running snapshot was observed. Catalog-only
+application retains this inbox update, and a standalone inbox refresh repaints the
+chat-list indicator. Stale inbox revisions and pending direct requests cannot end
+current tracking.
 
 An idle selected chat with `RunViewState.lifecycle=awaiting_user` shows a static
 “Нужен ваш ответ” notice above the composer, with an “Ответить” action that focuses

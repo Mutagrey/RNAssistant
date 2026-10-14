@@ -13,6 +13,9 @@ function applyChatInbox(inbox, deferRender) {
   var old = state.chatInboxes[inbox.chatId];
   if (old && old.epoch === inbox.epoch && old.revision > inbox.revision) return;
   state.chatInboxes[inbox.chatId] = inbox;
+  var endedRun = inbox.running === false && !state.activeSends[inbox.chatId] &&
+    state.chatRuns && state.chatRuns[inbox.chatId];
+  if (endedRun) endChatRunTracking(inbox.chatId);
   var echoes = chatInputEchoes(inbox.chatId);
   var items = (inbox.items || []).slice();
   if (inbox.acceptedInput) items.push(inbox.acceptedInput);
@@ -26,7 +29,6 @@ function applyChatInbox(inbox, deferRender) {
     else echoes.push(item);
   });
   if (inbox.chatId === state.activeChatId) {
-    if (old && old.running && !inbox.running && !state.activeSends[inbox.chatId]) endChatRunTracking(inbox.chatId);
     var announcer = $("inboxAnnouncer");
     if (announcer && (!old || old.revision !== inbox.revision)) announcer.textContent =
       "Ожидают отправки: " + (inbox.items || []).length + (inbox.paused ? ". Очередь приостановлена." : ".");
@@ -34,6 +36,7 @@ function applyChatInbox(inbox, deferRender) {
     if (!deferRender && (!old || old.epoch !== inbox.epoch || old.revision !== inbox.revision ||
         old.phase !== inbox.phase || old.running !== inbox.running || old.paused !== inbox.paused || inbox.acceptedInput)) renderChatInbox();
   }
+  if (!deferRender && (endedRun || !old || old.running !== inbox.running)) renderChatSessions();
 }
 function reconcileChatInputEchoes(chatId, messages) {
   state.chatInputEchoes = state.chatInputEchoes || {};
