@@ -150,47 +150,43 @@ namespace RNAssistant.Core.Storage
             Action<byte[], int> visit = null, Action reset = null)
         {
             token.ThrowIfCancellationRequested();
-            if (string.IsNullOrWhiteSpace(path) || expectedPlaintextLength < 0 ||
-                string.IsNullOrWhiteSpace(expectedSha256)) return false;
-            protector = protector ?? StorageProtector.None;
+            if (string.IsNullOrWhiteSpace(path)) return false;
             try
             {
-                VerificationResult result;
                 using (var stored = new FileStream(
                     path, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, FileOptions.SequentialScan))
-                {
-                    if (capture != null && stored.Length > protector.StoredByteLength(checked(expectedPlaintextLength + HeaderLength))) return false;
-                    using (var plaintext = protector.OpenUnprotectedReadStream(stored, purpose, token))
-                        result = VerifyPlaintextStream(plaintext, expectedPlaintextLength, expectedSha256,
-                            capture, maximumBytes, token, visit);
-                }
-                if (result != VerificationResult.RetryAsRaw)
-                {
-                    return result == VerificationResult.Valid;
-                }
-                if (capture != null) { capture.SetLength(0); capture.Position = 0; }
-                reset?.Invoke();
-                using (var stored = new FileStream(
-                    path, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, FileOptions.SequentialScan))
-                {
-                    if (capture != null && stored.Length > protector.StoredByteLength(checked(expectedPlaintextLength + HeaderLength))) return false;
-                    using (var plaintext = protector.OpenUnprotectedReadStream(stored, purpose, token))
-                        return VerifyRawStream(null, 0, plaintext, expectedPlaintextLength, expectedSha256,
-                            capture, maximumBytes, token, visit);
-                }
+                    return VerifyStream(stored, expectedPlaintextLength, expectedSha256, protector, purpose,
+                        capture, maximumBytes, token, visit, reset);
             }
-            catch (IOException)
-            {
-                return false;
-            }
-            catch (UnauthorizedAccessException)
-            {
-                return false;
-            }
-            catch (CryptographicException)
-            {
-                return false;
-            }
+            catch (Exception error) when (error is IOException || error is InvalidDataException || error is UnauthorizedAccessException || error is CryptographicException)
+            { return false; }
+        }
+
+        internal static bool VerifyStoredBytes(Stream stored, long length, string sha256)
+        {
+            return HashStream(stored, length, sha256, null, 0, CancellationToken.None, null);
+        }
+
+        // The caller owns a seekable file or an immutable, bounded encoded snapshot.
+        internal static bool VerifyStream(Stream stored, long expectedPlaintextLength, string expectedSha256,
+            StorageProtector protector, string purpose, Stream capture = null, int maximumBytes = 0,
+            CancellationToken token = default(CancellationToken), Action<byte[], int> visit = null, Action reset = null)
+        {
+            token.ThrowIfCancellationRequested();
+            if (expectedPlaintextLength < 0 || string.IsNullOrWhiteSpace(expectedSha256)) return false;
+            protector = protector ?? StorageProtector.None;
+            if (capture != null && stored.Length > protector.StoredByteLength(checked(expectedPlaintextLength + HeaderLength))) return false;
+            VerificationResult result;
+            using (var plaintext = protector.OpenUnprotectedReadStream(stored, purpose, token))
+                result = VerifyPlaintextStream(plaintext, expectedPlaintextLength, expectedSha256,
+                    capture, maximumBytes, token, visit);
+            if (result != VerificationResult.RetryAsRaw) return result == VerificationResult.Valid;
+            if (capture != null) { capture.SetLength(0); capture.Position = 0; }
+            reset?.Invoke();
+            stored.Position = 0;
+            using (var plaintext = protector.OpenUnprotectedReadStream(stored, purpose, token))
+                return HashStream(plaintext, expectedPlaintextLength, expectedSha256,
+                    capture, maximumBytes, token, visit);
         }
 
         public static bool HasValidEnvelope(string path, long expectedPlaintextLength)
@@ -311,8 +307,8 @@ namespace RNAssistant.Core.Storage
             if (prefixLength != HeaderLength || !TryParseHeaderPrefix(prefix, out header) ||
                 header.PlaintextLength != expectedLength)
             {
-                return VerifyRawStream(prefix, prefixLength, plaintext, expectedLength, expectedSha256,
-                    capture, maximumBytes, token, visit)
+                return HashStream(plaintext, expectedLength, expectedSha256,
+                    capture, maximumBytes, token, visit, prefix, prefixLength)
                     ? VerificationResult.Valid
                     : VerificationResult.Invalid;
             }
@@ -350,53 +346,24 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        private static bool VerifyRawStream(
-            byte[] prefix,
-            int prefixLength,
-            Stream remainder,
-            long expectedLength,
-            string expectedSha256, Stream capture, int maximumBytes, CancellationToken token,
-            Action<byte[], int> visit)
-        {
-            using (var sha = SHA256.Create())
-            {
-                var total = 0L;
-                if (prefixLength > 0)
-                {
-                    if (prefixLength > expectedLength) return false;
-                    sha.TransformBlock(prefix, 0, prefixLength, prefix, 0);
-                    CapturePrefix(capture, maximumBytes, prefix, prefixLength);
-                    Visit(visit, prefix, prefixLength);
-                    total = prefixLength;
-                }
-                var buffer = new byte[81920];
-                while (true)
-                {
-                    token.ThrowIfCancellationRequested();
-                    var read = remainder.Read(buffer, 0, buffer.Length);
-                    if (read <= 0) break;
-                    if (total > expectedLength - read) return false;
-                    sha.TransformBlock(buffer, 0, read, buffer, 0);
-                    CapturePrefix(capture, maximumBytes, buffer, read);
-                    Visit(visit, buffer, read);
-                    total += read;
-                }
-                if (total != expectedLength) return false;
-                sha.TransformFinalBlock(new byte[0], 0, 0);
-                return string.Equals(Hex(sha.Hash), expectedSha256, StringComparison.OrdinalIgnoreCase);
-            }
-        }
-
         private static bool HashStream(
             Stream stream,
             long expectedLength,
             string expectedSha256, Stream capture, int maximumBytes, CancellationToken token,
-            Action<byte[], int> visit)
+            Action<byte[], int> visit, byte[] prefix = null, int prefixLength = 0)
         {
             using (var sha = SHA256.Create())
             {
+                if (prefixLength > expectedLength)
+                    throw new InvalidDataException("CAS blob exceeds its declared plaintext length.");
+                if (prefixLength > 0)
+                {
+                    sha.TransformBlock(prefix, 0, prefixLength, prefix, 0);
+                    CapturePrefix(capture, maximumBytes, prefix, prefixLength);
+                    Visit(visit, prefix, prefixLength);
+                }
                 var buffer = new byte[81920];
-                var total = 0L;
+                var total = (long)prefixLength;
                 while (true)
                 {
                     token.ThrowIfCancellationRequested();

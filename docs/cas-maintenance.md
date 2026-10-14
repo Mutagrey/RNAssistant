@@ -9,7 +9,7 @@ Settings → Diagnostics → CAS storage runs a repository-wide audit under the 
 1. Enumerates canonical chat streams, VBA/resource mutation journals, resource authority records and managed Outlook archive-cache references.
 2. Validates each source's schema, replay and canonical-path rules; chat/VBA event validation also checks sequence, hash/HMAC chain, protection key and decrypted event data.
 3. Discovers payload references and the typed SHA-256/byte-length pairs used by artifacts and attachments from every retained event, including shadowed historical revisions.
-4. Verifies each referenced blob after decryption by plaintext byte length and SHA-256.
+4. Verifies each referenced blob by plaintext byte length and SHA-256. A previously authenticated encoding may use fresh stored-byte verification as described below.
 5. Classifies stored canonical blobs with no retained event/journal reference as orphans.
 
 Web snapshot manifests use authority view `Parts` for each retained file payload;
@@ -26,6 +26,25 @@ Failures in the derived-view consumer propagate as consumer failures; they are n
 reinterpreted as malformed compressed CAS bytes or retried as legacy raw blobs.
 
 The report distinguishes missing referenced blobs, corrupt/unreadable referenced blobs, harmless orphans, malformed CAS paths, reference conflicts, and invalid sources. Protected history is audited with the current DPAPI-backed API-key/custom-secret protector; secrets are never returned through Diagnostics.
+
+## Repeated source verification
+
+`ChatBlobStore` retains at most one in-memory encoding fingerprint, bound to the
+plaintext hash/length and the exact immutable `StorageProtector` instance. A cold
+check captures at most 1 MiB of encoded bytes, verifies that immutable snapshot
+through the normal authentication/decompression/plaintext-hash path, then records
+its SHA-256. This shortcut applies only when the encoding is less than half the
+plaintext size. Larger or weakly compressed encodings keep streaming verification.
+
+Every later check opens the current file and hashes **all** stored bytes within
+its captured length. Only an exact fingerprint match under the same protector can
+avoid repeating decryption, decompression and plaintext hashing. Size and timestamp
+never prove integrity. A changed encoding is fully verified before replacing the
+fingerprint; missing/corrupt bytes or another protection key fail closed. No source
+body, read authority, persistent cache or new CAS format is retained. Restart drops
+the fingerprint; collection still checks current bytes, not a prior audit result.
+The raw and compressed paths share one bounded hash loop, including prefix reads
+and provisional index visitors.
 
 ## Fail-closed collection
 

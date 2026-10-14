@@ -1,5 +1,32 @@
 # Stabilization progress
 
+## Repeated CAS checks reuse verified encodings — 2026-10-14
+
+Owner: Core `ChatBlobStore`/`CasBlobCodec`. One volatile fingerprint remembers the
+plaintext hash/length, stored-byte hash and exact protector instance. Each request
+still opens and hashes all current stored bytes. Matching encodings avoid repeated
+authentication/decompression/plaintext hashing; a miss is verified against one
+immutable encoded snapshot of at most 1 MiB before a new fingerprint is published.
+Only encodings smaller than half the plaintext take this path. Larger or weakly
+compressed blobs retain the streaming verifier. No stored-body cache, new durable
+format or metadata-based integrity shortcut. Raw/compressed verification now shares
+one bounded hash loop. Net production change: 12 added lines, with no new service.
+
+13 focused host-neutral checks pass: streaming encrypted/raw/compressed CAS,
+verified prefixes, encoding-magic collisions, text index repair/restart/coverage,
+large one-line reconstruction, outlines, protected audit and fail-closed GC.
+Repeated checks reject same-length corruption with restored timestamps, missing
+files, mismatched plaintext length and changed protection keys.
+
+On the same >10 MiB one-line/329-part fixture, three-run wall-time medians are
+2.766 → 1.654 seconds (about 40% less). The fixture includes ingestion, cold indexing,
+search and full part reconstruction; it is compressible synthetic text on macOS/
+.NET 8, not Office/model latency. Stored bytes are still read on each call, so the
+change does not establish linear scaling or improve every source encoding.
+Source/evidence: isolated `63cc75fc` plus these changes, under
+`/tmp/rna-source-cas-20261014-2k1033j4/`. Version format passes before commit.
+Windows/Office/WebView2 evidence and CLI/live-provider size parity remain open.
+
 ## Source-inclusion guard understands SDK projects — 2026-10-14
 
 Owner: Harness/project structure. Old-style projects still require explicit source
@@ -116,16 +143,17 @@ Focused host-neutral cases cover a >10 MiB one-line source with a surrogate pair
 a part boundary, late/negative and case-sensitive search, full part reconstruction,
 corrupt derived-part repair, partial PDF extraction, C#/VBA/TS navigation, native
 tool binding and both model projection paths. Editable copies and guarded partial
-mutation of large originals, 20 MiB CLI/live-Office parity, and warm repeated
-part-read cost remain open with owners in [BACKLOG](BACKLOG.md#large-source-mutation-and-provider-parity--2026-10-14).
+mutation of large originals, 20 MiB CLI/live-Office parity, and repeated-part
+cost for larger/weakly compressed encodings remain open with owners in [BACKLOG](BACKLOG.md#large-source-mutation-and-provider-parity--2026-10-14).
 No Windows/Office/WebView2 qualification is claimed.
 
 The local >10 MiB one-line fixture with exhaustive read-back of every indexed
 part passes in about 3 s wall time and peaks near 280 MiB RSS for the harness
 process (macOS, .NET 8). This includes staging, cold indexing, searches and 329
-part reads; it is not an Office or model latency measurement. Each part read still
-re-verifies the full source CAS payload, so a complete pass performs repeated
-source hashing and does not scale linearly with file size.
+part reads; it is not an Office or model latency measurement. That baseline
+re-verified the decoded source on every part read. The bounded encoded-verification
+optimization above reduces this cost while preserving fresh stored-byte checks;
+full traversal is still not generally linear in file size.
 
 ## HTML metadata hashes follow the requested page — 2026-10-14
 

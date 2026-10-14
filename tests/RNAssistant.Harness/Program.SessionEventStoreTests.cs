@@ -3011,6 +3011,13 @@ namespace RNAssistant.Harness
 
         private static void FileCasStreamsHashCompressionAndEncryption()
         {
+            WithTempPaths(paths =>
+            {
+                var incompressible = new byte[2 * 1024 * 1024];
+                new Random(7).NextBytes(incompressible);
+                var blobs = new ChatBlobStore(paths);
+                AssertRepeatedCasVerification(blobs, blobs.StoreBytes(incompressible, "application/octet-stream"));
+            });
             var bytes = Encoding.UTF8.GetBytes("{\"rows\":\"" + new string('ж', 256 * 1024) + "\"}");
             WithTempPaths(paths =>
             {
@@ -3022,6 +3029,7 @@ namespace RNAssistant.Harness
 
                 AssertEqual((long)bytes.Length, reference.ByteLength, "streamed file reference keeps plaintext length");
                 AssertTrue(blobs.HasVerifiedReference(reference), "streaming verifier accepts streamed plaintext CAS");
+                AssertRepeatedCasVerification(blobs, reference);
                 AssertTrue(bytes.SequenceEqual(blobs.ReadBytes(reference)),
                     "byte-array reader accepts streamed compressed CAS");
                 AssertEqual("RNACAS01", Encoding.ASCII.GetString(File.ReadAllBytes(blobPath), 0, 8),
@@ -3052,6 +3060,14 @@ namespace RNAssistant.Harness
                     "streamed file uses the existing authenticated encryption envelope");
                 AssertTrue(blobs.HasVerifiedReference(reference),
                     "streaming verifier authenticates and hashes streamed ciphertext");
+                AssertRepeatedCasVerification(blobs, reference);
+                var originalProtector = protector;
+                protector = new StorageProtector(HistoryIntegrityModes.Sha256, HistoryEncryptionModes.Aes256CbcHmacSha256,
+                    "different CAS secret", Enumerable.Range(121, 32).Select(value => (byte)value).ToArray());
+                AssertTrue(!blobs.HasVerifiedReference(new ChatBlobReference { Sha256 = reference.Sha256,
+                    ByteLength = reference.ByteLength }), "cached encoding never authenticates under a different protection key");
+                protector = originalProtector;
+                AssertTrue(blobs.HasVerifiedReference(reference), "the original key still verifies the exact source");
                 AssertTrue(bytes.SequenceEqual(blobs.ReadBytes(reference)),
                     "byte-array reader decrypts streamed file ciphertext");
 
@@ -3067,6 +3083,29 @@ namespace RNAssistant.Harness
                 AssertEqual(0, Directory.GetFiles(paths.Root, "*.tmp", SearchOption.AllDirectories).Length,
                     "streaming encrypted verification leaves no plaintext temporary files");
             });
+        }
+
+        private static void AssertRepeatedCasVerification(ChatBlobStore blobs, ChatBlobReference reference)
+        {
+            var path = blobs.PathFor(reference.Sha256);
+            var stored = File.ReadAllBytes(path);
+            var timestamp = File.GetLastWriteTimeUtc(path);
+            AssertTrue(blobs.HasVerifiedReference(reference) && blobs.HasVerifiedReference(reference),
+                "repeated checks retain exact source verification");
+            var corrupt = stored.ToArray();
+            corrupt[corrupt.Length / 2] ^= 1;
+            File.WriteAllBytes(path, corrupt);
+            File.SetLastWriteTimeUtc(path, timestamp);
+            AssertTrue(!blobs.HasVerifiedReference(reference),
+                "same-length corruption with preserved timestamp cannot reuse prior verification");
+            File.WriteAllBytes(path, stored);
+            AssertTrue(blobs.HasVerifiedReference(reference), "restoring the exact encoding restores availability");
+            AssertTrue(!blobs.HasVerifiedReference(new ChatBlobReference { Sha256 = reference.Sha256,
+                ByteLength = reference.ByteLength + 1, Encryption = reference.Encryption, ProtectionKeyId = reference.ProtectionKeyId }),
+                "verification also binds the declared plaintext length");
+            File.Delete(path);
+            AssertTrue(!blobs.HasVerifiedReference(reference), "a prior verification cannot conceal missing source bytes");
+            File.WriteAllBytes(path, stored);
         }
 
         private static void PlaintextCasAcceptsEnvelopePrefix()

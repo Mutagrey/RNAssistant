@@ -49,11 +49,12 @@ Owner: CLI `WorkspaceFileService`/provider and Office live providers. The CLI fi
 owner still has a 1 MiB whole-file bound and 16,000-character model read; live
 Word/VBA/PowerPoint captures remain independently bounded near 1 MiB. Extend
 these providers through semantic selectors and exact bounded windows before
-advertising 20 MiB support or large one-line editing there. Measure repeated
-indexed part reads: each currently re-verifies the full source CAS blob, preserving
-fail-closed source availability but doing avoidable work across many parts. A
-replacement must retain cryptographic exactness and missing/corrupt-source refusal;
-file metadata alone is not authority. Validate with a 3–5 MiB edit/restart/race
+advertising 20 MiB support or large one-line editing there. Repeated indexed reads of strongly compressed sources now reuse one verified
+encoding fingerprint; every call still hashes all current stored bytes. The local
+>10 MiB/329-part fixture is about 40% faster. Larger/weakly compressed encodings
+retain full streaming verification; full traversal is not generally linear in
+source size. Further changes need measured representative sources and must retain
+missing/corrupt-source refusal; file metadata alone is not authority. Validate with a 3–5 MiB edit/restart/race
 fixture and focused provider tests; Windows/Office qualification remains separate.
 
 Owner: Resource Gateway and provider-specific navigation owners. `ResourceCoverage`

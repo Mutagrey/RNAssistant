@@ -14,6 +14,7 @@ namespace RNAssistant.Core.Storage
         private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
         private readonly string _rootDirectory;
         private readonly Func<StorageProtector> _protectionProvider;
+        private volatile VerifiedEncoding _verifiedEncoding;
 
         public ChatBlobStore(AppDataPaths paths)
             : this(paths, null)
@@ -113,8 +114,52 @@ namespace RNAssistant.Core.Storage
         {
             if (!ValidReference(reference)) return false;
             var protector = Protection();
-            return ProtectionMatches(reference, protector) &&
-                Matches(PathFor(reference.Sha256), reference.Sha256, reference.ByteLength, protector);
+            if (!ProtectionMatches(reference, protector)) return false;
+            var hash = reference.Sha256;
+            var length = reference.ByteLength;
+            try
+            {
+                using (var stored = new FileStream(PathFor(hash), FileMode.Open, FileAccess.Read,
+                    FileShare.Read, 81920, FileOptions.SequentialScan))
+                {
+                    // Cache only a fingerprint, never source bytes or filesystem metadata.
+                    // Every hit still hashes the entire current stored file. Cold snapshots
+                    // are bounded to 1 MiB and used only when encoding saves at least half.
+                    var encodedLength = stored.Length;
+                    if (encodedLength > 1024 * 1024 || encodedLength >= length / 2)
+                        return CasBlobCodec.VerifyStream(stored, length, hash, protector, BlobPurpose(hash, length));
+                    var verified = _verifiedEncoding;
+                    if (verified != null && verified.PlaintextHash == hash && verified.PlaintextLength == length &&
+                        ReferenceEquals(verified.Protector, protector))
+                    {
+                        if (CasBlobCodec.VerifyStoredBytes(stored, encodedLength, verified.StoredHash)) return true;
+                        stored.Position = 0;
+                    }
+                    byte[] encoded;
+                    using (var reader = new BinaryReader(stored, Encoding.UTF8, true))
+                        encoded = reader.ReadBytes((int)encodedLength);
+                    if (encoded.Length != encodedLength || stored.ReadByte() >= 0) return false;
+                    using (var snapshot = new MemoryStream(encoded, false))
+                        if (!CasBlobCodec.VerifyStream(snapshot, length, hash, protector, BlobPurpose(hash, length))) return false;
+                    _verifiedEncoding = new VerifiedEncoding(hash, length, protector, Sha256(encoded));
+                    return true;
+                }
+            }
+            catch (Exception error) when (error is IOException || error is InvalidDataException || error is UnauthorizedAccessException || error is CryptographicException)
+            { return false; }
+        }
+
+        private sealed class VerifiedEncoding
+        {
+            internal readonly string PlaintextHash, StoredHash;
+            internal readonly long PlaintextLength;
+            internal readonly StorageProtector Protector;
+
+            internal VerifiedEncoding(string plaintextHash, long plaintextLength, StorageProtector protector, string storedHash)
+            {
+                PlaintextHash = plaintextHash; PlaintextLength = plaintextLength;
+                Protector = protector; StoredHash = storedHash;
+            }
         }
 
         internal StorageSizeSnapshot CreateStorageSizeSnapshot()
