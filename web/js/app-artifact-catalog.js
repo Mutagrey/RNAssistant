@@ -2,7 +2,7 @@
   "use strict";
   if (!document.getElementById("artifactCatalog")) return;
   var generation = 0, previewGeneration = 0, pending = false, response = null, next = null, chat = null, previewUrl = null;
-  var selected = null, collapsed = {}, searchTimer, loading = false;
+  var selected = null, selectedRevision = null, collapsed = {}, searchTimer, loading = false;
   function el(id) { return document.getElementById("artifactCatalog" + id); }
   function node(tag, text, className) {
     var result = document.createElement(tag); result.textContent = text || "";
@@ -26,6 +26,7 @@
     load();
   }
   function editor(artifact) {
+    selectedRevision = null;
     clearPreview();
     if (response) {
       var selection = state.htmlWorkspaceSelection || {};
@@ -40,7 +41,7 @@
   }
   function sync() {
     if (chat !== state.activeChatId) {
-      chat = state.activeChatId; generation++; response = null; selected = null; next = null;
+      chat = state.activeChatId; generation++; response = null; selected = null; selectedRevision = null; next = null;
       clearPreview(); actions();
       if (typeof isPanelActive === "function" && isPanelActive("artifacts")) load();
     } else if (response && !loading && !pending && state.chatProjectionRevisions &&
@@ -51,7 +52,7 @@
   }
   async function load(cursor) {
     var id = state.activeChatId, nav = state.chatNavigationVersion, version = ++generation;
-    if (!id) { response = null; selected = null; clearPreview(); actions(); status("Откройте или создайте чат документа."); render(); return; }
+    if (!id) { response = null; selected = null; selectedRevision = null; clearPreview(); actions(); status("Откройте или создайте чат документа."); render(); return; }
     chat = id; loading = true; status("Загрузка…"); el("More").hidden = true;
     el("Document").hidden = el("Scope").value !== "all";
     try {
@@ -67,6 +68,7 @@
       el("Document").value = selectedDocument;
       if (selected) {
         selected = result.items.find(function (item) { return item.resourceUri === selected.resourceUri; }) || null;
+        if (!selected) selectedRevision = null;
         if (!selected && !state.htmlWorkspaceDirty) {
           if (el("Preview").hidden) editor();
           if (!selected) { clearPreview(); emptyPreview(); }
@@ -126,6 +128,25 @@
       var b = node("button", label, className); b.type = "button"; b.disabled = pending || !!disabled;
       b.addEventListener("click", function () { if (!b.disabled && current(id, nav)) fn(b); }); parent.appendChild(b);
     }
+    var artifact = localArtifact(item);
+    var head = artifact && window.RNAssistantArtifactVisuals && window.RNAssistantArtifactVisuals.libraryHead(artifact);
+    if (window.RNAssistantArtifactVersions) window.RNAssistantArtifactVersions.append(root, head, selectedRevision, function (revision) {
+      if (selected !== item || response !== listed || !current(id, nav) || !canMutate()) return false;
+      if (revision.resourceUri === item.resourceUri) { select(item.resourceUri); return true; }
+      selectedRevision = revision;
+      actions();
+      preview(Object.assign({}, item, { resourceUri: revision.resourceUri, title: revision.title || item.title }), revision);
+      render();
+      return true;
+    });
+    if (selectedRevision) {
+      root.appendChild(node("span", "Только просмотр", "artifact-version-readonly"));
+      action(root, "К текущей версии", function () { select(item.resourceUri); });
+      if (item.canTransfer) action(root, "Скачать v" + selectedRevision.revision, function () {
+        download(Object.assign({}, item, { resourceUri: selectedRevision.resourceUri }));
+      });
+      return;
+    }
     if (item.documentId === listed.documentId) {
       action(root, item.linked ? "Убрать из чата" : "Подключить к чату", async function (b) {
         if (await changeLink(id, listed.sessionRevision, item.resourceUri, item.linked, b)) {
@@ -151,7 +172,7 @@
     if (!canMutate() || !response) return false;
     var item = response.items.find(function (value) { return value.resourceUri === uri; });
     if (!item) return false;
-    selected = item; clearPreview(); actions();
+    selected = item; selectedRevision = null; clearPreview(); actions();
     if (item.availabilityIssue) {
       $("htmlWorkspaceEditor").hidden = true; el("Preview").hidden = false; el("PreviewTitle").textContent = item.title;
       el("PreviewBody").appendChild(node("p", "Артефакт недоступен. Можно убрать ссылку из чата или удалить артефакт из документа.")); render(); return true;
@@ -259,15 +280,20 @@
     }
     return snapshot;
   }
-  async function preview(item) {
+  async function preview(item, revision) {
     var id = state.activeChatId, nav = state.chatNavigationVersion, version;
+    var previousPicker = revision && el("PreviewBody").querySelector('select[aria-label="Файл проекта"]');
+    var previousSource = revision && el("PreviewBody").querySelector(".artifact-catalog-source");
+    var previousPath = previousPicker && previousPicker.value;
+    var showSource = !!revision && (previousSource ? !previousSource.hidden : state.htmlWorkspaceMode === "edit");
     clearPreview(); version = previewGeneration;
     $("htmlWorkspaceEditor").hidden = true; el("Preview").hidden = false;
-    el("PreviewTitle").textContent = item.title; status("Загрузка предпросмотра…");
+    var title = item.title + (revision ? " · v" + revision.revision : "");
+    el("PreviewTitle").textContent = title; status("Загрузка предпросмотра…");
     try {
       var result = await read(item, true, id, nav, function () { return current(id, nav) && version === previewGeneration; });
       if (!current(id, nav) || version !== previewGeneration) return;
-      el("PreviewTitle").textContent = item.title; el("Preview").hidden = false;
+      el("PreviewTitle").textContent = title; el("Preview").hidden = false;
       var mime = result.transfer.contentType || "";
       if (item.kind === "html_workspace") {
         var envelope = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(result.bytes));
@@ -277,7 +303,13 @@
         files.forEach(function (f) { picker.appendChild(new Option(f.path, f.id)); });
         var pre = node("pre", "", "artifact-catalog-source");
         function source() { pre.textContent = files.find(function (f) { return f.id === picker.value; }).content; }
-        picker.addEventListener("change", source); picker.value = files[0].id; source();
+        var selection = state.htmlWorkspaceSelection || {};
+        var currentFile = revision && selection.type === "file" && ((state.htmlWorkspace || {}).files || [])
+          .find(function (f) { return (f.id || f.Id) === selection.id; });
+        var path = previousPath || currentFile && (currentFile.path || currentFile.Path);
+        var selectedFile = path && files.find(function (f) { return f.path.toLowerCase() === path.toLowerCase(); });
+        picker.addEventListener("change", source); picker.value = (selectedFile || files[0]).id; source();
+        if (path && !selectedFile) el("PreviewBody").appendChild(node("p", "Файл «" + path + "» отсутствует в этой версии проекта."));
 
         if (project.ExternalDependencies.length) el("PreviewBody").appendChild(node("p", "Внешние зависимости: " + project.ExternalDependencies.join(", ")));
         // Source inspection is always available; use the established sandbox renderer for HTML.
@@ -298,7 +330,8 @@
         viewButton.addEventListener("click", function () { mode(false); }); sourceButton.addEventListener("click", function () { mode(true); });
         modes.appendChild(viewButton); modes.appendChild(sourceButton);
         el("PreviewBody").insertBefore(modes, el("PreviewBody").firstChild);
-        el("PreviewBody").appendChild(picker); el("PreviewBody").appendChild(pre); mode(false);
+        el("PreviewBody").appendChild(picker); el("PreviewBody").appendChild(pre);
+        mode(showSource);
       } else if (/^image\//.test(mime)) {
         previewUrl = URL.createObjectURL(new Blob([result.bytes], { type: mime }));
         var image = document.createElement("img"); image.src = previewUrl; image.alt = item.title; el("PreviewBody").appendChild(image);

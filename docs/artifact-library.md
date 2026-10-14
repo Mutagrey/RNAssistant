@@ -1028,6 +1028,22 @@ strictly monotonic and linear. HTML may branch through undo/redo, but revision
 numbers remain unique and monotonic for the logical workspace and the active branch
 is explicit.
 
+The catalog action bar exposes **Версия · vN** for a selected local Library
+artifact with multiple revisions (**Версия проекта** for HTML). Opening it loads
+the existing exact history in pages of 50, with dates, current-head and alternate
+branch labels. Selecting a revision opens its read-only saved preview/source;
+**К текущей версии** returns to the current artifact. Source reads and downloads
+target the displayed exact artifact revision; data bindings retain the existing
+catalog export policy (dynamic head bindings read current retained data).
+Browsing does not restore, move the working head or discard edits;
+dirty drafts block version changes. Standalone files have separate histories;
+HTML/CSS/JS members and bindings share the whole-project revision. The chooser uses
+loaded Library head metadata; unlinked/foreign catalog resources without that
+metadata retain their existing preview. No new durable history is introduced.
+The catalog browser check covers per-file history, continuation, exact preview and
+download, dirty/late-response guards, and layout at 1100/420 px. This is host-neutral
+UI evidence; Windows/Office/WebView2 qualification remains open.
+
 Restoring never modifies an old revision. Plan restore creates a new head revision
 whose body equals the selected revision and records `restoredFrom`. HTML may move
 the active pointer through an explicit undo/redo branch operation; the next save

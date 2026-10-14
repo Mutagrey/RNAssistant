@@ -659,6 +659,14 @@
 .artifact-catalog-actions { padding:8px 12px; border-bottom:1px solid var(--line); }
 .artifact-catalog-actions button { font-size:12px; }
 .artifact-catalog-actions .artifact-action-menu { margin-left:auto; }
+.artifact-version-menu { max-width:100%; }
+.artifact-version-menu > summary { white-space:normal; }
+.artifact-version-options { left:0; right:auto; min-width:0; width:260px; max-width:100%; max-height:320px; overflow:auto; }
+.artifact-version-options p { margin:6px; color:var(--muted); font-size:11px; }
+.artifact-version-options p:empty { display:none; }
+.artifact-version-options button { display:flex; flex-direction:column; align-items:flex-start; gap:2px; }
+.artifact-version-options button[aria-current="true"] { background:var(--secondary-bg); }
+.artifact-version-options button span, .artifact-version-readonly { color:var(--muted); font-size:11px; }
 .artifact-catalog-preview { display:flex; flex-direction:column; flex:1; min-height:0; padding:12px; overflow:auto; }
 .artifact-catalog-preview h3 { margin:0 0 12px; font-size:15px; overflow-wrap:anywhere; }
 #artifactCatalogPreviewBody { display:flex; flex-direction:column; gap:10px; flex:1; min-height:0; }
