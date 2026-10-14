@@ -346,6 +346,11 @@ Ollama Cloud [не поддерживает structured outputs](https://docs.oll
 Поэтому простой JSON greeting не квалифицирует облачный `json_schema`-маршрут.
 Явный `json_object` требует отдельного evidence текущего protocol/tool trajectory; строгий
 parser и общий runtime ради cloud-модели не ослабляются.
+У `gemma4:cloud` актуальный `done`-контроль проходит, а реальные tool-ответы могут
+содержать нативный `<tool_call|>` после JSON. Поэтому успешный терминальный ответ
+не квалифицирует tool-путь. В [сравнении 2026-10-14](stabilization/PROGRESS.md#gemma-cloud-json-terminator-failures-diagnosed--2026-10-14)
+изменения промпта/роли/thinking не устранили сбой; сокращение format retries само
+по себе не является улучшением, если полная acceptance задачи провалена.
 
 Для сравнения зафиксировать RNAssistant commit, task, исходный workspace, tool
 catalog, skills, acceptance tests и по возможности temperature/reasoning policy.

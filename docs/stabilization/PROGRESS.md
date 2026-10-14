@@ -1,5 +1,53 @@
 # Stabilization progress
 
+## Gemma cloud JSON terminator failures diagnosed — 2026-10-14
+
+Owner: Core model protocol / CLI evaluation. All five format failures in the prior
+CSV run contain one complete JSON object followed by `<tool_call|>`. Requests have
+no native `tools` field or native history calls; direct SSE replay reproduces the
+suffix in provider content. The strict parser correctly refuses it. Google
+[documents this token](https://ai.google.dev/gemma/docs/core/prompt-formatting-gemma4)
+as part of Gemma's native tool-call format; Ollama Cloud
+[does not enforce structured outputs](https://docs.ollama.com/capabilities/structured-outputs).
+This identifies a response-format mismatch, separately from accepted premature `done`.
+
+Fresh isolated replays of the five failing requests, with unchanged task/history,
+model and sampling, gave the following valid-envelope counts. Calls were not executed.
+These small exploratory samples do not establish general success rates.
+
+| Single change from the saved request | Valid envelopes |
+|---|---:|
+| None | 1/5 |
+| Add a short JSON-boundary sentence to the response contract | 2/5 |
+| Move the existing response contract to the last instruction message | 3/5 |
+| Use system instead of developer instructions (two selected requests) | 0/2 |
+| Request thinking off / reasoning_effort=none | 3/5 |
+
+Every rejected replay still carries the same suffix; none has an HTTP failure.
+The completed-state protocol control passes. No tested prompt/profile variant
+eliminates the reproduced failure, so no prompt, role, parser or default is changed.
+
+A fresh full CSV run with thinking off uses the exact previous CLI binary and
+unchanged task, empty workspace, budgets and acceptance checks. It has one format
+repair instead of five, but fails acceptance (exit 5): 13 iterations, 14 tool steps,
+3/3 final file reads and no current successful browser verification. The last
+browser attempt passes 12 checks, fails one and leaves 11 unrun; a later file edit
+is followed by a read and `done` without another `web.verify`. Final assessment
+correctly refuses success. Observed reasoning text is absent in this run. The
+result does not justify disabling thinking or relaxing acceptance.
+
+Next bounded investigation: expose the current required browser-verification state
+alongside read acceptance, using its existing snapshot/currency owner. The last
+request currently shows reads 3/3 while the required post-edit verification is
+missing. This is a visibility hypothesis, not proof that another prompt field
+will fix completion; no completion gate or second durable state is introduced.
+
+Profile remains Ollama 0.35.0 / `gemma4:cloud` remote `gemma4:31b`, the same digest,
+32K/4096 budget, temperature 0.2, top-p 1 and `json_object` as the preceding evidence.
+Requests, SSE, exact profile/digest, comparison table, CLI binary hash and complete
+live event/CAS trace: `/tmp/rna-json-boundary-20261014-hfd0q6mg/`. Live binary source
+is isolated `9394b7b6` plus `26eca3f3`; no new build or Office validation was run.
+
 ## Final-read requirements follow current results — 2026-10-14
 
 Owner: Core context compiler / workspace conversation. Requests with an explicit

@@ -75,6 +75,16 @@ comparison favors that order and one fresh CSV run passes 3/3 final reads plus
 [placement evidence](PROGRESS.md#final-read-requirements-follow-current-results--2026-10-14)
 is preliminary; autonomous completion and format reliability remain open.
 
+The [JSON terminator investigation](PROGRESS.md#gemma-cloud-json-terminator-failures-diagnosed--2026-10-14)
+reproduces Gemma's native `<tool_call|>` suffix in plain response content. Short
+prompt clarification, contract placement, instruction-role changes and thinking
+off all retain failures; the strict parser and current defaults remain unchanged.
+Thinking off reduces format repairs in one full CSV run but fails final acceptance:
+after a failed browser check the model edits, reads and returns `done` without
+verifying the new snapshot. Read acceptance alone is insufficient. Next owner/scope:
+workspace context projection of the existing browser-verification currency evidence;
+evaluate it without a second store, model judge or automatic completion loop.
+
 ## Skill and resource workflow regressions — 2026-10-13
 
 **Fixed reproduced causes; incident qualification remains open / Core skill/runtime,
