@@ -1,5 +1,30 @@
 # Stabilization progress
 
+## Bounded simplification of model preparation and editor transport — 2026-10-14
+
+Owners: Core model projection, Office editor data plane and Office/workspace model
+request preparation. Shared result data is projected before serialization; the
+unreachable Office resource-family branch and intermediate generic result are
+removed. Five editors share UTF-8/hash validation, three share strict typed JSON
+upload decoding, and source-length checks no longer allocate a throwaway string.
+Domain validation, upload ownership/single-use and mutation guards stay intact.
+
+Office/workspace requests reuse one detached messages/receipt pair. Frozen source
+and repair isolation remain unchanged. HTML structure rendering reuses its loaded
+snapshot for member projection. No new service, cache, store or wire format was
+introduced. These four slices remove 34 production lines net; operation/allocation
+reductions are established by the code change, not a measured latency claim.
+
+35 focused host-neutral checks pass (23 editor, 2 model projection, 7 shared HTML,
+3 request/context checks), and the workspace Runtime builds. Checks use an isolated
+`47365ee8` source plus these changes, excluding concurrent large-reading and host/UI
+work. Version checks pass before each commit. No Office/WebView2 qualification.
+Evidence and scoped diffs: `/tmp/rna-simplify-20261014-4xxsvp4i/`.
+
+P2 registration/bridge simplification remains separate: exact native binding
+validation must be retained, and canonical bridge casing needs a bounded typed
+contract cutover and its WebView2 evidence.
+
 ## HTML metadata hashes follow the requested page — 2026-10-14
 
 Owner: Office `ChatHtmlResourceCatalog`. Listing still validates the complete
