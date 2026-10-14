@@ -1,5 +1,20 @@
 # Stabilization progress
 
+## Source-inclusion guard understands SDK projects — 2026-10-14
+
+Owner: Harness/project structure. Old-style projects still require explicit source
+includes. SDK compile items now come from MSBuild evaluation, so defaults, globs,
+conditions and exclusions are honored without a second MSBuild interpreter.
+The repository check passes, with disposable cases for missing old-style files,
+old-style wildcard refusal, SDK defaults/removals, conditional globs, a missing
+explicit SDK file and disabled default compilation. Evaluation does not build,
+restore or evaluate Office/VSTO projects. Previously reported SDK false positives
+are closed; this is not Windows qualification.
+
+Checked against isolated `63cc75fc` source plus this change. The duplicated SDK
+backlog entries and completed tool-binding item are reconciled. Evidence:
+`/tmp/rna-source-cas-20261014-2k1033j4/`. Version format passes before commit.
+
 ## Direct tool bindings and canonical run-view reads — 2026-10-14
 
 Owners: Office tool catalogs/native runtime and bridge/UI run-view projection.

@@ -20,30 +20,68 @@ namespace RNAssistant.Harness
             var missing = new List<string>();
 
             foreach (var projectPath in Directory.GetFiles(sourceRoot, "*.csproj", SearchOption.AllDirectories))
-            {
-                var projectDirectory = Path.GetDirectoryName(projectPath);
-                var document = XDocument.Load(projectPath);
-                var included = new HashSet<string>(
-                    document.Descendants()
-                        .Where(element => element.Name.LocalName == "Compile")
-                        .Select(element => (string)element.Attribute("Include"))
-                        .Where(value => !string.IsNullOrWhiteSpace(value) &&
-                            value.IndexOf('*') < 0 && value.IndexOf('?') < 0)
-                        .Select(value => Path.GetFullPath(Path.Combine(
-                            projectDirectory,
-                            value.Replace('\\', Path.DirectorySeparatorChar)))),
-                    StringComparer.OrdinalIgnoreCase);
-
-                foreach (var sourcePath in Directory.GetFiles(projectDirectory, "*.cs", SearchOption.AllDirectories))
-                {
-                    if (IsGeneratedProjectPath(sourcePath) || included.Contains(Path.GetFullPath(sourcePath))) continue;
-                    missing.Add(Path.GetRelativePath(root, sourcePath).Replace('\\', '/'));
-                }
-            }
+                missing.AddRange(MissingProjectSources(projectPath)
+                    .Select(path => Path.GetRelativePath(root, path).Replace('\\', '/')));
 
             AssertEqual(0, missing.Count,
-                "old-style production projects must explicitly include every source file: " +
-                string.Join(", ", missing.OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToArray()));
+                "production source inclusion: " + string.Join(", ", missing.OrderBy(value => value, StringComparer.OrdinalIgnoreCase)));
+            ProjectSourceInclusionRespectsProjectStyle();
+        }
+
+        private static string[] MissingProjectSources(string projectPath)
+        {
+            var projectDirectory = Path.GetDirectoryName(projectPath);
+            var document = XDocument.Load(projectPath);
+            if (document.Root.DescendantsAndSelf().Any(element =>
+                element.Attribute("Sdk") != null || element.Name.LocalName == "Sdk"))
+            {
+                // Evaluation only: SDK defaults, globs, conditions and Compile Remove
+                // belong to MSBuild. Do not build/restore or evaluate VSTO projects here.
+                var output = RunVersioningCommand(projectDirectory, "dotnet", true,
+                    "msbuild", projectPath, "-nologo", "-getItem:Compile");
+                var items = (Newtonsoft.Json.Linq.JArray)Newtonsoft.Json.Linq.JObject.Parse(output)["Items"]["Compile"];
+                AssertTrue(items != null && items.Count > 0, "SDK production project has no evaluated sources: " + projectPath);
+                return items.Select(item => (string)item["FullPath"]).Where(path => !File.Exists(path)).ToArray();
+            }
+
+            var included = new HashSet<string>(document.Descendants()
+                .Where(element => element.Name.LocalName == "Compile")
+                .Select(element => (string)element.Attribute("Include"))
+                .Where(value => !string.IsNullOrWhiteSpace(value) && value.IndexOf('*') < 0 && value.IndexOf('?') < 0)
+                .Select(value => Path.GetFullPath(Path.Combine(projectDirectory, value.Replace('\\', Path.DirectorySeparatorChar)))),
+                StringComparer.OrdinalIgnoreCase);
+            return Directory.GetFiles(projectDirectory, "*.cs", SearchOption.AllDirectories)
+                .Where(path => !IsGeneratedProjectPath(path) && !included.Contains(Path.GetFullPath(path))).ToArray();
+        }
+
+        private static void ProjectSourceInclusionRespectsProjectStyle()
+        {
+            var directory = Path.Combine(Path.GetTempPath(), "rna-source-inclusion-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            try
+            {
+                var source = Path.Combine(directory, "Included.cs");
+                File.WriteAllText(source, "class Included {}");
+                File.WriteAllText(Path.Combine(directory, "Excluded.cs"), "class Excluded {}");
+                var project = Path.Combine(directory, "Fixture.csproj");
+                File.WriteAllText(project, "<Project><ItemGroup><Compile Include='Included.cs' /></ItemGroup></Project>");
+                AssertEqual("Excluded.cs", Path.GetFileName(MissingProjectSources(project).Single()),
+                    "old-style projects still reject an unlisted source");
+                File.WriteAllText(project, "<Project><ItemGroup><Compile Include='*.cs' /></ItemGroup></Project>");
+                AssertEqual(2, MissingProjectSources(project).Length, "old-style projects require explicit includes, not globs");
+                var sdk = "<Project Sdk='Microsoft.NET.Sdk'><PropertyGroup><TargetFramework>net8.0</TargetFramework>{0}</PropertyGroup><ItemGroup>{1}</ItemGroup></Project>";
+                File.WriteAllText(project, string.Format(sdk, "", "<Compile Remove='Excluded.cs' />"));
+                AssertEqual(0, MissingProjectSources(project).Length, "SDK implicit sources honor explicit exclusions");
+                File.WriteAllText(project, string.Format(sdk, "<EnableDefaultCompileItems>false</EnableDefaultCompileItems>",
+                    "<Compile Include='*.cs' Exclude='Excluded.cs' Condition=\"'$(TargetFramework)' == 'net8.0'\" />"));
+                AssertEqual(0, MissingProjectSources(project).Length, "SDK explicit glob sources honor conditions and exclusions");
+                File.WriteAllText(project, string.Format(sdk, "", "<Compile Include='Missing.cs' />"));
+                AssertEqual("Missing.cs", Path.GetFileName(MissingProjectSources(project).Single()),
+                    "SDK evaluation cannot hide a missing explicit source");
+                File.WriteAllText(project, string.Format(sdk, "<EnableDefaultCompileItems>false</EnableDefaultCompileItems>", ""));
+                RuntimeThrows<InvalidOperationException>(() => MissingProjectSources(project));
+            }
+            finally { Directory.Delete(directory, true); }
         }
 
         private static void PortablePublishReplacesOwnedDestination()

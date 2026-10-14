@@ -177,15 +177,11 @@ host-neutral evidence, not real Outlook qualification.
 
 ## Source-inclusion harness guard and SDK projects — 2026-10-05
 
-Owner: Harness/project structure. `harness: production projects include all source
-files` scans every project as old-style and reports 176 missing source includes
-in the current Core.Net8/Runtime/CLI SDK projects. It does not interpret default
-SDK Compile items; no production compilation error was observed. The existing
-guard predates the SDK CLI composition. Update its project-style handling in a
-separate slice while preserving explicit include checks for .NET Framework.
-The mode/question slice's five new Core files were independently checked against
-the old-style Core project, and retired Office includes were removed. Do not
-report the overall source-inclusion guard as passed.
+Closed 2026-10-14. The Harness keeps explicit includes mandatory for old-style
+projects and uses MSBuild evaluation for SDK compile items, including defaults,
+conditions, globs and exclusions. Missing explicit SDK files and empty compilation
+are rejected. The repository check and disposable positive/negative fixtures pass;
+no Office/VSTO project is built or evaluated. See the [Harness guide](../../tests/RNAssistant.Harness/README.md).
 
 ## CLI question argument adherence — 2026-10-05
 
@@ -362,14 +358,8 @@ continuation comparison before changing roles, prompts or budgets. See current
 
 ## SDK project source-inclusion audit — 2026-10-05
 
-Owner: harness / project structure. `harness: production projects include all
-source files` assumes explicit `Compile Include` for every project and reports
-SDK-default sources as missing in Core.Net8, Runtime and CLI. Teach it to distinguish
-SDK inclusion/exclusion from old-style projects without weakening the latter's
-explicit-source check. Direct XML checks of the changed Core/Office old-style
-projects found all 156/326 sources included and no removed file entries; the CLI
-build and dependency-boundary tests passed. This is a pre-existing test-scope gap,
-not evidence of Windows compilation.
+Closed with the [source-inclusion guard correction](#source-inclusion-harness-guard-and-sdk-projects--2026-10-05).
+This heading is retained for links from historical evidence.
 
 ## Large Excel search without manual range slicing — 2026-09-30
 
@@ -633,10 +623,11 @@ claim of measured UI cost. Current priority remains chat navigation/persistence.
   extension may introduce a narrow semantic-resolution capability and remove the
   corresponding branch, with ambiguity/coverage/exact-binding tests. No generic
   plugin platform or provider expansion is scheduled by this review.
-- **Tool definition duplication:** owner tool catalogs / `DirectToolBindingCatalog`.
-  `ToolCatalogEntry` already carries schema/policy/binding, but binding resolution
-  and model projection still use separate tool/family dispatch. Consolidate only a
-  named approved tool-family change; preserve separate human docs/model descriptions.
+- **Tool binding lookup — closed 2026-10-14:** catalogs now supply source-owned
+  bindings directly; the native handler validates the captured binding before
+  registration. `DirectToolBindingCatalog` and its consumers are removed.
+  Domain model-result projection remains the separate measured follow-up above;
+  human documentation and model descriptions retain distinct purposes.
 
 The screenshot's free-form-only compaction claim is obsolete: compaction requires
 claims with valid sourceIds and attaches source messages/evidence/generations.

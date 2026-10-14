@@ -916,6 +916,12 @@ The former Excel identity probe/helper and Qualification Center tests were remov
 Real Excel COM identity, production binding and UI reentrancy remain Windows gates
 under [ADR-0005](../../docs/decisions/ADR-0005-bound-document-session.md).
 
+`harness: production projects include all source files` requires explicit file
+includes in old-style projects. SDK projects use MSBuild `-getItem:Compile`
+evaluation for defaults, conditions, globs and exclusions; missing explicit files
+and an empty compilation are rejected. This check does not build, restore or
+evaluate Office/VSTO projects. Disposable fixtures preserve both project styles.
+
 Versioning changes use the existing `Program.ProjectStructureTests.cs` suite:
 
 ```bash
