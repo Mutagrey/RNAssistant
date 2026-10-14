@@ -561,7 +561,7 @@ namespace RNAssistant.Office.Services
                     ["payload_externalized"] = true,
                     ["complete"] = result.ResourceEvidence.All(item => item.Complete),
                     ["characters"] = message.Content.Length };
-                var readData = ToolResultWire.ParseData(result.Result.DataJson) as JObject;
+                var readData = result.Data as JObject;
                 if (command.ToolId == ResourceToolCatalog.ReadToolId && (string)readData?["type"] == "shared context")
                     compact["type"] = "shared context";
                 // Current after-source is selected before full result hydration,

@@ -1165,6 +1165,13 @@ The strict reader rejects aliases, extra fields, duplicate keys,
 comments, trailing content and unsupported statuses; ISO and literal strings are
 not date-converted. Writer, probes and all replay roles use the same contract.
 
+The reader exposes one detached, request-local `Data` tree alongside the immutable
+terminal result. Context compilation, compaction and model projection reuse this
+validated tree without parsing `Result.DataJson` again. Editing the parsed view
+cannot change the terminal JSON snapshot. `WriteParsed` validates and streams the
+supplied tree directly, preserving its parent and contents without a deep copy;
+envelope fields, resource order and the exact result relation remain unchanged.
+
 For the R61-switched resource, capability, question, Plan, Task List, HTML and Prompt/Tool/Skill authoring families, Tool Result v1 keeps the
 same required correlation/status fields but its model projection omits
 `resources` and removes opaque identity from nested `data`; the accepted durable

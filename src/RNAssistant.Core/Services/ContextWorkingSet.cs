@@ -113,7 +113,7 @@ namespace RNAssistant.Core.Services
                 if (missing.Length == 0) continue;
                 ToolResultWireReadResult wire; string error;
                 ToolResultHistoryReader.TryRead(message, out wire, out error);
-                var data = wire == null ? null : ToolResultWire.ParseData(wire.Result.DataJson) as JObject;
+                var data = wire?.Data as JObject;
                 ChatMessage call;
                 var candidate = new List<ChatMessage>();
                 // Skills/references and structured results keep the original closed
@@ -173,7 +173,7 @@ namespace RNAssistant.Core.Services
             if (!ToolResultHistoryReader.TryRead(message, out wire, out error) || wire.Result.Status != ToolResultStatus.Ok) return false;
             if (message.ResourceEffect != null) return message.ResourceEffect.Outcome == ResourceEffectOutcome.VerifiedChanged ||
                 message.ResourceEffect.Outcome == ResourceEffectOutcome.Restored;
-            var data = ToolResultWire.ParseData(wire.Result.DataJson) as JObject;
+            var data = wire.Data as JObject;
             if (message.ToolName == "common.resources_read")
                 return (string)data?["type"] != "shared context" && (string)data?["type"] != "HTML data" &&
                     (string)data?["type"] != "HTML workspace";

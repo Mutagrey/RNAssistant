@@ -36,6 +36,9 @@ namespace RNAssistant.Harness
                     AssertEqual(status, parsed.Result.Status, "all three states survive");
                     AssertEqual("done", parsed.Result.Message, "message survives");
                     AssertEqual(data ?? "null", parsed.Result.DataJson, "any JSON data shape survives");
+                    AssertEqual(parsed.Result.DataJson, parsed.Data.ToString(Formatting.None),
+                        "reader exposes the same validated data without reparsing");
+                    AssertEqual(null, parsed.Data.Parent, "parsed data is detached from envelope metadata");
                     AssertTrue(parsed.Result.Resources.Count == 0 && parsed.ResultResource == null, "absent resources stay absent");
                     AssertEqual(wire, ToolResultWire.Write(parsed.ToolCallId, parsed.Name, parsed.Result), "wire round-trip");
                 }
@@ -74,6 +77,17 @@ namespace RNAssistant.Harness
                 "parsed writer preserves the one strict data tree");
             AssertEqual(null, parsedData.Parent,
                 "parsed writer does not reparent the caller-owned data tree");
+            var owner = new JObject { ["payload"] = parsedData };
+            AssertEqual(parsedWire, ToolResultWire.WriteParsed(
+                    "call_parsed", "test.read", TerminalResult.Ok(literal), parsedData),
+                "writer reads attached data without changing its wire value");
+            AssertTrue(ReferenceEquals(owner["payload"], parsedData) &&
+                JToken.DeepEquals(data, owner["payload"]),
+                "writer preserves the caller's parent and nested data");
+            var terminalJson = parsed.Result.DataJson;
+            parsed.Data["nested"][0]["date"] = "projected value";
+            AssertEqual(terminalJson, parsed.Result.DataJson,
+                "editing parsed data cannot change the immutable terminal snapshot");
             var scalar = ToolResultWire.Read(ToolResultWire.Write("call_scalar", "test.read",
                 TerminalResult.Ok(iso, JsonConvert.SerializeObject(iso))));
             AssertEqual(JTokenType.String, WireJson(scalar.Result.DataJson).Type, "scalar ISO data stays a string");

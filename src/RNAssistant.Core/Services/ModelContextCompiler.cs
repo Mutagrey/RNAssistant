@@ -376,7 +376,7 @@ namespace RNAssistant.Core.Services
                 var result = atom.Messages.Last();
                 ToolResultWireReadResult wire; string error;
                 if (!ToolResultHistoryReader.TryRead(result, out wire, out error)) continue;
-                atom.HistoricalFailure.Target = RootTargetLabel(ToolResultWire.ParseData(wire.Result.DataJson) as JObject);
+                atom.HistoricalFailure.Target = RootTargetLabel(wire.Data as JObject);
                 atom.Kind = "historical-diagnostic";
                 RecordHistoricalOutcome(atom, result, wire, atom.HistoricalFailure, preserveDiagnostic: true);
             }
@@ -522,7 +522,7 @@ namespace RNAssistant.Core.Services
             ToolResultWireReadResult wire;
             string error;
             if (!ToolResultHistoryReader.TryRead(result, out wire, out error)) return null;
-            var data = ToolResultWire.ParseData(wire.Result.DataJson) as JObject;
+            var data = wire.Data as JObject;
             // Delivery warnings retain the original semantic result under tool_data.
             data = data?["tool_data"] as JObject ?? data;
             var member = (data?["members"] as JArray ?? new JArray()).OfType<JObject>()
@@ -547,14 +547,14 @@ namespace RNAssistant.Core.Services
         {
             ToolResultWireReadResult wire; string error;
             return message.ToolName == "common.resources_read" && ToolResultHistoryReader.TryRead(message, out wire, out error) &&
-                (string)(ToolResultWire.ParseData(wire.Result.DataJson) as JObject)?["type"] == "shared context";
+                (string)(wire.Data as JObject)?["type"] == "shared context";
         }
 
         private void ProjectSharedContext(ChatMessage message, ModelAuthoritySnapshot authority)
         {
             ToolResultWireReadResult wire; string error;
             if (message.ToolName != "common.resources_read" || !ToolResultHistoryReader.TryRead(message, out wire, out error)) return;
-            var data = ToolResultWire.ParseData(wire.Result.DataJson) as JObject;
+            var data = wire.Data as JObject;
             if ((string)data?["type"] != "shared context") return;
             if (wire.Result.Status != RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok) { message.ContextClaims.Clear(); return; }
             if (data["text"]?.Type != JTokenType.String && (string)data["kind"] != "shared-context-read") return;
@@ -641,7 +641,7 @@ namespace RNAssistant.Core.Services
             if (!ToolResultHistoryReader.TryRead(projected, out wire, out error)) return false;
             if (aggregateBudget) atom.KeepPair = true;
             RecordHistoricalOutcome(atom, projected, wire,
-                SourceOmission(RootTargetLabel(ToolResultWire.ParseData(wire.Result.DataJson) as JObject), aggregateBudget));
+                SourceOmission(RootTargetLabel(wire.Data as JObject), aggregateBudget));
             atom.Kind = "completed-operation";
             atom.BodyParts.Clear();
             return true;
@@ -663,8 +663,7 @@ namespace RNAssistant.Core.Services
             var call = atom.Messages[0];
             var result = atom.Messages[1];
             var capability = !ModelResultProjection.IsResourceEvidence(call.ToolName);
-            var original = ToolResultWire.ParseData(
-                wire.Result.DataJson) as JObject;
+            var original = wire.Data as JObject;
             var data = new JObject
             {
                 ["code"] = capability
@@ -845,9 +844,9 @@ namespace RNAssistant.Core.Services
             // or stale source bytes can no longer count as delivered read evidence.
             var data = new JObject { ["targets"] = JArray.FromObject(OperationTargets(wire, call)),
                 ["observation"] = JObject.FromObject(observation) };
-            if (preserveDiagnostic) data["tool_data"] = ToolResultWire.ParseData(wire.Result.DataJson);
+            if (preserveDiagnostic) data["tool_data"] = wire.Data;
             var projected = new RNAssistant.Core.Tools.Contracts.ToolResult(wire.Result.Status, wire.Result.Message, data.ToString(Formatting.None));
-            var json = ToolResultWire.Write(wire.ToolCallId, wire.Name, projected);
+            var json = ToolResultWire.WriteParsed(wire.ToolCallId, wire.Name, projected, data);
             result.Content = result.Role == ToolResultRoles.Tool ? json : "TOOL_RESULT:\n" + json;
             result.ResultPayload = null;
             result.ResourceRefs.Clear();
@@ -860,7 +859,7 @@ namespace RNAssistant.Core.Services
 
         private static List<string> OperationTargets(ToolResultWireReadResult wire, ChatMessage call)
         {
-            var data = ToolResultWire.ParseData(wire.Result.DataJson) as JObject;
+            var data = wire.Data as JObject;
             data = data?["tool_data"] as JObject ?? data;
             JObject arguments = null;
             var native = call?.ToolCalls?.FirstOrDefault(item => item.Id == wire.ToolCallId);
@@ -888,7 +887,7 @@ namespace RNAssistant.Core.Services
                 // source currency must never turn it into a different error.
                 DataJson = observation == null || preserveDiagnostic
                     ? wire.Result.DataJson : wire.Result.Status == RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok ? null :
-                        ModelResultProjection.SelectFields(ToolResultWire.ParseData(wire.Result.DataJson),
+                        ModelResultProjection.SelectFields(wire.Data,
                             "code", "hunkIndex", "field", "chartIndex", "recovery").ToString(Formatting.None),
                 // wire is already model-projected: never recover labels from
                 // unsanitized durable data when omitting the original body.
@@ -947,7 +946,7 @@ namespace RNAssistant.Core.Services
                 // The latest pair survives; older frames may become closed receipts.
                 var projected = _projection.Project(message);
                 ToolResultHistoryReader.TryRead(projected, out wire, out error);
-                var semanticData = ToolResultWire.ParseData(wire.Result.DataJson) as JObject;
+                var semanticData = wire.Data as JObject;
                 RecordHistoricalOutcome(atom, projected, wire,
                     new ResourceObservationNotice { Target = (string)semanticData?["target"],
                         State = code == "resource_evidence_stale" ? EvidenceState.Superseded : EvidenceState.Unavailable, Reason = reason,

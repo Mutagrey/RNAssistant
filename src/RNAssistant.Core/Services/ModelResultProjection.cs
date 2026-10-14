@@ -54,7 +54,7 @@ namespace RNAssistant.Core.Services
                 return InvalidCurrentResult(projected, source);
             }
 
-            var data = ToolResultWire.ParseData(wire.Result.DataJson);
+            var data = wire.Data;
             var materialized = new ToolResultMaterialization(
                 wire.Result, resultResource: wire.ResultResource, data: data);
             // Common families have one projection in both hosts. Domain projection

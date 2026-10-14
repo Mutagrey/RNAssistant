@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -20,18 +21,21 @@ namespace RNAssistant.Core.ModelProtocol
         public string ToolCallId { get; private set; }
         public string Name { get; private set; }
         public TerminalResult Result { get; private set; }
+        // Request-local parsed data; projecting it cannot alter the immutable Result.
+        public JToken Data { get; private set; }
         public ResourceRef ResultResource
         {
             get { return _resultResource == null ? null : new ResourceRef(_resultResource.Uri, _resultResource.Revision); }
         }
 
         internal ToolResultWireReadResult(string error, string toolCallId = null, string name = null,
-            TerminalResult result = null, ResourceRef resultResource = null)
+            TerminalResult result = null, ResourceRef resultResource = null, JToken data = null)
         {
             Error = error;
             ToolCallId = toolCallId;
             Name = name;
             Result = result;
+            Data = data;
             _resultResource = resultResource == null ? null : new ResourceRef(resultResource.Uri, resultResource.Revision);
         }
     }
@@ -75,14 +79,6 @@ namespace RNAssistant.Core.ModelProtocol
             if (data == null || data.Type == JTokenType.Property || ContainsNonJsonValue(data))
                 throw new ArgumentException("Parsed tool result data must be one strict JSON value.", nameof(data));
 
-            var root = new JObject
-            {
-                ["tool_call_id"] = toolCallId,
-                ["name"] = toolName,
-                ["status"] = StatusName(result.Status),
-                ["message"] = result.Message,
-                ["data"] = data.DeepClone()
-            };
             var references = result.Resources;
             var markedIndex = -1;
             for (var i = 0; i < references.Count; i++)
@@ -93,20 +89,34 @@ namespace RNAssistant.Core.ModelProtocol
             }
             if (resultResource != null && markedIndex < 0)
                 throw new ArgumentException("The full result resource must be an exact member of result.Resources.", nameof(resultResource));
-            if (references.Count > 0)
+            using (var output = new StringWriter(CultureInfo.InvariantCulture))
+            using (var writer = new JsonTextWriter(output) { Formatting = Formatting.None })
             {
-                var resources = new JArray();
-                for (var i = 0; i < references.Count; i++)
+                writer.WriteStartObject();
+                writer.WritePropertyName("tool_call_id"); writer.WriteValue(toolCallId);
+                writer.WritePropertyName("name"); writer.WriteValue(toolName);
+                writer.WritePropertyName("status"); writer.WriteValue(StatusName(result.Status));
+                writer.WritePropertyName("message"); writer.WriteValue(result.Message);
+                writer.WritePropertyName("data"); data.WriteTo(writer);
+                if (references.Count > 0)
                 {
-                    var reference = references[i];
-                    var entry = new JObject { ["uri"] = reference.Uri };
-                    if (reference.Revision != null) entry["revision"] = reference.Revision;
-                    if (i == markedIndex) entry["relation"] = "result";
-                    resources.Add(entry);
+                    writer.WritePropertyName("resources"); writer.WriteStartArray();
+                    for (var i = 0; i < references.Count; i++)
+                    {
+                        var reference = references[i];
+                        writer.WriteStartObject();
+                        writer.WritePropertyName("uri"); writer.WriteValue(reference.Uri);
+                        if (reference.Revision != null)
+                        { writer.WritePropertyName("revision"); writer.WriteValue(reference.Revision); }
+                        if (i == markedIndex)
+                        { writer.WritePropertyName("relation"); writer.WriteValue("result"); }
+                        writer.WriteEndObject();
+                    }
+                    writer.WriteEndArray();
                 }
-                root["resources"] = resources;
+                writer.WriteEndObject();
+                return output.ToString();
             }
-            return root.ToString(Formatting.None);
         }
 
         public static ToolResultWireReadResult Read(string json)
@@ -160,8 +170,11 @@ namespace RNAssistant.Core.ModelProtocol
                     }
                 }
             }
-            var result = new TerminalResult(status, (string)root["message"], root["data"].ToString(Formatting.None), references);
-            return new ToolResultWireReadResult(null, (string)root["tool_call_id"], (string)root["name"], result, resultResource);
+            var data = root["data"];
+            // Json.NET skips equal scalar replacements; always use a different placeholder.
+            data.Replace(data.Type == JTokenType.Null ? new JValue(false) : JValue.CreateNull());
+            var result = new TerminalResult(status, (string)root["message"], data.ToString(Formatting.None), references);
+            return new ToolResultWireReadResult(null, (string)root["tool_call_id"], (string)root["name"], result, resultResource, data);
         }
 
         private static ToolResultWireReadResult Fail(string error)

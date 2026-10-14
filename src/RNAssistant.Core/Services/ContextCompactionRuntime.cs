@@ -452,7 +452,7 @@ namespace RNAssistant.Core.Services
                 // Callable availability is regenerated from the current catalog;
                 // it must not become a stale natural-language claim.
                 if (message.ToolName == "common.capabilities_search" || toolResult &&
-                    (string)(ToolResultWire.ParseData(sourceWire.Result.DataJson) as JObject)?["kind"] == "tool-schema") continue;
+                    (string)(sourceWire.Data as JObject)?["kind"] == "tool-schema") continue;
                 var operation = message.CompletedOperation != null || toolResult && message.ResourceEffect != null;
                 var sourceRole = toolResult || operation ? "tool" : projected.Role;
                 var userSource = sourceRole == "user" && !toolDependent && !message.ProtocolMessage;
