@@ -141,25 +141,27 @@ namespace RNAssistant.Office.Services
             string stepId, ModelProtocolCallContext callContext)
         {
             var snapshot = _lastSnapshot;
-            var exposed = new HashSet<string>(snapshot.Receipt.Arsenal.Tools.Select(item => item.Id), StringComparer.Ordinal);
+            var receipt = snapshot.Receipt;
+            var messages = snapshot.Messages;
+            var exposed = new HashSet<string>(receipt.Arsenal.Tools.Select(item => item.Id), StringComparer.Ordinal);
             var activeTools = _runnableCatalog.Where(item => exposed.Contains(item.Id)).OrderBy(item => item.Id, StringComparer.Ordinal).ToArray();
-            _session.LastContextReceipt = snapshot.Receipt;
-            _responseEvidence = snapshot.Messages.Where(message =>
+            _session.LastContextReceipt = receipt;
+            _responseEvidence = messages.Where(message =>
                     IsVisibleResourceRead(message) || message.SyntheticResourceObservation)
                 .SelectMany(item => item.ResourceEvidence ?? new List<ResourceEvidence>())
                 .Where(item => new RNAssistant.Core.Services.EvidenceStateReducer().Reduce(item, snapshot.Authority.Resources).State == EvidenceState.Current)
                 .GroupBy(item => item.EvidenceId, StringComparer.Ordinal).Select(group => group.First()).ToList();
             var options = BuildRequestOptions(_mode, _settings.AgentResponseMode, activeTools, callContext, _session, _runCache);
             options.TraceStepId = stepId;
-            options.TraceContextReceipt = snapshot.Receipt;
+            options.TraceContextReceipt = receipt;
             return new ModelProtocolRequest
             {
                 Settings = _settings,
-                AcceptedMessages = _lastSnapshot.Messages,
+                AcceptedMessages = messages,
                 ContextSnapshot = snapshot,
                 CompileRepair = notice => _compiler.CompileRepair(snapshot, notice),
-                ProjectJsonSchemaMessages = messages => ConversationPromptComposer.ProjectJsonSchemaMessages(
-                    messages, activeTools, options.ResponseSchemaJson),
+                ProjectJsonSchemaMessages = wireMessages => ConversationPromptComposer.ProjectJsonSchemaMessages(
+                    wireMessages, activeTools, options.ResponseSchemaJson),
                 CallableTools = activeTools,
                 RunnableCatalog = _runnableCatalog,
                 CallContext = callContext,

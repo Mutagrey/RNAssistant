@@ -898,16 +898,18 @@ namespace RNAssistant.Runtime
                     catch (PromptBudgetExceededException remaining)
                     { return AgentModelResult.Failed(ModelProtocolFailureKind.PromptBudgetExceeded, remaining.Message); }
                 }
-                RetainDeliveredObservations(snapshot);
-                options.TraceContextReceipt = snapshot.Receipt;
+                var messages = snapshot.Messages;
+                var receipt = snapshot.Receipt;
+                RetainDeliveredObservations(snapshot, messages);
+                options.TraceContextReceipt = receipt;
                 options.TraceSession = _session;
                 options.TracePurpose = "conversation";
                 _modelTrace.Configure(options);
-                _session.LastContextReceipt = snapshot.Receipt;
+                _session.LastContextReceipt = receipt;
                 _chats.Save(_session);
                 var result = await _protocol.GetResponseAsync(new ModelProtocolRequest
                 {
-                    Settings = _settings, AcceptedMessages = snapshot.Messages, ContextSnapshot = snapshot,
+                    Settings = _settings, AcceptedMessages = messages, ContextSnapshot = snapshot,
                     CompileRepair = notice => _compiler.CompileRepair(snapshot, notice),
                     CallableTools = _skillSurface.Tools, RunnableCatalog = _catalog,
                     CallContext = callContext, Options = options
@@ -1000,9 +1002,9 @@ namespace RNAssistant.Runtime
                     .Concat(new[] { TaskListPublication.Scope(_session), _plans.Scope }));
             }
 
-            private void RetainDeliveredObservations(ModelContextSnapshot snapshot)
+            private void RetainDeliveredObservations(ModelContextSnapshot snapshot, IReadOnlyList<ChatMessage> messages)
             {
-                var delivered = snapshot.Messages.Where(message => message.ToolName == "common.resources_read" &&
+                var delivered = messages.Where(message => message.ToolName == "common.resources_read" &&
                     message.Role != "assistant" && message.CompletedOperation == null)
                     .SelectMany(message => message.ResourceEvidence ?? new List<ResourceEvidence>()).ToArray();
                 var reducer = new EvidenceStateReducer();

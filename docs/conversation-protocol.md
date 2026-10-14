@@ -1135,6 +1135,9 @@ identical reads may be folded atomically. Short mutation outcomes are not folded
 unconditionally on the next request. These deterministic rules run regardless of
 `AutoCompressContext`, which controls the separate checkpoint/LLM summary step.
 Format repair reuses the frozen request, including the chosen pairs.
+Office and workspace request preparation each detach messages and the receipt
+once per request, then reuse them for evidence selection, tracing and delivery.
+The frozen source remains isolated; later requests and repairs obtain their own copies.
 
 ```text
 TOOL_RESULT:
