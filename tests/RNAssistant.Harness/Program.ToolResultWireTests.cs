@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -98,8 +99,10 @@ namespace RNAssistant.Harness
         {
             var source = new ResourceRef(WireResultUri, "0007");
             var unversioned = new ResourceRef("rna://future-provider/opaque/Item%201");
-            var result = TerminalResult.Ok("bounded", "{\"truncated\":true}", new[] { source, unversioned, source });
-            source = new ResourceRef("rna://chat/changed", "changed");
+            var sourceResources = new[] { source, unversioned, source };
+            var result = TerminalResult.Ok("bounded", "{\"truncated\":true}", sourceResources);
+            sourceResources[0] = new ResourceRef("rna://chat/changed", "changed");
+            RuntimeThrows<NotSupportedException>(() => ((IList<ResourceRef>)result.Resources)[0] = sourceResources[0]);
             var resultRef = new ResourceRef(WireResultUri, "0007");
             var wire = ToolResultWire.Write("call_resources", "test.read", result, resultRef);
             var resources = (JArray)WireJson(wire)["resources"];

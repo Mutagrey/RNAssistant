@@ -11,14 +11,10 @@ namespace RNAssistant.Core.Tools.Contracts
     // default DTO serialization is not the model-facing wire contract.
     public sealed class ToolResult
     {
-        private readonly ResourceRef[] _resources;
         public ToolResultStatus Status { get; private set; }
         public string Message { get; private set; }
         public string DataJson { get; private set; }
-        public IReadOnlyList<ResourceRef> Resources
-        {
-            get { return Array.AsReadOnly(_resources.Select(reference => new ResourceRef(reference.Uri, reference.Revision)).ToArray()); }
-        }
+        public IReadOnlyList<ResourceRef> Resources { get; }
 
         public ToolResult(ToolResultStatus status, string message = null, string dataJson = null,
             IEnumerable<ResourceRef> resources = null)
@@ -30,7 +26,7 @@ namespace RNAssistant.Core.Tools.Contracts
             Status = status;
             Message = message ?? string.Empty;
             DataJson = dataJson;
-            _resources = references.Select(reference => new ResourceRef(reference.Uri, reference.Revision)).ToArray();
+            Resources = Array.AsReadOnly(references);
         }
 
         public static ToolResult Ok(string message, string dataJson = null, IEnumerable<ResourceRef> resources = null)

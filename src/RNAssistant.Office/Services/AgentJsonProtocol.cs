@@ -35,18 +35,20 @@ namespace RNAssistant.Office.Services
             if (command == null) throw new ArgumentNullException(nameof(command));
             if (materialized == null) throw new ArgumentNullException(nameof(materialized));
             var result = materialized.Result;
-            var data = BoundData(materialized.Data.DeepClone(), maxDataTokens, settings);
-            if (materialized.ResultResource != null)
+            var resultResource = materialized.ResultResource;
+            var data = resultResource != null &&
+                string.Equals(materialized.ResultResourceKind, ChatArtifactKinds.Chart, StringComparison.OrdinalIgnoreCase)
+                ? new JObject
+                {
+                    ["externalized"] = true,
+                    ["kind"] = ChatArtifactKinds.Chart,
+                    ["original_chars"] = (result.DataJson ?? string.Empty).Length,
+                    ["hint"] = "The chart body is available through the exact resource with relation=result."
+                }
+                : BoundData(materialized.Data, maxDataTokens, settings);
+            if (resultResource != null)
             {
-                if (string.Equals(materialized.ResultResourceKind, ChatArtifactKinds.Chart, StringComparison.OrdinalIgnoreCase))
-                    data = new JObject
-                    {
-                        ["externalized"] = true,
-                        ["kind"] = ChatArtifactKinds.Chart,
-                        ["original_chars"] = (result.DataJson ?? string.Empty).Length,
-                        ["hint"] = "The chart body is available through the exact resource with relation=result."
-                    };
-                else if (data == null || data.Type == JTokenType.Null)
+                if (data.Type == JTokenType.Null)
                     data = new JObject
                     {
                         ["externalized"] = true,
@@ -54,17 +56,21 @@ namespace RNAssistant.Office.Services
                     };
                 var boundedData = data as JObject;
                 if ((bool?)boundedData?["truncated"] == true)
+                {
+                    if (ReferenceEquals(data, materialized.Data))
+                        data = boundedData = (JObject)boundedData.DeepClone();
                     boundedData["hint"] = "The full result is available as a resource with relation=result. Find its semantic target with common.resources_find, then read that target, or request a smaller scope.";
+                }
             }
-            var bounded = new TerminalResult(result.Status,
+            var envelopeResult = new TerminalResult(result.Status,
                 BoundText(result.Message, MaxToolResultMessageTokens, settings),
-                data.ToString(Formatting.None), result.Resources);
+                result.DataJson, result.Resources);
             return ToolResultWire.WriteParsed(
                 command.ToolCallId,
                 command.ToolId,
-                bounded,
+                envelopeResult,
                 data,
-                materialized.ResultResource);
+                resultResource);
         }
 
         public static ChatMessage CreateToolResultMessage(ToolInvocation command, TerminalResult result)

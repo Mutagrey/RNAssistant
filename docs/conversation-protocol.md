@@ -1191,6 +1191,16 @@ cannot change the terminal JSON snapshot. `WriteParsed` validates and streams th
 supplied tree directly, preserving its parent and contents without a deep copy;
 envelope fields, resource order and the exact result relation remain unchanged.
 
+`ToolResult` snapshots the resource collection once at construction and exposes
+that read-only snapshot on each access. Immutable `ResourceRef` values are reused;
+later edits to the input collection cannot change the terminal result.
+
+`AgentJsonProtocol` bounds the parsed data without copying the full tree first.
+An externalized chart uses its receipt directly; other payloads are copied only
+when replacing a hint on the original object. The bounded view is passed directly
+to `WriteParsed`, without an intermediate `DataJson` serialization. The source
+tree and immutable terminal result remain unchanged.
+
 For the R61-switched resource, capability, question, Plan, Task List, HTML and Prompt/Tool/Skill authoring families, Tool Result v1 keeps the
 same required correlation/status fields but its model projection omits
 `resources` and removes opaque identity from nested `data`; the accepted durable

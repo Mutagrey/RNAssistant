@@ -1748,6 +1748,23 @@ namespace RNAssistant.Harness
             AssertTrue(result.SelectToken("data.original_chars").Value<int>() > 49000, "original size retained");
             AssertTrue(((string)result.SelectToken("data.preview") ?? string.Empty).Length < 1000, "preview is bounded");
             AssertEqual("call_large", (string)result["tool_call_id"], "tool call id retained");
+            AssertEqual(data, toolResult.Data.ToString(Formatting.None), "bounding preserves the materialized source");
+
+            var exactResult = new ResourceRef("rna://chat/session/artifact/full/revision/1", "1");
+            var source = new JObject { ["truncated"] = true, ["hint"] = "original hint", ["value"] = "retained" };
+            var parent = new JObject { ["payload"] = source };
+            var sourceJson = source.ToString(Formatting.None);
+            var prebounded = new ToolResultMaterialization(
+                TerminalToolResult.Unknown("read", sourceJson, new[] { exactResult }),
+                resultResource: exactResult, data: source);
+            var preboundedEnvelope = JObject.Parse(AgentJsonProtocol.BuildToolResult(command, prebounded, 256));
+            AssertContains((string)preboundedEnvelope.SelectToken("data.hint"), "common.resources_find",
+                "an existing truncated payload receives the externalized-result hint");
+            AssertEqual("retained", (string)preboundedEnvelope.SelectToken("data.value"), "hint replacement retains business data");
+            AssertEqual("unknown", (string)preboundedEnvelope["status"], "projection retains the terminal status");
+            AssertEqual(sourceJson, source.ToString(Formatting.None), "hint replacement preserves the materialized source");
+            AssertTrue(ReferenceEquals(parent.Property("payload"), source.Parent), "hint replacement preserves the source parent");
+            AssertEqual(sourceJson, prebounded.Result.DataJson, "hint replacement preserves the terminal JSON");
 
             var resourceSession = new ChatSession();
             var resourceArtifact = ToolResultResourceService.ExternalizeIfNeeded(
@@ -2199,6 +2216,11 @@ namespace RNAssistant.Harness
                 "chart result body is reference-only in model history");
             AssertTrue(chartEnvelope.ToString(Formatting.None).IndexOf("\"month\":\"Jan\"", StringComparison.Ordinal) < 0,
                 "chart body is absent from the model tool-result envelope");
+            AssertEqual(chartData.Length, (int)chartEnvelope.SelectToken("data.original_chars"), "chart receipt retains original size");
+            AssertEqual(chartData, chartResult.Data.ToString(Formatting.None), "chart receipt preserves the materialized source");
+            AssertTrue(JToken.DeepEquals(chartEnvelope["data"],
+                JObject.Parse(AgentJsonProtocol.BuildToolResult(command, chartResult, 0))["data"]),
+                "an externalized chart keeps the same receipt at zero data budget");
             var chartResultMessage = AgentJsonProtocol.CreateToolResultMessage(
                 command, chartResult, 10000,
                 ToolResultRoles.User, new AppSettings());
