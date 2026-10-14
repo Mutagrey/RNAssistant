@@ -202,7 +202,11 @@ namespace RNAssistant.OfficeHosts
                         stage = "document";
                         if (host != "Outlook" && !documentPrepared)
                         {
-                            dispatcher.Invoke(() => EnsureBlankDocument(host, application));
+                            dispatcher.Invoke<object>(() =>
+                            {
+                                EnsureBlankDocument(host, application);
+                                return null;
+                            });
                             documentPrepared = true;
                         }
                         var targets = dispatcher.Invoke(() => OfficeTargetEnumerator.ListOpenTargets(host, _ => application)
@@ -218,8 +222,12 @@ namespace RNAssistant.OfficeHosts
                                 string.IsNullOrWhiteSpace(target.FolderPath))
                                 throw new InvalidOperationException(
                                     "Сохраните черновик Outlook перед созданием чата для письма.");
-                            dispatcher.Invoke(() => NativeWindowInfo.BringToForeground(
-                                target.Hwnd != 0 ? target.Hwnd : ActiveWindowHwnd(host, application)));
+                            dispatcher.Invoke<object>(() =>
+                            {
+                                NativeWindowInfo.BringToForeground(
+                                    target.Hwnd != 0 ? target.Hwnd : ActiveWindowHwnd(host, application));
+                                return null;
+                            });
                             stage = "chat";
                             using (var controller = new AssistantController(adapter))
                             {

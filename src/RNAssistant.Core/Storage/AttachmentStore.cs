@@ -518,11 +518,13 @@ namespace RNAssistant.Core.Storage
             truncated = text.Length > MaxExtractedChars || Encoding.UTF8.GetByteCount(text) > MaxExtractedTextBytes;
             if (!truncated) return text;
             var high = Math.Min(text.Length, MaxExtractedChars);
+            // .NET Framework 4.8 requires a char array for ranged byte counts.
+            var chars = text.ToCharArray(0, high);
             var low = 0;
             while (low < high)
             {
                 var middle = low + (high - low + 1) / 2;
-                if (Encoding.UTF8.GetByteCount(text, 0, middle) <= MaxExtractedTextBytes) low = middle;
+                if (Encoding.UTF8.GetByteCount(chars, 0, middle) <= MaxExtractedTextBytes) low = middle;
                 else high = middle - 1;
             }
             if (low < text.Length && low > 0 && char.IsHighSurrogate(text[low - 1])) low--;
