@@ -12,6 +12,18 @@
 новая возможность требует явной задачи, scope и owner; дефекты работающей системы
 приоритетнее расширения без конкретного пользовательского результата.
 
+## CLI smoke fixtures lag current admission contracts — 2026-10-14
+
+Owner: workspace CLI tests. On isolated `3cb0b69f` plus the explicit completion
+check, three older suites stop before their completion controls: `task_list_smoke`
+requests removed `chat` mode; `plan_document_smoke` expects skill-owned Plan tools
+in the initial capability list; `skills_runtime_smoke` expects a write to execute
+under Ask and pauses for confirmation instead. These failures precede `done` and
+are not evidence against the completion check. Refresh each fixture's declared
+mode/skill/permission setup and result-order assumptions in a separate change,
+then run that suite. Their negative completion controls now have explicit budgets.
+Evidence: `/tmp/rna-completion-gate-20261014-8e_qd7c5/{task-list,plan,skills}.log`.
+
 ## Transcript browser fixture dependency — 2026-10-14
 
 Owner: Web chat tests. `chat-transcript-layout.test.js` currently fails in Chromium

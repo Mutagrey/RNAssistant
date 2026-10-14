@@ -1,5 +1,37 @@
 # Stabilization progress
 
+## Explicit workspace criteria checked before completion — 2026-10-14
+
+Owner: workspace acceptance / Core kernel. A valid `done` is now checked against
+the task's frozen file/count/browser requirements before becoming accepted
+history. Unmet conditions produce durable running evidence and one fresh request
+inside the existing kernel and original budgets. The same assessment refreshes
+files after model wait and final termination; no prose judge, task-list gate,
+new service or store is introduced. Generic Office completion is unchanged.
+
+CLI and Harness builds pass. All 58 kernel checks pass, including completion
+rejection, exhaustion, cancellation/append failures and unknown-effect non-replay.
+Twenty-one focused CLI cases pass: final reads/late edits, missing files and
+write counts, frozen repair, blocked/needs_input/no-criteria controls, browser
+repair/reverification and recovery guards, binary dependency drift, presentation,
+question continuation and compaction/process restart with original accounting.
+Older Task List, Plan and skills suites stop earlier on stale fixture admission
+assumptions; their separate follow-up is in [BACKLOG](BACKLOG.md#cli-smoke-fixtures-lag-current-admission-contracts--2026-10-14).
+
+A fresh protocol probe and full CSV reference run on Gemma with thinking off pass.
+CSV: 7 iterations, 8 tool steps, 3/3 current file reads, 3 verified writes and
+24/24 browser assertions; 7 HTTP requests, no format repairs. This run never
+attempted premature completion, so it demonstrates compatibility, not a measured
+improvement in model behavior. Controlled HTTP cases prove the new continuation
+boundary. Semantic completion outside explicit criteria and the previously
+reproduced provider JSON suffix problem remain open.
+
+Evidence: isolated `3cb0b69f` plus this change in
+`/tmp/rna-completion-gate-20261014-8e_qd7c5/`; exact cloud profile, request/event/CAS
+trace and checks retained. Ollama 0.35.0, `gemma4:cloud` / remote `gemma4:31b`,
+unchanged digest; 32K/4096, temperature 0.2, top-p 1, developer instructions,
+user results, `json_object`, requested reasoning effort `none`. No Office validation.
+
 ## Authored HTML source viewer repaired — 2026-10-14
 
 Owner: Office Artifact Library/viewer and Web artifact detail. Created HTML files

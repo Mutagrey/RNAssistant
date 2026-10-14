@@ -14,7 +14,7 @@ extensions are accepted. At most 32 calls are allowed.
 | `action` | `tool_calls` | Meaning |
 |---|---|---|
 | `tool` | One or more | Dispatch validated calls. Multiple calls are allowed only for independent local reads. |
-| `done` | Empty | Model assesses the requested answer or work as complete and ends the turn. |
+| `done` | Empty | Model assesses the requested answer or work as complete; accepted completion ends the turn. |
 | `blocked` | Empty | End the turn with unfinished work and a concrete blocker. |
 | `needs_input` | Empty | End the turn with a material question for the user. |
 
@@ -24,9 +24,13 @@ extensions are accepted. At most 32 calls are allowed.
 model decision. `RunViewState` and the result card show actual read/write
 evidence separately.
 
-A response without calls ends the model turn. The runtime requests the next
-model step after tool results or new user input, never merely to elaborate on a
-progress message. `needs_input` preserves the question and waits for the user's
+An accepted response without calls ends the model turn. The runtime requests the
+next model step after tool results, new user input, or failure of explicit workspace
+acceptance criteria, never merely to elaborate on a progress message. For requested
+file/count/browser criteria, a valid `done` can be rejected before acceptance;
+the same kernel continues with concrete feedback under its original limits.
+This does not inspect prose or task-list status; see the
+[workspace acceptance contract](../conversation-protocol.md). `needs_input` preserves the question and waits for the user's
 next message; `common.questions_ask` remains available for structured questions
 and pauses through its typed `AwaitingUser` result. Neither path implies `done`.
 
@@ -46,8 +50,8 @@ blocker or meaningful stage change, with its basis/uncertainty and next action
 when useful. Routine skill/schema loading or continuation of an explained action
 does not require another message. Rephrasing prior progress adds no information.
 `ModelProtocolWire.MessageGuidance` is shared by defaults, schema and format repair.
-There is no extra model call, timer-driven narration, prose classifier or runtime
-completion gate. Tool activities retain their identities and remain available in
+There is no extra model call for narration, timer-driven narration or prose
+classifier. Tool activities retain their identities and remain available in
 the transcript; UI disclosures may fold completed silent work.
 `done` answers the user
 or reports the delivered outcome and available checks; `blocked` and `needs_input` name the
@@ -65,8 +69,10 @@ message. It receives bounded format repair and cannot become accepted history, v
 `done`. Call acceptance retains runtime IDs and exact tool policy as before.
 Repair instructions preserve the unfinished task: a missing call must be supplied
 or the complete answer delivered, rather than merely relabeling a promise `done`.
-These are model instructions, not a semantic validator: a syntactically valid
-premature `done` still ends the turn. Its wording never triggers an automatic retry.
+These are model instructions, not a semantic validator. A syntactically valid
+premature `done` still ends the turn unless explicit workspace postconditions
+reject it. Its wording never triggers an automatic retry; the wire parser and
+bounded format repair remain independent of that application-owned check.
 
 The strict response schema and parser use the same explicit local
 `ModelProtocolCallContext` for batch membership. `tool_calls` allows either up to

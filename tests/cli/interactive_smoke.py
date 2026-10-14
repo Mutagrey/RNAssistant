@@ -264,11 +264,11 @@ def browser_case(s, stale):
     script = s.workspace / "app.js"
     script.write_text(script.read_text().replace("count += increment", "count += 1"))
     def drift():
-        if stale and len(s.requests) == 2:
+        if stale and len(s.requests) == 3:
             script.write_text(script.read_text().replace("count += 1", "count += 0"))
     s.before_response = drift
-    s.responses.extend([call("web.verify", entryPath="index.html"), DONE])
-    result = s.json("run", "--message", "Verify the existing counter snapshot.",
+    s.responses.extend([call("common.skills_load", id="workspace.web_verify_repair"), call("web.verify", entryPath="index.html"), DONE])
+    result = s.json("run", "--message", "Verify the existing counter snapshot.", "--auto-confirm", "on", "--max-iterations", "3",
                     "--web-checks", str(REPO / "tests/cli/counter_checks.json"),
                     "--expect-files", "index.html,styles.css,app.js", code=5 if stale else 0)
     summary = result["presentation"]["LatestVerification"]

@@ -66,11 +66,11 @@ def run_case(root, mode, role):
         assert result.returncode == code, (result.stdout, result.stderr, errors)
         return json.loads(result.stdout.splitlines()[-1])["data"]
 
-    def run(*extra, code=0):
+    def run(*extra, code=0, iterations="12"):
         permissions = ["--read-only"] if mode == "plan" else []
         value = cli("run", "--mode", mode, "--tool-result-role", role, "--instruction-role", "system",
                     "--message", "Keep an accurate task list; do not modify notes.txt.",
-                    "--max-iterations", "12", "--max-tool-steps", "12", *permissions, *extra, code=code)
+                    "--max-iterations", iterations, "--max-tool-steps", "12", *permissions, *extra, code=code)
         assert not responses and not errors, (responses, errors)
         return value
 
@@ -166,7 +166,7 @@ def run_case(root, mode, role):
 
         if mode == "agent":
             responses.extend([call(TOOL, action="save", goal="Only assessment", steps=[{"text": "Assessed", "status": "completed"}]), DONE])
-            result = run("--min-writes", "1", code=5)
+            result = run("--min-writes", "1", code=5, iterations="2")
             assert result["verifiedFileChanges"] == 0
 
         # A definite refusal can be retried after its exact logical state changes.

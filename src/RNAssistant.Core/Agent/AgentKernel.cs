@@ -89,6 +89,7 @@ namespace RNAssistant.Core.Agent
             if (state.Progress.RecoveryIgnored)
                 return await FinishAsync(state, RunLifecycle.Failed, "restored_no_progress",
                     "The checkpoint already exhausted its no-progress allowance.").ConfigureAwait(false);
+            string completionFeedback = null;
             while (state.Iterations < state.Limits.MaxIterations)
             {
                 if (cancellationToken.IsCancellationRequested)
@@ -105,7 +106,7 @@ namespace RNAssistant.Core.Agent
                     using (var requestCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken,
                         _input == null ? CancellationToken.None : _input.InterruptToken))
                         model = await _model.SendAsync(new AgentModelRequest(state.RunId, state.TurnId, stepId,
-                            state.Messages), requestCancellation.Token).ConfigureAwait(false);
+                            state.Messages, completionFeedback), requestCancellation.Token).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {
@@ -129,6 +130,14 @@ namespace RNAssistant.Core.Agent
                 if (model.ProviderRefusal)
                     return await FinishAsync(state, RunLifecycle.Failed, "provider_refused", model.Message).ConfigureAwait(false);
 
+                if (model.CompletionRejected)
+                {
+                    completionFeedback = model.Message;
+                    await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.SummaryChanged,
+                        state.Summary(reason: "completion_requirements_unmet", message: completionFeedback), stepId)).ConfigureAwait(false);
+                    continue;
+                }
+                completionFeedback = null;
                 if (model.Response == null)
                     return await FinishAsync(state, RunLifecycle.Failed, "invalid_accepted_response", "Accepted response is missing.").ConfigureAwait(false);
                 AgentResponse response;

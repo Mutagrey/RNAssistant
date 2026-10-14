@@ -114,6 +114,7 @@ def acceptance(s, changed, late=False):
     result = s.json("run", "--message", "Verify the existing project.", "--require-web-verify",
                     "--auto-confirm", "on", "--expect-files", "index.html", "--max-iterations", "4", "--max-tool-steps", "4", code=5 if changed else 0)
     assert result["webSnapshotVerified"] == (not changed), result
+    assert result["reason"] == ("iteration_limit" if changed else "model_done"), result
     assert len(s.requests) == 4
     for request, expected in zip(s.requests, [False, False, True, not changed or late]):
         context = json.loads(request["messages"][-1]["content"].split("\n", 1)[1])

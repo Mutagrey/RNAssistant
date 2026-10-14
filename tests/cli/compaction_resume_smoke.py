@@ -83,6 +83,9 @@ def run_case(root, recover):
                         assert (workspace / "app.js").read_text() == EXTERNAL, "Stale observation overwrote the user's edit"
                         assert "source_observation_required" in content or "resource_conflict" in content
                         response = call("common.resources_read", target="app.js") if recover else DONE
+                    elif not recover:
+                        assert phase["after"] == 3 and "completionFeedback" in content
+                        response = {"message": "The external edit requires review before I can finish.", "action": "blocked", "tool_calls": []}
                     elif phase["after"] == 3:
                         assert "EXTERNAL_MARKER" in content
                         response = call("files.patch", relativePath="app.js", oldText="EXTERNAL_MARKER", newText="VERIFIED_MARKER")
@@ -125,7 +128,7 @@ def run_case(root, recover):
         process = subprocess.Popen(command("run", "--session", session, "--message", TASK,
             "--context-tokens", "24576", "--max-iterations", "24", "--max-tool-steps", "24",
             "--min-reads", "2", "--min-writes", "1", "--expect-files", "app.js,guard.txt,once.txt",
-            "--tool-result-role", role), cwd=REPO, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            "--tool-result-role", role, "--auto-confirm", "on"), cwd=REPO, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         assert entered.wait(20), (phase, summaries, errors, process.communicate(timeout=2) if process.poll() is not None else "compaction did not reach the barrier")
         before = cli("inspect", "--session", session)
         assert before["ContextCheckpointId"] and before["Status"] == "running"
@@ -138,7 +141,7 @@ def run_case(root, recover):
         assert stopped["ContextCheckpointId"] == before["ContextCheckpointId"]
         final = cli("resume", "--session", session, "--continue", "--run", stopped["RunId"], "--cursor", stopped["Cursor"],
                     "--context-tokens", "24576", code=0 if recover else 5)
-        assert final["RunId"] == stopped["RunId"] and final["reason"] == "model_done", final
+        assert final["RunId"] == stopped["RunId"] and final["reason"] == ("model_done" if recover else "model_blocked"), final
         assert final["acceptance"] == ("passed" if recover else "failed")
         assert final["completeFileReads"] == (2 if recover else 1)
         assert final["verifiedFileChanges"] == (2 if recover else 1)

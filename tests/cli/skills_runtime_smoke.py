@@ -85,10 +85,10 @@ def run_case(root):
     env = dict(os.environ, RNA_STATE_ROOT=str(state), RNA_MODEL="scripted", RNA_API_KEY="test",
                RNA_BASE_URL=f"http://127.0.0.1:{server.server_port}")
 
-    def run(*extra):
+    def run(*extra, iterations="16"):
         return subprocess.run(["dotnet", str(CLI), "run", "--workspace", str(workspace),
             "--message", "Use installed instructions to create, repair and read app.txt.",
-            "--tool-result-role", "tool", "--context-tokens", "32768", "--max-iterations", "16",
+            "--tool-result-role", "tool", "--context-tokens", "32768", "--max-iterations", iterations,
             "--max-tool-steps", "16", "--min-reads", "1", "--jsonl", *extra],
             cwd=REPO, env=env, text=True, capture_output=True, timeout=60, check=False)
 
@@ -123,7 +123,7 @@ def run_case(root):
         assert json.loads(messages[-2]["tool_calls"][0]["function"]["arguments"])["type"] == "skill"
         draft.unlink()
         reference.unlink()
-        again = run("--session", final["SessionId"])
+        again = run("--session", final["SessionId"], iterations="3")
         assert again.returncode == 5, (again.stdout, again.stderr)
         assert len(requests) == len(responses), (len(requests), server_errors)
         assert "PUBLISHED_CORE_MARKER" in text_at(12) and "PUBLISHED_REFERENCE_MARKER" in text_at(13)
@@ -134,7 +134,7 @@ def run_case(root):
         for read_only in (False, True):
             responses.append(DONE)
             env["RNA_BROWSER_EXECUTABLE"] = "/missing/chromium"
-            hidden = run(*(["--read-only"] if read_only else []))
+            hidden = run(*(["--read-only"] if read_only else []), iterations="1")
             assert hidden.returncode == 5, (hidden.stdout, hidden.stderr)
             prompt = requests[-1]["messages"][0]["content"]
             metadata, _ = json.JSONDecoder().raw_decode(prompt.split("Available skill metadata: ", 1)[1])

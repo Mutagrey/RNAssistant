@@ -247,13 +247,31 @@ authoritative and cannot be cleared by a task-list update. Target-model evaluati
 is still necessary; the runtime cannot guarantee that a model's conclusion is true.
 
 The development workspace CLI can accept explicit file/count postconditions with
-the user task. It saves that contract in the run record before model dispatch and
-assesses it after the kernel terminates. Current expected files are read through
+the user task. It saves that contract in the run record before model dispatch,
+checks it before accepting `done` and assesses it again after the kernel terminates.
+Current expected files are read through
 the file owner; read minimums count distinct complete file observations with
 current authority evidence, and write minimums count verified changed file
-effects. The assessment is a separate durable fact and exit condition. It does
-not rewrite the model's `done` action, the kernel lifecycle, or semantic/browser
-quality evidence.
+effects. The final assessment remains a separate durable fact and exit condition.
+It does not prove arbitrary semantic quality or replace browser evidence.
+
+For requested workspace criteria only, the application port refreshes actual
+file/read/browser authority after the model returns a valid `done`. The kernel
+receives a typed completion rejection when criteria are unmet or refresh is
+unavailable. It persists a running summary with reason
+`completion_requirements_unmet` before another dispatch; the rejected answer is
+not accepted assistant history and allocates no call IDs. The next fresh request
+gets the concrete unmet conditions in `RUNTIME_CONTEXT.completionFeedback`.
+This required field follows current results, participates in budgeting and stays
+frozen during format repair. An accepted response clears the previous feedback.
+
+Continuation uses the same kernel, run/session, cumulative iteration/tool limits
+and effect/recovery guards. Each rejected `done` spends one ordinary iteration;
+no format-repair allowance or outer loop is added. Cancellation and failed
+persistence stop continuation. Unknown effects never become safe to replay.
+`blocked`, `needs_input`, user questions, confirmation and tasks without explicit
+criteria retain their behavior. Task-list state and response prose never gate
+completion. Office does not opt into this workspace-specific check.
 
 When a workspace task has a read minimum, each model request also contains a
 typed `RUNTIME_CONTEXT.readAcceptance`: current distinct complete file reads,
@@ -276,9 +294,8 @@ budget selection and receipt projection. Format repair appends its notice after
 the frozen snapshot without recalculating either projection. Other requests retain
 their existing order.
 The compiler still controls source delivery/omission and mutation prerequisites.
-This is derived metadata, not another durable read model or a completion gate.
-A premature `done` still terminates the kernel and fails the separate assessment.
-At final assessment the file owner refreshes every accepted read target, even
+These are projections of existing evidence, not another durable read model.
+Both pre-completion and final assessment refresh every accepted read target, even
 without `--expect-files`, before freezing read authority; changes during the last
 model wait cannot pass using an old head. An unavailable refresh fails assessment.
 
@@ -888,8 +905,10 @@ propose another edit. Confirmation-required, external, opaque and unclassified c
 also remain singleton. Effective batch authority comes from the current local policy
 snapshot, not tool-name guesses, serialized catalog flags or model claims.
 
-Empty calls are valid only for `done`, `blocked` and `needs_input`; each ends
-the turn with its distinct reason. A question with `needs_input` waits for actual
+Empty calls are valid only for `done`, `blocked` and `needs_input`; accepted
+terminal decisions end the turn with distinct reasons. Explicit workspace
+acceptance criteria can reject `done` before acceptance as described above.
+A question with `needs_input` waits for actual
 user input. Unsupported `continue` goes through bounded format repair before
 acceptance and is never converted into `done`. The prompt asks the model to reconcile requested
 outcomes against results before `done`; the kernel cannot prove arbitrary Office

@@ -77,12 +77,12 @@ def run_case(root, role):
         assert result.returncode == code, (result.stdout, result.stderr, errors)
         return json.loads(result.stdout.splitlines()[-1])["data"]
 
-    def run(sequence, session=None, mode="plan", code=0, directory=None, extra=()):
+    def run(sequence, session=None, mode="plan", code=0, directory=None, extra=(), iterations="12"):
         start = len(requests)
         responses.extend(sequence)
         value = cli("run", "--mode", mode, "--tool-result-role", role, "--instruction-role", "system",
                     "--response-mode", "json_schema", "--message", "Save, read, restore or remove the requested Plan; preserve notes.txt.",
-                    "--max-iterations", "12", "--max-tool-steps", "12", "--read-only",
+                    "--max-iterations", iterations, "--max-tool-steps", "12", "--read-only",
                     *(["--session", session] if session else []), *extra, code=code, directory=directory)
         assert not responses and not errors, (responses, errors)
         return value, requests[start:]
@@ -193,7 +193,7 @@ def run_case(root, role):
         assert [item for item in journal()[1] if item["AttemptId"] == dispatched][-1]["State"] == "Resolved"
 
         # Shared Plans are allowed in Agent/read-only; they cannot satisfy actual file-write acceptance.
-        value, _ = run([save("# Assessment only"), DONE], mode="agent", code=5, extra=("--min-writes", "1"))
+        value, _ = run([save("# Assessment only"), DONE], mode="agent", code=5, extra=("--min-writes", "1"), iterations="2")
         assert value["verifiedFileChanges"] == 0
         plan_attempts = [item for item in journal()[1] if item["Operation"] in (SAVE, RESTORE, DELETE)]
         assert all(item["ScopeId"]["kind"] == "workspace" for item in plan_attempts)

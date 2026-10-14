@@ -178,7 +178,7 @@ def run_case(root, mode, role):
         if mode == "agent":
             responses.append(DONE)
             new_task = checked("run", "--session", session_id, "--message", "A separate task requires a new write.",
-                "--min-writes", "1", code=5)
+                "--min-writes", "1", "--max-iterations", "1", code=5)
             assert new_task["verifiedFileChanges"] == 0 and new_task["acceptance"] == "failed", "Unrelated task borrowed earlier writes"
         assert not errors and not responses
         print(f"PASS {mode}/{role}: needs_input, restored questions, 10 invalid answers rejected without writes, "

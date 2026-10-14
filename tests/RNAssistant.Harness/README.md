@@ -362,9 +362,11 @@ after current results, frozen JSON repair, native result transport and no credit
 from an earlier run. Its isolated writes explicitly use `--auto-confirm on`.
 The focused `context continuity: preserves recent pair` Harness check also verifies
 trailing-context budgeting, receipt indices and frozen repair across result roles.
-Premature `done` remains terminal and fails acceptance. An external edit during
-the final model wait is rejected even with only `--min-reads` and no
-`--expect-files`. The browser runtime
+Premature `done` with unmet explicit criteria stays out of accepted history and
+continues in the same run. Checks include refreshed reads after the final model
+wait without `--expect-files`, missing files/write counts, frozen completion
+feedback during format repair, exhaustion, and unchanged `blocked`/`needs_input`
+or no-criteria behavior. The browser runtime
 smoke confirms that verification/read-back do not add file reads; the omitted-read
 smoke confirms that this metadata does not grant overwrite authority.
 `python3 -B tests/cli/task_list_smoke.py` verifies shared Task Lists in Plan/user
@@ -971,7 +973,10 @@ Windows qualification. See [Phase 1A evidence](../../docs/stabilization/PHASE_1A
 ## Kernel and production adapters (Phase 3B2)
 
 `kernel:` uses fake generic model/tool/store ports and covers deterministic
-outcomes, IDs, limits, cancellation and append failures. `kernel replay:` uses
+outcomes, IDs, limits, cancellation and append failures. `kernel: completion rejection`
+covers same-run continuation, durable rejection before the next dispatch, budget
+exhaustion, cancellation/append failures and the unchanged unknown-effect guard.
+`kernel replay:` uses
 actual ChatStore events, isolated AppData, the current executor and a fake Office
 adapter: summary/pending replay, cancelled/stale confirmation, and interrupted
 execution/materialization boundaries. Neither is COM/Office validation.

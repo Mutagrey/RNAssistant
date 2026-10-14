@@ -96,6 +96,70 @@ namespace RNAssistant.Harness
             }
         }
 
+        private static async Task KernelCompletionRejectionContinues()
+        {
+            const string unmet = "Current complete file reads: 0/1.";
+            var f = new KernelFixture();
+            var responses = new Queue<AgentModelResult>(new[] {
+                AgentModelResult.RejectCompletion(unmet),
+                AgentModelResult.Accepted(KernelResponse(KernelCall("read"))),
+                AgentModelResult.Accepted(KernelResponse()) });
+            f.Model.OnSend = (request, token) => Task.FromResult(responses.Dequeue());
+            var result = await f.RunAsync();
+            AssertEqual("model_done", result.Summary.Reason, "verified completion can follow rejection in the same run");
+            AssertEqual(3, result.Summary.IterationsUsed, "rejected completion spends one ordinary iteration");
+            AssertEqual(1, result.Summary.ToolStepsUsed, "rejection does not fabricate a tool step");
+            AssertEqual(1, f.Model.Requests[1].AcceptedMessages.Count, "rejected done never enters accepted history");
+            AssertEqual(unmet, f.Model.Requests[1].CompletionFeedback, "next fresh request receives the concrete requirements");
+            AssertEqual<string>(null, f.Model.Requests[2].CompletionFeedback, "a useful accepted response clears the previous rejection");
+            var rejection = f.Store.Events.Single(e => e.Summary.Reason == "completion_requirements_unmet");
+            AssertEqual(RunLifecycle.Running, rejection.Summary.Lifecycle, "rejection is durable nonterminal evidence");
+            AssertEqual(unmet, rejection.Summary.AssistantMessage, "evidence records unmet requirements instead of a success claim");
+            AssertEqual(2, f.Store.Events.Count(e => e.Kind == AgentRunEventKind.ResponseAccepted), "only read and final completion are accepted");
+        }
+
+        private static async Task KernelCompletionRejectionStops()
+        {
+            foreach (var boundary in new[] { "limit", "cancel", "append" })
+            using (var cancellation = new CancellationTokenSource())
+            {
+                var f = new KernelFixture();
+                f.Model.OnSend = (request, token) => Task.FromResult(AgentModelResult.RejectCompletion("Missing required file."));
+                f.Store.OnAppended = fact => {
+                    if (boundary == "cancel" && fact.Summary.Reason == "completion_requirements_unmet") cancellation.Cancel();
+                };
+                f.Store.FailOn = fact => boundary == "append" && fact.Summary.Reason == "completion_requirements_unmet";
+                try
+                {
+                    var result = await f.RunAsync(cancellation.Token, new AgentRunLimits(2, 1));
+                    AssertTrue(boundary != "append", "a failed evidence append must stop the run");
+                    AssertEqual(boundary == "limit" ? "iteration_limit" : "cancelled", result.Summary.Reason, "existing budgets and cancellation govern continuation");
+                    AssertEqual(boundary == "limit" ? 2 : 1, result.Summary.IterationsUsed, "repeated done cannot reset the budget");
+                }
+                catch (RunStoreException) { AssertEqual("append", boundary, "only injected persistence failure throws"); }
+                AssertEqual(boundary == "limit" ? 2 : 1, f.Model.Requests.Count, "no request follows cancellation or failed persistence");
+                AssertTrue(!f.Store.Events.Any(e => e.Kind == AgentRunEventKind.ResponseAccepted), "none of the rejected answers are accepted");
+                AssertEqual(0, f.AllocationCount, "rejection allocates no tool identities");
+            }
+        }
+
+        private static async Task KernelCompletionRejectionKeepsUnknownGuard()
+        {
+            var f = new KernelFixture();
+            var responses = new Queue<AgentModelResult>(new[] {
+                AgentModelResult.Accepted(KernelResponse(KernelCall())),
+                AgentModelResult.RejectCompletion("Verified file changes: 0/1."),
+                AgentModelResult.Accepted(KernelResponse(KernelCall())),
+                AgentModelResult.Accepted(new AgentResponseDraft("Earlier write has an unknown effect.", new ToolCallDraft[0], ConversationResponse.BlockedAction)) });
+            f.Model.OnSend = (request, token) => Task.FromResult(responses.Dequeue());
+            f.Tools.OnExecute = (context, token) => Task.FromResult(KernelRecord(context, ToolExecutionOutcome.Unknown));
+            var result = await f.RunAsync();
+            AssertEqual("model_blocked", result.Summary.Reason, "a concrete obstacle still ends the run");
+            AssertEqual(ExecutionHealth.Unknown, result.Summary.ExecutionHealth, "completion feedback never erases uncertain effects");
+            AssertEqual(1, f.Tools.Calls.Count, "the rejected completion cannot authorize replay of an uncertain write");
+            AssertEqual(4, result.Summary.IterationsUsed, "the same kernel owns all continuation accounting");
+        }
+
         private static async Task KernelRejectsUnsupportedContinuation()
         {
             var f = new KernelFixture(new AgentResponseDraft("I will continue.", new ToolCallDraft[0], "continue"));

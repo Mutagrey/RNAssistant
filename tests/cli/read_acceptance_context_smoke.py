@@ -46,6 +46,9 @@ def run_case(root, ending):
                       call("common.resources_read", target="app.txt"),
                       call("common.resources_read", target="other.txt")]
     responses.append(DONE)
+    first_done = len(responses) - 1
+    if ending != "repair":
+        responses.extend([call("common.resources_read", target="app.txt"), DONE])
     first_run_requests = len(responses)
 
     class Handler(BaseHTTPRequestHandler):
@@ -55,7 +58,7 @@ def run_case(root, ending):
             index = len(requests) - 1
             if index == 6 and ending != "early":
                 (workspace / "other.txt").write_text("external edit during format repair")
-            if index == first_run_requests - 1 and ending == "late_edit":
+            if index == first_done and ending == "late_edit":
                 (workspace / "app.txt").write_text("external edit during final model wait")
             response = responses[index] if index < len(responses) else DONE
             body = json.dumps({"choices": [{"message": {"role": "assistant",
@@ -72,26 +75,33 @@ def run_case(root, ending):
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
-    env = dict(os.environ, RNA_STATE_ROOT=str(root / "state"),
+    env = dict({k: v for k, v in os.environ.items() if not k.startswith("RNA_")}, RNA_STATE_ROOT=str(root / "state"),
                RNA_BASE_URL=f"http://127.0.0.1:{server.server_port}",
                RNA_MODEL="scripted", RNA_API_KEY="test")
 
-    def run(*extra):
+    def run(*extra, iterations="12"):
         return subprocess.run(["dotnet", str(CLI), "run", "--workspace", str(workspace),
             "--message", "Update and read both final files.",
             *([] if ending == "late_edit" else ["--expect-files", "app.txt,other.txt"]),
             "--min-reads", "2", "--auto-confirm", "on", "--tool-result-role", "tool" if ending == "repair" else "user",
-            "--max-iterations", "12", "--max-tool-steps", "12", "--jsonl", *extra],
+            "--max-iterations", iterations, "--max-tool-steps", "12", "--jsonl", *extra],
             cwd=REPO, env=env, text=True, capture_output=True, timeout=45, check=False)
 
     try:
         result = run("--min-writes", "3")
-        assert result.returncode == (0 if ending == "repair" else 5), (result.stdout, result.stderr)
+        assert result.returncode == 0, (result.stdout, result.stderr)
         final = json.loads(result.stdout.splitlines()[-1])["data"]
         assert final["reason"] == "model_done", final
-        assert final["completeFileReads"] == (2 if ending == "repair" else 1), final
-        assert len(requests) == first_run_requests, "A premature done must not start another loop or model repair"
-        expected = [0, 0, 0, 1, 1, 2, 1] + ([1, 1, 2] if ending != "early" else [])
+        assert final["completeFileReads"] == 2 and final["acceptance"] == "passed", final
+        assert len(requests) == first_run_requests, "Only the existing kernel continues after unmet criteria"
+        if ending != "repair":
+            feedback = json.loads(requests[first_done + 1]["messages"][-1]["content"].split("\n", 1)[1])["completionFeedback"]
+            assert "1/2" in feedback, feedback
+            assert not any(message["role"] == "assistant" and "Finished." in message.get("content", "")
+                           for message in requests[first_done + 1]["messages"]), "Rejected done entered accepted history"
+            events = [json.loads(line) for path in (root / "state" / "chats").rglob("*.events.jsonl") for line in path.read_text().splitlines()]
+            assert "completion_requirements_unmet" in json.dumps(events), "Completion rejection was not saved"
+        expected = [0, 0, 0, 1, 1, 2, 1] + ([1, 1, 2] if ending != "early" else []) + ([1, 2] if ending != "repair" else [])
         for index, (request, count) in enumerate(zip(requests, expected)):
             # Repair adds its notice after the same frozen request; all fresh
             # decisions see one required read-state block after the tool results.
@@ -111,11 +121,12 @@ def run_case(root, ending):
         if ending == "repair":
             # Accepted reads in the previous run remain history, not proof that
             # this new run performed the required final reads.
-            again = run("--session", final["SessionId"])
+            again = run("--session", final["SessionId"], iterations="2")
             assert again.returncode == 5, (again.stdout, again.stderr)
             assert read_progress(requests[-1])["currentCompleteFileReads"] == 0
             assert json.loads(again.stdout.splitlines()[-1])["data"]["completeFileReads"] == 0
-            assert len(requests) == first_run_requests + 1
+            assert len(requests) == first_run_requests + 2
+            assert json.loads(again.stdout.splitlines()[-1])["data"]["reason"] == "iteration_limit"
         assert "rna://" not in json.dumps(requests), "Runtime identity leaked to the model"
         print("PASS read-acceptance context:", ending)
     finally:
@@ -124,12 +135,44 @@ def run_case(root, ending):
         thread.join()
 
 
+def run_completion_case(root, ending):
+    # Import locally: the shared HTTP fixture imports this module's call helpers.
+    from interactive_smoke import Scenario
+    scenario = Scenario(root)
+    try:
+        if ending == "repair":
+            scenario.responses.extend([DONE, {"invalid": "Preserve completion feedback during repair."},
+                call("files.create", relativePath="required.txt", text="Delivered"), DONE])
+        else:
+            scenario.responses.append({**DONE, "action": ending if ending in ("blocked", "needs_input") else "done"})
+        expected = {"repair": (0, "model_done"), "plain": (0, "model_done"),
+                    "blocked": (5, "model_blocked"), "needs_input": (3, "model_needs_input")}[ending]
+        result = scenario.json("run", "--message", "Create the required file, or name the concrete obstacle.",
+            "--auto-confirm", "on", "--max-iterations", "4", "--max-tool-steps", "2",
+            *([] if ending == "plain" else ["--expect-files", "required.txt", "--min-writes", "1"]), code=expected[0])
+        assert result["reason"] == expected[1] and not scenario.errors and not scenario.responses, result
+        if ending == "repair":
+            assert result["acceptance"] == "passed" and result["IterationsUsed"] == 3 and result["ToolStepsUsed"] == 1, result
+            request, repaired = scenario.requests[1:3]
+            assert repaired["messages"][:-1] == request["messages"], "Format repair changed the frozen completion feedback"
+            context = json.loads(request["messages"][-1]["content"].split("\n", 1)[1])
+            assert "Missing required files" in context["completionFeedback"] and "0/1" in context["completionFeedback"]
+            assert "readAcceptance" not in context and "webAcceptance" not in context
+        else:
+            assert len(scenario.requests) == 1, "Unfinished outcomes or a task without criteria started extra model work"
+        print("PASS explicit completion criteria:", ending)
+    finally:
+        scenario.close()
+
+
 def main():
     if not CLI.is_file():
         raise SystemExit("Build src/RNAssistant.Cli/RNAssistant.Cli.csproj first.")
     with TemporaryDirectory(prefix="rna-read-acceptance-") as folder:
         for ending in ("early", "repair", "late_edit"):
             run_case(Path(folder) / ending, ending)
+        for ending in ("repair", "plain", "blocked", "needs_input"):
+            run_completion_case(Path(folder) / ("completion-" + ending), ending)
 
 
 if __name__ == "__main__":

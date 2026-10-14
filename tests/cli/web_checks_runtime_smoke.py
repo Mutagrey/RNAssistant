@@ -43,7 +43,17 @@ def run_case(root, ending):
             responses.append(call("web.verify", {"entryPath": "index.html"}))
     if ending == "late_edit":
         responses.append("invalid JSON")
-    responses.append({"message": "Verified repair.", "action": "done", "tool_calls": []})
+    done = {"message": "Verified repair.", "action": "done", "tool_calls": []}
+    responses.append(done)
+    first_done = len(responses) - 1
+    if ending == "late_edit":
+        responses.extend([
+            call("common.resources_read", {"target": "app.js"}),
+            call("files.patch", {"relativePath": "app.js", "oldText": "count += 0", "newText": "count += 1"}),
+            call("common.resources_read", {"target": "app.js"}),
+        ])
+    if ending in ("late_edit", "stale"):
+        responses.extend([call("web.verify", {"entryPath": "index.html"}), done])
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_args):
@@ -84,18 +94,19 @@ def run_case(root, ending):
             cwd=REPO, env=env, capture_output=True, text=True, timeout=90, check=False)
         assert run.stdout.strip(), run.stderr
         result = json.loads(run.stdout.splitlines()[-1])["data"]
-        passed = ending in ("passed", "reverified")
-        assert run.returncode == (0 if passed else 5), (run.stdout, run.stderr)
-        assert result["acceptance"] == ("passed" if passed else "failed"), result
-        assert result["webSnapshotVerified"] == passed, result
+        assert run.returncode == 0, (run.stdout, run.stderr)
+        assert result["acceptance"] == "passed" and result["webSnapshotVerified"], result
+        if ending in ("late_edit", "stale"):
+            feedback = json.loads(requests[first_done + 1]["messages"][-1]["content"].split("\n", 1)[1])["completionFeedback"]
+            assert "Required browser checks" in feedback, feedback
         assert result["webCheckCount"] == 9 and len(requests) == len(responses), result
         initial_context = json.loads(requests[0]["messages"][-1]["content"].split("\n", 1)[1])
         assert initial_context["webAcceptance"] == {"currentSnapshotVerified": False}
         requests = requests[1:]  # The selected skill exposes web.verify for the workflow below.
-        read_counts = [0, 0, 1, 0, 1, 1] + ({"passed": [], "late_edit": [1], "stale": [0, 1], "reverified": [0, 1, 1]}[ending])
+        read_counts = [0, 0, 1, 0, 1, 1] + ({"passed": [], "late_edit": [1, 0, 1, 0, 1, 1], "stale": [0, 1, 1, 1], "reverified": [0, 1, 1]}[ending])
         assert [read_progress(request)["currentCompleteFileReads"] for request in requests] == read_counts, \
             "Browser evidence and mutation read-back must not count as accepted final file reads"
-        web_states = [False, False, False, False, False, True] + ({"passed": [], "late_edit": [True], "stale": [False, False], "reverified": [False, False, True]}[ending])
+        web_states = [False, False, False, False, False, True] + ({"passed": [], "late_edit": [True, False, False, False, False, True], "stale": [False, False, False, True], "reverified": [False, False, True]}[ending])
         for index, (request, expected) in enumerate(zip(requests, web_states)):
             messages = request["messages"]
             contexts = [m for m in messages if m.get("content", "").startswith("RUNTIME_CONTEXT:\n")]
@@ -129,7 +140,7 @@ def run_case(root, ending):
                         if (message.get("role") == "tool" or message.get("content", "").startswith("TOOL_RESULT")) and '"target":"app.js"' in message["content"]]
         assert len(current_read) == 1 and "count += 1" in current_read[0] and "count += increment" not in current_read[0], current_read
         saved = record(workspace, state)["Items"]
-        assert len(saved) == (3 if ending == "reverified" else 2) and {item["State"] for item in saved} == {"Passed", "Failed"}, saved
+        assert len(saved) == (2 if ending == "passed" else 3) and {item["State"] for item in saved} == {"Passed", "Failed"}, saved
         assert all(len(item["Checks"]["steps"]) == 9 for item in saved), saved
         passed = next(item for item in saved if item["State"] == "Passed")
         assert all(step["status"] == "Passed" for step in passed["CheckResults"]), passed

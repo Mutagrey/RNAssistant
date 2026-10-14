@@ -20,14 +20,16 @@ namespace RNAssistant.Core.ModelProtocol
         public string TurnId { get; private set; }
         public string StepId { get; private set; }
         public IReadOnlyList<AgentMessage> AcceptedMessages { get; private set; }
+        public string CompletionFeedback { get; private set; }
 
         internal AgentModelRequest(string runId, string turnId, string stepId,
-            IEnumerable<AgentMessage> messages)
+            IEnumerable<AgentMessage> messages, string completionFeedback = null)
         {
             RunId = runId;
             TurnId = turnId;
             StepId = stepId;
             AcceptedMessages = Array.AsReadOnly(messages.ToArray());
+            CompletionFeedback = completionFeedback;
         }
     }
 
@@ -37,12 +39,21 @@ namespace RNAssistant.Core.ModelProtocol
         public ModelProtocolFailureKind? FailureKind { get; private set; }
         public string Message { get; private set; }
         public bool ProviderRefusal { get; private set; }
+        public bool CompletionRejected { get; private set; }
 
         private AgentModelResult() { }
 
         public static AgentModelResult Accepted(AgentResponseDraft response)
         {
             return new AgentModelResult { Response = response ?? throw new ArgumentNullException(nameof(response)) };
+        }
+
+        // A valid done failed explicit application-owned postconditions. This is
+        // a fresh kernel step, never a format repair or accepted assistant answer.
+        public static AgentModelResult RejectCompletion(string message)
+        {
+            if (string.IsNullOrWhiteSpace(message)) throw new ArgumentException("Unmet requirements are required.", nameof(message));
+            return new AgentModelResult { CompletionRejected = true, Message = message };
         }
 
         public static AgentModelResult Failed(ModelProtocolFailureKind kind, string message)
