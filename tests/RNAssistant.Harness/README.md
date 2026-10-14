@@ -161,6 +161,9 @@ were unanswered calls. Original incomplete calls/batches still block that bounda
 `context continuity:` checks source/result projection. The omitted-read
 CLI smoke also uses 24K: it admits the current catalog while omitting the oversized
 body, and still requires the original bytes to survive a refused replacement.
+The bounded-working-set case also checks recovery chronology: an earlier success
+or later failed read cannot release a failure; a matching later success can do so
+even when excluded from the prompt.
 
 `context continuity: narration survives compaction and restart` covers independent
 assistant provenance through repeated-read folding, empty updates, two actual

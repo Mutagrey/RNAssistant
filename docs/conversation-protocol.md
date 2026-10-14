@@ -502,6 +502,13 @@ remain unchanged, including removal of the last media message. The final complet
 request still passes through `ModelContextBudget.EstimateMessagesTokens`; cached
 costs neither select evidence nor grant authority.
 
+Working-set recovery walks history backward and retains successful results as
+candidates for earlier failures. Matching stays in `ToolRecoveryContract`;
+earlier successes and later failed reads cannot release a recovery. A later
+success remains relevant even when its message is active or excluded from the
+prompt. The temporary candidate list does not change receipt order, unknown-effect
+retention or body/optional-receipt budgets.
+
 When a completed call/result is folded (including repeated reads and stale-source
 receipts), its nonempty first-call narration remains a separate assistant update
 with the original accepted-message identity. It is budgeted once, carries no tool

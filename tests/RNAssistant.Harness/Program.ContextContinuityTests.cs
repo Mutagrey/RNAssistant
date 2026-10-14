@@ -660,20 +660,29 @@ namespace RNAssistant.Harness
             catch (PromptBudgetExceededException) { exhausted = true; }
             AssertTrue(exhausted, "mandatory receipts cannot be silently dropped to fit a request");
             var neededRead = ContinuityResult("needs_refresh", "files.patch", ToolResult.Error("Read first."));
+            skill.ExecutionProgress = new ToolExecutionProgress(ToolExecutionOutcome.Ok);
             neededRead.ExecutionProgress = new ToolExecutionProgress(ToolExecutionOutcome.Error,
                 new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.RefreshRequired,
                     source.Identity, "text", "test"));
             session.Messages.Add(ContinuityCall(neededRead)); session.Messages.Add(neededRead);
             var recoverySet = ContextWorkingSet.Restore(session, active, authority, new AppSettings(), 0);
             AssertContains(string.Join("\n", recoverySet.Messages.Select(m => m.Content)), "RefreshRequired",
-                "unresolved typed recovery is retained without repeating tool execution");
+                "an earlier successful observation cannot release a later recovery");
+            var failedRefresh = ContinuityResult("failed_refresh", "common.resources_read", ToolResult.Error("Read failed."));
+            failedRefresh.ExecutionProgress = new ToolExecutionProgress(ToolExecutionOutcome.Error);
+            failedRefresh.ResourceEvidence.Add(skill.ResourceEvidence.Single());
+            session.Messages.Add(ContinuityCall(failedRefresh)); session.Messages.Add(failedRefresh);
+            AssertTrue(ContextWorkingSet.Restore(session, active, authority, new AppSettings(), 0).Messages
+                .Any(m => m.CompletedOperation?.ToolCallId == "needs_refresh"),
+                "a failed later read cannot release recovery even with matching evidence");
             var refreshed = ContinuityResult("refreshed", "common.resources_read", ToolResult.Ok("Read."));
             refreshed.ExecutionProgress = new ToolExecutionProgress(ToolExecutionOutcome.Ok);
+            refreshed.ExcludeFromModelContext = true;
             refreshed.ResourceEvidence.Add(skill.ResourceEvidence.Single());
             session.Messages.Add(ContinuityCall(refreshed)); session.Messages.Add(refreshed);
             var resolved = ContextWorkingSet.Restore(session, active, authority, new AppSettings(), 0);
             AssertTrue(!resolved.Messages.Any(m => m.CompletedOperation?.ToolCallId == "needs_refresh"),
-                "matching complete observation releases only the satisfied recovery receipt");
+                "a later successful observation releases recovery even when excluded from the prompt");
             neededRead.ExecutionProgress = new ToolExecutionProgress(ToolExecutionOutcome.Error,
                 new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.Replan));
             session.LastRun = new ChatRunRecord { RunId = "new-user-run" };

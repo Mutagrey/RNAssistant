@@ -1,5 +1,29 @@
 # Stabilization progress
 
+## Working-set recovery scan reduction — 2026-10-14
+
+Owner: Core `ContextWorkingSet`. A reverse pass retains only successful-result
+candidates for earlier recovery checks instead of repeatedly scanning all later
+calls and failures. `ToolRecoveryContract` still decides whether evidence satisfies
+recovery; unknown effects, receipt ordering and budgets are unchanged. The change
+adds one temporary list, with no persistent index or new recovery policy.
+
+All 10 context-continuity checks pass on isolated task source. Added boundary
+assertions also pass with the original implementation: earlier success/later
+failure does not release recovery, while an excluded later success does. Paired
+local profiles for 128/512/1,024 mandatory receipts measure
+9.69/35.96/125.13 → 8.46/31.57/83.77 ms. This synthetic result does not establish
+Windows latency. A saved Gemma fake-Office trace (38 messages) produces identical
+receipt fingerprints/counts at budgets 0/8192, with both versions around 3 ms.
+That probe adds an in-memory checkpoint and uses empty body authority; it is not
+real model compaction or Office qualification. An initial CLI trace had a different
+unmaterialized result format and was excluded from this comparison.
+
+Evidence, frozen sources and before/after binaries:
+`/var/folders/k9/hr_94nt142x1f43jr6g0wr_00000gp/T/rna-working-set-20261014-jvw_38d6/`.
+P1 model completion/skill adherence remains open. The next bounded P2 is
+[HTML metadata paging](BACKLOG.md#measured-html-metadata-costs--2026-10-14).
+
 ## Prompt simplification and incremental context cost — 2026-10-14
 
 Owner: Core prompt/context compiler; Office Task Tracking guidance. Prompt schema
@@ -30,8 +54,8 @@ completion remains open. No runtime `done` gate was added.
 
 Evidence, profiles, original compiler, paired binaries and live traces:
 `/tmp/rna-context-opt-20261014-3hodfzht/`. P1 remains real-model completion/skill
-adherence; measured working-set and HTML metadata costs are bounded P2 follow-ups
-in [BACKLOG](BACKLOG.md#measured-context-and-html-metadata-costs--2026-10-14).
+adherence; measured HTML metadata costs remain a bounded P2 follow-up in
+[BACKLOG](BACKLOG.md#measured-html-metadata-costs--2026-10-14).
 Large/structural reading is a separate workstream. Office/VSTO/WebView2 was not run.
 
 ## Working resource links and verified-effect boundary — 2026-10-14

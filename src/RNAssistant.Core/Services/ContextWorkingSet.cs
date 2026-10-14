@@ -33,9 +33,13 @@ namespace RNAssistant.Core.Services
             var required = new List<ChatMessage>();
             var optional = new List<ChatMessage>();
             var selected = new HashSet<string>(StringComparer.Ordinal);
+            var laterSuccesses = new List<ChatMessage>();
             for (var index = history.Count - 1; index >= 0; index--)
             {
                 var message = history[index];
+                // Success can satisfy an older recovery even when its body is
+                // active or excluded. Error candidates only see later successes.
+                if (message.ExecutionProgress?.Outcome == ToolExecutionOutcome.Ok) laterSuccesses.Add(message);
                 if (activeIds.Contains(message.Id) || !ContextCompactionRuntime.IsReplayMessage(message)) continue;
                 ToolResultWireReadResult wire; string error;
                 if (!ToolResultHistoryReader.TryRead(message, out wire, out error) ||
@@ -45,8 +49,7 @@ namespace RNAssistant.Core.Services
                 var recovery = message.ExecutionProgress?.Recovery;
                 if (message.RunId == runId && recovery != null && recovery.RetryPolicy != ToolRetryPolicy.None &&
                     message.ExecutionProgress.Outcome == ToolExecutionOutcome.Error &&
-                    !history.Skip(index + 1).Any(later => later.ExecutionProgress?.Outcome == ToolExecutionOutcome.Ok &&
-                        recovery.IsSatisfiedBy(later.ResourceEvidence, later.ResourceEffect))) mandatory = true;
+                    !laterSuccesses.Any(later => recovery.IsSatisfiedBy(later.ResourceEvidence, later.ResourceEffect))) mandatory = true;
                 // Keep the latest receipt for an exact call, including resumed runs.
                 if (!selected.Add(wire.ToolCallId)) continue;
                 var projected = projection.Project(message);

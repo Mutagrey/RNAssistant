@@ -12,15 +12,10 @@
 новая возможность требует явной задачи, scope и owner; дефекты работающей системы
 приоритетнее расширения без конкретного пользовательского результата.
 
-## Measured context and HTML metadata costs — 2026-10-14
+## Measured HTML metadata costs — 2026-10-14
 
-P2, owners: Core `ContextWorkingSet` and Office `ChatHtmlResourceCatalog`. Opt-in
-`context perf: remaining hotspots` measures unresolved mandatory-result restoration
-at 128/512/1,024 interactions: 8.58/35.94/128.92 ms. Inspect repeated scans of prior
-calls/results and replace them with one request-local lookup if this fixture and a
-real long-chat trace justify the change; preserve mandatory recovery and ordering.
-
-For 8/128/512 HTML files of 16 KiB, a one-item catalog page takes
+P2, owner: Office `ChatHtmlResourceCatalog`. For 8/128/512 HTML files of 16 KiB,
+`context perf: remaining hotspots` measures a one-item catalog page at
 0.32/4.27/21.11 ms; snapshot parsing alone takes 0.22/2.80/10.75 ms. Paging still
 processes the full snapshot. Narrow metadata construction/hashing to the requested
 page where authority permits, using the existing snapshot owner. Any future change
