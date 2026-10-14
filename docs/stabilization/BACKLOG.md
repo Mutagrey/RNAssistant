@@ -47,6 +47,15 @@ The authored-HTML viewer/import regression checks pass independently.
 
 Owner: Core `DocumentArtifactStore` and Office Resource Gateway. Document-owned
 copy/patch and bounded hunk preview are implemented for supported text/code files.
+The reported 11.2 MB JavaScript/vendor-splitting task also needs local extraction
+of selected source blocks into new files without echoing entire blocks through the
+model. Current tools copy a whole original or accept at most 32,000 characters of
+patch arguments; indexed reads alone do not supply this operation. Add bounded
+semantic boundary selection against an exact source revision, preserve originals
+and verify output bytes before any separate removal from an editable copy.
+Ambiguous boundaries must fail explicitly; byte preservation does not prove that
+JavaScript modules, dependencies or loading order still work. The initial-request
+budget defect is fixed independently in the context compiler.
 Remaining work is a measured real-model 10 MiB optimization run, language-specific
 syntax checks where suitable compilers/parsers are available, and efficient random
 viewer navigation: the current viewer retains preceding text pages while advancing.

@@ -195,7 +195,10 @@ namespace RNAssistant.Harness
                     new DocumentContext(),
                     new AppSettings(),
                     durable,
-                    null);
+                    durable.Messages.Single().Attachments,
+                    true);
+                AssertTrue(modelRequest.All(item => item.Attachments.Count == 0),
+                    "even small current text attachments are read explicitly through resources");
                 AssertTrue(ReferencesArtifact(durable, durable.Messages.Single(), artifact.Id),
                     "uploaded resource is durably linked to the user turn");
                 var flattenedRequest = FlattenSimple(modelRequest);

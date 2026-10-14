@@ -127,6 +127,13 @@ namespace RNAssistant.Core.Services
             foreach (var fact in frozenFacts) ProjectSharedContext(fact, authority);
             var currentUser = frozenFacts.LastOrDefault(item => !item.ProtocolMessage &&
                 string.Equals(item.Role, "user", StringComparison.OrdinalIgnoreCase));
+            // Uploaded text is already a discoverable resource. Its extraction
+            // must not consume the first request before bounded reads can run.
+            // Preserve current media delivery and the original durable metadata.
+            if (currentUser?.Attachments != null)
+                currentUser.Attachments.RemoveAll(item => item != null &&
+                    (string.Equals(item.Kind, "text", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(item.Kind, "office", StringComparison.OrdinalIgnoreCase)));
             foreach (var fact in frozenFacts.Where(item => item != currentUser &&
                 !(item.Content ?? string.Empty).StartsWith("RESOURCE_MEDIA_INPUT", StringComparison.Ordinal)))
                 fact.Attachments = new List<ChatAttachment>();

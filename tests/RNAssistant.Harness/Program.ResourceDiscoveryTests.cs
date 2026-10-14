@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using RNAssistant.Core.Agent;
+using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
@@ -238,8 +239,44 @@ namespace RNAssistant.Harness
                 var prefixLength = ((10 * 1024 * 1024 / 32000) + 1) * 32000 - 1;
                 var text = new string('x', prefixLength) + "😀late-needle";
                 var draft = ingestion.Stage(session, "single-line.js", "text/javascript", Encoding.UTF8.GetBytes(text));
-                var message = new ChatMessage { Role = "user", Attachments = ingestion.LoadDrafts(session, new[] { draft.Id }).ToList() };
+                var message = new ChatMessage { Role = "user", Content = "Analyze this large JavaScript file in logical parts.",
+                    Attachments = ingestion.LoadDrafts(session, new[] { draft.Id }).ToList() };
                 session.Messages.Add(message); ingestion.CommitAndLink(session, message, session.Messages.Count - 1);
+                chats.Save(session);
+                var catalogs = executor.CaptureCatalogs();
+                var tools = executor.GetControllerTools().ToList();
+                var settings = PromptSettingsService.ApplyPublishedTemplates(new AppSettings {
+                    ContextWindowOverrideTokens = 32768, MaxTokens = 3072 }, catalogs.PromptsJson);
+                using (var model = ConversationModelSession.CreateAsync(adapter, null, null, EventStore(chats),
+                    ChatModes.Agent, message.Content, session, NewContext(adapter), settings, tools,
+                    catalogs.Skills.Skills, message.Attachments, true, null, CancellationToken.None,
+                    executor.ResourceAuthority, executor.Payloads, () => catalogs.Skills,
+                    catalogs.Authority.Generation).GetAwaiter().GetResult())
+                {
+                    var request = model.CreateRequest("large-upload-first-request",
+                        new RNAssistant.Core.ModelProtocol.ModelProtocolCallContext(new string[0]));
+                    var body = new LlmMessageBuilder(attachmentReader: item => {
+                        throw new Exception("Initial request must not hydrate the uploaded original.");
+                    }, attachmentTextReader: (item, bound) => {
+                        throw new Exception("Initial request must not hydrate the extracted text.");
+                    }).Build(request.AcceptedMessages, settings, request.Options);
+                    var wire = Newtonsoft.Json.JsonConvert.SerializeObject(body.Messages);
+                    AssertContains(wire, "single-line.js", "first request exposes the semantic resource target");
+                    AssertTrue(!wire.Contains(new string('x', 100)) && !wire.Contains("late-needle"),
+                        "first request carries no uploaded source prefix or suffix");
+                    AssertTrue(body.EstimatedPromptTokens < ModelContextBudget.InputBudgetTokens(settings),
+                        "a ten-megabyte original does not consume a 32K model window");
+                    AssertTrue(request.CompileRepair(new ChatMessage { Role = "user", Content = "Repair JSON." })
+                        .All(item => item.Attachments.Count == 0), "repair preserves the bounded attachment projection");
+                }
+                var preview = new ModelContextCompiler(projection: ModelToolResultProjection.Instance).BuildPreview(
+                    ChatModes.Agent, message.Content, adapter, new ToolCatalogEntry[0], catalogs.Skills.Skills, NewContext(adapter),
+                    settings, session, message.Attachments, true);
+                AssertTrue(preview.All(item => item.Attachments.Count == 0), "preview uses the same resource-only text projection");
+                AssertEqual(text.Length, message.Attachments.Single().ExtractedCharCount,
+                    "compilation preserves the complete durable original metadata");
+                AssertEqual(text.Length, chats.Load(session.Host, session.DocumentKey, session.Id)
+                    .Messages.Single().Attachments.Single().ExtractedCharCount, "restart retains the original extraction");
                 var authority = new ResourceAuthorityStore(paths);
                 var owner = new DocumentArtifactStore(authority, authority, executor.Payloads);
                 var provider = new ChatArtifactResourceProvider(payloads: executor.Payloads, documentArtifacts: owner);

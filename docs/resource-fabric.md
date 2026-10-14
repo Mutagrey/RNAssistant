@@ -356,6 +356,13 @@ Domain owners retain typed guard/dispatch/read-back responsibilities.
 
 ### Large document text navigation — 2026-10-14
 
+Current uploaded text/code and extracted Office-document attachments are
+resource-only in model requests, including the initial request, preview and format
+repair. The compiler excludes their implicit extracted bodies before admission;
+the bounded resource index supplies discovery targets, and content enters through
+explicit resource reads. Durable originals and their extraction metadata remain
+intact. Current image/audio/PDF delivery keeps its existing routing.
+
 Document-owned uploaded text/code, authored text/code files and authored Markdown/Plans retain a deterministic
 `artifact-(extracted-)?text-index-v3` view under their exact revision. Its CAS
 manifest holds 32,000-character parts, UTF-16 character coverage, line ranges,

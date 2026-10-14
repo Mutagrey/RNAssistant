@@ -1,5 +1,20 @@
 # Stabilization progress
 
+## Large text attachments no longer block the initial request — 2026-10-14
+
+Owner: Core model-context compiler. Current text/code and extracted Office uploads
+now enter requests through resource discovery and explicit reads. Their full
+extraction no longer consumes admission budget before the first tool call.
+Original attachment metadata/CAS and current media routing remain intact.
+
+Six focused host-neutral checks pass. The >10 MiB one-line JS fixture now covers
+the production first-request/transport path at 32K context, preview, frozen repair,
+retained originals after restart, late search and exact reconstruction of every
+part. Small text, historical attachments and current media/helper delivery pass.
+No live-model split or Windows/Office qualification was run. Large block extraction
+for the reported vendor-splitting task remains a bounded follow-up in
+[BACKLOG](BACKLOG.md#large-source-mutation-and-provider-parity--2026-10-14).
+
 ## Explicit workspace criteria checked before completion — 2026-10-14
 
 Owner: workspace acceptance / Core kernel. A valid `done` is now checked against
