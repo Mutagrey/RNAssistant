@@ -129,10 +129,10 @@ function beginChatRunTracking(chatId) {
   state.chatRuns[chatId] = {
     activities: [],
     stream: "",
-    streamResetPending: false,
+    modelAttemptActive: false,
+    streamRetrying: false,
     reasoning: "",
-    reasoningComplete: false,
-    reasoningResetPending: false
+    reasoningComplete: false
   };
   if (state.activeChatId !== chatId) {
     return;
@@ -147,14 +147,19 @@ function beginChatRunTracking(chatId) {
 function trackChatProgressRun(chatId, runId) {
   if (!chatId) return null;
   var tracked = state.chatRuns[chatId];
+  if (chatId === state.activeChatId && runId && (!tracked || tracked.runId !== runId)) {
+    // A new run must retire the previous run's cached projection, even if its
+    // first progress event is a stream reset/delta rather than an activity.
+    state.liveFullRenderPending = true;
+  }
   if (runId && tracked && tracked.runId && tracked.runId !== runId) {
     beginChatRunTracking(chatId);
     tracked = state.chatRuns[chatId];
   }
   if (!tracked) {
     tracked = state.chatRuns[chatId] = {
-      activities: [], stream: "", streamResetPending: false,
-      reasoning: "", reasoningComplete: false, reasoningResetPending: false
+      activities: [], stream: "", modelAttemptActive: false, streamRetrying: false,
+      reasoning: "", reasoningComplete: false
     };
   }
   if (runId) tracked.runId = runId;

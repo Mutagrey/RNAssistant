@@ -369,7 +369,7 @@ function cancelChatRun(chatId, runId) {
 
 function recordChatRunActivityState(chatId, activity) {
   if (!chatId || !activity) return;
-  var run = state.chatRuns[chatId] = state.chatRuns[chatId] || { activities: [], stream: "", streamResetPending: false, reasoningResetPending: false };
+  var run = state.chatRuns[chatId] = state.chatRuns[chatId] || { activities: [], stream: "", modelAttemptActive: false, streamRetrying: false };
   if (typeof recordActivityTimeline === "function") {
     return recordActivityTimeline(run.activities, activity);
   }
@@ -473,26 +473,34 @@ if (window.chrome && window.chrome.webview) {
       var reasoningComplete = !!(progress.reasoningComplete);
       var hasReasoningProgress = !!(reasoningDelta || reasoningComplete);
       if ((contentReset || reasoningReset) && isChatProgress) {
-        // Keep the previous attempt visible until the next attempt has real output to replace it.
+        // A reset invalidates the draft immediately, including while a retry has no output.
         var resetRun = progressChatId ? state.chatRuns[progressChatId] : null;
         if (resetRun) {
-          if (contentReset) resetRun.streamResetPending = true;
-          if (reasoningReset) resetRun.reasoningResetPending = true;
+          resetRun.streamRetrying = !!resetRun.modelAttemptActive;
+          resetRun.modelAttemptActive = true;
+          if (contentReset) resetRun.stream = "";
+          if (reasoningReset) {
+            resetRun.reasoning = "";
+            resetRun.reasoningComplete = false;
+          }
         }
-        if (!contentDelta && !hasReasoningProgress) return;
+        if (progressChatId === state.activeChatId) {
+          if (contentReset) state.liveStreamContent = null;
+          if (reasoningReset) resetLiveReasoning();
+        }
+        if (!contentDelta && !hasReasoningProgress) {
+          if (progressChatId !== state.activeChatId) scheduleChatProgressRender();
+          else if (typeof scheduleLiveStreamRender === "function") scheduleLiveStreamRender();
+          else renderMessages();
+          return;
+        }
       }
       if (contentDelta && isChatProgress) {
         var contentRun = progressChatId ? state.chatRuns[progressChatId] : null;
-        var replaceContent = !!(contentRun && contentRun.streamResetPending);
-        var firstContentDelta = !progressChatId || replaceContent || !contentRun.stream;
         if (contentRun) {
-          contentRun.stream = replaceContent ? contentDelta : (contentRun.stream || "") + contentDelta;
-          contentRun.streamResetPending = false;
-          if (contentRun.reasoningResetPending) {
-            contentRun.reasoning = "";
-            contentRun.reasoningComplete = false;
-            contentRun.reasoningResetPending = false;
-          }
+          contentRun.stream = (contentRun.stream || "") + contentDelta;
+          contentRun.modelAttemptActive = true;
+          contentRun.streamRetrying = false;
         }
         if (progressChatId !== state.activeChatId) { scheduleChatProgressRender(); return; }
         state.liveStreamContent = progressChatId
@@ -505,9 +513,7 @@ if (window.chrome && window.chrome.webview) {
             state.liveActivity = state.liveAgentRun[state.liveAgentRun.length - 1];
           }
         }
-        if (firstContentDelta) {
-          renderMessages();
-        } else if (typeof scheduleLiveStreamRender === "function") {
+        if (typeof scheduleLiveStreamRender === "function") {
           scheduleLiveStreamRender();
         } else {
           renderMessages();
@@ -517,11 +523,7 @@ if (window.chrome && window.chrome.webview) {
       if (hasReasoningProgress && isChatProgress) {
         var reasoningRun = progressChatId ? state.chatRuns[progressChatId] : null;
         if (reasoningRun) {
-          if (reasoningRun.reasoningResetPending) {
-            reasoningRun.reasoning = "";
-            reasoningRun.reasoningComplete = false;
-            reasoningRun.reasoningResetPending = false;
-          }
+          reasoningRun.modelAttemptActive = true;
           if (reasoningDelta && reasoningRun.reasoningComplete) reasoningRun.reasoning = "";
           reasoningRun.reasoning = (reasoningRun.reasoning || "") + reasoningDelta;
           if (reasoningRun.reasoning.length > 24000) reasoningRun.reasoning = reasoningRun.reasoning.substring(0, 24000);
@@ -541,8 +543,8 @@ if (window.chrome && window.chrome.webview) {
         var activityPhase = String(progress.phase || "").toLowerCase();
         if ((activityPhase === "acting" || activityPhase === "tool_running") && progressChatId) {
           state.chatRuns[progressChatId].stream = "";
-          state.chatRuns[progressChatId].streamResetPending = false;
-          state.chatRuns[progressChatId].reasoningResetPending = false;
+          state.chatRuns[progressChatId].modelAttemptActive = false;
+          state.chatRuns[progressChatId].streamRetrying = false;
           if (progressChatId === state.activeChatId) state.liveStreamContent = null;
         }
         var normalizedActivity = normalizeProgressActivity(progress);

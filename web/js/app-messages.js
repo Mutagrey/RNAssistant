@@ -511,7 +511,7 @@ function liveAgentRunId() {
 
 function renderLiveAgentRun() {
   var activities = liveAgentTailActivities();
-  if ((!activities.length && !renderedLiveRunBase) || renderedLiveRunSuppressed) return null;
+  if ((!activities.length && !renderedLiveRunBase && !hasLiveAgentOutput()) || renderedLiveRunSuppressed) return null;
   var items = renderedLiveRunBase ? renderedLiveRunBase.items.slice() : [];
   var byKey = Object.create(null);
   items.forEach(function (item, index) { byKey[activityTimelineKey(item.activity)] = index; });
@@ -528,26 +528,75 @@ function renderLiveAgentRun() {
       items.push({ message: null, index: -1, activity: activity });
     }
   });
-  var node = renderAgentRunArticle({ live: true, items: items, finalMessage: null });
+  var node = renderAgentRunArticle({ live: true, items: items, finalMessage: null, hasLiveDraft: hasLiveAgentDraft() });
+  node.liveOutputVisible = hasLiveAgentOutput();
+  node.liveDraftVisible = hasLiveAgentDraft();
+  node.liveRunId = liveAgentRunId();
   if (renderedLiveRunBase && typeof appendAgentRunResourceCards === "function") {
     appendAgentRunResourceCards(node.querySelector(".agent-run-wrap"), renderedLiveRunBase.items, null);
   }
   return node;
 }
 
-function renderLiveStreamMessage() {
-  if (!state.liveStreamContent) {
-    return null;
-  }
+function hasLiveAgentOutput() {
+  return !!(state.liveReasoning || hasLiveAgentDraft());
+}
 
-  var live = document.createElement("article");
-  live.className = "message assistant pending streaming-message";
-  var body = document.createElement("div");
-  body.className = "markdown";
-  body.innerHTML = markdown(state.liveStreamContent);
-  live.appendChild(body);
-  enhanceMarkdown(body, { enableJsonViewer: true, sourceText: state.liveStreamContent, streaming: true });
-  return live;
+function hasLiveAgentDraft() {
+  var run = state.chatRuns && state.chatRuns[state.activeChatId];
+  return !!(state.liveStreamContent || run && run.streamRetrying);
+}
+
+// Keep streamed output inside its run and update only this leaf on token paints.
+function refreshLiveAgentOutput(node) {
+  if (!hasLiveAgentOutput()) return;
+  var section = node.querySelector(".agent-stream-step");
+  if (!section) {
+    section = document.createElement("section");
+    section.className = "agent-model-step agent-stream-step";
+    node.querySelector(".agent-run-actions").appendChild(section);
+  }
+  var previous = section.liveOutput || {};
+  var content = state.liveStreamContent || "";
+  var reasoning = state.liveReasoning || "";
+  var reasoningComplete = !!state.liveReasoningComplete;
+  if (previous.reasoning !== reasoning || previous.reasoningComplete !== reasoningComplete) {
+    var oldReasoning = section.querySelector(".reasoning-block");
+    if (reasoning && typeof reasoningBlock === "function") {
+      if (oldReasoning) {
+        updateReasoningBlock(oldReasoning, reasoning, null, !reasoningComplete, reasoning.length >= MAX_LIVE_REASONING_CHARS);
+      } else {
+        var block = reasoningBlock(reasoning, null, !reasoningComplete, reasoning.length >= MAX_LIVE_REASONING_CHARS);
+        block.setAttribute("data-disclosure-key", "live-reasoning");
+        section.insertBefore(block, section.firstChild);
+      }
+    } else if (oldReasoning) section.removeChild(oldReasoning);
+  }
+  var status = section.querySelector(".agent-stream-status");
+  if (!status) {
+    status = document.createElement("div");
+    status.className = "agent-stream-status";
+    status.setAttribute("role", "status");
+    section.appendChild(status);
+  }
+  if (previous.content !== content) {
+    var body = section.querySelector(".agent-stream-message");
+    if (body && typeof clearMarkdownEnhancements === "function") clearMarkdownEnhancements(body);
+    if (content) {
+      if (!body) {
+        body = document.createElement("div");
+        body.className = "agent-step-message markdown agent-stream-message";
+        section.insertBefore(body, status);
+      }
+      body.innerHTML = markdown(content);
+      enhanceMarkdown(body, { enableJsonViewer: true, sourceText: content, streaming: true });
+    } else if (body) section.removeChild(body);
+  }
+  var run = state.chatRuns && state.chatRuns[state.activeChatId];
+  var label = run && run.streamRetrying ? "Повторная попытка…" : content ? "Формируется…" : "";
+  if (status.hidden !== !label) status.hidden = !label;
+  if (status.textContent !== label) status.textContent = label;
+  section.liveOutput = { content: content, reasoning: reasoning, reasoningComplete: reasoningComplete };
 }
 
 function messageUnitSignature(message) {
@@ -601,9 +650,9 @@ function agentRunUnitSignature(run) {
   });
 }
 
-function appendMessageUnit(units, key, signature, render, actionsSignature, refreshActions) {
+function appendMessageUnit(units, key, signature, render, actionsSignature, refreshActions, update) {
   units.push({ key: key, signature: signature, render: render,
-    actionsSignature: actionsSignature, refreshActions: refreshActions });
+    actionsSignature: actionsSignature, refreshActions: refreshActions, update: update });
 }
 
 function messageActionsSignature() {
@@ -655,13 +704,15 @@ function buildMessageUnits() {
       var run = collectAgentRun(index);
       run.continued = !run.finalMessage && lastRunIndexes[agentRunId(run.items, run.finalMessage)] >= run.nextIndex;
       if (liveRunId && agentRunId(run.items, run.finalMessage) === liveRunId) {
-        if (!run.finalMessage && run.nextIndex > lastVisibleIndex) {
+        var savedView = agentRunViewState(run.items, run.finalMessage);
+        var terminalRun = savedView && ["completed", "failed", "cancelled"].indexOf(savedView.lifecycle) >= 0;
+        if (!run.finalMessage && !terminalRun && run.nextIndex > lastVisibleIndex) {
           renderedLiveRunBase = run;
           renderedLiveRunBaseSignature = agentRunUnitSignature(run);
           index = run.nextIndex - 1;
           continue;
         }
-        if (run.finalMessage) renderedLiveRunSuppressed = true;
+        if (run.finalMessage || terminalRun) renderedLiveRunSuppressed = true;
         else run.items.forEach(function (item) {
           renderedLiveRunPastActivities[activityTimelineKey(item.activity)] = true;
           var stepId = activityStepId(item.activity);
@@ -712,23 +763,12 @@ function buildMessageUnits() {
 
 function buildLiveMessageUnits() {
   var units = [];
-  if (!renderedLiveRunSuppressed && (liveAgentTailActivities().length || renderedLiveRunBase)) {
+  var activities = liveAgentTailActivities();
+  if (!renderedLiveRunSuppressed && (activities.length || renderedLiveRunBase || hasLiveAgentOutput())) {
     appendMessageUnit(units, "live:agent-run",
-      JSON.stringify({ stream: "agent", value: liveAgentTailActivities(),
-        base: renderedLiveRunBaseSignature }),
-      function () { return renderLiveAgentRun(); });
-  }
-
-  if (!renderedLiveRunSuppressed && typeof renderLiveReasoningMessage === "function" && state.liveReasoning) {
-    appendMessageUnit(units, "live:reasoning",
-      JSON.stringify({ reasoning: state.liveReasoning || "", complete: !!state.liveReasoningComplete }),
-      function () { return renderLiveReasoningMessage(); });
-  }
-
-  if (!renderedLiveRunSuppressed && state.liveStreamContent) {
-    appendMessageUnit(units, "live:stream",
-      JSON.stringify({ content: state.liveStreamContent }),
-      function () { return renderLiveStreamMessage(); });
+      JSON.stringify({ stream: "agent", runId: liveAgentRunId(), value: activities,
+        base: renderedLiveRunBaseSignature, hasOutput: hasLiveAgentOutput(), hasDraft: hasLiveAgentDraft() }),
+      function () { return renderLiveAgentRun(); }, "", null, refreshLiveAgentOutput);
   }
 
   return units.concat(typeof buildPendingInputUnits === "function" ? buildPendingInputUnits() : []);
@@ -763,6 +803,7 @@ function reconcileMessageUnits(box, units, liveOnly) {
     if (node && cached.actionsSignature !== unit.actionsSignature && unit.refreshActions) {
       unit.refreshActions(node);
     }
+    if (node && unit.update) unit.update(node);
     if (!node) {
       var disclosures = messageDisclosureSnapshot(cached && cached.node);
       if (cached && cached.node && typeof releaseMessageMediaThumbnails === "function") {
@@ -772,6 +813,7 @@ function reconcileMessageUnits(box, units, liveOnly) {
         clearMarkdownEnhancements(cached.node);
       }
       node = unit.render();
+      if (unit.update) unit.update(node);
       restoreMessageDisclosures(node, disclosures);
       node.messageUnitKey = unit.key;
       // Insert first: removing a tall live article first temporarily clamps scrollTop.
@@ -829,7 +871,7 @@ function scheduleLiveStreamRender(fullProjection) {
     var full = state.liveFullRenderPending;
     state.liveFullRenderPending = false;
     if (full) renderMessages();
-    else renderStreamingMessages();
+    else renderStreamingMessages(true);
   };
   if (window.requestAnimationFrame) {
     window.requestAnimationFrame(render);
@@ -838,16 +880,24 @@ function scheduleLiveStreamRender(fullProjection) {
   }
 }
 
-function renderStreamingMessages() {
+function renderStreamingMessages(outputOnly) {
   if (typeof isPanelActive === "function" && !isPanelActive("chat")) return;
-  if (renderedMessagesChatId !== state.activeChatId || !Object.keys(renderedMessageUnits).length) {
+  var live = renderedMessageUnits["live:agent-run"];
+  if (renderedMessagesChatId !== state.activeChatId || !live && !Object.keys(renderedMessageUnits).length) {
     renderMessages();
     return;
   }
+  if (outputOnly && renderedLiveRunSuppressed) return;
   var box = $("messages");
-  var viewport = captureMessageViewport(box);
   var shouldScroll = shouldFollowChatScroll(box);
-  reconcileMessageUnits(box, buildLiveMessageUnits(), true);
+  var viewport = !shouldScroll ? captureMessageViewport(box) : null;
+  if (outputOnly && live && live.node.liveOutputVisible && hasLiveAgentOutput() &&
+      live.node.liveDraftVisible === hasLiveAgentDraft() && live.node.liveRunId === liveAgentRunId()) {
+    // Token frames do not regroup/serialize activities, rebuild units or detach history.
+    refreshLiveAgentOutput(live.node);
+  } else {
+    reconcileMessageUnits(box, buildLiveMessageUnits(), true);
+  }
   if (!shouldScroll) restoreMessageViewport(box, viewport);
   syncChatScroll(shouldScroll, false);
 }
@@ -882,7 +932,7 @@ function renderMessages(options) {
     return;
   }
   var visibleMessages = (state.messages || []).filter(function (message) { return !messageProtocolMessage(message); });
-  if (!(typeof pendingChatInputs === "function" && pendingChatInputs().length) && !visibleMessages.length && !state.messageStartIndex && !state.liveStreamContent && !state.liveReasoning && !state.liveActivity && !(state.liveAgentRun && state.liveAgentRun.length)) {
+  if (!(typeof pendingChatInputs === "function" && pendingChatInputs().length) && !visibleMessages.length && !state.messageStartIndex && !hasLiveAgentOutput() && !state.liveActivity && !(state.liveAgentRun && state.liveAgentRun.length)) {
     resetRenderedMessageUnits(box);
     box.appendChild(renderChatEmptyState());
     chatScrollFollowing = true;

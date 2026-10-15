@@ -14,23 +14,36 @@ function messageHasReasoning(message) {
 function reasoningBlock(text, tokens, live, truncated) {
   if (!text && (tokens === null || tokens === undefined)) return null;
   var details = document.createElement("details");
-  details.className = "reasoning-block" + (live ? " is-live" : "");
   details.open = !!live;
   var summary = document.createElement("summary");
-  summary.textContent = "Ход рассуждения" +
-    (tokens !== null && tokens !== undefined ? " · " + tokens + " токенов" : "") +
-    (truncated ? " · обрезано" : "");
+  var title = document.createElement("span");
+  title.className = "reasoning-title";
+  summary.appendChild(title);
   var caret = document.createElement("span");
   caret.className = "reasoning-caret";
   caret.setAttribute("aria-hidden", "true");
   summary.appendChild(caret);
   details.appendChild(summary);
-  if (text) {
-    var body = document.createElement("pre");
-    body.textContent = text;
-    details.appendChild(body);
-  }
+  updateReasoningBlock(details, text, tokens, live, truncated);
   return details;
+}
+
+function updateReasoningBlock(details, text, tokens, live, truncated) {
+  var className = "reasoning-block" + (live ? " is-live" : "");
+  if (details.className !== className) details.className = className;
+  var title = details.querySelector(".reasoning-title");
+  var label = "Ход рассуждения" +
+    (tokens !== null && tokens !== undefined ? " · " + tokens + " токенов" : "") +
+    (truncated ? " · обрезано" : "");
+  if (title.textContent !== label) title.textContent = label;
+  var body = details.querySelector("pre");
+  if (text) {
+    if (!body) {
+      body = document.createElement("pre");
+      details.appendChild(body);
+    }
+    if (body.textContent !== text) body.textContent = text;
+  } else if (body) details.removeChild(body);
 }
 
 function appendMessageReasoning(parent, message) {
@@ -42,18 +55,6 @@ function appendMessageReasoning(parent, message) {
     !!reasoningValue(message, "ReasoningTruncated", "reasoningTruncated", false));
   if (block) parent.appendChild(block);
   return block;
-}
-
-function renderLiveReasoningMessage() {
-  if (!state.liveReasoning) return null;
-  var article = document.createElement("article");
-  article.className = "message assistant pending reasoning-live-message";
-  article.appendChild(reasoningBlock(
-    state.liveReasoning,
-    null,
-    !state.liveReasoningComplete,
-    state.liveReasoning.length >= MAX_LIVE_REASONING_CHARS));
-  return article;
 }
 
 function resetLiveReasoning() {

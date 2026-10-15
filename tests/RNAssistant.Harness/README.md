@@ -639,14 +639,19 @@ to check immediate Steer/Queue visibility, empty-queue/history races, exact-ID h
 and manual scrolling after submission. It uses the same Playwright environment as
 the layout test below. `node tests/web/live-run-projection.test.js` covers transcript
 order across applied steers, silent-step grouping under commentary, preserved
-disclosure state and visible active/attention rows. Accepted comments stay visible
-after completion, cancellation, failure, reload and steer; opening technical history
-does not duplicate them. `node tests/web/agent-activity-layout.test.js` checks that
-visibility in Chromium at wide/narrow widths. `node tests/web/chat-transcript-layout.test.js` uses
+disclosure state and visible active/attention rows. Accepted progress comments fold
+with their actions after completion, cancellation, failure, reload and steer; opening
+history restores each original comment once. Inline stream coverage checks readable
+drafts, retry invalidation, accepted/final handoff and retained action/reasoning nodes.
+`stream-render-cost.test.js` checks first-token frame coalescing, immediate resets,
+empty retries and background navigation without restoring rejected drafts.
+`node tests/web/agent-activity-layout.test.js` checks history in Chromium at wide/narrow
+widths. `node tests/web/chat-transcript-layout.test.js` uses
 the bundled Playwright (`NODE_PATH`, optional `BROWSER_EXECUTABLE` and
 `LAYOUT_SCREENSHOT`) to check narrow light/dark bubbles, safe full text, editor
 focus, manual/follow scrolling, late message growth, viewport resizing, deferred
-gestures and history anchoring.
+gestures and history anchoring, including normal-contrast inline streaming and the
+absence of a final-answer divider during generation.
 These browser checks are distinct from Windows/Office/WebView2 qualification.
 
 ## Test map

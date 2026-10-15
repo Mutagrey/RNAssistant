@@ -96,7 +96,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
         "late acknowledgement preserves a subsequent manual scroll");
       await page.evaluate(() => {
         state.chatRuns.chat.stream += "Следующие результаты проверки.\n\n".repeat(5);
-        state.liveStreamContent = state.chatRuns.chat.stream; renderStreamingMessages();
+        state.liveStreamContent = state.chatRuns.chat.stream; renderStreamingMessages(true);
       });
       assert.ok(Math.abs(await page.locator("#messages").evaluate(el => el.scrollTop) - manualTop) < 2,
         "streaming does not restart following after the user scrolls away");

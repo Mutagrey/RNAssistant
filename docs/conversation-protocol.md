@@ -1683,14 +1683,20 @@ separate visible elements. Silent steps add no paragraph, and live repeat groupi
 changes only presentation, retaining every original step and call.
 A zero-call run emits no empty
 overview. Independent runtime warnings remain visible. Progress phase names
-(`thinking`, `working`) are not target captions. A nonempty action block ends with a thin divider and a 6 px
-gap before the answer. Assistant footer buttons start at the left, with copy first
+(`thinking`, `working`) are not target captions. A nonempty action block gains a thin
+divider and a 6 px gap only before an accepted final answer. Streaming drafts remain
+inside the live run at normal text contrast with “Формируется…” beneath them; they
+replace the ambient thinking label until accepted. Attempt resets immediately clear
+unaccepted text/reasoning and show “Повторная попытка…” for retries. See
+[transient rendering](session-events.md#transient-stream-rendering) for update and
+reset behavior. Assistant footer buttons start at the left, with copy first
 and message count/usage immediately after the buttons; user footer buttons stay
 on the right. DOM order matches the visual and keyboard order. Changed live units retain explicit detail-disclosure
 state by identity. Persisted mid-run messages and live replay share one visible
 run matched by exact RunId and activity identity; durable terminal call results win
 over stale progress, while newly received calls remain visible. A final persisted
-answer retires its live activities, reasoning and text replay. Call identity is
+answer, or a typed completed/failed/cancelled run without an answer, retires its live
+activities, reasoning and text replay before the inbox's idle snapshot. Call identity is
 RunId + StepId + ToolCallId and excludes JSON formatting and CAS payload placement.
 Replayed step markers reuse their existing step even when delivered after saved
 calls. Repeated terminal materialization updates the same call row; stale running

@@ -16,7 +16,7 @@ class Element {
   setAttribute(key, value) { this.attributes[key] = String(value); }
   getAttribute(key) { return this.attributes[key]; }
   addEventListener(type, listener) { (this.listeners || (this.listeners = {}))[type] = listener; }
-  querySelectorAll(selector) { return walk(this).slice(1).filter(n => selector === "details" ? n.tagName === "details" : n.classList.contains(selector.slice(1))); }
+  querySelectorAll(selector) { return walk(this).slice(1).filter(n => selector.startsWith(".") ? n.classList.contains(selector.slice(1)) : n.tagName === selector); }
   querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
   set textContent(value) { this._text = String(value); this.childNodes.forEach(n => { n.parentNode = null; }); this.childNodes = []; }
   get textContent() { return this._text + this.innerHTML + this.childNodes.map(n => n.textContent).join(""); }
@@ -299,3 +299,94 @@ for (const lifecycle of ["completed", "cancelled"]) {
 }
 assert.equal(JSON.stringify(preparation), originalPreparation, "presentation never changes the stored step identities or comments");
 console.log("PASS live projection: silent steps fold below commentary while active work and attention stay visible");
+
+// Streamed text belongs to the current run, with cheap leaf-only token paints.
+vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-reasoning.js"), "utf8"), ctx);
+ctx.state.messages = [message(action("s1", "a", "completed", '{}'), 0)];
+ctx.state.liveAgentRun = [marker("s1"), action("s1", "a", "completed", '{}'),
+  ctx.normalizeProgressActivity({ runId: "r", phase: "thinking" })];
+ctx.state.chatRuns.chat = { runId: "r", activities: ctx.state.liveAgentRun, streamRetrying: false };
+ctx.state.liveStreamContent = "Создаю документ.";
+ctx.state.liveReasoning = "Проверяю структуру.";
+ctx.state.liveReasoningComplete = true;
+ctx.resetRenderedMessageUnits(box); render();
+assert.equal(box.children.length, 1, "stream and reasoning stay inside one run article");
+const streamRun = box.firstChild;
+assert.equal(streamRun.classList.contains("pending"), false, "the run and draft are not faded");
+assert.equal(streamRun.querySelector(".agent-run-actions").classList.contains("has-actions"), false,
+  "an unfinished draft has no final-answer divider");
+assert.equal(streamRun.querySelector(".agent-stream-status").textContent, "Формируется…");
+assert.ok(!streamRun.textContent.includes("Думаю…"), "streaming replaces the ambient thinking label");
+const retainedAction = streamRun.querySelector(".kind-tool");
+const draftBody = streamRun.querySelector(".agent-stream-message");
+const reasoningDetails = streamRun.querySelector(".reasoning-block");
+const reasoningBody = reasoningDetails.querySelector("pre");
+reasoningDetails.open = true;
+const buildLive = ctx.buildLiveMessageUnits, buildFull = ctx.buildMessageUnits;
+ctx.buildLiveMessageUnits = ctx.buildMessageUnits = () => { throw new Error("token paint must not rebuild transcript units"); };
+ctx.state.liveStreamContent += " Добавляю график.";
+ctx.renderStreamingMessages(true);
+assert.equal(box.firstChild, streamRun);
+assert.equal(streamRun.querySelector(".kind-tool"), retainedAction, "prior actions remain attached");
+assert.equal(streamRun.querySelector(".agent-stream-message"), draftBody, "tokens update the same paragraph container");
+assert.equal(streamRun.querySelector(".reasoning-block"), reasoningDetails, "text deltas do not rebuild reasoning");
+ctx.state.liveReasoning += " Проверено.";
+ctx.renderStreamingMessages(true);
+assert.equal(streamRun.querySelector(".reasoning-block"), reasoningDetails, "reasoning deltas retain the disclosure node");
+assert.equal(reasoningDetails.querySelector("pre"), reasoningBody, "reasoning deltas update the same text container");
+assert.equal(reasoningBody.textContent, ctx.state.liveReasoning);
+assert.equal(streamRun.querySelector(".reasoning-block").open, true, "reasoning disclosure survives its own deltas");
+ctx.buildLiveMessageUnits = buildLive; ctx.buildMessageUnits = buildFull;
+
+// An invalidated attempt is removed before the retry emits any replacement text.
+ctx.state.liveStreamContent = null; ctx.state.liveReasoning = "";
+ctx.state.chatRuns.chat.streamRetrying = true;
+ctx.renderStreamingMessages(true);
+assert.equal(box.firstChild, streamRun, "retry updates the same current step");
+assert.equal(streamRun.querySelector(".agent-stream-message"), null);
+assert.equal(streamRun.querySelector(".reasoning-block"), null);
+assert.equal(streamRun.querySelector(".agent-stream-status").textContent, "Повторная попытка…");
+ctx.state.chatRuns.chat.streamRetrying = false;
+ctx.state.liveStreamContent = "Исправленный комментарий.";
+ctx.renderStreamingMessages(true);
+assert.equal(streamRun.querySelector(".agent-stream-message").textContent, "Исправленный комментарий.");
+
+const accepted = Object.assign(action("s2", "b", "running", '{}'), { StepMessage: ctx.state.liveStreamContent });
+ctx.state.liveStreamContent = null;
+ctx.state.liveAgentRun.push(accepted);
+render();
+assert.equal(box.querySelectorAll(".agent-stream-step").length, 0, "accepted text retires its draft");
+assert.equal(box.textContent.split("Исправленный комментарий.").length - 1, 1, "the accepted comment appears once");
+ctx.state.messages.push(message(Object.assign({}, accepted, { Status: "completed" }), 1),
+  { Id: "stream-final", Role: "assistant", RunId: "r", Content: "Готово.", RunViewState: view });
+ctx.state.liveStreamContent = "Готово.";
+render();
+assert.equal(box.querySelectorAll(".agent-stream-step").length, 0, "a saved final answer suppresses late stream replay");
+assert.equal(box.querySelector(".agent-run-actions").classList.contains("has-actions"), true,
+  "the divider appears for the accepted final answer");
+console.log("PASS live stream: inline drafts, retry invalidation, stable leaf updates and accepted/final handoff");
+
+for (const lifecycle of ["failed", "cancelled"]) {
+  ctx.state.messages = [message(action("s1", "a", "completed", '{}'), 0),
+    { Id: "stopped", Role: "assistant", RunId: "r", Content: "", RunViewState: { ...failed, Lifecycle: lifecycle },
+      Activity: { RunId: "r", Kind: "diagnostic", Status: lifecycle, ResultMessage: "Stopped" } }];
+  ctx.state.liveStreamContent = "Unaccepted draft";
+  render();
+  assert.equal(box.querySelectorAll(".agent-stream-step").length, 0, lifecycle + " clears the draft before the idle inbox arrives");
+  assert.equal(box.querySelectorAll(".live").length, 0, "a saved terminal state cannot keep the run active");
+  assert.equal(box.querySelectorAll(".message-outcome").length, 1, "the terminal warning stays visible");
+  ctx.state.liveStreamContent += " late delta";
+  ctx.renderStreamingMessages(true);
+  assert.ok(!box.textContent.includes("Unaccepted draft"), "late output cannot revive a stopped draft");
+}
+const nextFrames = [];
+ctx.requestAnimationFrame = callback => nextFrames.push(callback);
+ctx.trackChatProgressRun("chat", "next-stream-run");
+ctx.state.messages.push({ Id: "next-user", Role: "user", Content: "New request" });
+ctx.state.liveStreamContent = "New draft";
+ctx.scheduleLiveStreamRender(); nextFrames.shift()();
+assert.equal(box.querySelector(".agent-stream-message").textContent, "New draft",
+  "the next run can start with streaming after the preceding run suppressed its replay");
+assert.equal(box.querySelector(".live").querySelectorAll(".kind-tool").length, 0,
+  "a new run does not inherit the old run's live actions");
+console.log("PASS live stream: terminal failure/cancel suppress late drafts and the next run starts independently");

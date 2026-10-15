@@ -149,6 +149,14 @@
   overflow-wrap: anywhere;
 }
 
+.agent-stream-status {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.agent-stream-step .reasoning-block { margin-bottom: 0; }
+
 .agent-step-repeat {
   color: var(--muted);
   font-size: 12px;

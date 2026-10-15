@@ -67,14 +67,23 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
           composerQueue: !!$("chatForm").querySelector(".inbox-message"),
           injected: !!document.querySelector(".inbox-message img"),
           clipped: getComputedStyle(document.querySelector(".inbox-pending-text")).webkitLineClamp,
-          background: getComputedStyle(document.querySelector(".inbox-pending-text")).backgroundColor
+          background: getComputedStyle(document.querySelector(".inbox-pending-text")).backgroundColor,
+          streamStatus: document.querySelector(".agent-stream-status").textContent,
+          streamColor: getComputedStyle(document.querySelector(".agent-stream-message")).color,
+          paragraphColor: getComputedStyle(document.querySelector(".agent-stream-step")).color,
+          streamOpacity: getComputedStyle(document.querySelector(".agent-run.live")).opacity,
+          divider: getComputedStyle(document.querySelector(".agent-run-actions")).borderBottomWidth
         }));
-        assert.deepEqual(layout.order, ["message:user", "live:stream", "live:input:op1", "live:input:op2"]);
+        assert.deepEqual(layout.order, ["message:user", "live:agent-run", "live:input:op1", "live:input:op2"]);
         assert.equal(layout.overflow, false, `bubbles fit ${width}px in ${dark ? "dark" : "light"} theme`);
         assert.equal(layout.composerQueue, false);
         assert.equal(layout.injected, false);
         assert.equal(layout.clipped, "none", "all queued text remains readable");
         assert.notEqual(layout.background, "rgba(0, 0, 0, 0)", "queued text retains its user bubble background");
+        assert.equal(layout.streamStatus, "Формируется…");
+        assert.equal(layout.streamColor, layout.paragraphColor, "the draft uses ordinary readable text color");
+        assert.equal(layout.streamOpacity, "1", "streamed text is not faded");
+        assert.equal(layout.divider, "0px", "a draft has no final-answer divider");
       }
     }
     await page.locator(".inbox-item-menu summary").first().click();

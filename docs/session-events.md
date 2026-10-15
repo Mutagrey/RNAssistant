@@ -422,13 +422,27 @@ and settings changes, and diagnostic/storage timestamps do not count as activity
 The UI sorts the latest accepted summaries on each render, including background
 updates, so selecting a chat does not trigger a delayed ordering change.
 
-Web stream/reasoning deltas update the transient run immediately and coalesce
-painting through one animation frame. Subsequent stream paints reconcile only
-live units; they do not serialize durable message bodies or rebuild the resource
-navigation. Full projection changes still reconcile the transcript, retaining
+Web stream/reasoning deltas update the transient run immediately; the first delta
+and later bursts share one scheduled animation-frame paint. Ordinary token paints
+update only the current run's output leaf, without serializing/regrouping activities,
+rebuilding transcript units or resource navigation, or detaching history. A changed
+run or transition between thinking, draft and accepted work reconciles the relevant
+projection. Full projection changes still reconcile the transcript, retaining
 unchanged attached DOM nodes. Background progress coalesces chat-list rendering
 at 100 ms without dropping deltas. A chat change uses the current full projection.
 This changes presentation cost only, not event/CAS persistence or commit barriers.
+
+Streamed text and reasoning belong to the active run article. The text uses normal
+contrast and a quiet “Формируется…” status, replacing the ambient thinking label
+while a draft is visible. Only an accepted final answer receives the divider after
+actions. An attempt reset immediately removes its unaccepted text/reasoning in both
+foreground and background chats. A repeated attempt before step acceptance shows
+“Повторная попытка…” even before replacement output arrives; ordinary next steps
+do not acquire that label. Accepted text continues as step narration or a final
+answer; transient drafts are never an additional durable message.
+A saved completed/failed/cancelled run suppresses late draft replay immediately,
+without waiting for the inbox's idle snapshot. The next runtime `RunId` establishes
+its own projection even when its first progress event is only a reset or delta.
 
 Transient progress is scoped by chat and runtime `RunId`: the first event for a new
 run clears the preceding run's live activities, stream and reasoning even when an

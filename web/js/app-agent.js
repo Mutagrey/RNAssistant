@@ -284,7 +284,7 @@ function appendAgentCompletedActions(parent, actions, stats) {
   parent.appendChild(details);
 }
 
-function appendLiveAgentStep(parent, step, isLast) {
+function appendLiveAgentStep(parent, step, isLast, suppressAmbient) {
   var actions = [];
   function append(item, activity, nested) {
     if (activityKind(activity) !== "notice" && activityKind(activity) !== "step") {
@@ -324,7 +324,7 @@ function appendLiveAgentStep(parent, step, isLast) {
   var ambient = step.ambient || (step.items || []).filter(function (item) {
     return activityKind(item.activity) === "notice";
   }).slice(-1)[0];
-  if (isLast && !active && ambient) {
+  if (isLast && !active && ambient && !suppressAmbient) {
     parent.appendChild(renderActivityRow(ambient.activity, true, false, {
       hideIcon: true, liveFeed: true, currentActivity: ambient.activity
     }));
@@ -492,7 +492,7 @@ function renderAgentRunArticle(run) {
   var body = document.createElement("div");
   body.className = "agent-run-wrap";
   var process = document.createElement("div");
-  process.className = "agent-run-actions" + (agentToolCallCount(timeline) ? " has-actions" : "");
+  process.className = "agent-run-actions" + (finalMessage && agentToolCallCount(timeline) ? " has-actions" : "");
   var expanded = !run.continued && (run.live || (runViewState && ["running", "awaiting_user", "awaiting_confirmation"].indexOf(runViewState.lifecycle) >= 0));
   // A step's narration and actions share the same disclosure. Final answers and
   // pending interactions remain outside the completed history.
@@ -501,11 +501,11 @@ function renderAgentRunArticle(run) {
     var section = document.createElement("section");
     section.className = "agent-model-step";
     appendAgentStepMessage(section, step.message, step.messageCount);
-    appendLiveAgentStep(section, step, stepIndex === updates.length - 1);
-    process.appendChild(section);
+    appendLiveAgentStep(section, step, stepIndex === updates.length - 1, run.hasLiveDraft);
+    if (section.childNodes.length) process.appendChild(section);
   });
   if (!expanded) appendAgentRunOverview(process, steps, timeline, stats);
-  if (process.childNodes.length) body.appendChild(process);
+  if (process.childNodes.length || run.live) body.appendChild(process);
   // This warning is outside collapsed trace and never derived from the model's prose.
   if (!run.live) appendAgentRunViewState(body, runViewState, agentRunId(items, finalMessage));
   if (finalMessage) {

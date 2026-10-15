@@ -780,10 +780,6 @@
   opacity: 1;
 }
 
-.message.assistant.streaming-message {
-  padding-top: 0;
-}
-
 .message.assistant .markdown {
   box-sizing: border-box;
   width: auto;
