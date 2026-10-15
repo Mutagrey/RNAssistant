@@ -419,6 +419,14 @@ character-range evidence. Neither a part nor a search/outline result grants
 whole-source mutation authority. Other provider families retain their own bounds;
 this contract does not claim 20 MiB Office live, HTML-member or CLI file reads.
 
+Within-target search requires an advertised `text` or `source` representation.
+A VBA project exposes its component inventory as `structure`; search its module
+names and code with `common.resources_find(scope=vba, query=...)`, then use
+`common.resources_search` on a returned VBA module target for literal occurrences.
+Project discovery and tool guidance expose this route. A structure-only target
+fails with non-retryable `resource_search_unsupported` and actionable guidance
+before a text read; it is never silently searched as a different scope.
+
 Agent `common.file_create` creates a small text/code file with an explicit extension;
 `common.file_copy` creates an independent authored `File` from an exact complete
 uploaded or authored text source (up to 20 MiB); `common.file_patch` replaces 1–16

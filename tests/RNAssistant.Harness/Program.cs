@@ -609,6 +609,7 @@ namespace RNAssistant.Harness
                 Test("resources: live Office and VBA are bounded and guarded", LiveOfficeAndVbaResourcesAreBoundedAndGuarded),
                 Test("resource search: zero-match drift and exact snapshots", GenericSearchPublishesZeroMatchScans),
                 Test("resource search: VBA bounded scans and body-free metadata", GenericVbaSearchSeparatesScansAndMetadata),
+                Test("resource search: VBA project directs to module discovery", VbaProjectSearchDirectsToModuleDiscovery),
                 Test("artifacts: prompt uses bounded working set", ArtifactPromptUsesBoundedWorkingSet),
                 Test("artifacts: prompt uses observed logical heads", ArtifactPromptUsesLogicalHeads),
                 Test("artifacts: prompt preserves decision context", ArtifactPromptPreservesDecisionContext),

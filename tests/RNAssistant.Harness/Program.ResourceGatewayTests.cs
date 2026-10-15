@@ -163,6 +163,55 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void VbaProjectSearchDirectsToModuleDiscovery()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                adapter.SetVbaModule("Module1", "Sub LoadFromFiles()\nDebug.Print \"ParentPath\", \"parentpath\"\nEnd Sub", "StdModule");
+                adapter.SetVbaModule("OtherModule", "Sub ReadFiles()\nDebug.Print \"ParentPath\"\nEnd Sub", "StdModule");
+                var session = NewSession(adapter);
+                var runtime = executor.CreateNativeRuntime(session, executor.GetControllerTools().ToArray(),
+                    new AppSettings(), ChatModes.Agent, false);
+                Func<string, object, ToolExecutionRecord> execute = (id, arguments) =>
+                {
+                    var call = new ToolCall(Guid.NewGuid().ToString("N"), id, JsonConvert.SerializeObject(arguments));
+                    return runtime.ExecuteAsync(new ToolExecutionContext(call, runtime.Describe(call),
+                        "run", "turn", "step", DateTime.UtcNow, false, 1), CancellationToken.None).GetAwaiter().GetResult();
+                };
+                var reads = adapter.CountVbaCalls(FakeVbaOperation.ReadModule);
+                var rejected = execute(ResourceToolCatalog.SearchToolId, new {
+                    target = VbaResourceProvider.ProjectSemanticTarget(adapter.DocumentTitle), query = "ParentPath", limit = 50
+                });
+                AssertEqual(ToolExecutionOutcome.Error, rejected.Outcome, "project is not a searchable text body");
+                var error = JObject.Parse(rejected.Result.DataJson);
+                AssertEqual("resource_search_unsupported", (string)error["code"], "project search rejects before choosing an unavailable representation");
+                AssertEqual(false, (bool)error["retryable"], "the same project search is not retryable");
+                AssertContains(rejected.Message, "common.resources_find", "failure gives the project-wide search tool");
+                AssertContains(rejected.Message, "scope=vba", "failure gives the search scope");
+                AssertEqual(reads, adapter.CountVbaCalls(FakeVbaOperation.ReadModule), "rejection does not silently search module source");
+
+                var inventory = execute(ResourceToolCatalog.FindToolId, new { scope = "vba" });
+                AssertEqual(ToolExecutionOutcome.Ok, inventory.Outcome, "VBA discovery succeeds");
+                var project = JObject.Parse(inventory.Result.DataJson)["items"].Single(item => (string)item["type"] == "VBA project");
+                AssertContains((string)project["usage"], "common.resources_find", "project discovery advertises its code search route");
+
+                var found = execute(ResourceToolCatalog.FindToolId, new { scope = "vba", query = "ParentPath" });
+                AssertEqual(ToolExecutionOutcome.Ok, found.Outcome, "project-wide code discovery succeeds");
+                var modules = JObject.Parse(found.Result.DataJson)["items"].ToList();
+                AssertEqual(2, modules.Count, "code search finds both modules regardless of their names");
+                var target = (string)modules.Single(item => (string)item["title"] == "Module1")["target"];
+                var searched = execute(ResourceToolCatalog.SearchToolId, new { target, query = "ParentPath", limit = 1 });
+                AssertEqual(ToolExecutionOutcome.Ok, searched.Outcome, "within-module search reads source");
+                var page = JObject.Parse(searched.Result.DataJson);
+                AssertEqual(2, (int)page["totalMatches"], "case-insensitive search counts beyond the snippet limit");
+                AssertEqual(1, page["matches"].Count(), "snippet limit is honored");
+                AssertTrue((bool)page["scanComplete"] && (bool)page["sourceComplete"], "complete module source is searched");
+                var exactCase = execute(ResourceToolCatalog.SearchToolId, new { target, query = "ParentPath", matchCase = true });
+                AssertEqual(ToolExecutionOutcome.Ok, exactCase.Outcome, "case-sensitive module search succeeds");
+                AssertEqual(1, (int)JObject.Parse(exactCase.Result.DataJson)["totalMatches"], "module search honors matchCase");
+            });
+        }
+
         private static void GenericVbaSearchSeparatesScansAndMetadata()
         {
             WithTempPaths(paths =>

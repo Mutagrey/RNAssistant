@@ -43,7 +43,15 @@ namespace RNAssistant.Office.Services
                 return page;
             }
             var reference = selected.Descriptor.Mutable ? new ResourceRef(selected.Reference.Uri) : selected.Reference;
-            var representation = selected.Descriptor.Representations.Contains("source") ? "source" : "text";
+            var representation = selected.Descriptor.Representations.Contains(ResourceRepresentations.Source)
+                ? ResourceRepresentations.Source
+                : selected.Descriptor.Representations.Contains(ResourceRepresentations.Text)
+                    ? ResourceRepresentations.Text : null;
+            if (representation == null)
+                throw new ResourceRequestException("This target has no searchable text/source representation. " +
+                    (IntentUsage(selected.Type, selected.Descriptor) ??
+                        "Use common.resources_find with a query, then search a returned text/source target."),
+                    "resource_search_unsupported", false);
             var read = ReadWhole(session, reference, representation, cancellationToken).Result;
             if (read.Text == null)
                 throw new ResourceRequestException("This target has no searchable text representation.", "resource_search_unsupported", false);
@@ -803,6 +811,8 @@ namespace RNAssistant.Office.Services
             string type,
             ResourceDescriptor descriptor)
         {
+            if (type == "VBA project")
+                return "Read structure for the complete component inventory. To search code across the project, use common.resources_find with scope=vba and query; use common.resources_search only on a VBA module target.";
             if (type == "HTML file")
                 return "Read source for the complete file contents. Structure belongs to the HTML workspace root; a structure request on this file returns source explicitly.";
             if (type == "HTML workspace")

@@ -9,9 +9,9 @@ namespace RNAssistant.Office.Tools
     {
         internal static readonly ToolDescriptor Descriptor = new ToolDescriptor(
             ResourceToolCatalog.SearchToolId,
-            "Read-only: Search every available text/source character in one semantic target. Returns bounded literal snippets, totalMatches, and scanComplete. For indexed artifacts, partNumber locates a matching source part for common.resources_read. A negative result proves absence only when scanComplete=true. Exact revisions and offsets remain runtime-owned.",
+            "Read-only: Search every available text/source character in one semantic target that advertises text or source (for example, a VBA module). For code across a VBA project, use common.resources_find with scope=vba and query. A VBA project target supports structure only. Returns bounded literal snippets, totalMatches, and scanComplete. For indexed artifacts, partNumber locates a matching source part for common.resources_read. A negative result proves absence only when scanComplete=true. Exact revisions and offsets remain runtime-owned.",
             "{\"type\":\"object\",\"properties\":{" +
-            "\"target\":{\"type\":\"string\",\"description\":\"Semantic target from resource discovery.\",\"minLength\":1,\"maxLength\":1000}," +
+            "\"target\":{\"type\":\"string\",\"description\":\"Semantic target with a text or source representation, such as a VBA module. For project-wide VBA search use common.resources_find with scope=vba and query.\",\"minLength\":1,\"maxLength\":1000}," +
             "\"query\":{\"type\":\"string\",\"description\":\"Literal text to find.\",\"minLength\":1,\"maxLength\":500}," +
             "\"matchCase\":{\"type\":\"boolean\",\"description\":\"Whether matching is case-sensitive.\",\"default\":false}," +
             "\"limit\":{\"type\":\"integer\",\"description\":\"Maximum returned matches.\",\"minimum\":1,\"maximum\":50,\"default\":20}" +
