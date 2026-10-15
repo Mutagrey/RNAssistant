@@ -1919,6 +1919,50 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void ResourceRetainedWholeReadsMaterializeOnce()
+        {
+            WithTempPaths(paths =>
+            {
+                var payloads = new ChatBlobStore(paths);
+                var store = new ResourceAuthorityStore(paths);
+                var authority = new ResourceAuthorityService(store, store, payloads: payloads);
+                var session = new ChatSession();
+                var scope = authority.Scope(session, false);
+                var exact = new ResourceRef(ResourceStateProvider.Identity(scope, "whole-lines").Uri, "r1");
+                var body = "first\r\n" + new string('x', 96000) + "\r\nlast";
+                var payload = PayloadRef.FromBlob(payloads.StoreText(body, "text/plain"));
+                store.RegisterRevision(scope, new ResourceRevisionMetadata(exact, payload.Sha256, payload));
+                store.Publish(ResourceAuthorityCommit.Create(scope, 0, null,
+                    new[] { new ResourceHeadChange(exact.Identity, null, ResourceHeadState.Known(exact, 1)) },
+                    AuthorityCommitReason.InitialObservation));
+                var provider = new ResourceStateProvider(authority, payloads);
+                var reads = 0;
+                var counted = new TestResourceProvider("state") { ReadRequest = (owner, request) => {
+                    reads++; return provider.Read(owner, request);
+                } };
+                var gateway = new ResourceGatewayService(new[] { counted }, authority);
+                var whole = gateway.ReadWhole(session, exact, "text");
+                AssertEqual(1, reads, "whole retained read uses one snapshot materialization");
+                AssertEqual(body, whole.Result.Text, "whole read delivers every exact byte as decoded text");
+                AssertTrue(whole.Result.Complete && !whole.Result.Truncated && whole.Result.NextCursor == null,
+                    "whole delivery has no partial-page metadata");
+                AssertEqual(payload.Sha256, gateway.Evidence(session, whole.Result).Single().Payload.Sha256,
+                    "whole evidence retains its original payload");
+                reads = 0;
+                var lines = gateway.ReadLines(session, exact, "text", 3, 1);
+                AssertEqual(1, reads, "line selection also materializes the snapshot once");
+                AssertEqual("last", lines.Result.Text, "line selection crosses internal page boundaries");
+                var evidence = gateway.Evidence(session, lines.Result).Single();
+                AssertTrue(!evidence.Complete && evidence.Coverage.Kind == ResourceCoverageKinds.CharacterRange,
+                    "line selection never grants whole-read evidence");
+                AssertEqual("last", payloads.ReadText(evidence.Payload.ToBlobReference()), "only selected lines become observation bytes");
+                AssertEqual(body, payloads.ReadText(payload.ToBlobReference()), "selection preserves the original snapshot");
+                System.IO.File.Delete(payloads.PathFor(payload.Sha256));
+                AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() =>
+                    gateway.ReadWhole(session, exact, "text")).ErrorCode, "another operation cannot borrow a cached body");
+            });
+        }
+
         private static void ResourceRetainedStateReadsPreservePublication()
         {
             WithTempPaths(paths =>
@@ -2132,7 +2176,10 @@ namespace RNAssistant.Harness
                 session.Messages.Add(new ChatMessage { Role = "user", Content = "Continue editing." });
                 var active = PromptBudgetComposer.ConversationHistory(session, true, false);
                 AssertTrue(!active.Any(item => item.Id == history.Last().Id), "checkpoint removes the write frame");
-                var archived = ContextWorkingSet.Restore(session, active, authority, new AppSettings(), 100000).Messages.Where(m => m.SyntheticResourceObservation).ToList();
+                Func<IReadOnlyList<ChatMessage>, ModelContextSnapshot> restore = input => compiler.Compile(authority,
+                    new ChatMessage[0], input, null, new ToolCatalogEntry[0], new AppSettings(), 4096,
+                    workingSet: ContextWorkingSet.Restore(session, input, 100000));
+                var archived = restore(active).Messages.Where(m => m.SyntheticResourceObservation).ToList();
                 AssertEqual(1, archived.Count, "only the latest source is carried across compaction");
                 foreach (var protocol in new[] { false, true })
                 {
@@ -2140,11 +2187,10 @@ namespace RNAssistant.Harness
                         Content = "Continue with the already edited module.",
                         ResourceEvidence = history.Last().ResourceEvidence.ToList() };
                     var withInput = active.Concat(new[] { inputOnly }).ToList();
-                    var retained = ContextWorkingSet.Restore(session, withInput, authority, new AppSettings(), 100000).Messages.Where(m => m.SyntheticResourceObservation).ToList();
+                    var retained = restore(withInput).Messages.Where(m => m.SyntheticResourceObservation).ToList();
                     AssertEqual(1, retained.Count,
                         "current input references on later assistant messages cannot stand in for visible source bytes");
-                    var request = compiler.Compile(authority, new ChatMessage[0], withInput.Concat(retained).ToList(),
-                        null, new ToolCatalogEntry[0], new AppSettings(), 4096);
+                    var request = restore(withInput);
                     AssertTrue(request.Messages.Any(item => item.SyntheticResourceObservation &&
                         item.Content.Contains("CURRENT_SOURCE_VERSION")), "compaction restores the actual body, not only its reference");
                 }
@@ -2155,11 +2201,10 @@ namespace RNAssistant.Harness
                         resourceEvidence: new[] { history[1].ResourceEvidence.Single() }), int.MaxValue, "tool");
                 historicalRead.RunId = "run";
                 session.Messages.Add(historicalRead);
-                AssertEqual(1, ContextWorkingSet.Restore(session, active, authority, new AppSettings(), 100000).Messages.Where(m => m.SyntheticResourceObservation).ToList().Count,
+                AssertEqual(1, restore(active).Messages.Where(m => m.SyntheticResourceObservation).ToList().Count,
                     "historical read in archived history cannot displace the current source");
                 AssertEqual(currentPayload.Sha256,
-                    ContextWorkingSet.Restore(session,
-                        active.Concat(new[] { historicalRead }).ToList(), authority, new AppSettings(), 100000)
+                    restore(active.Concat(new[] { historicalRead }).ToList())
                         .Messages.Where(m => m.SyntheticResourceObservation).ToList()
                         .Single().ResourceEvidence.Single().Payload.Sha256,
                     "stale active evidence cannot suppress the archived current source");
@@ -2173,13 +2218,12 @@ namespace RNAssistant.Harness
                         new JObject { ["type"] = "shared context" }.ToString()),
                         resourceEvidence: new[] { sharedEvidence }), int.MaxValue, "tool");
                 session.Messages.Insert(0, sharedResult);
-                AssertEqual(1, ContextWorkingSet.Restore(session, active, authority, new AppSettings(), 100000).Messages.Where(m => m.SyntheticResourceObservation).ToList().Count,
+                AssertEqual(1, restore(active).Messages.Where(m => m.SyntheticResourceObservation).ToList().Count,
                     "shared-context archives never bypass their claim projection through source carry-forward");
                 sharedResult.Content = sharedResult.Content.Replace("shared context", "HTML data");
-                AssertEqual(1, ContextWorkingSet.Restore(session, active, authority, new AppSettings(), 100000).Messages.Where(m => m.SyntheticResourceObservation).ToList().Count,
+                AssertEqual(1, restore(active).Messages.Where(m => m.SyntheticResourceObservation).ToList().Count,
                     "HTML binding metadata never reappears as raw URI-bearing source after compaction");
-                var afterCompaction = compiler.Compile(authority, new ChatMessage[0], active.Concat(archived).ToList(),
-                    null, new ToolCatalogEntry[0], new AppSettings(), 4096);
+                var afterCompaction = restore(active);
                 var replay = string.Join("\n", afterCompaction.Messages.Select(item => item.Content));
                 AssertContains(replay, "CURRENT_SOURCE_VERSION", "compacted context hydrates exact current CAS source");
                 AssertTrue(!replay.Contains("OLD_SOURCE_VERSION"), "compaction retains no obsolete source");

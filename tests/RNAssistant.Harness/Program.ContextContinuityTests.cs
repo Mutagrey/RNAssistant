@@ -381,17 +381,17 @@ namespace RNAssistant.Harness
                 var durable = session.Messages.Single(m => m.Id == archived.Id);
                 var active = ContextCompactionService.BuildActiveWindow(session);
                 AssertTrue(!active.Any(m => m.Id == durable.Id), "diagnostic is beyond the compaction checkpoint");
-                var restored = ContextWorkingSet.Restore(session, active, authority, new AppSettings(), 6000);
+                var restored = ContextWorkingSet.Restore(session, active, 6000);
                 AssertEqual(durable.ResultPayload.Sha256, restored.Operations.Single().Source.ResultPayload.Sha256,
                     "selection retains the exact result provenance");
                 foreach (var projection in new[] { new ModelResultProjection(), ModelToolResultProjection.Instance })
                 {
                     var compiler = new ModelContextCompiler(blobs, projection);
-                    var retained = compiler.Compile(authority, new ChatMessage[0], active.Concat(restored.Messages).ToArray(),
+                    var retained = compiler.Compile(authority, new ChatMessage[0], active,
                         null, new ToolCatalogEntry[0], new AppSettings(), 12000, workingSet: restored);
-                    var controlSet = ContextWorkingSet.Restore(session, active, authority, new AppSettings(), 6000,
+                    var controlSet = ContextWorkingSet.Restore(session, active, 6000,
                         archive: new[] { ContinuityCall(inline), inline });
-                    var control = compiler.Compile(authority, new ChatMessage[0], active.Concat(controlSet.Messages).ToArray(),
+                    var control = compiler.Compile(authority, new ChatMessage[0], active,
                         null, new ToolCatalogEntry[0], new AppSettings(), 12000, workingSet: controlSet);
                     var receipt = retained.Messages.Single(m => m.CompletedOperation != null);
                     AssertEqual(control.Messages.Single(m => m.CompletedOperation != null).Content, receipt.Content,
@@ -408,17 +408,17 @@ namespace RNAssistant.Harness
                 AssertEqual(full, blobs.ReadText(durable.ResultPayload.ToBlobReference()), "historical bytes remain unchanged");
                 if (status == ToolResultStatus.Unknown)
                     AssertContains(RuntimeThrows<PromptBudgetExceededException>(() => new ModelContextCompiler(blobs).Compile(authority,
-                        new ChatMessage[0], active.Concat(restored.Messages).ToArray(), null, new ToolCatalogEntry[0],
+                        new ChatMessage[0], active, null, new ToolCatalogEntry[0],
                         new AppSettings(), 1, workingSet: restored)).Message, "required archived operation",
                         "an oversized unresolved outcome fails before any payload can be replaced or omitted");
                 System.IO.File.Delete(blobs.PathFor(durable.ResultPayload.Sha256));
                 RuntimeThrows<InvalidOperationException>(() => new ModelContextCompiler(blobs).Compile(authority,
-                    new ChatMessage[0], active.Concat(restored.Messages).ToArray(), null, new ToolCatalogEntry[0],
+                    new ChatMessage[0], active, null, new ToolCatalogEntry[0],
                     new AppSettings(), 12000, workingSet: restored));
                 if (status == ToolResultStatus.Error)
                 {
-                    var omitted = ContextWorkingSet.Restore(session, active, authority, new AppSettings(), 0);
-                    var request = new ModelContextCompiler(blobs).Compile(authority, new ChatMessage[0], active.Concat(omitted.Messages).ToArray(),
+                    var omitted = ContextWorkingSet.Restore(session, active, 0);
+                    var request = new ModelContextCompiler(blobs).Compile(authority, new ChatMessage[0], active,
                         null, new ToolCatalogEntry[0], new AppSettings(), 12000, workingSet: omitted);
                     AssertEqual(0, request.Receipt.HydratedPayloads, "an unselected optional receipt never reads CAS");
                 }
@@ -454,8 +454,8 @@ namespace RNAssistant.Harness
                 var authority = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new ResourceAuthoritySnapshot[0]),
                     "pack", new SkillCatalogSnapshot(null), null, 1);
                 var active = ContextCompactionService.BuildActiveWindow(session);
-                var set = ContextWorkingSet.Restore(session, active, authority, new AppSettings(), 6000);
-                var compiled = new ModelContextCompiler(blobs).Compile(authority, new ChatMessage[0], active.Concat(set.Messages).ToArray(),
+                var set = ContextWorkingSet.Restore(session, active, 6000);
+                var compiled = new ModelContextCompiler(blobs).Compile(authority, new ChatMessage[0], active,
                     null, new ToolCatalogEntry[0], new AppSettings(), 12000, workingSet: set);
                 var receipt = compiled.Messages.Single(item => item.CompletedOperation != null);
                 AssertEqual(tool == "files.move" ? "index.html,archive/index.html" : "index.html",
@@ -470,7 +470,7 @@ namespace RNAssistant.Harness
                     AssertTrue(storedCall.ToolCalls.Count == 0, "compilation never rewrites the durable accepted-call header");
                     System.IO.File.Delete(blobs.PathFor(storedCall.AcceptedCallPayload.Sha256));
                     RuntimeThrows<InvalidOperationException>(() => new ModelContextCompiler(blobs).Compile(authority,
-                        new ChatMessage[0], active.Concat(set.Messages).ToArray(), null, new ToolCatalogEntry[0],
+                        new ChatMessage[0], active, null, new ToolCatalogEntry[0],
                         new AppSettings(), 12000, workingSet: set));
                 }
             });
@@ -499,11 +499,11 @@ namespace RNAssistant.Harness
                     session.Messages.Add(ContinuityCall(result)); session.Messages.Add(result);
                 }
                 SetContinuityCheckpoint(session, session.Messages.Last());
-                var set = ContextWorkingSet.Restore(session, new ChatMessage[0], authority, new AppSettings(), 120);
+                var set = ContextWorkingSet.Restore(session, new ChatMessage[0], 120);
                 var projected = 0;
                 var projection = new ModelResultProjection((tool, result, tools, skills) => { projected++; return result; });
                 var compiler = new ModelContextCompiler(blobs, projection);
-                var compiled = compiler.Compile(authority, new ChatMessage[0], set.Messages, null, new ToolCatalogEntry[0],
+                var compiled = compiler.Compile(authority, new ChatMessage[0], new ChatMessage[0], null, new ToolCatalogEntry[0],
                     new AppSettings(), externalized ? 12000 : 100000, workingSet: set);
                 AssertEqual(0, compiled.Receipt.OperationReceipts, "oversized receipts do not fit the optional token budget");
                 AssertTrue(projected > 0 && projected <= 64, "rejected optional candidates count toward the work limit");
@@ -519,8 +519,8 @@ namespace RNAssistant.Harness
                 unknown.Content = ToolResultWire.Write(unknown.ToolCallId, unknown.ToolName,
                     ToolResult.Unknown("Inspect before any retry.", "{\"payload_externalized\":true}"));
                 session.Messages.Add(ContinuityCall(unknown)); session.Messages.Add(unknown);
-                set = ContextWorkingSet.Restore(session, new ChatMessage[0], authority, new AppSettings(), 0);
-                var required = compiler.Compile(authority, new ChatMessage[0], set.Messages, null, new ToolCatalogEntry[0],
+                set = ContextWorkingSet.Restore(session, new ChatMessage[0], 0);
+                var required = compiler.Compile(authority, new ChatMessage[0], new ChatMessage[0], null, new ToolCatalogEntry[0],
                     new AppSettings(), 12000, workingSet: set);
                 AssertEqual("unresolved", required.Messages.Single(item => item.CompletedOperation != null).CompletedOperation.ToolCallId,
                     "unresolved effects remain mandatory with no optional work budget");
@@ -573,8 +573,8 @@ namespace RNAssistant.Harness
                     Messages = new List<ChatMessage> { ContinuityCall(mutation), mutation } };
                 var active = ContextCompactionService.BuildActiveWindow(session);
                 AssertTrue(!active.Any(m => m.Id == mutation.Id), "fixture actually compacts the original mutation");
-                var restored = ContextWorkingSet.Restore(session, active, authority, new AppSettings(), 6000);
-                var next = compiler.Compile(authority, new ChatMessage[0], active.Concat(restored.Messages).ToArray(),
+                var restored = ContextWorkingSet.Restore(session, active, 6000);
+                var next = compiler.Compile(authority, new ChatMessage[0], active,
                     null, new ToolCatalogEntry[0], new AppSettings(), 10000, workingSet: restored);
                 var receipt = next.Messages.Single(m => m.CompletedOperation != null);
                 AssertEqual("mutation", receipt.CompletedOperation.ToolCallId, "operation correlation survives compaction");
@@ -805,6 +805,51 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void ContextContinuitySelectsBodiesOnce()
+        {
+            WithTempPaths(paths =>
+            {
+                var blobs = new ChatBlobStore(paths);
+                var body = "CURRENT_SOURCE_" + new string('Ж', 1500);
+                var payload = PayloadRef.FromBlob(blobs.StoreText(body, "text/plain"));
+                var scope = new ResourceAuthorityScopeId("document", "review");
+                var exact = new ResourceRef("rna://vba/review/module", "r1");
+                var observation = new ResourceEvidence("source", scope, exact, "source", ResourceCoverage.Whole(), true, 1, payload);
+                var result = ContinuityResult("archived_source", "common.resources_read", ToolResult.Ok("Read.",
+                    "{\"target\":\"VBA module: Review\",\"representation\":\"source\",\"complete\":true}"));
+                result.ResourceEvidence.Add(observation);
+                var session = new ChatSession { Messages = new List<ChatMessage> { ContinuityCall(result), result } };
+                SetContinuityCheckpoint(session, result);
+                var authority = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new[] {
+                    new ResourceAuthoritySnapshot(scope, 1, null, 0, new[] { ResourceHeadState.Known(exact, 1) }) }),
+                    "pack", new SkillCatalogSnapshot(null), null, 1);
+                var compiler = new ModelContextCompiler(blobs);
+                var set = ContextWorkingSet.Restore(session, new ChatMessage[0], 1000);
+                var restored = compiler.Compile(authority, new ChatMessage[0], new ChatMessage[0], null,
+                    new ToolCatalogEntry[0], new AppSettings(), 12000, workingSet: set);
+                AssertEqual(1, restored.Receipt.RetainedBodies, "body admission uses projected token cost, not a second byte-as-character estimate");
+                AssertEqual(1, restored.Receipt.HydratedPayloads, "one selected exact body is hydrated once");
+                AssertContains(string.Join("\n", restored.Messages.Select(item => item.Content)), body, "the complete current source survives compaction");
+                System.IO.File.Delete(blobs.PathFor(payload.Sha256));
+                var omitted = compiler.Compile(authority, new ChatMessage[0], new ChatMessage[0], null,
+                    new ToolCatalogEntry[0], new AppSettings(), 12000,
+                    workingSet: ContextWorkingSet.Restore(session, new ChatMessage[0], 0));
+                AssertEqual(0, omitted.Receipt.HydratedPayloads, "zero body budget never touches missing CAS bytes");
+                AssertEqual(1, omitted.Receipt.EvictedBodies, "budget omission is observable independently of missing storage");
+                var activeResult = ContinuityResult("active_source", "common.resources_read", ToolResult.Ok("Read.",
+                    new JObject { ["target"] = "VBA module: Review", ["representation"] = "source", ["complete"] = true, ["text"] = body }.ToString()));
+                activeResult.ResourceEvidence.Add(observation);
+                var active = new[] { ContinuityCall(activeResult), activeResult };
+                var deduplicated = compiler.Compile(authority, new ChatMessage[0], active, null,
+                    new ToolCatalogEntry[0], new AppSettings(), 12000,
+                    workingSet: ContextWorkingSet.Restore(session, active, 1000));
+                AssertEqual(0, deduplicated.Receipt.HydratedPayloads, "active coverage excludes the archived copy before CAS hydration");
+                AssertEqual(0, deduplicated.Receipt.RetainedBodies, "an active body is not counted as archive restoration");
+                AssertTrue(deduplicated.Receipt.Deduplicated > 0, "active and archived bodies use one deduplication policy");
+                AssertContains(string.Join("\n", deduplicated.Messages.Select(item => item.Content)), body, "the active source remains complete");
+            });
+        }
+
         private static void ContextContinuityRestoresWorkingSet()
         {
             var scope = new ResourceAuthorityScopeId("catalog", "test");
@@ -829,16 +874,14 @@ namespace RNAssistant.Harness
                 new ResourceAuthoritySnapshot(scope, 1, null, 0, new[] { ResourceHeadState.Known(source, 1) }) }),
                 "pack", new SkillCatalogSnapshot(new[] { definition }), null, 4);
             var active = ContextCompactionService.BuildActiveWindow(session);
-            var restored = ContextWorkingSet.Restore(session, active, authority, new AppSettings(), 4000);
-            AssertEqual(2, restored.IncludedBodies, "loaded skill and selected rows survive checkpoint");
-            AssertTrue(restored.Messages.Any(m => (m.Content ?? "").Contains("KEEP_COMPLETE_BODY")), "complete skill body is reused");
-            var compiled = new ModelContextCompiler(projection: ModelToolResultProjection.Instance).Compile(authority, new ChatMessage[0], active.Concat(restored.Messages).ToList(),
+            var restored = ContextWorkingSet.Restore(session, active, 4000);
+            var compiled = new ModelContextCompiler(projection: ModelToolResultProjection.Instance).Compile(authority, new ChatMessage[0], active,
                 null, new ToolCatalogEntry[0], new AppSettings(), 6000,
-                retainedBodies: restored.IncludedBodies, evictedBodies: restored.OmittedBodies, workingSet: restored);
+                workingSet: restored);
             AssertTrue(compiled.Messages.Any(m => m.CompletedOperation?.ToolCallId == "write_done" &&
                 m.CompletedOperation.Status == ToolResultStatus.Ok), "mutation receipt survives independently of LLM summary");
             Func<ContextWorkingSet, IReadOnlyList<ChatMessage>> compileSet = set => new ModelContextCompiler().Compile(authority,
-                new ChatMessage[0], active.Concat(set.Messages).ToList(), null, new ToolCatalogEntry[0], new AppSettings(),
+                new ChatMessage[0], active, null, new ToolCatalogEntry[0], new AppSettings(),
                 6000, workingSet: set).Messages;
             AssertEqual(2, compiled.Receipt.RetainedBodies, "receipt exposes real retention");
             AssertContains(string.Join("\n", compiled.Messages.Select(m => m.Content)), "KEEP_COMPLETE_BODY", "model receives the still current complete skill after compaction");
@@ -850,10 +893,9 @@ namespace RNAssistant.Harness
             var removedAuthority = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new[] {
                 new ResourceAuthoritySnapshot(scope, 2, null, 0, new[] { ResourceHeadState.Removed(source.Identity, 2) }) }),
                 "pack", new SkillCatalogSnapshot(new[] { definition }), null, 4);
-            var removed = ContextWorkingSet.Restore(session, active, removedAuthority, new AppSettings(), 4000);
-            AssertEqual(0, removed.IncludedBodies, "removed resources do not restore current bodies");
             var removedRequest = new ModelContextCompiler(projection: ModelToolResultProjection.Instance).Compile(removedAuthority,
-                new ChatMessage[0], active.Concat(restored.Messages).ToList(), null, new ToolCatalogEntry[0], new AppSettings(), 6000, workingSet: restored);
+                new ChatMessage[0], active, null, new ToolCatalogEntry[0], new AppSettings(), 6000, workingSet: restored);
+            AssertEqual(0, removedRequest.Receipt.RetainedBodies, "removed resources do not restore current bodies");
             AssertTrue(removedRequest.Receipt.ExcludedUnavailable > 0, "compilation records removed evidence as unavailable");
             AssertTrue(!removedRequest.Messages.Any(m => (m.Content ?? "").Contains("KEEP_COMPLETE_BODY")),
                 "a previously restored body cannot survive removal in the next frozen request");
@@ -862,23 +904,26 @@ namespace RNAssistant.Harness
                 ToolResult.Error(new string('x', 24000)));
             session.Messages.Add(ContinuityCall(oversized)); session.Messages.Add(oversized);
             checkpoint.ThroughMessageId = oversized.Id;
-            var withLarge = ContextWorkingSet.Restore(session, active, authority, new AppSettings(), 4000);
+            var withLarge = ContextWorkingSet.Restore(session, active, 4000);
             AssertTrue(compileSet(withLarge).Any(m => m.CompletedOperation?.ToolCallId == "write_done"),
                 "oversized optional receipt does not hide older affordable receipts");
-            var evicted = ContextWorkingSet.Restore(session, active, authority, new AppSettings(), 0);
-            AssertEqual(2, evicted.OmittedBodies, "body budget is enforced before hydration");
-            AssertTrue(!evicted.Messages.Any(m => (m.Content ?? "").Contains("KEEP_COMPLETE_BODY")), "eviction cannot silently retain bytes");
-            AssertContains(string.Join("\n", evicted.Messages.Select(m => m.Content)), "not missing resources", "body absence is distinct from resource absence");
+            var evicted = ContextWorkingSet.Restore(session, active, 0);
+            var evictedRequest = new ModelContextCompiler().Compile(authority, new ChatMessage[0], active,
+                null, new ToolCatalogEntry[0], new AppSettings(), 6000, workingSet: evicted);
+            AssertEqual(2, evictedRequest.Receipt.EvictedBodies, "body budget is enforced before hydration");
+            AssertEqual(0, evictedRequest.Receipt.HydratedPayloads, "omitted bodies do not read CAS");
+            AssertTrue(!evictedRequest.Messages.Any(m => (m.Content ?? "").Contains("KEEP_COMPLETE_BODY")), "eviction cannot silently retain bytes");
+            AssertContains(string.Join("\n", evictedRequest.Messages.Select(m => m.Content)), "not missing resources", "body absence is distinct from resource absence");
             var pending = ContinuityResult("uncertain", "files.patch", ToolResult.Unknown("Inspect before retry."));
             pending.ExecutionProgress = new ToolExecutionProgress(ToolExecutionOutcome.Unknown);
             pending.ResourceEffect = new ResourceEffect("unknown", "files.patch", ResourceEffectOutcome.UnknownAfterDispatch);
             session.Messages.Add(ContinuityCall(pending)); session.Messages.Add(pending);
             checkpoint.ThroughMessageId = pending.Id;
-            var pinned = ContextWorkingSet.Restore(session, active, authority, new AppSettings(), 0);
+            var pinned = ContextWorkingSet.Restore(session, active, 0);
             AssertTrue(compileSet(pinned).Any(m => m.CompletedOperation?.ToolCallId == "uncertain"),
                 "unknown effects are retained even when the optional budget is zero");
             var exhausted = false;
-            try { new ModelContextCompiler().Compile(authority, new ChatMessage[0], pinned.Messages,
+            try { new ModelContextCompiler().Compile(authority, new ChatMessage[0], new ChatMessage[0],
                 null, new ToolCatalogEntry[0], new AppSettings(), 1, workingSet: pinned); }
             catch (PromptBudgetExceededException) { exhausted = true; }
             AssertTrue(exhausted, "mandatory receipts cannot be silently dropped to fit a request");
@@ -888,14 +933,14 @@ namespace RNAssistant.Harness
                 new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.RefreshRequired,
                     source.Identity, "text", "test"));
             session.Messages.Add(ContinuityCall(neededRead)); session.Messages.Add(neededRead);
-            var recoverySet = ContextWorkingSet.Restore(session, active, authority, new AppSettings(), 0);
+            var recoverySet = ContextWorkingSet.Restore(session, active, 0);
             AssertContains(string.Join("\n", compileSet(recoverySet).Select(m => m.Content)), "RefreshRequired",
                 "an earlier successful observation cannot release a later recovery");
             var failedRefresh = ContinuityResult("failed_refresh", "common.resources_read", ToolResult.Error("Read failed."));
             failedRefresh.ExecutionProgress = new ToolExecutionProgress(ToolExecutionOutcome.Error);
             failedRefresh.ResourceEvidence.Add(skill.ResourceEvidence.Single());
             session.Messages.Add(ContinuityCall(failedRefresh)); session.Messages.Add(failedRefresh);
-            AssertTrue(compileSet(ContextWorkingSet.Restore(session, active, authority, new AppSettings(), 0))
+            AssertTrue(compileSet(ContextWorkingSet.Restore(session, active, 0))
                 .Any(m => m.CompletedOperation?.ToolCallId == "needs_refresh"),
                 "a failed later read cannot release recovery even with matching evidence");
             var refreshed = ContinuityResult("refreshed", "common.resources_read", ToolResult.Ok("Read."));
@@ -903,13 +948,13 @@ namespace RNAssistant.Harness
             refreshed.ExcludeFromModelContext = true;
             refreshed.ResourceEvidence.Add(skill.ResourceEvidence.Single());
             session.Messages.Add(ContinuityCall(refreshed)); session.Messages.Add(refreshed);
-            var resolved = ContextWorkingSet.Restore(session, active, authority, new AppSettings(), 0);
+            var resolved = ContextWorkingSet.Restore(session, active, 0);
             AssertTrue(!compileSet(resolved).Any(m => m.CompletedOperation?.ToolCallId == "needs_refresh"),
                 "a later successful observation releases recovery even when excluded from the prompt");
             neededRead.ExecutionProgress = new ToolExecutionProgress(ToolExecutionOutcome.Error,
                 new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.Replan));
             session.LastRun = new ChatRunRecord { RunId = "new-user-run" };
-            var newRun = ContextWorkingSet.Restore(session, active, authority, new AppSettings(), 0);
+            var newRun = ContextWorkingSet.Restore(session, active, 0);
             AssertTrue(!compileSet(newRun).Any(m => m.CompletedOperation?.ToolCallId == "needs_refresh") &&
                 compileSet(newRun).Any(m => m.CompletedOperation?.ToolCallId == "uncertain"),
                 "a new user run releases old replan receipts but preserves unresolved effects");

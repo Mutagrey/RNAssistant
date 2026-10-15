@@ -603,7 +603,7 @@ namespace RNAssistant.Office.Services
             { throw new ResourceRequestException(error.Message, "resource_part_invalid", false); }
         }
 
-        private ResourceDescriptor Describe(ChatSession session, ChatArtifact artifact, bool compact)
+        internal static ResourceDescriptor DescribeMetadata(ChatSession session, ChatArtifact artifact)
         {
             var attachment = FindExactAttachment(session, artifact);
             var representations = new List<string> { "metadata" };
@@ -631,11 +631,25 @@ namespace RNAssistant.Office.Services
             if (!string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId) && (artifact.Kind == ChatArtifactKinds.Markdown ||
                 artifact.Kind == ChatArtifactKinds.PlanDocument || DocumentArtifactStore.IsMarkdownOriginal(attachment) && !attachment.TextTruncated))
                 result.Metadata["sectionRead"] = "atx-heading";
+            if (string.Equals(artifact.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase))
+            {
+                result.SnapshotTarget = ResourceGatewayService.IntentTarget(result);
+                if (artifact.Id == session.ActiveHtmlArtifactId)
+                    result.CurrentTarget = ChatHtmlResourceCatalog.CurrentWorkspaceTarget;
+                result.Metadata["memberKinds"] = ChatHtmlResourceCatalog.FileKind + "," + ChatHtmlResourceCatalog.DataKind;
+                result.Metadata["memberDiscovery"] = "List this provider with an exact member kind.";
+            }
+            return result;
+        }
+
+        private ResourceDescriptor Describe(ChatSession session, ChatArtifact artifact, bool compact)
+        {
+            var result = DescribeMetadata(session, artifact);
             if (MarkdownDocumentIdentity.LogicalId(artifact.Id) != null)
                 result.Metadata["description"] = (string)JObject.Parse(artifact.MetadataJson ?? "{}")["description"];
             if (_payloads != null)
             {
-                result.ViewCapabilities.AddRange(ArtifactViewerService.BinaryViewCapabilities(artifact, attachment, _readAttachmentBytes != null));
+                result.ViewCapabilities.AddRange(ArtifactViewerService.BinaryViewCapabilities(artifact, FindExactAttachment(session, artifact), _readAttachmentBytes != null));
                 result.Representations.AddRange(result.ViewCapabilities.Select(view => view.View));
             }
             if (!compact)
@@ -651,14 +665,6 @@ namespace RNAssistant.Office.Services
                     .ToList();
                 result.SourceMessageId = artifact.SourceMessageId;
                 result.ContentSha256 = artifact.ContentSha256;
-            }
-            if (string.Equals(artifact.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase))
-            {
-                result.SnapshotTarget = ResourceGatewayService.IntentTarget(result);
-                if (artifact.Id == session.ActiveHtmlArtifactId)
-                    result.CurrentTarget = ChatHtmlResourceCatalog.CurrentWorkspaceTarget;
-                result.Metadata["memberKinds"] = ChatHtmlResourceCatalog.FileKind + "," + ChatHtmlResourceCatalog.DataKind;
-                result.Metadata["memberDiscovery"] = "List this provider with an exact member kind.";
             }
             return result;
         }

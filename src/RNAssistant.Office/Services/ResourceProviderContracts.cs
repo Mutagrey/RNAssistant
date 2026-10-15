@@ -10,6 +10,10 @@ namespace RNAssistant.Office.Services
         public ResourceReadResult Result { get; set; }
         public IReadOnlyList<ChatAttachment> ModelAttachments { get; set; }
         public IReadOnlyList<ResourceRef> ResourceRefs { get; set; }
+        // Exact text already verified by the retained reader, owned by this read
+        // operation only. Whole/line consumers reuse it without paging through CAS.
+        [Newtonsoft.Json.JsonIgnore]
+        public string RetainedText { get; set; }
 
         public ResourceReadSelection()
         {

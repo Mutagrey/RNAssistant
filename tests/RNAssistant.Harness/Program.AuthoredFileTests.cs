@@ -30,6 +30,22 @@ namespace RNAssistant.Harness
                 var original = session.Artifacts.Single(item => item.Title == "index.html");
                 AssertTrue(ChatArtifactResourceProvider.FindExactAttachment(session, original) == null,
                     "created HTML has retained file bytes, not an uploaded attachment");
+                Action<ChatSession> assertPromptTargets = owner =>
+                {
+                    var rows = ChatResourcePromptIndex.Build(owner, 5000).Split('\n')
+                        .Where(line => line.StartsWith("- target=", StringComparison.Ordinal)).ToArray();
+                    AssertTrue(rows.Length > 0, "authored files are advertised in context");
+                    foreach (var row in rows)
+                    {
+                        var promptTarget = Newtonsoft.Json.JsonConvert.DeserializeObject<string>(
+                            row.Substring(9, row.IndexOf(" | type=", StringComparison.Ordinal) - 9));
+                        var resolved = executor.ResourceGateway.ResolveIntentTarget(owner, promptTarget);
+                        if (!resolved.Descriptor.Metadata.ContainsKey("authoredFile")) continue;
+                        AssertTrue(promptTarget.StartsWith("file: ", StringComparison.Ordinal), "prompt uses the authored-file target");
+                        AssertContains(row, "read=text", "retained authored text advertises a supported read");
+                    }
+                };
+                assertPromptTargets(session);
                 var viewer = new ArtifactViewerService(executor.ResourceGateway);
                 Action<ChatSession, ChatArtifact, string> assertSource = (owner, artifact, expected) =>
                 {
@@ -114,6 +130,7 @@ namespace RNAssistant.Harness
                 AssertTrue(store.DocumentArtifacts.ExportBytes(restarted, ChatResourceUri.CreateArtifactRevision(restarted, retained))
                     .SequenceEqual(bytes), "UTF-16 BOM and bytes survive hydration and another save");
                 assertSource(restarted, retained, uploadedText);
+                assertPromptTargets(restarted);
                 var rawPath = System.IO.Path.Combine(FixturePaths.Value.ChatBlobDirectory,
                     rawHash.Substring(0, 2), rawHash + ".blob");
                 System.IO.File.Move(rawPath, rawPath + ".held");

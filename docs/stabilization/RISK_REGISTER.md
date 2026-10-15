@@ -85,21 +85,35 @@ user incident to the artificial filesystem-damage scenario below.
 The separate [authored UTF-16 reopening failure](#authored-utf-16-file-blocks-chat-reopening--2026-10-14)
 is fixed host-neutral through separate raw-byte ownership and lazy decoded views.
 
-Architectural follow-up, **Office retained-reader owner**, observed by source
-inspection: `ResourceSnapshotReadService.Read` hydrates and verifies the whole CAS
-body for every 32,000-character page, while `ResourceGatewayService.ReadWhole`
-reassembles those pages; `ReadLines` also takes this whole-read route. Thus one
-2,000,000-character retained view can require 63 full body reads. No latency claim
-or benchmark is made. Materialize an exact bounded body once per operation and
-slice it, or use the existing indexed-view owner where applicable; remove the
-page-to-whole-to-page reconstruction without adding a persistent body cache.
+- **P2 / Office prompt index and artifact descriptors — fixed host-neutral 2026-10-15:**
+  The incomplete prompt descriptor advertised authored files as `attachment: ...`,
+  while discovery/resolution used `file: ...`. The index now consumes the provider's
+  shared metadata descriptor; its separate type/representation classifiers are
+  removed. Authored-file targets resolve before and after UTF-16 save/restart.
 
-The receipt boundary now has one compiler-owned hydration, model projection and
-final budget path for active and archived operation facts. Working-set restoration
-supplies candidates with exact provenance; the early result projection is removed.
-The separate retained-reader paging optimization above remains a proposal. CAS,
-authority/publication barriers and append-only events stay authoritative; this
-change grants no operation replay authority.
+The **Office retained-reader follow-up is complete host-neutral**. Whole and line
+reads consume the complete text already verified by `ResourceSnapshotReadService`
+within the same operation. The former page loop could reread a 2,000,000-character
+CAS body 63 times; retained whole/line delivery now uses one materialization.
+Generic provider pagination remains bounded. Line evidence contains only the
+selected excerpt, and missing bytes fail on the next operation; there is no
+persistent body cache. No wall-clock performance claim is made.
+
+The **Core context-selection follow-up is complete host-neutral**. `ContextWorkingSet`
+now supplies original archive candidates only. Active and archived bodies share
+compiler currentness filtering, exact coverage deduplication, lazy hydration and
+projected token budgeting. Separate working-set filtering/budget estimation and
+application-side body injection are removed. A current source that fits after
+projection is no longer discarded by estimating CAS bytes as characters. Optional
+input work remains bounded; unresolved operation facts remain mandatory. CAS,
+authority/publication barriers and append-only events stay authoritative.
+
+Implementation validation — 2026-10-15: Harness and CLI builds pass; 25 focused
+Harness checks and both controlled CLI compaction/resume cases pass. Coverage
+includes prompt-target restart, whole/line materialization and excerpt evidence,
+missing-body isolation, active/archive deduplication before CAS reads, projected
+body budgeting, current mutation sources, removed evidence and required outcomes.
+No full suite, real-model or Windows/Office/VSTO qualification was run.
 
 Original review validation: existing `storage: CAS` 7/7 and `context continuity:` 10/10 passed without
 rebuilding the project. A small separate probe reproduces the three gaps above;
@@ -107,6 +121,17 @@ its code, output and source/assembly fingerprints are retained at
 `/var/folders/k9/hr_94nt142x1f43jr6g0wr_00000gp/T/rna-cas-review-20261014-y33vnjl6/`.
 Only that probe was compiled. No full suite, model HTTP, Office/VSTO or Windows
 qualification was performed.
+
+Re-review validation — 2026-10-15: the existing assembly at `cc48a6dc` passed
+`storage: CAS` 9/9, `context continuity:` 11/11, frozen evidence 1/1, authored-file
+viewer/revision history 1/1 and document removal/restart 1/1 (23 checks). All three
+original defects and the UTF-16 failure can leave the active defect list. Concurrent
+working-tree hardening of GC filenames and archived call/byte admission was read
+but is not covered by these no-build results. A separate small probe against a
+copied assembly reproduces the prompt/discovery mismatch through the real resolver;
+source, output and source/assembly hashes are retained at
+`/var/folders/k9/hr_94nt142x1f43jr6g0wr_00000gp/T/rna-cas-rereview-20261015-fsqivjdf/`.
+Only the probe was compiled; no full suite or Office qualification was run.
 
 ## VBA patching and completion photos — 2026-10-14
 

@@ -28,10 +28,8 @@ namespace RNAssistant.Office.Services
                 CallableToolPack.Create(mode, session?.Host, null, tools).Revision, new SkillCatalogSnapshot(skills), null,
                 session?.Revision ?? 0);
             var budget = historyBudgetTokens > 0 ? historyBudgetTokens : ModelContextBudget.InputBudgetTokens(settings);
-            var workingSet = ContextWorkingSet.Restore(session, history, authority, settings,
-                Math.Max(0, Math.Min(budget / 3, budget - ContextWorkingSet.EstimateCost(required.Concat(history), settings))));
-            history.AddRange(workingSet.Messages);
-            var snapshot = compiler.Compile(authority, required, history, context?.Notes, tools, settings, budget, retainedBodies: workingSet.IncludedBodies, evictedBodies: workingSet.OmittedBodies, workingSet: workingSet);
+            var workingSet = ContextWorkingSet.Restore(session, history, budget / 3);
+            var snapshot = compiler.Compile(authority, required, history, context?.Notes, tools, settings, budget, workingSet: workingSet);
             recordReceipt?.Invoke(snapshot.Receipt);
             return snapshot.Messages.ToList();
         }

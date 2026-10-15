@@ -1796,8 +1796,11 @@ Owner: Conversation/model context; совместные границы — Core 
   File owner сохраняет version guard, journal и read-back; typed recovery не
   разрешает повтор unknown effect. Pending-вызов без требуемого prepared state
   не исполняется через fallback: его следует отклонить и запросить операцию заново.
-- Core `ContextWorkingSet` общий для Office request/preview и CLI. Он восстанавливает
-  current bodies из events/CAS, без provider calls и второго store. Неизвестные
+- Core `ContextWorkingSet` общий для Office request/preview и CLI. Он передаёт
+  исходные архивные кандидаты compiler, без provider calls и второго store.
+  `ModelContextCompiler` единолично проверяет актуальность, устраняет дубликаты
+  active/archive coverage и материализует тела. Активное видимое тело имеет
+  приоритет; ссылка во входных аргументах не заменяет наблюдение. Неизвестные
   эффекты и unresolved typed recovery текущего run удерживаются обязательно;
   matching refresh проверяет тот же `ToolRecoveryContract`, что и kernel.
   Replan без точной зависимости требует исправленных аргументов и не снимается
@@ -1806,11 +1809,13 @@ Owner: Conversation/model context; совместные границы — Core 
   возвращает `PromptBudgetExceeded`, а не удаляет факты.
 - Необязательный архив ограничен свободным местом и третью message budget:
   сначала до 32 current bodies, затем до 24 коротких receipts из оставшегося
-  места (максимум 2048 tokens). Compiler рассматривает не более 64 необязательных
-  кандидатов; суммарный вход для их материализации ограничен меньшим из 256 KiB
-  и request payload limit. Размер exact call + result учитывается до чтения CAS,
+  места (максимум 2048 tokens). Compiler рассматривает не более 64 кандидатов
+  тел и 64 кандидатов receipts. Вход для тел ограничен request payload limit;
+  для receipts — меньшим из 256 KiB и request payload limit. Размер exact call + result учитывается до чтения CAS,
   включая кандидатов, чей receipt затем не поместится. Слишком большой кандидат
   пропускается; более ранние рассматриваются в пределах этих лимитов.
+  Token budget тел считается после общей model projection; отдельной оценки
+  CAS bytes как количества символов больше нет. Retained/evicted counts выдаёт compiler.
   Selection по recency детерминирован; exact coverage и authority остаются обязательны.
   Media не переигрывается как доставленное изображение; Task List/Plan остаются
   у существующих владельцев.
@@ -1828,6 +1833,8 @@ Owner: Conversation/model context; совместные границы — Core 
   отсутствие тела в запросе от отсутствия ресурса.
 - `ResourceGatewayService.ReadWhole` — общий владелец полной сборки ресурса и core
   skill. Нет отдельного 24000-character skill path, обещающего полную загрузку.
+  Для retained CAS используется одно материализованное тело на whole/line operation;
+  выбор строк публикует только excerpt, без whole-read authority и межоперационного cache.
   `ResourceSelectorContract` используется read/HTML/JS: record path отделён от
   `pageIndex`, Office canonical path выбирает runtime. HTML требует явный `view`,
   default `policy=head`; `exact` выбирается для снимка. `table` и `records` сохраняют

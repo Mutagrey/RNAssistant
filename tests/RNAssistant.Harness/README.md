@@ -7,6 +7,14 @@ archived diagnostic provenance, accepted operation targets, bounded optional
 materialization and inline/CAS parity after checkpoint/save/restart. The controlled CLI `compaction_resume_smoke.py` checks
 the Runtime consumer through process loss, external drift and same-run recovery.
 
+`authored file: HTML viewer and revision history` also round-trips prompt targets
+through the real resolver before and after UTF-16 restart. `artifacts: prompt`
+covers the shared metadata projection. `resource cutover: retained whole and line
+reads materialize once` checks one retained read, exact excerpt evidence and no
+cross-operation cache. `context continuity: selects active and archived bodies
+once` covers projected body cost, zero-budget/no-CAS admission and active/archive
+deduplication; `resource cutover: current source` covers writes and compaction.
+
 Architectural simplification: `storage: runtime commits`,
 `authored file: HTML viewer and revision history`, `agent: native read batch`,
 `plan mode: native question` and the three `agent:` resource-media cases cover the

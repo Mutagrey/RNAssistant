@@ -69,7 +69,7 @@ namespace RNAssistant.Office.Services
                 .ToList();
             var descriptors = artifacts.ToDictionary(
                 artifact => artifact.Id,
-                IntentDescriptor,
+                artifact => ChatArtifactResourceProvider.DescribeMetadata(session, artifact),
                 StringComparer.OrdinalIgnoreCase);
 
             var rows = new List<string>();
@@ -99,8 +99,8 @@ namespace RNAssistant.Office.Services
                     (artifact.ContentByteLength.HasValue ? " | bytes=" + artifact.ContentByteLength.Value : string.Empty) +
                     (parent == null ? string.Empty : " | parentTarget=" + Newtonsoft.Json.JsonConvert.SerializeObject(
                         ResourceGatewayService.IntentTarget(descriptors[parent.Id]))) +
-                    " | reps=" + RepresentationHints(artifact) +
-                    " | read=" + ReadHint(artifact);
+                    " | reps=" + string.Join(",", descriptor.Representations) +
+                    " | read=" + (descriptor.Representations.FirstOrDefault(value => value != ResourceRepresentations.Metadata) ?? ResourceRepresentations.Metadata);
                 rows.Add(line);
                 if (ModelContextBudget.EstimateTextTokens(Render(rows, artifacts.Count, unavailable), settings) > maxTokens)
                 {
@@ -132,16 +132,6 @@ namespace RNAssistant.Office.Services
             return builder.ToString().TrimEnd();
         }
 
-        private static ResourceDescriptor IntentDescriptor(ChatArtifact artifact)
-        {
-            return new ResourceDescriptor
-            {
-                Kind = artifact == null ? null : artifact.Kind,
-                Title = artifact == null ? null : artifact.Title,
-                CreatedUtc = artifact == null ? (DateTime?)null : artifact.CreatedUtc
-            };
-        }
-
         private static string DescriptionHint(ChatArtifact artifact)
         {
             if (MarkdownDocumentIdentity.LogicalId(artifact.Id) == null) return null;
@@ -156,55 +146,6 @@ namespace RNAssistant.Office.Services
                 return text.Substring(0, length) + "…";
             }
             catch (Newtonsoft.Json.JsonException) { return "[description unavailable]"; }
-        }
-
-        private static string ReadHint(ChatArtifact artifact)
-        {
-            if (string.Equals(artifact.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase))
-                return ResourceRepresentations.Structure;
-            if (HasTextRepresentation(artifact)) return ResourceRepresentations.Text;
-            return RepresentationHints(artifact).Split(',').Contains("media") ? "media" : "metadata";
-        }
-
-        private static string RepresentationHints(ChatArtifact artifact)
-        {
-            var values = new List<string> { "metadata" };
-            if (artifact != null && string.Equals(
-                artifact.Kind,
-                ChatArtifactKinds.HtmlWorkspace,
-                StringComparison.OrdinalIgnoreCase))
-            {
-                values.Add(ResourceRepresentations.Structure);
-            }
-            else if (HasTextRepresentation(artifact)) values.Add(ResourceRepresentations.Text);
-            if (artifact != null &&
-                (string.Equals(artifact.Kind, ChatArtifactKinds.Image, StringComparison.OrdinalIgnoreCase) ||
-                 string.Equals(artifact.Kind, ChatArtifactKinds.Attachment, StringComparison.OrdinalIgnoreCase) &&
-                 (StartsWith(artifact.MimeType, "image/") || StartsWith(artifact.MimeType, "audio/") ||
-                  string.Equals(artifact.MimeType, "application/pdf", StringComparison.OrdinalIgnoreCase)))) values.Add("media");
-            return string.Join(",", values.Distinct(StringComparer.OrdinalIgnoreCase).ToArray());
-        }
-
-        private static bool HasTextRepresentation(ChatArtifact artifact)
-        {
-            if (artifact == null) return false;
-            if (artifact.Kind == RNAssistant.Core.Storage.DocumentArtifactStore.SharedContextKind) return true;
-            if (!string.IsNullOrWhiteSpace(artifact.InlineText) || StartsWith(artifact.MimeType, "text/")) return true;
-            if (!string.IsNullOrWhiteSpace(artifact.MimeType) &&
-                (artifact.MimeType.IndexOf("json", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                 artifact.MimeType.IndexOf("xml", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                 artifact.MimeType.IndexOf("csv", StringComparison.OrdinalIgnoreCase) >= 0)) return true;
-            return string.Equals(artifact.Kind, ChatArtifactKinds.TaskList, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(artifact.Kind, ChatArtifactKinds.PlanDocument, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(artifact.Kind, ChatArtifactKinds.Markdown, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(artifact.Kind, ChatArtifactKinds.Compaction, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(artifact.Kind, ChatArtifactKinds.ToolResult, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(artifact.Kind, ChatArtifactKinds.Chart, StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static bool StartsWith(string value, string prefix)
-        {
-            return !string.IsNullOrWhiteSpace(value) && value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
         }
 
         private static void AddPreferred(ICollection<string> ids, string id)

@@ -45,7 +45,7 @@ namespace RNAssistant.Office.Services
                 ReturnedCharacters = count, TotalCharacters = text.Length, Complete = next == text.Length, Truncated = next < text.Length,
                 CompleteViewPayload = payload, AuthorityGeneration = snapshot.Generation,
                 NextCursor = next < text.Length ? ResourceReadCursor.CreateRevisionBound(next, exact.Revision, binding) : null },
-                ResourceRefs = new[] { exact.Copy() } };
+                ResourceRefs = new[] { exact.Copy() }, RetainedText = text };
         }
 
         // Callers negotiate their domain-specific size bound before hydration.

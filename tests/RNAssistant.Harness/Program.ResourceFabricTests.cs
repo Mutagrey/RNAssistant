@@ -335,6 +335,7 @@ namespace RNAssistant.Harness
             internal Func<string, ResourceListPage> ListPage { get; set; }
             internal bool SearchTruncated { get; set; }
             internal ResourceSearchMatch SearchMatch { get; set; }
+            internal Func<ChatSession, ResourceReadRequest, ResourceReadSelection> ReadRequest { get; set; }
 
             public ResourceListPage List(ChatSession session, string kind, string cursor, int limit)
             {
@@ -382,6 +383,7 @@ namespace RNAssistant.Harness
 
             public ResourceReadSelection Read(ChatSession session, ResourceReadRequest request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
             {
+                if (ReadRequest != null) return ReadRequest(session, request);
                 throw new NotSupportedException();
             }
         }

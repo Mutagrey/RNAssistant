@@ -1630,13 +1630,23 @@ for rendered pages. Office record paths are runtime-owned; omit path. HTML's vie
 is required and binding policy defaults to head, with explicit exact snapshots.
 Whole resource and core skill reads use the same bounded, revision-pinned Gateway
 assembler; partial pages cannot masquerade as complete loads.
+The retained reader transfers its already verified complete text within the read
+operation. `ReadWhole` consumes that text directly instead of rereading CAS for
+each internal page; `ReadLines` slices the same materialization and records only
+the excerpt as observation bytes. Publication, exact revision and whole-read size
+checks remain required. Other paginated providers still use the bounded assembler.
+No body survives as a cache for another operation.
 
-After compaction `ContextWorkingSet` reuses current exact CAS evidence for source,
-text, structure and record coverage plus complete skill bodies. Archived operation
-selection supplies original call/result facts and mandatory/optional priority to
-`ModelContextCompiler`; it does not project or hydrate their bodies. The compiler
-uses the same bounded CAS hydration and model projection as active results, then
-creates receipts and applies their residual budget. Mandatory unresolved outcomes
+After compaction `ContextWorkingSet` supplies original archived call/result
+candidates and mandatory/optional priority. `ModelContextCompiler` owns currentness,
+exact coverage deduplication, hydration and projected token budgeting for both
+active and archived bodies. Active visible coverage takes priority; an input
+reference alone cannot replace source bytes. Archive admission retains at most
+32 bodies, considers at most 64 body candidates and charges cumulative input bytes
+against the request payload limit before hydration. Bodies then consume their
+actual projected token cost, removing the earlier byte-as-character estimate.
+Current mutation sources use the same lazy path. The compiler creates operation
+receipts from the original facts and applies the residual budget. Mandatory unresolved outcomes
 remain required, including with no optional budget. Optional receipts are selected
 newest first within the 24-receipt/2,048-token bound. Materialization examines at
 most 64 optional candidates and charges call/result input bytes before CAS reads,

@@ -693,7 +693,11 @@ Three levels keep context useful without loading the library wholesale:
 
 Implemented working-set context (2026-09-08): `ChatResourcePromptIndex` advertises
 document/conversation ownership and a next-read representation for every admitted
-row. It explicitly identifies these entries as potentially historical snapshots;
+row. The index and provider share `ChatArtifactResourceProvider.DescribeMetadata`
+for semantic type, target inputs and available representations. Authored files
+therefore retain their `file:` targets after restart; MIME-only prompt classifiers
+and the incomplete parallel descriptor are removed. This projection performs no
+body or authority IO. It explicitly identifies entries as potentially historical snapshots;
 selection roles and authored descriptions do not prove currentness. Current/shared
 discovery uses `common.resources_find`, followed by `common.resources_read` with
 the returned target. The prompt index does not derive currentness from timestamps

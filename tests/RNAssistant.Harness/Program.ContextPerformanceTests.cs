@@ -149,7 +149,7 @@ namespace RNAssistant.Harness
                     ContextCheckpoints = new List<ContextCheckpoint> { checkpoint },
                     LastRun = new ChatRunRecord { RunId = "continuity" } };
                 Action restore = () => {
-                    var set = ContextWorkingSet.Restore(session, new ChatMessage[0], authority, settings, 0);
+                    var set = ContextWorkingSet.Restore(session, new ChatMessage[0], 0);
                     AssertEqual(count, set.Operations.Count(item => item.Required), "all unresolved recoveries stay mandatory");
                 };
                 report["workingSet/" + count] = ProfileMedian(restore);

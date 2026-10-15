@@ -41,10 +41,11 @@ namespace RNAssistant.Office.Services
             result.Text = text.Substring(start, end - start);
             result.Offset = start;
             result.ReturnedCharacters = end - start;
-            result.Coverage = new ResourceCoverage(ResourceCoverageKinds.CharacterRange, start: start, end: end);
+            result.Coverage = result.Resource.Coverage = new ResourceCoverage(ResourceCoverageKinds.CharacterRange, start: start, end: end);
             result.Complete = false;
             result.Truncated = true;
             result.CompleteViewPayload = null;
+            result.Payload = null;
             return selection;
         }
 
@@ -123,6 +124,23 @@ namespace RNAssistant.Office.Services
                         "-character whole-read safety bound. For artifact text/source read partNumber=1, then follow partCount; otherwise choose a narrower semantic target.",
                         "resource_whole_read_too_large",
                         false);
+                }
+                if (pages == 1 && page.RetainedText != null)
+                {
+                    if (result.CompleteViewPayload == null || !result.Resource.Reference.IsExact ||
+                        page.RetainedText.Length != result.TotalCharacters ||
+                        !page.RetainedText.StartsWith(pageText, StringComparison.Ordinal))
+                        throw WholeReadFailure("The retained body does not match its exact first page.");
+                    cancellationToken.ThrowIfCancellationRequested();
+                    result.Text = page.RetainedText;
+                    page.RetainedText = null;
+                    result.ReturnedCharacters = result.TotalCharacters;
+                    result.Payload = result.CompleteViewPayload;
+                    result.Coverage = result.Resource.Coverage = ResourceCoverage.Whole();
+                    result.Complete = true;
+                    result.Truncated = false;
+                    result.NextCursor = null;
+                    return page;
                 }
                 text.Append(pageText);
                 references.AddRange(page.ResourceRefs ?? new ResourceRef[0]);

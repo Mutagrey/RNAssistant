@@ -1,5 +1,23 @@
 # Stabilization progress
 
+## Resource descriptors, retained reads and context selection unified — 2026-10-15
+
+The remaining CAS/resource review work is complete host-neutral. Office prompt
+index and discovery share artifact metadata descriptors, fixing authored-file
+`attachment:`/`file:` target mismatch and removing duplicate representation logic.
+Retained whole/line reads reuse one verified body per operation; excerpt evidence
+and publication/revision checks remain exact, without a persistent cache.
+
+Core `ContextWorkingSet` supplies candidates only. The compiler owns active/archive
+currentness, deduplication, lazy hydration and projected body budgeting. Office
+request/preview and CLI consume that path; separate selection and body injection
+are removed. Unresolved operation facts stay mandatory.
+
+Harness and CLI builds pass, along with 25 focused Harness checks and both
+controlled CLI compaction/resume cases. No real-model or Windows/Office/VSTO
+qualification was run. Details:
+[RISK_REGISTER](RISK_REGISTER.md#cas-and-resource-fabric-review--2026-10-14).
+
 ## Resource journal names and archived operation admission — 2026-10-15
 
 Three follow-up findings are fixed host-neutral. Core resource authority validates
@@ -13,6 +31,18 @@ Coverage includes filename case/suffix/extension changes, published/unpublished
 roots, supported sibling caches, accepted-call CAS/restart and rejected archive
 candidates. No Office/VSTO qualification was run. Details:
 [RISK_REGISTER](RISK_REGISTER.md#resource-journal-names-and-archived-operation-admission--2026-10-15).
+
+## CAS re-review: prior defects closed, authored-file prompt target open — 2026-10-15
+
+The three original CAS/resource findings and authored UTF-16 reopening failure
+are fixed host-neutral; 23 focused checks pass on the existing `cc48a6dc` assembly.
+Re-review reproduced an Office prompt-index mismatch: an authored file is advertised
+as `attachment: ...`, while discovery/resolution uses `file: ...`. Owner: Office
+artifact descriptor construction shared by the prompt index and resource provider.
+The descriptor mismatch and both architectural follow-ups are now fixed by the
+implementation above. These earlier no-build results did not cover the concurrent
+hardening; its later rebuilt evidence is recorded separately. Review evidence is in
+[RISK_REGISTER](RISK_REGISTER.md#cas-and-resource-fabric-review--2026-10-14).
 
 ## Archived operation receipts retain exact diagnostics — 2026-10-15
 

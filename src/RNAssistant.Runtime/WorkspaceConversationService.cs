@@ -1006,12 +1006,11 @@ namespace RNAssistant.Runtime
                 }
                 var budget = Math.Max(1, ModelContextBudget.InputBudgetTokens(_settings) - fixedTokens);
                 var facts = AcceptedFacts(ContextCompactionRuntime.BuildActiveWindow(_session));
-                var workingSet = ContextWorkingSet.Restore(_session, facts, authority, _settings,
-                    Math.Max(0, Math.Min(budget / 3, budget - ContextWorkingSet.EstimateCost(required.Concat(facts), _settings))),
+                var workingSet = ContextWorkingSet.Restore(_session, facts, budget / 3,
                     archive: ContextCompactionRuntime.ActiveCheckpoint(_session) == null ? null :
                         AcceptedFacts(_session.Messages.Where(ContextCompactionRuntime.IsReplayMessage).ToArray()));
-                return _compiler.Compile(authority, required, facts.Concat(workingSet.Messages).ToArray(), null, _catalog, _settings,
-                    budget, retainedBodies: workingSet.IncludedBodies, evictedBodies: workingSet.OmittedBodies, skillSurface: _skillSurface,
+                return _compiler.Compile(authority, required, facts, null, _catalog, _settings,
+                    budget, skillSurface: _skillSurface,
                     trailingRequiredMessageId: context.ReadAcceptance == null && context.WebAcceptance == null && context.CompletionFeedback == null ? null : runtimeContext.Id,
                     workingSet: workingSet);
             }
