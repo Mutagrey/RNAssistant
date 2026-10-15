@@ -52,11 +52,16 @@ Collection always performs a fresh audit inside the same maintenance window; it 
 
 Deletion is allowed only when reachability is complete. Any unreadable, corrupt, unsupported, misplaced, or projection-invalid source blocks all deletion. Managed roots and discovered source/blob entries that are reparse points, symlinks, or junctions are never traversed and are treated as unreadable/blocking. An incomplete final JSONL row also blocks GC even though normal append recovery can later trim that row. Missing or corrupt referenced content is never an orphan and is never deleted.
 
-Resource journal discovery uses one safe recursive inventory. Authority, revision
-and view journals must remain directly under `resource-authority`; moving them
-into a child directory blocks collection, including unpublished revision/view
-roots. An unreadable or linked path blocks authority replay before it can open
-companion journals. Audit and collection do not move or repair these sources.
+Resource journal discovery inventories all files, independently of extension.
+Authority, revision and view journals must remain directly under
+`resource-authority`, named `<64 lowercase hex>.authority.jsonl`,
+`.revisions.jsonl` or `.views.jsonl`. Renamed, case-changed or nested journals block
+collection, including unpublished revision/view roots. Only known sibling
+document metadata, lock files, the mutation journal and
+`outlook-archive-cache/<document>/<id>.ref.json` pointers are admitted; the existing
+mutation/cache owners scan their references. Unsupported names and unreadable or
+linked paths block authority replay before it can open companion journals. Audit
+and collection do not move or repair these sources.
 
 Only canonical `<first-two-hex>/<sha256>.blob` paths from the fresh orphan set are deleted, one exact file at a time. Unknown `.blob` layouts are reported and retained. Other managed recursive cleanup removes child reparse points themselves without following them. Source streams, journals, settings, keys, staging files, and directories are not modified by GC.
 

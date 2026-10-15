@@ -389,7 +389,7 @@ namespace RNAssistant.Core.Storage
             using (AcquireLock())
             {
                 var incomplete = false;
-                var paths = StorageFileSystem.GetFilesRecursive(_directory, "*.jsonl", (path, message) =>
+                var paths = StorageFileSystem.GetFilesRecursive(_directory, "*", (path, message) =>
                 {
                     incomplete = true;
                     scan.AddSourceIssue(CasHealthIssueKinds.SourceUnreadable, "resource-authority",
@@ -397,12 +397,11 @@ namespace RNAssistant.Core.Storage
                 }).ToArray();
                 foreach (var path in paths)
                 {
-                    if (string.Equals(Path.GetDirectoryName(Path.GetFullPath(path)),
-                        Path.GetFullPath(_directory), StringComparison.Ordinal)) continue;
+                    if (IsCanonicalStoragePath(path)) continue;
                     incomplete = true;
                     scan.AddSourceIssue("resource_authority_invalid", "resource-authority",
                         CasMaintenanceService.RelativePath(_directory, path),
-                        "Resource journals must be stored directly in the resource authority directory.");
+                        "Resource storage contains an unsupported name or misplaced source; collection requires canonical paths.");
                 }
                 // Load opens companion journals too. Do not replay any scope when traversal
                 // could not verify that all journal paths are regular and canonical.
@@ -465,6 +464,30 @@ namespace RNAssistant.Core.Storage
                 }
             }
         }
+
+        private bool IsCanonicalStoragePath(string path)
+        {
+            var name = Path.GetFileName(path);
+            if (!string.Equals(Path.GetDirectoryName(Path.GetFullPath(path)),
+                Path.GetFullPath(_directory), StringComparison.Ordinal))
+            {
+                // This sibling owner scans exact cache pointers separately. Other
+                // nested files, including renamed journals, remain blocking sources.
+                var parent = Path.GetDirectoryName(Path.GetFullPath(path));
+                return string.Equals(Path.GetDirectoryName(parent),
+                    Path.Combine(Path.GetFullPath(_directory), "outlook-archive-cache"), StringComparison.Ordinal) &&
+                    name.EndsWith(".ref.json", StringComparison.Ordinal);
+            }
+            if (name == "authority.lck" || name == "documents.json" || name == "documents.json.lck" ||
+                name == "mutation-attempts.jsonl" || name == "mutation-attempts.jsonl.lck") return true;
+            if (name.StartsWith("mutation-", StringComparison.Ordinal) && name.EndsWith(".lck", StringComparison.Ordinal))
+                return IsCanonicalScopeHash(name.Substring(9, name.Length - 13));
+            return name.Length > 64 && IsCanonicalScopeHash(name.Substring(0, 64)) &&
+                new[] { ".authority.jsonl", ".revisions.jsonl", ".views.jsonl" }.Contains(name.Substring(64), StringComparer.Ordinal);
+        }
+
+        private static bool IsCanonicalScopeHash(string value)
+        { return ChatBlobStore.ValidSha256(value) && value == value.ToLowerInvariant(); }
 
         private static string RevisionKey(ResourceRef reference)
         {

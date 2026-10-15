@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Newtonsoft.Json;
@@ -214,6 +215,68 @@ namespace RNAssistant.Harness
                 AssertTrue(recovered.Completed && recovered.DeletedBlobCount == 1,
                     scenario + ": canonical roots allow only the true orphan to be deleted");
                 AssertEqual(2, recovered.Health.ReferencedBlobCount, scenario + ": retained roots remain intact");
+            });
+        }
+
+        private static void CasGcRejectsRenamedResourceJournals()
+        {
+            foreach (var published in new[] { false, true })
+            foreach (var rename in new[] { "case", "suffix", "extension", "prefix" })
+            WithTempPaths(paths =>
+            {
+                var blobs = new ChatBlobStore(paths);
+                var authority = new ResourceAuthorityStore(paths);
+                var scope = new ResourceAuthorityScopeId("conversation", "renamed");
+                var exact = new ResourceRef("rna://state/conversation/renamed/source", "r1");
+                var body = PayloadRef.FromBlob(blobs.StoreText("retained renamed source", "text/plain"));
+                var part = PayloadRef.FromBlob(blobs.StoreText("retained renamed view", "text/plain"));
+                authority.RegisterRevision(scope, new ResourceRevisionMetadata(exact, body.Sha256, body));
+                authority.RegisterView(scope, new ResourceRevisionView(exact, "index", body.Sha256,
+                    body, ResourceCoverage.Whole(), new[] { part }));
+                if (published) authority.Publish(ResourceAuthorityCommit.Create(scope, 0, null,
+                    new[] { new ResourceHeadChange(exact.Identity, null, ResourceHeadState.Known(exact, 1)) },
+                    AuthorityCommitReason.InitialObservation));
+                using (new ResourceMutationJournal(paths).AcquireScope(scope)) { }
+                File.WriteAllText(Path.Combine(paths.ResourceAuthorityDirectory, "documents.json"), "{}");
+                var cache = Path.Combine(paths.ResourceAuthorityDirectory, "outlook-archive-cache", "mailbox");
+                Directory.CreateDirectory(cache);
+                var manifest = blobs.StoreText("{\"Pages\":[]}", "application/json");
+                File.WriteAllText(Path.Combine(cache, "archive.ref.json"), JsonConvert.SerializeObject(manifest));
+                var orphan = blobs.StoreText("unreferenced rename leftover", "text/plain");
+                var service = CasService(paths, new ChatStore(paths), new VbaJournalStore(paths), () => StorageProtector.None);
+                var control = service.Audit();
+                AssertTrue(control.ReachabilityComplete, "canonical journals and sibling metadata/locks are supported");
+                AssertEqual(3, control.ReferencedBlobCount, "source, view parts and sibling cache manifest are retained");
+                var originals = Directory.GetFiles(paths.ResourceAuthorityDirectory, "*.jsonl")
+                    .ToDictionary(path => path, File.ReadAllText);
+                var moved = new Dictionary<string, string>();
+                foreach (var path in originals.Keys)
+                {
+                    var name = Path.GetFileName(path);
+                    var destination = Path.Combine(paths.ResourceAuthorityDirectory, rename == "case" ? name.ToUpperInvariant() :
+                        rename == "suffix" ? name + ".renamed.jsonl" : rename == "extension" ? Path.ChangeExtension(name, ".bak") :
+                        "invalid-scope" + name.Substring(64));
+                    File.Move(path, path + ".rename");
+                    File.Move(path + ".rename", destination);
+                    moved.Add(path, destination);
+                }
+                var report = service.Audit();
+                AssertTrue(!report.ReachabilityComplete && !report.CanGarbageCollect, rename + ": every unsupported name blocks GC");
+                AssertTrue(report.Issues.Any(item => item.SourceType == "resource-authority" && item.BlocksGarbageCollection),
+                    "the unsupported source is reported");
+                var collected = service.Collect();
+                AssertTrue(!collected.Completed && collected.DeletedBlobCount == 0, "no blob is collected with an unknown source");
+                AssertEqual("retained renamed source", blobs.ReadText(body.ToBlobReference()), "original source survives");
+                AssertEqual("retained renamed view", blobs.ReadText(part.ToBlobReference()), "view parts survive");
+                AssertTrue(File.Exists(blobs.PathFor(orphan.Sha256)), "true orphan also survives incomplete reachability");
+                foreach (var entry in moved)
+                {
+                    AssertEqual(originals[entry.Key], File.ReadAllText(entry.Value), "GC leaves journals unchanged");
+                    File.Move(entry.Value, entry.Value + ".rename");
+                    File.Move(entry.Value + ".rename", entry.Key);
+                }
+                var recovered = service.Collect();
+                AssertTrue(recovered.Completed && recovered.DeletedBlobCount == 1, "explicit restoration permits only orphan collection");
             });
         }
 

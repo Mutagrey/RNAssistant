@@ -438,6 +438,7 @@ namespace RNAssistant.Harness
                 Test("storage: CAS health reports missing and corrupt blobs", CasHealthReportsMissingAndCorruptBlobs),
                 Test("storage: CAS GC fails closed for invalid sources", CasGcFailsClosedForInvalidSources),
                 Test("storage: CAS GC rejects misplaced resource journals", CasGcRejectsMisplacedResourceJournals),
+                Test("storage: CAS GC rejects renamed resource journals", CasGcRejectsRenamedResourceJournals),
                 Test("storage: CAS GC rejects resource journal links", CasGcRejectsResourceJournalLinks),
                 Test("storage: CAS health scans protected streams", CasHealthScansProtectedStreams),
                 Test("storage: CAS maintenance always uses gate", CasMaintenanceAlwaysUsesGate),
