@@ -533,6 +533,101 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void WorkspaceFilesPinIdentityAcrossMove(bool recreateSource)
+        {
+            foreach (var operation in new[] { "describe", "text", "raw" })
+            WithTempPaths(paths =>
+            {
+                var workspace = new WorkspaceStore(paths).Open(Path.Combine(paths.Root, "project"));
+                var mover = new WorkspaceFileService(paths);
+                var reader = new WorkspaceFileService(paths);
+                var source = mover.CreateText(workspace, "source.txt", "moved body");
+                var scope = new ResourceAuthorityScopeId("file", ResourceUri.Parse(source.Reference.Uri).Segments.Single());
+                var authority = new ResourceAuthorityStore(paths);
+                WorkspaceFileObservation moved = null;
+                long movedGeneration = 0;
+                // Deterministically interleave a completed move after path resolution,
+                // before the reader can acquire the resource lease. No timing dependency.
+                reader.FaultPoint = point =>
+                {
+                    if (point != "before-file-lease") return;
+                    moved = mover.MoveText(workspace, "source.txt", source.Reference, "target.txt");
+                    if (recreateSource)
+                        File.WriteAllText(Path.Combine(workspace.RootPath, "source.txt"), "unrelated body");
+                    movedGeneration = authority.Capture(scope).Generation;
+                };
+                IOException failure = null;
+                try
+                {
+                    if (operation == "describe") reader.Describe(workspace, "source.txt");
+                    else if (operation == "text") reader.ReadText(workspace, "source.txt");
+                    else reader.ReadBytes(workspace, "source.txt");
+                }
+                catch (IOException ex) { failure = ex; }
+                AssertTrue(moved != null, operation + ": move completed inside the identity/lease gap");
+                var snapshot = authority.Capture(scope);
+                AssertEqual(moved.Reference.Revision, snapshot.GetHead(new ResourceIdentity(source.Reference.Uri))?.Revision?.Revision,
+                    operation + ": old path must not invalidate or replace the moved file head");
+                AssertEqual(movedGeneration, snapshot.Generation, operation + ": stale path publishes no authority changes");
+                AssertEqual("target_conflict", (failure as WorkspaceFileException)?.Code,
+                    operation + ": changed path binding fails before observation");
+                AssertEqual(0, new ResourceMutationJournal(paths).Unresolved().Count,
+                    operation + ": stale read creates no mutation attempts");
+
+                // A fresh owner proves both durable identity and release of the rejected lease.
+                var restarted = new WorkspaceFileService(paths);
+                var current = restarted.ReadText(workspace, "target.txt");
+                AssertEqual(moved.Reference.Revision, current.Reference.Revision, operation + ": restart retains the move revision");
+                AssertEqual("moved body", current.Text, operation + ": target bytes survive");
+                AssertEqual("moved body", restarted.ReadExactText(workspace, "target.txt", source.Reference).Text,
+                    operation + ": historical CAS view survives");
+                if (recreateSource)
+                {
+                    var replacement = restarted.ReadText(workspace, "source.txt");
+                    AssertTrue(replacement.Reference.Uri != current.Reference.Uri, operation + ": reused path gets its own identity");
+                    AssertEqual("unrelated body", replacement.Text, operation + ": unrelated bytes survive");
+                }
+            });
+        }
+
+        private static void WorkspaceFilesRecoveryPinsPathIdentity()
+        {
+            WithTempPaths(paths =>
+            {
+                var workspace = new WorkspaceStore(paths).Open(Path.Combine(paths.Root, "project"));
+                var mover = new WorkspaceFileService(paths);
+                var recovery = new WorkspaceFileService(paths);
+                var source = mover.CreateText(workspace, "source.txt", "original");
+                var scope = new ResourceAuthorityScopeId("file", ResourceUri.Parse(source.Reference.Uri).Segments.Single());
+                WorkspaceFileObservation moved = null;
+                recovery.FaultPoint = point =>
+                {
+                    if (point != "before-file-lease") return;
+                    moved = mover.MoveText(workspace, "source.txt", source.Reference, "target.txt");
+                    mover.FaultPoint = stage => { if (stage == "after-dispatch") throw new IOException("interrupted publication"); };
+                    var unknown = false;
+                    try { mover.ReplaceText(workspace, "target.txt", moved.Reference, "written before interruption"); }
+                    catch (WorkspaceFileException ex) { unknown = ex.Code == "effect_unknown"; }
+                    AssertTrue(unknown, "replacement has a durable unresolved dispatch");
+                };
+                WorkspaceFileException failure = null;
+                try { recovery.ReconcileUncertain(workspace, "source.txt"); }
+                catch (WorkspaceFileException ex) { failure = ex; }
+                AssertEqual(1, new ResourceMutationJournal(paths).Unresolved().Count,
+                    "stale source path cannot resolve the target's interrupted write");
+                AssertEqual(moved.Reference.Revision,
+                    new ResourceAuthorityStore(paths).Capture(scope).GetHead(new ResourceIdentity(source.Reference.Uri))?.Revision?.Revision,
+                    "stale recovery cannot publish a missing head for the moved file");
+                AssertEqual("target_conflict", failure?.Code, "recovery checks path binding before inspecting attempts");
+                var restarted = new WorkspaceFileService(paths);
+                var reconciled = restarted.ReconcileUncertain(workspace, "target.txt");
+                AssertEqual(WorkspaceRecoveryOutcome.UnknownAfterDispatch, reconciled.Outcome,
+                    "explicit recovery keeps unknown causality without replay");
+                AssertEqual("written before interruption", reconciled.Current.Text, "recovery reads the actual target");
+                AssertEqual(0, new ResourceMutationJournal(paths).Unresolved().Count, "correctly addressed recovery resolves once");
+            });
+        }
+
         private static void JsonFileStoreWritesAtomicUtf8()
         {
             WithTempPaths(delegate(AppDataPaths paths)

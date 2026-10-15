@@ -139,9 +139,7 @@ namespace RNAssistant.Core.Storage
                 directory.Metadata["relativePath"] = relativePath;
                 return directory;
             }
-            var id = FileIdentity(path);
-            var scope = Scope(id);
-            using (_journal.AcquireScope(scope, true))
+            using (AcquireFileScope(path, out var id, out var scope))
             {
                 EnsureNoUnresolved(scope);
                 ResolvePath(workspace, relativePath, false);
@@ -187,9 +185,7 @@ namespace RNAssistant.Core.Storage
         private WorkspaceFileObservation ReadContent(WorkspaceDescriptor workspace, string relativePath, bool raw)
         {
             var path = ResolvePath(workspace, relativePath, false);
-            var id = FileIdentity(path);
-            var scope = Scope(id);
-            using (_journal.AcquireScope(scope, true))
+            using (AcquireFileScope(path, out var id, out var scope))
             {
                 EnsureNoUnresolved(scope);
                 ResolvePath(workspace, relativePath, false);
@@ -325,9 +321,7 @@ namespace RNAssistant.Core.Storage
             var target = ResolvePath(workspace, targetRelativePath, false, true);
             if (source == target)
                 throw new WorkspaceFileException("target_conflict", "Move source and target must differ.");
-            var id = FileIdentity(source);
-            var scope = Scope(id);
-            using (_journal.AcquireScope(scope, true))
+            using (AcquireFileScope(source, out var id, out var scope))
             {
                 EnsureNoUnresolved(scope);
                 if (expectedSource == null || !expectedSource.IsExact || expectedSource.Uri != Identity(id).Uri)
@@ -432,9 +426,7 @@ namespace RNAssistant.Core.Storage
             if (File.Exists(path) || Directory.Exists(path))
                 throw new WorkspaceFileException("target_exists", "Create does not overwrite an existing target.");
             var bytes = Encode(text);
-            var id = FileIdentity(path);
-            var scope = Scope(id);
-            using (_journal.AcquireScope(scope, true))
+            using (AcquireFileScope(path, out var id, out var scope))
             {
                 EnsureNoUnresolved(scope);
                 if (File.Exists(path)) throw new WorkspaceFileException("target_exists", "Target appeared before dispatch.");
@@ -472,9 +464,7 @@ namespace RNAssistant.Core.Storage
         {
             RequireWritable(workspace);
             var path = ResolvePath(workspace, relativePath, false, true);
-            var id = FileIdentity(path);
-            var scope = Scope(id);
-            using (_journal.AcquireScope(scope, true))
+            using (AcquireFileScope(path, out var id, out var scope))
             {
                 EnsureNoUnresolved(scope);
                 if (expected == null || !expected.IsExact || expected.Uri != Identity(id).Uri)
@@ -551,9 +541,7 @@ namespace RNAssistant.Core.Storage
         {
             RequireWritable(workspace);
             var path = ResolvePath(workspace, relativePath, false, true);
-            var id = FileIdentity(path);
-            var scope = Scope(id);
-            using (_journal.AcquireScope(scope, true))
+            using (AcquireFileScope(path, out var id, out var scope))
             {
                 EnsureNoUnresolved(scope);
                 if (File.Exists(path) || Directory.Exists(path))
@@ -592,9 +580,7 @@ namespace RNAssistant.Core.Storage
         {
             RequireWritable(workspace);
             var path = ResolvePath(workspace, relativePath, false, true);
-            var id = FileIdentity(path);
-            var scope = Scope(id);
-            using (_journal.AcquireScope(scope, true))
+            using (AcquireFileScope(path, out var id, out var scope))
             {
                 EnsureNoUnresolved(scope);
                 if (expected == null || !expected.IsExact || expected.Uri != Identity(id).Uri)
@@ -664,9 +650,7 @@ namespace RNAssistant.Core.Storage
         public WorkspaceFileRecoveryResult ReconcileUncertain(WorkspaceDescriptor workspace, string relativePath)
         {
             var path = ResolvePath(workspace, relativePath, false);
-            var id = FileIdentity(path);
-            var scope = Scope(id);
-            using (_journal.AcquireScope(scope, true))
+            using (AcquireFileScope(path, out var id, out var scope))
             {
                 var attempts = _journal.Unresolved().Where(item => item.ScopeId.Equals(scope)).ToArray();
                 if (attempts.Length == 0)
@@ -961,6 +945,29 @@ namespace RNAssistant.Core.Storage
             if (_journal.Unresolved().Any(attempt => attempt.ScopeId.Equals(scope)))
                 throw new WorkspaceFileException("unresolved_previous_effect",
                     "A possible previous file effect is unresolved; reconcile it before another write.");
+        }
+
+        private IDisposable AcquireFileScope(string absolutePath, out string id, out ResourceAuthorityScopeId scope)
+        {
+            id = FileIdentity(absolutePath);
+            scope = Scope(id);
+            FaultPoint?.Invoke("before-file-lease");
+            var lease = _journal.AcquireScope(scope, true);
+            try
+            {
+                // A move may have changed this path while we waited. Holding the
+                // old resource's lease alone cannot authorize observation/recovery
+                // of the path. Revalidate without allocating a replacement identity.
+                var currentId = ExistingLocatorId(absolutePath) ?? PendingMoveFileId(absolutePath);
+                if (currentId != id)
+                    throw new WorkspaceFileException("target_conflict", "File path changed while acquiring access.");
+                return lease;
+            }
+            catch
+            {
+                lease.Dispose();
+                throw;
+            }
         }
 
         private string FileIdentity(string absolutePath)

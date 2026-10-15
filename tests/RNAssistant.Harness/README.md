@@ -365,7 +365,12 @@ a temporary workspace and fresh Chromium profile; it is not an Office/WebView2
 qualification or an agent functional grader. It checks the exact snapshot digest
 with BOM/CRLF and rejects a missing retained CAS payload before browser launch,
 even when the workspace file still exists. Focused `workspace files:` tests cover
-retained provider evidence after edit/deletion, empty text, unpublished revisions,
+the identity/lease race through metadata, UTF-8 and raw reads, with an absent or
+reused source path after a managed move. Deterministic interleaving also verifies
+that stale-path recovery cannot resolve an interrupted write at the new path.
+These cases check unchanged authority generation, preserved bytes/history,
+released leases and explicit recovery after restart, without timing sleeps.
+The same filter covers retained provider evidence after edit/deletion, empty text, unpublished revisions,
 corrupt/missing payloads and the existing mutation/recovery guards.
 `workspace files: exact raw and image views` additionally covers shared identity
 across text/raw, binary drift, snapshot reads after deletion/restart, foreign refs,

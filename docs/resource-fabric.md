@@ -26,6 +26,17 @@ byte length and exact evidence. It enforces the one MiB text bound and rejects
 unpublished revisions and missing/corrupt payloads without a live-file fallback.
 Reading an old revision does not refresh or republish the head; its currentness
 still comes from frozen authority.
+
+Current file metadata/body reads, mutations and explicit recovery share
+`WorkspaceFileService.AcquireFileScope`. It resolves the locator, acquires that
+resource's lease, then verifies that the path still names the same file ID (or its
+unresolved move intent). A managed move may finish while the caller waits; a
+changed binding returns `target_conflict` before observing bytes, publishing a head
+or resolving an attempt. It neither allocates a replacement ID nor retries the
+operation. The resource lease then excludes another managed move until release;
+unrelated files retain independent leases. Immutable historical/snapshot reads
+continue through their existing published-CAS path.
+
 An explicit CLI `--read-only` open denies file mutations even when the workspace
 already has a manifest. The descriptor and root mount retain that permission for
 the open; workspace identity and later explicitly writable opens are unchanged.

@@ -8,6 +8,56 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## Workspace file identity and lease review — 2026-10-15
+
+**Fixed host-neutral / Core `WorkspaceFileService`.** On `10f3fa53`, eight entry
+points resolved a file ID before waiting for its resource lease. A managed move
+could finish in that gap. Deterministic interleavings reproduced a missing head
+published for the moved file, a reused source path advertised under the moved
+file's ID, and recovery resolving an interrupted target write by inspecting the
+now-absent source path. These are authority/recovery defects; no user files were
+used or lost in the probes.
+
+One `AcquireFileScope` now binds the locator to the acquired resource lease for
+all eight callers. A changed binding fails before observation or journal changes;
+the rejected lease is released. A read-only local guard would leave recovery
+unsafe; a global workspace lock would serialize independent files. The selected
+boundary retains per-file concurrency with one additional locator validation,
+no retry and no second identity store. Stale reads no longer publish an extra
+authority revision, and stale recovery leaves the unresolved attempt intact.
+
+Baseline: Harness build passed with two existing PDF CA1416 warnings;
+`workspace files:` 8/8, `host runtime:` 10/10, `storage: runtime commits` 1/1.
+After adding only the shared acquisition seam and regression cases, the original
+behavior passed 8 and failed 3. With binding validation, `workspace files:` 11/11,
+`workspace snapshots:` 3/3 and `workspace:` 2/2 pass. Harness and CLI build pass.
+
+Commands (repository root; filters run separately):
+
+```bash
+dotnet build tests/RNAssistant.Harness/RNAssistant.Harness.csproj --no-restore -nologo -v:minimal
+dotnet tests/RNAssistant.Harness/bin/Debug/net8.0/RNAssistant.Harness.dll "workspace files:"
+dotnet tests/RNAssistant.Harness/bin/Debug/net8.0/RNAssistant.Harness.dll "workspace snapshots:"
+dotnet tests/RNAssistant.Harness/bin/Debug/net8.0/RNAssistant.Harness.dll "workspace:"
+dotnet build src/RNAssistant.Cli/RNAssistant.Cli.csproj --no-restore -nologo -v:minimal
+python3 -B tests/cli/read_recovery_smoke.py
+git diff --check
+```
+
+**Open adjacent fixture / CLI tests owner:** `read_recovery_smoke.py` passes its
+five replace/patch/copy/move/delete cases, then fails its restart case on the second
+`AwaitingConfirmation` (`files.replace`, after one verified `files.delete`). The
+script approves only once although this case requests two mutations. The identical
+failure was reproduced in an isolated source archive of `10f3fa53`; it is not caused
+by binding validation. Follow-up: handle the two explicit approvals with a bounded
+count and retain the existing retry, exact-content and request-count assertions.
+This fixture was left unchanged; its restart scenario is not claimed as passing.
+
+The on-disk formats are unchanged. This fix does not rewrite earlier incorrect
+events or qualify races with uncoordinated editors, whole-workspace relocation,
+symlinks/hardlinks or Windows/Office behavior. Reverting this code/test/doc slice
+requires no data migration and reopens the reproduced race.
+
 ## Restart context continuity review — 2026-10-15
 
 **Closed host-neutral.** Owners: Core skill selection/protocol pairing, Office
