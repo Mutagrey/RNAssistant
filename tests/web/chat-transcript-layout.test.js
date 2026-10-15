@@ -31,7 +31,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       window.hasActiveMessageEdit = () => false;
       window.canEditMessage = () => false;
       window.renderChatResourceNavigation = () => {};
-      window.renderSendControls = () => {};
+      window.renderSendControls = window.renderChatSessions = () => {};
       window.endChatRunTracking = () => {};
       window.smallIconButton = title => { const b = document.createElement("button"); b.textContent = title; return b; };
       window.appendMessageArtifactCards = () => {};
@@ -88,12 +88,56 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     await editor.press("Escape");
     assert.equal(await editor.count(), 0);
 
-    // Short upward movement must suspend following even inside the old 64px threshold.
+    const settleLayout = () => page.evaluate(() => new Promise(resolve =>
+      requestAnimationFrame(() => requestAnimationFrame(resolve))));
+
+    // Late media/viewer layout can grow a message without resizing the scroll box.
     await page.evaluate(() => {
       state.liveStreamContent = "Длинный ответ\n\n" + "Строка текущего ответа.\n".repeat(90);
       renderMessages({ forceScroll: true });
     });
-    await page.evaluate(() => new Promise(requestAnimationFrame));
+    await settleLayout();
+    const initialHeight = await page.locator("#messages").evaluate(box => box.scrollHeight);
+    await page.evaluate(() => {
+      const content = document.createElement("div");
+      content.id = "lateMessageContent";
+      content.style.cssText = "height:240px;flex-shrink:0";
+      $("messages").lastElementChild.appendChild(content);
+    });
+    await settleLayout();
+    assert.ok(await page.locator("#messages").evaluate(box => box.scrollHeight) >= initialHeight + 240);
+    assert.ok(await page.evaluate(() => chatDistanceFromBottom($("messages"))) <= 2,
+      "late message growth keeps the actual end visible without another render");
+    await page.evaluate(() => {
+      $("lateMessageContent").style.height = "480px";
+      state.liveStreamContent += "Новое продолжение ответа.\n";
+      renderStreamingMessages();
+    });
+    assert.ok(await page.evaluate(() => chatDistanceFromBottom($("messages"))) <= 2,
+      "a render before resize delivery does not mistake layout growth for manual scrolling");
+    await settleLayout();
+
+    // Growing the viewport clamps scrollTop; that is not an upward user gesture.
+    for (const height of [1000, 650, 800]) {
+      await page.setViewportSize({ width: 360, height });
+      await settleLayout();
+      assert.ok(await page.evaluate(() => chatDistanceFromBottom($("messages"))) <= 2,
+        "following survives viewport growth and shrinkage at " + height + "px");
+    }
+    const manualTop = await page.evaluate(() => {
+      const box = $("messages");
+      box.dispatchEvent(new WheelEvent("wheel", { deltaY: -12 })); box.scrollTop -= 12;
+      const top = box.scrollTop;
+      $("lateMessageContent").style.height = "720px";
+      return top;
+    });
+    await settleLayout();
+    assert.ok(Math.abs(manualTop - await page.locator("#messages").evaluate(box => box.scrollTop)) < 2,
+      "late message growth respects the reader's manual scroll position");
+    await page.evaluate(() => { $("lateMessageContent").remove(); scrollMessagesToBottom(false); });
+    await settleLayout();
+
+    // Short upward movement must suspend following even inside the old 64px threshold.
     const smallScroll = await page.evaluate(() => {
       const box = $("messages");
       box.dispatchEvent(new WheelEvent("wheel", { deltaY: -12 })); box.scrollTop -= 12;
@@ -162,6 +206,6 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       await page.screenshot({ path: process.env.LAYOUT_SCREENSHOT });
     }
     assert.deepEqual(errors, []);
-    console.log("PASS chat transcript browser: queue placement, narrow themes, safe full text, edit focus, free/follow scroll, deferred gestures and history anchoring");
+    console.log("PASS chat transcript browser: queue placement, narrow themes, safe full text, edit focus, free/follow scroll, late layout, viewport resizing, deferred gestures and history anchoring");
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

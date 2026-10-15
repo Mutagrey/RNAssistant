@@ -44,8 +44,11 @@ function isChatNearBottom(box) {
 }
 
 function shouldFollowChatScroll(box) {
-  if (box.scrollTop < chatScrollPosition - 1 || !isChatNearBottom(box)) chatScrollFollowing = false;
-  else if (box.scrollTop > chatScrollPosition + 1 && chatDistanceFromBottom(box) <= 2) chatScrollFollowing = true;
+  var atBottom = chatDistanceFromBottom(box) <= 2;
+  // Layout growth alone is not a scroll gesture; shrinking content or a taller
+  // viewport can also clamp scrollTop upward while the reader is still at the end.
+  if (box.scrollTop > chatScrollPosition) chatScrollFollowing = atBottom;
+  else if (box.scrollTop < chatScrollPosition && !atBottom) chatScrollFollowing = false;
   return chatScrollFollowing;
 }
 
@@ -104,8 +107,7 @@ function bindMessageScrollControls() {
     box.addEventListener("scroll", function () {
       if (box.scrollTop !== chatScrollPosition) {
         chatScrollInteraction += 1;
-        // Even a short upward movement means the reader took control.
-        chatScrollFollowing = box.scrollTop > chatScrollPosition && chatDistanceFromBottom(box) <= 2;
+        shouldFollowChatScroll(box);
         chatScrollPosition = box.scrollTop;
       }
       updateChatScrollButton();
@@ -127,8 +129,22 @@ function bindMessageScrollControls() {
         interrupt(event.key === "ArrowUp" || event.key === "PageUp" || event.key === "Home" || event.key === " " && event.shiftKey);
     });
     if (window.ResizeObserver) {
-      var resizeObserver = new window.ResizeObserver(function () { syncChatScroll(chatScrollFollowing, false); });
+      var resizeObserver = new window.ResizeObserver(function () { syncChatScroll(shouldFollowChatScroll(box), false); });
       resizeObserver.observe(box);
+      Array.prototype.forEach.call(box.children, function (node) { resizeObserver.observe(node, { box: "border-box" }); });
+      // The scroll box keeps its size when images/viewers change message height.
+      // Track direct message nodes, releasing detached ones after reconciliation.
+      var contentObserver = new window.MutationObserver(function (records) {
+        records.forEach(function (record) {
+          Array.prototype.forEach.call(record.removedNodes, function (node) {
+            if (node.nodeType === 1 && node.parentNode !== box) resizeObserver.unobserve(node);
+          });
+          Array.prototype.forEach.call(record.addedNodes, function (node) {
+            if (node.nodeType === 1 && node.parentNode === box) resizeObserver.observe(node, { box: "border-box" });
+          });
+        });
+      });
+      contentObserver.observe(box, { childList: true });
     }
   }
   if (button) {

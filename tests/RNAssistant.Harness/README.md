@@ -611,7 +611,8 @@ does not duplicate them. `node tests/web/agent-activity-layout.test.js` checks t
 visibility in Chromium at wide/narrow widths. `node tests/web/chat-transcript-layout.test.js` uses
 the bundled Playwright (`NODE_PATH`, optional `BROWSER_EXECUTABLE` and
 `LAYOUT_SCREENSHOT`) to check narrow light/dark bubbles, safe full text, editor
-focus, manual/follow scrolling, deferred gestures and history anchoring.
+focus, manual/follow scrolling, late message growth, viewport resizing, deferred
+gestures and history anchoring.
 These browser checks are distinct from Windows/Office/WebView2 qualification.
 
 ## Test map
