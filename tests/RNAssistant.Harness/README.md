@@ -303,6 +303,14 @@ typed answers. For shared input persistence, run the `inbox:` and
 `storage: typed event port preserves classified wire` harness filters. These are
 scripted/host-neutral checks, not real-model or Office qualification.
 
+Office typed answers/receipt conflicts and CAS questions across restart are covered
+by MockDemo `--unified-agent-test`; `--inbox-test` covers steer and shared controllers.
+`tests/web/chat-inbox.test.js` verifies typed retries and composer preservation;
+`tool-result-presentation.test.js` verifies addressed cards and typed answer IDs.
+`storage:` exercises explicit conversation writes/removals and replay; its semantic
+operation tests use runtime commits, not the test-only bulk fixture `Save` helper.
+The latter only seeds/upserts fixture messages and cannot infer tool lifecycle.
+
 `python3 tests/cli/skills_runtime_smoke.py` checks the production CLI with a scripted
 HTTP model: metadata-only discovery, Common/Workspace and enabled filtering,
 built-in precedence, exact core/reference CAS reads after authoring drift/deletion,

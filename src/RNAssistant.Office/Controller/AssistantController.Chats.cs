@@ -98,6 +98,7 @@ namespace RNAssistant.Office
                 session = ReloadReservedSession(session);
                 ConversationProtocolContext.EnsureCurrentHistory(session);
                 var settings = ResolveChatSettings(session);
+                var firstMessage = session.Messages.Count;
                 try
                 {
                     await _contextCompactionService.EnsureWithinBudgetAsync(
@@ -112,7 +113,7 @@ namespace RNAssistant.Office
                 {
                     PersistTokenEstimateCalibration(settings);
                 }
-                SaveSessionChanges(session);
+                SaveSessionChanges(session, session.Messages.Skip(firstMessage));
             }
             return ChatState(session);
         }
@@ -309,7 +310,7 @@ namespace RNAssistant.Office
                 }
 
                 message.Activity.DataJson = parsed.ToString(Formatting.None);
-                SaveSessionChanges(session);
+                SaveSessionChanges(session, new[] { message });
             });
         }
 
@@ -535,9 +536,9 @@ namespace RNAssistant.Office
                 ConversationRunPolicy.RequireCurrentSession(session);
                 session.Mode = ConversationRunPolicy.For(mode, session.MutationPolicy).Mode;
                 RemovePendingAgentToolsForSession(session.Id);
-                CancelPendingActivities(session, "Pending action cancelled because chat mode changed.");
+                var changed = CancelPendingActivities(session, "Pending action cancelled because chat mode changed.");
                 session.LastRun = null;
-                SaveSessionChanges(session);
+                SaveSessionChanges(session, changed);
             });
         }
 
@@ -548,9 +549,9 @@ namespace RNAssistant.Office
                 ConversationRunPolicy.RequireCurrentSession(session);
                 session.MutationPolicy = ConversationRunPolicy.For(session.Mode, policy).MutationPolicy;
                 RemovePendingAgentToolsForSession(session.Id);
-                CancelPendingActivities(session, "Pending action cancelled because permissions changed.");
+                var changed = CancelPendingActivities(session, "Pending action cancelled because permissions changed.");
                 session.LastRun = null;
-                SaveSessionChanges(session);
+                SaveSessionChanges(session, changed);
             });
         }
 
@@ -804,7 +805,7 @@ namespace RNAssistant.Office
             return ChatSettingsResolver.Resolve(settings ?? _settingsService.Load(), session);
         }
 
-        private void SaveSessionChanges(ChatSession session)
+        private void SaveSessionChanges(ChatSession session, IEnumerable<ChatMessage> messages = null, ChatMessage recordedToolResult = null)
         {
             if (session == null ||
                 (!_conversationStore.IsPersisted(session) && !HasCompletedExchange(session)))
@@ -813,9 +814,13 @@ namespace RNAssistant.Office
             }
 
             var timer = Stopwatch.StartNew();
-            RunViewStateProjector.StampCurrentRun(session);
+            var view = RunViewStateProjector.StampCurrentRun(session);
+            var updates = (messages ?? new ChatMessage[0]).ToList();
+            var projected = session.Messages.LastOrDefault(message => view != null && ReferenceEquals(message.RunViewState, view));
+            if (projected != null) updates.Add(projected);
             var runViewMs = timer.ElapsedMilliseconds;
-            _conversationStore.Save(session);
+            _conversationStore.Commit(session, recordedToolResult == null
+                ? new ConversationCommit(updates) : ConversationCommit.ToolResult(recordedToolResult, updates));
             var storageMs = timer.ElapsedMilliseconds - runViewMs;
             _chatSessions.NotifySaved(session);
             if (timer.ElapsedMilliseconds >= 500)

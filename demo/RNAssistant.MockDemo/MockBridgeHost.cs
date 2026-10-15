@@ -20,15 +20,19 @@ namespace RNAssistant.MockDemo
     internal sealed class MockBridgeHost
     {
         private readonly AssistantWebBridge _bridge;
+        private readonly AssistantController _controller;
         private readonly AsyncLocal<List<string>> _currentEvents;
         private readonly Action<string> _eventObserver;
 
         public MockBridgeHost(AssistantController controller, Action<string> eventObserver = null)
         {
+            _controller = controller;
             _currentEvents = new AsyncLocal<List<string>>();
             _eventObserver = eventObserver;
             _bridge = new AssistantWebBridge(controller, PostMessage);
         }
+
+        public Task DrainAsync() { return _controller.InboxWorkersDrained; }
 
         public async Task<BridgePacket> HandleAsync(string requestJson)
         {

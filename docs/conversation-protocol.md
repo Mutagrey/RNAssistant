@@ -721,7 +721,7 @@ or resource address: runtime refuses it before provider dispatch, and retained
 accepted calls using it require an explicit new chat/reset. No title-to-URI fallback
 or compatibility translation exists.
 
-Paste, drop, and paperclip use one chat-scoped staging action. `sendChat` accepts only the resulting `resourceDraftIds`; before any model request, runtime promotes their bytes into CAS, creates immutable artifact revisions, links them to the user message, and persists that state. Existing resources are represented to the model only by bounded semantic targets and read through `common.resources_find/read`.
+Paste, drop, and paperclip use one chat-scoped staging action. `submitChatInput` accepts the resulting `resourceDraftIds` with an operation ID; before any model request, runtime promotes their bytes into CAS, creates immutable artifact revisions, links them to the user message, and persists that state. Existing resources are represented to the model only by bounded semantic targets and read through `common.resources_find/read`.
 
 A resource draft is not durable history or model context. After the mandatory
 pre-dispatch save, application must queue the committed message and artifact heads

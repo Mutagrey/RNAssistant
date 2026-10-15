@@ -4,6 +4,7 @@ using System.Linq;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
+using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Core.Services
 {
@@ -14,6 +15,17 @@ namespace RNAssistant.Core.Services
         private readonly IEventStore _events;
         public ConversationInputJournal(IEventStore events)
         { _events = events ?? throw new ArgumentNullException(nameof(events)); }
+
+        public static string Fingerprint<TIntent>(TIntent intent)
+        { return TextPatternEngine.Sha256(JsonConvert.SerializeObject(intent)); }
+
+        public static void RequireSameRequest(ConversationInput accepted, string fingerprint)
+        {
+            if (accepted == null || string.IsNullOrEmpty(accepted.RequestFingerprint) || string.IsNullOrEmpty(fingerprint))
+                throw new InvalidOperationException("The original input receipt is unavailable; inspect the conversation without replaying input.");
+            if (!string.Equals(accepted.RequestFingerprint, fingerprint, StringComparison.Ordinal))
+                throw new ArgumentException("request_id_conflict: this request ID already belongs to different input; use the original request or a new ID.");
+        }
 
         public IReadOnlyList<ConversationInputRecord> Read(ChatSession session, bool includeText = true)
         {

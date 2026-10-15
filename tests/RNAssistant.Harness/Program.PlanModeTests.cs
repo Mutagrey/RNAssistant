@@ -112,7 +112,7 @@ namespace RNAssistant.Harness
             {
                 var adapter = FakeOfficeAdapter.ForHost("Word");
                 var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths), paths: paths,
-                    persistResourceFacts: saved => { throw new System.IO.IOException("Injected Plan chat-link failure."); });
+                    persistResourceFacts: (saved, commit) => { throw new System.IO.IOException("Injected Plan chat-link failure."); });
                 var session = NewSession(adapter);
                 session.Mode = ChatModes.Plan;
                 var definition = executor.GetControllerTools().Single(item => item.Id == PlanDocumentToolCatalog.SaveToolId);

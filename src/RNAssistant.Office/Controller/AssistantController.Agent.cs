@@ -204,7 +204,7 @@ namespace RNAssistant.Office
                 var result = ToolRunResult.Cancelled(
                     "Tool cancelled by user.");
                 result.PendingId = pending.PendingId;
-                UpdatePendingActivity(session, pending.PendingId, pending.Command, result);
+                var updatedActivity = UpdatePendingActivity(session, pending.PendingId, pending.Command, result);
                 var protocolStart = session.Messages.Count;
                 var settings = _settingsService.Load();
                 settings.ToolResultRole = PendingToolResultRole(session, pending.Command, settings.ToolResultRole);
@@ -214,14 +214,18 @@ namespace RNAssistant.Office
                     message.Role == "assistant" && message.ToolCallId == pending.Command.ToolCallId &&
                     message.ToolName == pending.Command.ToolId &&
                     message.ToolResultProtocolVersion == RNAssistant.Core.ModelProtocol.ToolResultWire.CurrentVersion);
+                ChatMessage cancelledResult = null;
                 if (acceptedCall != null &&
                     (AcceptedCallPayloadService.IsExternalizedCall(acceptedCall) ||
                      RNAssistant.Core.ModelProtocol.ConversationResponseHistoryReader.Read(acceptedCall).Success))
-                    session.Messages.Add(AgentJsonProtocol.CreateToolResultMessage(
+                {
+                    cancelledResult = AgentJsonProtocol.CreateToolResultMessage(
                         CloneCommand(pending.Command),
                         RNAssistant.Core.Tools.Contracts.ToolResult.Error(result.Message,
                             "{\"code\":\"tool_cancelled\"}"),
-                        settings.ToolResultRole));
+                        settings.ToolResultRole);
+                    session.Messages.Add(cancelledResult);
+                }
                 AnnotateRunMessages(session, protocolStart, "cancel_" + Guid.NewGuid().ToString("N"));
                 // Explicit user cancellation is terminal for this run: persist it, but do not invoke the model.
                 if (session.LastRun != null)
@@ -232,7 +236,8 @@ namespace RNAssistant.Office
                     session.LastRun.Phase = "cancelled";
                     session.LastRun.CurrentAction = result.Message;
                 }
-                SaveSessionChanges(session);
+                SaveSessionChanges(session, session.Messages.Skip(protocolStart).Concat(
+                    updatedActivity == null ? new ChatMessage[0] : new[] { updatedActivity }), cancelledResult);
             }
             return ChatState(session);
         }
@@ -322,23 +327,26 @@ namespace RNAssistant.Office
             }
         }
 
-        private static void CancelPendingActivities(ChatSession session, string reason)
+        private static IReadOnlyList<ChatMessage> CancelPendingActivities(ChatSession session, string reason)
         {
+            var changed = new List<ChatMessage>();
             foreach (var message in session == null || session.Messages == null
                 ? new List<ChatMessage>()
                 : session.Messages)
             {
-                CancelPendingActivity(message == null ? null : message.Activity, reason);
+                if (CancelPendingActivity(message == null ? null : message.Activity, reason)) changed.Add(message);
             }
-            ChatHistoryEditService.ExcludeUnmatchedToolCalls(session == null ? null : session.Messages);
+            changed.AddRange(ChatHistoryEditService.ExcludeUnmatchedToolCalls(session == null ? null : session.Messages));
+            return changed;
         }
 
-        private static void CancelPendingActivity(ChatActivity activity, string reason)
+        private static bool CancelPendingActivity(ChatActivity activity, string reason)
         {
             if (activity == null)
             {
-                return;
+                return false;
             }
+            var changed = false;
             if (!string.IsNullOrWhiteSpace(activity.PendingId))
             {
                 activity.PendingId = null;
@@ -346,11 +354,13 @@ namespace RNAssistant.Office
                 activity.Status = "cancelled";
                 activity.ExecutionStatus = "cancelled";
                 activity.ResultMessage = reason ?? "Pending action cancelled.";
+                changed = true;
             }
             foreach (var child in activity.Children ?? new List<ChatActivity>())
             {
-                CancelPendingActivity(child, reason);
+                changed |= CancelPendingActivity(child, reason);
             }
+            return changed;
         }
 
         private static ToolInvocation CloneCommand(ToolInvocation command)
@@ -595,12 +605,12 @@ namespace RNAssistant.Office
                  (message.Content ?? string.Empty).StartsWith("TOOL_RESULT:", StringComparison.Ordinal));
         }
 
-        private static void UpdatePendingActivity(ChatSession session,
+        private static ChatMessage UpdatePendingActivity(ChatSession session,
             string pendingId, ToolInvocation command, ToolRunResult result)
         {
             if (session == null || session.Messages == null || string.IsNullOrWhiteSpace(pendingId))
             {
-                return;
+                return null;
             }
 
             var replacement = AgentTranscript.CreateToolActivity(command, result, "tool");
@@ -614,9 +624,10 @@ namespace RNAssistant.Office
                         message.Content = BuildResolvedToolContent(replacement);
                         message.HtmlWorkspaceCheckpoint = ChatResourceUri.ResolveArtifactRevision(session, session.ActiveHtmlArtifactId);
                     }
-                    return;
+                    return message;
                 }
             }
+            return null;
         }
 
         private static bool ReplacePendingActivity(ChatActivity activity, string pendingId, ChatActivity replacement)

@@ -1,3 +1,4 @@
+using RNAssistant.Core.Persistence;
 using System;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Models;
@@ -87,7 +88,7 @@ namespace RNAssistant.Office
         {
             _artifactWorkingSet.Change(session, new ArtifactLinkChangeRequest { ChatId = session.Id,
                 ExpectedSessionRevision = session.Revision, ResourceUri = ChatResourceUri.CreateArtifactRevisionUri(session, artifact), Detached = false },
-                current => { _conversationStore.Save(current); _chatSessions.NotifySaved(current); });
+                current => { _conversationStore.Commit(current, new ConversationCommit()); _chatSessions.NotifySaved(current); });
         }
 
         public ChatStateResponse ChangeArtifactLink(ArtifactLinkChangeRequest request)
@@ -98,7 +99,7 @@ namespace RNAssistant.Office
                     throw new InvalidOperationException("Откройте документ этого чата перед изменением ссылок.");
                 _artifactWorkingSet.Change(session, request, current =>
                 {
-                    _conversationStore.Save(current);
+                    _conversationStore.Commit(current, new ConversationCommit());
                     _chatSessions.NotifySaved(current);
                 });
             });
@@ -109,7 +110,7 @@ namespace RNAssistant.Office
             return WithReservedChatState(LoadArtifactViewerSession(request?.ChatId), session =>
                 _artifactWorkingSet.Delete(session, request, current =>
                 {
-                    _conversationStore.Save(current);
+                    _conversationStore.Commit(current, new ConversationCommit());
                     _chatSessions.NotifySaved(current);
                 }));
         }

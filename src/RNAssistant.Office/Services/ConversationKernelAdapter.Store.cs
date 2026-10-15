@@ -89,7 +89,7 @@ namespace RNAssistant.Office.Services
             var view = RunViewStateProjector.StampCurrentRun(_session);
             var projected = _session.Messages.LastOrDefault(message => view != null && ReferenceEquals(message.RunViewState, view));
             if (projected != null) _pendingMessageUpdates.Add(projected);
-            if (fact == null) _conversations.Save(_session);
+            if (fact == null) _conversations.Commit(_session, ConversationCommit.UserInput(appended.Single(), _pendingMessageUpdates));
             else _conversations.CommitRun(_session, new ConversationRunCommit(fact, appended, activity,
                 resultProjection, _pendingMessageUpdates));
             _pendingMessageUpdates.Clear();

@@ -194,8 +194,16 @@ ordering without diffing every message body. Omitting a new message fails before
 append. Initial/user admission is saved before the first kernel fact.
 
 The invocation cursor guards kernel appends; the store retains its existing
-current-session revision CAS. General `Save` still serves non-runtime mutations;
-its consumers and removal gate are in [MIGRATION_MAP](stabilization/MIGRATION_MAP.md#runtime-commit-boundary--2026-10-15).
+current-session revision CAS. Other owners use `ConversationCommit`: user intake
+names its user-message append; checkpoints name updated messages; history rewrites
+name their remaining messages and exact removals. A state-only commit never
+serializes or compares every message body. Undeclared additions/removals fail before
+append. The generic `Save` API and `ResolveUpsertType` classifier are removed;
+UI status, role and protocol fields cannot manufacture tool execution events.
+Explicit user cancellation records its protocol result with `ToolResult`; that
+message is distinct from an execution outcome owned by a kernel fact.
+Initial creation/fork still stores a complete initial projection. Bulk `Save`
+exists only in test fixture setup and emits ordinary message updates.
 This is not an O(1) save claim: normalization, metadata/artifact comparison and
 projection/cache maintenance still depend on session size. Own causal-trace appends may
 advance that revision without invalidating the kernel cursor. A stale reloaded
@@ -449,6 +457,13 @@ bodies; it never depends on the metadata page retaining `DataJson`. Missing data
 produces a visible explanation and reload action instead of an empty waiting card.
 Question results are not converted to generic Tool Result artifacts: their existing
 call/result and activity payloads retain the interaction body.
+Office and CLI use Core `UserQuestionAnswers` to resolve the accepted result,
+hydrate its CAS body and validate exact run/set/question/option identities. Web
+submits typed `answers` through `submitChatInput`, preserving the composer draft;
+only runtime creates the semantic `PLAN_ANSWERS` message. Office checks again under
+the run reservation before appending queued answers. Stale/already-answered sets
+are rejected; answer inputs cannot be edited as arbitrary text. A protocol result
+with the `user` role does not count as a human answer when rendering question cards.
 
 ## Inspection
 
@@ -493,10 +508,11 @@ absence of input events means an empty queue.
 
 ### Application input receipts and event reconnect
 
-Core `ConversationInputJournal` owns the existing input event/CAS serialization
-for the Office inbox and workspace application service. Queue scheduling stays
-with its application owner. Workspace intake adds optional `AcceptedRunId` and
-`RequestFingerprint` metadata to that same event; it adds no store or event type.
+Core `ConversationInputJournal` owns the existing input event/CAS serialization,
+request fingerprinting and conflict validation for Office and the workspace
+application service. Queue scheduling stays with its application owner. Inputs
+retain `RequestFingerprint` and optional `AcceptedRunId` / answer-run/set metadata
+in that same event; no store or event type is added.
 `OperationId` is the caller's request ID (or a runtime-generated ID when omitted).
 The accepted revision precedes user-message persistence and kernel invocation;
 the `applied` revision follows durable persistence of that message with the input
@@ -510,6 +526,13 @@ not reapplied on a duplicate. Reusing an ID for different input fails with
 lease, with another lookup inside the lease before acceptance. A duplicate does
 not append events, start/reconcile a run, re-grade acceptance or replay tools.
 Caller-supplied IDs require a pre-existing session.
+
+Office `submitChatInput` requires an operation ID and uses the same conflict check.
+Its fingerprint covers text or typed answers, draft IDs and delivery mode. Lookup
+precedes draft loading, so a retry works after drafts were consumed; a matching
+receipt never restarts the worker. Queue edits preserve the original fingerprint.
+Receipts without a fingerprint are explicitly unavailable for retry. `sendChat`
+and its controller/browser path are removed; UI and MockDemo use this inbox route.
 
 Receipt `DeliveryRecorded` means the `applied` event was persisted, not that a run
 completed or a tool had an effect. It may advance from false to true. A receipt

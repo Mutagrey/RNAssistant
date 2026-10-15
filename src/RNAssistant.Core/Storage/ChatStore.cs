@@ -171,7 +171,7 @@ namespace RNAssistant.Core.Storage
         internal ChatSession Create(string host, string documentKey, string documentTitle, string title)
         {
             var session = CreateTransient(host, documentKey, documentTitle, title);
-            Save(session);
+            Commit(session, new ConversationCommit());
             SaveActiveSessionId(host, documentKey, session.Id);
             return session;
         }
@@ -214,9 +214,10 @@ namespace RNAssistant.Core.Storage
             return selected;
         }
 
-        internal void Save(ChatSession session)
+        internal void Commit(ChatSession session, ConversationCommit commit)
         {
-            SaveInternal(session, null, false);
+            if (commit == null) throw new ArgumentNullException(nameof(commit));
+            SaveInternal(session, null, false, commit);
         }
 
         internal void CommitRun(ChatSession session, ConversationRunCommit commit)
@@ -604,7 +605,7 @@ namespace RNAssistant.Core.Storage
                     var newPath = GetSessionPath(host, documentKey, session.Id);
                     using (AcquireTwoDocumentLocks(oldHost, oldDocumentKey, host, documentKey))
                     {
-                        SaveInternalLocked(session, oldPath, true);
+                        SaveInternalLocked(session, oldPath, true, new ConversationCommit());
                         if (!string.Equals(oldPath, newPath, StringComparison.OrdinalIgnoreCase))
                         {
                             if (File.Exists(newPath))
@@ -668,8 +669,9 @@ namespace RNAssistant.Core.Storage
         {
             var session = Load(host, documentKey, sessionId);
             if (session == null) return;
+            var removed = session.Messages.Select(message => message.Id).ToArray();
             session.Messages.Clear();
-            Save(session);
+            Commit(session, new ConversationCommit(removed: removed));
         }
 
         internal bool Delete(string host, string documentKey, string sessionId)
@@ -810,12 +812,12 @@ namespace RNAssistant.Core.Storage
         }
 
         private void SaveInternal(ChatSession session, string explicitPath, bool allowRelocatedSession,
-            ConversationRunCommit commit = null)
+            ConversationCommit commit)
         {
             if (session == null) throw new ArgumentNullException("session");
             using (AcquirePersistenceRead())
             {
-                foreach (var message in commit == null ? session.Messages ?? new List<ChatMessage>() :
+                foreach (var message in session.Revision == 0 ? session.Messages ?? new List<ChatMessage>() :
                     commit.Messages.Select(write => write.Message))
                     RuntimePayloadService.ExternalizeActivity(message.Activity, _blobs);
                 NormalizeSession(session, session.Host, session.DocumentKey, session.DocumentTitle);
@@ -828,15 +830,15 @@ namespace RNAssistant.Core.Storage
         }
 
         private void SaveInternalLocked(ChatSession session, string path, bool allowRelocatedSession,
-            ConversationRunCommit commit = null)
+            ConversationCommit commit)
         {
             var timer = Stopwatch.StartNew();
             EnsureUniqueArtifactIdentities(session);
-            EnsureChartArtifacts(session, commit?.Messages.Select(write => write.Message));
+            EnsureChartArtifacts(session, session.Revision == 0 ? session.Messages : commit.Messages.Select(write => write.Message));
             ExternalizeArtifacts(session);
             var externalizeMs = timer.ElapsedMilliseconds;
             var exists = File.Exists(path);
-            if (commit != null && !exists)
+            if (commit is ConversationRunCommit && !exists)
                 throw new ChatConcurrencyException("Persist the conversation before appending runtime facts.");
             EventLogReadResult log = null;
             var stored = exists ? ReadProjectedSession(path, false, false, out log) : null;
@@ -867,7 +869,7 @@ namespace RNAssistant.Core.Storage
                     cachedBefore.Sequence == storedRevision &&
                     string.Equals(cachedBefore.HeadHash, stored.StorageHeadHash, StringComparison.OrdinalIgnoreCase)
                     ? cachedBefore.Root : exists ? ToProjectionToken(stored) : null;
-                var projectedAfter = ToProjectionToken(session, commit == null);
+                var projectedAfter = ToProjectionToken(session, !exists);
                 var projectionMs = timer.ElapsedMilliseconds - externalizeMs - readMs;
                 if (!exists)
                 {
@@ -879,12 +881,13 @@ namespace RNAssistant.Core.Storage
                 }
                 else
                 {
-                    var operations = BuildOperations(projectedBefore, projectedAfter, commit == null);
-                    if (commit != null)
+                    var operations = BuildStateOperations(projectedBefore, projectedAfter);
                     {
                         var writes = commit.Messages.Select(write => Operation(write.Operation,
                             new JObject { ["Value"] = JObject.FromObject(write.Message,
                                 JsonSerializer.Create(ProjectionJsonSettings)) })).ToList();
+                        writes.AddRange(commit.RemovedMessageIds.Select(id => Operation(SessionOperationTypes.MessageRemove,
+                            new JObject { ["Id"] = id })));
                         projectedAfter["Messages"] = projectedBefore["Messages"]?.DeepClone() ?? new JArray();
                         var replay = new ProjectionReplayState(projectedAfter);
                         ApplyOperations(projectedAfter, writes, replay);
@@ -893,7 +896,7 @@ namespace RNAssistant.Core.Storage
                         var requestedIds = session.Messages.Select(message => message.Id).ToArray();
                         if (actualIds.Length != requestedIds.Length || !new HashSet<string>(actualIds,
                             StringComparer.OrdinalIgnoreCase).SetEquals(requestedIds))
-                            throw new InvalidOperationException("A runtime commit omitted conversation messages.");
+                            throw new InvalidOperationException("A conversation commit omitted message writes or removals.");
                         if (!actualIds.SequenceEqual(requestedIds, StringComparer.OrdinalIgnoreCase))
                         {
                             writes.Add(Operation(SessionOperationTypes.MessagesReorder,

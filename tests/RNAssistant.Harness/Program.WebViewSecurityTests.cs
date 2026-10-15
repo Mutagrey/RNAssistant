@@ -34,7 +34,7 @@ namespace RNAssistant.Harness
                 cancellations.Release(type, uploadSource);
             }
 
-            var shutdownSource = cancellations.Create("request-2", BridgeOperationCatalog.Resolve("sendChat"));
+            var shutdownSource = cancellations.Create("request-2", BridgeOperationCatalog.Resolve("confirmAgentTool"));
             cancellations.Dispose();
             AssertTrue(shutdownSource.IsCancellationRequested, "bridge disposal cancels active requests");
             cancellations.Release("request-2", shutdownSource);

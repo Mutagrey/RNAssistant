@@ -6,12 +6,53 @@ using RNAssistant.Core.Models;
 
 namespace RNAssistant.Core.Persistence
 {
+    // State changes never infer message/tool events. History owners identify the
+    // exact writes and removals; kernel facts alone select tool lifecycle semantics.
+    public class ConversationCommit
+    {
+        public IReadOnlyList<ConversationMessageWrite> Messages { get; protected set; }
+        public IReadOnlyList<string> RemovedMessageIds { get; private set; }
+
+        public ConversationCommit(IEnumerable<ChatMessage> updated = null, IEnumerable<string> removed = null)
+        {
+            Messages = (updated ?? new ChatMessage[0]).GroupBy(message => message.Id, StringComparer.OrdinalIgnoreCase)
+                .Select(group => new ConversationMessageWrite(SessionOperationTypes.MessageUpdated, group.Last())).ToArray();
+            RemovedMessageIds = (removed ?? new string[0]).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            if (RemovedMessageIds.Any(string.IsNullOrWhiteSpace) || Messages.Any(write => RemovedMessageIds.Contains(write.Message.Id, StringComparer.OrdinalIgnoreCase)))
+                throw new ArgumentException("Message writes and removals require distinct exact identities.");
+        }
+
+        public static ConversationCommit UserInput(ChatMessage message, IEnumerable<ChatMessage> updated = null)
+        { return Append(SessionOperationTypes.UserMessageAppended, message, updated); }
+
+        // A recorded cancellation/result message is distinct from an execution
+        // outcome: only ConversationRunCommit may finish a tool execution.
+        public static ConversationCommit ToolResult(ChatMessage message, IEnumerable<ChatMessage> updated = null)
+        { return Append(SessionOperationTypes.ToolResultRecorded, message, updated); }
+
+        private static ConversationCommit Append(string operation, ChatMessage message, IEnumerable<ChatMessage> updated)
+        {
+            var commit = new ConversationCommit(updated);
+            commit.Messages = new[] { new ConversationMessageWrite(operation, message) }
+                .Concat(commit.Messages.Where(write => !string.Equals(write.Message.Id, message.Id, StringComparison.OrdinalIgnoreCase))).ToArray();
+            return commit;
+        }
+
+        // Reserved for explicit history rewrites (edit/delete/clear/fork), never
+        // a routine checkpoint. Only identities are compared, not message bodies.
+        public static ConversationCommit RewriteHistory(IEnumerable<string> previousIds, IEnumerable<ChatMessage> remaining)
+        {
+            var messages = remaining.ToArray();
+            var retained = new HashSet<string>(messages.Select(message => message.Id), StringComparer.OrdinalIgnoreCase);
+            return new ConversationCommit(messages, previousIds.Where(id => !retained.Contains(id)));
+        }
+    }
+
     // A transient write command for the existing session stream, not another store.
     // Runtime facts select semantics; protocol roles and UI labels do not.
-    public sealed class ConversationRunCommit
+    public sealed class ConversationRunCommit : ConversationCommit
     {
         public string RunId { get; private set; }
-        public IReadOnlyList<ConversationMessageWrite> Messages { get; private set; }
 
         public ConversationRunCommit(AgentRunEvent fact, IEnumerable<ChatMessage> appended,
             ChatMessage activity = null, bool resultProjection = false, IEnumerable<ChatMessage> updated = null)

@@ -44,7 +44,7 @@ mailbox по StoreID в Desktop; из VSTO/NativeHostCli выбирается а
 загружает его инструменты и контекст; начатый run перед сменой документа должен
 завершиться. Между чатами текущего документа можно переключаться во время run:
 он продолжает работу в исходном чате. Bridge проверяет принадлежность чата текущему
-документу до запроса эксклюзивной смены привязки; незавершённый `sendChat` не блокирует
+документу до запроса эксклюзивной смены привязки; незавершённый inbox run не блокирует
 такой выбор и последующую отмену исходного run. Выбор уже созданного чата другого документа
 подключает точный открытый target, если он доступен. Если документ закрыт или
 точная привязка недоступна, панель открывает сохранённый чат с его историей,
@@ -112,7 +112,7 @@ path/title, folder/mail id и selection reference. Долгоживущие COM-
   launcher/foreground `hwnd` является наиболее точным источником.
 - COM calls проходят через `DispatchedOfficeApplicationAdapter` и выделенный STA.
 - WebView bridge не выполняет полную загрузку/проекцию чата или agent/tool run в
-  Office UI callback. `listChats`, `getChatState`, `selectChat`, `sendChat`,
+  Office UI callback. `listChats`, `getChatState`, `selectChat`, `submitChatInput`,
   `init`, создание/удаление/переименование/fork чатов, открытие/активация документов,
   Office chat coordinators, `setChatModel`, `setChatMode`, `setChatReasoning`,
   `getModelCatalog`, `confirmAgentTool` и `runTool` сначала переходят на worker boundary;
@@ -249,9 +249,9 @@ transcript не могут вернуть старую историю.
 id, role, marker и run id без model/tool body; вложения сообщений содержат только
 метаданные карточки без извлечённого текста. Activity передаёт компактную пару
 source-owned `Dispatch`/`Effect` для статуса действия, но не включает runtime guard,
-каталожный hash и CAS-ссылки аргументов/результата. Завершающий
-`sendChat.toolResults` содержит только id инструмента, успех и короткое сообщение;
-детали остаются в activity/trajectory. Полные тела остаются в event/CAS и
+каталожный hash и CAS-ссылки аргументов/результата. `submitChatInput` возвращает
+inbox receipt; последующие `chatStateChanged` / `getChatState` передают состояние
+чата, а детали остаются в activity/trajectory. Полные тела остаются в event/CAS и
 доступны через адресные diagnostic/resource запросы. Ответ bridge сериализуется
 непосредственно из typed payload без промежуточного `JToken` дерева. `Startup timing`
 отдельно показывает `prompts`, `tools`, `skills` внутри `libraries`.

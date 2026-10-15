@@ -31,7 +31,7 @@ function renderActivityNode(activity, nested, current, context) {
 function appendQuestionCards(node, activity, context) {
   if (String(activityToolId(activity) || "") !== "common.questions_ask" || activityStatus(activity) !== "waiting") return;
   if (context && Number.isInteger(context.index) && (state.messages || []).slice(context.index + 1).some(function (message) {
-    return String(messageRole(message) || "").toLowerCase() === "user";
+    return !messageProtocolMessage(message) && String(messageRole(message) || "").toLowerCase() === "user";
   })) return;
   var slot = document.createElement("div");
   slot.className = "agent-question-slot";
@@ -58,12 +58,12 @@ function appendQuestionCards(node, activity, context) {
       target.appendChild(retry);
       return;
     }
-    renderQuestionCards(target, response.questions);
+    renderQuestionCards(target, response.questions, response);
   });
   if (!loading) slot.textContent = "Не удалось определить источник вопросов. Обновите чат.";
 }
 
-function renderQuestionCards(node, data) {
+function renderQuestionCards(node, data, source) {
   var form = document.createElement("form");
   form.className = "plan-question-cards";
   data.questions.forEach(function (question) {
@@ -92,6 +92,7 @@ function renderQuestionCards(node, data) {
       var free = document.createElement("textarea");
       free.name = "free_" + question.id;
       free.rows = 2;
+      free.maxLength = 4000;
       free.placeholder = "Дополнение или свой вариант";
       fieldset.appendChild(free);
     }
@@ -102,27 +103,23 @@ function renderQuestionCards(node, data) {
   submit.className = "agent-action-button primary";
   submit.textContent = "Ответить";
   form.appendChild(submit);
-  form.addEventListener("submit", function (event) {
+  form.addEventListener("submit", async function (event) {
     event.preventDefault();
     var answers = data.questions.map(function (question) {
       var selectedIds = Array.prototype.slice.call(form.querySelectorAll("[name='q_" + question.id + "']:checked")).map(function (input) { return input.value; });
-      var selected = (question.options || []).filter(function (option) {
-        return selectedIds.indexOf(option.id) >= 0;
-      }).map(function (option) { return option.label; });
       var free = form.querySelector("[name='free_" + question.id + "']");
-      return { question: question.prompt || question.header || "Вопрос", selections: selected, freeText: free ? free.value.trim() : "" };
+      return { questionId: question.id, optionIds: selectedIds, freeText: free ? free.value.trim() : "" };
     });
-    if (answers.some(function (answer) { return !answer.selections.length && !answer.freeText; })) {
+    if (answers.some(function (answer) { return !answer.optionIds.length && !answer.freeText; })) {
       window.alert("Ответьте на каждый вопрос.");
       return;
     }
-    var input = $("chatInput");
-    var chatForm = $("chatForm");
-    if (!input || !chatForm) return;
-    input.value = "PLAN_ANSWERS:\n" + JSON.stringify({ answers: answers });
-    updateComposerInputState();
-    if (chatForm.requestSubmit) chatForm.requestSubmit();
-    else chatForm.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    submit.disabled = true;
+    var accepted = await submitInboxMessage(null, [], source.chatId, "Steer", {
+      runId: source.runId, questionSetId: data.questionSetId, answers: answers
+    });
+    submit.disabled = !!accepted;
+    if (accepted) submit.textContent = "Ответ отправлен";
   });
   node.appendChild(form);
 }

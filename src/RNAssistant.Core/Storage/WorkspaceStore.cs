@@ -1,3 +1,4 @@
+using RNAssistant.Core.Persistence;
 using System;
 using System.IO;
 using System.Linq;
@@ -99,7 +100,7 @@ namespace RNAssistant.Core.Storage
             session.WorkspaceId = workspace.WorkspaceId;
             session.DocumentAuthorityId = null;
             session.DocumentPath = null;
-            chats.Save(session);
+            chats.Commit(session, new ConversationCommit());
             return session;
         }
 

@@ -367,19 +367,6 @@ namespace RNAssistant.Office.WebView
                             (nextRun, phase, message, activity) => ReportProgress("inbox:" + inboxChat, inboxChat, nextRun, phase, message, activity),
                             ReportChatState), cancellationToken).ConfigureAwait(false);
                         break;
-                    case BridgeOperationId.SendChat:
-                        var sendChat = Payload<SendChatPayload>(payload);
-                        var runId = Guid.NewGuid().ToString("N");
-                        responsePayload = await Task.Run(() => _controller.SendChatAsync(
-                                sendChat.Text,
-                                sendChat.ChatId,
-                                sendChat.ResourceDraftIds,
-                                (phase, message, activity) => ReportProgress(id, sendChat.ChatId, runId, phase, message, activity),
-                                ReportChatState,
-                                cancellationToken,
-                                runId),
-                            cancellationToken).ConfigureAwait(false);
-                        break;
                     case BridgeOperationId.BeginChatResourceUpload:
                         responsePayload = _controller.BeginChatResourceUpload(Payload<ResourceUploadOpenRequest>(payload), cancellationToken);
                         break;
@@ -776,7 +763,7 @@ namespace RNAssistant.Office.WebView
                 var serializeMs = timer.ElapsedMilliseconds - handleMs;
                 if ((type == BridgeOperationId.Init &&
                         handleMs + serializeMs >= 500) ||
-                    ((handleMs + serializeMs >= 250) && (type == BridgeOperationId.SendChat ||
+                    ((handleMs + serializeMs >= 250) && (type == BridgeOperationId.SubmitChatInput ||
                         type == BridgeOperationId.GetChatState ||
                         type == BridgeOperationId.SelectChat ||
                         type == BridgeOperationId.ListChats)))

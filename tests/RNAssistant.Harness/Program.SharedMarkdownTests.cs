@@ -197,7 +197,7 @@ namespace RNAssistant.Harness
             {
                 var adapter = FakeOfficeAdapter.ForHost("Word");
                 var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths), paths: paths,
-                    persistResourceFacts: saved => { throw new System.IO.IOException("Injected link save failure."); });
+                    persistResourceFacts: (saved, commit) => { throw new System.IO.IOException("Injected link save failure."); });
                 var session = NewSession(adapter);
                 var definition = executor.GetControllerTools().Single(item => item.Id == MarkdownDocumentToolCatalog.SaveToolId);
                 var runtime = executor.CreateNativeRuntime(session, new[] { definition }, new AppSettings(), ChatModes.Agent, false, manualRun: true);

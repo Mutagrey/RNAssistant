@@ -142,17 +142,29 @@ namespace RNAssistant.Office.Services
             var box = Get(session);
             lock (box.Sync) return Clone(box.Inputs.FirstOrDefault(i => i.Id == id));
         }
-        internal ConversationInput FindOperation(ChatSession session, string operationId)
+        internal ConversationInput FindOperation(ChatSession session, string operationId, string fingerprint = null)
         {
             var box = Get(session);
-            lock (box.Sync) return Clone(box.Inputs.FirstOrDefault(i => i.OperationId == operationId));
+            lock (box.Sync)
+            {
+                var accepted = box.Inputs.FirstOrDefault(i => i.OperationId == operationId);
+                if (accepted != null && fingerprint != null) ConversationInputJournal.RequireSameRequest(accepted, fingerprint);
+                return Clone(accepted);
+            }
         }
         internal void Submit(ChatSession session, ConversationInput input)
         {
             var box = Get(session);
             lock (box.Sync)
             {
-                if (box.Inputs.Any(i => i.Id == input.Id || (!string.IsNullOrEmpty(input.OperationId) && i.OperationId == input.OperationId))) return;
+                if (string.IsNullOrEmpty(input.OperationId) || string.IsNullOrEmpty(input.RequestFingerprint))
+                    throw new ArgumentException("Input requires an operation ID and request fingerprint.");
+                var accepted = box.Inputs.FirstOrDefault(i => i.Id == input.Id || i.OperationId == input.OperationId);
+                if (accepted != null)
+                { ConversationInputJournal.RequireSameRequest(accepted, input.RequestFingerprint); return; }
+                if (input.QuestionSetId != null && (box.Running || box.Inputs.Any(i => IsPending(i) ||
+                    i.Status != ConversationInputStatus.Removed && i.AnswerRunId == input.AnswerRunId && i.QuestionSetId == input.QuestionSetId)))
+                    throw new InvalidOperationException("The questions already have accepted input or the conversation has moved on.");
                 input.Revision = 1;
                 Write(box, input);
                 if (input.Delivery == InputDelivery.Steer) box.ExplicitSteers.Add(input.Id);
@@ -165,6 +177,8 @@ namespace RNAssistant.Office.Services
             lock (box.Sync)
             {
                 var input = Clone(box.Inputs.FirstOrDefault(i => i.Id == request.InputId));
+                if (action == "edit" && input?.QuestionSetId != null)
+                    throw new InvalidOperationException("Ответы на вопросы нельзя изменять как текст сообщения. Удалите ответ и отправьте новый.");
                 if (input != null && input.Revision == request.ExpectedRevision + 1 &&
                     ((action == "remove" && input.Status == ConversationInputStatus.Removed) ||
                      (action == "steer" && input.Delivery == InputDelivery.Steer) ||

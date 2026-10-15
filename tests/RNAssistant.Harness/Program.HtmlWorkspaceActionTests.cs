@@ -21,7 +21,7 @@ namespace RNAssistant.Harness
                 var adapter = FakeOfficeAdapter.ForHost("Excel");
                 var persisted = 0;
                 var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths), new ToolStore(paths),
-                    persistResourceFacts: saved => persisted++);
+                    persistResourceFacts: (saved, commit) => persisted++);
                 var session = NewSession(adapter);
                 var request = new HtmlWorkspaceDeleteFilePayload { ChatId = session.Id,
                     ExpectedActiveHtmlArtifactId = "", ExpectedSessionRevision = session.Revision, Path = "index.html" };

@@ -20,7 +20,18 @@ namespace RNAssistant.Office
         public ChatInboxResponse GetChatInbox(string chatId) { return new ChatInboxResponse { ChatId = chatId }; }
         public ChatInboxResponse StopChatInbox(string chatId) { return GetChatInbox(chatId); }
         public ChatInboxResponse SubmitChatInput(SubmitChatInputPayload request, Action<string, string, string, ChatActivity> progress,
-            Action<ChatStateResponse> changed) { return GetChatInbox(request.ChatId); }
+            Action<ChatStateResponse> changed)
+        {
+            LastChatText = request.Text;
+            LastChatId = request.ChatId;
+            LastResourceDraftIds = request.ResourceDraftIds ?? new List<string>();
+            progress?.Invoke("run-input", "thinking", "Testing progress", new ChatActivity { Kind = "notice", Title = "Testing progress", Status = "running" });
+            progress?.Invoke("run-input", "streaming", string.Empty, null);
+            progress?.Invoke("run-input", "streaming", "Hel", null);
+            changed?.Invoke(ChatState("Generated title", request.ChatId));
+            return new ChatInboxResponse { ChatId = request.ChatId, Revision = 8,
+                AcceptedInput = new ConversationInput { Id = "accepted-input", OperationId = request.OperationId, Text = request.Text } };
+        }
         public ChatInboxResponse UpdateChatInput(UpdateChatInputPayload request, string action, Action<string, string, string, ChatActivity> progress,
             Action<ChatStateResponse> changed) { return GetChatInbox(request.ChatId); }
         public ChatInboxResponse ResumeChatInbox(string chatId, Action<string, string, string, ChatActivity> progress,
@@ -78,8 +89,8 @@ namespace RNAssistant.Office
         public bool LastTrajectoryExportCas { get; private set; }
         internal ManualResetEventSlim RunToolEntered { get; set; }
         internal ManualResetEventSlim RunToolRelease { get; set; }
-        internal ManualResetEventSlim SendChatEntered { get; set; }
-        internal ManualResetEventSlim SendChatRelease { get; set; }
+        internal ManualResetEventSlim RunEntered { get; set; }
+        internal ManualResetEventSlim RunRelease { get; set; }
         internal Action NavigationWork { get; set; }
         internal Func<string, ChatStateResponse> CurrentDocumentChatSelection { get; set; }
 
@@ -526,6 +537,8 @@ namespace RNAssistant.Office
             Action<ChatStateResponse> chatStateChanged = null)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            RunEntered?.Set();
+            RunRelease?.Wait(cancellationToken);
             LastChatId = chatId;
             LastRunId = runId;
             if (progress != null)
@@ -850,84 +863,6 @@ namespace RNAssistant.Office
         public DocumentContext RemoveContextItem(string id, string chatId = null) { return new DocumentContext { Title = id ?? string.Empty }; }
         public DocumentContext ClearContext(string chatId = null) { return new DocumentContext { DocumentKey = chatId ?? string.Empty }; }
         public Task<QuickActionResponse> RunQuickActionAsync(string action) { return Task.FromResult(new QuickActionResponse { Prompt = action }); }
-
-        public Task<SendChatResponse> SendChatAsync(
-            string text,
-            string chatId = null,
-            IReadOnlyList<string> resourceDraftIds = null,
-            Action<string, string, ChatActivity> progress = null,
-            Action<ChatStateResponse> chatStateChanged = null,
-            CancellationToken cancellationToken = default(CancellationToken),
-            string runId = null)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (SendChatEntered != null) SendChatEntered.Set();
-            if (SendChatRelease != null) SendChatRelease.Wait(cancellationToken);
-            LastChatText = text;
-            LastChatId = chatId;
-            LastResourceDraftIds = resourceDraftIds ?? new string[0];
-            if (progress != null)
-            {
-                progress("thinking", "Testing progress", new ChatActivity { Kind = "notice", Title = "Testing progress", Status = "running" });
-                progress("streaming", string.Empty, null);
-                progress("streaming", "Hel", null);
-            }
-            if (chatStateChanged != null)
-            {
-                chatStateChanged(ChatState("Generated title", chatId));
-            }
-            return Task.FromResult(new SendChatResponse
-            {
-                SessionRevision = 8,
-                RunViewState = new RunViewState("run-bridge", "turn-bridge", "ok",
-                    RunViewLifecycles.Completed, RunViewHealth.Clean, 0, 0, 0, 0, 0, 0,
-                    null, null, "ok", DateTime.UtcNow),
-                Message = "ok",
-                Tools = new ToolLibraryResponse
-                {
-                    Type = ToolLibraryResponse.ContractType,
-                    ContractVersion = ToolLibraryResponse.CurrentContractVersion,
-                    Tools = new List<ToolLibraryItemDto>
-                    {
-                        new ToolLibraryItemDto
-                        {
-                            Revision = "generated-revision",
-                            Id = "common.generated_tool",
-                            Host = "Common",
-                            Name = "common.generated_tool",
-                            Description = string.Empty,
-                            Source = new ToolSourceMetadataDto { Sha256 = new string('b', 64), ByteLength = 64 },
-                            Executor = "builtin",
-                            Enabled = true,
-                            BuiltIn = true,
-                            AgentCanRun = true,
-                            ArgumentOrder = new List<string>()
-                        }
-                    }
-                },
-                Skills = new SkillLibraryResponse
-                {
-                    Type = SkillLibraryResponse.ContractType,
-                    ContractVersion = SkillLibraryResponse.CurrentContractVersion,
-                    Skills = new List<SkillPackageDto>
-                    {
-                        new SkillPackageDto
-                        {
-                            Revision = new string('a', 64),
-                            Id = "common.generated_skill",
-                            Host = "Common",
-                            Name = "Generated skill",
-                            Description = "Generated skill.",
-                            Version = "1.0.0",
-                            Body = SkillBodyMetadataDto.From("# Generated"),
-                            Enabled = true,
-                            BuiltIn = false,
-                            References = new List<SkillReferenceDto>()
-                        }
-                    }
-                }
-            });
-        }
 
         public ResourceUploadOpenResponse BeginChatResourceUpload(ResourceUploadOpenRequest request,
             CancellationToken cancellationToken = default(CancellationToken))

@@ -8,6 +8,25 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## Baseline test failures during architecture follow-through — 2026-10-15
+
+**Open, independently reproduced on baseline `4d716414`.** These eight failures
+occur both with the explicit-write/input/projection changes and in an isolated
+source archive of that baseline, compiled with the same host-neutral Harness.
+They are separate follow-ups, not evidence of a clean full suite or Office
+qualification. No production Office effect was exercised.
+
+| Priority / owner | Failing Harness filters | Evidence and next check |
+|---|---|---|
+| First: Office model preparation / VBA observation | `agent: confirmed VBA after-state reaches next request`; `agent: large VBA read and edit survive compaction` | Missing after-source in the next request; expected four model calls but received three. Establish whether current discovery/fixture setup or observation delivery owns each failure before changing the effect path. |
+| Core storage / SQLite projection reader | `storage: event integrity rejects tampering`; `storage: unterminated invalid records are not discarded`; `storage: terminated corrupt tails are rejected` | `JsonlRecordException` escapes `MaterializeSqliteProjection` instead of the expected concurrency/rejected-load contract. The reader fails closed; these checks do not demonstrate discarded records. Unify error translation at the existing reader boundary and retain corruption rejection. |
+| Office kernel-adapter replay fixtures | `kernel replay: confirmation and stale cursor`; `kernel replay: cancelled confirmation`; `kernel replay: known effect survives model preparation failure` | First expects `AwaitingConfirmation` but receives `Completed`; the other two fail with a null reference. Isolate current policy/catalog/fixture prerequisites before attributing a runtime cause. |
+
+Broader changed-tree runs: `agent:` 52/54, `kernel replay:` 7/10; `storage:` has
+three remaining failures after the header-cache fixture was corrected and its
+focused rerun passed. The explicit command/role/lifecycle cases, `chat:` 12/12,
+resource chat-lifecycle 2/2 and inbox 9/9 pass. No blanket suite pass is claimed.
+
 ## Resource journal names and archived operation admission — 2026-10-15
 
 **Fixed host-neutral / Core resource authority and model-context compiler.**
@@ -43,8 +62,9 @@ without calls as `tool.result.recorded`, producing an unknown-tool row. Office a
 Runtime now commit runtime facts explicitly; exact call correlation distinguishes
 results from protocol media helpers. Final done/blocked/needs_input replay and
 causal queries pass, as do paired batch, paused-view and media-release checks.
-Existing historical streams are not rewritten. The remaining non-runtime snapshot
-writer is tracked in [MIGRATION_MAP](MIGRATION_MAP.md#runtime-commit-boundary--2026-10-15).
+Existing historical streams are not rewritten. The follow-up also removed the
+non-runtime snapshot writer; all production owners use explicit message commands
+as described in [MIGRATION_MAP](MIGRATION_MAP.md#runtime-commit-boundary--2026-10-15).
 
 ## CAS and resource fabric review — 2026-10-14
 

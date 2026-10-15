@@ -1,3 +1,4 @@
+using RNAssistant.Core.Persistence;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -43,7 +44,7 @@ namespace RNAssistant.Office
                 using (ReserveChatOperation(session))
                 {
                     session = ReloadReservedSession(session);
-                    _conversationStore.Save(session);
+                    _conversationStore.Commit(session, new ConversationCommit());
                     _chatSessions.NotifySaved(session);
                 }
             }
@@ -86,28 +87,40 @@ namespace RNAssistant.Office
                 string.IsNullOrWhiteSpace(request.OperationId) || request.OperationId.Length > 128 ||
                 !Enum.IsDefined(typeof(InputDelivery), request.Delivery))
                 throw new ArgumentException("An explicit chat, operation id and delivery mode are required.");
+            if (request.Answers != null && (request.Text != null || (request.ResourceDraftIds?.Count ?? 0) > 0 || request.Delivery != InputDelivery.Steer))
+                throw new ArgumentException("Typed answers require their own input without text or attachments.");
+            var fingerprint = ConversationInputJournal.Fingerprint(new SubmitChatInputPayload {
+                Text = request.Text, Delivery = request.Delivery, Answers = request.Answers,
+                ResourceDraftIds = request.ResourceDraftIds ?? new List<string>() });
             var session = LoadInboxSession(request.ChatId);
             ConversationRunPolicy.RequireCurrentSession(session);
-            if (_inbox.FindOperation(session, request.OperationId) == null)
+            var accepted = _inbox.FindOperation(session, request.OperationId, fingerprint);
+            if (accepted == null)
             {
-                var drafts = _chatResourceIngestion.LoadDrafts(session, request.ResourceDraftIds);
-                if (string.IsNullOrWhiteSpace(request.Text) && drafts.Count == 0)
-                    throw new ArgumentException("Сообщение не может быть пустым.");
-                if (drafts.Any(a => a.Status == "error")) throw new InvalidOperationException("Вложение не готово.");
-                var message = new ChatMessage { Attachments = new List<ChatAttachment>(drafts) };
-                _attachmentStore.CommitToCas(message);
-                _inbox.Submit(session, new ConversationInput
+                using (request.Answers == null ? null : ReserveChatOperation(session))
                 {
-                    Id = Guid.NewGuid().ToString("N"), OperationId = request.OperationId, Text = request.Text ?? string.Empty, Delivery = request.Delivery,
-                    CreatedUtc = DateTime.UtcNow, Attachments = message.Attachments,
-                    DocumentRuntimeKey = CaptureExpectedRuntimeDocumentKey(session)
-                });
-                _chatResourceIngestion.DeleteDrafts(message);
+                    if (request.Answers != null) session = ReloadReservedSession(session);
+                    var text = request.Answers == null ? request.Text ?? string.Empty :
+                        UserQuestionAnswers.Accept(session, request.Answers, _toolExecutor.Payloads);
+                    var drafts = _chatResourceIngestion.LoadDrafts(session, request.ResourceDraftIds);
+                    if (string.IsNullOrWhiteSpace(text) && drafts.Count == 0)
+                        throw new ArgumentException("Сообщение не может быть пустым.");
+                    if (drafts.Any(a => a.Status == "error")) throw new InvalidOperationException("Вложение не готово.");
+                    var message = new ChatMessage { Attachments = new List<ChatAttachment>(drafts) };
+                    _attachmentStore.CommitToCas(message);
+                    _inbox.Submit(session, new ConversationInput
+                    {
+                        Id = Guid.NewGuid().ToString("N"), OperationId = request.OperationId, RequestFingerprint = fingerprint,
+                        Text = text, Delivery = request.Delivery, AnswerRunId = request.Answers?.RunId,
+                        QuestionSetId = request.Answers?.QuestionSetId, CreatedUtc = DateTime.UtcNow, Attachments = message.Attachments,
+                        DocumentRuntimeKey = CaptureExpectedRuntimeDocumentKey(session)
+                    });
+                    _chatResourceIngestion.DeleteDrafts(message);
+                }
+                StartInboxWorker(session, progress, changed);
             }
-            StartInboxWorker(session, progress, changed);
             var response = _inbox.Snapshot(session);
-            // Intake can finish after the worker has already consumed this input.
-            response.AcceptedInput = _inbox.FindOperation(session, request.OperationId);
+            response.AcceptedInput = _inbox.FindOperation(session, request.OperationId, fingerprint);
             return response;
         }
 
@@ -160,11 +173,22 @@ namespace RNAssistant.Office
                             continue;
                         }
                         var runId = Guid.NewGuid().ToString("N");
-                        await ExecuteChatTurnAsync(session, _settingsService.Load(), new ChatTurnInput
+                        var input = new ChatTurnInput
                         {
                             Text = item.Text, Attachments = item.Attachments, AppendUserMessage = true,
                             CommitUserAttachments = true, InputId = item.Id
-                        }, null, (phase, text, activity) => { if (progress != null) progress(runId, phase, text, activity); },
+                        };
+                        // Revalidate after reservation/reload, in the same lease as
+                        // the user append. A queued answer cannot follow a mode/history edit.
+                        Func<ChatSession, ChatTurnInput> prepare = item.QuestionSetId == null ? null : new Func<ChatSession, ChatTurnInput>(current =>
+                        {
+                            var questions = UserQuestionAnswers.Pending(current, _toolExecutor.Payloads);
+                            if (questions == null || questions.RunId != item.AnswerRunId || questions.QuestionSet.QuestionSetId != item.QuestionSetId)
+                                throw new InvalidOperationException("The accepted answer belongs to an earlier question run. Inspect the paused input.");
+                            return input;
+                        });
+                        await ExecuteChatTurnAsync(session, _settingsService.Load(), input, prepare,
+                            (phase, text, activity) => { if (progress != null) progress(runId, phase, text, activity); },
                             changed, _inboxCancellation.Token, runId).ConfigureAwait(false);
                     }
                 }

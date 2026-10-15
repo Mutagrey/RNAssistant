@@ -42,7 +42,6 @@ namespace RNAssistant.Office.Contracts
         RemoveChatInput,
         SteerChatInput,
         ResumeChatInbox,
-        [BridgeOperationPolicy(true, 300)] SendChat,
         [BridgeOperationPolicy(true, 300)] BeginChatResourceUpload,
         [BridgeOperationPolicy(true, 300)] CompleteChatResourceUpload,
         CancelChatResourceUpload,

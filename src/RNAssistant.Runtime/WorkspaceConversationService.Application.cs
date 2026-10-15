@@ -93,8 +93,7 @@ namespace RNAssistant.Runtime
                     item.Change.Input.Id != input.Id || item.Change.Input.AcceptedRunId != input.AcceptedRunId ||
                     item.Change.Input.RequestFingerprint != input.RequestFingerprint))
                 throw new InvalidOperationException("The accepted input receipt is unavailable; inspect the session without replaying input.");
-            if (fingerprint != input.RequestFingerprint)
-                throw new ArgumentException("request_id_conflict: this request ID already belongs to different input; use the original request or a new ID.");
+            ConversationInputJournal.RequireSameRequest(input, fingerprint);
             return Receipt(first.Event, input, records[records.Length - 1].Change.Input.Status == ConversationInputStatus.Applied);
         }
 
@@ -126,7 +125,7 @@ namespace RNAssistant.Runtime
                 Mode = request.Mode == null ? null : ChatModes.Require(request.Mode), MutationPolicy = request.MutationPolicy,
                 AutoConfirmToolActions = request.AutoConfirmToolActions, ReasoningEnabled = request.ReasoningEnabled,
                 Answers = request.Answers, Acceptance = PrepareAcceptance(request.Acceptance) };
-            return TextPatternEngine.Sha256(JsonConvert.SerializeObject(canonical));
+            return ConversationInputJournal.Fingerprint(canonical);
         }
     }
 }

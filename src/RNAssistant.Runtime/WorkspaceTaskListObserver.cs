@@ -1,3 +1,4 @@
+using RNAssistant.Core.Persistence;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -100,7 +101,7 @@ namespace RNAssistant.Runtime
                     var added = _session.Artifacts.Where(item => !_previousArtifacts.Contains(item.Id)).ToArray();
                     if (added.Length != 1 || added[0].Kind != ChatArtifactKinds.TaskList)
                         throw new InvalidDataException("Task-list mutation must append exactly one revision.");
-                    _chats.Save(_session);
+                    _chats.Commit(_session, new ConversationCommit());
                     var saved = _chats.Load(_session.Host, _session.DocumentKey, _session.Id);
                     var retained = saved?.Artifacts.SingleOrDefault(item => item.Id == added[0].Id);
                     if (saved == null || retained == null || saved.WorkspaceId != _session.WorkspaceId ||

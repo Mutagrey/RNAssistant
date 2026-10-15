@@ -61,13 +61,13 @@ const { chromium } = require("playwright");
     for (const file of ["app-agent-model.js", "app-agent-activity.js"])
       await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, "../../web/js", file), "utf8") });
     await page.evaluate(() => {
-      state.activeChatId = "chat"; state.messages = [];
+      state.activeChatId = "chat"; state.messages = [{}, { Role: "user", ProtocolMessage: true }];
+      window.messageProtocolMessage = m => !!m.ProtocolMessage;
       window.$ = id => document.getElementById(id);
       window.updateComposerInputState = () => {};
       document.body.innerHTML = '<div id="questions"></div><form id="chatForm"><textarea id="chatInput"></textarea></form>';
-      document.getElementById("chatForm").addEventListener("submit", event => {
-        event.preventDefault(); window.submittedAnswer = document.getElementById("chatInput").value;
-      });
+      document.getElementById("chatInput").value = "Unsent draft";
+      window.submitInboxMessage = async (...args) => { window.submittedAnswer = args; return true; };
       appendQuestionCards(document.getElementById("questions"), {
         ToolId: "common.questions_ask", ToolCallId: "ask", RunId: "run", Status: "waiting", DataJson: null
       }, { index: 0 });
@@ -93,9 +93,9 @@ const { chromium } = require("playwright");
     await page.locator("#questions textarea").fill("Сначала Core");
     await page.getByRole("button", { name: "Ответить", exact: true }).click();
     const answer = await page.evaluate(() => submittedAnswer);
-    assert.match(answer, /^PLAN_ANSWERS:/);
-    assert.deepEqual(JSON.parse(answer.split("\n")[1]).answers[0].selections, ["Core"]);
-    assert.doesNotMatch(answer, /questionSetId|optionIds|questionId/);
+    assert.deepEqual(answer, [null, [], "chat", "Steer", { runId: "run", questionSetId: "set",
+      answers: [{ questionId: "q1", optionIds: ["a"], freeText: "Сначала Core" }] }]);
+    assert.equal(await page.locator("#chatInput").inputValue(), "Unsent draft");
     await page.evaluate(() => {
       const missing = document.createElement("div"); missing.id = "missing-question-source"; document.body.appendChild(missing);
       appendQuestionCards(missing, { ToolId: "common.questions_ask", Status: "waiting" }, null);

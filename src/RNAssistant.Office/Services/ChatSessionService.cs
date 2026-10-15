@@ -179,7 +179,7 @@ namespace RNAssistant.Office.Services
                     try
                     {
                         RunViewStateProjector.StampCurrentRun(session);
-                        _conversations.Save(session);
+                        _conversations.Commit(session, new ConversationCommit(session.Messages.Where(message => BelongsToRun(message, run))));
                     }
                     catch (ChatConcurrencyException)
                     {
@@ -485,7 +485,7 @@ namespace RNAssistant.Office.Services
         public ChatSession CreatePersistentChat(string title)
         {
             var session = BuildNewChat(title);
-            _conversations.Save(session);
+            _conversations.Commit(session, new ConversationCommit());
             SetActiveSession(session);
             return session;
         }
@@ -613,7 +613,7 @@ namespace RNAssistant.Office.Services
             session.Title = generatedTitle.Trim();
             try
             {
-                _conversations.Save(session);
+                _conversations.Commit(session, new ConversationCommit());
             }
             catch (ChatConcurrencyException)
             {
@@ -816,7 +816,7 @@ namespace RNAssistant.Office.Services
                 {
                     try
                     {
-                        _conversations.Save(session);
+                        _conversations.Commit(session, new ConversationCommit());
                     }
                     catch (ChatConcurrencyException)
                     {

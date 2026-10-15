@@ -61,20 +61,20 @@ function retainUnsentInputAttachments(drafts, sent) {
     return !submitted;
   });
 }
-async function submitInboxMessage(text, attachments, chatId, delivery) {
+async function submitInboxMessage(text, attachments, chatId, delivery, answers) {
   if (isPendingChatSubmit(chatId)) return;
   attachments = (attachments || []).slice();
   setPendingChatSubmit(chatId, true);
   renderSendControls();
   // Retain the identity across uncertain transport retries, including accepted-but-unacknowledged sends.
-  var fingerprint = JSON.stringify([chatId, text, attachments.map(attachmentId), delivery]);
+  var fingerprint = JSON.stringify([chatId, text, attachments.map(attachmentId), delivery, answers || null]);
   var echoes = chatInputEchoes(chatId);
   state.inboxSubmissions = state.inboxSubmissions || {};
   var pending = state.inboxSubmissions[chatId];
   if (!pending || pending.fingerprint !== fingerprint) pending = echoes.find(function (item) { return item.fingerprint === fingerprint; });
   if (!pending) {
     pending = { fingerprint: fingerprint, OperationId: inboxOperationId(), Text: text,
-      Attachments: attachments.slice(), Delivery: delivery };
+      Attachments: attachments.slice(), Delivery: delivery, Answers: answers };
     echoes.push(pending);
   }
   state.inboxSubmissions[chatId] = pending;
@@ -83,7 +83,7 @@ async function submitInboxMessage(text, attachments, chatId, delivery) {
   if (state.activeChatId === chatId) renderChatInbox({ forceScroll: true });
   try {
     var inbox = await send("submitChatInput", { chatId: chatId, operationId: pending.OperationId,
-      text: text, resourceDraftIds: attachments.map(attachmentId), delivery: delivery });
+      text: text, resourceDraftIds: attachments.map(attachmentId), delivery: delivery, answers: answers });
     pending.localStatus = "syncing";
     // A newer push may precede this response; the exact intake receipt still resolves its echo.
     if (inbox.acceptedInput) {
@@ -95,13 +95,13 @@ async function submitInboxMessage(text, attachments, chatId, delivery) {
     applyChatInbox(inbox);
     delete state.inboxSubmissions[chatId];
     if (state.activeChatId === chatId) {
-      if ($("chatInput").value === submittedDraft && submittedDraft.trim() === text) setChatInputText("", false);
+      if (!answers && $("chatInput").value === submittedDraft && submittedDraft.trim() === text) setChatInputText("", false);
       state.draftAttachments = retainUnsentInputAttachments(state.draftAttachments, attachments);
       if (typeof renderAttachmentDrafts === "function") renderAttachmentDrafts();
       if (typeof captureChatDraft === "function") captureChatDraft(chatId);
       clearSendError();
       if ($("inboxStatus")) $("inboxStatus").textContent = "";
-    } else {
+    } else if (!answers) {
       var draft = state.chatDrafts && state.chatDrafts[chatId];
       if (draft) {
         if (draft.text === submittedDraft) draft.text = "";
@@ -110,11 +110,13 @@ async function submitInboxMessage(text, attachments, chatId, delivery) {
       }
     }
     refreshInboxChat(chatId);
+    return true;
   } catch (error) {
     pending.localStatus = "unconfirmed";
     log(error.detail || error.message, "error");
     var status = $("inboxStatus");
     if (status && state.activeChatId === chatId) status.textContent = "Не удалось подтвердить отправку. Текст сохранён — повторите отправку.";
+    return false;
   } finally {
     setPendingChatSubmit(chatId, false);
     renderSendControls();
@@ -225,15 +227,15 @@ function renderPendingInput(item, chatId, editing) {
     window.requestAnimationFrame(function () { if (editor.isConnected) editor.focus({ preventScroll: true }); });
   } else {
     var body = document.createElement("div"); body.className = "markdown inbox-pending-text";
-    body.textContent = item.Text || "Вложения"; node.appendChild(body);
+    body.textContent = item.Text || (item.Answers ? "Ответы на вопросы" : "Вложения"); node.appendChild(body);
     var actions = document.createElement("div"); actions.className = "inbox-actions";
     var queued = (chatInbox(chatId).items || []).some(function (pending) { return pending.Id === item.Id; });
     if (item.localStatus === "unconfirmed") actions.appendChild(inboxButton("Повторить отправку", function () {
-      submitInboxMessage(item.Text, item.Attachments || [], chatId, item.Delivery);
+      submitInboxMessage(item.Text, item.Attachments || [], chatId, item.Delivery, item.Answers);
     }));
     if (queued && item.Status === "Pending") {
       if (item.Delivery !== "Steer") actions.appendChild(inboxButton("Отправить сейчас", function () { changeInboxItem("steerChatInput", item); }));
-      actions.appendChild(inboxButton("Редактировать", function () {
+      if (!item.QuestionSetId) actions.appendChild(inboxButton("Редактировать", function () {
         state.inboxEditing = item.Id;
         state.inboxEditDraft = { chatId: chatId, id: item.Id, text: item.Text, revision: item.Revision };
         renderChatInbox();

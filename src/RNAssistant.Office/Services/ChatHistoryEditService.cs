@@ -179,9 +179,10 @@ namespace RNAssistant.Office.Services
             return result;
         }
 
-        internal static void ExcludeUnmatchedToolCalls(IReadOnlyList<ChatMessage> messages)
+        internal static IReadOnlyList<ChatMessage> ExcludeUnmatchedToolCalls(IReadOnlyList<ChatMessage> messages)
         {
-            if (messages == null) return;
+            var changed = new List<ChatMessage>();
+            if (messages == null) return changed;
             for (var index = 0; index < messages.Count; index++)
             {
                 var call = messages[index];
@@ -192,14 +193,16 @@ namespace RNAssistant.Office.Services
                     continue;
                 }
 
-                call.ExcludeFromModelContext = true;
+                if (!call.ExcludeFromModelContext) { call.ExcludeFromModelContext = true; changed.Add(call); }
                 for (var resultIndex = index + 1; resultIndex < messages.Count; resultIndex++)
                 {
                     var message = messages[resultIndex];
                     if (!ToolProtocolMessages.IsExchange(message) || ToolProtocolMessages.IsCall(message)) break;
-                    if (ToolProtocolMessages.Uses(message, ids)) message.ExcludeFromModelContext = true;
+                    if (ToolProtocolMessages.Uses(message, ids) && !message.ExcludeFromModelContext)
+                    { message.ExcludeFromModelContext = true; changed.Add(message); }
                 }
             }
+            return changed;
         }
 
         internal static bool HasResultForLatestToolCall(

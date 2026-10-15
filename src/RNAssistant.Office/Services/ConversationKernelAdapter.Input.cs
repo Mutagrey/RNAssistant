@@ -26,10 +26,11 @@ namespace RNAssistant.Office.Services
                         RunId = _session.LastRun.TurnId, Attachments = input.Attachments };
                     _session.Messages.Add(message);
                     if (_ingestion != null) _ingestion.CommitAndLink(_session, message, _session.Messages.Count - 1);
-                    Save();
+                    Save(appended: new[] { message });
                 }
                 var routing = AttachmentModelRoutingService.Select(_input.Settings, _session, message.Attachments);
                 await _attachments.EnsureAsync(message.Content, _session, message, routing, _progress, token).ConfigureAwait(false);
+                _pendingMessageUpdates.Add(message);
                 _text = message.Content;
                 _steered = true;
                 _input = new ConversationRunInput(routing.Settings, _input.Context, _input.Tools, _input.Skills, routing.PrimaryAttachments);

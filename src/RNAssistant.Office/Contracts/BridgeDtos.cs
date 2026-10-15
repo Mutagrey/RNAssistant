@@ -419,15 +419,6 @@ namespace RNAssistant.Office.Contracts
         public bool? Enabled { get; set; }
     }
 
-    public sealed class SendChatPayload : ChatPayload
-    {
-        [JsonProperty("text")]
-        public string Text { get; set; }
-
-        [JsonProperty("resourceDraftIds")]
-        public List<string> ResourceDraftIds { get; set; }
-    }
-
     public sealed class DiscardChatResourceDraftPayload : ChatPayload
     {
         [JsonProperty("id")]

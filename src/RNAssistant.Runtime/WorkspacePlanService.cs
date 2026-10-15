@@ -1,3 +1,4 @@
+using RNAssistant.Core.Persistence;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -90,7 +91,7 @@ namespace RNAssistant.Runtime
                     var exact = _owner.FindPlanOperation(_session, _operationKey);
                     var artifact = _owner.Read(_session, exact, false);
                     ArtifactWorkingSet.Set(_session, artifact, false);
-                    _chats.Save(_session);
+                    _chats.Commit(_session, new ConversationCommit());
                 }
                 return commit;
             }

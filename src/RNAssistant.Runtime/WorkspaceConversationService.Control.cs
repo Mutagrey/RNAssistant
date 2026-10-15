@@ -1,3 +1,4 @@
+using RNAssistant.Core.Persistence;
 using System;
 using System.Linq;
 using System.Threading;
@@ -62,7 +63,7 @@ namespace RNAssistant.Runtime
                     {
                         AssessAcceptance(workspace, session, result.Summary, acceptance);
                         session.LastRun.WorkspaceAcceptance = acceptance;
-                        _chats.Save(session);
+                        _chats.Commit(session, new ConversationCommit());
                     }
                     return new WorkspaceRunResult(session.Id, result.Summary, acceptance, GetPendingQuestions(session),
                         cursor: ConversationEventFeed.Cursor(session), presentation: Presentation(workspace, session));

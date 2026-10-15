@@ -7,8 +7,7 @@ const vm = require("node:vm");
 
 const root = path.join(__dirname, "../..");
 const requests = [];
-const fullStates = [];
-const catalogStates = [];
+const refreshedChats = [];
 const context = vm.createContext({ Promise, console });
 context.window = context;
 context.state = {
@@ -22,7 +21,7 @@ context.$ = () => ({ value: "" });
 context.attachmentId = item => item && (item.Id || item.id) || item;
 context.messageContent = message => message && (message.Content || message.content) || "";
 context.send = (type, payload) => {
-  assert.equal(type, "sendChat");
+  assert.equal(type, "submitChatInput");
   let resolve;
   let reject;
   const promise = new Promise((accept, decline) => { resolve = accept; reject = decline; });
@@ -30,8 +29,7 @@ context.send = (type, payload) => {
   requests.push({ payload, resolve, reject });
   return promise;
 };
-context.applyChatState = response => fullStates.push(response.activeChatId);
-context.applyChatCatalogState = response => catalogStates.push(response.activeChatId);
+context.setChatInputText = () => {};
 context.clearSendError = () => {};
 context.logToolResults = () => {};
 context.renderSendControls = () => {};
@@ -44,26 +42,32 @@ context.log = () => {};
 vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-chat-run.js"), "utf8"), context,
   { filename: "app-chat-run.js" });
 
+vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-chat-inbox.js"), "utf8"), context);
+context.refreshInboxChat = chatId => refreshedChats.push(chatId);
+
 (async function () {
-  const first = context.sendChat("Первый", [], "chat-a");
-  const second = context.sendChat("Второй", [], "chat-b");
+  const first = context.submitInboxMessage("Первый", [], "chat-a", "Steer");
+  const second = context.submitInboxMessage("Второй", [], "chat-b", "Steer");
 
   assert.deepEqual(requests.map(item => item.payload.chatId), ["chat-a", "chat-b"],
-    "each bridge request keeps its captured chat id");
-  assert.deepEqual(Object.keys(context.state.activeSends).sort(), ["chat-a", "chat-b"],
-    "both chats own independent active sends");
+    "each intake keeps its captured chat id");
+  assert.notEqual(requests[0].payload.operationId, requests[1].payload.operationId);
+  assert.deepEqual(Object.keys(context.state.pendingChatSubmits).sort(), ["chat-a", "chat-b"],
+    "both chats own independent intake requests");
 
-  requests[0].resolve({ activeChatId: "chat-a", toolResults: [] });
+  requests[0].resolve({ chatId: "chat-a", epoch: "a", revision: 1, items: [],
+    acceptedInput: { Id: "input-a", OperationId: requests[0].payload.operationId, Text: "Первый" } });
   await first;
-  assert.deepEqual(catalogStates, ["chat-a"], "background response only refreshes the catalog");
-  assert.deepEqual(fullStates, []);
-  assert.ok(context.state.activeSends["chat-b"], "the second request remains active");
+  assert.deepEqual(refreshedChats, ["chat-a"], "background receipt refreshes only its own chat");
+  assert.equal(context.state.activeChatId, "chat-b");
+  assert.ok(context.state.pendingChatSubmits["chat-b"], "the second intake remains pending");
 
-  requests[1].resolve({ activeChatId: "chat-b", toolResults: [] });
+  requests[1].resolve({ chatId: "chat-b", epoch: "b", revision: 1, items: [],
+    acceptedInput: { Id: "input-b", OperationId: requests[1].payload.operationId, Text: "Второй" } });
   await second;
-  assert.deepEqual(fullStates, ["chat-b"], "selected chat receives its own full response");
-  assert.deepEqual(Object.keys(context.state.activeSends), []);
-  console.log("PASS multi-chat: requests, responses and lifecycles stay addressed per chat");
+  assert.deepEqual(refreshedChats, ["chat-a", "chat-b"]);
+  assert.deepEqual(Object.keys(context.state.pendingChatSubmits), []);
+  console.log("PASS multi-chat: input requests and receipts stay addressed per chat");
 
   context.setPendingChatSubmit("chat-a", true);
   assert.equal(context.isPendingChatSubmit("chat-a"), true);

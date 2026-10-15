@@ -1371,12 +1371,12 @@ namespace RNAssistant.Harness
                 long? expectedGenerationDuringSave = null;
                 var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths),
                     paths: paths, resourceAuthorityStore: store, loadArtifactBody: chats.LoadArtifactBody,
-                    persistResourceFacts: saved =>
+                    persistResourceFacts: (saved, commit) =>
                     {
                         if (expectedGenerationDuringSave.HasValue)
                             AssertEqual(expectedGenerationDuringSave.Value, store.Capture(new ResourceAuthorityScopeId("conversation", saved.Id)).Generation,
                                 "conversation state persists before authority becomes visible");
-                        chats.Save(saved);
+                        chats.Commit(saved, commit);
                     });
                 var session = NewSession(adapter);
                 var edits = new ChatHistoryEditService(_ => { }, (_, reason) => { }, chats.LoadArtifactBody);
@@ -1407,9 +1407,11 @@ namespace RNAssistant.Harness
                 var target = new ChatMessage { Role = "user", Content = "Continue",
                     HtmlWorkspaceCheckpoint = ChatResourceUri.ResolveArtifactRevision(session, session.ActiveHtmlArtifactId) };
                 session.Messages.Add(target);
+                chats.Save(session);
                 executor.MutateLocalResources(session, "common.html_workspace_write_file", null,
                     () => HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "<p>two</p>", true));
                 session.Messages.Add(new ChatMessage { Role = "assistant", Content = "Changed" });
+                chats.Save(session);
                 var second = store.GetHead(htmlScope, html).Revision;
                 expectedGenerationDuringSave = store.Capture(scope).Generation;
                 executor.MutateChatResources(session, new ChatResourceMutationIntent(ChatResourceMutationKind.Edit, target.Id, text: "Replay"),
@@ -1474,8 +1476,8 @@ namespace RNAssistant.Harness
                 var store = new ResourceAuthorityStore(paths);
                 var fail = false;
                 var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths), paths: paths,
-                    resourceAuthorityStore: store, persistResourceFacts: saved =>
-                    { chats.Save(saved); if (fail) throw new System.IO.IOException("Injected failure after durable conversation write."); });
+                    resourceAuthorityStore: store, persistResourceFacts: (saved, commit) =>
+                    { chats.Commit(saved, commit); if (fail) throw new System.IO.IOException("Injected failure after durable conversation write."); });
                 var session = NewSession(adapter);
                 var edits = new ChatHistoryEditService(_ => { }, (_, reason) => { });
                 executor.MutateLocalResources(session, "common.html_workspace_write_file", null,

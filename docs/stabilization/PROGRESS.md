@@ -1,5 +1,31 @@
 # Stabilization progress
 
+## Projection, input and persistence simplification — 2026-10-15
+
+The four follow-ups are implemented in priority order 1 → 3 → 2 → 4:
+
+- **Office authoring owners:** closed model envelopes replace recursive field
+  removal. User JSON schemas, required fields and literal source text survive.
+- **Office bridge / Web:** the unused `sendChat` controller/browser route is
+  removed. UI, mock models and bridge fixtures use `submitChatInput` receipts.
+- **Core input admission:** Office and CLI share request fingerprints, conflict
+  checks and exact question-answer validation, including CAS questions after
+  restart. Typed answers preserve the composer and reject stale question sets;
+  matching receipts do not replay input.
+- **Core persistence / application owners:** explicit message writes/removals
+  replace production `Save(session)` and message-shape event classification.
+  User cancellation explicitly records its protocol result; UI status cannot
+  manufacture an execution outcome. Metadata/artifact deltas and the existing
+  event/CAS/revision barrier remain; this is not an O(1) persistence claim.
+
+Focused projection, inbox, bridge, chat/history, resource-lifecycle, Web and CLI
+request/question checks pass. MockDemo covers all four scripted profiles,
+failed-turn resource persistence, live artifact delivery, typed answers/restart,
+shared-controller inbox and resource workflows. Broader storage/agent/kernel
+filters have eight failures reproduced on isolated baseline `4d716414`; they are
+tracked with owners in [RISK_REGISTER](RISK_REGISTER.md#baseline-test-failures-during-architecture-follow-through--2026-10-15).
+No Windows/Office/VSTO or real-model qualification was run.
+
 ## Resource descriptors, retained reads and context selection unified — 2026-10-15
 
 The remaining CAS/resource review work is complete host-neutral. Office prompt
@@ -96,15 +122,15 @@ product-version change or automatic effect replay was introduced.
 | Slice | Owner and concrete change | Removed path / verification | State |
 |---|---|---|---|
 | A1 | Core artifact storage: authored bodies stay lazy and use their encoding-aware owner | MIME-driven authored-file hydration and re-encoding; UTF-16 reopen/read/save/export and missing-body isolation pass | Verified host-neutral |
-| A2 | Core persistence / Office and Runtime adapters: explicit runtime commits | Runtime message-shape classification and full message-body diff; final responses, paired batches, paused views, released media, durable-before-dispatch and append failure checked | Runtime cutover verified; general writer remains tracked |
-| A3 | Office bridge / Web: versioned catalog for 129 operations, shared cancellation and idle waits | Separate cancellation list and init/navigation/progress casing aliases; missing/late replies, mismatch and no replay checked | Transport cutover verified; embedded projections remain tracked |
+| A2 | Core persistence / Office and Runtime adapters: explicit runtime commits | Runtime message-shape classification and full message-body diff; final responses, paired batches, paused views, released media, durable-before-dispatch and append failure checked | Runtime and remaining conversation writers cut over; follow-up above |
+| A3 | Office bridge / Web: versioned catalog, shared cancellation and idle waits; 128 operations after `sendChat` removal | Separate cancellation list and init/navigation/progress casing aliases; missing/late replies, mismatch and no replay checked | Transport cutover verified; embedded projections remain tracked |
 | A4 | Office domain boundary: shared immutable `DomainOutcome` and one ToolRuntime conversion | Nine outcome/status/effect definitions and nine handler converters removed; 36 domain/read-back/dispatch checks pass | Verified host-neutral |
 
 Canonical contracts: [Session events](../session-events.md),
 [Artifact Library](../artifact-library.md), [Architecture](../architecture.md#bridge-operation-contract)
 and [Conversation protocol](../conversation-protocol.md#tool-result).
-The remaining general `Save` writer and embedded projection adapters have explicit
-owners, consumers and removal gates in [MIGRATION_MAP](MIGRATION_MAP.md#runtime-commit-boundary--2026-10-15).
+The general `Save` writer is now removed. Remaining embedded projection adapters
+have owners, consumers and removal gates in [MIGRATION_MAP](MIGRATION_MAP.md#runtime-commit-boundary--2026-10-15).
 This does not claim constant-time saves or complete removal of all bridge adapters.
 
 Harness, CLI and MockDemo host-neutral builds pass. The real-controller fake-host

@@ -928,7 +928,7 @@ namespace RNAssistant.Harness
                 Test("bridge: navigation leaves caller context", BridgeNavigationLeavesCallerContext),
                 Test("bridge: model catalog cancellation releases binding", BridgeModelCatalogCancellationReleasesBinding),
                 Test("bridge: typed runTool", BridgeUsesTypedRunToolPayload),
-                Test("bridge: typed sendChat", BridgeUsesTypedSendChatPayloadAndProgress),
+                Test("bridge: typed input", BridgeUsesTypedInputPayloadAndProgress),
                 Test("bridge: typed resource ingestion", BridgeUsesTypedResourceIngestionPayloads),
                 Test("bridge: typed editMessage", BridgeUsesTypedEditMessagePayloadAndProgress),
                 Test("bridge: compact addressed context", BridgeCompactsAddressedChatContext),

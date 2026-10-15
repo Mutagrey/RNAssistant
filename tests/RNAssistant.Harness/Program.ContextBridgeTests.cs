@@ -587,8 +587,8 @@ namespace RNAssistant.Harness
             using (var release = new ManualResetEventSlim())
             using (var bridge = new AssistantWebBridge(new AssistantController
             {
-                SendChatEntered = entered,
-                SendChatRelease = release,
+                RunEntered = entered,
+                RunRelease = release,
                 CurrentDocumentChatSelection = chatId => chatId == "chat-a" || chatId == "chat-b"
                     ? new ChatStateResponse { ActiveChatId = chatId } : null
             }, null))
@@ -601,8 +601,8 @@ namespace RNAssistant.Harness
                 };
                 var token = BridgeToken(bridge);
                 var running = bridge.HandleMessageAsync(
-                    "{\"contractVersion\":1,\"id\":\"long-agent\",\"type\":\"sendChat\",\"bridgeToken\":\"" + token +
-                    "\",\"payload\":{\"chatId\":\"chat-a\",\"text\":\"test\"}}");
+                    "{\"contractVersion\":1,\"id\":\"long-agent\",\"type\":\"confirmAgentTool\",\"bridgeToken\":\"" + token +
+                    "\",\"payload\":{\"chatId\":\"chat-a\",\"pendingId\":\"pending-test\"}}");
                 AssertTrue(entered.Wait(TimeSpan.FromSeconds(5)),
                     "agent run entered background bridge work");
                 try
@@ -1028,44 +1028,26 @@ namespace RNAssistant.Harness
             AssertEqual(128 * 1024, result.Description.Length, "unused description remains outside completion log");
         }
 
-        private static void BridgeUsesTypedSendChatPayloadAndProgress()
+        private static void BridgeUsesTypedInputPayloadAndProgress()
         {
             var controller = new AssistantController();
             var progressMessages = new List<string>();
             var bridge = new AssistantWebBridge(controller, progressMessages.Add);
             var token = BridgeToken(bridge);
             var responseJson = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"b2\",\"type\":\"sendChat\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-1\",\"text\":\"hello\",\"resourceDraftIds\":[\"draft-1\"]}}")
+                "{\"contractVersion\":1,\"id\":\"b2\",\"type\":\"submitChatInput\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-1\",\"text\":\"hello\",\"operationId\":\"input-b2\",\"delivery\":\"Steer\",\"resourceDraftIds\":[\"draft-1\"]}}")
                 .GetAwaiter()
                 .GetResult();
 
             var response = JObject.Parse(responseJson);
             AssertTrue(response["ok"].Value<bool>(), "bridge response ok");
-            AssertEqual("ok", response["payload"]["message"].Value<string>(), "chat response message");
-            AssertTrue(response["payload"]["responseStatus"] == null,
-                "model-authored response status is absent from the UI bridge");
-            AssertEqual(8L, response["payload"]["sessionRevision"].Value<long>(),
-                "chat response carries the durable ordering revision");
-            AssertEqual(RunViewLifecycles.Completed,
-                response["payload"]["runViewState"]["Lifecycle"].Value<string>(),
-                "chat response carries typed runtime lifecycle");
-            AssertEqual("rnassistant.toolLibrary",
-                response["payload"]["tools"]["type"].Value<string>(),
-                "chat response refreshes a versioned tool catalog");
-            AssertEqual("common.generated_tool",
-                response["payload"]["tools"]["tools"][0]["id"].Value<string>(),
-                "chat response refreshes tool catalog");
-            AssertEqual("rnassistant.skillLibrary",
-                response["payload"]["skills"]["type"].Value<string>(),
-                "chat response refreshes a versioned skill catalog");
-            AssertEqual("common.generated_skill",
-                response["payload"]["skills"]["skills"][0]["id"].Value<string>(),
-                "chat response refreshes skill catalog");
+            AssertEqual("input-b2", (string)response["payload"]["acceptedInput"]["OperationId"], "intake receipt preserves operation identity");
+            AssertEqual(8L, (long)response["payload"]["revision"], "intake revision");
             AssertEqual("hello", controller.LastChatText, "chat text");
             AssertEqual("chat-1", controller.LastChatId, "chat id");
             AssertEqual("draft-1", controller.LastResourceDraftIds.Single(), "resource draft id");
             var progress = JObject.Parse(progressMessages[0]);
-            AssertEqual("b2", progress["id"].Value<string>(), "progress id");
+            AssertEqual("inbox:chat-1", progress["id"].Value<string>(), "progress id");
             AssertEqual("thinking", progress["payload"]["phase"].Value<string>(), "progress phase");
             AssertEqual("Testing progress", progress["payload"]["activity"]["Title"].Value<string>(), "progress activity title");
             AssertEqual(4, progressMessages.Count, "send chat event count");

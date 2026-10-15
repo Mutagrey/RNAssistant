@@ -450,7 +450,7 @@ if (window.chrome && window.chrome.webview) {
       var progress = response.payload || {};
       var progressPending = state.pending[response.id];
       if (progressPending) refreshBridgeWait(response.id);
-      var isChatProgress = String(response.id || "").indexOf("inbox:") === 0 || progressPending && (progressPending.type === "sendChat" || progressPending.type === "confirmAgentTool" || progressPending.type === "editMessage");
+      var isChatProgress = String(response.id || "").indexOf("inbox:") === 0 || progressPending && (progressPending.type === "confirmAgentTool" || progressPending.type === "editMessage");
       var progressChatId = progress.chatId || (progressPending && progressPending.payload && progressPending.payload.chatId) || "";
       var progressRunId = progress.runId || "";
       if (progressChatId && isChatProgress) {

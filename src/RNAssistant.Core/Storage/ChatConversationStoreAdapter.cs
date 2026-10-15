@@ -34,9 +34,9 @@ namespace RNAssistant.Core.Storage
             return _store.Load(sessionId);
         }
 
-        public void Save(ChatSession session)
+        public void Commit(ChatSession session, ConversationCommit commit)
         {
-            _store.Save(session);
+            _store.Commit(session, commit);
         }
 
         public void CommitRun(ChatSession session, ConversationRunCommit commit)

@@ -91,22 +91,8 @@ namespace RNAssistant.Runtime
 
         public WorkspaceUserInput GetPendingQuestions(ChatSession session)
         {
-            var run = session?.LastRun;
-            var summary = run?.KernelState?.Summary;
-            if (summary?.Lifecycle != RunLifecycle.Completed || summary.Reason != "awaiting_user") return null;
-            var fact = session.Messages.LastOrDefault(item => item.RunId == run.RunId &&
-                item.ProtocolMessage && !string.IsNullOrWhiteSpace(item.ToolCallId));
-            if (fact?.ToolName != UserQuestionToolCatalog.AskToolId)
-                throw new InvalidOperationException("The waiting run has no accepted question result.");
-            var wire = ToolResultWire.Read(fact.Content);
-            if (!wire.Success || wire.Result.Status != ToolResultStatus.Ok || wire.ToolCallId != fact.ToolCallId ||
-                wire.Name != UserQuestionToolCatalog.AskToolId)
-                throw new InvalidOperationException("The accepted question result is invalid.");
-            var questions = JsonConvert.DeserializeObject<UserQuestionSet>(wire.Result.DataJson);
-            if (questions?.Type != "rnassistant.questions" || string.IsNullOrWhiteSpace(questions.QuestionSetId) ||
-                questions.Questions == null || questions.Questions.Count < 1 || questions.Questions.Count > 3)
-                throw new InvalidOperationException("The accepted questions are missing.");
-            return new WorkspaceUserInput { RunId = run.RunId, QuestionSet = questions };
+            var pending = UserQuestionAnswers.Pending(session, _payloads);
+            return pending == null ? null : new WorkspaceUserInput { RunId = pending.RunId, QuestionSet = pending.QuestionSet };
         }
 
         public WorkspaceFileRecoveryResult ReconcileFile(WorkspaceDescriptor workspace, string relativePath)
@@ -255,7 +241,7 @@ namespace RNAssistant.Runtime
                     WorkspaceAcceptance = acceptedContract };
                 session.Model = settings.Model;
                 session.Messages.Add(new ChatMessage { Id = input.Id, Role = "user", Content = message, RunId = runId });
-                _chats.Save(session);
+                _chats.Commit(session, ConversationCommit.UserInput(session.Messages.Last()));
                 input.Status = ConversationInputStatus.Applied; input.Revision++;
                 inputs.Append(session, new ConversationInputEvent { Input = input });
                 receipt.DeliveryRecorded = true;
@@ -270,7 +256,7 @@ namespace RNAssistant.Runtime
                     {
                         AssessAcceptance(workspace, session, result.Summary, acceptedContract);
                         session.LastRun.WorkspaceAcceptance = acceptedContract;
-                        _chats.Save(session);
+                        _chats.Commit(session, new ConversationCommit());
                     }
                     return new WorkspaceRunResult(session.Id, result.Summary, acceptedContract, GetPendingQuestions(session),
                         receipt, ConversationEventFeed.Cursor(session), Presentation(workspace, session));
@@ -334,7 +320,7 @@ namespace RNAssistant.Runtime
                     {
                         AssessAcceptance(workspace, session, result.Summary, acceptance);
                         session.LastRun.WorkspaceAcceptance = acceptance;
-                        _chats.Save(session);
+                        _chats.Commit(session, new ConversationCommit());
                     }
                     return new WorkspaceRunResult(session.Id, result.Summary, acceptance, GetPendingQuestions(session),
                         cursor: ConversationEventFeed.Cursor(session), presentation: Presentation(workspace, session));
@@ -603,7 +589,7 @@ namespace RNAssistant.Runtime
                 run.WorkspaceAcceptance.Error = "Run interrupted before acceptance could be assessed.";
             }
             session.Messages.Add(new ChatMessage { Role = "assistant", RunId = run.RunId, Content = message });
-            _chats.Save(session);
+            _chats.Commit(session, new ConversationCommit(session.Messages.Where(item => item.RunId == run.RunId)));
         }
 
         private static IReadOnlyList<AgentMessage> RestoreAcceptedHistory(ChatSession session)
@@ -913,6 +899,7 @@ namespace RNAssistant.Runtime
                 {
                     if (!ex.CanCompact || !_settings.AutoCompressContext)
                         return AgentModelResult.Failed(ModelProtocolFailureKind.PromptBudgetExceeded, ex.Message);
+                    var firstMessage = _session.Messages.Count;
                     var checkpoint = await _compaction.EnsureWithinBudgetAsync(_session, _settings, string.Empty, true,
                         (phase, message, activity) =>
                         {
@@ -923,7 +910,7 @@ namespace RNAssistant.Runtime
                     if (checkpoint == null) return AgentModelResult.Failed(ModelProtocolFailureKind.PromptBudgetExceeded, ex.Message);
                     // Publish the checkpoint before it can change a model request.
                     // Complete accepted history still belongs to the kernel, not the summary.
-                    _chats.Save(_session);
+                    _chats.Commit(_session, new ConversationCommit(_session.Messages.Skip(firstMessage)));
                     _progress?.Invoke(new WorkspaceRunEvent("compacted", _session.LastRun.KernelState.Summary,
                         null, ConversationEventFeed.Cursor(_session)));
                     authority = CaptureModelAuthority(request.RunId, cancellationToken);
@@ -939,7 +926,7 @@ namespace RNAssistant.Runtime
                 options.TracePurpose = "conversation";
                 _modelTrace.Configure(options);
                 _session.LastContextReceipt = receipt;
-                _chats.Save(_session);
+                _chats.Commit(_session, new ConversationCommit());
                 var result = await _protocol.GetResponseAsync(new ModelProtocolRequest
                 {
                     Settings = _settings, AcceptedMessages = messages, ContextSnapshot = snapshot,
@@ -1198,7 +1185,8 @@ namespace RNAssistant.Runtime
                     var record = fact.Execution;
                     _session.Messages.Add(new ChatMessage
                     {
-                        Role = "user", ProtocolMessage = true, ToolCallId = record.Context.Call.Id,
+                        Role = ToolResultRoles.Tool, ToolResultRole = ToolResultRoles.Tool,
+                        ProtocolMessage = true, ToolCallId = record.Context.Call.Id,
                         ToolName = record.Context.Call.Name, ToolResultProtocolVersion = ToolResultWire.CurrentVersion,
                         Content = WireResult(record),
                         ExecutionProgress = ToolExecutionProgress.Capture(record),

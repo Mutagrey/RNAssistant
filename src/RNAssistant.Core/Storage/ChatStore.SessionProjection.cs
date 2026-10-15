@@ -177,7 +177,7 @@ namespace RNAssistant.Core.Storage
             return session;
         }
 
-        private static List<SessionOperation> BuildOperations(JObject before, JObject after, bool includeMessages = true)
+        private static List<SessionOperation> BuildStateOperations(JObject before, JObject after)
         {
             var operations = new List<SessionOperation>();
 
@@ -193,9 +193,6 @@ namespace RNAssistant.Core.Storage
 
             AddSetOperation(operations, before, after, "Context", SessionOperationTypes.ContextSet);
             AddRunOperation(operations, before["LastRun"], after["LastRun"]);
-            if (includeMessages)
-                AddListOperations(operations, before, after, "Messages", "Id",
-                    SessionOperationTypes.MessageUpdated, SessionOperationTypes.MessageRemove, SessionOperationTypes.MessagesReorder);
             AddListOperations(operations, before, after, "Artifacts", "Id",
                 SessionOperationTypes.ArtifactRevisionCreated, SessionOperationTypes.ArtifactRemove, SessionOperationTypes.ArtifactsReorder);
 
@@ -275,7 +272,7 @@ namespace RNAssistant.Core.Storage
                 var existed = !string.IsNullOrWhiteSpace(id) && beforeById.TryGetValue(id, out previous);
                 if (!existed || !JToken.DeepEquals(previous, item))
                 {
-                    operations.Add(Operation(ResolveUpsertType(property, upsertType, previous, item),
+                    operations.Add(Operation(upsertType,
                         new JObject { ["Value"] = item.DeepClone() }));
                 }
             }
@@ -304,88 +301,6 @@ namespace RNAssistant.Core.Storage
         private static SessionOperation Operation(string type, JObject data)
         {
             return new SessionOperation { Type = type, Data = data ?? new JObject() };
-        }
-
-        private static string ResolveUpsertType(string property, string fallback, JObject previous, JObject item)
-        {
-            if (string.Equals(property, "Artifacts", StringComparison.Ordinal))
-            {
-                return SessionOperationTypes.ArtifactRevisionCreated;
-            }
-            if (!string.Equals(property, "Messages", StringComparison.Ordinal)) return fallback;
-
-            var activity = item["Activity"] as JObject;
-            var status = activity == null ? null : (string)activity["Status"];
-            var executionStatus = activity == null ? null : (string)activity["ExecutionStatus"];
-            var toolCallId = activity == null ? null : (string)activity["ToolCallId"];
-            var previousActivity = previous == null ? null : previous["Activity"] as JObject;
-            if (!string.IsNullOrWhiteSpace(toolCallId) &&
-                IsTerminalToolActivity(status, executionStatus) &&
-                !IsSameToolActivityState(previousActivity, activity, true))
-            {
-                return SessionOperationTypes.ToolExecutionFinished;
-            }
-            if (!string.IsNullOrWhiteSpace(toolCallId) &&
-                string.Equals(status, "running", StringComparison.OrdinalIgnoreCase) &&
-                !IsSameToolActivityState(previousActivity, activity, false))
-            {
-                return SessionOperationTypes.ToolExecutionStarted;
-            }
-            if (previous == null && (bool?)item["ProtocolMessage"] == true)
-            {
-                // Accepted calls are identified by the runtime-owned origin, not by
-                // the provider-specific native ToolCalls representation. Markdown
-                // instruction roles intentionally have no native ToolCalls array.
-                if (item["AcceptedCallOrigin"] is JObject &&
-                    !string.IsNullOrWhiteSpace((string)item["ToolCallId"]))
-                {
-                    return SessionOperationTypes.ToolCallRecorded;
-                }
-                var calls = item["ToolCalls"] as JArray;
-                if (calls != null && calls.Count > 0) return SessionOperationTypes.ToolCallRecorded;
-                if (!string.IsNullOrWhiteSpace((string)item["ToolCallId"])) return SessionOperationTypes.ToolResultRecorded;
-                if (!string.Equals((string)item["Role"], "assistant", StringComparison.OrdinalIgnoreCase)) return fallback;
-            }
-            if (previous == null && string.Equals((string)item["Role"], "user", StringComparison.OrdinalIgnoreCase))
-            {
-                return SessionOperationTypes.UserMessageAppended;
-            }
-            if (previous == null && string.Equals((string)item["Role"], "assistant", StringComparison.OrdinalIgnoreCase))
-            {
-                return SessionOperationTypes.AssistantMessageAppended;
-            }
-            return fallback;
-        }
-
-        private static bool IsTerminalToolActivity(string status, string executionStatus)
-        {
-            return string.Equals(status, "completed", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(status, "failed", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(status, "cancelled", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(status, "waiting", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(status, "waiting_confirmation", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(executionStatus, "waiting_confirmation", StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static bool IsSameToolActivityState(JObject previous, JObject current, bool terminal)
-        {
-            if (previous == null || current == null)
-            {
-                return false;
-            }
-            if (!string.Equals((string)previous["ToolCallId"], (string)current["ToolCallId"],
-                    StringComparison.OrdinalIgnoreCase) ||
-                !string.Equals((string)previous["RunId"], (string)current["RunId"],
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
-            var previousStatus = (string)previous["Status"];
-            var previousExecutionStatus = (string)previous["ExecutionStatus"];
-            return terminal
-                ? IsTerminalToolActivity(previousStatus, previousExecutionStatus)
-                : string.Equals(previousStatus, "running", StringComparison.OrdinalIgnoreCase) &&
-                    !IsTerminalToolActivity(previousStatus, previousExecutionStatus);
         }
 
         private static void ApplyOperations(

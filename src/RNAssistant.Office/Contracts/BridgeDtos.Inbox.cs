@@ -10,6 +10,7 @@ namespace RNAssistant.Office.Contracts
         public string Text { get; set; }
         public InputDelivery Delivery { get; set; }
         public List<string> ResourceDraftIds { get; set; }
+        public UserQuestionAnswerCommand Answers { get; set; }
     }
     public sealed class UpdateChatInputPayload : ChatPayload
     {

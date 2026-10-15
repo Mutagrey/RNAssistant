@@ -20,9 +20,14 @@ gates; active tool compatibility adapter отсутствует. Windows/Office 
 
 ## Runtime commit boundary — 2026-10-15
 
+All production conversation writers now use explicit `ConversationCommit` /
+`ConversationRunCommit`; the general `Save` API and message-shape classifier are
+removed. State-only commits retain metadata/artifact delta calculation and the
+existing JSONL/CAS barrier. History rewrites are explicit commands; ordinary saves
+never rediscover message semantics or diff every message body.
+
 | Temporary path | Owner / remaining consumers | Removal gate |
 |---|---|---|
-| `ChatStore.Save` general snapshot-diff writer and `ResolveUpsertType` | Core conversation persistence; user/inbox admission, controller metadata/edit/clear/fork, compaction, artifact and non-runtime service checkpoints. Kernel facts in Office/Runtime use explicit `ConversationRunCommit`; they no longer infer lifecycle operations from message shape | Move remaining mutation commands to explicit operations, retain one JSONL/CAS revision barrier and replay parity, then delete generic message diff/classification. No hidden fallback from a failed runtime commit |
 | Existing JS casing adapters for embedded Core projections | Office Contracts / Web feature owners; chat summaries, settings, message/activity and document/resource projections. Transport version, operation policies and typed init/navigation/progress envelopes are cut over | Replace each embedded shape with its exact typed contract and switch its consumers together; delete both-case readers and verify serialization/consumer parity. Do not apply global casing conversion to opaque tool data or stored history |
 
 ## Model result families — 2026-10-07
@@ -50,13 +55,13 @@ output remains business content, not recursively filtered metadata.
 | CLI accepted-fact and authority preparation | `WorkspaceConversationService` normalizes durable accepted facts with stable message IDs, refreshes current-run file authority through `WorkspaceFileService` and pins committed skill metadata, conversation-owned Task Lists and workspace-owned Plans through shared Core publication owners. Core `ModelContextCompiler` owns request assembly, filtering, budgeting and repair; `ContextCompactionRuntime` owns checkpoint selection/claims for both hosts. Core `ContextWorkingSet` also restores receipts and current bodies for both hosts. Office retains authority capture, domain projection and prompt preparation, with no separate compaction/retention algorithm. | M5–M7: consolidate application preparation when host profiles share the same capability/context inputs; preserve one compiler, compactor and file authority owner. |
 | Filesystem text-only provider surface | Office and CLI use shared `ResourceFindPage`/`ResourceReadProjection` and exact `ResourceReadObservation`; bounded CLI discovery carries metadata descriptors and explicit incompleteness. The filesystem provider now exposes exact retained text to the browser verifier (2026-10-05). `ResourceProviderRouter<TProvider>` still only routes providers. | §8.1 remains open for raw/binary views, remaining preview/viewer consumers and shared Office/filesystem operation dispatch. Close each with a concrete consumer, bounded coverage and exact evidence, preserving Office host guards; the text slice does not replace the target architecture. |
 | CLI abandoned-run reconciliation | Plain `PrepareResume` still closes an abandoned run without replay. Explicit continuation now uses the shared coordinator/kernel, exact checkpoint, complete history and original remaining limits. Cross-process cancellation reaches only the owning kernel through an ephemeral current-user pipe. | M5–M7: consolidate startup and CLI reconciliation in the common application lifecycle; adopt control contracts in UI and qualify Windows transport. Keep incomplete/unknown tool exchanges blocked from same-run continuation. |
-| Workspace application request/reconnect consumer | CLI `run`/`answer` use typed `SubmitInputAsync` with receipts from shared Core `ConversationInputJournal`; Office inbox uses the same existing event/CAS serializer. `ReadState`/`ReadEvents`/`SubscribeEventsAsync` use canonical sequence/hash cursors and Core event metadata projection. ChatStore's bounded reader reuses unchanged-file boundaries; changed files receive streaming full validation. No second store. | §11/M7: adopt these application contracts in Office UI and consolidate host composition/lifetime. Initial scope loading and changed-file validation remain O(history); optimize only through the canonical owner without weakening prefix integrity. |
+| Workspace application request/reconnect consumer | CLI `run`/`answer` and Office inbox share Core input event/CAS serialization, fingerprints/conflict checks and typed question admission. `ReadState`/`ReadEvents`/`SubscribeEventsAsync` use canonical sequence/hash cursors and Core event metadata projection. ChatStore's bounded reader reuses unchanged-file boundaries; changed files receive streaming full validation. No second store. | §11/M7: adopt event reconnect contracts in Office UI and consolidate host composition/lifetime. Initial scope loading and changed-file validation remain O(history); optimize only through the canonical owner without weakening prefix integrity. |
 | Existing document-owned HTML authoring | `HtmlWorkspacePublication` and Office UI still own old document results; CLI files have no dual writer. | M6: explicit materialization/linkage and guarded old-writer removal for cut-over authored types. |
 
 The Office-only mode policy and question catalog/handler seam was removed on
 2026-10-05. Office and CLI now use Core `ConversationRunPolicy` and
-`UserQuestionToolCatalog/Handler`; typed CLI answer admission belongs to the
-workspace application owner under its existing lease. Question state is derived
+`UserQuestionToolCatalog/Handler` and `UserQuestionAnswers`; typed Office inbox and
+CLI answer admission run under their application leases. Question state is derived
 from the accepted result and kernel summary, with no second pending store.
 The shared compiler projects semantic questions and preserves transport pairing.
 The Office-only Task List service/catalog/handler path was removed on 2026-10-05.
@@ -74,9 +79,9 @@ bound gate. CLI Plan composition publishes through the same journal/CAS owners,
 uses semantic exact reads and pins metadata against the frozen compiler snapshot.
 It does not write a second Plan file or invent a document identity.
 
-Explicit uncertain Task List/Plan reconciliation, file-backed Plan authoring and
-the Office UI's typed answer admission remain open: the existing UI still sends
-semantic `PLAN_ANSWERS` text. Owner: conversation/planning application services.
+Explicit uncertain Task List/Plan reconciliation and file-backed Plan authoring
+remain open. Typed Office answer admission is implemented: only the shared runtime
+validator creates semantic `PLAN_ANSWERS` text. Owner: conversation/planning application services.
 Close each by reusing the existing publication/mutation owners, switching consumers
 and preserving read-back and append-only history.
 

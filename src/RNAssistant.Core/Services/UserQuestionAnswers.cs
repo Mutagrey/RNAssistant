@@ -3,13 +3,53 @@ using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Agent;
+using RNAssistant.Core.ModelProtocol;
+using RNAssistant.Core.Storage;
+using RNAssistant.Core.Tools;
+using RNAssistant.Core.Tools.Contracts;
 
 namespace RNAssistant.Core.Services
 {
-    // Pure admission/projection. The application owner checks the current run
-    // under its session lease, then appends this ordinary accepted user fact.
+    // Shared admission/projection from the accepted question fact. The application
+    // owner holds its session lease, then appends an ordinary accepted user fact.
     public static class UserQuestionAnswers
     {
+        public static PendingUserQuestions Pending(ChatSession session, ChatBlobStore payloads)
+        {
+            var run = session?.LastRun;
+            var summary = run?.KernelState?.Summary;
+            if (summary?.Lifecycle != RunLifecycle.Completed || summary.Reason != "awaiting_user") return null;
+            var fact = session.Messages.LastOrDefault(item => item.RunId == run.RunId &&
+                item.ProtocolMessage && !string.IsNullOrWhiteSpace(item.ToolCallId));
+            if (fact?.ToolName != UserQuestionToolCatalog.AskToolId)
+                throw new InvalidOperationException("The waiting run has no accepted question result.");
+            if (fact.ResultPayload != null)
+            {
+                if (payloads == null || fact.ResultPayload.ByteLength > 1024 * 1024)
+                    throw new InvalidOperationException("The accepted question payload is unavailable or too large.");
+                fact = JsonConvert.DeserializeObject<ChatMessage>(JsonConvert.SerializeObject(fact));
+                fact.Content = payloads.ReadText(fact.ResultPayload.ToBlobReference()) ??
+                    throw new InvalidOperationException("The accepted question payload is missing.");
+            }
+            ToolResultWireReadResult wire; string error;
+            if (!ToolResultHistoryReader.TryRead(fact, out wire, out error) || wire.Result.Status != ToolResultStatus.Ok)
+                throw new InvalidOperationException("The accepted question result is invalid: " + error);
+            var questions = JsonConvert.DeserializeObject<UserQuestionSet>(wire.Result.DataJson);
+            if (questions?.Type != "rnassistant.questions" || string.IsNullOrWhiteSpace(questions.QuestionSetId) ||
+                questions.Questions == null || questions.Questions.Count < 1 || questions.Questions.Count > 3)
+                throw new InvalidOperationException("The accepted questions are missing.");
+            return new PendingUserQuestions { RunId = run.RunId, QuestionSet = questions };
+        }
+
+        public static string Accept(ChatSession session, UserQuestionAnswerCommand command, ChatBlobStore payloads)
+        {
+            var pending = Pending(session, payloads);
+            if (pending == null || command == null || pending.RunId != command.RunId)
+                throw new ArgumentException("The question run is stale, missing or already answered.");
+            return Accept(pending.QuestionSet, command);
+        }
+
         public static string Accept(UserQuestionSet questions, UserQuestionAnswerCommand command)
         {
             if (questions == null || questions.Type != "rnassistant.questions" ||

@@ -62,6 +62,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="..\RNAssistant.Testing\FakeOfficeAdapter.cs" Link="FakeOfficeAdapter.cs" />
+    <Compile Include="..\RNAssistant.Testing\ConversationStoreFixture.cs" Link="ConversationStoreFixture.cs" />
     <Compile Include="..\RNAssistant.Testing\FakeOfficeAdapter.ExcelWrite.cs" Link="FakeOfficeAdapter.ExcelWrite.cs" />
     <Compile Include="..\RNAssistant.Testing\FakeOfficeAdapter.ExcelFindReplace.cs" Link="FakeOfficeAdapter.ExcelFindReplace.cs" />
     <Compile Include="..\RNAssistant.Testing\FakeOfficeAdapter.ExcelRangeMutation.cs" Link="FakeOfficeAdapter.ExcelRangeMutation.cs" />

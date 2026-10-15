@@ -119,5 +119,18 @@ vm.runInContext(fs.readFileSync("web/js/app-chat-inbox.js", "utf8"), context);
   await context.changeInboxItem("removeChatInput", { Id: "edit", Revision: 2 });
   assert.equal(context.pendingChatInputs().some(item => item.Id === "edit"), false,
     "an explicit successful removal still removes the pending bubble");
+  const answer = { runId: "run", questionSetId: "set", answers: [{ questionId: "q", optionIds: ["a"], freeText: "" }] };
+  context.$("chatInput").value = "Unsent draft";
+  transport = () => Promise.reject(new Error("lost answer acknowledgement"));
+  assert.equal(await context.submitInboxMessage(null, [], "b", "Steer", answer), false);
+  const answerId = calls.at(-1).payload.operationId;
+  transport = async () => ({ chatId: "b", revision: 12, items: [], acceptedInput: {
+    Id: "answer", OperationId: answerId, QuestionSetId: "set", Text: "Accepted answers", Status: "Applied", Revision: 1 } });
+  assert.equal(await context.submitInboxMessage(null, [], "b", "Steer", answer), true);
+  assert.equal(calls.at(-1).payload.operationId, answerId, "typed answer retry keeps its receipt identity");
+  assert.equal(calls.at(-1).payload.answers, answer);
+  assert.equal(calls.at(-1).payload.text, null);
+  assert.equal(context.$("chatInput").value, "Unsent draft", "question answers preserve composer text");
+  assert.equal(context.state.draftAttachments[0].Id, "second", "question answers preserve composer attachments");
   console.log("PASS chat inbox: settings, ack/retry, chat isolation, stale projections, queue controls");
 })().catch(error => { console.error(error); process.exitCode = 1; });

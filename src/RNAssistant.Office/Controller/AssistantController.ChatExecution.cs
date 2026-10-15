@@ -17,53 +17,6 @@ namespace RNAssistant.Office
 {
     public sealed partial class AssistantController
     {
-        public async Task<SendChatResponse> SendChatAsync(
-            string text,
-            string chatId = null,
-            IReadOnlyList<string> resourceDraftIds = null,
-            Action<string, string, ChatActivity> progress = null,
-            Action<ChatStateResponse> chatStateChanged = null,
-            CancellationToken cancellationToken = default(CancellationToken),
-            string runId = null)
-        {
-            if (string.IsNullOrWhiteSpace(text) &&
-                (resourceDraftIds == null || resourceDraftIds.Count == 0))
-            {
-                return EmptySendResponse(LoadAddressedSession(chatId), _settingsService.Load());
-            }
-
-            var settings = _settingsService.Load();
-            var intakeTimer = Stopwatch.StartNew();
-            var session = LoadAddressedSession(chatId);
-            runId = string.IsNullOrWhiteSpace(runId) ? Guid.NewGuid().ToString("N") : runId;
-            var attachments = _chatResourceIngestion.LoadDrafts(session, resourceDraftIds);
-            var invalidAttachment = attachments.FirstOrDefault(a => a != null && a.Status == "error");
-            if (invalidAttachment != null)
-            {
-                throw new InvalidOperationException(invalidAttachment.FileName + ": " + invalidAttachment.Error);
-            }
-
-            if (intakeTimer.ElapsedMilliseconds >= 500)
-                RuntimeLog.Info("Chat send intake timing: sessionAndDrafts=" +
-                    intakeTimer.ElapsedMilliseconds + "ms.");
-
-            return await ExecuteChatTurnAsync(
-                session,
-                settings,
-                new ChatTurnInput
-                {
-                    Text = text ?? string.Empty,
-                    Attachments = attachments,
-                    AppendUserMessage = true,
-                    CommitUserAttachments = true
-                },
-                null,
-                progress,
-                chatStateChanged,
-                cancellationToken,
-                runId).ConfigureAwait(false);
-        }
-
         public bool CancelChatRun(string chatId, string runId)
         {
             var active = _chatRuns.Get(chatId);
@@ -102,14 +55,15 @@ namespace RNAssistant.Office
             }
         }
 
-        private void PersistRunCheckpoint(ChatSession session, string runId, string phase)
+        private void PersistRunCheckpoint(ChatSession session, string runId, string phase, int firstMessageIndex)
         {
             if (!string.Equals(phase, "tool_running", StringComparison.OrdinalIgnoreCase) &&
                 !string.Equals(phase, "tool_result", StringComparison.OrdinalIgnoreCase))
             {
                 return;
             }
-            if (session.LastRun == null || session.LastRun.KernelState == null) SaveSessionChanges(session);
+            if (session.LastRun == null || session.LastRun.KernelState == null)
+                SaveSessionChanges(session, session.Messages.Skip(firstMessageIndex));
             _chatRuns.UpdateSessionSnapshot(session.Id, runId, session);
         }
 
@@ -170,7 +124,7 @@ namespace RNAssistant.Office
                 {
                     AnnotateRunMessages(session, firstMessageIndex, runId);
                 }
-                PersistRunCheckpoint(session, runId, phase);
+                PersistRunCheckpoint(session, runId, phase, firstMessageIndex);
                 if (string.Equals(phase, "tool_result", StringComparison.OrdinalIgnoreCase))
                 {
                     // Kernel persistence precedes this callback. Publish the complete
@@ -209,7 +163,7 @@ namespace RNAssistant.Office
             ChatResourceReferenceService.LinkMessageResources(session, resourceStartIndex);
             if (ex == null && (completion == null || !completion.WaitingForConfirmation))
                 ApplyTerminalRunResult(session);
-            SaveSessionChanges(session);
+            SaveSessionChanges(session, session.Messages.Skip(firstMessageIndex));
             RunCausalTrace.Summary(session);
             _chatRuns.UpdateSessionSnapshot(session.Id, runId, session);
         }
@@ -512,7 +466,9 @@ namespace RNAssistant.Office
                         ChatResourceReferenceService.LinkMessageResources(session, firstRunMessageIndex);
                     }
                     var initialSaveStartMs = turnTimer.ElapsedMilliseconds;
-                    _conversationStore.Save(session);
+                    _conversationStore.Commit(session, appendedUserMessage == null
+                        ? new ConversationCommit(session.Messages.Skip(firstRunMessageIndex))
+                        : ConversationCommit.UserInput(appendedUserMessage));
                     var initialSaveMs = turnTimer.ElapsedMilliseconds - initialSaveStartMs;
                     preparedTurnPersisted = true;
                     if (input.InputId != null) _inbox.Applied(session, input.InputId);
@@ -556,7 +512,7 @@ namespace RNAssistant.Office
                         AnnotateRunMessages(session, firstRunMessageIndex, runId);
                         try
                         {
-                            SaveSessionChanges(session);
+                            SaveSessionChanges(session, session.Messages.Skip(firstRunMessageIndex));
                             RunCausalTrace.Summary(session);
                         }
                         catch
@@ -772,17 +728,6 @@ namespace RNAssistant.Office
                     ", headerIncrementalReplays=" + (_chatStore.HeaderIncrementalReplayCount - incrementalReplays) +
                     ", casRefs=" + chats.Sum(item => item.CasBlobCount) + ".");
             return response;
-        }
-
-        private SendChatResponse EmptySendResponse(ChatSession session, AppSettings settings)
-        {
-            settings = ResolveChatSettings(session, settings);
-            return CreateSendChatResponse(session, settings, new ChatTurnResult
-            {
-                AssistantText = string.Empty,
-                ToolResults = new ToolResultDescriptionDto[0],
-                ContextUsage = ContextUsageEstimator.FromSession(session, settings)
-            });
         }
 
         private static void ApplyTerminalRunResult(ChatSession session)

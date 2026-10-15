@@ -112,11 +112,16 @@ namespace RNAssistant.Office.Services
                 _executor.ResourceAuthority, _executor.Payloads, () => _skillSnapshot, _catalogGeneration).ConfigureAwait(false);
         }
 
-        private Task<ModelProtocolRequest> PrepareRequestAsync(AgentModelRequest request, CancellationToken cancellationToken)
+        private async Task<ModelProtocolRequest> PrepareRequestAsync(AgentModelRequest request, CancellationToken cancellationToken)
         {
-            return _modelSession.PrepareRequestAsync(request.StepId,
-                new ModelProtocolCallContext(ConversationProtocolContext.SequentialBatchIds(_catalog)),
-                cancellationToken);
+            var firstMessage = _session.Messages.Count;
+            try
+            {
+                return await _modelSession.PrepareRequestAsync(request.StepId,
+                    new ModelProtocolCallContext(ConversationProtocolContext.SequentialBatchIds(_catalog)),
+                    cancellationToken).ConfigureAwait(false);
+            }
+            finally { _pendingMessageUpdates.AddRange(_session.Messages.Skip(firstMessage)); }
         }
 
         private async Task RefreshAuthorityAsync(CancellationToken cancellationToken)

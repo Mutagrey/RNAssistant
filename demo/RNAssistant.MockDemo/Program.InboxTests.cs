@@ -14,6 +14,14 @@ namespace RNAssistant.MockDemo
 {
     internal static partial class Program
     {
+        private static async Task<ChatStateResponse> SubmitAndWaitAsync(AssistantController controller, string text, string chatId)
+        {
+            controller.SubmitChatInput(new SubmitChatInputPayload { ChatId = chatId,
+                OperationId = Guid.NewGuid().ToString("N"), Text = text, Delivery = InputDelivery.Steer }, null, null);
+            await controller.InboxWorkersDrained.ConfigureAwait(false);
+            return controller.GetChatState(chatId);
+        }
+
         private static async Task<int> RunUnifiedAgentTestAsync()
         {
             var root = Path.Combine(Path.GetTempPath(), "RNAssistant.Unified." + Guid.NewGuid().ToString("N"));
@@ -29,15 +37,15 @@ namespace RNAssistant.MockDemo
                 Func<string, object, string> tool = (name, arguments) => Newtonsoft.Json.JsonConvert.SerializeObject(new {
                     message = "", action = "tool", tool_calls = new[] { new { name, arguments } } });
                 const string done = "{\"message\":\"Done\",\"action\":\"done\",\"tool_calls\":[]}";
-                new SettingsService(paths).Save(new AppSettings { AutoConfirmToolActions = false });
+                new SettingsService(paths).Save(new AppSettings { AutoConfirmToolActions = false, ContextWindowOverrideTokens = 131072 });
                 controller = new AssistantController(adapter, paths, model);
                 var id = controller.Initialize().ActiveChatId;
                 responses.Enqueue(done);
-                var direct = await controller.SendChatAsync("Direct answer", id);
+                var direct = await SubmitAndWaitAsync(controller, "Direct answer", id);
                 if (calls != 1 || direct.RunViewState.Lifecycle != "completed") throw new Exception("direct answer did not finish once");
                 responses.Enqueue(tool("common.capabilities_read", new { id = "excel.add_sheet" }));
                 responses.Enqueue(tool("excel.add_sheet", new { name = "ApprovedSheet" }));
-                await controller.SendChatAsync("Create sheet", id);
+                await SubmitAndWaitAsync(controller, "Create sheet", id);
                 var store = new ChatStore(paths);
                 var pending = store.Load(id).LastRun.KernelState.Summary.PendingConfirmation;
                 if (pending == null || adapter.HasSheet("ApprovedSheet")) throw new Exception("write bypassed approval");
@@ -57,7 +65,7 @@ namespace RNAssistant.MockDemo
                     throw new Exception("approved mutation dispatched more than once");
                 responses.Enqueue(tool("excel.add_sheet", new { name = "AutomaticSheet" }));
                 responses.Enqueue(done);
-                var automatic = await controller.SendChatAsync("Create sheet automatically", id);
+                var automatic = await SubmitAndWaitAsync(controller, "Create sheet automatically", id);
                 if (!adapter.HasSheet("AutomaticSheet") || automatic.RunViewState.Lifecycle != "completed" ||
                     !store.Load(id).LastRun.ConversationPolicy.AutoConfirmToolActions)
                     throw new Exception("new controller run did not capture automatic approval");
@@ -69,11 +77,54 @@ namespace RNAssistant.MockDemo
                 responses.Enqueue(tool("common.capabilities_read", new { id = "common.task_list_set" }));
                 responses.Enqueue(tool("common.task_list_set", new { action = "save", goal = "Review", steps = new[] { new { text = "Inspect", status = "pending" } } }));
                 responses.Enqueue(done);
-                var planned = await controller.SendChatAsync("Save the plan and task list", id);
+                var planned = await SubmitAndWaitAsync(controller, "Save the plan and task list", id);
                 var saved = store.Load(id);
                 if (planned.ActiveChatMode != ChatModes.Plan || saved.MutationPolicy != RNAssistant.Core.Services.MutationPolicy.Deny ||
                     string.IsNullOrEmpty(saved.ActivePlanDocumentArtifactId) || string.IsNullOrEmpty(saved.ActiveTaskListArtifactId) ||
                     planned.RunViewState.ExecutionHealth != "clean") throw new Exception("Plan/Deny did not preserve both planning artifacts");
+
+                responses.Enqueue(tool("common.capabilities_read", new { id = "common.questions_ask" }));
+                responses.Enqueue(tool("common.questions_ask", new { questions = new[] { new {
+                    header = "Format", prompt = "Choose format " + new string('x', 9000), selection = "single", allowFreeText = true,
+                    options = new[] { new { label = "Markdown", description = "Text" }, new { label = "HTML", description = "Web" } }
+                } } }));
+                await SubmitAndWaitAsync(controller, "Ask before continuing", id);
+                var questionState = store.Load(id);
+                if (!questionState.Messages.Any(m => m.ToolName == "common.questions_ask" && m.ResultPayload != null))
+                    throw new Exception("large question fixture did not reach CAS");
+                controller.Dispose();
+                controller = new AssistantController(adapter, paths, model);
+                var question = RNAssistant.Core.Services.UserQuestionAnswers.Pending(store.Load(id), new ChatBlobStore(paths));
+                var answer = new SubmitChatInputPayload { ChatId = id, OperationId = "typed-answer", Delivery = InputDelivery.Steer,
+                    Answers = new UserQuestionAnswerCommand { RunId = question.RunId, QuestionSetId = question.QuestionSet.QuestionSetId,
+                        Answers = question.QuestionSet.Questions.Select(q => new UserQuestionAnswer {
+                            QuestionId = q.Id, OptionIds = new System.Collections.Generic.List<string> { q.Options[0].Id }, FreeText = "Examples"
+                        }).ToList() } };
+                var beforeAnswer = calls;
+                var expectedSet = answer.Answers.QuestionSetId;
+                answer.Answers.QuestionSetId = "stale";
+                var invalidAnswer = false;
+                try { controller.SubmitChatInput(answer, null, null); }
+                catch (ArgumentException) { invalidAnswer = true; }
+                if (!invalidAnswer || calls != beforeAnswer) throw new Exception("stale question was accepted");
+                answer.Answers.QuestionSetId = expectedSet;
+                responses.Enqueue(done);
+                var receipt = controller.SubmitChatInput(answer, null, null).AcceptedInput;
+                await controller.InboxWorkersDrained.ConfigureAwait(false);
+                var repeated = controller.SubmitChatInput(answer, null, null).AcceptedInput;
+                if (receipt.Id != repeated.Id || calls != beforeAnswer + 1 || store.Load(id).LastRun.KernelState.Summary.Lifecycle != RNAssistant.Core.Agent.RunLifecycle.Completed ||
+                    !receipt.Text.Contains("Markdown") || receipt.Text.Contains(expectedSet))
+                    throw new Exception("typed answer receipt or semantic projection was not stable");
+                answer.Answers.Answers[0].FreeText = "Changed";
+                invalidAnswer = false;
+                try { controller.SubmitChatInput(answer, null, null); }
+                catch (ArgumentException) { invalidAnswer = true; }
+                if (!invalidAnswer || calls != beforeAnswer + 1) throw new Exception("conflicting answer receipt replayed input");
+                answer.OperationId = "another-answer";
+                invalidAnswer = false;
+                try { controller.SubmitChatInput(answer, null, null); }
+                catch (ArgumentException) { invalidAnswer = true; }
+                if (!invalidAnswer || calls != beforeAnswer + 1) throw new Exception("already answered question was accepted");
 
                 controller.SetChatMode(id, ChatModes.Agent);
                 controller.SetChatMutationPolicy(id, RNAssistant.Core.Services.MutationPolicy.Ask);
@@ -81,8 +132,9 @@ namespace RNAssistant.MockDemo
                 controls.AutoConfirmToolActions = false;
                 controller.SaveSettings(new SaveSettingsPayload { ChatId = id, Settings = controls,
                     ExpectedPromptPublication = controller.GetSettings().Prompts.Publication }, CancellationToken.None);
+                responses.Enqueue(tool("common.capabilities_read", new { id = "excel.add_sheet" }));
                 responses.Enqueue(tool("excel.add_sheet", new { name = "CancelledSheet" }));
-                await controller.SendChatAsync("Create another sheet", id);
+                await SubmitAndWaitAsync(controller, "Create another sheet", id);
                 pending = store.Load(id).LastRun.KernelState.Summary.PendingConfirmation;
                 if (pending == null) throw new Exception("second mutation did not wait");
                 var before = calls;
@@ -91,7 +143,22 @@ namespace RNAssistant.MockDemo
                 try { await controller.ConfirmAgentToolAsync(pending.PendingId, id); }
                 catch (InvalidOperationException) { rejected = true; }
                 if (!rejected || adapter.HasSheet("CancelledSheet") || calls != before) throw new Exception("stale approval was not cancelled");
-                Console.WriteLine("PASS unified controller: direct answer, approval/restart, automatic next run, Plan/Deny artifacts, policy change cancels pending");
+                controller.SetChatMutationPolicy(id, RNAssistant.Core.Services.MutationPolicy.Ask);
+                responses.Enqueue(tool("common.capabilities_read", new { id = "excel.add_sheet" }));
+                responses.Enqueue(tool("excel.add_sheet", new { name = "UserCancelledSheet" }));
+                await SubmitAndWaitAsync(controller, "Ask permission for a sheet", id);
+                pending = store.Load(id).LastRun.KernelState.Summary.PendingConfirmation;
+                if (pending == null) throw new Exception("explicit cancellation fixture did not wait");
+                before = calls;
+                var cancelled = controller.CancelAgentTool(pending.PendingId, id);
+                var cancelledSession = store.Load(id);
+                var cancellation = store.ReadEvents(cancelledSession.Host, cancelledSession.DocumentKey, id)
+                    .Last(item => item.Type == SessionEventTypes.SessionCommit);
+                if (cancelled.RunViewState.Lifecycle != "cancelled" || calls != before || adapter.HasSheet("UserCancelledSheet") ||
+                    !cancellation.Data["Operations"].Any(op => (string)op["Type"] == SessionOperationTypes.ToolResultRecorded &&
+                        (string)op["Data"]?["Value"]?["ToolCallId"] == pending.Call.Id))
+                    throw new Exception("user cancellation lost its explicit result or dispatched a tool");
+                Console.WriteLine("PASS unified controller: direct answer, approval/restart, Plan/Deny artifacts, typed CAS questions/restart, idempotent answers, stale/conflicting input rejected, policy change cancels pending");
                 return 0;
             }
             catch (Exception error) { Console.WriteLine("FAIL unified controller: " + error); return 1; }
@@ -116,7 +183,7 @@ namespace RNAssistant.MockDemo
                             throw new InvalidOperationException("steer did not interrupt transport");
                         }
                         if (messages.Any(m => (m.Content ?? "").Contains("steer-marker"))) sawSteer = true;
-                        return new LlmCompletionResult { Content = "{\"message\":\"Done\",\"final\":true,\"tool_calls\":[]}" };
+                        return new LlmCompletionResult { Content = "{\"message\":\"Done\",\"action\":\"done\",\"tool_calls\":[]}" };
                     });
                 var init = controller.Initialize(); var chatId = init.ActiveChatId;
                 controller.SubmitChatInput(new SubmitChatInputPayload { ChatId = chatId, OperationId = "initial-marker",
@@ -144,7 +211,8 @@ namespace RNAssistant.MockDemo
                 await drained;
                 if (!sawSteer) throw new Exception("materialized model request omitted steer");
                 var inbox = controller.GetChatInbox(chatId);
-                if (inbox.Items.Count != 0) throw new Exception("queue not drained: " + inbox.PauseReason);
+                if (inbox.Items.Count != 0) throw new Exception("queue not drained: " + inbox.PauseReason + "; " +
+                    new ChatStore(AppDataPaths.CreateForRoot(root)).Load(chatId).LastRun.KernelState.Summary.AssistantMessage);
                 var chat = controller.GetChatState(chatId);
                 var json = Newtonsoft.Json.JsonConvert.SerializeObject(chat);
                 if (!json.Contains("queued-marker") || !json.Contains("steer-marker")) throw new Exception("messages missing from durable chat");
@@ -193,7 +261,7 @@ namespace RNAssistant.MockDemo
                         var hasQueue = messages.Any(m => (m.Content ?? "").Contains("cross-queue"));
                         if (call == 2) { sawSteerInOwnerTurn = hasSteer; sawQueueInOwnerTurn = hasQueue; }
                         if (call == 3) sawQueueInNextTurn = hasQueue;
-                        return new LlmCompletionResult { Content = "{\"message\":\"Done\",\"final\":true,\"tool_calls\":[]}" };
+                        return new LlmCompletionResult { Content = "{\"message\":\"Done\",\"action\":\"done\",\"tool_calls\":[]}" };
                     });
                 var chatId = owner.Initialize().ActiveChatId;
                 owner.SubmitChatInput(new SubmitChatInputPayload { ChatId = chatId, OperationId = "cross-initial",

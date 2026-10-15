@@ -120,7 +120,7 @@ namespace RNAssistant.Office.Services
             if (user != null) user.RunId = session.LastRun.TurnId;
             if (appendUserMessage || !_conversationStore.IsPersisted(session))
             {
-                _conversationStore.Save(session);
+                _conversationStore.Commit(session, appendUserMessage ? ConversationCommit.UserInput(user) : new ConversationCommit());
             }
             var input = new ConversationRunInput(settings, documentContext, tools, skills, attachments);
             using (var ports = CreatePorts(mode, text, session, input, progress, pendingToolRegistrar, cancellationToken))

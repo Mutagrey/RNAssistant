@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Storage;
@@ -109,6 +110,12 @@ namespace RNAssistant.Harness
             AssertEqual(paused.Summary.IterationsUsed + 1, result.Summary.IterationsUsed, "same model budget continues");
             AssertEqual(RunLifecycle.Completed, result.Summary.Lifecycle, "superseded approval continues through kernel");
         }
+        private static ConversationInput InboxInput(string id, string text, InputDelivery delivery, string documentKey = null)
+        {
+            var input = new ConversationInput { Id = id, OperationId = id, Text = text, Delivery = delivery, DocumentRuntimeKey = documentKey };
+            input.RequestFingerprint = ConversationInputJournal.Fingerprint(input);
+            return input;
+        }
         private static void InboxDurabilityAndQueue()
         {
             WithTempPaths(paths =>
@@ -116,9 +123,13 @@ namespace RNAssistant.Harness
                 var store = new ChatStore(paths); var events = new ChatEventStoreAdapter(store);
                 var session = NewSession(FakeOfficeAdapter.ForHost("Excel")); store.Save(session);
                 var inbox = new ConversationInboxService(events);
-                inbox.Submit(session, new ConversationInput { Id = "a", Text = "first", Delivery = InputDelivery.Queue });
-                inbox.Submit(session, new ConversationInput { Id = "a", Text = "duplicate", Delivery = InputDelivery.Queue });
-                inbox.Submit(session, new ConversationInput { Id = "b", Text = "second", Delivery = InputDelivery.Queue });
+                inbox.Submit(session, InboxInput("a", "first", InputDelivery.Queue));
+                inbox.Submit(session, InboxInput("a", "first", InputDelivery.Queue));
+                var conflict = false;
+                try { inbox.Submit(session, InboxInput("a", "different", InputDelivery.Queue)); }
+                catch (ArgumentException) { conflict = true; }
+                AssertTrue(conflict, "reusing an operation with different content is a conflict");
+                inbox.Submit(session, InboxInput("b", "second", InputDelivery.Queue));
                 AssertEqual(2, inbox.Snapshot(session).Items.Count, "intake idempotency");
                 var accepted = events.Read(session, SessionEventReadMode.RequireComplete).First(e => e.Type == SessionEventTypes.ConversationInputChanged);
                 AssertEqual("first", events.ReadPayload(session, accepted), "immutable text body is CAS-backed");
@@ -129,6 +140,8 @@ namespace RNAssistant.Harness
                 var recovered = new ConversationInboxService(events);
                 AssertTrue(recovered.Snapshot(session).Paused, "restart pauses");
                 AssertTrue(!recovered.TryStartWorker(session), "restart cannot execute retained messages");
+                AssertEqual("edited", recovered.FindOperation(session, "b", InboxInput("b", "second", InputDelivery.Queue).RequestFingerprint).Text,
+                    "replay retains the original request fingerprint across edits");
                 recovered.Resume(session);
                 AssertEqual("edited", recovered.TakeNext(session, false).Text, "edit survives replay");
             });
@@ -146,7 +159,7 @@ namespace RNAssistant.Harness
                 try
                 {
                     AssertTrue(ReferenceEquals(first, second), "controllers share one live inbox");
-                    second.Submit(session, new ConversationInput { Id = "queued", Text = "retained", Delivery = InputDelivery.Queue });
+                    second.Submit(session, InboxInput("queued", "retained", InputDelivery.Queue));
                     AssertEqual(1, first.Snapshot(session).Items.Count, "other controller observes accepted input");
                 }
                 finally
@@ -186,7 +199,7 @@ namespace RNAssistant.Harness
                 var session = NewSession(FakeOfficeAdapter.ForHost("Excel")); store.Save(session);
                 var events = new InboxFailingEvents(new ChatEventStoreAdapter(store));
                 var inbox = new ConversationInboxService(events);
-                inbox.Submit(session, new ConversationInput { Id = "a", Text = "retained", Delivery = InputDelivery.Queue });
+                inbox.Submit(session, InboxInput("a", "retained", InputDelivery.Queue));
                 events.Fail = true;
                 var failed = false;
                 try { inbox.Pause(session, "stop"); } catch (System.IO.IOException) { failed = true; }
@@ -202,13 +215,13 @@ namespace RNAssistant.Harness
                 var store = new ChatStore(paths); var events = new ChatEventStoreAdapter(store);
                 var session = NewSession(FakeOfficeAdapter.ForHost("Excel")); store.Save(session);
                 var inbox = new ConversationInboxService(events); inbox.Bind(session);
-                inbox.Submit(session, new ConversationInput { Id = "a", Text = "steer", Delivery = InputDelivery.Steer, DocumentRuntimeKey = "doc-1" });
+                inbox.Submit(session, InboxInput("a", "steer", InputDelivery.Steer, "doc-1"));
                 AssertTrue(inbox.InterruptToken(session).IsCancellationRequested, "steer interrupts model");
                 inbox.Pause(session, "stop");
                 AssertTrue(!inbox.HasSteer(session), "stop freezes earlier steer");
                 inbox.End(session, false, false);
                 AssertTrue(!inbox.TryStartWorker(session), "stop does not restart queued work");
-                inbox.Submit(session, new ConversationInput { Id = "b", Text = "new explicit request", Delivery = InputDelivery.Steer, DocumentRuntimeKey = "doc-1" });
+                inbox.Submit(session, InboxInput("b", "new explicit request", InputDelivery.Steer, "doc-1"));
                 AssertEqual("b", inbox.TakeNext(session, false).Id, "new request may run while old queue stays paused");
                 AssertEqual("doc-1", inbox.Find(session, "a").DocumentRuntimeKey, "original target retained");
                 AssertTrue(inbox.Snapshot(session).Paused, "old queue remains paused");

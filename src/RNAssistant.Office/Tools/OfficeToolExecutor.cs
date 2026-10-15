@@ -49,7 +49,7 @@ namespace RNAssistant.Office.Tools
         private readonly ResourceAuthorityService _resourceAuthority;
         private readonly ResourceMutationJournal _resourceMutationJournal;
         private readonly DocumentAuthorityRegistry _documentAuthorities;
-        private readonly Action<ChatSession> _persistResourceFacts;
+        private readonly Action<ChatSession, ConversationCommit> _persistResourceFacts;
         private readonly CatalogPublicationService _catalogPublication;
         private readonly ToolStore _toolStore;
         private readonly Func<AppSettings> _loadSettings;
@@ -70,7 +70,7 @@ namespace RNAssistant.Office.Tools
             Func<ChatSession, string, bool> loadArtifactBody = null,
             Func<ChatAttachment, int, string> readAttachmentText = null,
             ResourceAuthorityStore resourceAuthorityStore = null,
-            Action<ChatSession> persistResourceFacts = null,
+            Action<ChatSession, ConversationCommit> persistResourceFacts = null,
             Func<ChatAttachment, byte[]> readAttachmentBytes = null)
         {
             if (vbaJournalStore == null) throw new ArgumentNullException(nameof(vbaJournalStore));
@@ -249,7 +249,8 @@ namespace RNAssistant.Office.Tools
                 session == null
                     ? null
                     : new ResourceMutationAuthorityObserver(
-                        _resourceAuthority, _resourceMutationJournal, session, Payloads, _persistResourceFacts,
+                        _resourceAuthority, _resourceMutationJournal, session, Payloads,
+                        saved => _persistResourceFacts?.Invoke(saved, new ConversationCommit()),
                         _catalogPublication.CaptureReadBack), _markdownDocuments, runPolicy, dispatchGuard, _authoredFiles);
         }
 
@@ -278,7 +279,10 @@ namespace RNAssistant.Office.Tools
             var context = new ToolExecutionContext(new RNAssistant.Core.Agent.ToolCall(id, operation, JsonConvert.SerializeObject(arguments)),
                 new ToolPolicySnapshot(operation, "resource-ui-v1", new ToolPolicy(ToolEffect.Write, ToolVerification.Tool,
                     false, false, new[] { "agent" }, 1)), id, id, id, DateTime.UtcNow, true, 1);
-            var observer = new ResourceMutationAuthorityObserver(_resourceAuthority, _resourceMutationJournal, session, Payloads, _persistResourceFacts);
+            var previousIds = historyMutation ? session.Messages.Select(message => message.Id).ToArray() : null;
+            var observer = new ResourceMutationAuthorityObserver(_resourceAuthority, _resourceMutationJournal, session, Payloads,
+                saved => _persistResourceFacts?.Invoke(saved, historyMutation
+                    ? ConversationCommit.RewriteHistory(previousIds, saved.Messages) : new ConversationCommit()));
             var attempt = observer.Prepare(context, arguments);
             var publicationStarted = false;
             var dispatched = false;

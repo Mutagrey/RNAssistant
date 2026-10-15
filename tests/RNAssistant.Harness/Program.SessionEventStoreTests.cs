@@ -1337,7 +1337,7 @@ namespace RNAssistant.Harness
                 var store = new ChatStore(paths);
                 var session = store.Create("Word", "event-doc", "Event.docx", "Event chat");
                 session.Messages.Add(new ChatMessage { Role = "user", Content = "hello event log" });
-                store.Save(session);
+                store.Commit(session, ConversationCommit.UserInput(session.Messages.Last()));
 
                 var events = store.ReadEvents(session.Host, session.DocumentKey, session.Id);
                 AssertEqual(2, events.Count, "created and commit events");
@@ -1548,7 +1548,7 @@ namespace RNAssistant.Harness
                     .SequenceEqual(new[] { second.Id, first.Id }), "reordered messages replay exactly");
 
                 session.Messages.RemoveAt(0);
-                store.Save(session);
+                store.Commit(session, new ConversationCommit(removed: new[] { second.Id }));
                 commit = store.ReadEvents(session.Host, session.DocumentKey, session.Id).Last();
                 AssertTrue(!commit.Data["Operations"].Any(operation =>
                     string.Equals((string)operation["Type"], SessionOperationTypes.MessagesReorder, StringComparison.Ordinal)),
@@ -1615,12 +1615,13 @@ namespace RNAssistant.Harness
                 AssertEqual(0L, reader.HeaderFullReplayCount, "unchanged header avoids a full replay");
 
                 session.Title = "Appended";
+                var removedMessageId = session.Messages[0].Id;
                 session.Messages.RemoveAt(0);
                 session.Messages.Single().ProtocolMessage = false;
                 session.Messages.Add(new ChatMessage { Role = "assistant", Content = "second visible" });
                 session.Messages.Reverse();
                 HtmlWorkspaceToolService.UpsertDataSource(session, "rows", "{\"rows\":[1]}");
-                writer.Save(session);
+                writer.Commit(session, new ConversationCommit(session.Messages, new[] { removedMessageId }));
 
                 header = reader.ListHeaders(session.Host, session.DocumentKey, session.DocumentTitle).Single();
                 AssertEqual("Appended", header.Title, "full replay applies externally appended metadata operations");
@@ -2223,6 +2224,8 @@ namespace RNAssistant.Harness
             {
                 var store = new ChatStore(paths);
                 var session = store.Create("Excel", "accepted-call-operation", "Calls.xlsx", "Calls");
+                session.LastRun = new ChatRunRecord { RunId = "run-roles", TurnId = "run-roles" };
+                var summary = new RunSummary("run-roles", "run-roles", RunLifecycle.Running, new ToolCounts(), 1, 0, "", null, null);
                 var roles = new[] { ToolResultRoles.User, ToolResultRoles.Developer, ToolResultRoles.Tool };
                 foreach (var role in roles)
                 {
@@ -2237,8 +2240,9 @@ namespace RNAssistant.Harness
                         new AcceptedToolCallOrigin("step-" + role, "attempt-" + role, 0));
                     message.RunId = "run-roles";
                     session.Messages.Add(message);
+                    store.CommitRun(session, new ConversationRunCommit(new AgentRunEvent(AgentRunEventKind.ResponseAccepted, summary,
+                        response: new AgentResponse("Read.", new[] { PersistenceContext(summary.RunId, id).Call })), new[] { message }));
                 }
-                store.Save(session);
 
                 var callOperations = store.ReadEvents(session.Host, session.DocumentKey, session.Id)
                     .Where(item => item.Type == SessionEventTypes.SessionCommit)
@@ -2248,7 +2252,7 @@ namespace RNAssistant.Harness
                 AssertEqual(roles.Length, callOperations.Count, "every configured result role persists one accepted call");
                 AssertTrue(callOperations.All(operation =>
                     (string)operation["Type"] == SessionOperationTypes.ToolCallRecorded),
-                    "accepted origin, not native ToolCalls, owns operation classification");
+                    "the accepted runtime fact owns operation classification for every role");
 
                 foreach (var role in roles)
                 {
@@ -2258,8 +2262,9 @@ namespace RNAssistant.Harness
                         TerminalToolResult.Ok("Read complete."), role);
                     result.RunId = "run-roles";
                     session.Messages.Add(result);
+                    store.CommitRun(session, new ConversationRunCommit(new AgentRunEvent(AgentRunEventKind.ToolCompleted, summary,
+                        execution: KernelRecord(PersistenceContext(summary.RunId, id))), new[] { result }));
                 }
-                store.Save(session);
                 var resultOperations = store.ReadEvents(session.Host, session.DocumentKey, session.Id)
                     .Where(item => item.Type == SessionEventTypes.SessionCommit)
                     .SelectMany(item => ((JArray)item.Data["Operations"]).OfType<JObject>())
@@ -2318,12 +2323,23 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static ToolExecutionContext PersistenceContext(string runId, string callId)
+        {
+            var policy = new ToolPolicySnapshot("excel.read_range", "fixture", new ToolPolicy(ToolEffect.Read,
+                ToolVerification.None, false, false, new[] { "agent" }, 0));
+            return new ToolExecutionContext(new ToolCall(callId, policy.ToolId, "{\"range\":\"A1\"}"),
+                policy, runId, runId, "step-" + callId, DateTime.UtcNow, false, 1);
+        }
+
         private static void MessageOperationsRecordStateTransitionsOnce()
         {
             WithTempPaths(paths =>
             {
                 var store = new ChatStore(paths);
                 var session = store.Create("Excel", "message-operation-transitions", "Calls.xlsx", "Calls");
+                session.LastRun = new ChatRunRecord { RunId = "run-transition", TurnId = "run-transition" };
+                var summary = new RunSummary("run-transition", "run-transition", RunLifecycle.Running, new ToolCounts(), 1, 0, "", null, null);
+                var context = PersistenceContext(summary.RunId, "call-transition");
                 var accepted = AgentJsonProtocol.CreateToolCallMessage(
                     new AgentToolCall
                     {
@@ -2351,23 +2367,30 @@ namespace RNAssistant.Harness
                     }
                 };
                 session.Messages.Add(accepted);
+                store.CommitRun(session, new ConversationRunCommit(new AgentRunEvent(AgentRunEventKind.ResponseAccepted, summary,
+                    response: new AgentResponse("Read.", new[] { context.Call })), new[] { accepted }));
                 session.Messages.Add(activity);
-                store.Save(session);
+                store.CommitRun(session, new ConversationRunCommit(new AgentRunEvent(AgentRunEventKind.ToolStarted, summary,
+                    toolContext: context), new ChatMessage[0], activity));
 
                 accepted.Sequence = 1;
                 activity.Activity.ResultMessage = "Still running.";
-                store.Save(session);
+                store.Commit(session, new ConversationCommit(new[] { accepted, activity }));
                 AssertTrue(store.HasOpenToolExecution(session, "run-transition"),
                     "a metadata update does not close the active execution");
 
                 activity.Activity.Status = "completed";
                 activity.Activity.ExecutionStatus = "completed";
-                store.Save(session);
+                store.Commit(session, new ConversationCommit(new[] { activity }));
+                AssertTrue(store.HasOpenToolExecution(session, "run-transition"),
+                    "a terminal UI label cannot manufacture a runtime completion");
+                store.CommitRun(session, new ConversationRunCommit(new AgentRunEvent(AgentRunEventKind.ToolCompleted, summary,
+                    execution: KernelRecord(context)), new ChatMessage[0], activity));
                 AssertTrue(!store.HasOpenToolExecution(session, "run-transition"),
                     "the terminal transition closes the active execution");
 
                 activity.Activity.DataJson = "{\"rows\":1}";
-                store.Save(session);
+                store.Commit(session, new ConversationCommit(new[] { activity }));
                 AssertTrue(!store.HasOpenToolExecution(session, "run-transition"),
                     "post-terminal hydration does not create another execution boundary");
 
@@ -2391,6 +2414,7 @@ namespace RNAssistant.Harness
                 AssertTrue(activityTypes.SequenceEqual(new[]
                 {
                     SessionOperationTypes.ToolExecutionStarted,
+                    SessionOperationTypes.MessageUpdated,
                     SessionOperationTypes.MessageUpdated,
                     SessionOperationTypes.ToolExecutionFinished,
                     SessionOperationTypes.MessageUpdated

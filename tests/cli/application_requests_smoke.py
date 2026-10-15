@@ -91,7 +91,7 @@ def run_case(root):
         session, initial_cursor = initial["Id"], initial["Cursor"]
         assert sequence(initial_cursor) == initial["Revision"]
         args = ("--session", session, "--request-id", "create-once", "--message", "Create note.txt once.",
-                "--mode", "agent", "--min-writes", "1", "--instruction-role", "system", "--tool-result-role", "tool")
+                "--mode", "agent", "--auto-confirm", "on", "--min-writes", "1", "--instruction-role", "system", "--tool-result-role", "tool")
         responses.extend([(call("files.create", relativePath="note.txt", text="WRITTEN_ONCE"), True), (DONE, False)])
         process = start(args)
         assert blocked.wait(10), "Original run did not reach the controlled model wait"

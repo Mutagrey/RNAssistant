@@ -108,7 +108,7 @@ namespace RNAssistant.Office
                 _chatStore.LoadArtifactBody,
                 (attachment, maxChars) => _attachmentStore.ReadExtractedText(attachment, maxChars),
                 _resourceAuthorityStore,
-                session => _conversationStore.Save(session),
+                (session, commit) => _conversationStore.Commit(session, commit),
                 attachment => _attachmentStore.ReadBytes(attachment));
             _toolExecutor.MigratePromptSchemaIfNeeded(
                 published => _settingsService.HasPromptMigrationEvidence(published),
@@ -157,7 +157,7 @@ namespace RNAssistant.Office
             });
             _chatHistoryEditService = new ChatHistoryEditService(
                 RemovePendingAgentToolsForSession,
-                CancelPendingActivities,
+                (session, reason) => CancelPendingActivities(session, reason),
                 _chatStore.LoadArtifactBody);
             _htmlNetwork = new HtmlNetworkService(() => _settingsService.Load(), value => _settingsService.Save(value));
             _llmClient = new LlmClient(

@@ -94,6 +94,9 @@ namespace RNAssistant.MockDemo
                         Reset = true
                     };
                     SettingsService.ConfigureDemoDefaults(localOptions.BaseUrl, model);
+                    // This scripted model covers tools/repair; compaction has its own fixture.
+                    new SettingsService(AppDataPaths.CreateForRoot(root)).Save(new AppSettings {
+                        AutoConfirmToolActions = true, ContextWindowOverrideTokens = 131072 });
                     var bridge = CreateBridgeHost(localOptions);
                     await ExerciseModelAsync(bridge, model).ConfigureAwait(false);
                     Console.WriteLine("PASS " + model);
@@ -102,6 +105,7 @@ namespace RNAssistant.MockDemo
                 {
                     failed += 1;
                     Console.WriteLine("FAIL " + model + ": " + ex.Message);
+                    if (Environment.GetEnvironmentVariable("RNA_MOCK_TRACE") == "1") Console.WriteLine(ex);
                 }
                 finally
                 {
@@ -120,6 +124,7 @@ namespace RNAssistant.MockDemo
             {
                 failed += 1;
                 Console.WriteLine("FAIL failed-turn-persistence: " + ex.Message);
+                if (Environment.GetEnvironmentVariable("RNA_MOCK_TRACE") == "1") Console.WriteLine(ex);
             }
 
             Console.WriteLine(failed == 0 ? "OK" : "FAILED " + failed);
@@ -150,7 +155,9 @@ namespace RNAssistant.MockDemo
                 {
                     var message = JObject.Parse(eventJson);
                     if (string.Equals((string)message["type"], "chatState", StringComparison.Ordinal) &&
-                        string.Equals((string)message["scope"], "full", StringComparison.Ordinal))
+                        string.Equals((string)message["scope"], "full", StringComparison.Ordinal) && !transportCalled &&
+                        message["payload"]?["messages"] is JArray projectedMessages &&
+                        projectedMessages.OfType<JObject>().Any(item => (string)item["Content"] == "persist failed turn"))
                     {
                         committedProjection = message["payload"] as JObject;
                         committedProjectionQueued = committedProjection != null;
@@ -184,21 +191,24 @@ namespace RNAssistant.MockDemo
                 {
                     contractVersion = BridgeOperationCatalog.Version,
                     id = "failure-send",
-                    type = "sendChat",
+                    type = "submitChatInput",
                     bridgeToken = token,
                     payload = new
                     {
                         chatId = chatId,
                         text = "persist failed turn",
+                        operationId = "failure-input", delivery = "Steer",
                         resourceDraftIds = new[] { draft.Resource.Id }
                     }
                 });
                 var failedPacket = await bridge.HandleAsync(request).ConfigureAwait(false);
-                var failedResponse = JObject.Parse(failedPacket.Response);
+                if (!(bool)JObject.Parse(failedPacket.Response)["ok"]) throw new InvalidOperationException("intake failed");
+                await bridge.DrainAsync().ConfigureAwait(false);
+                var failedResponse = await SendAsync(bridge, "failure-state", "getChatState", new { chatId }, token).ConfigureAwait(false);
                 var failedPayload = failedResponse["payload"] as JObject;
                 if (!(bool)failedResponse["ok"] || failedPayload == null ||
                     !string.Equals((string)failedPayload["runViewState"]?["Lifecycle"], "failed", StringComparison.OrdinalIgnoreCase) ||
-                    ((string)failedPayload["message"] ?? string.Empty).IndexOf("scripted transport failure", StringComparison.Ordinal) < 0)
+                    failedPayload.ToString().IndexOf("scripted transport failure", StringComparison.Ordinal) < 0)
                 {
                     throw new InvalidOperationException("transport failure did not produce typed failed state");
                 }
@@ -211,12 +221,15 @@ namespace RNAssistant.MockDemo
                     .OfType<JObject>()
                     .Single(message => string.Equals((string)message["Role"], "user", StringComparison.OrdinalIgnoreCase));
                 var committedAttachment = ((JArray)committedUser["Attachments"]).OfType<JObject>().Single();
-                var committedReference = ((JArray)committedUser["ResourceRefs"]).OfType<JObject>().Single();
+                var committedArtifactId = ((JArray)committedUser["ArtifactIds"]).Values<string>().Single();
                 var committedArtifact = ((JArray)committedProjection["artifacts"])
                     .OfType<JObject>()
-                    .Single(artifact => string.Equals((string)artifact["resourceUri"], (string)committedReference["uri"], StringComparison.Ordinal));
-                if (committedAttachment["DraftChatId"] != null ||
-                    (int)committedArtifact["revision"] != 1 || string.IsNullOrWhiteSpace((string)committedReference["revision"]))
+                    .Single(artifact => (string)artifact["id"] == committedArtifactId);
+                var committedReference = new ChatStore(AppDataPaths.CreateForRoot(root)).Load(chatId).Messages
+                    .Single(item => item.Id == (string)committedUser["Id"]).ResourceRefs.Single();
+                if (string.IsNullOrWhiteSpace((string)committedAttachment["FileName"]) ||
+                    (int)committedArtifact["revision"] != 1 || string.IsNullOrWhiteSpace(committedReference.Revision) ||
+                    (string)committedArtifact["resourceUri"] != committedReference.Uri)
                 {
                     throw new InvalidOperationException("projection contains draft or unpinned resource state");
                 }
@@ -237,7 +250,7 @@ namespace RNAssistant.MockDemo
                 }
                 var storedArtifacts = selectedPayload["artifacts"] as JArray;
                 if (storedArtifacts == null || storedArtifacts.OfType<JObject>().All(artifact =>
-                    !string.Equals((string)artifact["resourceUri"], (string)committedReference["uri"], StringComparison.Ordinal)))
+                    !string.Equals((string)artifact["resourceUri"], committedReference.Uri, StringComparison.Ordinal)))
                 {
                     throw new InvalidOperationException("provider failure rolled back the committed resource");
                 }
@@ -259,6 +272,8 @@ namespace RNAssistant.MockDemo
                 var terminalReturned = false;
                 var liveArtifactProjected = false;
                 var llm = new ScriptedDemoLlm("Excel");
+                new SettingsService(AppDataPaths.CreateForRoot(root)).Save(new AppSettings {
+                    AutoConfirmToolActions = true, ContextWindowOverrideTokens = 131072 });
                 var controller = new AssistantController(
                     FakeOfficeAdapter.ForHost("Excel"),
                     AppDataPaths.CreateForRoot(root),
@@ -281,7 +296,7 @@ namespace RNAssistant.MockDemo
                 await SendAsync(
                     bridge,
                     "live-send",
-                    "sendChat",
+                    "submitChatInput",
                     new { chatId = chatId, text = "Создай HTML dashboard с таблицей продаж." },
                     token).ConfigureAwait(false);
                 terminalReturned = true;
@@ -317,16 +332,16 @@ namespace RNAssistant.MockDemo
             var send = await SendAsync(
                 bridge,
                 "3",
-                "sendChat",
+                "submitChatInput",
                 new { chatId = chatId, text = "Создай демо отчет продаж с таблицей и графиком." },
                 token).ConfigureAwait(false);
             var payload = Payload(send);
-            var message = payload["message"] == null ? string.Empty : payload["message"].ToString();
+            var message = LastAnswer(payload);
             if (message.IndexOf("Demo Report", StringComparison.OrdinalIgnoreCase) < 0)
             {
                 throw new InvalidOperationException(
                     "final answer did not mention Demo Report: " + message +
-                    "; toolResults=" + (payload["toolResults"] == null ? "null" : payload["toolResults"].ToString(Formatting.None)));
+                    "; run=" + payload["runViewState"]?.ToString(Formatting.None));
             }
 
             var messages = payload["messages"] as JArray;
@@ -344,18 +359,17 @@ namespace RNAssistant.MockDemo
             var plain = await SendAsync(
                 bridge,
                 "4",
-                "sendChat",
+                "submitChatInput",
                 new { chatId = chatId, text = "Что такое EBITDA простыми словами?" },
                 token).ConfigureAwait(false);
             var plainPayload = Payload(plain);
-            var plainMessage = plainPayload["message"] == null ? string.Empty : plainPayload["message"].ToString();
+            var plainMessage = LastAnswer(plainPayload);
             if (plainMessage.IndexOf("EBITDA", StringComparison.OrdinalIgnoreCase) < 0)
             {
                 throw new InvalidOperationException("plain answer did not answer the ordinary question: " + plainMessage);
             }
 
-            var toolResults = plainPayload["toolResults"] as JArray;
-            if (toolResults != null && toolResults.Count != 0)
+            if (CurrentToolActivities(plainPayload).Any())
             {
                 throw new InvalidOperationException("plain answer unexpectedly executed tools");
             }
@@ -363,7 +377,7 @@ namespace RNAssistant.MockDemo
             var htmlCreate = await SendAsync(
                 bridge,
                 "5",
-                "sendChat",
+                "submitChatInput",
                 new { chatId = chatId, text = "Сделай HTML страницу Sales HTML Dashboard с данными продаж, CSS и отдельным JS скриптом." },
                 token).ConfigureAwait(false);
             var htmlCreatePayload = Payload(htmlCreate);
@@ -372,7 +386,7 @@ namespace RNAssistant.MockDemo
             var htmlEdit = await SendAsync(
                 bridge,
                 "6",
-                "sendChat",
+                "submitChatInput",
                 new { chatId = chatId, text = "Обнови HTML страницу: добавь март в данные и измени JS так, чтобы total стал обновленным." },
                 token).ConfigureAwait(false);
             var htmlEditPayload = Payload(htmlEdit);
@@ -392,7 +406,7 @@ namespace RNAssistant.MockDemo
             var dataSources = (workspace["dataSources"] ?? workspace["DataSources"]) as JArray;
             if (files == null || files.Count < 3)
             {
-                throw new InvalidOperationException("HTML workspace files were not created: " + workspace.ToString(Formatting.None));
+                throw new InvalidOperationException("HTML workspace files were not created; run=" + payload["runViewState"]?.ToString(Formatting.None));
             }
             if (dataSources == null || dataSources.Count != 1)
             {
@@ -434,17 +448,24 @@ namespace RNAssistant.MockDemo
 
             if (expectEdit)
             {
-                var results = payload["toolResults"] as JArray ?? new JArray();
+                var results = CurrentToolActivities(payload).ToList();
                 foreach (var expected in new[] { "common.html_data_write", "common.html_workspace_write_file" })
-                    if (!results.OfType<JObject>().Any(item =>
-                        string.Equals((string)item["toolId"], expected, StringComparison.Ordinal) &&
-                        string.Equals((string)item["status"], "ok", StringComparison.OrdinalIgnoreCase)))
+                    if (!results.Any(item =>
+                        string.Equals((string)item["ToolId"], expected, StringComparison.Ordinal) &&
+                        string.Equals((string)item["Status"], "completed", StringComparison.OrdinalIgnoreCase)))
                         throw new InvalidOperationException("HTML edit did not complete " + expected);
             }
         }
 
         private static async Task<JObject> SendAsync(MockBridgeHost bridge, string id, string type, object payload, string token)
         {
+            if (type == "submitChatInput")
+            {
+                var input = JObject.FromObject(payload);
+                input["operationId"] = id;
+                input["delivery"] = "Steer";
+                payload = input;
+            }
             var request = JsonConvert.SerializeObject(new
             {
                 contractVersion = BridgeOperationCatalog.Version,
@@ -460,7 +481,30 @@ namespace RNAssistant.MockDemo
                 throw new InvalidOperationException((string)response["error"]);
             }
 
+            if (type == "submitChatInput")
+            {
+                await bridge.DrainAsync().ConfigureAwait(false);
+                return await SendAsync(bridge, id + "-state", "getChatState",
+                    new { chatId = (string)((JObject)payload)["chatId"] }, token).ConfigureAwait(false);
+            }
             return response;
+        }
+
+        private static string LastAnswer(JObject state)
+        {
+            return ((JArray)state["messages"]).OfType<JObject>()
+                .Where(message => (string)message["Role"] == "assistant" &&
+                    (bool?)message["ProtocolMessage"] != true && message["Activity"]?.Type != JTokenType.Object)
+                .Select(message => (string)message["Content"]).LastOrDefault() ?? string.Empty;
+        }
+
+        private static System.Collections.Generic.IEnumerable<JObject> CurrentToolActivities(JObject state)
+        {
+            var runId = (string)state["runViewState"]?["RunId"];
+            return ((JArray)state["messages"]).OfType<JObject>().Where(message => (string)message["RunId"] == runId)
+                .Select(message => message["Activity"]).OfType<JObject>()
+                .SelectMany(activity => activity.DescendantsAndSelf().OfType<JObject>())
+                .Where(activity => !string.IsNullOrWhiteSpace((string)activity["ToolId"]));
         }
 
         private static JObject Payload(JObject response)

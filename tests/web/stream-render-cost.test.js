@@ -70,8 +70,8 @@ bridge.renderChatSessions = () => sidebarRenders++;
 vm.runInContext(read("app-core.js"), bridge);
 vm.runInContext(read("app-chat-run.js"), bridge);
 bridge.state.activeChatId = "foreground";
-bridge.state.pending.request = { type: "sendChat", payload: { chatId: "background" } };
-for (let i = 0; i < 100; i++) listener({ data: { type: "progress", id: "request", payload: { contentDelta: "x" } } });
+
+for (let i = 0; i < 100; i++) listener({ data: { type: "progress", id: "inbox:background", payload: { chatId: "background", contentDelta: "x" } } });
 assert.equal(bridge.state.chatRuns.background.stream.length, 100, "every delta is retained immediately");
 assert.equal(sidebarRenders, 0); assert.equal(timers.length, 1);
 timers.shift()(); assert.equal(sidebarRenders, 1);
@@ -84,8 +84,8 @@ bridge.renderMessages = () => foregroundRenders++;
 bridge.normalizeProgressActivity = progress => ({ id: progress.message, kind: "notice", title: progress.message });
 bridge.cloneActivity = activity => Object.assign({}, activity);
 bridge.log = () => {};
-bridge.state.pending.foreground = { type: "sendChat", payload: { chatId: "foreground" } };
-for (let i = 0; i < 100; i++) listener({ data: { type: "progress", id: "foreground", payload: { phase: "thinking", message: "step-" + i } } });
+
+for (let i = 0; i < 100; i++) listener({ data: { type: "progress", id: "inbox:foreground", payload: { chatId: "foreground", phase: "thinking", message: "step-" + i } } });
 assert.equal(bridge.state.chatRuns.foreground.activities.length, 100, "all activity events are recorded before rendering");
 assert.equal(foregroundRenders, 0);
 assert.equal(foregroundFrames.length, 1);

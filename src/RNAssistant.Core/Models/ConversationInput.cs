@@ -18,6 +18,10 @@ namespace RNAssistant.Core.Models
         public string AcceptedRunId { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string RequestFingerprint { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string AnswerRunId { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string QuestionSetId { get; set; }
         public long Revision { get; set; }
         public string Text { get; set; }
         public InputDelivery Delivery { get; set; }

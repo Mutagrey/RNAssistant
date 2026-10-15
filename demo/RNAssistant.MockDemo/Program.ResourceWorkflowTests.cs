@@ -59,7 +59,7 @@ namespace RNAssistant.MockDemo
                 responses.Enqueue(tool("common.task_list_set", new { action = "save", goal = "Edit report", steps = new[] { new { text = "Update HTML", status = "in_progress" } } }));
                 responses.Enqueue(tool("common.skills_load", new { id = "common.html_workspace_authoring" }));
                 responses.Enqueue(tool("common.html_workspace_write_file", new { path = "index.html", content = "<main>Before</main>" }));
-                await controller.SendChatAsync("Create a report and update its heading", id);
+                await SubmitAndWaitAsync(controller, "Create a report and update its heading", id);
                 var store = new ChatStore(paths);
                 var session = store.Load(id);
                 var pending = session.LastRun.KernelState.Summary.PendingConfirmation;
@@ -133,7 +133,7 @@ namespace RNAssistant.MockDemo
                 }
                 requireSelections = false;
                 responses.Enqueue(done);
-                await controller.SendChatAsync("A new independent question", id);
+                await SubmitAndWaitAsync(controller, "A new independent question", id);
                 if (store.Load(id).LastRun.SelectedSkills.Count != 0) throw new Exception("new task inherited old selections");
                 Console.WriteLine("PASS resource workflow: task list, selected skills across compaction and four approval restarts, exact HTML patch/full replacement/no-op and historical editor snapshots, independent task reset");
                 return 0;

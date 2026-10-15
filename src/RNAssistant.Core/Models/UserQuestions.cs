@@ -30,6 +30,12 @@ namespace RNAssistant.Core.Models
         [JsonProperty("recommended")] public bool Recommended { get; set; }
     }
 
+    public sealed class PendingUserQuestions
+    {
+        public string RunId { get; set; }
+        public UserQuestionSet QuestionSet { get; set; }
+    }
+
     public sealed class UserQuestionAnswerCommand
     {
         [JsonProperty("runId")] public string RunId { get; set; }

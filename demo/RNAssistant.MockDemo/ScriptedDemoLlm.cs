@@ -46,6 +46,9 @@ namespace RNAssistant.MockDemo
                 var commands = (isHtmlTask
                     ? HtmlCommands(isHtmlEdit, false)
                     : InitialCommands(_host, false)).ToList();
+                if (!isHtmlTask)
+                    commands.InsertRange(0, commands.Select(command => command.ToolId)
+                        .Distinct(StringComparer.Ordinal).Select(id => Cmd("common.capabilities_read", "id", id)).ToList());
                 var next = NextPendingCommand(commands, toolResults);
                 var firstTurn = toolResults.Count == 0;
 
@@ -188,8 +191,7 @@ namespace RNAssistant.MockDemo
             {
                 return new[]
                 {
-                    Cmd("common.capabilities_read", "id", "common.html_workspace_write_file"),
-                    Cmd("common.capabilities_read", "id", "common.html_data_write"),
+                    Cmd("common.skills_load", "id", "common.html_workspace_authoring"),
                     Cmd("common.html_data_write", "name", "sales", "json", "{\"rows\":[{\"month\":\"Jan\",\"sales\":120},{\"month\":\"Feb\",\"sales\":150},{\"month\":\"Mar\",\"sales\":180}],\"title\":\"Updated Sales HTML Dashboard\"}"),
                     Cmd("common.html_workspace_write_file", "path", "app.js", "content", "(async function(){var handle=await RN.resources.open('sales');var json='';try{for await(var batch of handle.stream({view:'text',limit:4096})){json+=batch.text||'';}}finally{await handle.close();}var data=JSON.parse(json||'{}');var rows=data.rows||[];var total=rows.reduce(function(sum,row){return sum+Number(row.sales||0);},0);document.getElementById('salesTitle').textContent=data.title||'Sales HTML Dashboard';document.getElementById('salesTotal').textContent='Total: '+total;var list=document.getElementById('salesRows');if(list){list.innerHTML=rows.map(function(row){return '<article class=\"row-card\"><strong>'+row.month+'</strong><span>'+row.sales+'</span></article>';}).join('');}document.body.setAttribute('data-script-ready','updated');}()).catch(function(error){document.body.setAttribute('data-script-error',error.message||'resource-error');});")
                 };
@@ -197,8 +199,7 @@ namespace RNAssistant.MockDemo
 
             return new[]
             {
-                Cmd("common.capabilities_read", "id", "common.html_workspace_write_file"),
-                Cmd("common.capabilities_read", "id", "common.html_data_write"),
+                Cmd("common.skills_load", "id", "common.html_workspace_authoring"),
                 Cmd("common.html_data_write", "name", "sales", "json", "{\"rows\":[{\"month\":\"Jan\",\"sales\":120},{\"month\":\"Feb\",\"sales\":150}],\"title\":\"Sales HTML Dashboard\"}"),
                 Cmd("common.html_workspace_write_file", "path", "styles.css", "content", "body{font-family:Segoe UI,Arial,sans-serif;margin:0;min-height:100vh;background:#f8fafc;color:#111827}.dashboard{min-height:100vh;padding:32px clamp(20px,4vw,56px);display:grid;align-content:start;gap:22px}.hero{display:flex;justify-content:space-between;gap:18px;align-items:flex-end;border-bottom:1px solid #d0d5dd;padding-bottom:18px}.hero h1{margin:0;font-size:clamp(28px,4vw,48px);font-weight:500}.hero p{margin:8px 0 0;color:#475467}.metric{margin:0;font-size:clamp(32px,5vw,56px);font-weight:500;color:#0f766e}.rows{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}.row-card{display:flex;justify-content:space-between;gap:12px;border:1px solid #d0d5dd;border-radius:8px;padding:14px;background:#fff}"),
                 Cmd("common.html_workspace_write_file", "path", "app.js", "content", "(async function(){var handle=await RN.resources.open('sales');var json='';try{for await(var batch of handle.stream({view:'text',limit:4096})){json+=batch.text||'';}}finally{await handle.close();}var data=JSON.parse(json||'{}');var rows=data.rows||[];var total=rows.reduce(function(sum,row){return sum+Number(row.sales||0);},0);document.getElementById('salesTitle').textContent=data.title||'Sales HTML Dashboard';document.getElementById('salesTotal').textContent='Total: '+total;var list=document.getElementById('salesRows');if(list){list.innerHTML=rows.map(function(row){return '<article class=\"row-card\"><strong>'+row.month+'</strong><span>'+row.sales+'</span></article>';}).join('');}document.body.setAttribute('data-script-ready','created');}()).catch(function(error){document.body.setAttribute('data-script-error',error.message||'resource-error');});"),
@@ -249,7 +250,7 @@ namespace RNAssistant.MockDemo
             return JsonConvert.SerializeObject(new
             {
                 message = "Выполняю следующий шаг: " + command.ToolId + ".",
-                final = false,
+                action = "tool",
                 tool_calls = new[]
                 {
                     new
@@ -266,7 +267,7 @@ namespace RNAssistant.MockDemo
             return JsonConvert.SerializeObject(new
             {
                 message = message ?? string.Empty,
-                final = true,
+                action = "done",
                 tool_calls = new object[0]
             });
         }
