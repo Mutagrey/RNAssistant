@@ -36,6 +36,7 @@ namespace RNAssistant.Office.Vba
         public string Message { get; private set; }
         public string ErrorCode { get; private set; }
         public bool? Retryable { get; private set; }
+        public bool? Changed { get; private set; }
         public JObject Data { get { return _data == null ? null : (JObject)_data.DeepClone(); } }
 
         private VbaMutationOutcome(
@@ -43,25 +44,29 @@ namespace RNAssistant.Office.Vba
             string message,
             JObject data,
             string errorCode,
-            bool? retryable)
+            bool? retryable,
+            bool? changed = null)
         {
             Status = status;
             Message = message ?? string.Empty;
             _data = data == null ? null : (JObject)data.DeepClone();
             ErrorCode = errorCode;
             Retryable = status == VbaMutationOutcomeStatus.Unknown ? false : retryable;
+            Changed = changed;
         }
 
         public static VbaMutationOutcome Ok(
             string message,
-            JObject data = null)
+            JObject data = null,
+            bool? changed = null)
         {
             return new VbaMutationOutcome(
                 VbaMutationOutcomeStatus.Ok,
                 message,
                 data,
                 null,
-                null);
+                null,
+                changed);
         }
 
         public static VbaMutationOutcome Error(

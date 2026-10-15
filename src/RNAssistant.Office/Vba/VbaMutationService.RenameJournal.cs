@@ -226,7 +226,8 @@ namespace RNAssistant.Office.Vba
                      actionResult.Status == VbaMutationActionStatus.Verified
                         ? string.Empty
                         : " Live identities match the intended result and terminal evidence was recorded."),
-                    data);
+                    data,
+                    changed: true);
             }
 
             if (string.Equals(

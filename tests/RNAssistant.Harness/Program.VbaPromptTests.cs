@@ -2339,6 +2339,52 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void VbaReadBackUnchangedStopsCaseLoop()
+        {
+            WithTempPaths(paths =>
+            {
+                const string source = "Sub Main(ByVal fov As Double)\nDebug.Print FOV\nEnd Sub";
+                var adapter = new FakeOfficeAdapter { VbaModuleCode = source,
+                    VbaWriteTransform = code => code.Replace("Debug.Print fov", "Debug.Print FOV") };
+                var journal = new VbaJournalStore(paths);
+                var executor = new OfficeToolExecutor(adapter, journal, new SkillStore(paths));
+                var session = NewSession(adapter);
+                var progress = new AgentProgressTracker();
+                ToolCall lastCall = null;
+                for (var index = 0; index < 3; index++)
+                {
+                    var pending = PrepareVbaNative(executor, session, Command("common.vba_apply_patch",
+                        "moduleName", "Module1", "patch", new JArray(new JObject {
+                            ["find"] = "Debug.Print FOV", ["text"] = "Debug.Print fov" })));
+                    var completed = ConfirmVbaNative(pending);
+                    AssertEqual(ToolExecutionOutcome.Ok, completed.Outcome, "VBE-equivalent request is satisfied");
+                    AssertTrue(completed.MayHaveDispatched, "case-only write did reach the backend");
+                    AssertEqual(ToolEffectEvidence.VerifiedNoChange, completed.Evidence.Effect,
+                        "restored casing is no change, not a successful edit");
+                    AssertEqual(ResourceEffectOutcome.VerifiedNoChange, completed.ResourceEffect.Outcome,
+                        "authority does not advance the source revision for restored casing");
+                    AssertEqual(false, (bool)JObject.Parse(completed.Result.DataJson)["changed"], "model sees actual no-change");
+                    AssertEqual(source, adapter.VbaModuleCode, "VBE restored the original source");
+                    lastCall = completed.Context.Call;
+                    progress.Observe(lastCall, ToolExecutionProgress.Capture(completed), completed.Result.Message,
+                        completed.ResourceEvidence, completed.ResourceEffect);
+                }
+                string reason, message;
+                int delay;
+                AssertTrue(!progress.CanDispatch(lastCall, out reason, out message, out delay),
+                    "three identical no-change results prevent another automatic write");
+                AssertEqual("repeated_tool_no_progress", reason, "case loop reaches the existing progress guard");
+                AssertEqual(3, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "only dispatched attempts wrote");
+
+                var renamed = ConfirmVbaNative(PrepareVbaNative(executor, session, Command("common.vba_apply_patch",
+                    "moduleName", "Module1", "patch", new JArray(new JObject {
+                        ["find"] = source, ["text"] = source.Replace("fov", "viewFov").Replace("FOV", "viewFov") }))));
+                AssertEqual(ToolEffectEvidence.VerifiedChange, renamed.Evidence.Effect,
+                    "a real identifier rename remains a significant change");
+                AssertEqual(true, (bool)JObject.Parse(renamed.Result.DataJson)["changed"], "actual rename is reported");
+            });
+        }
+
         private static void VbaProjectWriteAcceptsVbeNormalization()
         {
             var document = new FakeVbaDocumentObject();

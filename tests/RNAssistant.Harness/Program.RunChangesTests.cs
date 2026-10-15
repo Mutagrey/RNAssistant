@@ -2,9 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
+using RNAssistant.Core.Tools;
 using RNAssistant.Office.Services;
+using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Harness
 {
@@ -177,6 +181,66 @@ namespace RNAssistant.Harness
             AssertEqual("New", renamed.Items[0].Title, "planned new name");
             AssertEqual(renamed.Items[0].Before, renamed.Items[0].IntendedAfter, "planned rename has no fabricated line churn");
             AssertTrue(renamed.Items[0].After == null, "planned rename is never actual after source");
+        }
+
+        private static void RunChangesVbaCapturedReadBack()
+        {
+            WithTempPaths(paths =>
+            {
+                const string before = "Sub Main()\nDebug.Print \"old\"\nEnd Sub";
+                var adapter = new FakeOfficeAdapter { VbaModuleCode = before,
+                    VbaWriteTransform = code => code.Replace("Sub Main()", "sub Main ( )") + "\r\n\r\n" };
+                var journal = new VbaJournalStore(paths);
+                var executor = new OfficeToolExecutor(adapter, journal, new SkillStore(paths));
+                var session = NewSession(adapter);
+                var completed = ConfirmVbaNative(PrepareVbaNative(executor, session, Command("common.vba_apply_patch",
+                    "moduleName", "Module1", "patch", new JArray(new JObject { ["find"] = "\"old\"", ["text"] = "\"new\"" }))));
+                AssertEqual(ToolExecutionOutcome.Ok, completed.Outcome, "normalized source was verified");
+                AssertEqual(ToolEffectEvidence.VerifiedChange, completed.Evidence.Effect, "actual content changed");
+                var actual = adapter.VbaModuleCode;
+                var runId = completed.Context.RunId;
+                session.Messages.Add(new ChatMessage { Role = "tool", ProtocolMessage = true,
+                    RunId = runId, ToolCallId = completed.Context.Call.Id, ToolName = completed.Context.Call.Name,
+                    ResourceEffect = completed.ResourceEffect, AuthorityCommitId = completed.AuthorityCommitId });
+                var chatStore = new ChatStore(paths);
+                chatStore.Save(session);
+
+                // Move the live head, then reopen all persisted stores. Historical diff must stay pinned.
+                adapter.VbaModuleCode = before.Replace("old", "later");
+                ReadVbaSource(executor, session, "Module1");
+                var readsBeforeDiff = adapter.TotalBackendCallCount;
+                var loaded = chatStore.Load(session.Host, session.DocumentKey, session.Id);
+                var reopenedJournal = new VbaJournalStore(paths);
+                var store = new ResourceAuthorityStore(paths);
+                var payloads = new ChatBlobStore(paths);
+                var authority = new ResourceAuthorityService(store, store, new ResourceMutationJournal(paths), payloads);
+                var service = new RunChangesService(a => a.InlineText,
+                    query => reopenedJournal.QueryMutations(loaded.Host, loaded.DocumentKey, query),
+                    id => reopenedJournal.GetMutationDetail(loaded.Host, loaded.DocumentKey, id), authority);
+                var changed = service.Read(loaded, runId).Items.Single();
+                AssertEqual("available", changed.Availability, "retained read-back supplies the actual diff");
+                AssertEqual(before, changed.Before, "journal retains the before source");
+                AssertEqual(actual, changed.After, "diff uses VBE casing, spacing and newlines exactly as captured");
+                AssertTrue(changed.IntendedAfter == null, "actual source is not a planned preview");
+                AssertEqual(readsBeforeDiff, adapter.TotalBackendCallCount, "historical diff performs no Office reads");
+
+                var toolMessage = loaded.Messages.Single(m => m.ToolCallId == completed.Context.Call.Id);
+                var commitId = toolMessage.AuthorityCommitId;
+                toolMessage.AuthorityCommitId = "another-call-commit";
+                var unrelated = service.Read(loaded, runId).Items.Single();
+                AssertEqual("unverified", unrelated.Availability, "another call cannot supply the actual source");
+                AssertTrue(unrelated.After == null, "comparable-only match never supplies exact text");
+                toolMessage.AuthorityCommitId = commitId;
+
+                var exact = completed.ResourceEffect.Impacts.Single(i => i.After != null).After;
+                var scope = ResourceAuthorityScopeId.Document(new DocumentAuthorityId(loaded.DocumentAuthorityId));
+                var view = store.GetView(scope, exact, ResourceRepresentations.Source);
+                System.IO.File.WriteAllText(payloads.PathFor(view.Payload.Sha256), "corrupt body");
+                var unavailable = service.Read(loaded, runId).Items.Single();
+                AssertEqual("unverified", unavailable.Availability, "corrupt CAS cannot become actual source");
+                AssertTrue(unavailable.After == null && unavailable.IntendedAfter != null,
+                    "missing captured bytes retain only an explicit intended preview");
+            });
         }
     }
 }

@@ -1474,9 +1474,14 @@ older snapshots with missing attribution are not inferred from model prose.
 
 VBA uses the addressed document journal and exact chat/run correlation. Accepted
 protocol-call IDs also locate preparations belonging to an earlier confirmation run;
-the current call run owns the display. Only terminal exact actual/intended source-hash
-agreement permits the verified `after` text. For an open/unknown record or
-comparable-only hash agreement, retained `before` and separately typed
+the current call run owns the display. `after` prefers the complete source payload
+of that call's exact published document revision, addressed through its retained
+authority commit. Both the CAS body and its live source hash must verify against
+the journal's terminal actual hash. VBE casing, spacing and line endings are shown
+as captured; later Office edits or head changes never replace historical text.
+Without this payload, only terminal exact actual/intended source-hash agreement
+permits using the retained intended text as `after`. For an open/unknown record or
+comparable-only hash agreement without captured actual source, retained `before` and separately typed
 `intendedAfter`/`intendedAfterExists` expose the planned diff with the visible label
 «Точный текст результата недоступен». This is a source-comparison limitation,
 not a replacement for the action's separately verified or unknown effect.

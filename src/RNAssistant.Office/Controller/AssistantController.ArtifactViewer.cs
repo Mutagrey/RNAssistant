@@ -125,7 +125,8 @@ namespace RNAssistant.Office
                     _chatStore.LoadArtifactBody, _toolExecutor.ResourceGateway),
                 query => _vbaJournalStore.QueryMutations(session.Host, session.DocumentKey, query),
                 id => _vbaJournalStore.GetMutationDetail(session.Host, session.DocumentKey, id,
-                    RunChangesService.MaximumSourceCharacters)).Read(session, request.RunId, request.ToolCallId);
+                    RunChangesService.MaximumSourceCharacters), _toolExecutor.ResourceGateway.Authority)
+                .Read(session, request.RunId, request.ToolCallId);
         }
 
         public ToolResultPresentationDto ReadToolResultPresentation(ToolResultPresentationRequest request)
@@ -135,7 +136,8 @@ namespace RNAssistant.Office
             var changes = new RunChangesService(
                 artifact => RunChangesService.ReadRetainedSource(session, artifact, _chatStore.LoadArtifactBody, _toolExecutor.ResourceGateway),
                 query => _vbaJournalStore.QueryMutations(session.Host, session.DocumentKey, query),
-                id => _vbaJournalStore.GetMutationDetail(session.Host, session.DocumentKey, id, RunChangesService.MaximumSourceCharacters));
+                id => _vbaJournalStore.GetMutationDetail(session.Host, session.DocumentKey, id, RunChangesService.MaximumSourceCharacters),
+                _toolExecutor.ResourceGateway.Authority);
             return new ToolResultPresentationService(call => changes.Read(session, request.RunId, call), _toolExecutor.Payloads)
                 .Read(session, request.RunId, request.ToolCallId);
         }

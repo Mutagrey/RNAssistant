@@ -205,9 +205,18 @@ namespace RNAssistant.Office.Vba
                     ? actionResult.Message
                     : (actionResult.Message ?? "VBA mutation reported an error.") +
                       " Live state matches the intended result and terminal evidence was recorded.";
+                // Comparable hashes verify the requested result; live hashes determine
+                // whether VBE actually changed the module rather than restoring its casing.
+                var changed = prepared.BeforeExists != assessment.ActualExists ||
+                    prepared.BeforeExists && !string.Equals(prepared.BeforeCodeSha256,
+                        assessment.ActualCodeSha256, StringComparison.OrdinalIgnoreCase);
+                data["changed"] = changed;
+                if (!changed)
+                    message = "VBA read-back matches the original module; no document change was made.";
                 return VbaMutationOutcome.Ok(
                     message,
-                    data);
+                    data,
+                    changed);
             }
 
             if (string.Equals(assessment.Status, VbaMutationStatuses.Unknown, StringComparison.Ordinal))

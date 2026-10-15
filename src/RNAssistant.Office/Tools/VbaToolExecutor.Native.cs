@@ -605,21 +605,23 @@ namespace RNAssistant.Office.Tools
         internal VbaNativeOutcomeStatus Status { get; private set; }
         internal string Message { get; private set; }
         internal string DataJson { get; private set; }
+        internal bool? Changed { get; private set; }
         internal ToolRecoveryContract Recovery { get; private set; }
 
         private VbaNativeOutcome(VbaNativeOutcomeStatus status,
-            string message, JObject data)
+            string message, JObject data, bool? changed = null)
         {
             Status = status;
             Message = message ?? string.Empty;
+            Changed = changed;
             DataJson = data == null || !data.HasValues
                 ? null : data.ToString(Formatting.None);
         }
 
-        internal static VbaNativeOutcome Ok(string message, JObject data = null)
+        internal static VbaNativeOutcome Ok(string message, JObject data = null, bool? changed = null)
         {
             return new VbaNativeOutcome(
-                VbaNativeOutcomeStatus.Ok, message, data);
+                VbaNativeOutcomeStatus.Ok, message, data, changed);
         }
 
         internal static VbaNativeOutcome Error(string message,
@@ -635,7 +637,7 @@ namespace RNAssistant.Office.Tools
                 return Error("VBA mutation returned no typed outcome.",
                     "vba_mutation_missing_outcome", false);
             if (outcome.Status == VbaMutationOutcomeStatus.Ok)
-                return Ok(outcome.Message, outcome.Data);
+                return Ok(outcome.Message, outcome.Data, outcome.Changed);
             return new VbaNativeOutcome(
                 outcome.Status == VbaMutationOutcomeStatus.Unknown
                     ? VbaNativeOutcomeStatus.Unknown

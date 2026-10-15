@@ -138,8 +138,8 @@ namespace RNAssistant.Office.Tools
             if (outcome.Status == VbaNativeOutcomeStatus.Unknown)
                 return ToolEffectEvidence.Unknown;
             if (outcome.Status == VbaNativeOutcomeStatus.Ok)
-                return dispatched ? ToolEffectEvidence.VerifiedChange :
-                    ToolEffectEvidence.VerifiedNoChange;
+                return !dispatched || outcome.Changed == false ? ToolEffectEvidence.VerifiedNoChange :
+                    outcome.Changed == true ? ToolEffectEvidence.VerifiedChange : ToolEffectEvidence.Unknown;
             return dispatched ? ToolEffectEvidence.VerifiedNoChange :
                 ToolEffectEvidence.None;
         }

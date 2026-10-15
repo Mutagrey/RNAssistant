@@ -408,6 +408,32 @@ changes, not proof that the model loop or runtime effect attribution is resolved
 This wording-only follow-up was checked by diff; no rebuild, model run or Office
 validation was performed for it.
 
+The later Optional/Scale photos do not reproduce a lost write. The user clarified
+that the missing change was the parameter rename `scale` to `scaleFactor`, which
+the model had not attempted. The displayed patch adds `Optional`, visible in VBE;
+the narrative claims a field rename, and VBE already shows
+`s.ViewData.ScaleFactor = scale`. The field and parameter are separate identifiers.
+This evidence does not establish absent mutation effects or compilation success;
+the broader unsupported completion claims remain the model-guidance concern above.
+
+The separate source-inspection finding is now fixed host-neutral: previously
+`VbaToolHandler.Effect` mapped `Ok` plus dispatch to `VerifiedChange` without a
+before/read-back comparison. The VBA mutation owner now carries typed `Changed`
+evidence from actual existence/live hashes. A fake VBE restoring the original
+casing returns `VerifiedNoChange`; three identical results reach the existing
+no-progress guard. A real identifier rename still reports a change. Exact guards,
+VBE-comparable verification and unknown-effect handling remain separate.
+
+`RunChangesService` now prefers the exact source already captured by `CaptureModules`,
+through the same call's retained authority commit and revision. CAS integrity and
+the terminal actual hash must agree. Restart/later live edits cannot replace that
+historical body; absent or corrupt normalized read-back stays an explicit intended
+preview. Owners: Office VBA mutation outcomes/handler and run-change presentation.
+Validation: 12 focused Harness checks passed (VBE, retained diffs, live hashing,
+write/delete drift, rename, restore lineage and native bindings). This reproduces
+the classification defect with a fake VBE, not the user's exact model loop.
+Real-model and Windows/Office compilation, editing and WebView2 display remain open.
+
 Owners: Core prompts, Office VBA skill and Web presentation. Prompt schema 49
 aligns preparation, skill policy, loader and catalog guidance around reuse of
 included selections; failed intended edits remain pending until evidence resolves

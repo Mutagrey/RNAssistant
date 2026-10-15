@@ -5,6 +5,7 @@ using System.Linq;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
+using RNAssistant.Core.Tools;
 using RNAssistant.Office.Contracts;
 
 namespace RNAssistant.Office.Services
@@ -17,10 +18,12 @@ namespace RNAssistant.Office.Services
         private readonly Func<ChatArtifact, string> _read;
         private readonly Func<VbaMutationQueryRequest, VbaMutationQueryPage> _query;
         private readonly Func<string, VbaMutationDetail> _detail;
+        private readonly ResourceAuthorityService _authority;
 
         public RunChangesService(Func<ChatArtifact, string> read,
-            Func<VbaMutationQueryRequest, VbaMutationQueryPage> query, Func<string, VbaMutationDetail> detail)
-        { _read = read; _query = query; _detail = detail; }
+            Func<VbaMutationQueryRequest, VbaMutationQueryPage> query, Func<string, VbaMutationDetail> detail,
+            ResourceAuthorityService authority = null)
+        { _read = read; _query = query; _detail = detail; _authority = authority; }
 
         internal static string ReadRetainedSource(ChatSession session, ChatArtifact artifact,
             Func<ChatSession, string, bool> hydrate, ResourceGatewayService gateway)
@@ -224,9 +227,10 @@ namespace RNAssistant.Office.Services
                 {
                     var oldName = detail.Components.FirstOrDefault(c => c.BeforeExists && !c.IntendedAfterExists);
                     var newName = detail.Components.FirstOrDefault(c => !c.BeforeExists && c.IntendedAfterExists);
+                    var renamedSource = newName == null ? null : VbaAfterSource(session, runId, row, newName);
                     if (oldName != null && newName != null &&
                         !(MatchesExactState(oldName, false) && MatchesExactState(newName, false)) &&
-                        !(MatchesExactState(oldName, true) && MatchesExactState(newName, true)))
+                        !(oldName.ActualExists == false && newName.ActualExists == true && renamedSource != null))
                     {
                         AddIntendedPreview(result, row.MutationId, newName.ModuleName,
                             true, oldName.BeforeCode, true, newName.IntendedAfterCode, oldName.ModuleName);
@@ -234,20 +238,19 @@ namespace RNAssistant.Office.Services
                         continue;
                     }
                     if (oldName != null && newName != null && oldName.ActualExists == false &&
-                        newName.ActualExists == true && Same(newName.ActualCodeSha256, newName.IntendedAfterCodeSha256) &&
-                        oldName.BeforeCode != null && newName.IntendedAfterCode != null)
+                        newName.ActualExists == true && oldName.BeforeCode != null && renamedSource != null)
                     {
                         RunTextChangeDto prior;
                         if (chains.TryGetValue(oldName.ModuleName, out prior) && prior.AfterExists && prior.After == oldName.BeforeCode)
                         {
                             prior.BeforeTitle = prior.BeforeTitle ?? oldName.ModuleName;
-                            prior.Title = newName.ModuleName; prior.After = newName.IntendedAfterCode;
+                            prior.Title = newName.ModuleName; prior.After = renamedSource;
                         }
                         else
                         {
                             prior = new RunTextChangeDto { Id = row.MutationId, Title = newName.ModuleName,
                                 BeforeTitle = oldName.ModuleName, Scope = "VBA", BeforeExists = true, AfterExists = true,
-                                Before = oldName.BeforeCode, After = newName.IntendedAfterCode, Availability = "available" };
+                                Before = oldName.BeforeCode, After = renamedSource, Availability = "available" };
                             Add(result, prior);
                         }
                         chains.Remove(oldName.ModuleName); chains[newName.ModuleName] = prior;
@@ -257,11 +260,10 @@ namespace RNAssistant.Office.Services
                 foreach (var component in detail.Components)
                 {
                     var key = component.ModuleName ?? "VBA";
-                    // MatchesIntendedAfter may use a comparable hash. Only exact captured bytes may supply the after text.
-                    var exactAfter = MatchesExactState(component, true);
                     var exactBefore = MatchesExactState(component, false);
                     if (exactBefore) continue;
-                    if (!exactAfter)
+                    var after = VbaAfterSource(session, runId, row, component);
+                    if (after == null)
                     {
                         AddIntendedPreview(result, row.MutationId + ":" + key, key,
                             component.BeforeExists, component.BeforeCode,
@@ -269,9 +271,9 @@ namespace RNAssistant.Office.Services
                         chains.Remove(key); continue;
                     }
                     var change = new RunTextChangeDto { Id = row.MutationId + ":" + key, Title = key, Scope = "VBA",
-                        BeforeExists = component.BeforeExists, AfterExists = component.IntendedAfterExists,
+                        BeforeExists = component.BeforeExists, AfterExists = component.ActualExists == true,
                         Before = component.BeforeExists ? component.BeforeCode : "",
-                        After = component.IntendedAfterExists ? component.IntendedAfterCode : "", Availability = "available" };
+                        After = after, Availability = "available" };
                     if (change.Before == null || change.After == null || change.Before.Length > MaximumSourceCharacters || change.After.Length > MaximumSourceCharacters)
                     { AddGap(result, change.Id, key, "VBA", "unavailable"); chains.Remove(key); continue; }
                     RunTextChangeDto prior;
@@ -289,6 +291,53 @@ namespace RNAssistant.Office.Services
             var exists = intended ? component.IntendedAfterExists : component.BeforeExists;
             var hash = intended ? component.IntendedAfterCodeSha256 : component.BeforeCodeSha256;
             return component.ActualExists == exists && (!exists || Same(component.ActualCodeSha256, hash));
+        }
+
+        private string VbaAfterSource(ChatSession session, string runId, VbaMutationQueryRow row,
+            VbaMutationComponentDetail component)
+        {
+            // Read the exact publication of this call, never the current Office/authority head.
+            // A comparable hash alone cannot turn planned text into captured source.
+            if (_authority?.Payloads != null && component.ActualExists == true &&
+                !string.IsNullOrWhiteSpace(session.DocumentAuthorityId) && !string.IsNullOrWhiteSpace(row.ToolCallId))
+            {
+                try
+                {
+                    var commitIds = (session.Messages ?? new List<ChatMessage>())
+                        .Where(m => m != null && m.ProtocolMessage && m.Role == "tool" && Same(m.RunId, runId) &&
+                            Same(m.ToolCallId, row.ToolCallId) && !string.IsNullOrEmpty(m.AuthorityCommitId))
+                        .Select(m => m.AuthorityCommitId).Distinct(StringComparer.Ordinal).ToArray();
+                    if (commitIds.Length == 1)
+                    {
+                        var scope = ResourceAuthorityScopeId.Document(new DocumentAuthorityId(session.DocumentAuthorityId));
+                        var snapshot = _authority.Store.Capture(scope);
+                        var commit = snapshot.Commits.SingleOrDefault(c => c.CommitId == commitIds[0]);
+                        var identity = VbaResourceProvider.ComponentIdentity(session.DocumentAuthorityId, component.ModuleName);
+                        var impacts = commit?.Effect?.Impacts.Where(i => i.Identity.Equals(identity) &&
+                            i.Relation == ResourceImpactRelation.Exact && i.After?.IsExact == true).ToArray();
+                        if (impacts?.Length == 1)
+                        {
+                            var exact = impacts[0].After;
+                            var metadata = _authority.RequirePublished(snapshot, exact);
+                            var view = _authority.Revisions.GetView(scope, exact, ResourceRepresentations.Source);
+                            if (Same(metadata.ContentSha256, component.ActualCodeSha256) &&
+                                Same(view?.ContentSha256, component.ActualCodeSha256) &&
+                                view?.Coverage.Kind == ResourceCoverageKinds.Whole && view.Payload != null &&
+                                view.Payload.ByteLength <= MaximumSourceCharacters * 4L)
+                            {
+                                var code = _authority.Payloads.ReadText(view.Payload.ToBlobReference());
+                                if (code != null && code.Length <= MaximumSourceCharacters &&
+                                    Same(VbaTextCanonicalizer.LiveCodeSha256(code), component.ActualCodeSha256)) return code;
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex) when (ex is InvalidOperationException || ex is System.IO.IOException || ex is ArgumentException)
+                { /* Missing retained evidence leaves the journal-backed preview available. */ }
+            }
+            return MatchesExactState(component, true)
+                ? component.IntendedAfterExists ? component.IntendedAfterCode : ""
+                : null;
         }
 
         private static void AddIntendedPreview(RunChangesDto result, string id, string title,
