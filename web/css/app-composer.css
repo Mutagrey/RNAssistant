@@ -244,7 +244,7 @@
   min-width: 0;
 }
 
-.context-meter-wrap {
+.composer-tooltip-wrap {
   position: relative;
   display: flex;
   flex: 0 0 auto;
@@ -291,12 +291,13 @@
 .context-meter[data-level="warn"] { color: #d97706; }
 .context-meter[data-level="danger"] { color: var(--danger); }
 
-.context-meter-tooltip {
+.composer-tooltip {
   position: absolute;
   right: 0;
   bottom: calc(100% + 10px);
   z-index: 34;
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 5px;
   width: max-content;
   max-width: min(340px, calc(100vw - 32px));
@@ -306,14 +307,14 @@
   background: var(--composer-surface);
   color: var(--composer-text);
   box-shadow: var(--shadow);
-  transform: translateX(var(--context-tooltip-shift, 0px));
+  transform: translateX(var(--composer-tooltip-shift, 0px));
   font-size: 12px;
   line-height: 1.5;
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }
 
-.context-meter-tooltip::after {
+.composer-tooltip::after {
   position: absolute;
   top: 100%;
   right: 0;
@@ -322,8 +323,14 @@
   content: "";
 }
 
-.context-meter-tooltip strong { font-size: 13px; font-weight: var(--title-font-weight); }
-.context-meter-tooltip > span { color: var(--composer-muted); }
+.composer-tooltip strong { font-size: 13px; font-weight: var(--title-font-weight); }
+.composer-tooltip > span {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  color: var(--composer-muted);
+  white-space: pre-line;
+}
 
 .composer-picker {
   position: relative;
@@ -732,8 +739,9 @@
   flex: 0 0 auto;
   gap: 5px;
   align-items: center;
-  height: 30px;
+  height: 32px;
   padding: 0 4px;
+  border-radius: var(--control-radius);
   color: var(--composer-muted);
   font-size: 11px;
   font-weight: var(--label-font-weight);
@@ -741,6 +749,16 @@
   line-height: 1;
   cursor: help;
   white-space: nowrap;
+}
+
+.model-connection-indicator:hover,
+.model-connection-indicator:focus-visible {
+  background: var(--composer-control-hover);
+}
+
+.model-connection-indicator:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
 }
 
 .model-connection-indicator i {

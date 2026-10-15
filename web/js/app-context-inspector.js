@@ -500,24 +500,8 @@ function hideContextMeterTooltip() {
 }
 
 function bindContextMeterTooltip() {
-  var wrap = $("contextMeterWrap");
-  var tooltip = $("contextMeterTooltip");
-  var trigger = $("contextMeter");
-  function show() {
-    if (trigger.disabled || promptContextInspectorOpen()) return;
-    tooltip.hidden = false;
-    tooltip.style.setProperty("--context-tooltip-shift", "0px");
-    var rect = tooltip.getBoundingClientRect();
-    var shift = Math.max(12 - rect.left, Math.min(0, window.innerWidth - 12 - rect.right));
-    tooltip.style.setProperty("--context-tooltip-shift", shift + "px");
-  }
-  wrap.addEventListener("pointerenter", show);
-  wrap.addEventListener("pointerleave", hideContextMeterTooltip);
-  trigger.addEventListener("focus", show);
-  trigger.addEventListener("blur", hideContextMeterTooltip);
-  window.addEventListener("resize", hideContextMeterTooltip);
-  document.addEventListener("keydown", function (event) {
-    if (event.key === "Escape") hideContextMeterTooltip();
+  bindComposerTooltip($("contextMeterWrap"), $("contextMeter"), $("contextMeterTooltip"), function () {
+    return !promptContextInspectorOpen();
   });
 }
 

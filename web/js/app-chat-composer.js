@@ -1,3 +1,35 @@
+function positionComposerTooltip(tooltip, trigger) {
+  tooltip.style.setProperty("--composer-tooltip-shift", "0px");
+  var container = trigger.closest(".chat-main");
+  var top = container ? Math.max(12, container.getBoundingClientRect().top + 12) : 12;
+  tooltip.style.maxHeight = Math.max(0, Math.min(420, trigger.getBoundingClientRect().top - top - 10)) + "px";
+  var rect = tooltip.getBoundingClientRect();
+  var shift = Math.max(12 - rect.left, Math.min(0, window.innerWidth - 12 - rect.right));
+  tooltip.style.setProperty("--composer-tooltip-shift", shift + "px");
+}
+
+function bindComposerTooltip(wrap, trigger, tooltip, canShow) {
+  function hide() { tooltip.hidden = true; }
+  function show() {
+    if (trigger.disabled || (canShow && !canShow())) return;
+    Array.prototype.slice.call(document.querySelectorAll(".composer-tooltip")).forEach(function (other) {
+      other.hidden = other !== tooltip;
+    });
+    positionComposerTooltip(tooltip, trigger);
+  }
+  wrap.addEventListener("pointerenter", show);
+  wrap.addEventListener("pointerleave", hide);
+  trigger.addEventListener("focus", show);
+  trigger.addEventListener("blur", hide);
+  window.addEventListener("resize", hide);
+  document.addEventListener("pointerdown", function (event) {
+    if (!wrap.contains(event.target)) hide();
+  });
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape") hide();
+  });
+}
+
 function renderChatModePicker() {
   var button = $("chatPlanButton");
   if (!button) return;

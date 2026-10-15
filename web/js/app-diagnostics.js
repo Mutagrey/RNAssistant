@@ -82,8 +82,10 @@ function renderModelConnectionIndicator() {
     root.classList.add(elapsed >= 10000 ? "is-slow" : "is-active");
     text.textContent = formatDiagnosticDuration(elapsed);
   }
-  root.title = modelDiagnosticTooltip(update);
-  root.setAttribute("aria-label", root.title);
+  root.setAttribute("aria-label", modelDiagnosticPhaseLabel(update));
+  $("modelConnectionSummary").textContent = modelDiagnosticTooltip(update);
+  var tooltip = $("modelConnectionTooltip");
+  if (!tooltip.hidden) positionComposerTooltip(tooltip, root);
 }
 
 function scheduleModelDiagnosticRender() {
@@ -316,6 +318,7 @@ function setDiagnosticsTab(name, refreshRecords) {
 }
 
 function bindDiagnosticsActions() {
+  bindComposerTooltip($("modelConnectionWrap"), $("modelConnectionIndicator"), $("modelConnectionTooltip"));
   renderModelConnectionIndicator();
   Array.prototype.slice.call(document.querySelectorAll(".diagnostics-tab-button")).forEach(function (tab) {
     tab.addEventListener("click", function () {

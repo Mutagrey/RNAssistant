@@ -492,7 +492,8 @@
 
 .chat-utility-dock {
   position: relative;
-  z-index: 20;
+  /* Dock chips and popovers stay below composer menus and tooltips. */
+  z-index: 9;
   display: flex;
   flex: 0 0 auto;
   gap: 6px;

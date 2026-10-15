@@ -44,6 +44,11 @@
 }
 
 @media (max-width: 760px) {
+  .settings-nav {
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+
   .tool-form {
     grid-template-columns: 1fr;
   }
@@ -72,6 +77,14 @@
 
   .instruction-layout {
     grid-template-rows: clamp(145px, 24vh, 190px) minmax(0, 1fr);
+  }
+
+  .vba-layout {
+    grid-template-rows: clamp(145px, 24vh, 190px) minmax(0, 1fr);
+  }
+
+  .vba-layout.is-sidebar-hidden {
+    grid-template-rows: minmax(0, 1fr);
   }
 
   .splitter {

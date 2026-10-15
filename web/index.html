@@ -27,7 +27,7 @@
   <link rel="stylesheet" href="css/app.css?v=composer-menu-20261013-1">
   <link rel="stylesheet" href="css/app-chat.css?v=office-chat-20261014-1">
   <link rel="stylesheet" href="css/app-markdown.css?v=accent-chat-20261012-1">
-  <link rel="stylesheet" href="css/app-composer.css?v=composer-actions-20261013-1">
+  <link rel="stylesheet" href="css/app-composer.css?v=composer-tooltips-20261015-1">
   <link rel="stylesheet" href="css/app-reasoning.css?v=accent-chat-20261012-1">
   <link rel="stylesheet" href="css/app-context-chips.css?v=sidebar-polish-20260723-1">
   <link rel="stylesheet" href="css/app-models.css?v=model-tables-20260930-1">
@@ -39,7 +39,7 @@
   <link rel="stylesheet" href="css/app-trajectory.css?v=diagnostics-clarity-20260930-1">
   <link rel="stylesheet" href="css/app-run-journal.css?v=json-height-20260929-1">
   <link rel="stylesheet" href="css/app-tools.css?v=json-height-20260929-1-library-20261002-1">
-  <link rel="stylesheet" href="css/app-vba.css?v=accent-palette-20261012-2">
+  <link rel="stylesheet" href="css/app-vba.css?v=ui-narrow-20261015-1">
   <link rel="stylesheet" href="css/app-context-panel.css?v=json-height-20260929-1">
   <link rel="stylesheet" href="css/app-model-context.css?v=model-context-20261002-1">
   <link rel="stylesheet" href="css/app-context-inspector.css?v=composer-menu-20261013-1">
@@ -48,8 +48,8 @@
   <link rel="stylesheet" href="css/app-artifacts.css?v=artifact-versions-20261014-1">
   <link rel="stylesheet" href="css/app-tree-adapter.css?v=tree-adapter-20260829-1">
   <link rel="stylesheet" href="css/app-html-workspace.css?v=html-memory-20261002-1">
-  <link rel="stylesheet" href="css/app-responsive.css?v=composer-menu-20261013-1">
-  <link rel="stylesheet" href="css/app-agent.css?v=chat-progress-repeats-20261014-1">
+  <link rel="stylesheet" href="css/app-responsive.css?v=ui-narrow-20261015-1">
+  <link rel="stylesheet" href="css/app-agent.css?v=composer-layers-20261015-1">
   <link rel="stylesheet" href="css/app-agent-data.css?v=json-height-20260929-1">
   <link rel="stylesheet" href="css/app-theme.css?v=user-bubble-20261012-2">
 </head>
@@ -227,20 +227,26 @@
                 </summary>
                 <div class="composer-picker-menu composer-model-menu" id="chatModelMenu" role="listbox" aria-label="Выбор модели чата"></div>
               </details>
-              <span class="model-connection-indicator is-idle" id="modelConnectionIndicator" title="Связь с моделью ещё не проверялась.">
-                <i aria-hidden="true"></i><span id="modelConnectionIndicatorText">—</span>
-              </span>
+              <div class="composer-tooltip-wrap" id="modelConnectionWrap">
+                <span class="model-connection-indicator is-idle" id="modelConnectionIndicator" role="img" tabindex="0" aria-label="Связь не проверена" aria-describedby="modelConnectionTooltip">
+                  <i aria-hidden="true"></i><span id="modelConnectionIndicatorText">—</span>
+                </span>
+                <div class="composer-tooltip" id="modelConnectionTooltip" role="tooltip" hidden>
+                  <strong>Связь с моделью</strong>
+                  <span id="modelConnectionSummary">Связь с моделью ещё не проверялась.</span>
+                </div>
+              </div>
               <button type="button" class="composer-reasoning-button" id="chatReasoningToggle" title="Reasoning выключен" aria-label="Включить reasoning" aria-pressed="false">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6"/><path d="M10 21h4"/><path d="M8.4 14.7A6 6 0 1 1 15.6 14.7c-.9.7-1.4 1.6-1.6 2.3h-4c-.2-.7-.7-1.6-1.6-2.3Z"/><path d="M12 1V0"/><path d="m4.9 4.9-.8-.8"/><path d="m19.9 4.1-.8.8"/></svg>
               </button>
-              <div class="context-meter-wrap" id="contextMeterWrap">
+              <div class="composer-tooltip-wrap" id="contextMeterWrap">
                 <button class="context-meter" id="contextMeter" type="button" data-level="unknown" aria-label="Контекстное окно" aria-describedby="contextMeterTooltip" aria-expanded="false" aria-controls="promptContextInspector">
                   <svg viewBox="0 0 24 24" aria-hidden="true">
                     <circle class="context-meter-track" cx="12" cy="12" r="9"/>
                     <circle class="context-meter-fill" cx="12" cy="12" r="9" pathLength="100"/>
                   </svg>
                 </button>
-                <div class="context-meter-tooltip" id="contextMeterTooltip" role="tooltip" hidden>
+                <div class="composer-tooltip" id="contextMeterTooltip" role="tooltip" hidden>
                   <strong>Контекстное окно</strong>
                   <span id="contextMeterSummary">API ещё не сообщил число входных токенов</span>
                 </div>
@@ -1115,7 +1121,7 @@
   <script src="js/app-markdown.js?v=accent-chat-20261012-1"></script>
   <script src="js/app-settings.js?v=auto-confirm-20261013-1"></script>
   <script src="js/app-logs.js?v=diagnostics-clarity-20260930-1"></script>
-  <script src="js/app-diagnostics.js?v=diagnostics-clarity-20260930-1"></script>
+  <script src="js/app-diagnostics.js?v=composer-tooltips-20261015-1"></script>
   <script src="js/app-viewer-registry.js?v=artifact-preview-20260902-2"></script>
   <script src="js/app-json-viewer.js?v=chat-projection-20260907-1"></script>
   <script src="js/app-text-viewer.js?v=artifact-text-20260831-1"></script>
@@ -1157,7 +1163,7 @@
   <script src="js/app-html-workspace.js?v=html-memory-20261002-1-vendors-1-artifact-tree-20261013-1"></script>
   <script src="js/app-context.js?v=ui-lazy-20260903-1-usage-20261002-1-inbox-20261002-1"></script>
   <script src="js/app-model-context.js?v=history-context-20261013-1"></script>
-  <script src="js/app-context-inspector.js?v=history-context-20261013-1"></script>
+  <script src="js/app-context-inspector.js?v=composer-tooltips-20261015-1"></script>
   <script src="js/app-arsenal.js?v=skill-packages-20261013-2"></script>
   <script src="js/app-tool-result-preview.js?v=question-delivery-20261014-1"></script>
   <script src="js/app-agent-data.js?v=step-results-20260908-1"></script>
@@ -1175,7 +1181,7 @@
   <script src="js/app-reasoning.js?v=chat-projection-20260907-1"></script>
   <script src="js/app-attachments.js?v=attachment-input-20261012-1"></script>
   <script src="js/app-chat-session.js?v=bridge-contract-20261015-1"></script>
-  <script src="js/app-chat-composer.js?v=composer-actions-20261013-1"></script>
+  <script src="js/app-chat-composer.js?v=composer-tooltips-20261015-1"></script>
   <script src="js/app-chat-inbox.js?v=inbox-1-transcript-20261012-1-settings-delivery-1-input-visible-20261013-1-run-completion-20261014-1"></script>
   <script src="js/app-chat-run.js?v=response-render-timing-20260928-1-usage-20261002-1-navigation-20261002-1-inbox-20261002-1-large-chat-1-run-isolation-1-transcript-20261012-1-settings-delivery-1"></script>
   <script src="js/app-chat.js?v=office-chat-20261014-1"></script>

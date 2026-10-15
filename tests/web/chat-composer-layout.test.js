@@ -8,6 +8,18 @@ const { chromium } = require("playwright");
 const root = path.resolve(__dirname, "../../web");
 const read = file => fs.readFileSync(path.join(root, file), "utf8");
 
+async function assertAboveResources(page, selector) {
+  assert.equal(await page.locator(selector).evaluate(surface => {
+    const rect = surface.getBoundingClientRect();
+    const dock = document.getElementById("toggleChatResourcesButton").getBoundingClientRect();
+    const left = Math.max(rect.left, dock.left), top = Math.max(rect.top, dock.top);
+    const right = Math.min(rect.right, dock.right), bottom = Math.min(rect.bottom, dock.bottom);
+    if (left >= right || top >= bottom) return true;
+    const x = (left + right) / 2, y = (top + bottom) / 2;
+    return surface.contains(document.elementFromPoint(x, y));
+  }), true, selector + " paints above the Resources chip");
+}
+
 (async () => {
   const browser = await chromium.launch({ headless: true,
     ...(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : {}) });
@@ -23,6 +35,8 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     await page.evaluate(() => {
       window.$ = id => document.getElementById(id);
       window.state = { activeChatId: "chat", activeChatMode: "agent", draftAttachments: [], settings: {},
+        modelDiagnostics: { Phase: "completed", Model: "Модель с длинным названием", PreparationMs: 150,
+          ResponseHeadersMs: 410, FirstChunkMs: 650, TotalMs: 2460, StatusCode: 200 },
         contextUsage: { lastPromptTokens: 118000, lastCompletionTokens: 500,
           lastTotalTokens: 118500, contextWindowTokens: 258000 } };
       window.currentActiveSend = () => state.sending ? {} : null;
@@ -32,7 +46,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       window.saveChatMode = mode => { state.activeChatMode = mode; renderSendControls(); };
       window.findEditingMessage = () => null;
     });
-    for (const file of ["app-accent.js", "app-utils.js", "app-model-picker.js", "app-chat-composer.js", "app-chat-state.js", "app-context-inspector.js"])
+    for (const file of ["app-accent.js", "app-utils.js", "app-model-picker.js", "app-chat-composer.js", "app-chat-state.js", "app-context-inspector.js", "app-diagnostics.js"])
       await page.addScriptTag({ content: read("js/" + file) });
     await page.evaluate(() => {
       RNAssistantAccents.apply("blue", false);
@@ -41,7 +55,9 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       window.loadPromptContextInspector = () => { window.inspections = (window.inspections || 0) + 1; };
       $("chatModelButtonLabel").textContent = "Модель с длинным названием";
       $("compactContextButton").hidden = false;
-      bindComposerPickers(); bindContextInspectorActions(); renderSendControls(); renderContextMeter();
+      $("chatResourceDock").classList.remove("hidden");
+      $("toggleChatResourcesButton").disabled = false;
+      bindComposerPickers(); bindContextInspectorActions(); bindDiagnosticsActions(); renderSendControls(); renderContextMeter();
     });
 
     for (const width of [1100, 740, 360]) {
@@ -54,6 +70,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
         const trigger = await page.locator("#composerAddButton").boundingBox();
         assert.ok(menu.x >= 0 && menu.x + menu.width <= width && menu.y >= 0 && menu.y + menu.height <= trigger.y,
           `menu overlays above the composer inside ${width}px / ${theme}`);
+        await assertAboveResources(page, "#composerAddMenu");
         for (const id of ["attachFileButton", "addSelectionContextButton", "compactContextButton"])
           assert.equal(await page.locator("#" + id).isVisible(), true);
         assert.equal(await page.locator('#chatModeMenu button').count(), 1);
@@ -75,13 +92,48 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
         await page.locator("#contextMeter").hover();
         const tooltip = await page.locator("#contextMeterTooltip").boundingBox();
         assert.ok(tooltip && tooltip.x >= 0 && tooltip.x + tooltip.width <= width && tooltip.y >= 0);
+        await assertAboveResources(page, "#contextMeterTooltip");
         assert.match(await page.locator("#contextMeterSummary").textContent(), /Осталось 54%/);
         assert.equal(await page.locator("#contextMeter").textContent().then(t => t.trim()), "");
         await page.keyboard.press("Escape");
         assert.equal(await page.locator("#contextMeterTooltip").isVisible(), false);
+        await page.locator("#modelConnectionIndicator").hover();
+        const connection = await page.locator("#modelConnectionTooltip").boundingBox();
+        assert.ok(connection && connection.x >= 0 && connection.x + connection.width <= width && connection.y >= 0,
+          `connection tooltip fits ${width}px / ${theme}`);
+        await assertAboveResources(page, "#modelConnectionTooltip");
+        assert.equal(await page.locator("#modelConnectionIndicator").getAttribute("title"), null);
+        assert.match(await page.locator("#modelConnectionSummary").textContent(), /API до заголовков: 260 мс/);
+        await page.locator("#modelConnectionTooltip").hover();
+        assert.equal(await page.locator("#modelConnectionTooltip").isVisible(), true, "pointer can enter the tooltip");
+        await page.locator("#contextMeter").hover();
+        assert.equal(await page.locator("#modelConnectionTooltip").isVisible(), false);
+        await page.keyboard.press("Escape");
       }
     }
-    console.log("PASS composer: menu and ring tooltip fit 1100/740/360px in both themes");
+    console.log("PASS composer: menu, connection and context tooltips fit 1100/740/360px in both themes");
+
+    await page.locator("#modelConnectionIndicator").focus();
+    assert.equal(await page.locator("#modelConnectionTooltip").isVisible(), true);
+    await page.evaluate(() => {
+      state.modelDiagnostics = { Phase: "failed", Error: "<img src=x onerror=alert(1)>" + "Длинная ошибка API без пробелов".repeat(200) };
+      renderModelConnectionIndicator();
+    });
+    const longTooltip = await page.locator("#modelConnectionTooltip").boundingBox();
+    assert.ok(longTooltip.x >= 0 && longTooltip.x + longTooltip.width <= 360 && longTooltip.y >= 0,
+      "a live diagnostic update stays inside the viewport");
+    assert.equal(await page.locator("#modelConnectionSummary img").count(), 0);
+    assert.equal(await page.locator("#modelConnectionSummary").evaluate(node => node.scrollHeight > node.clientHeight), true,
+      "long diagnostics scroll inside the tooltip");
+    await page.keyboard.press("Escape");
+    assert.equal(await page.locator("#modelConnectionTooltip").isVisible(), false);
+    await page.locator("#modelConnectionIndicator").blur();
+    await page.evaluate(() => { state.modelDiagnostics = null; renderModelConnectionIndicator(); });
+    await page.locator("#modelConnectionIndicator").focus();
+    assert.match(await page.locator("#modelConnectionSummary").textContent(), /ещё не проверялась/);
+    await page.locator("#chatInput").focus();
+    assert.equal(await page.locator("#modelConnectionTooltip").isVisible(), false);
+    console.log("PASS connection tooltip: keyboard dismissal, live updates, bounded long errors and idle state");
 
     await page.evaluate(() => {
       state.settings.AutoConfirmToolActions = true; state.mutationPolicy = "Deny"; renderSendControls();
