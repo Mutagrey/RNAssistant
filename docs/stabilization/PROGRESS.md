@@ -1,5 +1,19 @@
 # Stabilization progress
 
+## Resource journal names and archived operation admission — 2026-10-15
+
+Three follow-up findings are fixed host-neutral. Core resource authority validates
+the complete file inventory and blocks GC on unsupported names. Core working-set
+selection retains accepted call/result pairs, restoring semantic operation targets
+after compaction. The compiler bounds optional materialization before CAS reads;
+rejected receipts consume the input allowance and unresolved effects stay mandatory.
+
+The rebuilt Harness passes `storage: CAS` 10/10 and `context continuity:` 13/13.
+Coverage includes filename case/suffix/extension changes, published/unpublished
+roots, supported sibling caches, accepted-call CAS/restart and rejected archive
+candidates. No Office/VSTO qualification was run. Details:
+[RISK_REGISTER](RISK_REGISTER.md#resource-journal-names-and-archived-operation-admission--2026-10-15).
+
 ## Archived operation receipts retain exact diagnostics — 2026-10-15
 
 Owner: Core model-context compiler. Working-set restoration now supplies original

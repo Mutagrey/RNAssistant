@@ -29,6 +29,9 @@ namespace RNAssistant.Core.Services
             var result = new ContextWorkingSet();
             if (ContextCompactionRuntime.ActiveCheckpoint(session) == null) return result;
             var history = archive ?? session.Messages;
+            var calls = history.Where(item => item.Role == "assistant" && item.CompletedOperation == null &&
+                item.ToolCallId != null).GroupBy(item => item.ToolCallId, StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.Last(), StringComparer.Ordinal);
             var activeIds = new HashSet<string>(active.Select(item => item.Id), StringComparer.Ordinal);
             var runId = session.LastRun?.RunId ?? history.LastOrDefault(item => !string.IsNullOrEmpty(item.RunId))?.RunId;
             var selected = new HashSet<string>(StringComparer.Ordinal);
@@ -51,12 +54,14 @@ namespace RNAssistant.Core.Services
                     !laterSuccesses.Any(later => recovery.IsSatisfiedBy(later.ResourceEvidence, later.ResourceEffect))) mandatory = true;
                 // Keep the latest receipt for an exact call, including resumed runs.
                 if (!selected.Add(wire.ToolCallId)) continue;
-                if (mandatory || budget > 0) result.Operations.Add(new OperationCandidate(message, mandatory));
+                ChatMessage call;
+                calls.TryGetValue(wire.ToolCallId, out call);
+                if (mandatory || budget > 0) result.Operations.Add(new OperationCandidate(call, message, mandatory));
             }
             result.Operations.Reverse();
             // Selection retains exact provenance. Only the compiler hydrates,
             // projects and budgets receipts; mandatory facts cannot be evicted.
-            var bodies = result.SelectBodies(history, active, authority.Resources, settings, Math.Max(0, budget));
+            var bodies = result.SelectBodies(history, active, calls, authority.Resources, settings, Math.Max(0, budget));
             result.Messages.AddRange(bodies);
             result.ReceiptBudget = Math.Max(0, budget - EstimateCost(bodies, settings));
             if (result.IncludedBodies + result.OmittedBodies > 0)
@@ -70,13 +75,15 @@ namespace RNAssistant.Core.Services
 
         internal sealed class OperationCandidate
         {
+            internal readonly ChatMessage Call;
             internal readonly ChatMessage Source;
             internal readonly bool Required;
-            internal OperationCandidate(ChatMessage source, bool required) { Source = source; Required = required; }
+            internal OperationCandidate(ChatMessage call, ChatMessage source, bool required)
+            { Call = call; Source = source; Required = required; }
         }
 
         private List<ChatMessage> SelectBodies(IReadOnlyList<ChatMessage> history, IReadOnlyList<ChatMessage> active,
-            ResourceAuthoritySnapshotSet resources, AppSettings settings, int budget)
+            IReadOnlyDictionary<string, ChatMessage> calls, ResourceAuthoritySnapshotSet resources, AppSettings settings, int budget)
         {
             var bodies = new List<ChatMessage>();
             var reducer = new EvidenceStateReducer();
@@ -86,8 +93,6 @@ namespace RNAssistant.Core.Services
             var selected = new HashSet<string>(active.Where(ExposesBody)
                 .SelectMany(item => item.ResourceEvidence ?? new List<ResourceEvidence>()).Where(current)
                 .Select(ObservationKey), StringComparer.Ordinal);
-            var calls = history.Where(item => item.Role == "assistant" && item.CompletedOperation == null &&
-                item.ToolCallId != null).GroupBy(item => item.ToolCallId).ToDictionary(group => group.Key, group => group.Last());
             foreach (var message in history.Reverse())
             {
                 if (activeIds.Contains(message.Id) || !ContextCompactionRuntime.IsReplayMessage(message) || !ExposesBody(message)) continue;

@@ -8,6 +8,33 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## Resource journal names and archived operation admission — 2026-10-15
+
+**Fixed host-neutral / Core resource authority and model-context compiler.**
+Follow-up probes against `cc48a6dc` reproduced three distinct gaps:
+
+- **P1:** renamed/case-changed journals disappeared from the CAS root set while
+  reachability stayed complete; collection deleted their body in an isolated
+  temporary store. The inventory now includes every extension and admits only
+  canonical journal names and known sibling-owner files. Unsupported paths block
+  replay and all deletion; source files remain unchanged.
+- **P2:** archived `target_exists` results lost the target when only the accepted
+  call carried `relativePath`/`targetPath`. Selection now retains the exact pair;
+  the compiler hydrates/projects the call and extracts semantic targets without
+  inserting write arguments into the receipt.
+- **P2:** 40 oversized optional results caused 40 CAS reads (484,750 bytes) while
+  retaining zero receipts. Compiler admission now limits optional candidates to
+  64 and cumulative input to the smaller of 256 KiB and the request payload limit.
+  Bytes are charged before reads even if the resulting receipt is rejected.
+  Mandatory unresolved outcomes retain their existing full-request budget rules.
+
+Validation: rebuilt Harness, `storage: CAS` 10/10 and `context continuity:` 13/13.
+Regression cases cover published/unpublished renamed sources and view parts,
+explicit restoration, allowed sibling files, inline/externalized accepted calls
+through save/restart for three result roles, rejected archive materialization and
+unknown outcomes with zero optional budget. No full suite or Office/VSTO
+qualification was run.
+
 ## Runtime final response classified as tool result — 2026-10-14
 
 **Fixed host-neutral — 2026-10-15 / Core conversation persistence and Runtime adapter.**

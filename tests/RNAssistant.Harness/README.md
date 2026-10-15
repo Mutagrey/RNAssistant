@@ -1,9 +1,10 @@
 # RNAssistant Harness
 
-`storage: CAS` covers misplaced published/unpublished resource journals and
-file/directory links. `resource cutover: frozen evidence` and `context continuity:`
-cover removed heads, archived diagnostic provenance and inline/CAS parity after
-checkpoint/save/restart. The controlled CLI `compaction_resume_smoke.py` checks
+`storage: CAS` covers misplaced/renamed published and unpublished resource journals,
+file/directory links and supported sibling cache/metadata paths.
+`resource cutover: frozen evidence` and `context continuity:` cover removed heads,
+archived diagnostic provenance, accepted operation targets, bounded optional
+materialization and inline/CAS parity after checkpoint/save/restart. The controlled CLI `compaction_resume_smoke.py` checks
 the Runtime consumer through process loss, external drift and same-run recovery.
 
 Architectural simplification: `storage: runtime commits`,

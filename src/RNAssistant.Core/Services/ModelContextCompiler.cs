@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
@@ -32,6 +33,7 @@ namespace RNAssistant.Core.Services
         internal List<ResourceEvidence> Evidence = new List<ResourceEvidence>();
         internal ResourceObservationNotice HistoricalFailure;
         internal bool ArchivedOperation;
+        internal ChatMessage ArchivedCall;
     }
 
     internal sealed class ToolInteractionFrame
@@ -45,6 +47,8 @@ namespace RNAssistant.Core.Services
     // an ordered, frozen authority tuple. No provider/COM access occurs in Compile.
     public sealed class ModelContextCompiler
     {
+        private const int MaximumOptionalOperationCandidates = 64;
+        private const long MaximumOptionalOperationBytes = 256L * 1024;
         private readonly EvidenceStateReducer _reducer = new EvidenceStateReducer();
         private readonly ChatBlobStore _payloads;
         private readonly ModelResultProjection _projection;
@@ -178,6 +182,7 @@ namespace RNAssistant.Core.Services
                 {
                     var atom = Atom("archived-operation", Clone(operation.Source), operation.Required);
                     atom.ArchivedOperation = true;
+                    atom.ArchivedCall = operation.Call;
                     atoms.Add(atom);
                 }
 
@@ -290,14 +295,42 @@ namespace RNAssistant.Core.Services
             // request budget, including calibrated token cost, decides what fits.
             var receiptBudget = workingSet?.ReceiptBudget ?? 0;
             var optionalReceipts = 0;
+            var optionalCandidates = 0;
+            var optionalBytes = Math.Min(MaximumOptionalOperationBytes, maximumPayloadBytes);
             var materializationOrder = atoms.Where(item => !item.ArchivedOperation && (item.Kind != "resource-change" || item.KeepPair))
                 .Concat(atoms.Where(item => item.ArchivedOperation && item.MustKeep))
                 .Concat(atoms.Where(item => item.ArchivedOperation && !item.MustKeep).Reverse());
             foreach (var atom in materializationOrder)
             {
-                if (atom.ArchivedOperation && !atom.MustKeep) receiptBudget = Math.Min(2048, receiptBudget);
-                if (atom.ArchivedOperation && !atom.MustKeep && (receiptBudget <= 0 || optionalReceipts >= 24))
-                { atom.Messages.Clear(); continue; }
+                if (atom.ArchivedOperation && !atom.MustKeep)
+                {
+                    receiptBudget = Math.Min(2048, receiptBudget);
+                    if (receiptBudget <= 0 || optionalReceipts >= 24 || optionalCandidates >= MaximumOptionalOperationCandidates)
+                    { atom.Messages.Clear(); continue; }
+                    optionalCandidates++;
+                    var bytes = MaterializationBytes(atom.ArchivedCall) + MaterializationBytes(atom.Messages.Single());
+                    if (bytes > optionalBytes) { atom.Messages.Clear(); continue; }
+                    // Rejected receipts still consumed work. Charge the whole pair
+                    // before any CAS read, independently of the final token budget.
+                    optionalBytes -= bytes;
+                }
+                if (atom.ArchivedCall != null)
+                {
+                    var call = atom.ArchivedCall;
+                    if (call.AcceptedCallPayload != null)
+                    {
+                        if (call.AcceptedCallPayload.ByteLength > maximumPayloadBytes)
+                        {
+                            if (atom.MustKeep) throw new PromptBudgetExceededException(
+                                "A required archived operation call exceeds this request budget. Use a larger context window.", false);
+                            atom.Messages.Clear(); continue;
+                        }
+                        call = AcceptedCallPayloadService.Hydrate(call, _payloads);
+                        receipt.HydratedPayloads++;
+                        receipt.HydratedBytes += call.AcceptedCallPayload.ByteLength;
+                    }
+                    atom.ArchivedCall = _projection.Project(call);
+                }
                 for (var index = 0; index < atom.Messages.Count; index++)
                 {
                     var message = atom.Messages[index];
@@ -411,7 +444,7 @@ namespace RNAssistant.Core.Services
                         throw new InvalidOperationException("Exact archived operation result is invalid: " + error);
                     var completed = CompleteOperation(projected, wire,
                         new ResourceObservationNotice { BodyIncluded = false, State = EvidenceState.Unknown,
-                            Reason = "Historical operation; body not included." });
+                            Reason = "Historical operation; body not included." }, call: atom.ArchivedCall);
                     var receiptCost = ModelContextBudget.EstimateMessagesTokens(new[] { completed }, settings);
                     atom.Messages.Clear();
                     if (!atom.MustKeep && receiptCost > receiptBudget) continue;
@@ -909,6 +942,14 @@ namespace RNAssistant.Core.Services
             atom.Messages = new List<ChatMessage> { call, result };
             atom.BodyOmitted = true;
             atom.BodyParts.Clear();
+        }
+
+        private static long MaterializationBytes(ChatMessage message)
+        {
+            if (message == null) return 0;
+            if (message.AcceptedCallPayload != null) return message.AcceptedCallPayload.ByteLength;
+            return (message.ResultPayload?.ByteLength ?? Encoding.UTF8.GetByteCount(message.Content ?? string.Empty)) +
+                (message.ToolCalls ?? new List<LlmToolCall>()).Sum(call => (long)Encoding.UTF8.GetByteCount(call.ArgumentsJson ?? string.Empty));
         }
 
         private static List<string> OperationTargets(ToolResultWireReadResult wire, ChatMessage call)

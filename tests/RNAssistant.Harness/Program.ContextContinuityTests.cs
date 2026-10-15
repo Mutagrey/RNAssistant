@@ -425,6 +425,119 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void ContextContinuityKeepsArchivedTargets()
+        {
+            foreach (var role in new[] { "user", "developer", "tool" })
+            foreach (var tool in new[] { "files.create", "files.move" })
+            foreach (var externalized in new[] { false, true })
+            WithTempPaths(paths =>
+            {
+                var blobs = new ChatBlobStore(paths);
+                var chats = new ChatStore(paths);
+                var result = ContinuityResult("target", tool, ToolResult.Error("Already exists.", "{\"code\":\"target_exists\"}"), role);
+                result.ResourceEffect = new ResourceEffect("effect", "write", ResourceEffectOutcome.FailedNoEffect);
+                var arguments = new Dictionary<string, object> { { "relativePath", "index.html" } };
+                arguments.Add(tool == "files.move" ? "targetPath" : "text", tool == "files.move" ? "archive/index.html" : new string('x', 10000));
+                var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall {
+                    Id = result.ToolCallId, Name = tool, Arguments = arguments }, "Attempted write.", null, role, FixtureCallOrigin("target"));
+                call.RunId = result.RunId;
+                if (externalized)
+                {
+                    call.ArgumentPayload = PayloadRef.FromBlob(blobs.StoreText(JsonConvert.SerializeObject(arguments), "application/json"));
+                    AcceptedCallPayloadService.Externalize(call, blobs);
+                }
+                var session = chats.Create("Word", "archived-target", "Target.docx", "Target");
+                session.Messages.Add(call); session.Messages.Add(result);
+                SetContinuityCheckpoint(session, result);
+                chats.Save(session);
+                session = new ChatStore(paths).Load(session.Host, session.DocumentKey, session.Id);
+                var authority = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new ResourceAuthoritySnapshot[0]),
+                    "pack", new SkillCatalogSnapshot(null), null, 1);
+                var active = ContextCompactionService.BuildActiveWindow(session);
+                var set = ContextWorkingSet.Restore(session, active, authority, new AppSettings(), 6000);
+                var compiled = new ModelContextCompiler(blobs).Compile(authority, new ChatMessage[0], active.Concat(set.Messages).ToArray(),
+                    null, new ToolCatalogEntry[0], new AppSettings(), 12000, workingSet: set);
+                var receipt = compiled.Messages.Single(item => item.CompletedOperation != null);
+                AssertEqual(tool == "files.move" ? "index.html,archive/index.html" : "index.html",
+                    string.Join(",", receipt.CompletedOperation.Targets), "accepted targets survive checkpoint and restart without result path fields");
+                AssertEqual(ToolResultStatus.Error, receipt.CompletedOperation.Status, "target restoration never changes the outcome");
+                AssertContains(receipt.CompletedOperation.DataJson, "target_exists", "the original failure remains visible");
+                AssertTrue(!receipt.Content.Contains(new string('x', 100)), "accepted write bodies never enter the operation receipt");
+                if (externalized)
+                {
+                    AssertEqual(1, compiled.Receipt.HydratedPayloads, "selected accepted call is hydrated once");
+                    var storedCall = session.Messages.Single(item => item.Id == call.Id);
+                    AssertTrue(storedCall.ToolCalls.Count == 0, "compilation never rewrites the durable accepted-call header");
+                    System.IO.File.Delete(blobs.PathFor(storedCall.AcceptedCallPayload.Sha256));
+                    RuntimeThrows<InvalidOperationException>(() => new ModelContextCompiler(blobs).Compile(authority,
+                        new ChatMessage[0], active.Concat(set.Messages).ToArray(), null, new ToolCatalogEntry[0],
+                        new AppSettings(), 12000, workingSet: set));
+                }
+            });
+        }
+
+        private static void ContextContinuityBoundsArchivedMaterialization()
+        {
+            foreach (var externalized in new[] { false, true })
+            WithTempPaths(paths =>
+            {
+                var blobs = new ChatBlobStore(paths);
+                var authority = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new ResourceAuthoritySnapshot[0]),
+                    "pack", new SkillCatalogSnapshot(null), null, 1);
+                var session = new ChatSession();
+                var count = externalized ? 40 : 100;
+                for (var index = 0; index < count; index++)
+                {
+                    var result = ContinuityResult("large_" + index, "test.failure", ToolResult.Error(new string('m', 2000),
+                        new JObject { ["code"] = "conflict", ["details"] = externalized ? new string('x', 10000) : "details" }.ToString()));
+                    if (externalized)
+                    {
+                        result.ResultPayload = PayloadRef.FromBlob(blobs.StoreText(result.Content, "application/vnd.rnassistant.tool-result+json"));
+                        result.Content = ToolResultWire.Write(result.ToolCallId, result.ToolName,
+                            ToolResult.Error(new string('m', 2000), "{\"payload_externalized\":true}"));
+                    }
+                    session.Messages.Add(ContinuityCall(result)); session.Messages.Add(result);
+                }
+                SetContinuityCheckpoint(session, session.Messages.Last());
+                var set = ContextWorkingSet.Restore(session, new ChatMessage[0], authority, new AppSettings(), 120);
+                var projected = 0;
+                var projection = new ModelResultProjection((tool, result, tools, skills) => { projected++; return result; });
+                var compiler = new ModelContextCompiler(blobs, projection);
+                var compiled = compiler.Compile(authority, new ChatMessage[0], set.Messages, null, new ToolCatalogEntry[0],
+                    new AppSettings(), externalized ? 12000 : 100000, workingSet: set);
+                AssertEqual(0, compiled.Receipt.OperationReceipts, "oversized receipts do not fit the optional token budget");
+                AssertTrue(projected > 0 && projected <= 64, "rejected optional candidates count toward the work limit");
+                if (externalized)
+                {
+                    AssertTrue(compiled.Receipt.HydratedPayloads > 0 && compiled.Receipt.HydratedPayloads < count,
+                        "byte admission stops hydration before every rejected archive body is read");
+                    AssertTrue(compiled.Receipt.HydratedBytes <= 256L * 1024, "cumulative optional input bytes remain bounded");
+                }
+                var unknown = ContinuityResult("unresolved", "test.failure", ToolResult.Unknown("Inspect before any retry.",
+                    new JObject { ["code"] = "uncertain", ["details"] = new string('x', 10000) }.ToString()));
+                unknown.ResultPayload = PayloadRef.FromBlob(blobs.StoreText(unknown.Content, "application/vnd.rnassistant.tool-result+json"));
+                unknown.Content = ToolResultWire.Write(unknown.ToolCallId, unknown.ToolName,
+                    ToolResult.Unknown("Inspect before any retry.", "{\"payload_externalized\":true}"));
+                session.Messages.Add(ContinuityCall(unknown)); session.Messages.Add(unknown);
+                set = ContextWorkingSet.Restore(session, new ChatMessage[0], authority, new AppSettings(), 0);
+                var required = compiler.Compile(authority, new ChatMessage[0], set.Messages, null, new ToolCatalogEntry[0],
+                    new AppSettings(), 12000, workingSet: set);
+                AssertEqual("unresolved", required.Messages.Single(item => item.CompletedOperation != null).CompletedOperation.ToolCallId,
+                    "unresolved effects remain mandatory with no optional work budget");
+                AssertEqual(1, required.Receipt.HydratedPayloads, "zero optional budget reads only the mandatory exact body");
+            });
+        }
+
+        private static void SetContinuityCheckpoint(ChatSession session, ChatMessage through)
+        {
+            var checkpoint = new ContextCheckpoint { ThroughMessageId = through.Id, Claims = new List<StructuredContextClaim> {
+                new StructuredContextClaim { ClaimId = "c", Kind = "interpretation", Text = "Continue.",
+                    SourceRoles = new List<string> { "assistant" }, SourceMessageIds = new List<string> { through.Id } } } };
+            session.ContextCheckpoints.Add(checkpoint); session.ActiveContextCheckpointId = checkpoint.Id;
+            session.Artifacts.Add(new ChatArtifact { Id = checkpoint.Id, Kind = ChatArtifactKinds.Compaction,
+                MimeType = "application/json", InlineText = JsonConvert.SerializeObject(checkpoint) });
+        }
+
         private static void ContextContinuityKeepsMutationReceipts()
         {
             var authority = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new ResourceAuthoritySnapshot[0]),

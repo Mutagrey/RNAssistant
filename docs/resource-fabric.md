@@ -1633,13 +1633,17 @@ assembler; partial pages cannot masquerade as complete loads.
 
 After compaction `ContextWorkingSet` reuses current exact CAS evidence for source,
 text, structure and record coverage plus complete skill bodies. Archived operation
-selection supplies original result facts and mandatory/optional priority to
+selection supplies original call/result facts and mandatory/optional priority to
 `ModelContextCompiler`; it does not project or hydrate their bodies. The compiler
 uses the same bounded CAS hydration and model projection as active results, then
 creates receipts and applies their residual budget. Mandatory unresolved outcomes
 remain required, including with no optional budget. Optional receipts are selected
-newest first within the 24-receipt/2,048-token bound; an unaffordable candidate does
-not hide earlier affordable receipts. Missing selected diagnostic bodies fail
+newest first within the 24-receipt/2,048-token bound. Materialization examines at
+most 64 optional candidates and charges call/result input bytes before CAS reads,
+capped by the smaller of 256 KiB and the request payload limit. Rejected receipts
+still consume this allowance; earlier affordable candidates remain eligible
+within it. Accepted calls supply semantic targets absent from result data, without
+including write arguments in the receipt. Missing selected exact bodies fail
 explicitly rather than substituting an externalization header. The context receipt
 records actual hydration and each original payload, including omitted candidates.
 No operation is executed by this path. It never rereads
