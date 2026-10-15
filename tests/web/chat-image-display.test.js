@@ -12,7 +12,7 @@ const read = file => fs.readFileSync(path.join(root, "web", file), "utf8");
   const browser = await chromium.launch({ headless: true,
     ...(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : {}) });
   try {
-    const page = await browser.newPage({ viewport: { width: 430, height: 700 } });
+    const page = await browser.newPage({ viewport: { width: 430, height: 700 }, deviceScaleFactor: 2 });
     page.setDefaultTimeout(4000);
     const errors = [];
     page.on("pageerror", error => errors.push(error.message));
@@ -33,7 +33,7 @@ const read = file => fs.readFileSync(path.join(root, "web", file), "utf8");
         ctx.fillStyle = "blue"; ctx.fillRect(width * 2 / 3, height * 2 / 3, width / 3, height / 3);
         return new Promise(resolve => canvas.toBlob(resolve, "image/jpeg"));
       };
-      window.jpeg = await makeJpeg(320, 80);
+      window.jpeg = await makeJpeg(1280, 320);
       const uri = "rna://chat/chat-image/artifact/image/revision/1";
       window.state = { activeChatId: "chat-image", messages: [{ ArtifactIds: ["image"] }],
         artifacts: [{ id: "image", kind: "image", title: "panorama.jpeg", revision: 1,
@@ -75,17 +75,21 @@ const read = file => fs.readFileSync(path.join(root, "web", file), "utf8");
     await page.locator(".chat-media-item").scrollIntoViewIfNeeded();
     await page.waitForFunction(() => {
       const img = document.querySelector(".chat-media-item img");
-      return img && img.complete && img.naturalWidth === 320;
+      return img && img.complete && img.naturalWidth === 1280;
     });
     assert.equal(await page.evaluate(() => reads), 1, "retained messages still load on scroll after a chat refresh");
     const layout = await page.locator(".chat-media-item img").evaluate(img => ({
       fit: getComputedStyle(img).objectFit,
+      sourceWidth: img.naturalWidth,
+      pixelRatio: devicePixelRatio,
       image: img.getBoundingClientRect().toJSON(),
       cell: img.closest("button").getBoundingClientRect().toJSON()
     }));
     assert.equal(layout.fit, "contain", "the entire panorama is visible");
     assert.ok(layout.image.height <= layout.cell.height + 1 && layout.image.width <= layout.cell.width + 1);
-    console.log("PASS chat images: refresh preserves lazy loading and the whole JPEG thumbnail");
+    assert.ok(layout.sourceWidth >= layout.image.width * layout.pixelRatio,
+      "the panorama preview has enough source pixels at 2x display scaling");
+    console.log("PASS chat images: refresh preserves lazy loading and the whole high-DPI JPEG thumbnail");
 
     await page.evaluate(() => { $("messages").scrollTop = 0; });
     // Let the observer deliver the offscreen transition before returning.
@@ -97,7 +101,7 @@ const read = file => fs.readFileSync(path.join(root, "web", file), "utf8");
       delete thumbnails[uri]; // Same cache miss as bounded eviction or an expired lease.
     });
     await page.locator(".chat-media-item").scrollIntoViewIfNeeded();
-    await page.waitForFunction(() => reads === 2 && document.querySelector(".chat-media-item img").naturalWidth === 320);
+    await page.waitForFunction(() => reads === 2 && document.querySelector(".chat-media-item img").naturalWidth === 1280);
     await page.evaluate(() => {
       $("draft").appendChild(attachmentCard({ previewUrl: URL.createObjectURL(jpeg),
         FileName: "panorama.jpeg", Kind: "image", Size: jpeg.size }, true));

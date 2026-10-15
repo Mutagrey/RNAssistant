@@ -215,8 +215,8 @@
       var imageByteLength = Number(value(response, "ImageByteLength", "imageByteLength", -1));
       var data = binaryData(response, uri, imageByteLength, imageHash);
       if (returnedUri !== uri || viewerKind !== "image" || !/^[a-f0-9]{64}$/i.test(hash) ||
-          !Number.isInteger(width) || width <= 0 || width > 320 ||
-          !Number.isInteger(height) || height <= 0 || height > 320 ||
+          !Number.isInteger(width) || width <= 0 || width > 1280 ||
+          !Number.isInteger(height) || height <= 0 || height > 1280 ||
           imageMimeType !== "image/jpeg" || !/^[a-f0-9]{64}$/i.test(imageHash) ||
           imageByteLength <= 0 || imageByteLength > 512 * 1024) {
         throw new Error("Artifact image thumbnail returned inconsistent render evidence.");

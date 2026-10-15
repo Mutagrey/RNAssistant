@@ -34,7 +34,10 @@ namespace RNAssistant.Office.Services
             if (capability?.MaxPayloadBytes == null)
                 throw new ResourceRequestException("The resource does not offer this binary view.", "RESOURCE_VIEW_UNAVAILABLE", false);
             descriptor.Metadata["sourceContentSha256"] = descriptor.ContentSha256;
-            var view = "binary:" + request.Representation + (paged ? ":" + page.ToString(CultureInfo.InvariantCulture) : string.Empty);
+            // A new renderer profile must not reuse or overwrite an older immutable preview.
+            var retainedView = request.Representation == ResourceRepresentations.Thumbnail
+                ? ArtifactViewerService.ImageThumbnailRetentionView : request.Representation;
+            var view = "binary:" + retainedView + (paged ? ":" + page.ToString(CultureInfo.InvariantCulture) : string.Empty);
             var scope = _authority.Scope(session, false);
             var revisions = (IResourceRevisionStore)_authority.Store;
             var retained = revisions.GetView(scope, exact, view);
@@ -102,7 +105,7 @@ namespace RNAssistant.Office.Services
                 ContentSha256 = binary.Payload.Sha256, Payload = binary.Payload, Coverage = coverage, Complete = true
             }, ResourceRefs = new[] { exact.Copy() } };
             // Publication sees only durable bytes and metadata, not a renderer's provisional result.
-            return _authority.PublishRead(session, result, request, false);
+            return _authority.PublishRead(session, result, request, false, retainedView);
         }
 
         private ResourceBinaryView ReadRetainedBinaryMetadata(ResourceRevisionView retained)

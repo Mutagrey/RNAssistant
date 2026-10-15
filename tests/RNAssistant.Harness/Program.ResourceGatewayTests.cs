@@ -1529,8 +1529,8 @@ namespace RNAssistant.Harness
                     return new ArtifactImageThumbnailRenderResult
                     {
                         Bytes = jpeg,
-                        Width = 160,
-                        Height = 120
+                        Width = 1280,
+                        Height = 960
                     };
                 });
             var thumbnail = thumbnailViewer.ReadImageThumbnail(session, uri);
@@ -1538,7 +1538,7 @@ namespace RNAssistant.Harness
                 "image thumbnail uses the bounded renderer dimension");
             AssertEqual(uri, thumbnail.ResourceUri, "image thumbnail pins exact canonical URI");
             AssertEqual(hash, thumbnail.ContentSha256, "image thumbnail preserves source hash evidence");
-            AssertEqual(160, thumbnail.Width, "image thumbnail returns bounded width");
+            AssertEqual(1280, thumbnail.Width, "image thumbnail admits a high-DPI chat preview");
             AssertTrue(jpeg.SequenceEqual(thumbnail.Bytes),
                 "image thumbnail returns the separately rendered JPEG");
 

@@ -1128,10 +1128,19 @@ and explicit workspace import; authored source is never executed in the main DOM
 Collection cards load media lazily near the viewport. Image thumbnails use a
 separate typed exact-revision read: the source attachment URI/hash/length is checked
 as for the full viewer, then a local Skia provider returns JPEG at no more than
-320 px and 512 KiB. The UI admits the returned source hash, thumbnail hash, byte
-length and dimensions, runs at most four reads concurrently and retains at most 24
+1280 px and 512 KiB. This supplies high-DPI chat previews without stretching a
+320 px image. Rendering uses cubic sampling and JPEG quality 90, never enlarges
+the source, and reduces dimensions from the decoded source only when the encoded
+preview exceeds the byte bound. The UI admits the returned source hash, thumbnail
+hash, byte length and dimensions, runs at most four reads concurrently and retains at most 24
 ephemeral results per chat. Thumbnail state is cleared on chat switch and is never
 an artifact, revision, message event or model-facing resource.
+
+Gateway retention keys include the image renderer profile (`thumbnail:hidpi-v2`),
+so previously sent images receive the new preview from their exact original bytes.
+Older retained previews remain immutable; they are not reused by the new renderer.
+The public `thumbnail` view and original revision/hash stay unchanged. Missing or
+corrupt data for the current profile still fails without recapture.
 
 Chat thumbnail observation survives incremental transcript refreshes and ends when
 the owning message is replaced, removed or reset. Returning to an image after its

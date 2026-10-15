@@ -68,6 +68,34 @@ namespace RNAssistant.Harness
                     var scan = new CasReachabilityScan(); store.ScanCasReferences(scan);
                     AssertTrue(scan.References.Any(item => item.Reference.Sha256 == hash), "binary view bytes are durable retention roots");
                     data.Close(session.Id, "viewer", again.LeaseId);
+                    var scope = authority.Scope(session, false);
+                    foreach (var retainedView in new[] { "thumbnail", ArtifactViewerService.ImageThumbnailRetentionView })
+                    {
+                        var width = retainedView == "thumbnail" ? 320 : 1280;
+                        var preview = new ResourceBinaryView
+                        {
+                            Payload = PayloadRef.FromBlob(payloads.StoreBytes(BitConverter.GetBytes(width), "image/jpeg")),
+                            Width = width, Height = width * 3 / 4
+                        };
+                        var metadata = PayloadRef.FromBlob(payloads.StoreText(Newtonsoft.Json.JsonConvert.SerializeObject(preview), "application/json"));
+                        store.RegisterView(scope, new ResourceRevisionView(exact, "binary:" + retainedView, preview.Payload.Sha256,
+                            metadata, ResourceCoverage.Whole(), new[] { preview.Payload }));
+                        if (retainedView == "thumbnail")
+                            store.RegisterView(scope, new ResourceRevisionView(exact, retainedView, preview.Payload.Sha256,
+                                preview.Payload, ResourceCoverage.Whole()));
+                    }
+                    var oldPreview = store.GetView(scope, exact, "thumbnail");
+                    var sharp = data.Open(session, "viewer", exact, "thumbnail");
+                    AssertEqual(1280, sharp.Binary.Width, "chat reads the current renderer profile instead of the old 320px view");
+                    AssertEqual("thumbnail", sharp.View, "renderer profile stays internal to retention");
+                    AssertEqual(hash, sharp.Descriptor.Metadata["sourceContentSha256"], "preview keeps exact original evidence");
+                    AssertEqual(sharp.Binary.Payload.Sha256,
+                        store.GetView(scope, exact, ArtifactViewerService.ImageThumbnailRetentionView).ContentSha256,
+                        "publication uses the same renderer profile as the binary metadata");
+                    AssertEqual(oldPreview.ContentSha256, store.GetView(scope, exact, "thumbnail").ContentSha256,
+                        "a sharper preview never overwrites the old immutable view");
+                    AssertEqual(1, reads, "retained high-DPI previews reuse CAS without reading originals");
+                    data.Close(session.Id, "viewer", sharp.LeaseId);
                     RuntimeThrows<OperationCanceledException>(() => data.Open(session, "viewer", exact, "image",
                         cancellationToken: new System.Threading.CancellationToken(true)));
                     RuntimeThrows<ResourceRequestException>(() => data.Open(session, "viewer", exact, "image",
@@ -172,7 +200,8 @@ namespace RNAssistant.Harness
                     var parts = defect == "no-part" ? new PayloadRef[0] : new[] { defect == "wrong-part"
                         ? new PayloadRef(body.Sha256, body.ByteLength + 1, body.ContentType) : body };
                     store.RegisterRevision(scope, new ResourceRevisionMetadata(exact, original.Sha256));
-                    store.RegisterView(scope, new ResourceRevisionView(exact, "binary:" + view,
+                    var retainedView = view == "thumbnail" ? ArtifactViewerService.ImageThumbnailRetentionView : view;
+                    store.RegisterView(scope, new ResourceRevisionView(exact, "binary:" + retainedView,
                         defect == "wrong-hash" ? new string('a', 64) : body.Sha256,
                         defect == "null-record" ? null : metadata, ResourceCoverage.Whole(), parts));
                     var before = authority.CaptureMany(new[] { scope }).Get(scope).Generation;

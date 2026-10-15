@@ -401,6 +401,7 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   let deferPdfThumbnails = false;
   const deferredImageThumbnails = [];
   let deferImageThumbnails = false;
+  let imageThumbnailWidth = 1280;
   const thumbnailChanges = [];
   const textBatches = new Map();
   let textLeaseSequence = 0;
@@ -446,8 +447,8 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
           resourceUri: payload.resourceUri,
           viewerKind: "image",
           contentSha256: "d".repeat(64),
-          width: 160,
-          height: 120,
+          width: imageThumbnailWidth,
+          height: 960,
           imageMimeType: "image/jpeg",
           imageContentSha256: "b".repeat(64),
           imageByteLength: 4,
@@ -572,8 +573,12 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   assert.equal(actions.artifactViewerState(actionImageUri).viewerKind, "image");
   assert.equal(calls.at(-1).method, "readArtifactImage");
   assert.equal(await actions.loadArtifactImageThumbnail({ resourceUri: actionImageUri }), true);
-  assert.equal(actions.artifactImageThumbnailState(actionImageUri).width, 160);
+  assert.equal(actions.artifactImageThumbnailState(actionImageUri).width, 1280);
   assert.equal(calls.at(-1).method, "readArtifactImageThumbnail");
+  imageThumbnailWidth = 1281;
+  assert.equal(await actions.loadArtifactImageThumbnail({ resourceUri: actionImageUri + "-oversized" }), false,
+    "high-DPI previews still reject dimensions above the renderer bound");
+  imageThumbnailWidth = 1280;
   deferImageThumbnails = true;
   const queuedImageUris = [1, 2, 3, 4, 5].map(index => actionImageUri + "-" + index);
   const queuedImageLoads = queuedImageUris.map(resourceUri => actions.loadArtifactImageThumbnail({ resourceUri }));

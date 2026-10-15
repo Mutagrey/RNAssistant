@@ -224,7 +224,7 @@ namespace RNAssistant.Office.Services
         }
 
         internal ResourceReadSelection PublishRead(ChatSession session, ResourceReadSelection selection,
-            ResourceReadRequest originalRequest, bool live)
+            ResourceReadRequest originalRequest, bool live, string retainedView = null)
         {
             if (selection == null || selection.Result == null ||
                 selection.Result.Resource == null || selection.Result.Resource.Reference == null)
@@ -363,10 +363,10 @@ namespace RNAssistant.Office.Services
             if (result.Text != null && _payloads != null)
                 result.Payload = PayloadRef.FromBlob(_payloads.StoreText(result.Text, result.Resource.MimeType ?? "text/plain; charset=utf-8"));
             if (result.CompleteViewPayload == null)
-                _revisions.RegisterView(scope, new ResourceRevisionView(exact, result.Representation,
+                _revisions.RegisterView(scope, new ResourceRevisionView(exact, retainedView ?? result.Representation,
                     contentSha256, result.Payload, result.Coverage));
             else
-                _revisions.RegisterView(scope, new ResourceRevisionView(exact, result.Representation,
+                _revisions.RegisterView(scope, new ResourceRevisionView(exact, retainedView ?? result.Representation,
                     contentSha256, result.CompleteViewPayload, ResourceCoverage.Whole(), result.CompleteViewParts));
             // Every referenced view is durable before the head becomes visible to another reader.
             if (publication != null) _authority.Publish(publication);

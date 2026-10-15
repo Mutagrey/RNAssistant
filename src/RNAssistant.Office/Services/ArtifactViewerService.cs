@@ -33,8 +33,10 @@ namespace RNAssistant.Office.Services
         public const int MaximumDocumentCharacters = 512000;
         public const long MaximumImageBytes = 20L * 1024L * 1024L;
         public const long MaximumRawBytes = 20L * 1024L * 1024L;
-        public const int MaximumImageThumbnailDimension = 320;
+        public const int MaximumImageThumbnailDimension = 1280;
         public const long MaximumImageThumbnailBytes = 512L * 1024L;
+        // Change the profile when raster output changes; retained previews are immutable.
+        public const string ImageThumbnailRetentionView = "thumbnail:hidpi-v2";
 
         private static readonly HashSet<string> SourceExtensions = new HashSet<string>(
             new[]
@@ -375,32 +377,41 @@ namespace RNAssistant.Office.Services
                     {
                         throw new InvalidOperationException("Image thumbnail source cannot be decoded exactly.");
                     }
-                    var width = Math.Max(1, (int)Math.Round(codec.Info.Width * scale));
-                    var height = Math.Max(1, (int)Math.Round(codec.Info.Height * scale));
-                    width = Math.Min(maximumDimension, width);
-                    height = Math.Min(maximumDimension, height);
-                    using (var thumbnail = new SKBitmap(
-                        width, height, SKColorType.Rgba8888, SKAlphaType.Opaque))
-                    using (var canvas = new SKCanvas(thumbnail))
-                    using (var paint = new SKPaint { IsAntialias = true })
+                    using (var decodedImage = SKImage.FromBitmap(decoded))
                     {
-                        canvas.Clear(SKColors.White);
-                        canvas.DrawBitmap(decoded, new SKRect(0, 0, width, height), paint);
-                        canvas.Flush();
-                        using (var image = SKImage.FromBitmap(thumbnail))
-                        using (var data = image.Encode(SKEncodedImageFormat.Jpeg, 82))
+                        // Keep enough pixels for a high-DPI chat preview. Reduce dimensions
+                        // only when needed to fit the byte budget, always from the source.
+                        for (var dimension = maximumDimension; dimension > 0; dimension = dimension * 3 / 4)
                         {
-                            if (data == null)
+                            var renderScale = Math.Min(1d, dimension /
+                                (double)Math.Max(codec.Info.Width, codec.Info.Height));
+                            var width = Math.Max(1, (int)Math.Round(codec.Info.Width * renderScale));
+                            var height = Math.Max(1, (int)Math.Round(codec.Info.Height * renderScale));
+                            using (var thumbnail = new SKBitmap(
+                                width, height, SKColorType.Rgba8888, SKAlphaType.Opaque))
+                            using (var canvas = new SKCanvas(thumbnail))
+                            using (var paint = new SKPaint { IsAntialias = true })
                             {
-                                throw new InvalidOperationException("Image thumbnail cannot be encoded.");
+                                canvas.Clear(SKColors.White);
+                                canvas.DrawImage(decodedImage, new SKRect(0, 0, width, height),
+                                    new SKSamplingOptions(SKCubicResampler.Mitchell), paint);
+                                canvas.Flush();
+                                using (var image = SKImage.FromBitmap(thumbnail))
+                                using (var data = image.Encode(SKEncodedImageFormat.Jpeg, 90))
+                                {
+                                    if (data == null)
+                                        throw new InvalidOperationException("Image thumbnail cannot be encoded.");
+                                    if (data.Size > MaximumImageThumbnailBytes) continue;
+                                    return new ArtifactImageThumbnailRenderResult
+                                    {
+                                        Bytes = data.ToArray(),
+                                        Width = width,
+                                        Height = height
+                                    };
+                                }
                             }
-                            return new ArtifactImageThumbnailRenderResult
-                            {
-                                Bytes = data.ToArray(),
-                                Width = width,
-                                Height = height
-                            };
                         }
+                        throw new InvalidOperationException("Image thumbnail exceeds the encoded byte bound.");
                     }
                 }
             }
