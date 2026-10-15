@@ -29,7 +29,9 @@ The first read of an older chat builds the index by validating and replaying its
 Catalog/startup, full-session and paged reads share one bounded recovery boundary
 for malformed SQLite metadata, row payloads and missing/corrupt schema. It disposes
 the connection, removes only the derived sidecars and retries once from validated
-events. Busy/I/O failures are not treated as index corruption. All chat event
+events. Both the root and header checkpoint must match the indexed session id;
+missing or foreign header identity requires a rebuild, never a generated chat id.
+Busy/I/O failures are not treated as index corruption. All chat event
 readers share the same integrity/error contract: malformed authoritative streams
 remain untouched and unavailable, without stopping the catalog of healthy chats.
 

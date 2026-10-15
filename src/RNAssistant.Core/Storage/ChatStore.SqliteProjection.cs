@@ -233,10 +233,11 @@ namespace RNAssistant.Core.Storage
                         if (messageCount != reader.GetInt64(14) || artifactCount != reader.GetInt64(15))
                             return null;
                         var root = JObject.Parse(OpenProjection(sessionId, "root", (byte[])reader[12]));
-                        var header = ChatHeaderReducer.FromCheckpoint(_blobs,
-                            JObject.Parse(OpenProjection(sessionId, "header", (byte[])reader[13])));
+                        var checkpoint = JObject.Parse(OpenProjection(sessionId, "header", (byte[])reader[13]));
+                        var header = ChatHeaderReducer.FromCheckpoint(_blobs, checkpoint);
                         if (!ChatSession.IsReadableFormat((int?)root["FormatVersion"]) ||
                             !string.Equals((string)root["Id"], sessionId, StringComparison.OrdinalIgnoreCase) ||
+                            !string.Equals((string)checkpoint["Id"], sessionId, StringComparison.OrdinalIgnoreCase) ||
                             !header.IsValid) return null;
                         return new SqliteCursor
                         {

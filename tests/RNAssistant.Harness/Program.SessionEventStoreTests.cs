@@ -875,6 +875,8 @@ namespace RNAssistant.Harness
                     "UPDATE projection SET root=CAST('" + invalidRoot + "' AS BLOB)",
                     "UPDATE projection SET header=CAST('{\"Seeded\":true,\"CreatedUtc\":[]}' AS BLOB)",
                     "UPDATE projection SET header=CAST('{\"Seeded\":true,\"CasReferences\":null}' AS BLOB)",
+                    "UPDATE projection SET header=CAST('{\"Seeded\":true,\"Id\":\"wrong-chat\"}' AS BLOB)",
+                    "UPDATE projection SET header=CAST('{\"Seeded\":true}' AS BLOB)",
                     "UPDATE messages SET payload='wrong sqlite storage class'",
                     "UPDATE projection SET tail_offset=-1, next_offset=-1",
                     "DROP TABLE messages" })
