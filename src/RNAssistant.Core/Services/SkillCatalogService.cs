@@ -47,7 +47,7 @@ namespace RNAssistant.Core.Services
                 return new ResourceFindCandidate { Target = skill.Id, Type = "skill", Scope = "catalog",
                     Title = skill.Name, Description = skill.Description, MimeType = "text/markdown",
                     Mutable = false, Representations = new List<string> { "text" },
-                    Usage = "Select for this task with common.skills_load and this id. Resource reads are inspection only.",
+                    Usage = "Reuse this skill if its SELECTED_SKILL instructions are already included; otherwise select it with common.skills_load and this id. Resource reads are inspection only.",
                     Descriptor = descriptor, Reference = descriptor.Reference };
             }).ToList();
             return new ResourceFindPage { Scope = "catalog", Query = query, Items = items, Total = matches.Length,

@@ -318,6 +318,39 @@ Only the probe was compiled; no full suite or Office qualification was run.
 
 ## VBA patching and completion photos — 2026-10-14
 
+**Follow-up photos — 2026-10-15:** SceneParser reports
+`vba_patch_stale_source` with no write; the user confirms an automatic stop. A later
+Renderer turn loads `common.vba_code_editing`, applies one patch, rejects another
+and still claims all four modules were fixed. The accepted calls/current source
+and terminal run reason are needed to attribute the mismatch and stop; the photos
+do not establish that the patch engine or skill retention failed. Inbox currently
+pauses on cumulative execution errors as well as failed lifecycle, so its generic
+banner alone cannot identify which occurred.
+
+Another photo shows repeated SceneBuilder patches accompanied by the same
+`s.ViewData.FOV = FOV` self-reference diagnosis and attempts to change `FOV` to
+`fov`. VBA identifiers are case-insensitive; with a declared parameter `fov`, the
+unqualified right side refers to that parameter. The VBA skill now includes this
+counterexample, accepts VBE casing/spacing and requires a real remaining defect
+before another edit. It also covers reserved names such as `Scale`, scope,
+current procedure signatures and assignment/call typing. These are guidance
+changes, not proof that the model loop or runtime effect attribution is resolved.
+This wording-only follow-up was checked by diff; no rebuild, model run or Office
+validation was performed for it.
+
+Owners: Core prompts, Office VBA skill and Web presentation. Prompt schema 49
+aligns preparation, skill policy, loader and catalog guidance around reuse of
+included selections; failed intended edits remain pending until evidence resolves
+them. VBA recovery explicitly rebuilds the rejected patch from current source
+without reloading the skill. The stale-patch caption now reports a mismatch instead
+of asserting that source changed. Autonomous model compliance and the original
+automatic stop remain open; no Office qualification is claimed.
+
+Validation: seven focused Harness checks pass (prompt structure/migration,
+built-in skill loading, VBA schema discovery and stale-patch recovery), plus all
+27 `completion-guard.test.js` checks. JavaScript syntax and diff checks pass.
+No real-model run or Windows/Office/VSTO validation was performed.
+
 **Reproduced discovery/presentation defects fixed; model and Office attribution
 open.** Photos 1/2/4 show `common.skills_load` alternating with an unchanged
 capability read refused as `skill_required`/`repeated_tool_failure`. The capability

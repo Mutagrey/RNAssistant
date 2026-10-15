@@ -787,7 +787,7 @@ document gates are not held across model wait. `ConversationRunService →
 AgentKernel` remains the single execution loop.
 
 The skill catalog contains metadata only. `common.skills_load(id, action?)` selects
-or removes a published procedure for this run. `SkillTaskService` resolves required
+or removes a published procedure for this chat. `SkillTaskService` resolves required
 and optional dependencies against the policy-filtered frozen ToolPack, rejecting
 missing contracts, version conflicts and oversized selections atomically. The next
 request contains complete `SELECTED_SKILL` bodies and the deduplicated union of
@@ -796,13 +796,22 @@ bindings of the already accepted response. Specialized tools reject direct schem
 admission; source inspection through `common.capabilities_read` does not activate
 a skill.
 
-`ChatRunRecord.SelectedSkills` survives compaction and confirmation/restart via
-`run.updated`; a new turn starts with no selections. `ContextReceipt.Arsenal`
+`ChatRunRecord.SelectedSkills` survives later user turns, compaction and
+confirmation/restart via `run.updated`; removal/reset explicitly clears selection.
+Each request revalidates the retained publications and policy. `ContextReceipt.Arsenal`
 records the request's selected revisions, tool bindings, relationships and policy.
 Dispatch requires that originating run/step and exact binding, in addition to the
 existing permission, host, resource and approval gates. Updated/revoked selections
 are suspended; catalog drift after compilation blocks dispatch. Complete
 instructions that do not fit cause explicit refusal, not silent truncation.
+
+Prompt schema 49 starts preparation by reusing included `SELECTED_SKILL` bodies
+and current callable schemas. Follow-ups and failed edits continue from the current
+stage; skill loading neither refreshes source nor repairs an edit. A failed intended
+change stays pending until later evidence confirms that same change or shows it is
+unnecessary in current source. Final claims distinguish confirmed and unfinished
+changes and verification gaps. This is model guidance, not an automatic goal check
+or permission to replay failed/unknown effects.
 
 Supporting UTF-8 files under `references/`, `scripts/` and `assets/` remain bounded
 resource reads, never executable authority. Read paths come from published metadata;

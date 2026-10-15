@@ -158,6 +158,32 @@ Resource search поддерживает bounded case-insensitive literal discov
 несовпадение не пишет VBA. После отказа модель может исправить hunk и продолжить
 в том же run; число таких исправлений отдельно не ограничивается.
 
+VBA skill направляет recovery к актуальному source из результата либо к чтению
+нужных строк через `common.resources_read`, затем к исправлению hunks в том же run.
+Повторная загрузка уже выбранного skill для этого не нужна. Все изменения
+отклонённого patch остаются невыполненными: даже hunks до ошибочного не записаны.
+Заявление об исправлении требует последующего подтверждения именно этой правки;
+при препятствии модель указывает оставшийся module/change и причину.
+
+VBA skill отдельно учитывает нормализацию VBE: регистр keywords/identifiers не
+меняет их смысл, поэтому повторять правку `FOV` → `fov` ради «исправления» нельзя.
+При параметре `ByVal fov As Double` выражение `s.ViewData.FOV = FOV` присваивает
+полю параметр, а не само поле; binding определяется scope и qualification.
+Строковые литералы, комментарии и значимые переносы при этом сохраняются точно.
+Для новых имён skill рекомендует `scaleFactor`/`sceneScale` вместо `Scale`,
+проверку реальных declarations и обновление ссылок при содержательном rename.
+Основание: [правила имён Microsoft](https://learn.microsoft.com/en-us/office/vba/language/concepts/getting-started/visual-basic-naming-rules),
+[разрешение конфликтов](https://learn.microsoft.com/en-us/office/vba/language/concepts/getting-started/avoiding-naming-conflicts)
+и [reserved identifiers MS-VBAL](https://learn.microsoft.com/en-us/openspecs/microsoft_general_purpose_programming_languages/ms-vbal/7df907cb-ab6c-40d3-aa81-272742ce00c3).
+
+Проверки skill также охватывают актуальные сигнатуры с `Optional`, скобки при
+вызовах, тип каждого имени в `Dim`, `ByRef`/`ByVal` и `Set` для object references.
+Это guidance модели, а не новая runtime-проверка компиляции. Правила вызовов и
+типов сверены с документацией Microsoft о
+[скобках](https://learn.microsoft.com/en-us/office/vba/language/concepts/getting-started/using-parentheses-in-code),
+[ByRef](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/byref-argument-type-mismatch)
+и [Set](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/set-statement).
+
 Если модель скопировала полный `find` с соседним context из актуального VBA source,
 runtime сначала проверяет этот блок без изменения его переносов строк. Это
 сохраняет точный матч в модуле со смешанными LF/CRLF; приведение переносов и

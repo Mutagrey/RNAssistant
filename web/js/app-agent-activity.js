@@ -443,7 +443,7 @@ function activityDisplayResult(activity) {
       manual_tool_chat_busy: "Дождитесь завершения текущего действия",
       active_document_changed: "Активный документ изменился",
       document_session_unavailable: "Документ недоступен",
-      vba_patch_stale_source: "Код изменился — обновите исходник",
+      vba_patch_stale_source: "Фрагмент патча не совпал с кодом",
       vba_patch_ambiguous: "Нужно уточнить место правки",
       vba_patch_invalid: "Нужно исправить патч",
       vba_snapshot_refresh_required: "Код изменился — перечитайте модуль",
