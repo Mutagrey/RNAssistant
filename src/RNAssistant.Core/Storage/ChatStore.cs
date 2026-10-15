@@ -217,14 +217,14 @@ namespace RNAssistant.Core.Storage
         internal void Commit(ChatSession session, ConversationCommit commit)
         {
             if (commit == null) throw new ArgumentNullException(nameof(commit));
-            SaveInternal(session, null, false, commit);
+            SaveInternal(session, commit);
         }
 
         internal void CommitRun(ChatSession session, ConversationRunCommit commit)
         {
             if (commit == null || session?.LastRun?.RunId != commit.RunId)
                 throw new InvalidOperationException("The runtime commit must belong to the current run.");
-            SaveInternal(session, null, false, commit);
+            SaveInternal(session, commit);
         }
 
         internal SessionEvent AppendTrace(
@@ -578,41 +578,41 @@ namespace RNAssistant.Core.Storage
             var oldDocumentTitle = session.DocumentTitle;
             var oldPath = GetSessionPath(oldHost, oldDocumentKey, session.Id);
 
-            ChatSessionNormalizer.RecordDocumentKeyMigration(session, oldDocumentKey, documentKey);
-            session.Host = host;
-            session.DocumentKey = documentKey;
-            session.DocumentTitle = documentTitle;
-            if (session.Context != null)
-            {
-                session.Context.Host = host;
-                session.Context.DocumentKey = documentKey;
-            }
-            NormalizeSession(session, host, documentKey, documentTitle);
-
             try
             {
-                if (!File.Exists(oldPath))
-                {
-                    if (session.Revision > 0)
-                    {
-                        throw new ChatConcurrencyException("The source chat event log no longer exists.");
-                    }
-                    return session;
-                }
-
                 using (AcquirePersistenceRead())
                 {
                     var newPath = GetSessionPath(host, documentKey, session.Id);
                     using (AcquireTwoDocumentLocks(oldHost, oldDocumentKey, host, documentKey))
                     {
-                        SaveInternalLocked(session, oldPath, true, new ConversationCommit());
-                        if (!string.Equals(oldPath, newPath, StringComparison.OrdinalIgnoreCase))
+                        var sourceExists = File.Exists(oldPath);
+                        if (!sourceExists && session.Revision > 0)
+                            throw new ChatConcurrencyException("The source chat event log no longer exists.");
+                        var changesPath = !string.Equals(oldPath, newPath, StringComparison.OrdinalIgnoreCase);
+                        if (sourceExists && changesPath)
                         {
-                            if (File.Exists(newPath))
+                            if (File.Exists(newPath) || Directory.Exists(newPath))
                             {
                                 throw new ChatConcurrencyException("The destination already contains this chat.");
                             }
                             Directory.CreateDirectory(Path.GetDirectoryName(newPath));
+                        }
+
+                        ChatSessionNormalizer.RecordDocumentKeyMigration(session, oldDocumentKey, documentKey);
+                        session.Host = host;
+                        session.DocumentKey = documentKey;
+                        session.DocumentTitle = documentTitle;
+                        if (session.Context != null)
+                        {
+                            session.Context.Host = host;
+                            session.Context.DocumentKey = documentKey;
+                        }
+                        NormalizeSession(session, host, documentKey, documentTitle);
+                        if (!sourceExists) return session;
+
+                        SaveInternalLocked(session, oldPath, new ConversationCommit());
+                        if (changesPath)
+                        {
                             File.Move(oldPath, newPath);
                             MoveSqliteProjection(oldPath, newPath);
                             MoveProjectionCache(oldPath, newPath);
@@ -811,8 +811,7 @@ namespace RNAssistant.Core.Storage
             catch (ChatConcurrencyException) { }
         }
 
-        private void SaveInternal(ChatSession session, string explicitPath, bool allowRelocatedSession,
-            ConversationCommit commit)
+        private void SaveInternal(ChatSession session, ConversationCommit commit)
         {
             if (session == null) throw new ArgumentNullException("session");
             using (AcquirePersistenceRead())
@@ -821,16 +820,15 @@ namespace RNAssistant.Core.Storage
                     commit.Messages.Select(write => write.Message))
                     RuntimePayloadService.ExternalizeActivity(message.Activity, _blobs);
                 NormalizeSession(session, session.Host, session.DocumentKey, session.DocumentTitle);
-                var path = explicitPath ?? GetSessionPath(session.Host, session.DocumentKey, session.Id);
+                var path = GetSessionPath(session.Host, session.DocumentKey, session.Id);
                 using (AcquireDocumentPathLock(path))
                 {
-                    SaveInternalLocked(session, path, allowRelocatedSession, commit);
+                    SaveInternalLocked(session, path, commit);
                 }
             }
         }
 
-        private void SaveInternalLocked(ChatSession session, string path, bool allowRelocatedSession,
-            ConversationCommit commit)
+        private void SaveInternalLocked(ChatSession session, string path, ConversationCommit commit)
         {
             var timer = Stopwatch.StartNew();
             EnsureUniqueArtifactIdentities(session);
@@ -852,7 +850,7 @@ namespace RNAssistant.Core.Storage
             {
                 throw new ChatConcurrencyException("Chat was changed by another RNAssistant instance. Reload the chat before saving again.");
             }
-            if (!exists && session.Revision > 0 && !allowRelocatedSession)
+            if (!exists && session.Revision > 0)
             {
                 throw new ChatConcurrencyException("Chat storage changed while this session was open. Reload the chat before saving again.");
             }

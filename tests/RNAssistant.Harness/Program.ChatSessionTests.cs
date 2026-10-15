@@ -856,6 +856,114 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void RejectedChatRelocationPreservesSource(string obstacle)
+        {
+            WithTempPaths(paths =>
+            {
+                var store = new ChatStore(paths);
+                var source = store.Create("Word", "source", "Source.docx", "Source chat");
+                source.Messages.Add(new ChatMessage { Role = "user", Content = "Keep source history" });
+                store.Save(source);
+                var target = store.CreateTransient("Word", "target", "Target.docx", "Target chat");
+                target.Id = source.Id;
+                var sourcePath = SessionEventFile(paths, source);
+                var targetPath = SessionEventFile(paths, target);
+                byte[] targetBytes = null;
+                if (obstacle == "file")
+                {
+                    target.Messages.Add(new ChatMessage { Role = "user", Content = "Keep destination history" });
+                    store.Save(target);
+                    targetBytes = File.ReadAllBytes(targetPath);
+                }
+                else if (obstacle == "directory") Directory.CreateDirectory(targetPath);
+                else if (obstacle == "parent") File.WriteAllText(Path.GetDirectoryName(targetPath), "Occupied parent");
+                else source.HtmlWorkspace.DataSources.Add(new HtmlWorkspaceDataSource());
+                var original = File.ReadAllBytes(sourcePath);
+                var revision = source.Revision;
+                var updatedUtc = source.UpdatedUtc;
+                var keys = source.PreviousDocumentKeys.ToArray();
+                Exception failure = null;
+                try { store.Move(source, target.Host, target.DocumentKey, target.DocumentTitle); }
+                catch (Exception ex) when (ex is IOException || ex is InvalidOperationException) { failure = ex; }
+                AssertTrue(failure != null, "invalid relocation is refused");
+                AssertTrue(original.SequenceEqual(File.ReadAllBytes(sourcePath)), "refused relocation appends no source event");
+                AssertEqual(revision, source.Revision, "refusal preserves revision");
+                AssertEqual(updatedUtc, source.UpdatedUtc, "refusal preserves update time");
+                AssertEqual("source", source.DocumentKey, "refusal preserves caller identity");
+                AssertEqual("Source.docx", source.DocumentTitle, "refusal preserves document title");
+                AssertEqual("source", source.Context.DocumentKey, "refusal preserves context identity");
+                AssertTrue(keys.SequenceEqual(source.PreviousDocumentKeys), "refusal adds no document alias");
+                var cold = new ChatStore(paths).Load("Word", "source", source.Id);
+                AssertEqual("source", cold.DocumentKey, "restart retains canonical source identity");
+                AssertEqual("Keep source history", cold.Messages.Single().Content, "restart retains source history");
+                if (targetBytes != null)
+                    AssertTrue(targetBytes.SequenceEqual(File.ReadAllBytes(targetPath)), "destination history is untouched");
+                else AssertTrue(!File.Exists(targetPath), "refusal creates no destination log");
+
+                if (obstacle == "projection") source.HtmlWorkspace.DataSources.Clear();
+                store.Move(source, "Word", "retry", "Retry.docx");
+                AssertTrue(!File.Exists(sourcePath), "retry moves the source log");
+                var moved = new ChatStore(paths).Load("Word", "retry", source.Id);
+                AssertEqual("retry", moved.DocumentKey, "retry persists the accepted destination");
+                AssertEqual("Keep source history", moved.Messages.Single().Content, "retry preserves history");
+                AssertTrue(moved.PreviousDocumentKeys.Contains("source") && !moved.PreviousDocumentKeys.Contains("target"),
+                    "retry retains only the accepted document lineage");
+            });
+        }
+
+        private static void ChatRelocationDoesNotRecreateDeletedSource()
+        {
+            WithTempPaths(paths =>
+            {
+                var store = new ChatStore(paths);
+                var source = store.Create("Word", "delete-race", "Source.docx", "Deleted chat");
+                source.Messages.Add(new ChatMessage { Role = "user", Content = "Deleted history" });
+                store.Save(source);
+                var originalPath = SessionEventFile(paths, source);
+                var target = store.CreateTransient("Word", "delete-race-target", "Target.docx", "Target");
+                target.Id = source.Id;
+                var targetPath = SessionEventFile(paths, target);
+                var lockPath = Path.Combine(paths.Root, "locks", "chat_" + AppDataPaths.SafeFileName(
+                    Path.GetFullPath(SessionDirectory(paths, source) + ".document")) + ".lck");
+                Exception failure = null;
+                var worker = new Thread(() =>
+                {
+                    try { store.Move(source, target.Host, target.DocumentKey, target.DocumentTitle); }
+                    catch (Exception ex) { failure = ex; }
+                }) { IsBackground = true };
+                bool waiting;
+                using (new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
+                {
+                    worker.Start();
+                    // A dedicated thread sleeps only while waiting for the held document lock.
+                    waiting = SpinWait.SpinUntil(() => (worker.ThreadState & System.Threading.ThreadState.WaitSleepJoin) != 0, 5000);
+                    if (waiting) File.Delete(originalPath);
+                }
+                AssertTrue(worker.Join(12000), "relocation worker releases its locks");
+                AssertTrue(waiting, "relocation reached the document lock before deletion");
+                AssertTrue(failure is ChatConcurrencyException, "deleted persisted source is refused after acquiring the lock");
+                AssertTrue(!File.Exists(originalPath) && !File.Exists(targetPath), "relocation cannot resurrect deleted history");
+                AssertEqual("delete-race", source.DocumentKey, "deleted source does not change caller identity");
+                AssertTrue(new ChatStore(paths).Load(source.Id) == null, "restart keeps deleted history absent");
+            });
+        }
+
+        private static void ChatRelocationKeepsTransientDraft()
+        {
+            WithTempPaths(paths =>
+            {
+                var store = new ChatStore(paths);
+                var draft = store.CreateTransient("Word", "draft-source", "Draft.docx", "Draft");
+                store.Move(draft, "Word", "draft-target", "Saved.docx");
+                AssertEqual("draft-target", draft.DocumentKey, "transient binding follows its document");
+                AssertEqual("draft-target", draft.Context.DocumentKey, "transient context follows its document");
+                AssertTrue(draft.PreviousDocumentKeys.Contains("draft-source"), "transient binding retains its prior key");
+                AssertTrue(!store.IsPersisted(draft) && store.ListHeaders().Count == 0, "relocation does not persist a draft");
+                store.Save(draft);
+                AssertEqual("draft-target", new ChatStore(paths).Load(draft.Id).DocumentKey, "first explicit save uses the destination");
+            });
+        }
+
         private static void DeletesDocumentChats()
         {
             WithTempPaths(delegate(AppDataPaths paths)

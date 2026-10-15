@@ -46,6 +46,16 @@ the bridge sends only the newest 80 and requests older pages by ordinal from SQL
 Paged artifact presentation checks retained source-message IDs separately, so a
 model-linked tombstone outside the page does not disappear from its resource cards.
 
+Document relocation checks source existence and destination availability under both
+ordered document locks before appending the new binding. A missing persisted source
+is a concurrency error in both save and move; relocation has no recreation bypass.
+An occupied destination (file or directory), unavailable destination parent or
+invalid projection leaves the source event stream and caller's document identity
+unchanged. A transient draft only changes its binding until an explicit commit.
+Metadata append and file rename are still separate durable operations: a crash or
+I/O failure after append can leave the stream at its old path with the new binding.
+No automatic relocation recovery or replay is claimed.
+
 Chat-list/header reads use a separate reducer checkpoint in SQLite. It retains scalar header/run metadata, message ids/protocol flags, minimal active-HTML artifact references/counts and CAS reference metadata. It does not materialize message/tool bodies or context or hydrate CAS. HTML counts come only from artifact event metadata; old events without that metadata report zero counts. Up to 64 reducer states are also cached in memory (maximum about 512 thousand characters each and 4 million in total).
 
 The indexed header derives per-chat storage usage. `JsonlByteLength` is the exact event file length. CAS totals deduplicate retained references by plaintext SHA-256: `CasLogicalByteLength` sums declared plaintext lengths, while `CasStoredByteLength` sums actual compressed/encrypted blob file lengths without loading their bodies. Shared blobs are counted for every chat that references them, so per-chat totals are diagnostic attribution rather than globally additive disk usage. Missing, invalid, or length-conflicting references raise a critical warning. Healthy chats warn at 64 MiB JSONL, 256 MiB combined JSONL plus stored CAS, or 512 MiB logical CAS; critical size thresholds are 256 MiB, 1 GiB, and 2 GiB respectively. These warnings are advisory: RNAssistant has no event retention or automatic history deletion.

@@ -70,13 +70,56 @@ known original bytes remain unavailable; no automatic historical-data repair is
 performed. Rollback is limited to this slice's source/test/doc hunks; event/CAS
 formats and hashes are unchanged, with no data migration to reverse.
 
-**Open adjacent inspection / Core chat relocation owner:** `ChatStore.Move` appends
-the new document identity before checking the destination and moving the source
-log. A subsequent relocation failure can therefore leave durable metadata and
-physical placement disagreeing while its catch restores only in-memory identity.
-This is a code-path finding, not a reproduced data-loss claim. It needs destination
-collision/I/O fault injection and a separately scoped relocation commit/recovery
-design; changing that transaction is outside CAS publication integrity.
+## Chat relocation refusals and deletion race — 2026-10-15
+
+**Fixed host-neutral / Core `ChatStore`.** Five regressions reproduced: occupied
+destination file/directory and blocked parent appended a new binding to the source
+before refusing the move; invalid projection normalization left the caller rebound;
+deletion while awaiting the document lock recreated an already persisted chat.
+The source check preceded lock acquisition, and `allowRelocatedSession` bypassed
+the normal missing-stream guard. No user data was used by these fixtures.
+
+The affected path is `ChatSessionService.LoadSession` / alias reconciliation →
+`IConversationStore` → `ChatStore.MoveDocument` / `Move` → ordered document locks
+→ JSONL append and rename. JSONL remains authoritative; SQLite and memory caches
+follow the moved log. Preflight now runs under both locks before publishing any
+binding, normalization participates in identity rollback, and all saves reject a
+missing stream with a persisted revision. The recreation flag and unused ordinary
+save path override are removed. Moving only the destination check would have left
+the deletion race and save-policy exception intact.
+
+Before the fix, `chat relocation:` was 1 pass / 5 failures; after it, 6/6 pass.
+Refusals preserve exact source/destination bytes, revision and document lineage;
+an explicit later move succeeds, and cold reads preserve history. Transient moves
+remain unpersisted. This establishes zero event appends for the tested refusals,
+not a timing or throughput claim.
+
+Initial working-tree baseline at `dc164915`: Harness build and `chat sessions:`
+18/18 passed. During parallel edits, the same build hit CS0246 (`ToolCall`) in the
+unrelated new `Program.ExcelDeletionTests.cs`; that file was not edited here.
+Final validation used a temporary source archive of `46e2d4ae` plus only this
+slice's source, test methods and six registrations, with repository dependencies:
+
+```text
+dotnet build tests/RNAssistant.Harness/RNAssistant.Harness.csproj -nologo -v:quiet
+  PASS; two existing CA1416 warnings and source-archive provenance warning
+dotnet tests/RNAssistant.Harness/bin/Debug/net8.0/RNAssistant.Harness.dll 'chat relocation:'
+  PASS 6/6
+dotnet tests/RNAssistant.Harness/bin/Debug/net8.0/RNAssistant.Harness.dll 'chat sessions:'
+  PASS 18/18
+dotnet tests/RNAssistant.Harness/bin/Debug/net8.0/RNAssistant.Harness.dll 'storage:'
+  PASS 77/77
+git diff --check
+  PASS in the working tree
+```
+
+**Still open / Core chat relocation owner:** metadata append and physical rename
+are separate durable operations. A crash or I/O fault after append can still leave
+the new binding at the old path; no automatic retry/recovery is added. A separate
+commit/recovery design with fault injection is needed, including document-wide
+partial moves. Real Windows/Office Save As, the full suite and live models were not
+run. Event/CAS formats and public APIs are unchanged. Rollback removes only this
+slice's source/test/doc hunks, without moving histories or reverting other work.
 
 ## Workspace file identity and lease review — 2026-10-15
 

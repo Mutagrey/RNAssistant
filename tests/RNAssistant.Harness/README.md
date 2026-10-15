@@ -1,5 +1,12 @@
 # RNAssistant Harness
 
+`chat relocation:` covers occupied destinations, blocked parent creation, invalid
+projection rollback, deletion while waiting for the document lock, explicit retry
+and transient drafts. It checks unchanged event bytes on refusal and history after
+cold reload. `chat sessions:` and `storage: stale chat save` cover document
+rebinding consumers and optimistic concurrency. These do not cover crashes or I/O
+failure between the metadata append and physical rename, or real Office Save As.
+
 CAS publication integrity: `storage: CAS supplied` covers explicit restoration of
 the same artifact after raw/compressed and plaintext/encrypted corruption.
 `storage: CAS original` rejects damaged original/extraction parts before retaining
