@@ -372,6 +372,49 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void WorkspaceFilesRejectCorruptPreimages()
+        {
+            foreach (var operation in new[] { "move", "delete", "restore" })
+            WithTempPaths(paths =>
+            {
+                const string body = "Retained file source";
+                var workspace = new WorkspaceStore(paths).Open(Path.Combine(paths.Root, "project"));
+                var files = new WorkspaceFileService(paths);
+                files.CreateText(workspace, "source.txt", body);
+                var source = files.ReadText(workspace, "source.txt");
+                if (operation == "restore") files.DeleteText(workspace, "source.txt", source.Reference);
+                var payload = source.Evidence.Payload;
+                var blobPath = Path.Combine(paths.ChatBlobDirectory, payload.Sha256.Substring(0, 2), payload.Sha256 + ".blob");
+                var bytes = File.ReadAllBytes(blobPath);
+                bytes[bytes.Length - 1] ^= 1;
+                File.WriteAllBytes(blobPath, bytes);
+                var dispatched = false;
+                Action mutate = () =>
+                {
+                    if (operation == "move") files.MoveText(workspace, "source.txt", source.Reference, "target.txt", () => dispatched = true);
+                    else if (operation == "delete") files.DeleteText(workspace, "source.txt", source.Reference, () => dispatched = true);
+                    else files.RestoreDeletedText(workspace, "source.txt", () => dispatched = true);
+                };
+                var rejected = false;
+                try { mutate(); }
+                catch (WorkspaceFileException ex) { rejected = ex.Code == "snapshot_unavailable"; }
+                AssertTrue(rejected && !dispatched, operation + " rejects corrupt retained bytes before dispatch");
+                AssertEqual(0, new ResourceMutationJournal(paths).Unresolved().Count,
+                    "rejected mutation leaves no prepared attempt");
+                var sourcePath = Path.Combine(workspace.RootPath, "source.txt");
+                AssertEqual(operation != "restore", File.Exists(sourcePath), "refusal preserves source existence");
+                if (operation != "restore") AssertEqual(body, File.ReadAllText(sourcePath), "refusal preserves source bytes");
+                AssertTrue(!File.Exists(Path.Combine(workspace.RootPath, "target.txt")), "refusal creates no move target");
+
+                new ChatBlobStore(paths).StoreText(body, "text/plain; charset=utf-8");
+                mutate();
+                AssertTrue(dispatched, "explicit retry succeeds after source repair");
+                var currentPath = operation == "move" ? Path.Combine(workspace.RootPath, "target.txt") : sourcePath;
+                if (operation == "delete") AssertTrue(!File.Exists(currentPath), "verified delete moves source to trash");
+                else AssertEqual(body, File.ReadAllText(currentPath), "verified operation preserves exact bytes");
+            });
+        }
+
         private static void WorkspaceFilesRecoverableDelete()
         {
             WithTempPaths(paths =>

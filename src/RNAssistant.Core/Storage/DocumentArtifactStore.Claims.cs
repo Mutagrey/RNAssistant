@@ -61,6 +61,9 @@ namespace RNAssistant.Core.Storage
             var identity = new ResourceIdentity(ResourceUri.Create("state", scope.Kind, scope.Id, logicalId));
             var before = _authority.Capture(scope);
             if (before.Generation != expectedGeneration) throw new ResourceAuthorityConflictException("The document changed during compaction; shared context was not published.");
+            var payloads = checkpoint.Claims.SelectMany(claim => claim.Evidence).Select(e => e.Payload).Where(p => p != null).ToArray();
+            if (payloads.Any(p => !_payloads.HasVerifiedReference(p.ToBlobReference())))
+                throw new InvalidDataException("An exact claim source payload is unavailable.");
             var parent = CurrentSnapshot(session, identity);
             var previous = parent == null ? null : Read(session, parent, false);
             var revision = checked((previous?.Revision ?? 0) + 1);
@@ -73,9 +76,6 @@ namespace RNAssistant.Core.Storage
             var dependencies = document.Claims.SelectMany(claim => claim.Evidence)
                 .SelectMany(e => new[] { new ResourceDependency(e.Resource, e.View, e.Coverage, "claim-source") }.Concat(e.Dependencies)).ToArray();
             var retained = RetainAuthoredSnapshot(session, artifact, checkpoint.Id, checkpoint.Id, dependencies: dependencies);
-            var payloads = checkpoint.Claims.SelectMany(claim => claim.Evidence).Select(e => e.Payload).Where(p => p != null).ToArray();
-            if (payloads.Any(p => !_payloads.HasStoredReference(p.ToBlobReference())))
-                throw new InvalidDataException("An exact claim source payload is unavailable.");
             _revisions.RegisterView(scope, new ResourceRevisionView(retained.Revision, "claim-provenance", retained.ContentSha256,
                 retained.Payload, ResourceCoverage.Whole(), payloads));
             var link = PayloadRef.FromBlob(_payloads.StoreText(JsonConvert.SerializeObject(retained.Revision), "application/json"));

@@ -30,21 +30,7 @@ namespace RNAssistant.Core.Storage
 
         public ChatBlobReference StoreText(string value, string contentType)
         {
-            return StoreText(value, contentType, null);
-        }
-
-        public ChatBlobReference StoreText(string value, string contentType, ChatBlobReference knownReference)
-        {
-            var bytes = Utf8.GetBytes(value ?? string.Empty);
-            var hash = Sha256(bytes);
-            var protector = Protection();
-            if (knownReference != null && knownReference.ByteLength == bytes.LongLength &&
-                string.Equals(knownReference.Sha256, hash, StringComparison.OrdinalIgnoreCase) &&
-                HasStoredReference(knownReference, protector))
-            {
-                return CreateReference(hash, bytes.LongLength, contentType, protector);
-            }
-            return StoreBytes(bytes, contentType, hash, protector);
+            return StoreBytes(Utf8.GetBytes(value ?? string.Empty), contentType);
         }
 
         public ChatBlobReference StoreBytes(byte[] bytes, string contentType)
@@ -103,11 +89,6 @@ namespace RNAssistant.Core.Storage
                 }
                 return CreateReference(hash, byteLength, contentType, protector);
             }
-        }
-
-        public bool HasStoredReference(ChatBlobReference reference)
-        {
-            return HasStoredReference(reference, Protection());
         }
 
         internal bool HasVerifiedReference(ChatBlobReference reference)
@@ -405,9 +386,12 @@ namespace RNAssistant.Core.Storage
             catch (InvalidDataException) { return false; }
         }
 
-        private bool HasStoredReference(ChatBlobReference reference, StorageProtector protector)
+        // Metadata-only hint for an unchanged, already trusted in-memory artifact.
+        // New publications, source evidence and mutations require HasVerifiedReference.
+        internal bool MayHaveStoredReference(ChatBlobReference reference)
         {
             if (!ValidReference(reference)) return false;
+            var protector = Protection();
             if (!ProtectionMatches(reference, protector)) return false;
             try
             {

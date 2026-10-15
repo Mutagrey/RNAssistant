@@ -109,6 +109,8 @@ accepted complete source read. It requires an existing target parent and never
 overwrites a target or prior target identity. A durable two-path move intent lets
 `recover` inspect either path after an interrupted dispatch; both paths are blocked
 from ordinary reads until reconciliation. An uncertain move is never replayed.
+Move/delete/restore verify the retained CAS body before preparation/dispatch;
+corrupt bytes yield `snapshot_unavailable`, even when file size and envelope match.
 Cross-volume move semantics, binary mutations, large files, trash retention policy
 and full symlink/hardlink race guarantees remain open M3–M5 work. Bounded raw and
 PNG/JPEG application views are implemented below. They and the shared compiler do
@@ -465,6 +467,8 @@ hold links only. `ChatArtifactResourceProvider` projects these records for Gatew
 discovery and exact viewers independently of the origin chat. Historical `chat`
 in the URI provider namespace does not imply conversation ownership: these refs
 carry `DocumentAuthorityId` as owner, and descriptors expose document scope.
+Original and extracted payloads must pass CAS integrity verification before any
+revision or head is published; availability metadata alone is insufficient.
 New Plan snapshots and per-Plan logical heads are also document-owned (2026-09-08).
 The existing mutation observer prepares the selected exact base and publishes
 snapshot/head read-backs together; chat persistence follows publication and keeps

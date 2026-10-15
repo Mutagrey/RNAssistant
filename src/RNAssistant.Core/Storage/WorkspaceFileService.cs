@@ -349,7 +349,7 @@ namespace RNAssistant.Core.Storage
                     Observe(scope, id, bytes);
                     throw new WorkspaceFileException("target_conflict", "Source changed outside RNAssistant since the accepted read.");
                 }
-                if (revision.Payload == null || !_blobs.HasStoredReference(revision.Payload.ToBlobReference()))
+                if (revision.Payload == null || !_blobs.HasVerifiedReference(revision.Payload.ToBlobReference()))
                     throw new WorkspaceFileException("snapshot_unavailable", "The retained move preimage is unavailable.");
                 if (!Directory.Exists(Path.GetDirectoryName(target)))
                     throw new WorkspaceFileException("target_parent_missing", "Move target parent must already exist.");
@@ -491,7 +491,7 @@ namespace RNAssistant.Core.Storage
                     Observe(scope, id, bytes);
                     throw new WorkspaceFileException("target_conflict", "File changed outside RNAssistant since the accepted read.");
                 }
-                if (revision.Payload == null || !_blobs.HasStoredReference(revision.Payload.ToBlobReference()))
+                if (revision.Payload == null || !_blobs.HasVerifiedReference(revision.Payload.ToBlobReference()))
                     throw new WorkspaceFileException("snapshot_unavailable", "The retained delete preimage is unavailable.");
                 var trashDirectory = TrashDirectory(workspace, id);
                 var attempt = _journal.Prepare(scope, "files.delete", Identity(id), expected.Revision, revision.Payload);
@@ -556,7 +556,7 @@ namespace RNAssistant.Core.Storage
                     throw new WorkspaceFileException("target_conflict", "The current head is not a recoverable managed deletion.");
                 var previous = change.Before.Revision;
                 var retained = _authority.GetRevision(scope, previous);
-                if (retained?.Payload == null || !_blobs.HasStoredReference(retained.Payload.ToBlobReference()))
+                if (retained?.Payload == null || !_blobs.HasVerifiedReference(retained.Payload.ToBlobReference()))
                     throw new WorkspaceFileException("snapshot_unavailable", "The retained deleted text is unavailable.");
                 var trashPath = Path.Combine(TrashDirectory(workspace, id, false), deletion.MutationAttemptId + ".utf8");
                 if (!File.Exists(trashPath) || StorageFileSystem.IsReparsePoint(trashPath))

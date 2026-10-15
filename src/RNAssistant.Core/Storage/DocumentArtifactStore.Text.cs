@@ -309,7 +309,7 @@ namespace RNAssistant.Core.Storage
                 address.Segments[5] != "member" || address.Segments[6] != "file" && address.Segments[6] != "data" ||
                 member.Reference.Revision != member.Parent.Revision || text.Length > MaximumIndexedCharacters)
                 throw new InvalidDataException("The text member does not belong to this bounded HTML snapshot.");
-            if (!_payloads.HasStoredReference(_revisions.GetRevision(Scope(session), member.Parent).Payload.ToBlobReference()))
+            if (!_payloads.HasVerifiedReference(_revisions.GetRevision(Scope(session), member.Parent).Payload.ToBlobReference()))
                 throw new InvalidDataException("The exact HTML source is unavailable.");
             var body = new PayloadRef(TextPatternEngine.Sha256(text), Encoding.UTF8.GetByteCount(text), member.MimeType);
             var path = "member/" + address.Segments[6] + "/" + address.Segments[7];

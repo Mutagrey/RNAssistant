@@ -48,7 +48,7 @@ namespace RNAssistant.Core.Storage
             if (!string.IsNullOrWhiteSpace(source.ExtractedTextSha256) || source.ExtractedTextByteLength.HasValue)
                 parts.Add(new PayloadRef(source.ExtractedTextSha256, source.ExtractedTextByteLength ?? -1, "text/plain; charset=utf-8"));
             foreach (var part in parts)
-                if (!_payloads.HasStoredReference(part.ToBlobReference()))
+                if (!_payloads.HasVerifiedReference(part.ToBlobReference()))
                     throw new InvalidDataException("An original publication requires durable CAS payloads.");
             var record = new OriginalRecord { Artifact = item, Original = source, SourceChatId = session.Id };
             var recordJson = JsonConvert.SerializeObject(record);

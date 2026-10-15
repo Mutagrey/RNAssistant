@@ -1,5 +1,15 @@
 # RNAssistant Harness
 
+CAS publication integrity: `storage: CAS supplied` covers explicit restoration of
+the same artifact after raw/compressed and plaintext/encrypted corruption.
+`storage: CAS original` rejects damaged original/extraction parts before retaining
+metadata. `workspace files: corrupt` covers move/delete/restore refusal before
+dispatch and an explicit retry after source repair. `shared context:` rejects
+corrupt dependencies before snapshot publication and filters raw/already projected
+model claims. Existing `storage: unchanged artifacts`, `document originals:`,
+`artifact transfer:` and `shared HTML: text discovery` cover reuse, publication,
+copy/restart and member reads. No real-model or Office qualification is implied.
+
 Confirmation input: after a host-neutral MockDemo build, run
 `dotnet demo/RNAssistant.MockDemo/bin/Debug/net8.0/RNAssistant.MockDemo.dll --confirmation-input-test`.
 Ten controlled cases cover user/developer/tool result roles, native images,

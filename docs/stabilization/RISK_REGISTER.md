@@ -8,6 +8,76 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## CAS reuse and publication integrity — 2026-10-15
+
+**Fixed host-neutral / Core CAS and its publication consumers.** Review began on
+`main` at `85159f14` with existing skill/settings/UI/doc changes; those were left
+intact and became `79af79ca` during the review. The initial Harness build passed
+with two existing PDF CA1416 warnings, and `storage:` passed 75/75.
+
+Root cause: `HasStoredReference` checked presence/length/envelope, but consumers
+treated it as integrity evidence. Four regressions failed before the production
+change: restoring supplied text into the same artifact left a corrupt blob;
+original publication accepted a damaged part; shared-context publication accepted
+damaged evidence; workspace move dispatched with a corrupt retained preimage.
+New coverage also exercises extracted parts, delete/restore, projected model
+claims and raw/compressed/plain/encrypted bodies.
+
+`StoreText` now delegates to the verified byte writer; its known-reference bypass
+is deleted. Reference-only consumers use the existing `HasVerifiedReference`.
+Shared-context validation precedes snapshot retention, so rejection creates no
+revision or head. The renamed internal availability hint has one consumer:
+unchanged trusted chat artifacts. A blanket verification pass on every metadata
+save was rejected because it would re-read unrelated bodies without publishing
+them. No additional store, retry, persistent cache or format migration was added.
+
+Structural comparison: text-write paths 2 → 1; metadata-only authorization checks
+at seven publication/evidence/mutation sites → 0. Rejected original/context
+publication leaves authority generation and revisions unchanged; rejected file
+operations execute zero dispatch callbacks and leave zero prepared attempts.
+Existing unchanged-artifact checks still report one externalization for initial
+save plus subsequent metadata/equal-text saves, and zero for a metadata save after
+reload. Stronger checks read actual CAS bytes; no latency improvement is claimed.
+
+Final commands and results:
+
+```text
+dotnet build tests/RNAssistant.Harness/RNAssistant.Harness.csproj --no-restore -nologo -v:quiet
+  PASS; two existing CA1416 warnings
+dotnet build src/RNAssistant.Cli/RNAssistant.Cli.csproj --no-restore -nologo -v:minimal
+  PASS; no warnings
+dotnet tests/RNAssistant.Harness/bin/Debug/net8.0/RNAssistant.Harness.dll 'storage:'
+  PASS 77/77
+dotnet tests/RNAssistant.Harness/bin/Debug/net8.0/RNAssistant.Harness.dll 'workspace files:'
+  PASS 12/12
+dotnet tests/RNAssistant.Harness/bin/Debug/net8.0/RNAssistant.Harness.dll 'shared context:'
+  PASS 2/2
+dotnet tests/RNAssistant.Harness/bin/Debug/net8.0/RNAssistant.Harness.dll 'shared HTML: text discovery'
+  PASS 2/2
+dotnet tests/RNAssistant.Harness/bin/Debug/net8.0/RNAssistant.Harness.dll 'attachments: import commit delete'
+  PASS 1/1
+dotnet tests/RNAssistant.Harness/bin/Debug/net8.0/RNAssistant.Harness.dll 'artifact transfer:'
+  PASS 5/5
+dotnet tests/RNAssistant.Harness/bin/Debug/net8.0/RNAssistant.Harness.dll 'document originals:'
+  PASS 2/2
+git diff --check
+  PASS
+```
+
+Scope/risk: this does not qualify Windows/Office/WebView2, live models, the full
+suite or hostile filesystem races after verification. Corrupt bodies without
+known original bytes remain unavailable; no automatic historical-data repair is
+performed. Rollback is limited to this slice's source/test/doc hunks; event/CAS
+formats and hashes are unchanged, with no data migration to reverse.
+
+**Open adjacent inspection / Core chat relocation owner:** `ChatStore.Move` appends
+the new document identity before checking the destination and moving the source
+log. A subsequent relocation failure can therefore leave durable metadata and
+physical placement disagreeing while its catch restores only in-memory identity.
+This is a code-path finding, not a reproduced data-loss claim. It needs destination
+collision/I/O fault injection and a separately scoped relocation commit/recovery
+design; changing that transaction is outside CAS publication integrity.
+
 ## Workspace file identity and lease review — 2026-10-15
 
 **Fixed host-neutral / Core `WorkspaceFileService`.** On `10f3fa53`, eight entry

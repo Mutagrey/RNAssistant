@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -112,6 +113,25 @@ namespace RNAssistant.Harness
                 AssertContains(current.Messages.Single().Content, "Observed source conclusion", "compiler admits current supported claim");
                 AssertContains(current.Messages.Single().Content, "source-", "projection carries source citations without durable ids");
                 AssertTrue(!current.Messages.Single().Content.Contains(source.Uri) && !current.Messages.Single().Content.Contains(user.Id), "runtime provenance stays private to runtime");
+                var blobPath = Path.Combine(paths.ChatBlobDirectory, body.Sha256.Substring(0, 2), body.Sha256 + ".blob");
+                var corrupt = File.ReadAllBytes(blobPath);
+                corrupt[corrupt.Length - 1] ^= 1;
+                File.WriteAllBytes(blobPath, corrupt);
+                var priorGeneration = authority.Capture(scope).Generation;
+                var revisionFiles = Directory.GetFiles(paths.ResourceAuthorityDirectory, "*.revisions.jsonl");
+                var priorRevisions = revisionFiles.ToDictionary(path => path, File.ReadAllText);
+                RuntimeThrows<InvalidDataException>(() => chats.DocumentArtifacts.PublishContext(a,
+                    new ContextCheckpoint { Claims = checkpoint.Claims }, priorGeneration));
+                AssertEqual(priorGeneration, authority.Capture(scope).Generation, "corrupt claim source cannot advance publication");
+                AssertTrue(priorRevisions.All(pair => pair.Value == File.ReadAllText(pair.Key)),
+                    "corrupt claim source leaves retained revisions unchanged");
+                foreach (var input in new[] { message, current.Messages.Single() })
+                {
+                    var filtered = compile(input).Messages.Single().Content;
+                    AssertTrue(!filtered.Contains("Observed source conclusion"), "raw and projected claims require intact CAS evidence");
+                    AssertContains(filtered, "Preserve layout", "corrupt evidence does not discard independent user constraints");
+                }
+                executor.Payloads.StoreText("Exact observed source", "text/plain");
                 var before = authority.Capture(scope);
                 authority.RegisterRevision(scope, new ResourceRevisionMetadata(new ResourceRef(source.Uri, "r2"), body.Sha256, body));
                 authority.Publish(ResourceAuthorityCommit.Create(scope, before.Generation, null, new[] {
@@ -139,7 +159,7 @@ namespace RNAssistant.Harness
                 AssertTrue(gc.Completed && gc.Health.MissingBlobCount == 0, "document roots retain source revisions and bodies through GC: " + Newtonsoft.Json.JsonConvert.SerializeObject(gc));
                 var retained = new ChatStore(paths).DocumentArtifacts.Read(b, exact);
                 AssertContains(retained.InlineText, "Keep the original layout", "source transcript survives origin deletion and CAS collection");
-                AssertTrue(executor.Payloads.HasStoredReference(body.ToBlobReference()), "exact source evidence payload remains retained");
+                AssertTrue(executor.Payloads.HasVerifiedReference(body.ToBlobReference()), "exact source evidence payload remains retained");
                 AssertContains(chats.DocumentArtifacts.Read(b, ChatResourceUri.CreateArtifactRevision(b, copied)).InlineText, "Keep the original layout", "republication preserves inherited source transcript");
             });
         }

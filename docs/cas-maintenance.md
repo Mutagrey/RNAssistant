@@ -27,6 +27,25 @@ reinterpreted as malformed compressed CAS bytes or retried as legacy raw blobs.
 
 The report distinguishes missing referenced blobs, corrupt/unreadable referenced blobs, harmless orphans, malformed CAS paths, reference conflicts, and invalid sources. Protected history is audited with the current DPAPI-backed API-key/custom-secret protector; secrets are never returned through Diagnostics.
 
+## Publication and reuse
+
+`ChatBlobStore.StoreText` uses the same verified write path as `StoreBytes`.
+Supplying exact source bytes can repair a damaged blob at its existing content
+address; an earlier reference, matching file size or valid envelope cannot bypass
+verification. No CAS format or identity changes are involved.
+
+Reference-only original/shared-context publication, model claim evidence, HTML
+member search and workspace move/delete/restore use `HasVerifiedReference`.
+Damaged dependencies are rejected before publication or mutation preparation;
+shared-context validation also precedes retaining its new snapshot. A reference
+alone cannot repair unknown bytes. These checks read current stored bytes through
+the existing verifier; they do not introduce a persistent validity cache.
+
+The internal `MayHaveStoredReference` is only an availability hint for skipping
+externalization of an unchanged, already trusted in-memory chat artifact. It does
+not establish integrity or authorize publication. Metadata-only chat saves retain
+this optimization; reopening a body and maintenance audits still verify it.
+
 ## Repeated source verification
 
 `ChatBlobStore` retains at most one in-memory encoding fingerprint, bound to the

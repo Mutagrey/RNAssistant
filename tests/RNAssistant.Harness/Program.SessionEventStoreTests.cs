@@ -3069,6 +3069,85 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void SuppliedArtifactTextRepairsRetainedCorruption()
+        {
+            foreach (var encrypted in new[] { false, true })
+            foreach (var compressed in new[] { false, true })
+            WithTempPaths(paths =>
+            {
+                var protector = encrypted ? new StorageProtector(HistoryIntegrityModes.Sha256,
+                    HistoryEncryptionModes.Aes256CbcHmacSha256, "CAS repair fixture",
+                    Enumerable.Range(1, 32).Select(value => (byte)value).ToArray()) : StorageProtector.None;
+                Func<StorageProtector> protection = () => protector;
+                var body = compressed ? new string('ж', 32000) : "Exact supplied source";
+                var store = new ChatStore(paths, protection);
+                var session = store.Create("Word", "cas-repair", "Repair.docx", "Repair");
+                var artifact = new ChatArtifact { Kind = ChatArtifactKinds.Markdown,
+                    MimeType = "text/markdown", InlineText = body };
+                session.Artifacts.Add(artifact);
+                store.Save(session);
+                var hash = artifact.ContentSha256;
+                var blobPath = Path.Combine(paths.ChatBlobDirectory, hash.Substring(0, 2), hash + ".blob");
+                var stored = File.ReadAllBytes(blobPath);
+                stored[stored.Length - 1] ^= 1;
+                File.WriteAllBytes(blobPath, stored);
+
+                var reopenedStore = new ChatStore(paths, protection);
+                var reopened = reopenedStore.Load(session.Id);
+                var damaged = reopened.Artifacts.Single();
+                AssertTrue(damaged.InlineText == null, "corrupt bytes are not hydrated");
+                damaged.InlineText = body;
+                reopenedStore.Save(reopened);
+                AssertEqual(hash, damaged.ContentSha256, "repair retains exact CAS identity");
+                AssertEqual(body, new ChatStore(paths, protection).Load(session.Id).Artifacts.Single().InlineText,
+                    "supplied text repairs retained CAS: encrypted=" + encrypted + ", compressed=" + compressed);
+                AssertEqual(1, Directory.GetFiles(paths.ChatBlobDirectory, "*.blob", SearchOption.AllDirectories).Length,
+                    "repair creates no parallel body or format");
+            });
+        }
+
+        private static void OriginalPublicationRejectsCorruptParts()
+        {
+            foreach (var corruptExtraction in new[] { false, true })
+            WithTempPaths(paths =>
+            {
+                var store = new ChatStore(paths);
+                var session = store.Create("Word", "cas-original", "Original.docx", "Original");
+                session.DocumentAuthorityId = DocumentAuthorityId.Create().Id;
+                var payloads = new ChatBlobStore(paths);
+                var raw = payloads.StoreText("Original bytes", "text/plain");
+                var extracted = payloads.StoreText("Extracted text", "text/plain");
+                var original = new ChatAttachment { FileName = "original.txt", Kind = "text", ContentType = "text/plain",
+                    ContentSha256 = raw.Sha256, ContentByteLength = raw.ByteLength,
+                    ExtractedTextSha256 = extracted.Sha256, ExtractedTextByteLength = extracted.ByteLength };
+                var artifact = new ChatArtifact { Id = "attachment_" + original.Id, Kind = ChatArtifactKinds.Attachment,
+                    DocumentAuthorityId = session.DocumentAuthorityId, Revision = 1,
+                    MimeType = original.ContentType, ContentSha256 = raw.Sha256, ContentByteLength = raw.ByteLength };
+                var reference = ChatResourceUri.CreateArtifactRevision(session, artifact);
+                var damaged = corruptExtraction ? extracted : raw;
+                var blobPath = Path.Combine(paths.ChatBlobDirectory, damaged.Sha256.Substring(0, 2), damaged.Sha256 + ".blob");
+                var bytes = File.ReadAllBytes(blobPath);
+                bytes[bytes.Length - 1] ^= 1;
+                File.WriteAllBytes(blobPath, bytes);
+                var authority = new ResourceAuthorityStore(paths);
+                var scope = ResourceAuthorityScopeId.Document(new DocumentAuthorityId(session.DocumentAuthorityId));
+                var generation = authority.Capture(scope).Generation;
+                var rejected = false;
+                try { store.DocumentArtifacts.PublishOriginal(session, artifact, original); }
+                catch (InvalidDataException) { rejected = true; }
+                AssertTrue(rejected, "corrupt original/extraction is rejected before publication");
+                AssertEqual(generation, authority.Capture(scope).Generation, "rejected publication preserves heads");
+                AssertTrue(authority.GetRevision(scope, reference) == null, "rejected publication registers no revision");
+                AssertTrue(bytes.SequenceEqual(File.ReadAllBytes(blobPath)), "reference-only publication cannot repair unknown bytes");
+
+                payloads.StoreText(corruptExtraction ? "Extracted text" : "Original bytes", "text/plain");
+                var published = store.DocumentArtifacts.PublishOriginal(session, artifact, original);
+                AssertTrue(published != null, "publication succeeds after explicit source repair");
+                AssertEqual("Original bytes", Encoding.UTF8.GetString(store.DocumentArtifacts.ExportBytes(session, reference)),
+                    "published original is readable");
+            });
+        }
+
         private static void CasCompressionIsTransparent()
         {
             var body = "{\"value\":\"" + new string('ж', 32 * 1024) + "\"}";

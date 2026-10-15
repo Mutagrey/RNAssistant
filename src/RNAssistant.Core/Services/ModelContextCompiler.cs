@@ -783,7 +783,7 @@ namespace RNAssistant.Core.Services
                 ? archive.Claims.Where(claim => ContextClaimProjection.CurrentClaim(claim, authority) &&
                     claim.SourceMessageIds.All(id => archive.Sources.Count(source => source != null && source.MessageId == id) == 1) &&
                     claim.Evidence.All(e => _reducer.Reduce(e, authority.Resources).State == EvidenceState.Current &&
-                        (e.Payload == null || _payloads != null && _payloads.HasStoredReference(e.Payload.ToBlobReference())))).ToList()
+                        (e.Payload == null || _payloads != null && _payloads.HasVerifiedReference(e.Payload.ToBlobReference())))).ToList()
                 : new List<StructuredContextClaim>();
             message.ContextClaims = claims;
             foreach (var claim in claims) claim.SourceSnapshots = archive.Sources.Where(source => source != null && claim.SourceMessageIds.Contains(source.MessageId)).ToList();

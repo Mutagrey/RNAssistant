@@ -21,8 +21,7 @@ namespace RNAssistant.Core.Storage
                 if (CanReuseArtifactBody(artifact)) continue;
                 Interlocked.Increment(ref _artifactCasExternalizationCount);
                 var reference = _blobs.StoreText(artifact.InlineText,
-                    string.IsNullOrWhiteSpace(artifact.MimeType) ? "text/plain; charset=utf-8" : artifact.MimeType,
-                    ArtifactBodyReference(artifact));
+                    string.IsNullOrWhiteSpace(artifact.MimeType) ? "text/plain; charset=utf-8" : artifact.MimeType);
                 artifact.ContentSha256 = reference.Sha256;
                 artifact.ContentByteLength = reference.ByteLength;
                 RememberArtifactBody(artifact);
@@ -36,7 +35,7 @@ namespace RNAssistant.Core.Storage
                 artifact.ContentByteLength.Value == artifact.StorageContentByteLength.Value &&
                 artifact.StorageInlineTextTrusted &&
                 string.Equals(artifact.ContentSha256, artifact.StorageContentSha256, StringComparison.OrdinalIgnoreCase) &&
-                _blobs.HasStoredReference(ArtifactBodyReference(artifact));
+                _blobs.MayHaveStoredReference(ArtifactBodyReference(artifact));
         }
 
         private static ChatBlobReference ArtifactBodyReference(ChatArtifact artifact)
