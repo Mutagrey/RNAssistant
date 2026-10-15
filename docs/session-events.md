@@ -26,6 +26,13 @@ RNAssistant uses one append-only event stream per chat as its durable source of 
 
 The first read of an older chat builds the index by validating and replaying its complete JSONL stream on the bridge worker. The UI shows navigation progress while it waits. This one-time conversion remains proportional to file size; it does not delete or rewrite the source. Later reads verify the exact last indexed record at its byte offset and load normalized rows. A longer stream is caught up from the validated suffix; shrink, same-length replacement, incomplete tail or protection mismatch triggers a complete rebuild. Append first flushes JSONL to stable storage, then advances the derived index transactionally. Failure to advance the index never replaces a successful JSONL append; the next read catches up or rebuilds it.
 
+Catalog/startup, full-session and paged reads share one bounded recovery boundary
+for malformed SQLite metadata, row payloads and missing/corrupt schema. It disposes
+the connection, removes only the derived sidecars and retries once from validated
+events. Busy/I/O failures are not treated as index corruption. All chat event
+readers share the same integrity/error contract: malformed authoritative streams
+remain untouched and unavailable, without stopping the catalog of healthy chats.
+
 Within one process, up to 16 recently used canonical projection roots are also cached in memory (maximum about 16 million characters each and 32 million in total). An unchanged warm read checks the exact final record. The cache and SQLite projection are disposable and do not serve trajectory export or CAS reachability. Routine tail checks are a checkpoint trust boundary: a changed prefix that preserves the exact tail and file metadata is detected by the explicit full maintenance audit, not by every navigation read. That audit validates every JSONL event, compares the canonical projection with SQLite and repairs divergence. This preserves fast routine reads without presenting the sidecar as an independent authority.
 
 Writes to separate documents may proceed concurrently under their existing ordered

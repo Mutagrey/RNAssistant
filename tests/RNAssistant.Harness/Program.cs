@@ -391,6 +391,7 @@ namespace RNAssistant.Harness
                 Test("storage: sqlite cursor catches up after projection lag", SqliteCursorCatchesUpAfterLag),
                 Test("storage: corrupt sqlite index rebuilds from events", CorruptSqliteIndexRebuildsFromEvents),
                 Test("storage: corrupt sqlite row rebuilds from events", CorruptSqliteRowRebuildsFromEvents),
+                Test("storage: damaged sqlite metadata preserves startup and history", DamagedSqliteMetadataPreservesStartup),
                 Test("storage: sqlite audit repairs divergent projection", SqliteAuditRepairsDivergentProjection),
                 Test("chat sessions: activity ignores navigation and metadata", ChatActivityIgnoresNavigationAndMetadata),
                 Test("storage: json save remains atomic", JsonFileStoreWritesAtomicUtf8),

@@ -44,9 +44,39 @@ namespace RNAssistant.Core.Storage
             public ChatHeaderReducer Header;
         }
 
-        private sealed class ProjectionRowException : Exception
+        private sealed class ProjectionDataException : JsonException
         {
-            public ProjectionRowException(Exception inner) : base("The disposable chat index has an invalid row.", inner) { }
+            public ProjectionDataException(Exception inner) : base("The disposable chat index contains invalid data.", inner) { }
+        }
+
+        private static bool IsInvalidProjectionValue(Exception ex)
+        {
+            return ex is JsonException || ex is CryptographicException || ex is InvalidCastException ||
+                ex is ArgumentException || ex is FormatException || ex is OverflowException;
+        }
+
+        private static bool IsDamagedSqliteProjection(Exception ex)
+        {
+            var sqlite = ex as SqliteException;
+            return ex is ProjectionDataException || sqlite != null &&
+                (sqlite.SqliteErrorCode == 1 || sqlite.SqliteErrorCode == 11 || sqlite.SqliteErrorCode == 26);
+        }
+
+        // Retry only disposable index damage. Busy, I/O and canonical event failures
+        // propagate; a rebuild never changes or repairs the authoritative JSONL.
+        private static T ReadSqliteProjection<T>(string path, Func<SqliteConnection, T> read)
+        {
+            for (var attempt = 0; ; attempt++)
+            {
+                try
+                {
+                    using (var connection = OpenProjectionDatabase(path)) return read(connection);
+                }
+                catch (Exception ex) when (attempt == 0 && IsDamagedSqliteProjection(ex))
+                {
+                    DeleteSqliteProjection(path);
+                }
+            }
         }
 
         private static void InitializeSqliteProvider()
@@ -64,16 +94,6 @@ namespace RNAssistant.Core.Storage
         }
 
         private static SqliteConnection OpenProjectionDatabase(string eventPath)
-        {
-            try { return OpenProjectionDatabaseCore(eventPath); }
-            catch (SqliteException ex) when (ex.SqliteErrorCode == 11 || ex.SqliteErrorCode == 26)
-            {
-                DeleteSqliteProjection(eventPath);
-                return OpenProjectionDatabaseCore(eventPath);
-            }
-        }
-
-        private static SqliteConnection OpenProjectionDatabaseCore(string eventPath)
         {
             InitializeSqliteProvider();
             var builder = new SqliteConnectionStringBuilder
@@ -191,48 +211,55 @@ namespace RNAssistant.Core.Storage
 
         private SqliteCursor ReadSqliteCursor(SqliteConnection connection, SqliteTransaction transaction = null)
         {
-            using (var command = connection.CreateCommand())
+            try
             {
-                command.Transaction = transaction;
-                command.CommandText = "SELECT version,session_id,sequence,head_hash,byte_length,next_offset," +
-                    "tail_offset,mtime_ticks,protection_key_id,incomplete_tail,message_count,artifact_count,root,header," +
-                    "(SELECT COUNT(*) FROM messages),(SELECT COUNT(*) FROM artifacts) " +
-                    "FROM projection WHERE id=1";
-                using (var reader = command.ExecuteReader())
+                using (var command = connection.CreateCommand())
                 {
-                    if (!reader.Read()) return null;
-                    if (reader.GetInt32(0) != SqliteProjectionVersion) return null;
-                    var sessionId = reader.GetString(1);
-                    var keyId = reader.IsDBNull(8) ? null : reader.GetString(8);
-                    if (!string.Equals(keyId ?? string.Empty, Protection().KeyId ?? string.Empty,
-                        StringComparison.OrdinalIgnoreCase)) return null;
-                    var messageCount = reader.GetInt64(10);
-                    var artifactCount = reader.GetInt64(11);
-                    if (messageCount != reader.GetInt64(14) || artifactCount != reader.GetInt64(15))
-                        return null;
-                    var root = JObject.Parse(OpenProjection(sessionId, "root", (byte[])reader[12]));
-                    var header = ChatHeaderReducer.FromCheckpoint(_blobs,
-                        JObject.Parse(OpenProjection(sessionId, "header", (byte[])reader[13])));
-                    if (!ChatSession.IsReadableFormat((int?)root["FormatVersion"]) ||
-                        !string.Equals((string)root["Id"], sessionId, StringComparison.OrdinalIgnoreCase) ||
-                        !header.IsValid) return null;
-                    return new SqliteCursor
+                    command.Transaction = transaction;
+                    command.CommandText = "SELECT version,session_id,sequence,head_hash,byte_length,next_offset," +
+                        "tail_offset,mtime_ticks,protection_key_id,incomplete_tail,message_count,artifact_count,root,header," +
+                        "(SELECT COUNT(*) FROM messages),(SELECT COUNT(*) FROM artifacts) " +
+                        "FROM projection WHERE id=1";
+                    using (var reader = command.ExecuteReader())
                     {
-                        SessionId = sessionId,
-                        Sequence = reader.GetInt64(2),
-                        HeadHash = reader.GetString(3),
-                        ByteLength = reader.GetInt64(4),
-                        NextOffset = reader.GetInt64(5),
-                        TailOffset = reader.GetInt64(6),
-                        LastWriteUtcTicks = reader.GetInt64(7),
-                        ProtectionKeyId = keyId,
-                        IncompleteTail = reader.GetInt32(9) != 0,
-                        MessageCount = messageCount,
-                        ArtifactCount = artifactCount,
-                        Root = root,
-                        Header = header
-                    };
+                        if (!reader.Read()) return null;
+                        if (reader.GetInt32(0) != SqliteProjectionVersion) return null;
+                        var sessionId = reader.GetString(1);
+                        var keyId = reader.IsDBNull(8) ? null : reader.GetString(8);
+                        if (!string.Equals(keyId ?? string.Empty, Protection().KeyId ?? string.Empty,
+                            StringComparison.OrdinalIgnoreCase)) return null;
+                        var messageCount = reader.GetInt64(10);
+                        var artifactCount = reader.GetInt64(11);
+                        if (messageCount != reader.GetInt64(14) || artifactCount != reader.GetInt64(15))
+                            return null;
+                        var root = JObject.Parse(OpenProjection(sessionId, "root", (byte[])reader[12]));
+                        var header = ChatHeaderReducer.FromCheckpoint(_blobs,
+                            JObject.Parse(OpenProjection(sessionId, "header", (byte[])reader[13])));
+                        if (!ChatSession.IsReadableFormat((int?)root["FormatVersion"]) ||
+                            !string.Equals((string)root["Id"], sessionId, StringComparison.OrdinalIgnoreCase) ||
+                            !header.IsValid) return null;
+                        return new SqliteCursor
+                        {
+                            SessionId = sessionId,
+                            Sequence = reader.GetInt64(2),
+                            HeadHash = reader.GetString(3),
+                            ByteLength = reader.GetInt64(4),
+                            NextOffset = reader.GetInt64(5),
+                            TailOffset = reader.GetInt64(6),
+                            LastWriteUtcTicks = reader.GetInt64(7),
+                            ProtectionKeyId = keyId,
+                            IncompleteTail = reader.GetInt32(9) != 0,
+                            MessageCount = messageCount,
+                            ArtifactCount = artifactCount,
+                            Root = root,
+                            Header = header
+                        };
+                    }
                 }
+            }
+            catch (Exception ex) when (IsInvalidProjectionValue(ex))
+            {
+                throw new ProjectionDataException(ex);
             }
         }
 
@@ -254,12 +281,7 @@ namespace RNAssistant.Core.Storage
         {
             var current = CaptureStorageFileState(path);
             if (current == null) return null;
-            SqliteCursor saved;
-            try { saved = ReadSqliteCursor(connection); }
-            catch (Exception ex) when (ex is JsonException || ex is CryptographicException || ex is SqliteException)
-            {
-                saved = null;
-            }
+            var saved = ReadSqliteCursor(connection);
             var append = saved != null && !saved.IncompleteTail &&
                 current.ByteLength >= saved.ByteLength &&
                 ReadValidatedEventAtOffset(path, saved.SessionId, saved.Sequence, saved.HeadHash,
@@ -298,11 +320,10 @@ namespace RNAssistant.Core.Storage
                     StorageByteOffset = previous.TailOffset
                 };
                 var startOffset = previous == null ? 0 : previous.NextOffset;
-                var summary = JsonlRecordReader.Read(path, startOffset, ParseSessionEvent, (item, line) =>
+                var protector = Protection();
+                var summary = ReadValidatedChatRecords(path, startOffset, last, protector, (item, line) =>
                 {
-                    ValidateEvent(last, item, Protection());
-                    item.StorageByteOffset = line.Offset;
-                    HydrateEventData(item, Protection());
+                    HydrateEventData(item, protector);
                     header.Apply(item);
                     if (IsProjectionEvent(item)) ApplySqliteEvent(connection, transaction, ref root, item);
                     last = item;
@@ -511,7 +532,7 @@ namespace RNAssistant.Core.Storage
                     while (reader.Read())
                     {
                         var id = reader.GetString(0);
-                        values.Add(ReadSqliteItem(sessionId, table, id, (byte[])reader[1]));
+                        values.Add(ReadSqliteItem(sessionId, table, id, reader[1]));
                     }
                 }
             }
@@ -533,25 +554,25 @@ namespace RNAssistant.Core.Storage
                     while (reader.Read())
                     {
                         var id = reader.GetString(0);
-                        values.Add(ReadSqliteItem(sessionId, "messages", id, (byte[])reader[1]));
+                        values.Add(ReadSqliteItem(sessionId, "messages", id, reader[1]));
                     }
                 }
             }
             return values;
         }
 
-        private JObject ReadSqliteItem(string sessionId, string table, string id, byte[] payload)
+        private JObject ReadSqliteItem(string sessionId, string table, string id, object payload)
         {
             try
             {
-                var value = JObject.Parse(OpenProjection(sessionId, table + "/" + id, payload));
+                var value = JObject.Parse(OpenProjection(sessionId, table + "/" + id, (byte[])payload));
                 if (!string.Equals((string)value["Id"], id, StringComparison.OrdinalIgnoreCase))
                     throw new JsonException("Indexed chat item id does not match its key.");
                 return value;
             }
-            catch (Exception ex) when (ex is JsonException || ex is CryptographicException)
+            catch (Exception ex) when (IsInvalidProjectionValue(ex))
             {
-                throw new ProjectionRowException(ex);
+                throw new ProjectionDataException(ex);
             }
         }
 
@@ -561,13 +582,7 @@ namespace RNAssistant.Core.Storage
             if (pageSize <= 0 || pageSize > 100) throw new ArgumentOutOfRangeException(nameof(pageSize));
             foreach (var path in SafeFindSessionFiles(chatId))
             {
-                ConversationMessageWindow page;
-                try { page = ReadMessageWindowAtPath(path, chatId, beforeIndex, pageSize); }
-                catch (ProjectionRowException)
-                {
-                    DeleteSqliteProjection(path);
-                    page = ReadMessageWindowAtPath(path, chatId, beforeIndex, pageSize);
-                }
+                var page = ReadMessageWindowAtPath(path, chatId, beforeIndex, pageSize);
                 if (page != null) return page;
             }
             return null;
@@ -576,7 +591,7 @@ namespace RNAssistant.Core.Storage
         private ConversationMessageWindow ReadMessageWindowAtPath(string path, string chatId,
             int beforeIndex, int pageSize)
         {
-            using (var connection = OpenProjectionDatabase(path))
+            return ReadSqliteProjection(path, connection =>
             {
                 for (var attempt = 0; attempt < 2; attempt++)
                 {
@@ -609,8 +624,7 @@ namespace RNAssistant.Core.Storage
                                 "SELECT 1 FROM messages WHERE item_id=$p0 COLLATE NOCASE", id) != null)
                             .ToList();
                     }
-                    var session = Project(root, cursor.Sequence, cursor.HeadHash, cursor.TailOffset,
-                        cursor.ByteLength, cursor.LastWriteUtcTicks, false, true);
+                    var session = ProjectSqliteSession(root, cursor, false, true);
                     var pageMessages = session.Messages.ToArray();
                     // Artifact tombstones are applicable only while their source message
                     // exists. Keep ID-only context for presentation without reading bodies.
@@ -624,8 +638,8 @@ namespace RNAssistant.Core.Storage
                         TotalCount = total
                     };
                 }
-            }
-            throw new ChatConcurrencyException("Chat index changed while the message page was being read.");
+                throw new ChatConcurrencyException("Chat index changed while the message page was being read.");
+            });
         }
 
         internal void SetTitle(ChatSession session, string title)
@@ -700,17 +714,7 @@ namespace RNAssistant.Core.Storage
 
         private ChatSession ReadSqliteSession(string path, bool hydrateActiveArtifacts, bool rebuildDerivedProjections)
         {
-            try { return ReadSqliteSessionOnce(path, hydrateActiveArtifacts, rebuildDerivedProjections); }
-            catch (ProjectionRowException)
-            {
-                DeleteSqliteProjection(path);
-                return ReadSqliteSessionOnce(path, hydrateActiveArtifacts, rebuildDerivedProjections);
-            }
-        }
-
-        private ChatSession ReadSqliteSessionOnce(string path, bool hydrateActiveArtifacts, bool rebuildDerivedProjections)
-        {
-            using (var connection = OpenProjectionDatabase(path))
+            return ReadSqliteProjection(path, connection =>
             {
                 for (var attempt = 0; attempt < 2; attempt++)
                 {
@@ -724,13 +728,26 @@ namespace RNAssistant.Core.Storage
                         root["Messages"] = ReadSqliteList(connection, transaction, "messages", cursor.SessionId);
                         root["Artifacts"] = ReadSqliteList(connection, transaction, "artifacts", cursor.SessionId);
                     }
-                    var session = Project(root, cursor.Sequence, cursor.HeadHash, cursor.TailOffset, cursor.ByteLength,
-                        cursor.LastWriteUtcTicks, hydrateActiveArtifacts, rebuildDerivedProjections);
+                    var session = ProjectSqliteSession(root, cursor, hydrateActiveArtifacts, rebuildDerivedProjections);
                     if (session != null && !cursor.IncompleteTail) StoreProjectionCache(path, root, session);
                     return session;
                 }
+                throw new ChatConcurrencyException("Chat index changed while the session was being read.");
+            });
+        }
+
+        private ChatSession ProjectSqliteSession(JObject root, SqliteCursor cursor,
+            bool hydrateActiveArtifacts, bool rebuildDerivedProjections)
+        {
+            try
+            {
+                return Project(root, cursor.Sequence, cursor.HeadHash, cursor.TailOffset, cursor.ByteLength,
+                    cursor.LastWriteUtcTicks, hydrateActiveArtifacts, rebuildDerivedProjections);
             }
-            throw new ChatConcurrencyException("Chat index changed while the session was being read.");
+            catch (Exception ex) when (IsInvalidProjectionValue(ex))
+            {
+                throw new ProjectionDataException(ex);
+            }
         }
 
         // The routine read trusts an exact tail checkpoint. The explicit maintenance audit
@@ -759,8 +776,7 @@ namespace RNAssistant.Core.Storage
                     }
                 }
             }
-            catch (Exception ex) when (ex is ProjectionRowException || ex is JsonException ||
-                ex is CryptographicException || ex is SqliteException)
+            catch (Exception ex) when (IsDamagedSqliteProjection(ex))
             {
                 // A valid JSONL stream remains authoritative if the secondary index is damaged.
             }
@@ -775,12 +791,12 @@ namespace RNAssistant.Core.Storage
         private ChatSessionHeader ReadSqliteHeader(string path, string host, string documentKey,
             string documentTitle, ChatBlobStore.StorageSizeSnapshot storageSizes)
         {
-            using (var connection = OpenProjectionDatabase(path))
+            return ReadSqliteProjection(path, connection =>
             {
                 var cursor = EnsureSqliteProjection(connection, path);
                 return cursor == null ? null : cursor.Header.CreateHeader(storageSizes, cursor.Sequence,
                     cursor.ByteLength, host, documentKey, documentTitle);
-            }
+            });
         }
 
         private void AdvanceSqliteProjection(string path, IReadOnlyList<SessionEvent> appended)

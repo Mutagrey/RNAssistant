@@ -42,40 +42,24 @@ namespace RNAssistant.Core.Storage
             };
             var protector = Protection();
             var before = CaptureStorageFileState(path);
-            try
-            {
-                var summary = JsonlRecordReader.Read(
-                    path,
-                    startByteOffset,
-                    ParseSessionEvent,
-                    (sessionEvent, line) =>
-                    {
-                        ValidateEvent(previousEvent, sessionEvent, protector);
-                        HydrateEventData(sessionEvent, protector);
-                        sessionEvent.StorageByteOffset = line.Offset;
-                        result.Reducer.Apply(sessionEvent);
-                        result.Tail = sessionEvent;
-                        previousEvent = sessionEvent;
-                    });
-                result.ByteLength = summary.ByteLength;
-                result.TailNextByteOffset = summary.TailNextByteOffset;
-                result.HasIncompleteTail = summary.HasIncompleteTail;
-                var after = CaptureStorageFileState(path);
-                result.IsStableSnapshot = before != null && after != null &&
-                    before.ByteLength == result.ByteLength && after.ByteLength == result.ByteLength &&
-                    before.LastWriteUtcTicks == after.LastWriteUtcTicks;
-                result.LastWriteUtcTicks = result.IsStableSnapshot ? after.LastWriteUtcTicks : 0;
-            }
-            catch (JsonlRecordException ex)
-            {
-                throw new ChatConcurrencyException(ex.Kind == JsonlRecordErrorKind.BlankRecord
-                    ? "The chat event log contains a blank record."
-                    : "The chat event log contains an invalid record.");
-            }
-            catch (DecoderFallbackException)
-            {
-                throw new ChatConcurrencyException("The chat event log contains invalid UTF-8.");
-            }
+            var summary = ReadValidatedChatRecords(
+                path,
+                startByteOffset,
+                previousEvent, protector,
+                (sessionEvent, line) =>
+                {
+                    HydrateEventData(sessionEvent, protector);
+                    result.Reducer.Apply(sessionEvent);
+                    result.Tail = sessionEvent;
+                });
+            result.ByteLength = summary.ByteLength;
+            result.TailNextByteOffset = summary.TailNextByteOffset;
+            result.HasIncompleteTail = summary.HasIncompleteTail;
+            var after = CaptureStorageFileState(path);
+            result.IsStableSnapshot = before != null && after != null &&
+                before.ByteLength == result.ByteLength && after.ByteLength == result.ByteLength &&
+                before.LastWriteUtcTicks == after.LastWriteUtcTicks;
+            result.LastWriteUtcTicks = result.IsStableSnapshot ? after.LastWriteUtcTicks : 0;
             return result;
         }
 

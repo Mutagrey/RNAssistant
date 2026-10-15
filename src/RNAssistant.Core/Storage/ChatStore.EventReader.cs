@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Text;
 using System.Threading;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
@@ -123,21 +122,13 @@ namespace RNAssistant.Core.Storage
                 var predecessor = previous == null ? null : new SessionEvent
                 { SessionId = _sessionId, Sequence = previous.Position.Sequence, Hash = previous.Position.Hash };
                 var protector = _store.Protection();
-                try
+                var summary = ReadValidatedChatRecords(_path, offset, predecessor, protector, (item, line) =>
                 {
-                    var summary = JsonlRecordReader.Read(_path, offset, ParseSessionEvent, (item, line) =>
-                    {
-                        ValidateEvent(predecessor, item, protector);
-                        if (item.SessionId != _sessionId) throw new ChatConcurrencyException("The event stream belongs to another session.");
-                        item.StorageByteOffset = line.Offset;
-                        accept(item, new Boundary { Position = new SessionEventPosition(item.SessionId, item.Sequence, item.Hash),
-                            Offset = line.Offset, NextOffset = line.NextOffset });
-                        predecessor = item;
-                    }, count, token);
-                    if (summary.HasIncompleteTail) throw new ChatConcurrencyException("The event stream has an incomplete tail.");
-                }
-                catch (JsonlRecordException) { throw new ChatConcurrencyException("The event stream contains an invalid record."); }
-                catch (DecoderFallbackException) { throw new ChatConcurrencyException("The event stream contains invalid UTF-8."); }
+                    if (item.SessionId != _sessionId) throw new ChatConcurrencyException("The event stream belongs to another session.");
+                    accept(item, new Boundary { Position = new SessionEventPosition(item.SessionId, item.Sequence, item.Hash),
+                        Offset = line.Offset, NextOffset = line.NextOffset });
+                }, count, token);
+                if (summary.HasIncompleteTail) throw new ChatConcurrencyException("The event stream has an incomplete tail.");
             }
 
             private bool ValidateBoundary(Boundary boundary, StorageFileState state)

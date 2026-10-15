@@ -857,6 +857,70 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void DamagedSqliteMetadataPreservesStartup()
+        {
+            WithTempPaths(paths =>
+            {
+                var writer = new ChatStore(paths);
+                var chat = writer.Create("Word", "damaged-index-metadata", "Metadata.docx", "Canonical title");
+                chat.Messages.Add(new ChatMessage { Role = "user", Content = "canonical history" });
+                writer.Save(chat);
+                var path = SessionEventFile(paths, chat);
+                var events = File.ReadAllBytes(path);
+                var invalidRoot = new JObject { ["Id"] = chat.Id, ["FormatVersion"] = chat.FormatVersion,
+                    ["CreatedUtc"] = new JArray() }.ToString(Formatting.None);
+                foreach (var sql in new[] {
+                    "UPDATE projection SET root='wrong sqlite storage class'",
+                    "UPDATE projection SET root=CAST('{\"FormatVersion\":[]}' AS BLOB)",
+                    "UPDATE projection SET root=CAST('" + invalidRoot + "' AS BLOB)",
+                    "UPDATE projection SET header=CAST('{\"Seeded\":true,\"CreatedUtc\":[]}' AS BLOB)",
+                    "UPDATE projection SET header=CAST('{\"Seeded\":true,\"CasReferences\":null}' AS BLOB)",
+                    "UPDATE messages SET payload='wrong sqlite storage class'",
+                    "UPDATE projection SET tail_offset=-1, next_offset=-1",
+                    "DROP TABLE messages" })
+                foreach (var surface in new[] { "headers", "session", "page", "startup" })
+                {
+                    using (var connection = new SqliteConnection(new SqliteConnectionStringBuilder {
+                        DataSource = path + ".projection.sqlite", Pooling = false }.ToString()))
+                    {
+                        connection.Open();
+                        using (var command = connection.CreateCommand())
+                        { command.CommandText = sql; command.ExecuteNonQuery(); }
+                    }
+                    var reader = new ChatStore(paths);
+                    try
+                    {
+                        if (surface == "startup")
+                            new ChatSessionService(FakeOfficeAdapter.ForHost("Word"), ConversationStore(reader))
+                                .ReconcileInterruptedRuns("metadata-startup");
+                        if (surface == "headers")
+                            AssertEqual("Canonical title", reader.ListHeaders().Single().Title,
+                                "startup catalog rebuilds disposable metadata");
+                        var loaded = surface == "page" ? reader.ReadMessageWindow(chat.Id, 1, 80).Session : reader.Load(chat.Id);
+                        AssertTrue(loaded != null, "damaged index cannot hide the chat");
+                        AssertEqual("canonical history", loaded.Messages.Single().Content,
+                            "damaged metadata cannot hide canonical messages");
+                    }
+                    catch (Exception ex) { throw new InvalidOperationException(surface + ": " + sql, ex); }
+                    AssertEqual(1L, reader.SqliteProjectionFullBuildCount, "one bounded rebuild from validated events");
+                    AssertTrue(File.ReadAllBytes(path).SequenceEqual(events), "rebuilding metadata never rewrites durable history");
+                }
+                var damaged = writer.Create("Word", "damaged-event-log", "Damaged.docx", "Damaged");
+                var damagedPath = SessionEventFile(paths, damaged);
+                File.AppendAllText(damagedPath, "{not-json}\n");
+                var damagedEvents = File.ReadAllBytes(damagedPath);
+                var startup = new ChatStore(paths);
+                new ChatSessionService(FakeOfficeAdapter.ForHost("Word"), ConversationStore(startup))
+                    .ReconcileInterruptedRuns("mixed-startup");
+                AssertEqual(chat.Id, startup.ListHeaders().Single().Id,
+                    "a damaged durable stream cannot stop startup for a healthy chat");
+                AssertEqual("canonical history", startup.Load(chat.Id).Messages.Single().Content,
+                    "healthy history survives startup with a damaged sibling");
+                AssertTrue(File.ReadAllBytes(damagedPath).SequenceEqual(damagedEvents),
+                    "startup preserves the damaged durable stream for recovery");
+            });
+        }
+
         private static void SqliteAuditRepairsDivergentProjection()
         {
             WithTempPaths(paths =>

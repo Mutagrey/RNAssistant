@@ -36,38 +36,51 @@ namespace RNAssistant.Core.Storage
             var protector = Protection();
             var before = CaptureStorageFileState(path);
             SessionEvent tail = null;
+            var summary = ReadValidatedChatRecords(
+                path,
+                startByteOffset,
+                previousEvent, protector,
+                (sessionEvent, line) =>
+                {
+                    if (projectionVisitor == null)
+                    {
+                        HydrateEventData(sessionEvent, protector);
+                        result.Events.Add(sessionEvent);
+                    }
+                    else if (IsProjectionEvent(sessionEvent))
+                    {
+                        HydrateEventData(sessionEvent, protector);
+                        projectionVisitor(sessionEvent);
+                    }
+                    tail = sessionEvent;
+                });
+            if (projectionVisitor != null && tail != null) result.Events.Add(tail);
+            result.ByteLength = summary.ByteLength;
+            result.TailNextByteOffset = summary.TailNextByteOffset;
+            result.HasIncompleteTail = summary.HasIncompleteTail;
+            var after = CaptureStorageFileState(path);
+            result.IsStableSnapshot = before != null && after != null &&
+                before.ByteLength == result.ByteLength && after.ByteLength == result.ByteLength &&
+                before.LastWriteUtcTicks == after.LastWriteUtcTicks;
+            result.LastWriteUtcTicks = result.IsStableSnapshot ? after.LastWriteUtcTicks : 0;
+            return result;
+        }
+
+        // All event consumers share validation and the chat-store error contract.
+        // A disposable index must not turn malformed durable data into an uncaught parser error.
+        private static JsonlReadSummary ReadValidatedChatRecords(string path, long offset,
+            SessionEvent previous, StorageProtector protector, Action<SessionEvent, JsonlByteLine> accept,
+            int? count = null, CancellationToken token = default(CancellationToken))
+        {
             try
             {
-                var summary = JsonlRecordReader.Read(
-                    path,
-                    startByteOffset,
-                    ParseSessionEvent,
-                    (sessionEvent, line) =>
-                    {
-                        ValidateEvent(previousEvent, sessionEvent, protector);
-                        sessionEvent.StorageByteOffset = line.Offset;
-                        if (projectionVisitor == null)
-                        {
-                            HydrateEventData(sessionEvent, protector);
-                            result.Events.Add(sessionEvent);
-                        }
-                        else if (IsProjectionEvent(sessionEvent))
-                        {
-                            HydrateEventData(sessionEvent, protector);
-                            projectionVisitor(sessionEvent);
-                        }
-                        tail = sessionEvent;
-                        previousEvent = sessionEvent;
-                    });
-                if (projectionVisitor != null && tail != null) result.Events.Add(tail);
-                result.ByteLength = summary.ByteLength;
-                result.TailNextByteOffset = summary.TailNextByteOffset;
-                result.HasIncompleteTail = summary.HasIncompleteTail;
-                var after = CaptureStorageFileState(path);
-                result.IsStableSnapshot = before != null && after != null &&
-                    before.ByteLength == result.ByteLength && after.ByteLength == result.ByteLength &&
-                    before.LastWriteUtcTicks == after.LastWriteUtcTicks;
-                result.LastWriteUtcTicks = result.IsStableSnapshot ? after.LastWriteUtcTicks : 0;
+                return JsonlRecordReader.Read(path, offset, ParseSessionEvent, (item, line) =>
+                {
+                    ValidateEvent(previous, item, protector);
+                    item.StorageByteOffset = line.Offset;
+                    accept(item, line);
+                    previous = item;
+                }, count, token);
             }
             catch (JsonlRecordException ex)
             {
@@ -79,7 +92,6 @@ namespace RNAssistant.Core.Storage
             {
                 throw new ChatConcurrencyException("The chat event log contains invalid UTF-8.");
             }
-            return result;
         }
 
         private static void ValidateEvent(
