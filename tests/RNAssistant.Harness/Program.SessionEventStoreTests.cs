@@ -201,10 +201,11 @@ namespace RNAssistant.Harness
                 var responses = KernelConfirmationResponses();
                 var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
                     Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() }));
-                service.ExecuteAsync(ChatModes.Agent, "Create a skill", session,
+                var first = service.ExecuteAsync(ChatModes.Agent, "Create a skill", session,
                     NewContext(adapter), settingsForRun, tools, null,
                     (pendingSession, pendingCommand, result) => "pending_replay")
                     .GetAwaiter().GetResult();
+                AssertTrue(first.WaitingForConfirmation, "skill preparation reaches confirmation: " + first.AssistantText);
                 var pending = AssertKernelReplay(session);
                 AssertEqual(RunLifecycle.AwaitingConfirmation, pending.LastRun.KernelState.Summary.Lifecycle, "pending replay lifecycle");
                 AssertEqual(0, pending.LastRun.KernelState.Summary.ToolCounts.WriteOk, "confirmation has not dispatched a mutation");
@@ -254,11 +255,12 @@ namespace RNAssistant.Harness
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
                     Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() }));
-                service.ExecuteAsync(ChatModes.Agent, "Create skill", session,
+                var first = service.ExecuteAsync(ChatModes.Agent, "Create skill", session,
                     NewContext(adapter), settingsForRun, tools, null,
                     (pendingSession, command, pendingResult) =>
                         "pending_replay_cancel")
                     .GetAwaiter().GetResult();
+                AssertTrue(first.WaitingForConfirmation, "cancellation fixture reaches confirmation: " + first.AssistantText);
                 var pending = AssertKernelReplay(session);
                 var acceptedCalls = AcceptedCallIdentitiesJson(pending);
                 var result = service.ConfirmAsync(pending.LastRun.KernelState.Summary.PendingConfirmation.PendingId,
@@ -279,7 +281,7 @@ namespace RNAssistant.Harness
         {
             return new Queue<string>(new[]
             {
-                LoadToolSchemaResponse("common.skills_upsert"),
+                LoadSkillResponse("common.skill_authoring"),
                 "{\"message\":\"Create skill\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.skills_upsert\",\"arguments\":{\"id\":\"common.replay_test\",\"description\":\"Replay test\",\"bodyMarkdown\":\"# Replay\"}}]}",
                 "{\"message\":\"Done\",\"action\":\"done\",\"tool_calls\":[]}"
             });
@@ -295,11 +297,12 @@ namespace RNAssistant.Harness
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
                     Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() }));
-                service.ExecuteAsync(ChatModes.Agent, "Create skill", session,
+                var first = service.ExecuteAsync(ChatModes.Agent, "Create skill", session,
                     NewContext(adapter), settingsForRun, tools, null,
                     (pendingSession, command, pendingResult) =>
                         "pending_replay_preparation")
                     .GetAwaiter().GetResult();
+                AssertTrue(first.WaitingForConfirmation, "preparation failure fixture reaches confirmation: " + first.AssistantText);
                 var loaded = AssertKernelReplay(session);
                 var acceptedCalls = AcceptedCallIdentitiesJson(loaded);
                 var result = service.ConfirmAsync(loaded.LastRun.KernelState.Summary.PendingConfirmation.PendingId, PendingCommand(loaded), loaded,

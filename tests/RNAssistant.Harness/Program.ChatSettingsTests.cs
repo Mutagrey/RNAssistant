@@ -626,33 +626,33 @@ namespace RNAssistant.Harness
             }
             AssertContains(defaults.SystemPrompt, "1. **Understand.** Translate the request into explicit deliverables",
                 "Agent begins by establishing deliverables and evidence");
-            AssertContains(defaults.SystemPrompt, "Inspect the source structure and key examples",
+            AssertContains(defaults.SystemPrompt, "Inspect source structure and key examples",
                 "Agent inspects requested sources before construction");
             AssertContains(defaults.SystemPrompt, "only after the primary solution is implemented and verified",
                 "Agent follows source, deliverable, verification and reuse dependency order");
             AssertContains(defaults.SystemPrompt, "Choose checks proportionate to the changed behavior",
                 "Agent selects useful verification from context");
-            AssertContains(defaults.SystemPrompt, "An open Task List does not block a terminal response",
+            AssertContains(defaults.SystemPrompt, "an open list does not block a terminal response",
                 "saved planning state is advisory");
-            AssertContains(defaults.SystemPrompt, "without making a redundant call merely to pass a gate",
+            AssertContains(defaults.SystemPrompt, "a plan status does not require a new read or mutation",
                 "Agent does not perform bookkeeping to bypass a gate");
             AssertContains(defaults.SystemPrompt, "cannot become success prose",
                 "tool and protocol errors cannot be reported as completed work");
             AssertContains(defaults.SystemPrompt, "simplified placeholder",
                 "Agent does not degrade an artifact to bypass validation");
-            AssertContains(defaults.AgentToolsPrompt, "For multi-deliverable Agent work, use a Task List after bounded discovery",
+            AssertContains(taskTracking, "For Agent work with multiple distinct deliverables or dependent implementation stages, create a concise Task List after bounded discovery",
                 "tracking preserves multiple deliverables after initial discovery");
-            AssertContains(defaults.AgentToolsPrompt, "Load only missing skill bodies and schemas",
+            AssertContains(defaults.AgentToolsPrompt, "Reuse successful reads and completed mutations; repeat only to obtain missing coverage or after relevant state changes",
                 "planning does not force repeated loading or duplicate artifacts");
-            AssertContains(defaults.AgentToolsPrompt, "Revise the goal and stages through save when needed",
+            AssertContains(taskTracking, "Revise the goal and stages as understanding or user direction changes",
                 "tool policy permits reasoned replanning");
             AssertContains(defaults.ContextCompactionPrompt, "compaction does not require another capabilities_read or admission",
                 "compaction guidance agrees with durable tool admission");
-            AssertContains(defaults.SystemPrompt, "If feasible authorized work remains, perform the next needed tool step or deliver the requested content in this response",
+            AssertContains(defaults.SystemPrompt, "If feasible authorized work remains, perform the next tool step or deliver the requested content in this response",
                 "unfinished work continues instead of forcing a terminal decision");
             AssertContains(taskTracking, "use blocked only for a concrete obstacle and needs_input only for an indispensable user answer",
                 "task tracking does not treat every unfinished stage as a blocker");
-            AssertContains(defaults.AgentToolsPrompt, "never add an inner `arguments`",
+            AssertContains(defaults.AgentToolsPrompt, "exact callable operation, root arguments, and returned evidence",
                 "tool arguments are supplied at the schema root");
             AssertContains(defaults.AgentToolsPrompt, "Skills define domain workflow and quality criteria",
                 "tool policy defines authority between skill guidance and schemas");

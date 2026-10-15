@@ -26,13 +26,12 @@ Evidence: `/tmp/rna-completion-gate-20261014-8e_qd7c5/{task-list,plan,skills}.lo
 
 ## Replay confirmation fixtures — 2026-10-15
 
-Owner: host-neutral conversation tests. The `kernel replay` cases for confirmation,
-cancelled confirmation and preparation failure stop before their intended boundary:
-the skill-write fixture reaches Completed without a pending confirmation. The same
-3 failures reproduce on the pre-change `863d2ece` and the explicit-commit implementation;
-7 other replay cases pass in both. Refresh the fixture's tool admission/source
-contract without changing runtime permission rules. Current native Office approval,
-paired batch replay and question continuation checks pass independently.
+Closed for the three host-neutral confirmation replay fixtures: they now select
+`common.skill_authoring` and assert the pending boundary before approval/cancellation.
+`kernel replay:` passes 10/10; related protocol-context and causal-trace cases
+also use actual skill selection, without changing runtime permission rules.
+
+Remaining owner: controlled CLI fixture.
 `application_requests_smoke.py` also assumes its initial file write auto-executes;
 it currently stops at AwaitingConfirmation. Refresh its declared approval policy
 before using it as application-request evidence.

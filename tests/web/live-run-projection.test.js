@@ -105,11 +105,11 @@ assert.equal(walk(box).filter(n => n.classList.contains("agent-final-step")).len
 const completedOverview = walk(box).find(n => n.classList.contains("agent-run-overview"));
 assert.ok(completedOverview, "completed run keeps its expandable action history");
 assert.equal(completedOverview.open, false);
-assert.deepEqual(visibleStepMessages(box), ["Narration s1", "Narration s2"],
-  "completing a run preserves its model comments outside collapsed actions");
+assert.deepEqual(visibleStepMessages(box), [],
+  "completing a run folds progress comments with their actions");
 completedOverview.open = true; completedOverview.listeners.toggle();
 assert.deepEqual(visibleStepMessages(box), ["Narration s1", "Narration s2"],
-  "expanding actions does not repeat model comments");
+  "expanding actions restores each original model comment once");
 assert.equal(walk(completedOverview).filter(n => n.classList.contains("agent-model-step-history")).length, 2);
 assert.equal(walk(completedOverview).filter(n => n.classList.contains("kind-tool")).length, 3);
 completedOverview.open = false; completedOverview.listeners.toggle();
@@ -118,8 +118,12 @@ completedOverview.open = true; completedOverview.listeners.toggle();
 assert.equal(walk(completedOverview).filter(n => n.classList.contains("agent-model-step-history")).length, 2,
   "every saved step can be reopened after completion");
 ctx.resetRenderedMessageUnits(box); render();
+assert.deepEqual(visibleStepMessages(box), [],
+  "restoring the saved transcript folds completed progress without prior DOM state");
+const restoredOverview = walk(box).find(n => n.classList.contains("agent-run-overview"));
+restoredOverview.open = true; restoredOverview.listeners.toggle();
 assert.deepEqual(visibleStepMessages(box), ["Narration s1", "Narration s2"],
-  "restoring the saved transcript retains comments without relying on prior DOM state");
+  "reopening restored history retains every original comment");
 // Distinct transcript segments of one logical run must not share a DOM cache key.
 ctx.state.liveAgentRun = null; ctx.state.liveActivity = null; ctx.state.liveStreamContent = null; ctx.state.chatRuns = {};
 ctx.state.messages = [message(action("s1", "a", "completed", null), 0),
@@ -140,8 +144,12 @@ assert.equal(box.childNodes[2].messageUnitKey, "live:agent-run");
 assert.equal(ctx.liveAgentTailActivities().map(a => a.StepId).join("|"), "s2|s2",
   "live replay cannot move earlier narration or actions below the applied steer");
 const prefix = box.childNodes[0], reply = box.childNodes[1];
+assert.deepEqual(visibleStepMessages(prefix), [],
+  "applying a steer folds the completed prefix above the user input");
+const prefixOverview = walk(prefix).find(n => n.classList.contains("agent-run-overview"));
+prefixOverview.open = true; prefixOverview.listeners.toggle();
 assert.deepEqual(visibleStepMessages(prefix), ["Narration s1"],
-  "applying a steer preserves the earlier comment above the user input");
+  "the earlier comment remains inspectable above the user input");
 ctx.state.liveAgentRun.push(action("s2", "c", "running", "{}"));
 ctx.reconcileMessageUnits(box, ctx.buildLiveMessageUnits(), true);
 assert.equal(box.childNodes[0], prefix); assert.equal(box.childNodes[1], reply);
@@ -185,10 +193,11 @@ assert.equal(walk(box).filter(n => n.classList.contains("status-running")).lengt
   "terminal failure does not leave earlier progress cards running");
 const overview = walk(box).find(n => n.classList.contains("agent-run-overview"));
 assert.ok(overview, "no-tool progress remains inspectable");
-assert.deepEqual(visibleStepMessages(box), ["Narration s1", "Narration s2"],
-  "a failed run preserves accepted comments outside the diagnostic history");
+assert.deepEqual(visibleStepMessages(box), [],
+  "a failed run folds progress while keeping its diagnostic visible");
 overview.open = true; overview.listeners.toggle();
-assert.equal(walk(overview).filter(n => n.classList.contains("agent-step-message")).length, 0);
+assert.deepEqual(visibleStepMessages(box), ["Narration s1", "Narration s2"],
+  "failed history restores each accepted comment once");
 assert.equal(walk(overview).filter(n => n.classList.contains("kind-step")).length, 0,
   "step text is not repeated inside its own activity row");
 
@@ -237,8 +246,8 @@ const preparation = [0, 1, 2].map(index => {
 });
 for (const active of [true, false]) {
   const article = ctx.renderAgentRunArticle({ live: active, items: preparation });
-  assert.deepEqual(visibleStepMessages(article), ["Inspect the styles before choosing a change."],
-    "silent steps cannot hide the comment when the feed becomes saved history");
+  assert.deepEqual(visibleStepMessages(article), active ? ["Inspect the styles before choosing a change."] : [],
+    "active progress stays visible and saved progress is folded");
   if (!active) {
     const overview = article.querySelector(".agent-run-overview");
     overview.open = true; overview.listeners.toggle();
@@ -281,8 +290,12 @@ for (const lifecycle of ["completed", "cancelled"]) {
   const article = ctx.renderAgentRunArticle({ items: preparation.concat({ activity: nextFinding }),
     finalMessage: { message: { Id: "terminal", Role: "assistant", RunId: "r", Content: "Final answer",
       RunViewState: Object.assign({}, view, { Lifecycle: lifecycle }) }, index: 4 } });
-  assert.deepEqual(visibleStepMessages(article), [nextFinding.StepMessage, nextFinding.StepMessage],
-    "distinct model steps keep repeated comments after " + lifecycle);
+  assert.deepEqual(visibleStepMessages(article), [], "progress is folded after " + lifecycle);
+  const history = walk(article).find(n => n.classList.contains("agent-run-overview"));
+  history.open = true; history.listeners.toggle();
+  assert.deepEqual(visibleStepMessages(article), preparation.map(item => item.activity.StepMessage)
+    .filter(Boolean).concat(nextFinding.StepMessage),
+    "expanded history keeps the original comments after " + lifecycle);
 }
 assert.equal(JSON.stringify(preparation), originalPreparation, "presentation never changes the stored step identities or comments");
 console.log("PASS live projection: silent steps fold below commentary while active work and attention stay visible");

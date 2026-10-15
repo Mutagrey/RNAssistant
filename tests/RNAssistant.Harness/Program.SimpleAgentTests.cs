@@ -1136,7 +1136,7 @@ namespace RNAssistant.Harness
                 store.Save(session);
                 var responses = new Queue<string>(Enumerable.Repeat("REJECTED_TRACE_SENTINEL", invalidAttempts).Concat(new[]
                 {
-                    LoadToolSchemaResponse("common.vba_write_module"),
+                    LoadSkillResponse("common.vba_code_editing"),
                     new JObject
                     {
                         ["message"] = "Update module.",
@@ -1189,7 +1189,7 @@ namespace RNAssistant.Harness
                 var accepted = events.Where(item => item.Type == "model.response.accepted").ToList();
                 AssertEqual(invalidAttempts + 3, requestCount, "trace introduces no retry or model request");
                 AssertEqual(invalidAttempts, rejected.Count, "every rejected attempt has a diagnostic event");
-                AssertEqual(3, accepted.Count, "only valid schema/write/final responses are accepted");
+                AssertEqual(3, accepted.Count, "only valid skill/write/final responses are accepted");
                 AssertEqual(requestCount, requests.Select(item => (string)item.Data["ModelAttemptId"]).Distinct().Count(),
                     "each completion attempt has a distinct id");
                 AssertTrue(requests.All(item => !string.IsNullOrWhiteSpace((string)item.Data["ModelAttemptId"])), "attempt ids exist");
@@ -2214,12 +2214,10 @@ namespace RNAssistant.Harness
                 var service = CreateConversationRunService(adapter, executor, completion);
                 var settings = new AppSettings { AutoConfirmToolActions = true,
                     ContextWindowOverrideTokens = 131072, MaxTokens = 16384 };
-                var tools = executor.GetControllerTools().Where(tool => VbaToolCatalog.Owns(tool.Id) ||
-                    tool.Id == SkillLoadToolHandler.ToolId ||
-                    tool.Id == ResourceToolCatalog.ReadToolId || tool.Id == ResourceToolCatalog.FindToolId).ToList();
-                service.ExecuteWithApprovalsAsync(ChatModes.Agent, "Create and inspect ContextModule.", session,
+                var tools = executor.GetControllerTools().ToList();
+                var created = service.ExecuteWithApprovalsAsync(ChatModes.Agent, "Create and inspect ContextModule.", session,
                     NewContext(adapter), settings, tools, null).GetAwaiter().GetResult();
-                AssertEqual(4, step, "skill selection, creation and read complete without repairs");
+                AssertEqual(4, step, "skill selection, creation and read complete without repairs: " + created.AssistantText);
                 AssertEqual(source, adapter.GetVbaModuleCode(module), "creation preserves the complete source");
 
                 Action compact = () => {
@@ -2733,7 +2731,7 @@ namespace RNAssistant.Harness
                     adapter, executor, completion);
                 var session = NewSession(adapter);
                 var settings = new AppSettings
-                    { AutoConfirmToolActions = false };
+                    { AutoConfirmToolActions = false, ContextWindowOverrideTokens = 131072, MaxTokens = 16384 };
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName)
                     .Concat(executor.GetControllerTools()).ToList();
                 var first = service.ExecuteAsync(

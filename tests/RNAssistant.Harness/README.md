@@ -29,9 +29,16 @@ typed routing; `tests/web/bridge-bootstrap.test.js` uses controlled timers for l
 and late replies without replay. The nine domain slices (`excel write:`,
 `excel find replace:`, `excel sheet:`, `excel range mutation:`, `excel table:`,
 `excel chart:`, `word tools:`, `powerpoint tools:`, `outlook tools:`) cover the shared
-outcome contract through real domain services and fake backends. Three older
-confirmation replay fixtures fail on the baseline too; see
-[BACKLOG](../../docs/stabilization/BACKLOG.md#replay-confirmation-fixtures--2026-10-15).
+outcome contract through real domain services and fake backends. Confirmation
+replay, protocol-context and causal-trace fixtures select the actual authoring/VBA
+skill before mutation. Startup recovery records a typed execution boundary;
+UI activity labels cannot manufacture one.
+
+`storage: damaged sqlite metadata preserves startup and history` checks ten
+sidecar corruption variants through catalog, load, pagination and startup recovery,
+plus a healthy chat beside malformed JSONL. Every rebuild preserves event bytes.
+`live-run-projection.test.js` checks folded progress after completion/failure/steer
+and restores every original comment on expansion/reload.
 
 
 VBA patching incident: `skill packages: VBA schema inspection does not loop`

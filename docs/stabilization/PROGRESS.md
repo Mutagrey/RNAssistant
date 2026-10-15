@@ -1,5 +1,25 @@
 # Stabilization progress
 
+## Chat startup integrity and regression fixtures — 2026-10-15
+
+Owners: Core chat persistence and host-neutral test fixtures. The eight tracked
+Harness failures and the Web narration failure are closed. All event consumers
+share validation; damaged SQLite metadata/schema uses one bounded rebuild from
+canonical events. Startup, catalog and history reads preserve the journal, and
+one corrupt chat cannot stop access to healthy chats.
+
+Regression fixtures now use actual skill selection, complete dependencies,
+explicit source budgets and typed execution boundaries. Additional confirmation,
+causal-trace, startup and prompt-fixture failures found during this pass are fixed.
+Validation: `storage:` 75/75, `agent:` 54/54, `kernel replay:` 10/10,
+`protocol context:` 6/6, `causal trace:` 6/6, `settings:` 6/6 and `chat sessions:`
+17/17; `live-run-projection.test.js` passes. The metadata test includes 40 damage
+scenarios plus a mixed healthy/corrupt startup catalog.
+
+This closes the [baseline-failure incident](RISK_REGISTER.md#baseline-test-failures-during-architecture-follow-through--2026-10-15),
+not the other open risks. No full-suite, real-model or Windows/Office/VSTO
+qualification was run.
+
 ## Delivered observations and bridge initialization — 2026-10-15
 
 Three review findings are fixed host-neutral. Core publishes final delivered

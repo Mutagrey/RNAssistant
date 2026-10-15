@@ -10,29 +10,26 @@ exact-build gate.
 
 ## Baseline test failures during architecture follow-through — 2026-10-15
 
-**Open, independently reproduced on baseline `4d716414`.** These eight failures
-occur both with the explicit-write/input/projection changes and in an isolated
-source archive of that baseline, compiled with the same host-neutral Harness.
-They are separate follow-ups, not evidence of a clean full suite or Office
-qualification. No production Office effect was exercised.
+**Closed host-neutral.** The original eight Harness failures were independently
+reproduced on baseline `4d716414`; all now pass. No Office effect or full-suite
+qualification is claimed.
 
-| Priority / owner | Failing Harness filters | Evidence and next check |
+| Owner | Cause and correction | Evidence |
 |---|---|---|
-| First: Office model preparation / VBA observation | `agent: confirmed VBA after-state reaches next request`; `agent: large VBA read and edit survive compaction` | Missing after-source in the next request; expected four model calls but received three. Establish whether current discovery/fixture setup or observation delivery owns each failure before changing the effect path. |
-| Core storage / SQLite projection reader | `storage: event integrity rejects tampering`; `storage: unterminated invalid records are not discarded`; `storage: terminated corrupt tails are rejected` | `JsonlRecordException` escapes `MaterializeSqliteProjection` instead of the expected concurrency/rejected-load contract. The reader fails closed; these checks do not demonstrate discarded records. Unify error translation at the existing reader boundary and retain corruption rejection. |
-| Office kernel-adapter replay fixtures | `kernel replay: confirmation and stale cursor`; `kernel replay: cancelled confirmation`; `kernel replay: known effect survives model preparation failure` | First expects `AwaitingConfirmation` but receives `Completed`; the other two fail with a null reference. Isolate current policy/catalog/fixture prerequisites before attributing a runtime cause. |
+| Core storage | SQLite materialization bypassed the chat error contract. Four event readers now share validation and error translation. Corrupt JSONL remains untouched and unavailable. | All three original integrity/tail failures pass; `storage:` 75/75. |
+| Core SQLite projection | Invalid SQL storage classes, typed root/header fields, missing/foreign header identity and missing schema could abort catalog/startup or hide valid history. Catalog, full load and pages now share one bounded sidecar rebuild. | Ten damage variants across four consumers, including startup recovery; exact JSONL bytes preserved. A damaged authoritative sibling cannot block healthy chats. |
+| Office replay fixtures | Schema discovery cannot grant skill-only tool authority. Select the authoring skill before testing confirmation, cancellation or preparation failure; assert that the intended pending boundary is reached. | `kernel replay:` 10/10, `protocol context:` 6/6, `causal trace:` 6/6. |
+| VBA fixtures | The large-source fixture omitted required resource dependencies; the approval fixture demanded a complete source without reserving enough input budget. Use the published catalog and an explicit large context; retain the constrained-context refusal/recovery phase. | `agent:` 54/54, including both original failures. |
+| Startup and prompt fixtures | UI labels do not prove a started execution. Persist a typed runtime boundary before recovery. Guidance checks follow their current system/tool/skill owner. | `chat sessions:` 17/17; `settings:` 6/6. |
 
-Broader changed-tree runs: `agent:` 52/54, `kernel replay:` 7/10; `storage:` has
-three remaining failures after the header-cache fixture was corrected and its
-focused rerun passed. The explicit command/role/lifecycle cases, `chat:` 12/12,
-resource chat-lifecycle 2/2 and inbox 9/9 pass. No blanket suite pass is claimed.
+The Web failure also reproduced with baseline `fcba1ce1`. Its expectations
+contradicted the canonical completed-history behavior: progress comments fold
+with actions. `live-run-projection.test.js` now verifies collapse, reopen, reload,
+failure, cancellation and steering without duplicate or lost comments; it passes
+without changing production rendering.
 
-**Web baseline `fcba1ce1`:** `tests/web/live-run-projection.test.js:108` fails both
-in the current tree and with that commit's test and all eight UI dependencies in
-an isolated directory. After completion it expects visible `Narration s1/s2`, but
-finds none outside collapsed actions. Owner: Web run/activity rendering. Check the
-fixture's accepted commentary/protocol shape and the final grouping before
-changing production rendering; this is separate from bootstrap/context delivery.
+These are 174 focused Harness checks and one Web script. Other risk-register
+items and Windows/Office/WebView2 qualification remain separate and open.
 
 ## Delivered observations and bridge bootstrap review — 2026-10-15
 

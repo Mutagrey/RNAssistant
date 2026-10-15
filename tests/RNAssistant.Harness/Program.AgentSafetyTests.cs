@@ -567,7 +567,7 @@ namespace RNAssistant.Harness
             {
                 var responses = new Queue<string>(new[]
                 {
-                    LoadToolSchemaResponse("common.skills_upsert"),
+                    LoadSkillResponse("common.skill_authoring"),
                     "{\"message\":\"Create skill\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.skills_upsert\",\"arguments\":{\"id\":\"common.context_probe\",\"description\":\"Test\",\"bodyMarkdown\":\"# Test\"}}]}",
                     "{\"message\":\"Done\",\"action\":\"done\",\"tool_calls\":[]}"
                 });
@@ -584,21 +584,21 @@ namespace RNAssistant.Harness
                 var first = service.ExecuteAsync(ChatModes.Agent, "Create test skill", session, NewContext(adapter), settingsForRun, tools, null,
                     (pendingSession, command, result) => { confirmed = command; return "pending_context"; }).GetAwaiter().GetResult();
                 AssertTrue(first.WaitingForConfirmation && confirmed != null, "real runtime pauses after the accepted confirmation-required call");
-                var schemaCall = session.Messages.Single(message => message.Activity == null && message.Role == "assistant" &&
-                    message.ToolName == CapabilityToolCatalog.ReadToolId);
+                var selectionCall = session.Messages.Single(message => message.Activity == null && message.Role == "assistant" &&
+                    message.ToolName == SkillLoadToolHandler.ToolId);
                 var skillCall = session.Messages.Single(message => message.Activity == null && message.Role == "assistant" &&
                     message.ToolName == "common.skills_upsert");
-                var schemaId = schemaCall.ToolCallId;
+                var selectionId = selectionCall.ToolCallId;
                 var skillId = skillCall.ToolCallId;
                 AssertEqual(skillId, confirmed.ToolCallId, "pending confirmation retains the accepted runtime ID");
-                var originalOrigins = JsonConvert.SerializeObject(new[] { schemaCall.AcceptedCallOrigin, skillCall.AcceptedCallOrigin });
+                var originalOrigins = JsonConvert.SerializeObject(new[] { selectionCall.AcceptedCallOrigin, skillCall.AcceptedCallOrigin });
                 foreach (var message in session.Messages) message.RunId = "original_run";
-                var through = session.Messages.First(message => message.ProtocolMessage && message.Role != "assistant" && message.ToolCallId == schemaId);
-                var checkpoint = new ContextCheckpoint { ThroughMessageId = through.Id, SummaryMarkdown = "Schema discovery summarized.",
+                var through = session.Messages.First(message => message.ProtocolMessage && message.Role != "assistant" && message.ToolCallId == selectionId);
+                var checkpoint = new ContextCheckpoint { ThroughMessageId = through.Id, SummaryMarkdown = "Skill selection summarized.",
                     Claims = new List<StructuredContextClaim> { new StructuredContextClaim {
-                        ClaimId = "schema-discovery", Text = "Schema discovery completed; admission remains runtime-owned.",
+                        ClaimId = "skill-selection", Text = "Skill selection completed; admission remains runtime-owned.",
                         Kind = "interpretation", SourceRoles = new List<string> { "assistant", "tool" },
-                        SourceMessageIds = new List<string> { schemaCall.Id, through.Id } } } };
+                        SourceMessageIds = new List<string> { selectionCall.Id, through.Id } } } };
                 session.Artifacts.Add(new ChatArtifact { Id = checkpoint.Id, Kind = ChatArtifactKinds.Compaction,
                     MimeType = "application/json", InlineText = JsonConvert.SerializeObject(checkpoint, Formatting.None) });
                 session.ContextCheckpoints.Add(checkpoint);
@@ -612,8 +612,8 @@ namespace RNAssistant.Harness
                     JsonConvert.SerializeObject(confirmed.Arguments, Formatting.None), "confirmed argument binding");
                 ConversationProtocolContext.EnsureCanContinue(session, confirmed);
                 var restored = ConversationProtocolContext.RestoreContinuation(session, confirmed);
-                AssertTrue(restored.AcceptedCallIds.SequenceEqual(new[] { schemaId, skillId }.OrderBy(id => id, StringComparer.Ordinal)),
-                    "new runtime RunId restores logical-turn IDs, including compacted-away schema discovery");
+                AssertTrue(restored.AcceptedCallIds.SequenceEqual(new[] { selectionId, skillId }.OrderBy(id => id, StringComparer.Ordinal)),
+                    "new runtime RunId restores logical-turn IDs, including compacted-away skill selection");
                 var last = service.ConfirmAsync("pending_context", confirmed, session,
                     new ConversationRunInput(settingsForRun, NewContext(adapter), tools), null).GetAwaiter().GetResult();
                 AssertEqual(1, last.RunViewState.VerifiedWrites,
@@ -625,10 +625,10 @@ namespace RNAssistant.Harness
                 AssertEqual(3, requests.Count, "one model step after confirmation");
                 var continuation = requests[2];
                 AssertTrue(continuation.CallContext.IsComplete, "confirmation context is complete");
-                AssertTrue(!continuation.AcceptedMessages.Any(message => message.ProtocolMessage && message.Role == "assistant" && message.ToolCallId == schemaId),
+                AssertTrue(!continuation.AcceptedMessages.Any(message => message.ProtocolMessage && message.Role == "assistant" && message.ToolCallId == selectionId),
                     "id scope is wider than the actual materialized prompt");
                 AssertEqual(skillId, skillCall.ToolCallId, "confirmation does not regenerate the call ID");
-                AssertEqual(originalOrigins, JsonConvert.SerializeObject(new[] { schemaCall.AcceptedCallOrigin, skillCall.AcceptedCallOrigin }),
+                AssertEqual(originalOrigins, JsonConvert.SerializeObject(new[] { selectionCall.AcceptedCallOrigin, skillCall.AcceptedCallOrigin }),
                     "confirmation preserves accepted raw-attempt provenance");
                 AssertEqual(1, session.Messages.Count(message => message.ProtocolMessage && message.Role != "assistant" && message.ToolCallId == skillId),
                     "confirmed result references the same runtime call exactly once");

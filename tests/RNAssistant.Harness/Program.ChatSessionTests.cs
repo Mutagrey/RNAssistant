@@ -7,8 +7,10 @@ using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using RNAssistant.Core.Agent;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
 using RNAssistant.Core.Storage;
@@ -1276,6 +1278,15 @@ namespace RNAssistant.Harness
                     }
                 });
                 store.Save(session);
+                var summary = new RunSummary("old-run", "old-run", RunLifecycle.Running,
+                    new ToolCounts(), 1, 0, "", null, null);
+                store.CommitRun(session, new ConversationRunCommit(
+                    new AgentRunEvent(AgentRunEventKind.ToolStarted, summary,
+                        toolContext: PersistenceContext("old-run", "call-without-result")),
+                    new ChatMessage[0], session.Messages.Single(message =>
+                        message.Activity?.ToolCallId == "call-without-result")));
+                AssertTrue(store.HasOpenToolExecution(session, "old-run"),
+                    "startup fixture has a durable execution boundary, independent of UI labels");
 
                 var registry = new ChatRunRegistry(paths);
                 var service = new ChatSessionService(adapter, ConversationStore(store))
