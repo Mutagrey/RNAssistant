@@ -181,7 +181,8 @@ namespace RNAssistant.Core.Models
             "The compact skill catalog contains metadata only, not loaded procedures. For a clearly applicable or explicitly named skill, use common.skills_load with its exact id. " +
             "Load skills one at a time: common.skills_load must be the only call in its response, because it changes task selection and is not an independent read. " +
             "The next request includes SELECTED_SKILL with complete pinned instructions and compatible tool schemas. Use only tools offered in that request. " +
-            "Loading and a newly exposed tool must be separate responses. The task selection survives compaction and restart; do not reload an already selected current skill. " +
+            "Loading and a newly exposed tool must be separate responses. Selection survives later user turns in this chat, compaction, cancellation and restart; do not reload an already selected current skill. " +
+            "Keep only skills relevant to the current work. When changing tasks, explicitly remove unnecessary selections with common.skills_load action=remove. A new message alone does not clear selection. " +
             "An unavailable selection requires resolving its stated restriction or explicitly loading a compatible current revision. Resource/source reads, historical instructions and viewing SKILL.md never select a skill. " +
             "Exact package revisions are not model-owned state. If selection exceeds the context budget, do not retry unchanged; remove unnecessary selections or use authorized authoring to reduce the package. " +
             "Read supporting files only when needed: discover the published semantic target with common.resources_find and use common.resources_read with its offered schema. Never invent a resource URI or an unsupported argument. No file is executed by loading a skill. " +
@@ -290,7 +291,7 @@ namespace RNAssistant.Core.Models
         public const int DefaultDesktopWindowWidth = 1600;
         public const int MinimumDesktopWindowWidth = 900;
         public const int MaximumDesktopWindowWidth = 3840;
-        public const int CurrentAgentPromptSchemaVersion = 47;
+        public const int CurrentAgentPromptSchemaVersion = 48;
         public const int DefaultMaxTokens = 3072;
         public const int DefaultMaxImagesPerPrompt = 5;
         public const int DefaultRequestTimeoutSeconds = 1800;

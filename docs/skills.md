@@ -85,9 +85,15 @@ failure that would block another inspection after selection.
 `common.office_run_macro`
 remains an optional direct tool for requests to execute an existing macro.
 
-Selection belongs to one run. Existing `run.updated` events preserve it through
-compaction, confirmation and restart; a new independent turn starts empty. There
-is no loaded-skill store, dual write or replay of an unfinished business action.
+Selection continues across user turns in the same chat. Each new run copies only
+the selected package/publication/tool pins from the previous run; existing
+`run.updated` events preserve them through cancellation, compaction, confirmation
+and restart. Every request revalidates those pins against current publications and
+policy. Prior confirmations, prepared state and resource write guards are not
+copied into a new turn. There is no loaded-skill store, dual write or replay of an
+unfinished business action. The model removes irrelevant selections explicitly
+when changing tasks; a message alone does not imply a task boundary. A new chat,
+history rewrite/reset or explicit Office mode/permission reset clears selection.
 The Office controller preserves selections when confirmation starts a new invocation.
 Dispatch validates that invocation against the exact durable pending call's original
 request, turn, step, arguments, policy and prepared state; it still rejects changed
@@ -305,6 +311,9 @@ empty built-ins and prevents retired `TOOL_RESULT ok=true` guidance from returni
 - Schema 47 consolidates Agent lifecycle/completion guidance and moves Task List
   procedure details into its selected skill. It uses the same automatic migration
   with an archived recovery copy; runtime completion policy is unchanged.
+- Schema 48 retains selection across user turns and asks the model to remove
+  irrelevant procedures explicitly. Exact revision, policy and budget checks remain
+  mandatory; retained selection never grants mutation permission.
 - The current `Discuss skill` UI copies Markdown into custom chat context; that copy
   does not create a selection or grant any tool access.
 - Host filtering uses the selected execution endpoint, not the containing window.
@@ -396,10 +405,11 @@ Core bodies use Gateway whole-read assembly, including bodies larger than one
 provider page. The bounded context working set restores complete current skill
 results and needed reference coverage from saved events/CAS. Compaction alone is
 not a reason to load a skill or admit an already callable schema again. A new user
-turn may reuse source evidence but starts without task selections; only a new
-`common.skills_load` can restore procedure authority. Unchanged direct optional
-schemas may carry across turns when their exact admission remains valid and fits
-the request budget; specialized schemas cannot. Body
+turn retains selections and may reuse current source evidence. Complete selected
+instructions and specialized schemas are reconstructed from the pinned publication
+without a repeated `common.skills_load`; changed or unavailable dependencies require
+explicit resolution. Unchanged direct optional schemas may also carry across turns
+when their exact admission remains valid and fits the request budget. Body
 omission/staleness is distinct from the historical successful load. Prompt schema
 33 originally required manual review; schema 35 replaces that flow with automatic
 default migration and a recovery copy before the next settings save.

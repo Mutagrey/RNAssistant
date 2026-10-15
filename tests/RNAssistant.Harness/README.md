@@ -93,7 +93,8 @@ Resource-workflow regression: after building MockDemo, run
 This uses the actual controller with a fake Excel host: create/read Library sources,
 Task List, structured compaction during pending approval, four approval/restart
 boundaries, preserved selected skills, HTML patch/full replacement/identical write,
-exact effect counts, immutable editor downloads and new-task reset. The Harness filters `skill packages:`,
+exact effect counts, immutable editor downloads, new-turn continuity and explicit
+selection removal. The Harness filters `skill packages:`,
 `html tools:`, `shared HTML:`, `tools: discovery is complete and exact`,
 `vba: confirmed mutation rejects stale snapshot` and `vba: patch` cover its owners.
 `resources: HTML semantic reads preserve workspace snapshot` checks working versus
@@ -119,12 +120,19 @@ Skill-package checks: after the normal host-neutral Harness build, filter by
 `skill packages:`, `tool pack:`, `skill editor:` and the two `agent:` prompt cases.
 The package slice covers selection, next-request exposure, exact dispatch, shared
 dependencies, version conflicts/revocation, budget, compaction-independent state,
-restart and inert UI metadata. `tool pack:` includes the production HTML skill
+restart/new-turn selection, fresh authority and inert UI metadata.
+`chat sessions: interrupted mixed` covers completed/open exchanges in three result roles, serial
+and batch ordering, before dispatch and in flight, with idempotent recovery.
+`tool pack:` includes the production HTML skill
 loader/local-write flow with a fake host. `agent: new skill and tool are readable in
 same run` covers publication, source/schema reads, selection and next-request
 exposure after creation. After building the CLI, run
 `python3 -B tests/cli/skill_packages_smoke.py` for the controlled HTTP pilot with
-two approval restarts; it makes no real-model quality claim.
+two approval restarts, follow-up without skill/source rereads, and persistent
+explicit removal, permission restriction and refusal to reuse a prior write guard.
+`interrupted_run_smoke.py` kills a process after a completed read batch and checks
+retained source bodies, external drift and no automatic replay. These make no
+real-model quality claim.
 
 `node tests/web/skills-contract.test.js` and
 `node tests/web/skill-editor-resource.test.js` cover manifest transport and editor

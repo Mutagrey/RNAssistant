@@ -87,14 +87,28 @@ def check(root):
         assert all("UNPUBLISHED_CHANGED_BODY" not in json.dumps(request) for request in requests)
         prior = len(requests)
         responses.append(DONE)
-        direct = cli("run", "--session", final["SessionId"], "--message", "Just answer this separate question.")
-        assert len(requests) == prior + 1 and not selected(requests[-1]), "New task must not inherit selection"
+        direct = cli("run", "--session", final["SessionId"], "--message", "Continue discussing the same report.")
+        assert len(requests) == prior + 1 and selected(requests[-1]) == ["SELECTED_SKILL fixture.report\n" + marker], "Follow-up must retain selection without a load call"
+        assert "Verified total: 13" in json.dumps(requests[-1]), "Current report evidence survives new input and process restart"
         assert direct["ToolCounts"]["ReadOk"] == 0, direct
+        responses.extend([call("files.patch", relativePath="source.txt", oldText="total=13", newText="total=14"), DONE])
+        guarded = cli("run", "--session", final["SessionId"], "--message", "Check the follow-up write guard.", "--auto-confirm", "on")
+        assert (workspace / "source.txt").read_text() == "total=13\n", "Carried skill must not inherit the prior turn's write guard"
+        assert guarded["ToolCounts"]["WriteOk"] == 0 and "source_observation_required" in json.dumps(requests[-1]), guarded
+        responses.append(DONE)
+        cli("run", "--session", final["SessionId"], "--message", "Inspect with restricted permissions.", "--mutation-policy", "deny")
+        assert not selected(requests[-1]), "Current policy must suspend an incompatible retained selection"
+        responses.extend([call("common.skills_load", id="fixture.report", action="remove"), DONE])
+        cli("run", "--session", final["SessionId"], "--message", "Switch tasks and remove the report procedure.")
+        assert not selected(requests[-1]), "Explicit removal takes effect on the next request"
+        responses.append(DONE)
+        cli("run", "--session", final["SessionId"], "--message", "Continue after removal.")
+        assert not selected(requests[-1]), "Removed selection must not return after restart"
         responses.extend([call("common.skills_load", id="fixture.report"), DONE])
         cli("run", "--message", "Inspect only", "--mutation-policy", "deny")
         assert not selected(requests[-1]), "Unavailable required writer prevents partial selection under Deny"
         assert not errors and not responses, errors
-        print("PASS skill packages CLI: canonical load, optional fallback, guarded read/patch/report/readback, two process approvals, exact publication and new-task reset")
+        print("PASS skill packages CLI: canonical load, guarded read/patch/report/readback, approvals, exact publication, follow-up without reload and explicit removal")
         print(json.dumps({"controlledModelRequests": len(requests), "pilotRequests": prior,
                           "selectedInstructionCharacters": len(marker), "realModelEvaluation": False}))
     finally:

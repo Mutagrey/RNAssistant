@@ -530,7 +530,9 @@ delivery projection consumed by Office and CLI. It includes current resource-rea
 and synthetic source evidence only after materialization, projection and final
 budget selection. Native result roles and archived assistant views confer the
 same delivery evidence; diagnostics, operation receipts and omitted/stale bodies
-confer none. CLI still retains only previously admitted same-run file observations
+confer none. CLI refreshes retained source authority across user turns before
+compilation, so unchanged prior reads can remain in context and external changes
+invalidate their bytes. Its write guards still retain only previously admitted same-run file observations
 with exact whole-text coverage. This projection is neither a durable store nor a
 model field. Source deduplication reserves coverage only for a materialized body;
 successful/failed diagnostics that cite it, or an unavailable active payload,
@@ -582,10 +584,14 @@ projected semantic data and are not passed through a domain envelope again.
   cleared history, changed schemas, host/mode drift, or insufficient budget fall
   back to the finite core; budget fallback is explicit in the model request. The
   current `schemaLoaded` flag and complete callable schemas are authoritative.
-- Skill bodies remain ordinary complete capability-read evidence in history/CAS,
-  with `loaded`, `complete` and `bodyMarkdown`. There is no separate persistent
-  "skill loaded" flag. A still-current complete read remains usable; compaction
-  can remove the body and requires a fresh read. Tool admission does not reload it.
+- Skill selection is carried in existing `run.updated` state across user turns,
+  cancellation, restart and compaction. Each request revalidates package/tool pins
+  and current policy, then injects complete selected instructions and compatible
+  schemas. No repeated load is needed for an unchanged selection. Explicit removal
+  or history reset clears it; changed/revoked dependencies remain unavailable until
+  resolved. Supporting-file and artifact reads stay ordinary bounded history/CAS
+  evidence: reuse current included bodies and reread only needed omitted/stale
+  sources. Retained selection does not carry confirmations or write guards.
 - Repeated input evidence does not supersede an earlier successful call. Different
   JS computations can use the same resource revision. After hydration/projection,
   byte-equivalent successful resource/capability results with equal evidence keep

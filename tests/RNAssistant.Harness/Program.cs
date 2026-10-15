@@ -492,6 +492,7 @@ namespace RNAssistant.Harness
                 Test("chat sessions: legacy chat rebinds by full path", LegacyChatRebindsByFullPath),
                 Test("chat sessions: interrupted run is marked unknown", InterruptedRunIsRecoveredAsUnknown),
                 Test("chat sessions: saved run boundary preserves protocol", InterruptedRunAtSavedBoundaryPreservesProtocol),
+                Test("chat sessions: interrupted mixed exchanges preserve completed context", InterruptedRunPreservesCompletedExchanges),
 
                 Test("attachments: import commit delete", AttachmentImportCommitDelete),
                 Test("attachments: upload uses the bounded resource data plane", ResourceUploadStagesThroughDataPlane),

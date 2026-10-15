@@ -186,7 +186,10 @@ cannot seed UI authority or confirmation execution. A run without current
 revision, publication dependency, selection call and tool pins. Successful load or
 removal is persisted with the existing accepted tool terminal. Compaction keeps this
 run state independently of transcript text. Restart revalidates its publications;
-missing or changed bindings are explicitly unavailable. New runs start empty. The
+missing or changed bindings are explicitly unavailable. New user turns copy only
+selection pins from the previous run, without its request authority, confirmation
+or prepared state. Explicit removal survives restart; new chats and history resets
+start empty. The
 receipt's Arsenal is a read projection, not another store or permission authority.
 
 `ConversationKernelAdapter.Store` saves accepted responses and execution boundaries
@@ -238,7 +241,11 @@ caller while startup recovery remains the fallback.
 Recovery never replays a tool. An in-flight possible write becomes unknown; an
 in-flight read becomes an error. Already persisted terminal counts remain known,
 including a crash before result projection. An incomplete protocol exchange is
-excluded from replay. These are minimal summary/recovery adaptations; the complete
+excluded from replay without suppressing completed exchanges from that run. Shared
+Core pairing recognizes tool/user/developer results and interleaved batch calls;
+Office and CLI persist accepted batch calls individually, so an unfinished sibling
+cannot hide a completed read or effect receipt. Durable calls/results are retained,
+and repeated recovery is inert. These are minimal summary/recovery adaptations; the complete
 persistence/UI matrix remains Phase 9. [Phase 3B2 evidence](stabilization/PHASE_3B2_KERNEL_CUTOVER.md)
 covers actual event replay, pending/cancelled confirmation, stale CAS and faults.
 

@@ -443,6 +443,7 @@ namespace RNAssistant.Office
 
                 session.LastRun = new ChatRunRecord
                 {
+                    SelectedSkills = SkillTaskService.CopySelections(session.LastRun),
                     RunId = runId,
                     TurnId = runId,
                     RuntimeId = _runtimeId,

@@ -57,6 +57,19 @@ namespace RNAssistant.Core.Services
     // SelectedSkills is part of run.updated in the append-only conversation stream.
     public static class SkillTaskService
     {
+        // Carry only procedure selection across invocations, never a prior request's
+        // bindings, confirmation, guards or outcome. Compile revalidates every pin.
+        public static List<SelectedSkill> CopySelections(ChatRunRecord run)
+        {
+            return (run?.SelectedSkills ?? new List<SelectedSkill>()).Select(item => new SelectedSkill
+            {
+                Id = item.Id, Revision = item.Revision, SelectionCallId = item.SelectionCallId,
+                Publication = item.Publication?.Copy(),
+                Tools = item.Tools == null ? null : item.Tools.Select(pin =>
+                    new SkillToolPin { Id = pin.Id, Revision = pin.Revision }).ToList()
+            }).ToList();
+        }
+
         public static string Validate(SkillPackageManifest manifest)
         {
             if (manifest == null) return null; // Portable instruction-only SKILL.md.

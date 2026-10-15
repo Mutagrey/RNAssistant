@@ -1,5 +1,20 @@
 # Stabilization progress
 
+## Skill and restart context continuity — 2026-10-15
+
+Core selection/pairing, Office recovery and CLI context preparation now preserve
+selected skills across user turns and completed tool exchanges across interrupted
+runs. Existing `run.updated` stores copied selection pins; every request validates
+current publications and policy. Explicit removal/reset still clears selection.
+CLI revalidates retained file sources across turns without inheriting write guards;
+batch projections retain completed siblings and reconstruct kernel continuation.
+Prompt schema 48 documents the new selection lifetime.
+
+Validation: 46 focused Harness checks, MockDemo resource workflow and four CLI
+scripts (including two compaction/resume cases) pass. The original run-wide
+context-loss P1 is [closed host-neutral](RISK_REGISTER.md#restart-context-continuity-review--2026-10-15).
+No full-suite, real-model or Windows/Office/VSTO qualification was run.
+
 ## Confirmation input and inbox receipts — 2026-10-15
 
 Three reproduced findings are closed host-neutral. Confirmation and model

@@ -131,11 +131,18 @@ namespace RNAssistant.MockDemo
                             throw new Exception("editor source is not the requested immutable snapshot");
                     }
                 }
-                requireSelections = false;
+                controller.Dispose();
+                controller = new AssistantController(adapter, paths, model);
                 responses.Enqueue(done);
-                await SubmitAndWaitAsync(controller, "A new independent question", id);
-                if (store.Load(id).LastRun.SelectedSkills.Count != 0) throw new Exception("new task inherited old selections");
-                Console.WriteLine("PASS resource workflow: task list, selected skills across compaction and four approval restarts, exact HTML patch/full replacement/no-op and historical editor snapshots, independent task reset");
+                await SubmitAndWaitAsync(controller, "Continue with the existing report", id);
+                if (store.Load(id).LastRun.SelectedSkills.Count != 2) throw new Exception("follow-up lost selections after restart");
+                requireSelections = false;
+                responses.Enqueue(tool("common.skills_load", new { id = "common.task_tracking", action = "remove" }));
+                responses.Enqueue(tool("common.skills_load", new { id = "common.html_workspace_authoring", action = "remove" }));
+                responses.Enqueue(done);
+                await SubmitAndWaitAsync(controller, "Switch tasks and remove the report procedures", id);
+                if (store.Load(id).LastRun.SelectedSkills.Count != 0) throw new Exception("explicit removal retained selections");
+                Console.WriteLine("PASS resource workflow: task list, selected skills across compaction, approval restarts and new input, exact HTML patch/full replacement/no-op and historical editor snapshots, explicit selection removal");
                 return 0;
             }
             catch (Exception error) { Console.WriteLine("FAIL resource workflow: " + error); return 1; }

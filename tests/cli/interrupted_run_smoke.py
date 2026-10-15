@@ -1,4 +1,4 @@
-"""Kill a CLI model wait and verify explicit, non-replaying session recovery."""
+"""Kill after completed reads; verify retained context and non-replaying recovery."""
 
 import json
 import os
@@ -25,11 +25,15 @@ def main():
             assert self.path == "/v1/chat/completions", self.path
             body = self.rfile.read(int(self.headers["Content-Length"]))
             requests.append(json.loads(body))
-            if len(requests) == 1:
+            if len(requests) == 2:
                 entered.set()
                 release.wait(10)
             content = {"message": "Waiting for an explicit new task.", "action": "needs_input", "tool_calls": []}
-            if len(requests) == 3:
+            if len(requests) == 1:
+                content = {"message": "Read the existing sources.", "action": "tool", "tool_calls": [
+                    {"name": "common.resources_read", "arguments": {"target": name}}
+                    for name in ("seed.txt", "second.txt")]}
+            if len(requests) == 4:
                 content = {"message": "Inspect available files.", "action": "tool", "tool_calls": [
                     {"name": "common.resources_find", "arguments": {"query": "index.html"}}]}
             response = json.dumps({"choices": [{"message": {"role": "assistant", "content":
@@ -54,6 +58,8 @@ def main():
             root = Path(folder)
             workspace = root / "workspace"
             workspace.mkdir()
+            (workspace / "seed.txt").write_text("FIRST_COMPLETED_READ_SENTINEL\n")
+            (workspace / "second.txt").write_text("SECOND_COMPLETED_READ_SENTINEL\n")
             env = dict(os.environ, RNA_STATE_ROOT=str(root / "state"),
                        RNA_BASE_URL=f"http://127.0.0.1:{server.server_port}",
                        RNA_MODEL="scripted", RNA_API_KEY="ollama")
@@ -64,7 +70,8 @@ def main():
                                       timeout=20, check=False)
 
             process = subprocess.Popen(["dotnet", str(CLI), "run", "--workspace", str(workspace),
-                "--message", "Create index.html", "--expect-files", "index.html", "--jsonl"],
+                "--message", "Create index.html from the two sources", "--expect-files", "index.html",
+                "--tool-result-role", "tool", "--jsonl"],
                 cwd=REPO, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             assert entered.wait(10), "CLI did not reach the model endpoint"
             process.kill()
@@ -83,30 +90,37 @@ def main():
             assert recovery["type"] == "run.interrupted", recovery
             assert recovery["data"]["possibleEffect"] is False, recovery
             assert recovery["data"]["acceptance"] == "unknown", recovery
-            assert len(requests) == 1, "resume must not call the model"
+            assert len(requests) == 2, "resume must not call the model"
 
             again = cli("resume", "--workspace", str(workspace), "--session", session_id)
             assert again.returncode == 3 and json.loads(again.stdout)["type"] == "run.interrupted"
-            assert len(requests) == 1, "repeat resume must not replay"
+            assert len(requests) == 2, "repeat resume must not replay"
 
             continued = cli("run", "--workspace", str(workspace), "--session", session_id,
-                            "--message", "Continue only after my new input")
+                            "--message", "Continue only after my new input", "--tool-result-role", "tool")
             assert continued.returncode == 3, (continued.stdout, continued.stderr)
             result = json.loads(continued.stdout.splitlines()[-1])
             assert result["data"]["reason"] == "model_needs_input", result
-            assert len(requests) == 2, "one new model request after explicit input"
+            assert len(requests) == 3, "one new model request after explicit input"
+            for marker in ("FIRST_COMPLETED_READ_SENTINEL", "SECOND_COMPLETED_READ_SENTINEL"):
+                assert marker in json.dumps(requests[-1]), "Completed batch read lost after restart: " + marker
             assert not (workspace / "index.html").exists(), "the interrupted tool was replayed"
+
+            # Revalidation must preserve unchanged sources and suppress stale bytes.
+            (workspace / "seed.txt").write_text("EXTERNALLY_CHANGED_SOURCE\n")
 
             invalid = cli("run", "--workspace", str(workspace), "--session", session_id,
                           "--message", "Check budget", "--max-iterations", "0")
-            assert invalid.returncode == 2 and len(requests) == 2, invalid
+            assert invalid.returncode == 2 and len(requests) == 3, invalid
             limited = cli("run", "--workspace", str(workspace), "--session", session_id,
                           "--message", "Check budget", "--max-iterations", "1",
                           "--max-tool-steps", "1")
             assert limited.returncode == 5, (limited.stdout, limited.stderr)
             assert json.loads(limited.stdout.splitlines()[-1])["data"]["reason"] == "iteration_limit"
-            assert len(requests) == 3, "one model request within the explicit iteration limit"
-            print("PASS interrupted CLI model wait: durable unknown, idempotent resume, explicit input and run limit")
+            assert len(requests) == 4, "one model request within the explicit iteration limit"
+            assert "FIRST_COMPLETED_READ_SENTINEL" not in json.dumps(requests[-1]), "Stale source bytes survived revalidation"
+            assert "SECOND_COMPLETED_READ_SENTINEL" in json.dumps(requests[-1]), "Unchanged source was lost with the stale sibling"
+            print("PASS interrupted CLI: completed batch reads survive restart, idempotent resume without replay, explicit input and run limit")
     finally:
         release.set()
         server.shutdown()

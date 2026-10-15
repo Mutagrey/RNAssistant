@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
@@ -459,6 +460,8 @@ namespace RNAssistant.Harness
             var firstResult = AgentJsonProtocol.CreateToolResultMessage(
                 new ToolInvocation { ToolCallId = firstCall.ToolCallId, ToolId = "excel.inspect" },
                 RuntimeToolResult.Ok("Read"), ToolResultRoles.Developer);
+            firstCall.RunId = "before-confirmation";
+            firstResult.RunId = "after-confirmation";
             var secondCall = new ChatMessage
             {
                 Role = "assistant",
@@ -513,7 +516,7 @@ namespace RNAssistant.Harness
                 ToolCalls = new List<LlmToolCall> { new LlmToolCall { Id = "call_1", Name = "excel.inspect" } }
             };
             messages.Insert(messages.Count - 1, danglingCall);
-            ChatHistoryEditService.ExcludeUnmatchedToolCalls(messages);
+            ToolProtocolMessages.ExcludeUnmatchedToolCalls(messages);
             AssertTrue(!firstCall.ExcludeFromModelContext && !secondCall.ExcludeFromModelContext,
                 "completed calls remain replayable");
             AssertTrue(danglingCall.ExcludeFromModelContext,
@@ -535,7 +538,7 @@ namespace RNAssistant.Harness
                 new ToolInvocation { ToolCallId = "multi_1", ToolId = "excel.inspect" },
                 RuntimeToolResult.Ok("Read"), ToolResultRoles.Tool);
             var incompleteMulti = new List<ChatMessage> { multiCall, multiResult1 };
-            ChatHistoryEditService.ExcludeUnmatchedToolCalls(incompleteMulti);
+            ToolProtocolMessages.ExcludeUnmatchedToolCalls(incompleteMulti);
             AssertTrue(multiCall.ExcludeFromModelContext && multiResult1.ExcludeFromModelContext,
                 "partial multi-call exchange is excluded as one unit");
             AssertTrue(!ChatHistoryEditService.HasResultForLatestToolCall(incompleteMulti, "multi_2"),

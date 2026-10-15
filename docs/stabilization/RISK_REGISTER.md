@@ -8,6 +8,37 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## Restart context continuity review — 2026-10-15
+
+**Closed host-neutral.** Owners: Core skill selection/protocol pairing, Office
+recovery and CLI context preparation. The reproduced P1 was run-wide suppression:
+a completed read replayed as two messages until a later accepted call lacked a
+result, when both completed messages disappeared from model context despite
+remaining durable. Successful mutation receipts were affected by the same filter.
+
+Office and CLI now use shared exact call/result pairing and suppress only
+unfinished exchanges. Completed batches survive; CLI persists individual call
+projections and reconstructs the accepted batch for kernel continuation. Pairing
+also handles confirmation results saved under a later runtime invocation. Recovery
+does not re-execute calls, erase history or reset known terminal counts.
+
+New turns copy `SelectedSkills` through existing `run.updated`, with independent
+pins and fresh request authority. Revisions, dependencies, policy and budget are
+revalidated; explicit removal remains durable. Prompt schema 48 directs removal
+of irrelevant skills instead of implicitly clearing all choices on each message.
+Current CLI source evidence is also revalidated across turns. Previously those
+scopes were omitted, forcing fresh reads of unchanged files. External drift still
+invalidates old bodies; prior-turn write guards and confirmations are not reused.
+
+Validation: Harness `chat sessions:` 18/18 (mixed recovery includes 12 role/order/
+in-flight cases), `skill packages:` 6/6, `context continuity:` 14/14, `settings:`
+6/6, scoped exchange deletion and native batch replay pass. MockDemo resource
+workflow covers compaction, four approvals/restarts, follow-up and explicit removal.
+Controlled CLI `skill_packages_smoke`, `interrupted_run_smoke`,
+`omitted_read_guard_smoke` and both `compaction_resume_smoke` cases pass. These
+check retained bodies, changed sources, restricted policy and unchanged write
+guards. No full suite, real-model or Windows/Office/WebView2 qualification was run.
+
 ## Confirmation input ownership and persistence review — 2026-10-15
 
 **Closed host-neutral.** Current-user selection is shared; pending-tool attachment

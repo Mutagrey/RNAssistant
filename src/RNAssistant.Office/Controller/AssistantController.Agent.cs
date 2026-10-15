@@ -78,7 +78,7 @@ namespace RNAssistant.Office
                     Phase = "executing",
                     KernelState = previousRun.KernelState,
                     ConversationPolicy = previousRun.ConversationPolicy,
-                    SelectedSkills = previousRun.SelectedSkills ?? new List<SelectedSkill>(),
+                    SelectedSkills = SkillTaskService.CopySelections(previousRun),
                     CurrentAction = supersedePending ? "Учитываю уточнение пользователя." : "Выполняю подтверждённое действие.",
                     DocumentRuntimeKey = documentRuntimeKey,
                     IterationsUsed = pending.IterationsUsed,
@@ -330,7 +330,7 @@ namespace RNAssistant.Office
             {
                 if (CancelPendingActivity(message == null ? null : message.Activity, reason)) changed.Add(message);
             }
-            changed.AddRange(ChatHistoryEditService.ExcludeUnmatchedToolCalls(session == null ? null : session.Messages));
+            changed.AddRange(ToolProtocolMessages.ExcludeUnmatchedToolCalls(session == null ? null : session.Messages));
             return changed;
         }
 

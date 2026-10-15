@@ -213,7 +213,7 @@ namespace RNAssistant.Office
                 fork.Messages = targetIndex < 0
                     ? new List<ChatMessage>()
                     : ChatCloneService.CloneMessages(sourceMessages.Take(targetIndex + 1));
-                ChatHistoryEditService.ExcludeUnmatchedToolCalls(fork.Messages);
+                ToolProtocolMessages.ExcludeUnmatchedToolCalls(fork.Messages);
                 foreach (var message in fork.Messages)
                 {
                     _attachmentStore.CloneMessageAttachments(message);

@@ -52,11 +52,58 @@ namespace RNAssistant.Core.Services
             for (var index = callIndex + 1; index < end; index++)
             {
                 var message = messages[index];
-                if (!IsExchange(message) || IsCall(message)) break;
+                if (!IsExchange(message)) break;
+                // A native batch may persist all calls before any result. Only
+                // reusing one of our IDs starts a different exchange.
+                if (IsCall(message) && Ids(message).Overlaps(remaining)) break;
                 if (IsResult(message)) remaining.ExceptWith(Ids(message));
                 if (remaining.Count == 0) return true;
             }
             return false;
+        }
+
+        public static IReadOnlyList<ChatMessage> ExcludeUnmatchedToolCalls(IReadOnlyList<ChatMessage> messages)
+        {
+            var changed = new List<ChatMessage>();
+            if (messages == null) return changed;
+            var pending = new Dictionary<string, ChatMessage>(StringComparer.Ordinal);
+            var remaining = new Dictionary<ChatMessage, HashSet<string>>();
+            var results = new Dictionary<ChatMessage, List<ChatMessage>>();
+            foreach (var message in messages)
+            {
+                if (!IsExchange(message)) { pending.Clear(); continue; }
+                if (IsCall(message))
+                {
+                    var ids = Ids(message);
+                    remaining[message] = ids;
+                    results[message] = new List<ChatMessage>();
+                    // Confirmation may finish an accepted call in a new runtime
+                    // invocation. Pair by exact call identity, not by run ID.
+                    foreach (var id in ids) pending[id] = message;
+                }
+                else if (IsResult(message))
+                {
+                    foreach (var id in Ids(message))
+                    {
+                        ChatMessage call;
+                        if (!pending.TryGetValue(id, out call)) continue;
+                        if (!message.ExcludeFromModelContext) remaining[call].Remove(id);
+                        results[call].Add(message);
+                        pending.Remove(id);
+                    }
+                }
+            }
+            foreach (var pair in remaining)
+            {
+                if (pair.Value.Count == 0 && !pair.Key.ExcludeFromModelContext) continue;
+                // A compound call is one transport unit: never leave orphan
+                // results. Producers persist batch calls individually so a
+                // later unfinished sibling cannot hide a completed exchange.
+                foreach (var message in new[] { pair.Key }.Concat(results[pair.Key]))
+                    if (!message.ExcludeFromModelContext)
+                    { message.ExcludeFromModelContext = true; changed.Add(message); }
+            }
+            return changed;
         }
 
         public static int PreserveCompletePrefix(IReadOnlyList<ChatMessage> messages, int prefixCount)

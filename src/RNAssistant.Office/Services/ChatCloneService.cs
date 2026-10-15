@@ -249,8 +249,7 @@ namespace RNAssistant.Office.Services
             {
                 RunId = run.RunId,
                 ConversationPolicy = run.ConversationPolicy,
-                SelectedSkills = Newtonsoft.Json.JsonConvert.DeserializeObject<List<SelectedSkill>>(
-                    Newtonsoft.Json.JsonConvert.SerializeObject(run.SelectedSkills ?? new List<SelectedSkill>())),
+                SelectedSkills = SkillTaskService.CopySelections(run),
                 TurnId = run.TurnId,
                 RuntimeId = run.RuntimeId,
                 ResponseProtocolVersion = run.ResponseProtocolVersion,

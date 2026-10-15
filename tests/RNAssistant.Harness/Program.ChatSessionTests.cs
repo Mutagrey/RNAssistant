@@ -1316,6 +1316,49 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void InterruptedRunPreservesCompletedExchanges()
+        {
+            foreach (var role in new[] { ToolResultRoles.User, ToolResultRoles.Developer, ToolResultRoles.Tool })
+            foreach (var batch in new[] { false, true })
+            foreach (var inFlight in new[] { false, true })
+            WithTempPaths(paths =>
+            {
+                var adapter = new FakeOfficeAdapter();
+                var store = new ChatStore(paths);
+                var session = store.Create(adapter.HostName, adapter.DocumentKey, adapter.DocumentTitle, "Mixed recovery");
+                const string runId = "mixed-run";
+                var summary = new RunSummary(runId, runId, RunLifecycle.Running,
+                    new ToolCounts(readOk: 1), 2, 1, "", null, null);
+                session.LastRun = new ChatRunRecord { RunId = runId, RuntimeId = "old-runtime", Status = "running",
+                    StartedUtc = DateTime.UtcNow, KernelState = new AgentRunState(summary, new AgentRunLimits(10, 10),
+                        inFlight ? PersistenceContext(runId, "unfinished") : null) };
+                Func<string, ChatMessage> call = id => AgentJsonProtocol.CreateToolCallMessage(
+                    new AgentToolCall { Id = id, Name = "excel.inspect" }, "Read", null, role, FixtureCallOrigin("step-" + id));
+                var completed = call("completed");
+                var unfinished = call("unfinished");
+                var result = AgentJsonProtocol.CreateToolResultMessage(
+                    new ToolInvocation { ToolCallId = "completed", ToolId = "excel.inspect" },
+                    RuntimeToolResult.Ok("READ_BODY_SENTINEL", "{\"text\":\"READ_BODY_SENTINEL\"}"), role);
+                session.Messages.Add(new ChatMessage { Role = "user", Content = "Read and continue" });
+                session.Messages.AddRange(batch ? new[] { completed, unfinished, result } : new[] { completed, result, unfinished });
+                foreach (var message in session.Messages) message.RunId = runId;
+                store.Save(session);
+
+                var service = new ChatSessionService(adapter, ConversationStore(new ChatStore(paths)));
+                service.ReconcileInterruptedRuns("new-runtime");
+                var recovered = new ChatStore(paths).Load(session.Id);
+                var replay = ContextCompactionRuntime.BuildActiveWindow(recovered);
+                AssertEqual(2, replay.Count(item => item.ToolCallId == "completed"), "completed pair survives mixed recovery: " + role);
+                AssertTrue(replay.Any(item => item.Content == result.Content), "completed result bytes are retained");
+                AssertTrue(!replay.Any(item => item.ToolCallId == "unfinished"), "unfinished call never reaches the model");
+                AssertEqual(3, recovered.Messages.Count(item => item.ProtocolMessage), "recovery deletes no accepted facts");
+                AssertEqual(1, recovered.LastRun.KernelState.Summary.ToolCounts.ReadOk, "completed outcome is not erased");
+                var count = recovered.Messages.Count;
+                service.ReconcileInterruptedRuns("another-runtime");
+                AssertEqual(count, new ChatStore(paths).Load(session.Id).Messages.Count, "recovery is idempotent");
+            });
+        }
+
         private static void InterruptedRunAtSavedBoundaryPreservesProtocol()
         {
             WithTempPaths(delegate(AppDataPaths paths)

@@ -139,16 +139,10 @@ namespace RNAssistant.Office.Services
                         ? storedOpenToolExecution
                         : run.KernelState.InFlightTool != null;
                     MarkInterruptedActivities(session, run, effectMayBeUnknown);
-                    var incompleteProjection = run.KernelState != null && session.Messages.Any(message =>
-                        message.ProtocolMessage && message.Role == "assistant" && BelongsToRun(message, run) &&
-                        !string.IsNullOrWhiteSpace(message.ToolCallId) &&
-                        !ChatHistoryEditService.HasResultForLatestToolCall(session.Messages, message.ToolCallId));
-                    if (effectMayBeUnknown || incompleteProjection)
-                    {
-                        // A terminal effect can be saved before optional result/media
-                        // projection. Keep its counts, but never replay an open exchange.
-                        ExcludeInterruptedProtocolMessages(session, run);
-                    }
+                    // A terminal effect can precede its optional result projection.
+                    // Suppress open exchanges only; completed evidence remains usable.
+                    ToolProtocolMessages.ExcludeUnmatchedToolCalls(session.Messages
+                        .Where(message => BelongsToRun(message, run)).ToArray());
                     run.Status = "interrupted";
                     run.Phase = "interrupted";
                     run.CurrentAction = effectMayBeUnknown
@@ -236,19 +230,6 @@ namespace RNAssistant.Office.Services
             foreach (var child in activity.Children ?? new List<ChatActivity>())
             {
                 MarkInterruptedActivity(child, effectMayBeUnknown);
-            }
-        }
-
-        private static void ExcludeInterruptedProtocolMessages(ChatSession session, ChatRunRecord run)
-        {
-            var messages = session == null ? null : session.Messages;
-            if (messages == null || run == null || string.IsNullOrWhiteSpace(run.RunId)) return;
-            foreach (var message in messages.Where(item =>
-                item != null && item.ProtocolMessage && BelongsToRun(item, run)))
-            {
-                // A crashed run may have crossed an external side-effect boundary even when a
-                // matching result was persisted. Keep it visible, but replay none of its protocol.
-                message.ExcludeFromModelContext = true;
             }
         }
 

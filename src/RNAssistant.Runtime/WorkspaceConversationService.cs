@@ -225,6 +225,7 @@ namespace RNAssistant.Runtime
                 progress?.Invoke(new WorkspaceRunEvent("InputAccepted", null, null, receipt.AcceptedCursor, receipt));
                 session.LastRun = new ChatRunRecord
                 { RunId = runId, TurnId = runId, StartedUtc = DateTime.UtcNow, ConversationPolicy = policy,
+                    SelectedSkills = SkillTaskService.CopySelections(session.LastRun),
                     ResponseProtocolVersion = ConversationResponse.ProtocolVersion,
                     ModelConfiguration = new ModelRunMetadata
                     {
@@ -552,18 +553,8 @@ namespace RNAssistant.Runtime
                 !string.IsNullOrWhiteSpace(run.Status) && run.Status != "running" &&
                 run.Status != "cancelling") return;
             var active = run.KernelState?.InFlightTool;
-            var accepted = session.Messages.Where(item => item != null && item.RunId == run.RunId &&
-                item.ProtocolMessage && item.Role == "assistant")
-                .SelectMany(item => item.ToolCalls ?? new List<LlmToolCall>())
-                .Select(call => call.Id).Where(id => !string.IsNullOrWhiteSpace(id)).ToArray();
-            var completed = new HashSet<string>(session.Messages.Where(item => item != null &&
-                item.RunId == run.RunId && item.ProtocolMessage && !string.IsNullOrWhiteSpace(item.ToolCallId))
-                .Select(item => item.ToolCallId), StringComparer.OrdinalIgnoreCase);
-            var incomplete = accepted.Any(id => !completed.Contains(id));
-            if (active != null || incomplete)
-                foreach (var item in session.Messages.Where(item => item != null &&
-                    item.RunId == run.RunId && item.ProtocolMessage))
-                    item.ExcludeFromModelContext = true;
+            ToolProtocolMessages.ExcludeUnmatchedToolCalls(session.Messages
+                .Where(item => item != null && item.RunId == run.RunId).ToArray());
             run.InterruptedToolId = active?.Call.Name;
             if (active != null && active.Call.Name.StartsWith("files.", StringComparison.Ordinal))
             {
@@ -617,6 +608,17 @@ namespace RNAssistant.Runtime
                             saved[i].ArgumentsJson != parsed.Response.ToolCalls[i].Arguments.ToString(Formatting.None))
                             throw new InvalidOperationException("Stored workspace accepted call differs from response.");
                         calls.Add(new ToolCall(saved[i].Id, saved[i].Name, saved[i].ArgumentsJson));
+                    }
+                    // Durable batch projections are per call; the kernel's
+                    // accepted history represents the original response as one
+                    // batch followed by its results. Rejoin adjacent siblings.
+                    var previous = history.LastOrDefault();
+                    if (calls.Count > 0 && previous?.Kind == AgentMessageKind.Assistant && previous.ToolCalls.Count > 0)
+                    {
+                        if (previous.Action != parsed.Response.Action || previous.Text != parsed.Response.Message)
+                            throw new InvalidOperationException("Adjacent workspace batch calls have inconsistent response metadata.");
+                        calls.InsertRange(0, previous.ToolCalls);
+                        history.RemoveAt(history.Count - 1);
                     }
                     history.Add(AgentMessage.Assistant(new AgentResponse(parsed.Response.Message, calls, parsed.Response.Action)));
                     continue;
@@ -886,7 +888,7 @@ namespace RNAssistant.Runtime
 
             public async Task<AgentModelResult> SendAsync(AgentModelRequest request, CancellationToken cancellationToken)
             {
-                var authority = CaptureModelAuthority(request.RunId, cancellationToken);
+                var authority = CaptureModelAuthority(cancellationToken);
                 _skillSurface = SkillTaskService.Compile(_session, _skills, _toolPack, _catalog, _catalog, request.StepId, _settings);
                 var callContext = new ModelProtocolCallContext(_skillSurface.Tools.Where(tool => tool.Policy.IndependentLocalRead).Select(tool => tool.Id));
                 var options = ModelProtocolWire.CreateRequestOptions(_settings.AgentResponseMode, _skillSurface.Tools, callContext);
@@ -913,7 +915,7 @@ namespace RNAssistant.Runtime
                     _chats.Commit(_session, new ConversationCommit(_session.Messages.Skip(firstMessage)));
                     _progress?.Invoke(new WorkspaceRunEvent("compacted", _session.LastRun.KernelState.Summary,
                         null, ConversationEventFeed.Cursor(_session)));
-                    authority = CaptureModelAuthority(request.RunId, cancellationToken);
+                    authority = CaptureModelAuthority(cancellationToken);
                     try { snapshot = CompileCurrent(authority, options, request); }
                     catch (PromptBudgetExceededException remaining)
                     { return AgentModelResult.Failed(ModelProtocolFailureKind.PromptBudgetExceeded, remaining.Message); }
@@ -950,9 +952,9 @@ namespace RNAssistant.Runtime
                         call.Arguments.ToString(Formatting.None))), result.Response.Action));
             }
 
-            private ModelAuthoritySnapshot CaptureModelAuthority(string runId, CancellationToken cancellationToken)
+            private ModelAuthoritySnapshot CaptureModelAuthority(CancellationToken cancellationToken)
             {
-                var frozen = CaptureContextAuthority(runId, cancellationToken);
+                var frozen = CaptureContextAuthority(cancellationToken);
                 _skills = VisibleSkills(_skillPublications.Capture(frozen.Get(SkillPublicationService.ScopeId)));
                 return new ModelAuthoritySnapshot(frozen, TextPatternEngine.Sha256(JsonConvert.SerializeObject(_catalog)),
                     _skills, null, _session.Revision);
@@ -1002,13 +1004,15 @@ namespace RNAssistant.Runtime
                     workingSet: workingSet);
             }
 
-            private ResourceAuthoritySnapshotSet CaptureContextAuthority(string runId, CancellationToken cancellationToken)
+            private ResourceAuthoritySnapshotSet CaptureContextAuthority(CancellationToken cancellationToken)
             {
                 // Prepare live authority before compilation. The compiler receives
                 // only this frozen tuple and never invokes a filesystem provider.
-                // Old turns without a fresh observation have no admitted scope.
-                var active = _session.Messages.Where(item => item.RunId == runId &&
-                    item.ProtocolMessage && !item.ExcludeFromModelContext && !string.IsNullOrWhiteSpace(item.ToolCallId)).ToArray();
+                // Revalidate retained reads across turns as well as the current
+                // run. This restores source currency, not the per-run write guard
+                // in _observed; the compiler still bounds delivery of old bodies.
+                var active = _session.Messages.Where(item => ContextCompactionRuntime.IsReplayMessage(item) &&
+                    ToolProtocolMessages.IsResult(item) && item.ResourceEvidence?.Count > 0).ToArray();
                 var paths = new HashSet<string>(_observed.Keys, StringComparer.Ordinal);
                 foreach (var fact in active)
                 {
@@ -1148,7 +1152,7 @@ namespace RNAssistant.Runtime
                     "A task-list write does not satisfy file-write acceptance, and closing a list is not a prerequisite for done. " +
                     "Use common.questions_ask for material decisions that require user input after available discovery. Its typed result stops the run for answers; never choose an answer for the user. " +
                     "For a clearly applicable skill, select it with common.skills_load and its id. The next request includes complete instructions and compatible tools. " +
-                    "Selection survives compaction for this run. Resource reads are inspection only and never activate a skill. " +
+                    "Selection survives new user turns, cancellation, restart and compaction in this chat. Remove irrelevant skills with common.skills_load action=remove when changing tasks. Resource reads are inspection only and never activate a skill. " +
                     "Available skill metadata: " + ResourceFindProjection.Serialize(SkillCatalogService.Find(_skills, null)) + ". " : string.Empty) +
                     "Available tools and exact argument schemas: " +
                     JsonConvert.SerializeObject((_skillSurface?.Tools ?? _catalog.Where(tool => tool.Exposure != ToolExposure.Skill).ToArray()).Select(tool => new { tool.Id, tool.Description, Schema = JObject.Parse(tool.ArgumentSchemaJson) })) +
@@ -1165,14 +1169,19 @@ namespace RNAssistant.Runtime
                 _session.LastRun.ToolStepsUsed = fact.Summary.ToolStepsUsed;
                 if (fact.Kind == AgentRunEventKind.ResponseAccepted)
                 {
-                    var calls = fact.Response.ToolCalls.Select(call => new ConversationToolCall
-                    { Name = call.Name, Arguments = JObject.Parse(call.ArgumentsJson) }).ToArray();
+                    // Match the shared per-call projection: one interrupted batch
+                    // sibling must not suppress another sibling's completed result.
+                    var groups = fact.Response.ToolCalls.Count == 0
+                        ? new[] { new ToolCall[0] }
+                        : fact.Response.ToolCalls.Select(call => new[] { call }).ToArray();
+                    foreach (var group in groups)
                     _session.Messages.Add(new ChatMessage
                     {
                         Role = "assistant", ProtocolMessage = true,
                         ResponseProtocolVersion = ConversationResponse.ProtocolVersion,
-                        Content = new ConversationResponse(fact.Response.Message, calls, fact.Response.Action).ToJson(),
-                        ToolCalls = fact.Response.ToolCalls.Select(call => new LlmToolCall
+                        Content = new ConversationResponse(fact.Response.Message, group.Select(call => new ConversationToolCall
+                            { Name = call.Name, Arguments = JObject.Parse(call.ArgumentsJson) }).ToArray(), fact.Response.Action).ToJson(),
+                        ToolCalls = group.Select(call => new LlmToolCall
                         { Id = call.Id, Type = "function", Name = call.Name, ArgumentsJson = call.ArgumentsJson }).ToList(),
                         RunId = fact.Summary.RunId
                     });

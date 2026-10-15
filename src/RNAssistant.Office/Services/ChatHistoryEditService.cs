@@ -179,32 +179,6 @@ namespace RNAssistant.Office.Services
             return result;
         }
 
-        internal static IReadOnlyList<ChatMessage> ExcludeUnmatchedToolCalls(IReadOnlyList<ChatMessage> messages)
-        {
-            var changed = new List<ChatMessage>();
-            if (messages == null) return changed;
-            for (var index = 0; index < messages.Count; index++)
-            {
-                var call = messages[index];
-                var ids = ToolProtocolMessages.Ids(call);
-                if (!ToolProtocolMessages.IsCall(call) ||
-                    ToolProtocolMessages.HasAllResults(messages, index, ids, messages.Count))
-                {
-                    continue;
-                }
-
-                if (!call.ExcludeFromModelContext) { call.ExcludeFromModelContext = true; changed.Add(call); }
-                for (var resultIndex = index + 1; resultIndex < messages.Count; resultIndex++)
-                {
-                    var message = messages[resultIndex];
-                    if (!ToolProtocolMessages.IsExchange(message) || ToolProtocolMessages.IsCall(message)) break;
-                    if (ToolProtocolMessages.Uses(message, ids) && !message.ExcludeFromModelContext)
-                    { message.ExcludeFromModelContext = true; changed.Add(message); }
-                }
-            }
-            return changed;
-        }
-
         internal static bool HasResultForLatestToolCall(
             IReadOnlyList<ChatMessage> messages,
             string toolCallId)

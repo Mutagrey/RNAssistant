@@ -118,8 +118,15 @@ namespace RNAssistant.Harness
             AssertEqual(1, initial.Receipt.Arsenal.Tools.Count, "S04 previous request remains frozen");
             RuntimeThrows<PromptBudgetExceededException>(() => CompilePackage(session, skills, pack, catalog, 1));
             AssertEqual(3, session.LastRun.SelectedSkills.Count, "S14 budget refusal does not remove selection");
-            session.LastRun = new ChatRunRecord { RunId = "new-run", ConversationPolicy = ConversationRunPolicy.For("agent") };
-            AssertEqual(1, CompilePackage(session, skills, pack, catalog).Receipt.Arsenal.Tools.Count, "S22 new run does not inherit procedures");
+            var previous = session.LastRun;
+            session.LastRun = new ChatRunRecord { RunId = "new-run", ConversationPolicy = ConversationRunPolicy.For("agent"),
+                SelectedSkills = SkillTaskService.CopySelections(previous) };
+            AssertEqual(2, CompilePackage(session, skills, pack, catalog).Receipt.Arsenal.Tools.Count, "S22 new turn retains procedures");
+            session.LastRun.SelectedSkills.Single(item => item.Id == one.Id).Tools[0].Revision = "changed";
+            AssertTrue(previous.SelectedSkills.Single(item => item.Id == one.Id).Tools[0].Revision != "changed",
+                "carried pins do not mutate the previous run");
+            session.LastRun.SelectedSkills.Clear();
+            AssertEqual(3, previous.SelectedSkills.Count, "explicit removal is local to the current selection");
         }
 
         private static void SkillPackagesDependencyFailures()
@@ -228,11 +235,20 @@ namespace RNAssistant.Harness
                 new ChatStore(paths).Save(session);
                 var restored = new ChatStore(paths).Load(session.Host, session.DocumentKey, session.Id);
                 AssertEqual(skill.Id, restored.LastRun.SelectedSkills.Single().Id, "S15 run.changed replays selection");
+                restored.LastRun = new ChatRunRecord { RunId = "follow-up", ConversationPolicy = ConversationRunPolicy.For("agent"),
+                    SelectedSkills = SkillTaskService.CopySelections(restored.LastRun) };
+                new ChatStore(paths).Save(restored);
+                restored = new ChatStore(paths).Load(session.Host, session.DocumentKey, session.Id);
                 var recompiled = CompilePackage(restored, skills, pack, catalog);
                 AssertTrue(recompiled.Messages.Any(item => item.Content.Contains(skill.BodyMarkdown)), "S13/S15 complete exact instructions rehydrated with no load frame");
+                AssertEqual("follow-up", recompiled.Receipt.Arsenal.RunId, "new request rebuilds authority for the carried selection");
                 var view = AgentArsenalProjection.Build(restored, recompiled.Receipt.Arsenal, skills.Metadata, null);
                 AssertEqual("selected", view.Selected.Single().Status, "S27/S31 UI projects restored selection");
                 AssertEqual(1, restored.LastRun.SelectedSkills.Count, "opening arsenal is inert");
+                skill.BodyMarkdown = "Republished instructions";
+                var changed = CompilePackage(restored, new SkillCatalogSnapshot(new[] { skill }), pack, catalog);
+                AssertEqual("unavailable", changed.Receipt.Arsenal.Selected.Single().Status, "new publication suspends the carried pin");
+                AssertTrue(!changed.Messages.Any(item => item.Content.Contains(skill.BodyMarkdown)), "changed instructions are not silently adopted");
             });
         }
     }
