@@ -707,6 +707,14 @@ namespace RNAssistant.Office
 
         private ChatStateResponse ChatState(ChatSession session, bool includeCatalog = true)
         {
+            var response = new ChatStateResponse();
+            PopulateChatState(session, response, includeCatalog);
+            return response;
+        }
+
+        private void PopulateChatState(ChatSession session, ChatStateResponse response,
+            bool includeCatalog = true, AppSettings settings = null)
+        {
             var timer = Stopwatch.StartNew();
             var activeId = session.Id;
             int messageStartIndex;
@@ -719,36 +727,33 @@ namespace RNAssistant.Office
             var catalogMs = timer.ElapsedMilliseconds - messagesMs - artifactsMs;
             var context = session == null ? CreateEmptyContext() : ChatCloneService.CloneContext(LoadContext(session));
             var contextMs = timer.ElapsedMilliseconds - messagesMs - artifactsMs - catalogMs;
-            var contextUsage = ContextUsageEstimator.FromSession(session, ResolveChatSettings(session));
+            var contextUsage = ContextUsageEstimator.FromSession(session, ResolveChatSettings(session, settings));
             var usageMs = timer.ElapsedMilliseconds - messagesMs - artifactsMs - catalogMs - contextMs;
             var htmlWorkspace = HtmlWorkspaceEditorResourceService.Metadata(session);
             var htmlMs = timer.ElapsedMilliseconds - messagesMs - artifactsMs - catalogMs - contextMs - usageMs;
-            var response = new ChatStateResponse
-            {
-                Inbox = _inbox.Snapshot(session),
-                MessageStartIndex = messageStartIndex,
-                MessageTotalCount = session.Messages.Count,
-                SessionRevision = session == null ? 0 : session.Revision,
-                RunViewState = RunViewStateProjector.Create(session),
-                ActiveChatId = activeId,
-                ActiveChatModel = session == null ? string.Empty : session.Model,
-                ActiveChatMode = ChatModes.Normalize(session == null ? null : session.Mode),
-                MutationPolicy = session?.MutationPolicy ?? MutationPolicy.Ask,
-                ChatReadOnly = session != null && session.FormatVersion != ChatSession.CurrentFormatVersion,
-                ActiveChatReasoning = session != null && session.ReasoningEnabled,
-                Chats = chats,
-                Documents = documents,
-                Context = context,
-                Messages = bridgeMessages,
-                Artifacts = artifactPresentation.Artifacts,
-                ArtifactLibrary = artifactPresentation.Library,
-                ActiveContextCheckpointId = session == null ? string.Empty : session.ActiveContextCheckpointId,
-                ActiveHtmlArtifactId = session == null ? string.Empty : session.ActiveHtmlArtifactId,
-                ActiveTaskListArtifactId = session == null ? string.Empty : session.ActiveTaskListArtifactId,
-                ActivePlanDocumentArtifactId = session == null ? string.Empty : session.ActivePlanDocumentArtifactId,
-                ContextUsage = contextUsage,
-                HtmlWorkspace = htmlWorkspace
-            };
+            response.Inbox = _inbox.Snapshot(session);
+            response.MessageStartIndex = messageStartIndex;
+            response.MessageTotalCount = session.Messages.Count;
+            response.SessionRevision = session == null ? 0 : session.Revision;
+            response.RunViewState = RunViewStateProjector.Create(session);
+            response.ActiveChatId = activeId;
+            response.ActiveChatModel = session == null ? string.Empty : session.Model;
+            response.ActiveChatMode = ChatModes.Normalize(session == null ? null : session.Mode);
+            response.MutationPolicy = session?.MutationPolicy ?? MutationPolicy.Ask;
+            response.ChatReadOnly = session != null && session.FormatVersion != ChatSession.CurrentFormatVersion;
+            response.ActiveChatReasoning = session != null && session.ReasoningEnabled;
+            response.Chats = chats;
+            response.Documents = documents;
+            response.Context = context;
+            response.Messages = bridgeMessages;
+            response.Artifacts = artifactPresentation.Artifacts;
+            response.ArtifactLibrary = artifactPresentation.Library;
+            response.ActiveContextCheckpointId = session == null ? string.Empty : session.ActiveContextCheckpointId;
+            response.ActiveHtmlArtifactId = session == null ? string.Empty : session.ActiveHtmlArtifactId;
+            response.ActiveTaskListArtifactId = session == null ? string.Empty : session.ActiveTaskListArtifactId;
+            response.ActivePlanDocumentArtifactId = session == null ? string.Empty : session.ActivePlanDocumentArtifactId;
+            response.ContextUsage = contextUsage;
+            response.HtmlWorkspace = htmlWorkspace;
             if (timer.ElapsedMilliseconds >= 250)
                 RNAssistant.Office.Diagnostics.RuntimeLog.Info("Chat state timing: messages=" + messagesMs +
                     "ms, artifacts=" + artifactsMs + "ms, catalog=" + catalogMs +
@@ -757,7 +762,6 @@ namespace RNAssistant.Office
                     (timer.ElapsedMilliseconds - messagesMs - artifactsMs - catalogMs - contextMs - usageMs - htmlMs) +
                     "ms, totalMessages=" + (session.Messages == null ? 0 : session.Messages.Count) +
                     ", totalArtifacts=" + (session.Artifacts == null ? 0 : session.Artifacts.Count) + ".");
-            return response;
         }
 
         private ChatStateResponse ChatSelectionState(ChatSession session)

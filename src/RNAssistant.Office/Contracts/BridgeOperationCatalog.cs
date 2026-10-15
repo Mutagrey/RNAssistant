@@ -177,7 +177,7 @@ namespace RNAssistant.Office.Contracts
 
     public static class BridgeOperationCatalog
     {
-        public const int Version = 1;
+        public const int Version = 2;
         public static readonly IReadOnlyList<BridgeOperationDescriptor> Operations = Array.AsReadOnly(
             Enum.GetValues(typeof(BridgeOperationId)).Cast<BridgeOperationId>()
                 .Select(id => new BridgeOperationDescriptor(id)).ToArray());

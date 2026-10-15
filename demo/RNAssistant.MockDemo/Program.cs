@@ -165,7 +165,7 @@ namespace RNAssistant.MockDemo
                 });
                 var init = await SendAsync(bridge, "failure-init", "init", null, null).ConfigureAwait(false);
                 var token = Payload(init)["bridgeToken"].ToString();
-                var chatId = Payload(init)["activeChatId"].ToString();
+                var chatId = Payload(init)["init"]["activeChatId"].ToString();
                 var bytes = System.Text.Encoding.UTF8.GetBytes("durable attachment");
                 var upload = controller.BeginChatResourceUpload(new ResourceUploadOpenRequest
                 {
@@ -292,7 +292,7 @@ namespace RNAssistant.MockDemo
                 });
                 var init = await SendAsync(bridge, "live-init", "init", null, null).ConfigureAwait(false);
                 var token = Payload(init)["bridgeToken"].ToString();
-                var chatId = Payload(init)["activeChatId"].ToString();
+                var chatId = Payload(init)["init"]["activeChatId"].ToString();
                 await SendAsync(
                     bridge,
                     "live-send",
@@ -318,8 +318,8 @@ namespace RNAssistant.MockDemo
         {
             var init = await SendAsync(bridge, "1", "init", null, null).ConfigureAwait(false);
             var token = Payload(init)["bridgeToken"].ToString();
-            var chatId = Payload(init)["activeChatId"].ToString();
-            if (!string.Equals((string)Payload(init)["activeChatMode"], "agent", StringComparison.OrdinalIgnoreCase))
+            var chatId = Payload(init)["init"]["activeChatId"].ToString();
+            if (!string.Equals((string)Payload(init)["init"]["activeChatMode"], "agent", StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidOperationException("new chat did not default to Agent mode");
             }

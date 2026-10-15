@@ -236,7 +236,17 @@ function setControlBusy(target, busy) {
   delete control.dataset.busyWasDisabled;
 }
 
-var bridgeContractVersion = 1;
+var bridgeContractVersion = 2;
+
+function acceptBridgeBootstrap(bootstrap) {
+  if (!bootstrap || typeof bootstrap.bridgeToken !== "string" || !bootstrap.bridgeToken.trim() ||
+      !bootstrap.init || typeof bootstrap.init !== "object" || Array.isArray(bootstrap.init)) {
+    throw new Error("Invalid WebView bridge bootstrap. Reload the panel.");
+  }
+  acceptBridgeContract(bootstrap.bridgeContract);
+  state.bridgeToken = bootstrap.bridgeToken;
+  return bootstrap.init;
+}
 
 function acceptBridgeContract(contract) {
   if (!contract || contract.version !== bridgeContractVersion || !Array.isArray(contract.operations)) {
@@ -558,7 +568,7 @@ if (window.chrome && window.chrome.webview) {
     if (!pending) return;
     if (response.ok) {
       if (pending.type === "init" || pending.type === "clearRuntimeData") {
-        try { acceptBridgeContract(response.payload && response.payload.bridgeContract); }
+        try { response.payload = acceptBridgeBootstrap(response.payload); }
         catch (error) {
           error.code = "bridge_contract_mismatch";
           pending.reject(error);

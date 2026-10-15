@@ -818,20 +818,8 @@ namespace RNAssistant.Office.Contracts
         public HtmlWorkspaceDto HtmlWorkspace { get; set; }
     }
 
-    public sealed class InitResponse
+    public sealed class InitResponse : ChatStateResponse
     {
-        [JsonProperty("messageStartIndex")]
-        public int MessageStartIndex { get; set; }
-
-        [JsonProperty("messageTotalCount")]
-        public int MessageTotalCount { get; set; }
-
-        [JsonProperty("sessionRevision")]
-        public long SessionRevision { get; set; }
-
-        [JsonProperty("runViewState", NullValueHandling = NullValueHandling.Ignore)]
-        public RunViewState RunViewState { get; set; }
-
         [JsonProperty("appVersion")]
         public string AppVersion { get; set; }
 
@@ -849,26 +837,6 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("officeContext")]
         public OfficeContext OfficeContext { get; set; }
-
-        [JsonProperty("activeChatId")]
-        public string ActiveChatId { get; set; }
-
-        [JsonProperty("activeChatModel")]
-        public string ActiveChatModel { get; set; }
-
-        [JsonProperty("activeChatMode")]
-        public string ActiveChatMode { get; set; }
-        [JsonProperty("mutationPolicy")] public RNAssistant.Core.Services.MutationPolicy MutationPolicy { get; set; }
-        [JsonProperty("chatReadOnly")] public bool ChatReadOnly { get; set; }
-
-        [JsonProperty("activeChatReasoning")]
-        public bool ActiveChatReasoning { get; set; }
-
-        [JsonProperty("chats")]
-        public IReadOnlyList<ChatSessionSummary> Chats { get; set; }
-
-        [JsonProperty("documents")]
-        public IReadOnlyList<OpenOfficeDocumentDto> Documents { get; set; }
 
         [JsonProperty("settings")]
         public SettingsControlsDto Settings { get; set; }
@@ -893,38 +861,14 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("skillsPath")]
         public string SkillsPath { get; set; }
 
-        [JsonProperty("context")]
-        public DocumentContext Context { get; set; }
-
-        [JsonProperty("messages")]
-        public IReadOnlyList<ChatMessageViewDto> Messages { get; set; }
-
-        [JsonProperty("artifacts")]
-        public IReadOnlyList<ChatArtifactDto> Artifacts { get; set; }
-
-        [JsonProperty("artifactLibrary")]
-        public ArtifactLibraryProjectionDto ArtifactLibrary { get; set; }
-
-        [JsonProperty("activeContextCheckpointId")]
-        public string ActiveContextCheckpointId { get; set; }
-
-        [JsonProperty("activeHtmlArtifactId")]
-        public string ActiveHtmlArtifactId { get; set; }
-
-        [JsonProperty("activeTaskListArtifactId")]
-        public string ActiveTaskListArtifactId { get; set; }
-
-        [JsonProperty("activePlanDocumentArtifactId")]
-        public string ActivePlanDocumentArtifactId { get; set; }
-
-        [JsonProperty("contextUsage")]
-        public object ContextUsage { get; set; }
-
-        [JsonProperty("htmlWorkspace")]
-        public HtmlWorkspaceDto HtmlWorkspace { get; set; }
-
         [JsonProperty("quickAction")]
         public string QuickAction { get; set; }
+    }
+
+    public sealed class BridgeBootstrapResponse
+    {
+        [JsonProperty("init")]
+        public InitResponse Init { get; set; }
 
         [JsonProperty("bridgeContract")]
         public BridgeContractDto BridgeContract { get { return new BridgeContractDto(); } }

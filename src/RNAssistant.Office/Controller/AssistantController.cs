@@ -248,46 +248,23 @@ namespace RNAssistant.Office
             EnsureStartupRecovery();
             var session = _chatSessions.GetActiveSessionForOfficeState();
             var sessionMs = timer.ElapsedMilliseconds;
-            var activeId = session.Id;
-            var context = LoadContext(session);
             var settings = _settingsService.Load();
-            var chatSettings = ResolveChatSettings(session, settings);
-            var contextMs = timer.ElapsedMilliseconds - sessionMs;
             var officeContext = _officeContextCapture.CaptureOfficeContext();
-            var officeMs = timer.ElapsedMilliseconds - sessionMs - contextMs;
-            var chats = _chatSessions.GetChatSummaries(activeId);
-            var chatsMs = timer.ElapsedMilliseconds - sessionMs - contextMs - officeMs;
-            var documents = ListOpenDocuments();
-            var documentsMs = timer.ElapsedMilliseconds - sessionMs - contextMs - officeMs - chatsMs;
+            var officeMs = timer.ElapsedMilliseconds - sessionMs;
             var prompts = _toolExecutor.GetPromptLibrary();
-            var promptsMs = timer.ElapsedMilliseconds - sessionMs - contextMs - officeMs - chatsMs - documentsMs;
+            var promptsMs = timer.ElapsedMilliseconds - sessionMs - officeMs;
             var tools = ToolLibraryResponse.From(_toolCatalog.GetVisibleTools());
-            var toolsMs = timer.ElapsedMilliseconds - sessionMs - contextMs - officeMs - chatsMs - documentsMs - promptsMs;
+            var toolsMs = timer.ElapsedMilliseconds - sessionMs - officeMs - promptsMs;
             var skills = GetSkills();
-            var skillsMs = timer.ElapsedMilliseconds - sessionMs - contextMs - officeMs - chatsMs - documentsMs - promptsMs - toolsMs;
+            var skillsMs = timer.ElapsedMilliseconds - sessionMs - officeMs - promptsMs - toolsMs;
             var librariesMs = promptsMs + toolsMs + skillsMs;
-            int messageStartIndex;
-            var bridgeMessages = ChatCloneService.CloneRecentMessagesForBridge(session, out messageStartIndex);
-            var artifactPresentation = ArtifactLibraryProjectionService.ProjectState(session, bridgeMessages);
             var response = new InitResponse
             {
-                MessageStartIndex = messageStartIndex,
-                MessageTotalCount = session.Messages.Count,
-                SessionRevision = session == null ? 0 : session.Revision,
-                RunViewState = RunViewStateProjector.Create(session),
                 AppVersion = ApplicationVersionService.Current,
                 Host = _adapter.HostName,
                 DocumentKey = _adapter.DocumentKey,
                 Title = _adapter.DocumentTitle,
                 OfficeContext = officeContext,
-                ActiveChatId = activeId,
-                ActiveChatModel = session == null ? string.Empty : session.Model,
-                ActiveChatMode = ChatModes.Normalize(session == null ? null : session.Mode),
-                MutationPolicy = session?.MutationPolicy ?? MutationPolicy.Ask,
-                ChatReadOnly = session != null && session.FormatVersion != ChatSession.CurrentFormatVersion,
-                ActiveChatReasoning = session != null && session.ReasoningEnabled,
-                Chats = chats,
-                Documents = documents,
                 Settings = SettingsControlsDto.From(settings),
                 Prompts = prompts,
                 HasApiKey = !string.IsNullOrWhiteSpace(_settingsService.LoadApiKey()),
@@ -296,25 +273,13 @@ namespace RNAssistant.Office
                 ToolsPath = _paths.ToolsDirectory,
                 Skills = skills,
                 SkillsPath = _paths.SkillsDirectory,
-                Context = ChatCloneService.CloneContext(context),
-                Messages = bridgeMessages,
-                Artifacts = artifactPresentation.Artifacts,
-                ArtifactLibrary = artifactPresentation.Library,
-                ActiveContextCheckpointId = session.ActiveContextCheckpointId,
-                ActiveHtmlArtifactId = session.ActiveHtmlArtifactId,
-                ActiveTaskListArtifactId = session.ActiveTaskListArtifactId,
-                ActivePlanDocumentArtifactId = session.ActivePlanDocumentArtifactId,
-                ContextUsage = ContextUsageEstimator.FromSession(session, chatSettings),
-                HtmlWorkspace = HtmlWorkspaceEditorResourceService.Metadata(session),
                 QuickAction = DequeueQuickAction()
             };
+            PopulateChatState(session, response, settings: settings);
             if (timer.ElapsedMilliseconds >= 500)
-                RuntimeLog.Info("Startup timing: session=" + sessionMs + "ms, context=" +
-                    contextMs + "ms, office=" + officeMs + "ms, chats=" + chatsMs +
-                    "ms, documents=" + documentsMs + "ms, libraries=" + librariesMs +
+                RuntimeLog.Info("Startup timing: session=" + sessionMs + "ms, office=" + officeMs + "ms, libraries=" + librariesMs +
                     "ms (prompts=" + promptsMs + "ms, tools=" + toolsMs + "ms, skills=" + skillsMs + "ms)," +
-                    " projection=" + (timer.ElapsedMilliseconds - sessionMs - contextMs - officeMs -
-                        chatsMs - documentsMs - librariesMs) + "ms.");
+                    " chatState=" + (timer.ElapsedMilliseconds - sessionMs - officeMs - librariesMs) + "ms.");
             return response;
         }
 

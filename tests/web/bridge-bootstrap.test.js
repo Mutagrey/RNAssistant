@@ -32,14 +32,73 @@ function createContext() {
     }
   };
   vm.runInContext(source, context, { filename: "app-core.js" });
-  const contract = { version: 1, operations: ["init", "listChats", "getChatState", "runTool", "clearRuntimeData"].map(name =>
+  const contract = { version: 2, operations: ["init", "listChats", "getChatState", "runTool", "clearRuntimeData", "selectChat", "createOfficeHostChat"].map(name =>
     ({ name, idleTimeoutMs: name === "init" ? 30000 : 120000, cancellable: name === "runTool" })) };
   context.acceptBridgeContract(contract);
   return { context, posted, contract, timers, deliver: data => messageListener({ data }),
     expire: id => { const timer = timers.get(id); assert.ok(timer); timers.delete(id); timer.callback(); } };
 }
 
+function installChatProjection(context) {
+  for (const file of ["app-run-view-state.js", "app-chat-state.js", "app-chat-session.js"]) {
+    vm.runInContext(fs.readFileSync(path.join(root, "web/js", file), "utf8"), context, { filename: file });
+  }
+  context.document.body = { classList: { add() {}, remove() {} } };
+  context.$ = () => ({ textContent: "", classList: { contains: () => false } });
+  for (const name of ["captureChatDraft", "restoreChatDraft", "resetMessageEditState", "renderSettings",
+    "renderChatSessions", "renderMessages", "renderContext", "renderContextMeter", "renderModelControls",
+    "renderSendControls", "syncTokenEstimateCalibrationFromUsage", "log"]) context[name] = () => {};
+  context.toolLibraryItemsFromContract = contract => contract.items;
+  context.skillLibraryItemsFromContract = contract => contract.items;
+}
+
+function appInit(host, chatId) {
+  return { host, activeChatId: chatId, sessionRevision: 1, activeChatMode: "agent",
+    activeChatModel: "model", activeChatReasoning: true, mutationPolicy: "Ask", chatReadOnly: false,
+    chats: [], documents: [], messages: [], artifacts: [], context: {}, contextUsage: {},
+    htmlWorkspace: { files: [], dataSources: [] }, tools: { items: [] }, skills: { items: [] },
+    inbox: { chatId, inputs: [] } };
+}
+
 (async function () {
+  {
+    const { context, posted, contract, deliver } = createContext();
+    installChatProjection(context);
+    const inboxes = [];
+    context.applyChatInbox = inbox => inboxes.push(inbox.chatId);
+    const initRequest = context.send("init", {});
+    const initial = appInit("Excel", "excel-chat");
+    deliver({ id: initRequest.requestId, ok: true,
+      payload: { bridgeToken: "session-token", bridgeContract: contract, init: initial } });
+    const init = await initRequest;
+    assert.equal(init, initial, "transport resolves only application state");
+    context.applyInitState(init);
+    assert.equal(context.state.bridgeToken, "session-token", "transport accepts its token before resolving init");
+    for (const operation of ["selectChat", "createOfficeHostChat"]) {
+      const target = appInit("Word", operation + "-chat");
+      const navigation = context.navigateChat(operation, { host: "Word", chatId: target.activeChatId });
+      await new Promise(resolve => setImmediate(resolve));
+      deliver({ id: posted.at(-1).id, ok: true, payload: { host: "Word", chatId: target.activeChatId, init: target } });
+      await navigation;
+      assert.equal(context.state.host, "Word");
+      assert.equal(context.state.activeChatId, target.activeChatId);
+      assert.equal(context.state.activeChatReasoning, true);
+      assert.equal(context.state.bridgeToken, "session-token", "application navigation cannot revoke the token");
+      const next = context.send("getChatState", { chatId: target.activeChatId });
+      assert.equal(posted.at(-1).bridgeToken, "session-token", "next request remains authorized");
+      deliver({ id: next.requestId, ok: true, payload: {} });
+      await next;
+    }
+    assert.deepEqual(inboxes, ["excel-chat", "selectChat-chat", "createOfficeHostChat-chat"],
+      "init and navigation both apply the shared inbox projection");
+    const reset = context.send("clearRuntimeData", {});
+    deliver({ id: reset.requestId, ok: true,
+      payload: { bridgeToken: "reset-token", bridgeContract: contract, init: initial } });
+    context.applyInitState(await reset);
+    assert.equal(context.state.bridgeToken, "reset-token", "explicit bootstrap can replace transport authority");
+    console.log("PASS bridge bootstrap: real chat projection preserves transport across host navigation and reset");
+  }
+
   {
     const { context, posted } = createContext();
     await assert.rejects(() => context.send("listChats", {}), /not initialized/);
@@ -59,7 +118,7 @@ function createContext() {
     assert.equal(posted.length, 1);
     assert.equal(posted[0].type, "listChats");
     assert.equal(posted[0].bridgeToken, "token-1");
-    assert.equal(posted[0].contractVersion, 1);
+    assert.equal(posted[0].contractVersion, 2);
     assert.deepEqual(posted[0].payload, { marker: true });
     assert.equal(promise.requestId, posted[0].id);
     console.log("PASS bridge bootstrap: host calls wait for init token before posting");
@@ -200,10 +259,10 @@ function createContext() {
     console.log("PASS bridge bootstrap: lost and late replies settle without effect replay");
   }
 
-  for (const version of [0, 2, undefined]) {
+  for (const version of [0, 1, 3, undefined]) {
     const { context, posted, deliver, contract, timers } = createContext();
     const init = context.send("init", {});
-    deliver({ id: posted[0].id, ok: true, payload: { bridgeToken: "token", bridgeContract: { ...contract, version } } });
+    deliver({ id: posted[0].id, ok: true, payload: { bridgeToken: "token", bridgeContract: { ...contract, version }, init: {} } });
     await assert.rejects(init, error => error.code === "bridge_contract_mismatch");
     assert.equal(context.state.bridgeToken, "");
     assert.equal(context.state.bridgeOperations, null);
@@ -212,11 +271,20 @@ function createContext() {
   {
     const { context, deliver, contract } = createContext();
     const init = context.send("init", {});
-    deliver({ id: init.requestId, ok: true, payload: { bridgeToken: "token", bridgeContract: contract } });
+    deliver({ id: init.requestId, ok: true, payload: { bridgeToken: "token", bridgeContract: contract, init: {} } });
     await init;
-    context.state.bridgeToken = "token";
+    assert.equal(context.state.bridgeToken, "token");
     await assert.rejects(context.send("retiredOperation", {}), /Unknown WebView bridge operation/);
     console.log("PASS bridge bootstrap: exact version and operation catalog required");
+  }
+  for (const invalid of [{ bridgeToken: "" }, { bridgeToken: null }, { init: null }, { init: [] }]) {
+    const { context, deliver, contract } = createContext();
+    const init = context.send("init", {});
+    deliver({ id: init.requestId, ok: true,
+      payload: { bridgeToken: "token", bridgeContract: contract, init: {}, ...invalid } });
+    await assert.rejects(init, error => error.code === "bridge_contract_mismatch");
+    assert.equal(context.state.bridgeToken, "");
+    assert.equal(context.state.bridgeOperations, null);
   }
   console.log("OK bridge bootstrap");
 }()).catch(error => {

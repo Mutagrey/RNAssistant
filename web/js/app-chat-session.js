@@ -430,25 +430,14 @@ function renderVisibleSecondarySurfaces() {
 }
 
 function applyInitState(init) {
-  state.chatStateApplyVersion = (state.chatStateApplyVersion || 0) + 1;
   init = init || {};
-  var previousChatId = state.activeChatId || "";
-  var nextChatId = init.activeChatId || "";
-  var chatChanged = previousChatId !== nextChatId;
-  if (chatChanged) {
-    captureChatDraft(previousChatId);
-    if (typeof cancelVbaModuleRead === "function") cancelVbaModuleRead();
-    if (typeof cancelVbaModuleWrite === "function") cancelVbaModuleWrite();
-  }
   state.bridgeUnavailable = false;
   document.body.classList.remove("bridge-unavailable");
-  resetMessageEditState();
   state.appVersion = init.appVersion || "";
   state.host = init.host;
   state.officeHostChatAvailable = !!(init.officeHostChatAvailable);
   state.title = init.title;
   state.officeContext = init.officeContext || null;
-  state.bridgeToken = init.bridgeToken || "";
   state.settings = init.settings || {};
   if (typeof resetModelCatalog === "function") resetModelCatalog();
   state.prompts = init.prompts;
@@ -460,59 +449,27 @@ function applyInitState(init) {
   if (typeof cancelToolLibraryWrite === "function") cancelToolLibraryWrite();
   if (typeof cancelToolSourceRead === "function") cancelToolSourceRead();
   if (typeof cancelToolDocumentationRead === "function") cancelToolDocumentationRead();
-  state.tools = toolLibraryItemsFromContract(init.tools);
   if (typeof cancelSkillSourceRead === "function") cancelSkillSourceRead();
   if (typeof cancelSkillSourceWrite === "function") cancelSkillSourceWrite();
-  state.skills = skillLibraryItemsFromContract(init.skills);
-  if (typeof acceptToolLibraryState === "function") acceptToolLibraryState();
-  if (typeof acceptSkillLibraryState === "function") acceptSkillLibraryState();
+  state.tools = [];
+  state.skills = [];
+  state.toolLibraryDirty = false;
+  state.skillLibraryDirty = false;
   state.toolsPath = init.toolsPath || "";
   state.skillsPath = init.skillsPath || "";
-  state.context = init.context || {};
-  state.contextUsage = init.contextUsage || {};
-  state.htmlWorkspace = init.htmlWorkspace || { activeFileId: "", files: [], dataSources: [], history: [], redoHistory: [], redoBranches: [], recovery: { status: "empty", canMutate: true, candidates: [] } };
-  state.htmlWorkspaceDirty = false;
-  state.activeChatId = nextChatId;
-  state.chatDetailPending = false;
-  state.chatDetailError = "";
+  // Init and navigation apply one chat projection. The bridge owns its token.
   state.chatProjectionRevisions = {};
-  window.RNAssistantRunViewState.accept(
-    state.chatProjectionRevisions,
-    nextChatId,
-    window.RNAssistantRunViewState.sessionRevision(init));
-  state.activeRunViewState = window.RNAssistantRunViewState.normalize(
-    init.runViewState !== undefined ? init.runViewState : init.RunViewState);
-  state.activeChatModel = init.activeChatModel || "";
-  state.activeChatMode = init.activeChatMode || "agent";
-  state.mutationPolicy = init.mutationPolicy || "Ask";
-  state.chatReadOnly = init.chatReadOnly === true;
-  state.activeChatReasoning = !!(init.activeChatReasoning);
-  state.chats = window.RNAssistantRunViewState.mergeCatalog(
-    [], init.chats || [], state.chatProjectionRevisions);
-  state.documents = init.documents || [];
-  state.messages = init.messages || [];
-  state.messageStartIndex = init.messageStartIndex || 0;
-  state.messageTotalCount = init.messageTotalCount || state.messages.length;
-  state.artifacts = init.artifacts || [];
-  state.artifactLibrary = init.artifactLibrary || { sessionRevision: 0, heads: [] };
-  state.activeContextCheckpointId = init.activeContextCheckpointId || "";
-  state.activeHtmlArtifactId = init.activeHtmlArtifactId || "";
-  state.activeTaskListArtifactId = init.activeTaskListArtifactId || "";
-  state.activePlanDocumentArtifactId = init.activePlanDocumentArtifactId || "";
-  if (chatChanged) restoreChatDraft(state.activeChatId);
+  state.chats = [];
+  state.htmlWorkspace = null;
+  state.htmlWorkspaceDirty = false;
+  applyChatState(init);
   $("toolsPath").textContent = state.toolsPath ? "Хранилище: " + state.toolsPath : "";
   if ($("skillsPath")) $("skillsPath").textContent = state.skillsPath ? "Хранилище: " + state.skillsPath : "";
   renderSettings();
-  renderChatSessions();
-  renderMessages();
-  renderContextMeter();
   renderVisibleSecondarySurfaces();
   log("Initialized " + init.host);
   if (init.quickAction) {
     runQuickAction(init.quickAction);
-  }
-  if (chatChanged && typeof restoreActiveChatRun === "function") {
-    restoreActiveChatRun();
   }
 }
 

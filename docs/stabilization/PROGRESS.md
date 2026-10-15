@@ -1,5 +1,24 @@
 # Stabilization progress
 
+## Delivered observations and bridge initialization — 2026-10-15
+
+Three review findings are fixed host-neutral. Core publishes final delivered
+observations once; Office and CLI consume them without interpreting message roles.
+Diagnostics no longer suppress archived source bodies, and an included source
+retains the same-run CLI read guard after automatic compaction. Omitted or stale
+bodies still grant no write authority.
+
+Bridge bootstrap v2 separates transport authority from application state, fixing
+token loss on cross-host navigation. Init/navigation share one typed chat DTO and
+controller/Web projection, including inbox. The earlier explicit persistence
+cutover remains in place; no compatibility path was added.
+
+Validation: Harness 55/55 focused checks, five controlled CLI cases, seven Web
+scripts and MockDemo's four profiles plus failed-turn persistence pass. A separate
+Web narration test fails identically on baseline `fcba1ce1`; see
+[RISK_REGISTER](RISK_REGISTER.md#baseline-test-failures-during-architecture-follow-through--2026-10-15).
+No Windows/Office/VSTO or real-model qualification was run.
+
 ## Projection, input and persistence simplification — 2026-10-15
 
 The four follow-ups are implemented in priority order 1 → 3 → 2 → 4:

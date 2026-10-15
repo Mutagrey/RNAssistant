@@ -27,6 +27,37 @@ three remaining failures after the header-cache fixture was corrected and its
 focused rerun passed. The explicit command/role/lifecycle cases, `chat:` 12/12,
 resource chat-lifecycle 2/2 and inbox 9/9 pass. No blanket suite pass is claimed.
 
+**Web baseline `fcba1ce1`:** `tests/web/live-run-projection.test.js:108` fails both
+in the current tree and with that commit's test and all eight UI dependencies in
+an isolated directory. After completion it expects visible `Narration s1/s2`, but
+finds none outside collapsed actions. Owner: Web run/activity rendering. Check the
+fixture's accepted commentary/protocol shape and the final grouping before
+changing production rendering; this is separate from bootstrap/context delivery.
+
+## Delivered observations and bridge bootstrap review — 2026-10-15
+
+**Fixed host-neutral; owners: Core context compiler, Office bridge/Web, CLI model
+adapter.** Review probes against `4d716414` reproduced:
+
+- **P1:** cross-host application init had no bridge token; applying it cleared the
+  panel token and the next command failed before posting. Bootstrap v2 now owns
+  the token/contract separately. Host switches apply only application state;
+  init/navigation use the same chat projection, including inbox.
+- **P2:** successful/failed `web.verify` carried source evidence without its body
+  and suppressed an archived read. Deduplication now reserves coverage only after
+  body materialization; missing active payloads cannot suppress usable archives.
+- **P2:** CLI discarded a prior read when compaction delivered it as an assistant
+  source view. `ModelContextSnapshot.DeliveredObservations` now owns delivery for
+  both Office and CLI; exact current same-run guards remain with the runtime.
+
+Focused evidence: Harness `context continuity:` 14/14, `bridge:` 37/37 and four
+resource authority/source checks; CLI compaction/edit (tool/user), compaction/
+restart/drift (tool/user) and omitted-source guard; seven Web scripts including
+real bootstrap/chat projections; MockDemo four profiles and failed-turn
+persistence. Harness, CLI and MockDemo builds pass (existing PDF platform warnings
+remain). The separate baseline rendering failure above stays open. Actual
+cross-host COM/WebView2 delivery requires Windows x64 + Office x64 qualification.
+
 ## Resource journal names and archived operation admission — 2026-10-15
 
 **Fixed host-neutral / Core resource authority and model-context compiler.**

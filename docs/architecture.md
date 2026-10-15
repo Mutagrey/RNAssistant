@@ -246,10 +246,18 @@ See [conversation-protocol.md](conversation-protocol.md).
 policy and UI idle-wait limits. `AssistantWebBridge` resolves it once and dispatches
 by `BridgeOperationId` to the existing typed payload handlers. The cancellation
 registry consumes the same descriptor; its separate string list is removed.
-Application requests require `contractVersion: 1`; the pane-local focus signal is
+Application requests require `contractVersion: 2`; the pane-local focus signal is
 handled separately by its host adapter. `init` publishes the matching version and
 operation policies before Web can send ordinary operations. Unknown operations and
 version mismatch fail before dispatch; incompatible UI must reload explicitly.
+
+Only `init` and `clearRuntimeData` return `BridgeBootstrapResponse` with
+`bridgeContract`, `bridgeToken` and application `init`. `app-core.js` validates the
+complete handshake, installs transport authority and resolves the application
+state. Cross-host navigation carries only `InitResponse`; it cannot replace the
+token. `InitResponse` extends `ChatStateResponse`, and controller initialization
+and navigation share `PopulateChatState` (including inbox). Web applies both
+through `applyChatState`; application projection does not infer transport state.
 
 The shared `send` boundary starts an idle timer (init: 30 seconds; ordinary
 operations: 120 seconds; cancellable operations: 300 seconds). Correlated progress

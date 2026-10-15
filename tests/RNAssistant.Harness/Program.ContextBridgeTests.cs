@@ -430,7 +430,7 @@ namespace RNAssistant.Harness
             var bridge = new AssistantWebBridge(controller, progressMessages.Add);
             var token = BridgeToken(bridge);
             var responseJson = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"b1\",\"type\":\"runTool\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-a\",\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\",\"count\":2,\"enabled\":true,\"values\":[[\"A\"]]},\"dryRun\":true}}")
+                "{\"contractVersion\":2,\"id\":\"b1\",\"type\":\"runTool\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-a\",\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\",\"count\":2,\"enabled\":true,\"values\":[[\"A\"]]},\"dryRun\":true}}")
                 .GetAwaiter()
                 .GetResult();
 
@@ -455,7 +455,7 @@ namespace RNAssistant.Harness
             var bridge = new AssistantWebBridge(controller, null);
             var token = BridgeToken(bridge);
             var responseJson = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"trajectory1\",\"type\":\"getChatTrajectory\",\"bridgeToken\":\"" + token +
+                "{\"contractVersion\":2,\"id\":\"trajectory1\",\"type\":\"getChatTrajectory\",\"bridgeToken\":\"" + token +
                 "\",\"payload\":{\"chatId\":\"chat-query\",\"view\":\"failure-retries\",\"cursor\":\"view:failure-retries:42:25\",\"pageSize\":25,\"search\":\"tool failure\",\"eventTypes\":[\"session.commit\",\"llm.failure\"],\"visibility\":\"log-only\"}}")
                 .GetAwaiter()
                 .GetResult();
@@ -469,7 +469,7 @@ namespace RNAssistant.Harness
             AssertEqual("llm.failure", controller.LastTrajectoryEventTypes[1], "trajectory event types remain native array");
 
             responseJson = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"trajectory2\",\"type\":\"exportChatTrajectory\",\"bridgeToken\":\"" + token +
+                "{\"contractVersion\":2,\"id\":\"trajectory2\",\"type\":\"exportChatTrajectory\",\"bridgeToken\":\"" + token +
                 "\",\"payload\":{\"chatId\":\"chat-export\",\"view\":\"raw\",\"search\":\"failed\",\"eventTypes\":[\"llm.failure\"],\"visibility\":\"log-only\",\"redactionMode\":\"none\",\"includeCasPayloads\":true}}")
                 .GetAwaiter()
                 .GetResult();
@@ -482,7 +482,7 @@ namespace RNAssistant.Harness
             AssertTrue(controller.LastTrajectoryExportCas, "trajectory export CAS flag");
             AssertEqual("llm.failure", controller.LastTrajectoryEventTypes.Single(), "trajectory export types remain native array");
             responseJson = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"payload1\",\"type\":\"getChatEventPayload\",\"bridgeToken\":\"" + token +
+                "{\"contractVersion\":2,\"id\":\"payload1\",\"type\":\"getChatEventPayload\",\"bridgeToken\":\"" + token +
                 "\",\"payload\":{\"chatId\":\"chat-payload\",\"eventId\":\"event-payload\"}}")
                 .GetAwaiter().GetResult();
             var preview = JObject.Parse(responseJson);
@@ -500,7 +500,7 @@ namespace RNAssistant.Harness
             var controller = new AssistantController();
             var bridge = new AssistantWebBridge(controller, null);
             var responseJson = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"bad\",\"type\":\"runTool\",\"payload\":{\"toolId\":\"excel.add_sheet\",\"arguments\":{},\"dryRun\":true}}")
+                "{\"contractVersion\":2,\"id\":\"bad\",\"type\":\"runTool\",\"payload\":{\"toolId\":\"excel.add_sheet\",\"arguments\":{},\"dryRun\":true}}")
                 .GetAwaiter()
                 .GetResult();
 
@@ -521,14 +521,14 @@ namespace RNAssistant.Harness
             {
                 var token = BridgeToken(bridge);
                 var running = bridge.HandleMessageAsync(
-                    "{\"contractVersion\":1,\"id\":\"long-tool\",\"type\":\"runTool\",\"bridgeToken\":\"" + token +
+                    "{\"contractVersion\":2,\"id\":\"long-tool\",\"type\":\"runTool\",\"bridgeToken\":\"" + token +
                     "\",\"payload\":{\"chatId\":\"chat-a\",\"toolId\":\"fixture.read\",\"arguments\":{},\"dryRun\":true}}");
                 AssertTrue(entered.Wait(TimeSpan.FromSeconds(5)),
                     "long tool entered background bridge work");
                 try
                 {
                     var list = bridge.HandleMessageAsync(
-                        "{\"contractVersion\":1,\"id\":\"responsive-list\",\"type\":\"listChats\",\"bridgeToken\":\"" + token +
+                        "{\"contractVersion\":2,\"id\":\"responsive-list\",\"type\":\"listChats\",\"bridgeToken\":\"" + token +
                         "\",\"payload\":{}}");
                     var completed = await Task.WhenAny(list,
                         Task.Delay(TimeSpan.FromSeconds(2)));
@@ -538,7 +538,7 @@ namespace RNAssistant.Harness
                         "chat catalog remains available during a tool run");
 
                     var cancel = JObject.Parse(await bridge.HandleMessageAsync(
-                        "{\"contractVersion\":1,\"id\":\"cancel-long-tool\",\"type\":\"cancelRequest\",\"bridgeToken\":\"" + token +
+                        "{\"contractVersion\":2,\"id\":\"cancel-long-tool\",\"type\":\"cancelRequest\",\"bridgeToken\":\"" + token +
                         "\",\"payload\":{\"requestId\":\"long-tool\"}}"));
                     AssertTrue(cancel["ok"].Value<bool>() &&
                             cancel["payload"]["cancelled"].Value<bool>(),
@@ -601,14 +601,14 @@ namespace RNAssistant.Harness
                 };
                 var token = BridgeToken(bridge);
                 var running = bridge.HandleMessageAsync(
-                    "{\"contractVersion\":1,\"id\":\"long-agent\",\"type\":\"confirmAgentTool\",\"bridgeToken\":\"" + token +
+                    "{\"contractVersion\":2,\"id\":\"long-agent\",\"type\":\"confirmAgentTool\",\"bridgeToken\":\"" + token +
                     "\",\"payload\":{\"chatId\":\"chat-a\",\"pendingId\":\"pending-test\"}}");
                 AssertTrue(entered.Wait(TimeSpan.FromSeconds(5)),
                     "agent run entered background bridge work");
                 try
                 {
                     var select = bridge.HandleMessageAsync(
-                        "{\"contractVersion\":1,\"id\":\"responsive-select\",\"type\":\"selectChat\",\"bridgeToken\":\"" + token +
+                        "{\"contractVersion\":2,\"id\":\"responsive-select\",\"type\":\"selectChat\",\"bridgeToken\":\"" + token +
                         "\",\"payload\":{\"chatId\":\"chat-b\"}}");
                     var completed = await Task.WhenAny(select,
                         Task.Delay(TimeSpan.FromSeconds(2)));
@@ -641,7 +641,7 @@ namespace RNAssistant.Harness
                     AssertTrue(!bridge.HostSwitchPending, "a refused document switch does not retain the exclusive gate");
 
                     var cancel = JObject.Parse(await bridge.HandleMessageAsync(
-                        "{\"contractVersion\":1,\"id\":\"cancel-long-agent\",\"type\":\"cancelRequest\",\"bridgeToken\":\"" + token +
+                        "{\"contractVersion\":2,\"id\":\"cancel-long-agent\",\"type\":\"cancelRequest\",\"bridgeToken\":\"" + token +
                         "\",\"payload\":{\"requestId\":\"long-agent\"}}"));
                     AssertTrue(cancel["ok"].Value<bool>() &&
                             cancel["payload"]["cancelled"].Value<bool>(),
@@ -757,12 +757,16 @@ namespace RNAssistant.Harness
 
             AssertTrue(!string.IsNullOrWhiteSpace(token), "bridge token returned");
             var initialized = JObject.Parse(bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"contract\",\"type\":\"init\"}").GetAwaiter().GetResult());
+                "{\"contractVersion\":2,\"id\":\"contract\",\"type\":\"init\"}").GetAwaiter().GetResult());
             var contract = initialized["payload"]["bridgeContract"];
+            AssertTrue(initialized["payload"]["init"] is JObject, "bootstrap contains typed application state");
+            AssertTrue(initialized["payload"]["init"]["bridgeToken"] == null &&
+                initialized["payload"]["init"]["bridgeContract"] == null,
+                "application state cannot replace the transport handshake");
             AssertEqual(BridgeOperationCatalog.Version, (int)contract["version"], "exact bridge contract version");
             AssertEqual(BridgeOperationCatalog.Operations.Count, contract["operations"].Count(), "complete operation policies");
             AssertTrue(contract["operations"].All(operation => (int)operation["idleTimeoutMs"] > 0), "all waits are bounded");
-            foreach (var version in new[] { 0, 2 })
+            foreach (var version in new[] { 0, 1, 3 })
             {
                 var refused = JObject.Parse(bridge.HandleMessageAsync(new JObject {
                     ["id"] = "mismatch", ["type"] = "runTool", ["bridgeToken"] = token,
@@ -772,12 +776,12 @@ namespace RNAssistant.Harness
                 AssertTrue(controller.LastToolId == null, "mismatch never dispatches a tool");
             }
             var timing = JObject.Parse(bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"timing\",\"type\":\"reportClientTiming\",\"bridgeToken\":\"" + token +
+                "{\"contractVersion\":2,\"id\":\"timing\",\"type\":\"reportClientTiming\",\"bridgeToken\":\"" + token +
                 "\",\"payload\":{\"kind\":\"startup\",\"bridgeMs\":600,\"renderMs\":200,\"messages\":12}}")
                 .GetAwaiter().GetResult());
             AssertTrue(timing["ok"].Value<bool>(), "slow client timing uses the authorized typed bridge");
             var unauthorizedTiming = JObject.Parse(bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"timing-denied\",\"type\":\"reportClientTiming\",\"payload\":{\"kind\":\"startup\"}}")
+                "{\"contractVersion\":2,\"id\":\"timing-denied\",\"type\":\"reportClientTiming\",\"payload\":{\"kind\":\"startup\"}}")
                 .GetAwaiter().GetResult());
             AssertTrue(!unauthorizedTiming["ok"].Value<bool>(), "client timing requires the bridge token");
         }
@@ -797,9 +801,9 @@ namespace RNAssistant.Harness
                 };
                 var token = BridgeToken(bridge);
                 var init = JObject.Parse(bridge.HandleMessageAsync(
-                    "{\"contractVersion\":1,\"id\":\"office-chat-init\",\"type\":\"init\",\"payload\":{}}")
+                    "{\"contractVersion\":2,\"id\":\"office-chat-init\",\"type\":\"init\",\"payload\":{}}")
                     .GetAwaiter().GetResult());
-                AssertTrue((bool)init["payload"]["officeHostChatAvailable"],
+                AssertTrue((bool)init["payload"]["init"]["officeHostChatAvailable"],
                     "initialized panel exposes Office chat capability");
                 var valid = JObject.Parse(bridge.HandleMessageAsync(JsonConvert.SerializeObject(new
                 {
@@ -937,7 +941,7 @@ namespace RNAssistant.Harness
             var bridge = new AssistantWebBridge(controller, null);
             var token = BridgeToken(bridge);
             var listJson = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"list\",\"type\":\"listChats\",\"bridgeToken\":\"" + token + "\",\"payload\":{}}")
+                "{\"contractVersion\":2,\"id\":\"list\",\"type\":\"listChats\",\"bridgeToken\":\"" + token + "\",\"payload\":{}}")
                 .GetAwaiter()
                 .GetResult();
             var list = JObject.Parse(listJson);
@@ -949,7 +953,7 @@ namespace RNAssistant.Harness
             AssertTrue(list["payload"]["htmlWorkspace"] == null, "catalog omits html workspace");
 
             var fullJson = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"full\",\"type\":\"getChatState\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-1\"}}")
+                "{\"contractVersion\":2,\"id\":\"full\",\"type\":\"getChatState\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-1\"}}")
                 .GetAwaiter()
                 .GetResult();
             var full = JObject.Parse(fullJson);
@@ -1035,7 +1039,7 @@ namespace RNAssistant.Harness
             var bridge = new AssistantWebBridge(controller, progressMessages.Add);
             var token = BridgeToken(bridge);
             var responseJson = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"b2\",\"type\":\"submitChatInput\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-1\",\"text\":\"hello\",\"operationId\":\"input-b2\",\"delivery\":\"Steer\",\"resourceDraftIds\":[\"draft-1\"]}}")
+                "{\"contractVersion\":2,\"id\":\"b2\",\"type\":\"submitChatInput\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-1\",\"text\":\"hello\",\"operationId\":\"input-b2\",\"delivery\":\"Steer\",\"resourceDraftIds\":[\"draft-1\"]}}")
                 .GetAwaiter()
                 .GetResult();
 
@@ -1071,7 +1075,7 @@ namespace RNAssistant.Harness
             var bridge = new AssistantWebBridge(controller, null);
             var token = BridgeToken(bridge);
             var openedJson = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"open-upload\",\"type\":\"beginChatResourceUpload\",\"bridgeToken\":\"" + token +
+                "{\"contractVersion\":2,\"id\":\"open-upload\",\"type\":\"beginChatResourceUpload\",\"bridgeToken\":\"" + token +
                 "\",\"payload\":{\"chatId\":\"chat-resource\",\"fileName\":\"image.png\",\"contentType\":\"image/png\",\"byteLength\":262145}}")
                 .GetAwaiter()
                 .GetResult();
@@ -1082,23 +1086,23 @@ namespace RNAssistant.Harness
             AssertEqual("image.png", controller.LastResourceFileName, "resource file name reaches typed payload");
             var leaseId = opened["payload"]["leaseId"].Value<string>();
             var stagedJson = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"complete-upload\",\"type\":\"completeChatResourceUpload\",\"bridgeToken\":\"" + token +
+                "{\"contractVersion\":2,\"id\":\"complete-upload\",\"type\":\"completeChatResourceUpload\",\"bridgeToken\":\"" + token +
                 "\",\"payload\":{\"chatId\":\"chat-resource\",\"leaseId\":\"" + leaseId + "\"}}").GetAwaiter().GetResult();
             var staged = JObject.Parse(stagedJson);
             AssertTrue(staged["ok"].Value<bool>(), "resource staging response ok");
             AssertEqual("resource-draft", staged["payload"]["resource"]["Id"].Value<string>(), "resource draft returned");
             AssertEqual(leaseId, controller.LastResourceDraftId, "completion receives only the exact upload lease");
             var cancelledJson = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"cancel-upload\",\"type\":\"cancelChatResourceUpload\",\"bridgeToken\":\"" + token +
+                "{\"contractVersion\":2,\"id\":\"cancel-upload\",\"type\":\"cancelChatResourceUpload\",\"bridgeToken\":\"" + token +
                 "\",\"payload\":{\"chatId\":\"chat-resource\",\"leaseId\":\"" + leaseId + "\"}}").GetAwaiter().GetResult();
             AssertTrue(JObject.Parse(cancelledJson)["payload"]["closed"].Value<bool>(), "typed upload close response");
             var legacyJson = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"legacy-upload\",\"type\":\"stageChatResource\",\"bridgeToken\":\"" + token +
+                "{\"contractVersion\":2,\"id\":\"legacy-upload\",\"type\":\"stageChatResource\",\"bridgeToken\":\"" + token +
                 "\",\"payload\":{\"chatId\":\"chat-resource\",\"base64\":\"AQ==\"}}").GetAwaiter().GetResult();
             AssertTrue(!JObject.Parse(legacyJson)["ok"].Value<bool>(), "the base64 staging route has no compatibility alias");
 
             var discardedJson = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"discard-resource\",\"type\":\"discardChatResourceDraft\",\"bridgeToken\":\"" + token +
+                "{\"contractVersion\":2,\"id\":\"discard-resource\",\"type\":\"discardChatResourceDraft\",\"bridgeToken\":\"" + token +
                 "\",\"payload\":{\"chatId\":\"chat-resource\",\"id\":\"resource-draft\"}}")
                 .GetAwaiter()
                 .GetResult();
@@ -1113,7 +1117,7 @@ namespace RNAssistant.Harness
             var bridge = new AssistantWebBridge(controller, progressMessages.Add);
             var token = BridgeToken(bridge);
             var responseJson = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"edit1\",\"type\":\"editMessage\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-2\",\"id\":\"message-7\",\"index\":3,\"text\":\"edited text\"}}")
+                "{\"contractVersion\":2,\"id\":\"edit1\",\"type\":\"editMessage\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-2\",\"id\":\"message-7\",\"index\":3,\"text\":\"edited text\"}}")
                 .GetAwaiter()
                 .GetResult();
 
@@ -1134,7 +1138,7 @@ namespace RNAssistant.Harness
             var bridge = new AssistantWebBridge(controller, progressMessages.Add);
             var token = BridgeToken(bridge);
             var responseJson = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"compact1\",\"type\":\"compactChatContext\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-compact\"}}")
+                "{\"contractVersion\":2,\"id\":\"compact1\",\"type\":\"compactChatContext\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-compact\"}}")
                 .GetAwaiter().GetResult();
 
             var response = JObject.Parse(responseJson);
@@ -1153,7 +1157,7 @@ namespace RNAssistant.Harness
             var bridge = new AssistantWebBridge(controller, progressMessages.Add);
             var token = BridgeToken(bridge);
             var responseJson = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"confirm1\",\"type\":\"confirmAgentTool\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-confirm\",\"pendingId\":\"pending-1\"}}")
+                "{\"contractVersion\":2,\"id\":\"confirm1\",\"type\":\"confirmAgentTool\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-confirm\",\"pendingId\":\"pending-1\"}}")
                 .GetAwaiter()
                 .GetResult();
 
@@ -1178,7 +1182,7 @@ namespace RNAssistant.Harness
             var bridge = new AssistantWebBridge(controller, null);
             var token = BridgeToken(bridge);
             var responseJson = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"mode1\",\"type\":\"setChatMode\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-1\",\"mode\":\"agent\"}}")
+                "{\"contractVersion\":2,\"id\":\"mode1\",\"type\":\"setChatMode\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-1\",\"mode\":\"agent\"}}")
                 .GetAwaiter()
                 .GetResult();
 
@@ -1195,7 +1199,7 @@ namespace RNAssistant.Harness
             var bridge = new AssistantWebBridge(controller, null);
             var token = BridgeToken(bridge);
             var responseJson = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"reasoning1\",\"type\":\"setChatReasoning\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-1\",\"enabled\":true}}")
+                "{\"contractVersion\":2,\"id\":\"reasoning1\",\"type\":\"setChatReasoning\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-1\",\"enabled\":true}}")
                 .GetAwaiter()
                 .GetResult();
 
@@ -1214,7 +1218,7 @@ namespace RNAssistant.Harness
             var bridge = new AssistantWebBridge(controller, null);
             var token = BridgeToken(bridge);
             var responseJson = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"b3\",\"type\":\"saveSettings\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"settings\":{\"model\":\"gpt-test\",\"uiTheme\":\"dark\",\"debugModelTraffic\":true,\"screenCaptureProtectionEnabled\":false,\"reasoningRequestMode\":\"custom_json\",\"reasoningCustomJson\":\"{\\\"thinking\\\":{\\\"budget\\\":4096}}\",\"systemPromptRole\":\"system\",\"agentResponseMode\":\"json_schema\",\"toolResultRole\":\"tool\",\"fallbackToJsonObject\":false,\"maxAgentFormatRetries\":4,\"historyIntegrityMode\":\"hmac_sha256\",\"historyEncryptionMode\":\"aes256_cbc_hmac_sha256\",\"historyKeySource\":\"custom_secret\",\"modelImageSupportOverrides\":{\"gpt-test\":true},\"modelAudioSupportOverrides\":{\"gpt-audio\":true}},\"apiKey\":\"secret\",\"historySecret\":\"portable secret\"}}")
+                "{\"contractVersion\":2,\"id\":\"b3\",\"type\":\"saveSettings\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"settings\":{\"model\":\"gpt-test\",\"uiTheme\":\"dark\",\"debugModelTraffic\":true,\"screenCaptureProtectionEnabled\":false,\"reasoningRequestMode\":\"custom_json\",\"reasoningCustomJson\":\"{\\\"thinking\\\":{\\\"budget\\\":4096}}\",\"systemPromptRole\":\"system\",\"agentResponseMode\":\"json_schema\",\"toolResultRole\":\"tool\",\"fallbackToJsonObject\":false,\"maxAgentFormatRetries\":4,\"historyIntegrityMode\":\"hmac_sha256\",\"historyEncryptionMode\":\"aes256_cbc_hmac_sha256\",\"historyKeySource\":\"custom_secret\",\"modelImageSupportOverrides\":{\"gpt-test\":true},\"modelAudioSupportOverrides\":{\"gpt-audio\":true}},\"apiKey\":\"secret\",\"historySecret\":\"portable secret\"}}")
                 .GetAwaiter()
                 .GetResult();
 
@@ -1279,7 +1283,7 @@ namespace RNAssistant.Harness
             foreach (var command in new[] { "getRuntimeLog", "clearRuntimeLog" })
             {
                 var response = JObject.Parse(bridge.HandleMessageAsync(
-                    "{\"contractVersion\":1,\"id\":\"retired-log\",\"type\":\"" + command + "\",\"bridgeToken\":\"" + token + "\",\"payload\":{}}")
+                    "{\"contractVersion\":2,\"id\":\"retired-log\",\"type\":\"" + command + "\",\"bridgeToken\":\"" + token + "\",\"payload\":{}}")
                     .GetAwaiter().GetResult());
                 AssertTrue(!response["ok"].Value<bool>(), "retired runtime log command is not dispatched: " + command);
                 AssertTrue(response.SelectToken("payload.content") == null, "no inline log body or fallback");
@@ -1292,7 +1296,7 @@ namespace RNAssistant.Harness
             var bridge = new AssistantWebBridge(controller, null);
             var token = BridgeToken(bridge);
             var responseJson = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"compat1\",\"type\":\"testModelCompatibility\",\"bridgeToken\":\"" + token + "\",\"payload\":{}}")
+                "{\"contractVersion\":2,\"id\":\"compat1\",\"type\":\"testModelCompatibility\",\"bridgeToken\":\"" + token + "\",\"payload\":{}}")
                 .GetAwaiter()
                 .GetResult();
 
@@ -1308,7 +1312,7 @@ namespace RNAssistant.Harness
             var bridge = new AssistantWebBridge(controller, null);
             var token = BridgeToken(bridge);
             var responseJson = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"doc1\",\"type\":\"activateDocument\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"documentKey\":\"forecast-doc\"}}")
+                "{\"contractVersion\":2,\"id\":\"doc1\",\"type\":\"activateDocument\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"documentKey\":\"forecast-doc\"}}")
                 .GetAwaiter()
                 .GetResult();
 
@@ -1317,7 +1321,7 @@ namespace RNAssistant.Harness
             AssertEqual("forecast-doc", response["payload"]["activeChatId"].Value<string>(), "document key payload");
 
             var deleteResponseJson = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"doc2\",\"type\":\"deleteDocument\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"host\":\"Excel\",\"documentKey\":\"forecast-doc\"}}")
+                "{\"contractVersion\":2,\"id\":\"doc2\",\"type\":\"deleteDocument\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"host\":\"Excel\",\"documentKey\":\"forecast-doc\"}}")
                 .GetAwaiter()
                 .GetResult();
             AssertTrue(JObject.Parse(deleteResponseJson)["ok"].Value<bool>(), "document delete response ok");
@@ -1339,27 +1343,27 @@ namespace RNAssistant.Harness
             AssertEqual("exact", (string)toolSourceResponse["payload"]["sources"][0]["revision"], "exact source proof reaches UI");
             AssertTrue(toolSourceResponse["payload"]["code"] == null && toolSourceResponse["payload"]["data"] != null, "only metadata and bounded download capability");
             var toolsResponseJson = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"b6\",\"type\":\"saveTools\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"tool-chat\",\"uploadLeaseId\":\"tool-lease\",\"sha256\":\"tool-hash\"}}")
+                "{\"contractVersion\":2,\"id\":\"b6\",\"type\":\"saveTools\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"tool-chat\",\"uploadLeaseId\":\"tool-lease\",\"sha256\":\"tool-hash\"}}")
                 .GetAwaiter()
                 .GetResult();
             var documentationResponseJson = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"b6-docs\",\"type\":\"getToolDocumentation\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"type\":\"rnassistant.toolLibraryDocumentationRequest\",\"contractVersion\":1,\"chatId\":\"tool-chat\",\"toolId\":\"excel.inspect\",\"expectedRevision\":\"exact-revision\"}}")
+                "{\"contractVersion\":2,\"id\":\"b6-docs\",\"type\":\"getToolDocumentation\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"type\":\"rnassistant.toolLibraryDocumentationRequest\",\"contractVersion\":1,\"chatId\":\"tool-chat\",\"toolId\":\"excel.inspect\",\"expectedRevision\":\"exact-revision\"}}")
                 .GetAwaiter()
                 .GetResult();
             var skillsResponseJson = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"b7\",\"type\":\"saveSkills\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"skill-chat\",\"uploadLeaseId\":\"core-lease\",\"sha256\":\"core-hash\"}}")
+                "{\"contractVersion\":2,\"id\":\"b7\",\"type\":\"saveSkills\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"skill-chat\",\"uploadLeaseId\":\"core-lease\",\"sha256\":\"core-hash\"}}")
                 .GetAwaiter()
                 .GetResult();
             var readReferenceJson = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"b8\",\"type\":\"readSkillSource\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"type\":\"rnassistant.skillSourceRequest\",\"contractVersion\":1,\"chatId\":\"skill-chat\",\"skillId\":\"common.review\",\"path\":\"references/rules.md\",\"expectedPackageRevision\":\"package\"}}")
+                "{\"contractVersion\":2,\"id\":\"b8\",\"type\":\"readSkillSource\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"type\":\"rnassistant.skillSourceRequest\",\"contractVersion\":1,\"chatId\":\"skill-chat\",\"skillId\":\"common.review\",\"path\":\"references/rules.md\",\"expectedPackageRevision\":\"package\"}}")
                 .GetAwaiter()
                 .GetResult();
             var saveReferenceJson = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"b9\",\"type\":\"saveSkillReference\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"skill-chat\",\"uploadLeaseId\":\"reference-lease\",\"sha256\":\"reference-hash\"}}")
+                "{\"contractVersion\":2,\"id\":\"b9\",\"type\":\"saveSkillReference\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"skill-chat\",\"uploadLeaseId\":\"reference-lease\",\"sha256\":\"reference-hash\"}}")
                 .GetAwaiter()
                 .GetResult();
             var deleteReferenceJson = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"b10\",\"type\":\"deleteSkillReference\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"type\":\"rnassistant.skillReferenceRequest\",\"contractVersion\":1,\"skillId\":\"common.review\",\"path\":\"references/rules.md\",\"expectedPackageRevision\":\"package\"}}")
+                "{\"contractVersion\":2,\"id\":\"b10\",\"type\":\"deleteSkillReference\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"type\":\"rnassistant.skillReferenceRequest\",\"contractVersion\":1,\"skillId\":\"common.review\",\"path\":\"references/rules.md\",\"expectedPackageRevision\":\"package\"}}")
                 .GetAwaiter()
                 .GetResult();
 
@@ -1410,7 +1414,7 @@ namespace RNAssistant.Harness
             var bridge = new AssistantWebBridge(controller, null);
             var token = BridgeToken(bridge);
             var responseJson = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"b4\",\"type\":\"addTextContext\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-2\",\"role\":\"SuppliedData\",\"kind\":\"note\",\"title\":\"T\",\"reference\":\"R\",\"text\":\"Body\",\"detailsJson\":\"{}\"}}")
+                "{\"contractVersion\":2,\"id\":\"b4\",\"type\":\"addTextContext\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-2\",\"role\":\"SuppliedData\",\"kind\":\"note\",\"title\":\"T\",\"reference\":\"R\",\"text\":\"Body\",\"detailsJson\":\"{}\"}}")
                 .GetAwaiter()
                 .GetResult();
 
@@ -1423,7 +1427,7 @@ namespace RNAssistant.Harness
             AssertEqual("R", controller.LastContextReference, "context reference");
             AssertEqual("Body", controller.LastContextText, "context text");
             var oldResponse = JObject.Parse(bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"old\",\"type\":\"addTextContext\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"kind\":\"note\",\"text\":\"Legacy\"}}")
+                "{\"contractVersion\":2,\"id\":\"old\",\"type\":\"addTextContext\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"kind\":\"note\",\"text\":\"Legacy\"}}")
                 .GetAwaiter().GetResult());
             AssertTrue(!oldResponse["ok"].Value<bool>(), "untyped bridge context is explicitly rejected");
             AssertEqual("Body", controller.LastContextText, "old payload never reaches the controller");
@@ -1435,7 +1439,7 @@ namespace RNAssistant.Harness
             var bridge = new AssistantWebBridge(controller, null);
             var token = BridgeToken(bridge);
             var responseJson = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"context-inspect\",\"type\":\"inspectPromptContext\",\"bridgeToken\":\"" + token +
+                "{\"contractVersion\":2,\"id\":\"context-inspect\",\"type\":\"inspectPromptContext\",\"bridgeToken\":\"" + token +
                 "\",\"payload\":{\"chatId\":\"chat-context\",\"text\":\"draft\",\"resourceDraftIds\":[\"file-1\"],\"includeRaw\":true}}")
                 .GetAwaiter()
                 .GetResult();
@@ -1453,7 +1457,7 @@ namespace RNAssistant.Harness
             var bridge = new AssistantWebBridge(controller, null);
             var token = BridgeToken(bridge);
             var readResponseJson = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"b5-read\",\"type\":\"getVbaModule\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-editor\",\"moduleName\":\"Module2\"}}")
+                "{\"contractVersion\":2,\"id\":\"b5-read\",\"type\":\"getVbaModule\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-editor\",\"moduleName\":\"Module2\"}}")
                 .GetAwaiter()
                 .GetResult();
             AssertTrue(JObject.Parse(readResponseJson)["ok"].Value<bool>(), "VBA read bridge response ok");
@@ -1466,7 +1470,7 @@ namespace RNAssistant.Harness
             AssertEqual("text/plain; charset=utf-8", (string)source["data"]["payload"]["contentType"], "bounded inert source download");
 
             var mutationsResponseJson = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"b5-mutations\",\"type\":\"getVbaMutations\",\"bridgeToken\":\"" + token +
+                "{\"contractVersion\":2,\"id\":\"b5-mutations\",\"type\":\"getVbaMutations\",\"bridgeToken\":\"" + token +
                 "\",\"payload\":{\"cursor\":\"vba:4:2\",\"pageSize\":25,\"kind\":\"package\"}}")
                 .GetAwaiter()
                 .GetResult();
@@ -1474,7 +1478,7 @@ namespace RNAssistant.Harness
             AssertEqual("vba:4:2", controller.LastVbaMutationCursor, "VBA mutation cursor reaches typed controller");
 
             var mutationDetailResponseJson = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"b5-mutation-detail\",\"type\":\"getVbaMutationDetail\",\"bridgeToken\":\"" + token +
+                "{\"contractVersion\":2,\"id\":\"b5-mutation-detail\",\"type\":\"getVbaMutationDetail\",\"bridgeToken\":\"" + token +
                 "\",\"payload\":{\"mutationId\":\"mutation-1\"}}")
                 .GetAwaiter()
                 .GetResult();
@@ -1482,18 +1486,18 @@ namespace RNAssistant.Harness
             AssertEqual("mutation-1", controller.LastVbaMutationId, "VBA mutation id reaches typed controller");
 
             var uploadJson = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"vba-upload\",\"type\":\"beginVbaModuleUpload\",\"bridgeToken\":\"" + token +
+                "{\"contractVersion\":2,\"id\":\"vba-upload\",\"type\":\"beginVbaModuleUpload\",\"bridgeToken\":\"" + token +
                 "\",\"payload\":{\"chatId\":\"vba-chat\",\"byteLength\":123}}").GetAwaiter().GetResult();
             var uploadResponse = JObject.Parse(uploadJson);
             AssertTrue(uploadResponse["ok"].Value<bool>(), "typed VBA upload open");
             AssertEqual(123L, uploadResponse["payload"]["byteLength"].Value<long>(), "exact source byte reservation");
             var cancelUploadJson = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"vba-upload-close\",\"type\":\"cancelVbaModuleUpload\",\"bridgeToken\":\"" + token +
+                "{\"contractVersion\":2,\"id\":\"vba-upload-close\",\"type\":\"cancelVbaModuleUpload\",\"bridgeToken\":\"" + token +
                 "\",\"payload\":{\"chatId\":\"vba-chat\",\"leaseId\":\"source-upload\"}}").GetAwaiter().GetResult();
             AssertTrue(JObject.Parse(cancelUploadJson)["payload"]["closed"].Value<bool>(), "typed VBA upload close");
 
             var responseJson = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"b5\",\"type\":\"saveVbaModule\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"vba-chat\",\"moduleName\":\"Module1\",\"uploadLeaseId\":\"source-upload\",\"sourceSha256\":\"raw123\",\"expectedCodeSha256\":\"save123\"}}")
+                "{\"contractVersion\":2,\"id\":\"b5\",\"type\":\"saveVbaModule\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"vba-chat\",\"moduleName\":\"Module1\",\"uploadLeaseId\":\"source-upload\",\"sourceSha256\":\"raw123\",\"expectedCodeSha256\":\"save123\"}}")
                 .GetAwaiter()
                 .GetResult();
 
@@ -1506,7 +1510,7 @@ namespace RNAssistant.Harness
             AssertEqual("save123", controller.LastModuleHash, "save module hash");
 
             var createResponseJson = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"b5-create\",\"type\":\"createVbaModule\",\"bridgeToken\":\"" + token +
+                "{\"contractVersion\":2,\"id\":\"b5-create\",\"type\":\"createVbaModule\",\"bridgeToken\":\"" + token +
                 "\",\"payload\":{\"chatId\":\"vba-chat\",\"moduleName\":\"UserForm1\",\"componentType\":\"MSForm\",\"uploadLeaseId\":\"create-upload\",\"sourceSha256\":\"create123\"}}")
                 .GetAwaiter()
                 .GetResult();
@@ -1519,7 +1523,7 @@ namespace RNAssistant.Harness
                 "neither write contract carries an inline code fallback");
 
             var deleteResponseJson = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"b5-delete\",\"type\":\"deleteVbaModule\",\"bridgeToken\":\"" + token +
+                "{\"contractVersion\":2,\"id\":\"b5-delete\",\"type\":\"deleteVbaModule\",\"bridgeToken\":\"" + token +
                 "\",\"payload\":{\"moduleName\":\"Module3\"}}")
                 .GetAwaiter()
                 .GetResult();
@@ -1527,7 +1531,7 @@ namespace RNAssistant.Harness
             AssertEqual("Module3", controller.LastModuleName, "delete module name");
 
             var runResponseJson = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"b5-run\",\"type\":\"runVbaMacro\",\"bridgeToken\":\"" + token +
+                "{\"contractVersion\":2,\"id\":\"b5-run\",\"type\":\"runVbaMacro\",\"bridgeToken\":\"" + token +
                 "\",\"payload\":{\"macroName\":\"Module1.Main\"}}")
                 .GetAwaiter()
                 .GetResult();
@@ -1535,8 +1539,8 @@ namespace RNAssistant.Harness
             AssertEqual("Module1.Main", controller.LastModuleName, "run macro name");
 
             var installResponse = JObject.Parse(bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"b5-install\",\"type\":\"installVbaTool\",\"bridgeToken\":\"" + token +
-                "\",\"payload\":{\"contractVersion\":1,\"id\":\"excel.echo_vba\",\"dryRun\":true}}")
+                "{\"contractVersion\":2,\"id\":\"b5-install\",\"type\":\"installVbaTool\",\"bridgeToken\":\"" + token +
+                "\",\"payload\":{\"contractVersion\":2,\"id\":\"excel.echo_vba\",\"dryRun\":true}}")
                 .GetAwaiter().GetResult());
             AssertTrue(installResponse["ok"].Value<bool>(),
                 "VBA package install bridge response ok");
@@ -1555,8 +1559,8 @@ namespace RNAssistant.Harness
                 "package dry-run flag reaches typed controller");
 
             var uninstallResponse = JObject.Parse(bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"b5-uninstall\",\"type\":\"uninstallVbaTool\",\"bridgeToken\":\"" + token +
-                "\",\"payload\":{\"contractVersion\":1,\"id\":\"excel.echo_vba\"}}")
+                "{\"contractVersion\":2,\"id\":\"b5-uninstall\",\"type\":\"uninstallVbaTool\",\"bridgeToken\":\"" + token +
+                "\",\"payload\":{\"contractVersion\":2,\"id\":\"excel.echo_vba\"}}")
                 .GetAwaiter().GetResult());
             AssertTrue(uninstallResponse["ok"].Value<bool>(),
                 "VBA package uninstall bridge response ok");
@@ -1573,7 +1577,7 @@ namespace RNAssistant.Harness
             {
                 var token = BridgeToken(bridge);
                 var responseJson = bridge.HandleMessageAsync(
-                    "{\"contractVersion\":1,\"id\":\"ping1\",\"type\":\"testModelConnection\",\"bridgeToken\":\"" + token + "\",\"payload\":{}}")
+                    "{\"contractVersion\":2,\"id\":\"ping1\",\"type\":\"testModelConnection\",\"bridgeToken\":\"" + token + "\",\"payload\":{}}")
                     .GetAwaiter().GetResult();
 
                 var response = JObject.Parse(responseJson);
@@ -1590,10 +1594,10 @@ namespace RNAssistant.Harness
             var bridge = new AssistantWebBridge(controller, null);
             var token = BridgeToken(bridge);
             var health = JObject.Parse(bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"cas1\",\"type\":\"getCasHealth\",\"bridgeToken\":\"" + token + "\",\"payload\":{}}")
+                "{\"contractVersion\":2,\"id\":\"cas1\",\"type\":\"getCasHealth\",\"bridgeToken\":\"" + token + "\",\"payload\":{}}")
                 .GetAwaiter().GetResult());
             var collected = JObject.Parse(bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"cas2\",\"type\":\"collectCasGarbage\",\"bridgeToken\":\"" + token + "\",\"payload\":{}}")
+                "{\"contractVersion\":2,\"id\":\"cas2\",\"type\":\"collectCasGarbage\",\"bridgeToken\":\"" + token + "\",\"payload\":{}}")
                 .GetAwaiter().GetResult());
 
             AssertTrue(health["ok"].Value<bool>(), "CAS health bridge response ok");
@@ -1608,11 +1612,11 @@ namespace RNAssistant.Harness
             var bridge = new AssistantWebBridge(controller, null);
             var token = BridgeToken(bridge);
             var fileResponse = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"html1\",\"type\":\"deleteHtmlWorkspaceFile\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-html\",\"path\":\"scripts/app.js\",\"expectedActiveHtmlArtifactId\":\"html-r3\",\"expectedSessionRevision\":7}}")
+                "{\"contractVersion\":2,\"id\":\"html1\",\"type\":\"deleteHtmlWorkspaceFile\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-html\",\"path\":\"scripts/app.js\",\"expectedActiveHtmlArtifactId\":\"html-r3\",\"expectedSessionRevision\":7}}")
                 .GetAwaiter()
                 .GetResult();
             var dataResponse = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"html2\",\"type\":\"deleteHtmlWorkspaceData\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-html\",\"name\":\"sales\",\"expectedActiveHtmlArtifactId\":\"html-r3\",\"expectedSessionRevision\":7}}")
+                "{\"contractVersion\":2,\"id\":\"html2\",\"type\":\"deleteHtmlWorkspaceData\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-html\",\"name\":\"sales\",\"expectedActiveHtmlArtifactId\":\"html-r3\",\"expectedSessionRevision\":7}}")
                 .GetAwaiter()
                 .GetResult();
 
@@ -1630,7 +1634,7 @@ namespace RNAssistant.Harness
             var token = BridgeToken(bridge);
             const string sourceUri = "rna://chat/chat-html/artifact/upload-html/revision/1";
             var preview = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"html-preview\",\"type\":\"readArtifactViewerPage\",\"bridgeToken\":\"" + token +
+                "{\"contractVersion\":2,\"id\":\"html-preview\",\"type\":\"readArtifactViewerPage\",\"bridgeToken\":\"" + token +
                 "\",\"payload\":{\"chatId\":\"chat-html\",\"resourceUri\":\"" + sourceUri + "\"}}")
                 .GetAwaiter().GetResult();
             AssertTrue(JObject.Parse(preview)["ok"].Value<bool>(), "uploaded HTML preview bridge response ok");
@@ -1639,7 +1643,7 @@ namespace RNAssistant.Harness
                 "HTML source setup carries metadata only, with bytes on the shared data plane");
 
             var imported = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"html-import\",\"type\":\"importUploadedHtmlToWorkspace\",\"bridgeToken\":\"" + token +
+                "{\"contractVersion\":2,\"id\":\"html-import\",\"type\":\"importUploadedHtmlToWorkspace\",\"bridgeToken\":\"" + token +
                 "\",\"payload\":{\"chatId\":\"chat-html\",\"sourceResourceUri\":\"" + sourceUri +
                 "\",\"expectedSessionRevision\":7,\"expectedActiveHtmlArtifactId\":\"html-r2\",\"targetPath\":\"pages/upload.html\"}}")
                 .GetAwaiter().GetResult();
@@ -1656,7 +1660,7 @@ namespace RNAssistant.Harness
             var bridge = new AssistantWebBridge(controller, null);
             var token = BridgeToken(bridge);
             var response = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"html-export\",\"type\":\"prepareHtmlWorkspaceExport\",\"bridgeToken\":\"" + token +
+                "{\"contractVersion\":2,\"id\":\"html-export\",\"type\":\"prepareHtmlWorkspaceExport\",\"bridgeToken\":\"" + token +
                 "\",\"payload\":{\"chatId\":\"chat-html\",\"expectedSessionRevision\":7,\"expectedActiveHtmlArtifactId\":\"html-r3\"}}")
                 .GetAwaiter().GetResult();
             var envelope = JObject.Parse(response);
@@ -1678,7 +1682,7 @@ namespace RNAssistant.Harness
             var token = BridgeToken(bridge);
             const string uri = "rna://chat/chat-view/artifact/plan-r2/revision/2";
             var response = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"artifact-page\",\"type\":\"readArtifactViewerPage\",\"bridgeToken\":\"" + token +
+                "{\"contractVersion\":2,\"id\":\"artifact-page\",\"type\":\"readArtifactViewerPage\",\"bridgeToken\":\"" + token +
                 "\",\"payload\":{\"chatId\":\"chat-view\",\"resourceUri\":\"" + uri +
                 "\",\"cursor\":\"32000\"}}")
                 .GetAwaiter().GetResult();
@@ -1716,7 +1720,7 @@ namespace RNAssistant.Harness
 
             const string imageUri = "rna://chat/chat-view/artifact/image-r1/revision/1";
             response = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"artifact-image\",\"type\":\"readArtifactImage\",\"bridgeToken\":\"" + token +
+                "{\"contractVersion\":2,\"id\":\"artifact-image\",\"type\":\"readArtifactImage\",\"bridgeToken\":\"" + token +
                 "\",\"payload\":{\"chatId\":\"chat-view\",\"resourceUri\":\"" + imageUri + "\"}}")
                 .GetAwaiter().GetResult();
             envelope = JObject.Parse(response);
@@ -1726,7 +1730,7 @@ namespace RNAssistant.Harness
             AssertEqual("image", (string)envelope["payload"]["viewerKind"],
                 "artifact image returns typed viewer kind");
             response = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"artifact-image-thumbnail\",\"type\":\"readArtifactImageThumbnail\",\"bridgeToken\":\"" + token +
+                "{\"contractVersion\":2,\"id\":\"artifact-image-thumbnail\",\"type\":\"readArtifactImageThumbnail\",\"bridgeToken\":\"" + token +
                 "\",\"payload\":{\"chatId\":\"chat-view\",\"resourceUri\":\"" + imageUri + "\"}}")
                 .GetAwaiter().GetResult();
             envelope = JObject.Parse(response);
@@ -1736,7 +1740,7 @@ namespace RNAssistant.Harness
 
             const string pdfUri = "rna://chat/chat-view/artifact/pdf-r1/revision/1";
             response = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"artifact-pdf\",\"type\":\"readArtifactPdfInfo\",\"bridgeToken\":\"" + token +
+                "{\"contractVersion\":2,\"id\":\"artifact-pdf\",\"type\":\"readArtifactPdfInfo\",\"bridgeToken\":\"" + token +
                 "\",\"payload\":{\"chatId\":\"chat-view\",\"resourceUri\":\"" + pdfUri + "\"}}")
                 .GetAwaiter().GetResult();
             envelope = JObject.Parse(response);
@@ -1746,7 +1750,7 @@ namespace RNAssistant.Harness
             AssertTrue(envelope["payload"]["extractedText"] == null,
                 "artifact PDF info does not bypass bounded extracted-text paging");
             response = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"artifact-pdf-page\",\"type\":\"readArtifactPdfPage\",\"bridgeToken\":\"" + token +
+                "{\"contractVersion\":2,\"id\":\"artifact-pdf-page\",\"type\":\"readArtifactPdfPage\",\"bridgeToken\":\"" + token +
                 "\",\"payload\":{\"chatId\":\"chat-view\",\"resourceUri\":\"" + pdfUri +
                 "\",\"pageIndex\":0}}")
                 .GetAwaiter().GetResult();
@@ -1755,7 +1759,7 @@ namespace RNAssistant.Harness
             AssertEqual(0, envelope["payload"]["pageIndex"].Value<int>(),
                 "artifact PDF page forwards zero-based page index");
             response = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"artifact-pdf-thumbnail\",\"type\":\"readArtifactPdfThumbnail\",\"bridgeToken\":\"" + token +
+                "{\"contractVersion\":2,\"id\":\"artifact-pdf-thumbnail\",\"type\":\"readArtifactPdfThumbnail\",\"bridgeToken\":\"" + token +
                 "\",\"payload\":{\"chatId\":\"chat-view\",\"resourceUri\":\"" + pdfUri +
                 "\",\"pageIndex\":0}}")
                 .GetAwaiter().GetResult();
@@ -1796,10 +1800,10 @@ namespace RNAssistant.Harness
             var bridge = new AssistantWebBridge(controller, null);
             var token = BridgeToken(bridge);
             var allow = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"net1\",\"type\":\"allowHtmlNetworkOrigin\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"origin\":\"https://example.test\"}}")
+                "{\"contractVersion\":2,\"id\":\"net1\",\"type\":\"allowHtmlNetworkOrigin\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"origin\":\"https://example.test\"}}")
                 .GetAwaiter().GetResult();
             var fetch = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"net2\",\"type\":\"htmlFetch\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"url\":\"https://example.test/data\",\"method\":\"POST\",\"headers\":{\"Content-Type\":\"application/json\"},\"body\":\"{}\"}}")
+                "{\"contractVersion\":2,\"id\":\"net2\",\"type\":\"htmlFetch\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"url\":\"https://example.test/data\",\"method\":\"POST\",\"headers\":{\"Content-Type\":\"application/json\"},\"body\":\"{}\"}}")
                 .GetAwaiter().GetResult();
 
             AssertTrue(JObject.Parse(allow)["ok"].Value<bool>(), "html origin bridge response ok");
@@ -1813,7 +1817,7 @@ namespace RNAssistant.Harness
             var bridge = new AssistantWebBridge(controller, null);
             var token = BridgeToken(bridge);
             var responseJson = bridge.HandleMessageAsync(
-                "{\"contractVersion\":1,\"id\":\"cancel1\",\"type\":\"cancelChatRun\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-a\",\"runId\":\"run-a\"}}")
+                "{\"contractVersion\":2,\"id\":\"cancel1\",\"type\":\"cancelChatRun\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-a\",\"runId\":\"run-a\"}}")
                 .GetAwaiter().GetResult();
 
             var response = JObject.Parse(responseJson);
@@ -1824,7 +1828,7 @@ namespace RNAssistant.Harness
 
         private static string BridgeToken(AssistantWebBridge bridge)
         {
-            var initJson = bridge.HandleMessageAsync("{\"contractVersion\":1,\"id\":\"init\",\"type\":\"init\",\"payload\":{}}")
+            var initJson = bridge.HandleMessageAsync("{\"contractVersion\":2,\"id\":\"init\",\"type\":\"init\",\"payload\":{}}")
                 .GetAwaiter()
                 .GetResult();
             return JObject.Parse(initJson)["payload"]["bridgeToken"].Value<string>();

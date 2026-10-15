@@ -13,7 +13,13 @@ covers the shared metadata projection. `resource cutover: retained whole and lin
 reads materialize once` checks one retained read, exact excerpt evidence and no
 cross-operation cache. `context continuity: selects active and archived bodies
 once` covers projected body cost, zero-budget/no-CAS admission and active/archive
-deduplication; `resource cutover: current source` covers writes and compaction.
+deduplication, diagnostic-only evidence, missing active payloads and frozen
+`DeliveredObservations`; `resource cutover: current source` covers writes and
+compaction. `tests/cli/compacted_read_guard_smoke.py` exercises real automatic
+compaction followed by a guarded edit for tool/user result roles;
+`omitted_read_guard_smoke.py` verifies that excluded bodies cannot authorize edits.
+`bridge-bootstrap.test.js` applies real init/chat projections across Office host
+switches and reset, with a separate v2 handshake and invalid-bootstrap rejection.
 
 Architectural simplification: `storage: runtime commits`,
 `authored file: HTML viewer and revision history`, `agent: native read batch`,

@@ -167,7 +167,7 @@ namespace RNAssistant.Office.WebView
                         break;
                     case BridgeOperationId.Init:
                         responsePayload = await RunBridgeWorkAsync(
-                            () => WithBridgeToken(_controller.Initialize()),
+                            () => Bootstrap(_controller.Initialize()),
                             cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.ListChats:
@@ -443,7 +443,7 @@ namespace RNAssistant.Office.WebView
                         responsePayload = await _controller.TestModelConnectionAsync(cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.ClearRuntimeData:
-                        responsePayload = WithBridgeToken(_controller.ClearRuntimeData());
+                        responsePayload = Bootstrap(_controller.ClearRuntimeData());
                         break;
                     case BridgeOperationId.GetTools:
                         responsePayload = _controller.GetTools();
@@ -811,15 +811,11 @@ namespace RNAssistant.Office.WebView
                 string.Equals(host, "Outlook", StringComparison.Ordinal);
         }
 
-        private InitResponse WithBridgeToken(InitResponse response)
+        private BridgeBootstrapResponse Bootstrap(InitResponse response)
         {
-            if (response != null)
-            {
-                response.BridgeToken = _bridgeToken;
-                response.OfficeHostChatAvailable = OfficeHostChatRequested != null;
-            }
-
-            return response;
+            if (response == null) throw new InvalidOperationException("Application initialization returned no state.");
+            response.OfficeHostChatAvailable = OfficeHostChatRequested != null;
+            return new BridgeBootstrapResponse { BridgeToken = _bridgeToken, Init = response };
         }
 
         public void Dispose()
