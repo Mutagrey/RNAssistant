@@ -35,6 +35,10 @@ namespace RNAssistant.Core.Agent
 
         internal bool RecoveryIgnored => _stepRejected && !_stepDispatched && _rejectedSteps >= 2;
 
+        // A workflow floor, not proof that the requested state was achieved.
+        // Reconstructed from terminal facts; never clears unknown replay guards.
+        internal bool InspectionRequired { get; private set; }
+
         internal bool CanDispatch(ToolCall call, out string reason, out string message, out int delayMilliseconds)
         {
             reason = message = null; delayMilliseconds = 0;
@@ -71,7 +75,12 @@ namespace RNAssistant.Core.Agent
             if (progress.Outcome == ToolExecutionOutcome.NotDispatched) { _stepRejected = true; return; }
             _stepDispatched = true;
             var key = Signature(call);
-            if (progress.Outcome == ToolExecutionOutcome.Unknown) { _unknown.Add(key); return; }
+            if (progress.Outcome == ToolExecutionOutcome.Unknown)
+            {
+                _unknown.Add(key);
+                InspectionRequired = true;
+                return;
+            }
             if (progress.Outcome == ToolExecutionOutcome.Error)
             {
                 Failure previous;
@@ -79,6 +88,8 @@ namespace RNAssistant.Core.Agent
                 previous.Attempts++; previous.Recovery = progress.Recovery; previous.Message = message;
                 return;
             }
+            if (progress.Outcome == ToolExecutionOutcome.Ok && progress.IndependentLocalRead)
+                InspectionRequired = false;
             var observations = (evidence ?? new ResourceEvidence[0]).Where(e => e != null).ToArray();
             foreach (var pair in _failures.ToArray())
                 if (pair.Value.Recovery?.IsSatisfiedBy(observations, effect) == true)

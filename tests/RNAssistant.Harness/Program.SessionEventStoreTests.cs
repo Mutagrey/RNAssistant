@@ -48,7 +48,8 @@ namespace RNAssistant.Harness
                 {
                     LoadToolSchemaResponse("outlook.create_draft"),
                     "{\"message\":\"Write\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"outlook.create_draft\",\"arguments\":{\"kind\":\"new\",\"body\":\"Replay\"}}]}",
-                    "{\"message\":\"Everything done\",\"action\":\"done\",\"tool_calls\":[]}"
+                    ModelProtocolWire.WriteAction("The draft cannot be inspected with available tools.",
+                        outcome == "unknown" ? ConversationResponse.BlockedAction : ConversationResponse.DoneAction)
                 });
                 var modelCalls = 0;
                 var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>

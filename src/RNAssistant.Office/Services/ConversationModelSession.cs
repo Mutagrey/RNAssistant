@@ -45,6 +45,7 @@ namespace RNAssistant.Office.Services
         private List<ResourceEvidence> _responseEvidence = new List<ResourceEvidence>();
         private CallableToolPack _toolPack;
         private string _requestStepId;
+        private string _completionFeedback;
         private LlmRunCache _runCache;
         private bool _carryOverOnly;
         private bool _skipPriorAdmissions;
@@ -125,9 +126,15 @@ namespace RNAssistant.Office.Services
         }
 
         internal async Task<ModelProtocolRequest> PrepareRequestAsync(
-            string stepId, ModelProtocolCallContext callContext, CancellationToken cancellationToken)
+            string stepId, ModelProtocolCallContext callContext, CancellationToken cancellationToken,
+            string completionFeedback = null)
         {
-            if (_requestStepId != stepId) { _requestStepId = stepId; _lastSnapshot = null; }
+            if (_requestStepId != stepId || _completionFeedback != completionFeedback)
+            {
+                _requestStepId = stepId;
+                _completionFeedback = completionFeedback;
+                _lastSnapshot = null;
+            }
             // Compile at the request boundary, after every accepted terminal
             // result (including confirmation continuation) has entered history.
             if (_lastSnapshot == null)
@@ -515,10 +522,18 @@ namespace RNAssistant.Office.Services
                 tools, skillDefinitions, null, _settings, _session, null, true, 0,
                 _toolPack.CapabilityContext(skillDefinitions, tools));
             if (packState != null) required.Add(packState);
+            ChatMessage feedback = null;
+            if (!string.IsNullOrWhiteSpace(_completionFeedback))
+            {
+                feedback = new ChatMessage { Role = _settings.SystemPromptRole, ProtocolMessage = true,
+                    Content = "COMPLETION_FEEDBACK:\n" + _completionFeedback };
+                required.Add(feedback);
+            }
             var budget = RequestMessageBudget(tools);
             var workingSet = ContextWorkingSet.Restore(_session, facts, budget / 3);
             return _compiler.Compile(frozen, required, facts, _context?.Notes, _runnableCatalog,
-                _settings, budget, enforceBudget, surface, workingSet: workingSet);
+                _settings, budget, enforceBudget, surface, trailingRequiredMessageId: feedback?.Id,
+                workingSet: workingSet);
         }
 
         private ChatMessage MaterializeToolResultMessage(

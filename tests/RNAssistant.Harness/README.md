@@ -7,6 +7,14 @@ cold reload. `chat sessions:` and `storage: stale chat save` cover document
 rebinding consumers and optimistic concurrency. These do not cover crashes or I/O
 failure between the metadata append and physical rename, or real Office Save As.
 
+`kernel: read inspection after unknown effect` and `kernel: unknown inspection`
+cover premature completion, failed inspection, unrelated writes, replay guards,
+iteration limits and restored read policy. `agent: Excel unknown` reproduces a
+clear-range read-back mismatch through the production conversation with a fake
+host, rejects empty completion and blind replay, then reads the affected range
+and completes remaining work. It covers both response formats and tool/user result
+roles with custom prompts. These checks do not qualify real Excel or model behavior.
+
 CAS publication integrity: `storage: CAS supplied` covers explicit restoration of
 the same artifact after raw/compressed and plaintext/encrypted corruption.
 `storage: CAS original` rejects damaged original/extraction parts before retaining

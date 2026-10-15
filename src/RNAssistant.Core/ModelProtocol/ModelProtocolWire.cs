@@ -11,6 +11,13 @@ namespace RNAssistant.Core.ModelProtocol
     // No version selection or historical fallback: all active responses use v7.
     public static class ModelProtocolWire
     {
+        public const string UnknownEffectGuidance =
+            "An unknown effect is a reason to investigate, not to stop the task. Before done, make a successful read of the affected current state after the unconfirmed operation. " +
+            "Compare it with the requested outcome, then continue feasible authorized work. Do not repeat the uncertain call unchanged or disguise a retry by changing arguments. " +
+            "A read alone does not prove the intended change, and an unrelated success does not resolve it. " +
+            "Use blocked only for a concrete obstacle that prevents further safe progress, or needs_input for an indispensable user decision; explain the unfinished outcome. " +
+            "Do not ask the user to verify state that available read tools can inspect.";
+
         public const string ActionGuidance =
             "Choose action from the remaining work before writing message. Use action=tool with nonempty tool_calls when a needed, authorized tool step remains; its result triggers the next model request. " +
             "If no tool is needed, deliver the complete requested answer or code in message now and use done with empty tool_calls. " +

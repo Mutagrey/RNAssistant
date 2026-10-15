@@ -152,6 +152,18 @@ explicit `WasCancelled` fact identifies cancelled/superseded calls; rejected
 replays and other undispatched work retain their error code and explanation in
 Office/Web. These presentation distinctions do not change dispatch, counts or
 the prohibition on repeating an unknown effect.
+Schema 50 directs the model to inspect the affected current state after `unknown`
+and continue feasible authorized work. Core rejects `done` until a subsequent
+successful independent local read, returning completion feedback in the same run
+under its existing budgets. Office and workspace adapters retain that feedback in
+required model context, including with custom prompts. Failed reads, unrelated
+writes, confirmations and rejected replays do not satisfy this workflow floor;
+the captured read policy and unknown facts reconstruct it on continuation.
+The guard does not establish target reconciliation or goal success: the model
+must choose the affected semantic target and compare the actual state with the
+request. `blocked` and `needs_input` remain available for a concrete obstacle or
+indispensable user decision. Inspection never clears cumulative uncertainty or
+permits replay of the uncertain call.
 `RunViewState.GoalVerification=not_assessed` records that no independent general
 goal check occurred. The UI shows this separately from verified write/no-change
 counts when the model chooses `done`; clean execution health never certifies the

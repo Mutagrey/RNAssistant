@@ -1064,6 +1064,7 @@ namespace RNAssistant.Harness
                             ["arguments"] = new JObject { ["moduleName"] = "Module1", ["code"] = intended }
                         })
                     }.ToString(Formatting.None),
+                    "{\"message\":\"Проверяю модуль после неподтверждённой записи.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.resources_read\",\"arguments\":{\"target\":\"VBA module: Module1\",\"representation\":\"source\"}}]}",
                     "{\"message\":\"Модуль Module1 обновлён.\",\"action\":\"done\",\"tool_calls\":[]}"
                 });
                 var requests = new List<IReadOnlyList<ChatMessage>>();
@@ -1100,7 +1101,7 @@ namespace RNAssistant.Harness
                 AssertContains(FlattenSimple(requests.Last()), "Final VBA state is unknown", "model receives the exact verification warning");
                 AssertEqual(RunViewLifecycles.Completed, result.RunViewState.Lifecycle, "loop completion is independent of execution health");
                 AssertRunViewState(result, session, "unknown", 0, 0, 1);
-                AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "model completed is accepted after unknown write");
+                AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "model completed is accepted after inspecting the unknown write");
                 AssertContains(result.AssistantText, "состояние 1 операций записи осталось неизвестным",
                     "runtime annotates an unverified mutation claim");
                 AssertContains(session.Messages.Last().Content, "Успешное применение всех изменений не подтверждено",
@@ -1147,7 +1148,8 @@ namespace RNAssistant.Harness
                             ["arguments"] = new JObject { ["moduleName"] = "Module1", ["code"] = intended }
                         })
                     }.ToString(Formatting.None),
-                    "{\"message\":\"Done.\",\"action\":\"done\",\"tool_calls\":[]}"
+                    ModelProtocolWire.WriteAction("The target cannot be inspected with available tools.",
+                        outcome == "unknown" ? ConversationResponse.BlockedAction : ConversationResponse.DoneAction)
                 }));
                 var trace = new ModelTracePersistenceService(EventStore(store));
                 var requestCount = 0;
@@ -2553,7 +2555,8 @@ namespace RNAssistant.Harness
                     "{\"message\":\"Добавляю лист.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"}}]}",
                     LoadSkillResponse("common.skill_authoring"),
                     "{\"message\":\"Сохраняю skill.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.skills_upsert\",\"arguments\":{\"id\":\"common.test\",\"description\":\"Test\",\"bodyMarkdown\":\"# Test\"}}]}",
-                    "{\"message\":\"Все изменения применены.\",\"action\":\"done\",\"tool_calls\":[]}",
+                    ModelProtocolWire.WriteAction("Проверка листа недоступна; skill сохранён.",
+                        initialHealth == "unknown" ? ConversationResponse.BlockedAction : ConversationResponse.DoneAction),
                     "{\"message\":\"Обычный новый ответ.\",\"action\":\"done\",\"tool_calls\":[]}"
                 });
                 var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
@@ -3106,8 +3109,9 @@ namespace RNAssistant.Harness
                 Func<string, string> add = name => new JObject { ["message"] = "Add sheet", ["action"] = "tool",
                     ["tool_calls"] = new JArray(new JObject { ["name"] = "excel.add_sheet", ["arguments"] = new JObject { ["name"] = name } })
                 }.ToString(Formatting.None);
-                var responses = new Queue<string>(new[] { add("AutoOne"), add(unknown ? "AutoOne" : "AutoTwo"),
-                    ModelProtocolWire.WriteAction("Done", ConversationResponse.DoneAction) });
+                var responses = new Queue<string>(new[] { add("AutoOne"), add(unknown ? "AutoOne" : "AutoTwo") });
+                if (unknown) responses.Enqueue("{\"message\":\"Проверяю созданный лист.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.resources_read\",\"arguments\":{\"target\":\"Excel range: AutoOne!A1\",\"representation\":\"text\"}}]}");
+                responses.Enqueue(ModelProtocolWire.WriteAction("Done", ConversationResponse.DoneAction));
                 var configuration = new AppSettings { AutoConfirmToolActions = true };
                 var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) => {
                     configuration.AutoConfirmToolActions = false;
@@ -3118,6 +3122,7 @@ namespace RNAssistant.Harness
                 var result = service.ExecuteAsync(ChatModes.Agent, "Create sheets", session, NewContext(adapter),
                     configuration, tools, null).GetAwaiter().GetResult();
                 AssertTrue(!result.WaitingForConfirmation && responses.Count == 0, "captured auto-confirm completes multiple steps without registrar");
+                AssertEqual(RunViewLifecycles.Completed, result.RunViewState.Lifecycle, "inspection permits completion without replay");
                 AssertEqual(unknown ? 1 : 2, adapter.ExcelSheetRequests.Count(request => request.ToolId == "excel.add_sheet"), "unknown effect is never redispatched");
                 AssertEqual(unknown ? RunViewHealth.Unknown : RunViewHealth.Clean, result.RunViewState.ExecutionHealth, "auto-approval does not certify effects");
                 var loaded = new ChatStore(FixturePaths.Value).Load(session.Id);

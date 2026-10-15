@@ -61,12 +61,14 @@ namespace RNAssistant.Core.Tools
         public ToolExecutionOutcome Outcome { get; private set; }
         public ToolRecoveryContract Recovery { get; private set; }
         public string ResultFingerprint { get; private set; }
+        public bool IndependentLocalRead { get; private set; }
 
         [JsonConstructor]
         public ToolExecutionProgress(ToolExecutionOutcome outcome, ToolRecoveryContract recovery = null,
-            string resultFingerprint = null)
+            string resultFingerprint = null, bool independentLocalRead = false)
         {
             Outcome = outcome; Recovery = recovery; ResultFingerprint = resultFingerprint;
+            IndependentLocalRead = independentLocalRead;
         }
 
         public static ToolExecutionProgress Capture(ToolExecutionRecord record)
@@ -78,7 +80,8 @@ namespace RNAssistant.Core.Tools
                 // Invalid domain JSON is handled by result delivery. Optional
                 // progress metadata must not prevent recording an actual effect.
             }
-            return new ToolExecutionProgress(record.Outcome, record.Recovery, fingerprint);
+            return new ToolExecutionProgress(record.Outcome, record.Recovery, fingerprint,
+                record.Context.Policy.IndependentLocalRead);
         }
     }
 

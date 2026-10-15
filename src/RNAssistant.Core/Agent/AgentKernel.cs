@@ -106,7 +106,8 @@ namespace RNAssistant.Core.Agent
                     using (var requestCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken,
                         _input == null ? CancellationToken.None : _input.InterruptToken))
                         model = await _model.SendAsync(new AgentModelRequest(state.RunId, state.TurnId, stepId,
-                            state.Messages, completionFeedback), requestCancellation.Token).ConfigureAwait(false);
+                            state.Messages, completionFeedback ?? (state.Progress.InspectionRequired
+                                ? ModelProtocolWire.UnknownEffectGuidance : null)), requestCancellation.Token).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {
@@ -159,6 +160,13 @@ namespace RNAssistant.Core.Agent
                 catch (Exception ex)
                 {
                     return await FinishAsync(state, RunLifecycle.Failed, "invalid_accepted_response", ex.Message).ConfigureAwait(false);
+                }
+                if (response.Action == ConversationResponse.DoneAction && state.Progress.InspectionRequired)
+                {
+                    completionFeedback = ModelProtocolWire.UnknownEffectGuidance;
+                    await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.SummaryChanged,
+                        state.Summary(reason: "completion_requirements_unmet", message: completionFeedback), stepId)).ConfigureAwait(false);
+                    continue;
                 }
                 foreach (var call in response.ToolCalls) state.AcceptedIds.Add(call.Id);
                 state.Messages.Add(AgentMessage.Assistant(response));
@@ -319,11 +327,6 @@ namespace RNAssistant.Core.Agent
                 stop = cancelled ? RunLifecycle.Cancelled : RunLifecycle.Failed;
             }
             if (record.ToolStepsConsumed > remaining) stop = RunLifecycle.Failed;
-            if (record.Outcome == ToolExecutionOutcome.Unknown)
-            {
-                state.UnknownEffectObserved = state.UnknownEffectObserved ||
-                    policy.MayHaveSideEffects;
-            }
             state.ToolSteps = (int)Math.Min(int.MaxValue, (long)state.ToolSteps + Math.Max(0, (long)record.ToolStepsConsumed - chargedSteps));
             state.Counts = state.Counts.Add(record);
             if (record.Outcome == ToolExecutionOutcome.AwaitingConfirmation)
@@ -410,7 +413,6 @@ namespace RNAssistant.Core.Agent
             internal int ToolSteps;
             internal long Revision;
             internal PendingConfirmation Pending;
-            internal bool UnknownEffectObserved;
             internal readonly AgentProgressTracker Progress = new AgentProgressTracker();
 
             internal State(AgentRunRequest request)
@@ -432,7 +434,6 @@ namespace RNAssistant.Core.Agent
                 Progress.Restore(Messages);
                 AcceptedIds = new HashSet<string>(continuation.AcceptedCallIds, StringComparer.OrdinalIgnoreCase);
                 Counts = continuation.Summary.ToolCounts;
-                UnknownEffectObserved = Counts.WriteUnknown > 0;
                 Iterations = continuation.Summary.IterationsUsed;
                 ToolSteps = continuation.Summary.ToolStepsUsed;
                 Revision = continuation.Revision;

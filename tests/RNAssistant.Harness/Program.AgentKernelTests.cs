@@ -47,7 +47,9 @@ namespace RNAssistant.Harness
         private static async Task KernelAggregatesOutcome(string tool, ToolExecutionOutcome outcome,
             ExecutionHealth health, string counts)
         {
-            var f = new KernelFixture(KernelResponse(KernelCall(tool)), KernelResponse());
+            var f = new KernelFixture(KernelResponse(KernelCall(tool)),
+                new AgentResponseDraft("Done; all changes applied.", new ToolCallDraft[0],
+                    outcome == ToolExecutionOutcome.Unknown ? ConversationResponse.BlockedAction : ConversationResponse.DoneAction));
             f.Tools.OnExecute = (context, token) => Task.FromResult(KernelRecord(context, outcome));
             var result = await f.RunAsync();
             AssertEqual(RunLifecycle.Completed, result.Summary.Lifecycle, "empty calls finish the loop");
@@ -230,7 +232,8 @@ namespace RNAssistant.Harness
                     KernelResponse(KernelCall("write", close)),
                     KernelResponse(KernelCall("write", save)),
                     KernelResponse(KernelCall("write", close)),
-                    KernelResponse());
+                    new AgentResponseDraft("Further progress requires unavailable target inspection.", new ToolCallDraft[0],
+                        firstOutcome == ToolExecutionOutcome.Unknown ? ConversationResponse.BlockedAction : ConversationResponse.DoneAction));
                 var attempts = 0;
                 f.Tools.OnExecute = (context, token) => Task.FromResult(
                     KernelRecord(context, ++attempts == 1 ? firstOutcome : ToolExecutionOutcome.Ok,
@@ -337,11 +340,19 @@ namespace RNAssistant.Harness
         {
             var f = new KernelFixture(
                 KernelResponse(KernelCall("write")),
+                KernelResponse(),
+                KernelResponse(KernelCall("read", "{\"target\":\"missing\"}")),
+                KernelResponse(),
+                KernelResponse(KernelCall("write", "{\"target\":\"other\"}")),
+                KernelResponse(),
                 KernelResponse(KernelCall("read")),
+                KernelResponse(KernelCall("write")),
                 KernelResponse());
             var outcomes = new Queue<ToolExecutionOutcome>(new[]
             {
                 ToolExecutionOutcome.Unknown,
+                ToolExecutionOutcome.Error,
+                ToolExecutionOutcome.Ok,
                 ToolExecutionOutcome.Ok
             });
             f.Tools.OnExecute = (context, token) => Task.FromResult(
@@ -353,8 +364,48 @@ namespace RNAssistant.Harness
                 "unknown effect still permits read-only inspection and a final response");
             AssertEqual(ExecutionHealth.Unknown, result.Summary.ExecutionHealth,
                 "read evidence cannot erase the prior unknown effect");
-            AssertEqual("1,0,0,0,1", KernelCounts(result.Summary),
-                "inspection is accounted without another mutation");
+            AssertEqual("1,1,1,0,1", KernelCounts(result.Summary),
+                "inspection, failed read and unrelated write are counted without replaying the uncertain call");
+            AssertEqual(3, f.Store.Events.Count(e => e.Summary.Reason == "completion_requirements_unmet"),
+                "immediate done, failed read and unrelated write cannot skip inspection");
+            AssertEqual(4, f.Tools.Calls.Count, "inspection does not authorize replay");
+            AssertEqual(ModelProtocolWire.UnknownEffectGuidance, f.Model.Requests[1].CompletionFeedback,
+                "the first request after unknown already asks for investigation");
+            AssertEqual(ModelProtocolWire.UnknownEffectGuidance, f.Model.Requests[2].CompletionFeedback,
+                "rejected done returns actionable feedback");
+            AssertEqual<string>(null, f.Model.Requests[7].CompletionFeedback,
+                "successful inspection removes the workflow reminder without changing effect history");
+            AssertEqual(1, result.AcceptedMessages.Count(m => m.Action == ConversationResponse.DoneAction),
+                "premature done never enters accepted history");
+        }
+
+        private static async Task KernelUnknownInspectionIsBoundedAndRestored()
+        {
+            var f = new KernelFixture(KernelResponse(KernelCall()), KernelResponse(), KernelResponse());
+            f.Tools.OnExecute = (context, token) => Task.FromResult(KernelRecord(context, ToolExecutionOutcome.Unknown));
+            var result = await f.RunAsync(limits: new AgentRunLimits(3, 3));
+            AssertEqual("iteration_limit", result.Summary.Reason, "ignored inspection feedback uses the existing limit");
+            AssertEqual(1, f.Tools.Calls.Count, "no automatic mutation retry");
+            AssertEqual(0, result.AcceptedMessages.Count(m => m.Action == ConversationResponse.DoneAction), "uninspected done is never accepted");
+
+            var tracker = new AgentProgressTracker();
+            tracker.Restore(result.AcceptedMessages);
+            AssertTrue(tracker.InspectionRequired, "replay restores the inspection requirement from unknown facts");
+            var readContext = new ToolExecutionContext(new ToolCall("read", "read", "{}"), f.Tools.Policies["read"],
+                "run", "turn", "read-step", DateTime.UtcNow, false, 1);
+            var progress = Newtonsoft.Json.JsonConvert.DeserializeObject<ToolExecutionProgress>(
+                Newtonsoft.Json.JsonConvert.SerializeObject(ToolExecutionProgress.Capture(KernelRecord(readContext))));
+            AssertTrue(progress.IndependentLocalRead, "captured read policy survives durable JSON");
+            var history = result.AcceptedMessages.Concat(new[] {
+                AgentMessage.Assistant(new AgentResponse("Inspect", new[] { readContext.Call })),
+                AgentMessage.AcceptedToolResult("read", "Inspected", "{}", progress) }).ToArray();
+            tracker = new AgentProgressTracker();
+            tracker.Restore(history);
+            AssertTrue(!tracker.InspectionRequired, "replayed successful read satisfies the workflow floor");
+            string reason, message; int delay;
+            AssertTrue(!tracker.CanDispatch(new ToolCall("retry", "write", "{}"), out reason, out message, out delay),
+                "replayed inspection never clears the unknown replay guard");
+            AssertEqual("repeated_unknown_tool_call", reason, "uncertain effect remains protected");
         }
 
         private static async Task KernelReadsAreSequentialAndBounded()
@@ -623,7 +674,10 @@ namespace RNAssistant.Harness
         private static async Task KernelConfirmationSharesAccounting(ToolExecutionOutcome before, ToolExecutionOutcome after,
             ExecutionHealth health, string counts)
         {
-            var f = new KernelFixture(KernelResponse(KernelCall()), KernelResponse(KernelCall("confirm")), KernelResponse());
+            var f = new KernelFixture(KernelResponse(KernelCall()), KernelResponse(KernelCall("confirm")),
+                new AgentResponseDraft("The target cannot be inspected with available tools.", new ToolCallDraft[0],
+                    before == ToolExecutionOutcome.Unknown || after == ToolExecutionOutcome.Unknown
+                        ? ConversationResponse.BlockedAction : ConversationResponse.DoneAction));
             f.Tools.OnExecute = (context, token) => Task.FromResult(KernelRecord(context, context.Call.Name == "write"
                 ? before : context.IsConfirmed ? after : ToolExecutionOutcome.AwaitingConfirmation));
             var paused = await f.RunAsync(limits: new AgentRunLimits(3, 2));
@@ -654,11 +708,14 @@ namespace RNAssistant.Harness
             var f = new KernelFixture(
                 KernelResponse(KernelCall()),
                 KernelResponse(KernelCall("confirm")),
+                KernelResponse(),
+                KernelResponse(KernelCall("read")),
                 KernelResponse(KernelCall()), KernelResponse());
             var outcomes = new Queue<ToolExecutionOutcome>(new[]
             {
                 ToolExecutionOutcome.Unknown,
                 ToolExecutionOutcome.AwaitingConfirmation,
+                ToolExecutionOutcome.Ok,
                 ToolExecutionOutcome.Ok
             });
             f.Tools.OnExecute = (context, token) => Task.FromResult(
@@ -682,7 +739,11 @@ namespace RNAssistant.Harness
                 "the model can continue after the restored guard rejects unknown replay");
             AssertEqual(ExecutionHealth.Unknown, resumed.Summary.ExecutionHealth,
                 "an unrelated confirmed write does not erase unknown effect evidence");
-            AssertEqual(3, f.Tools.Calls.Count, "only the unrelated confirmed call is dispatched on resume");
+            AssertEqual(4, f.Tools.Calls.Count, "only the confirmed call and inspection are dispatched on resume");
+            AssertEqual(1, f.Store.Events.Count(e => e.Summary.Reason == "completion_requirements_unmet"),
+                "restored uncertainty still rejects done before inspection");
+            AssertEqual(ModelProtocolWire.UnknownEffectGuidance, f.Model.Requests[2].CompletionFeedback,
+                "confirmation does not erase the inspection requirement");
         }
 
         private static async Task KernelRejectsAllocationCollisionAfterConfirmation()

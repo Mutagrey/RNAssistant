@@ -120,7 +120,7 @@ namespace RNAssistant.Office.Services
             {
                 return await _modelSession.PrepareRequestAsync(request.StepId,
                     new ModelProtocolCallContext(ConversationProtocolContext.SequentialBatchIds(_catalog)),
-                    cancellationToken).ConfigureAwait(false);
+                    cancellationToken, request.CompletionFeedback).ConfigureAwait(false);
             }
             finally { _pendingMessageUpdates.AddRange(_session.Messages.Skip(firstMessage)); }
         }
