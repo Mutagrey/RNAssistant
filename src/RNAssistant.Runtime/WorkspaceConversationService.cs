@@ -920,7 +920,7 @@ namespace RNAssistant.Runtime
                 }
                 var messages = snapshot.Messages;
                 var receipt = snapshot.Receipt;
-                RetainDeliveredObservations(snapshot, messages);
+                RetainDeliveredObservations(snapshot);
                 options.TraceContextReceipt = receipt;
                 options.TraceSession = _session;
                 options.TracePurpose = "conversation";
@@ -1041,11 +1041,9 @@ namespace RNAssistant.Runtime
                     .Concat(new[] { TaskListPublication.Scope(_session), _plans.Scope }));
             }
 
-            private void RetainDeliveredObservations(ModelContextSnapshot snapshot, IReadOnlyList<ChatMessage> messages)
+            private void RetainDeliveredObservations(ModelContextSnapshot snapshot)
             {
-                var delivered = messages.Where(message => message.ToolName == "common.resources_read" &&
-                    message.Role != "assistant" && message.CompletedOperation == null)
-                    .SelectMany(message => message.ResourceEvidence ?? new List<ResourceEvidence>()).ToArray();
+                var delivered = snapshot.DeliveredObservations;
                 var reducer = new EvidenceStateReducer();
                 foreach (var path in _observed.Keys.ToArray())
                     if (!delivered.Any(evidence => reducer.IsCurrentExactText(evidence, _observed[path], snapshot.Authority.Resources)))

@@ -830,12 +830,51 @@ namespace RNAssistant.Harness
                 AssertEqual(1, restored.Receipt.RetainedBodies, "body admission uses projected token cost, not a second byte-as-character estimate");
                 AssertEqual(1, restored.Receipt.HydratedPayloads, "one selected exact body is hydrated once");
                 AssertContains(string.Join("\n", restored.Messages.Select(item => item.Content)), body, "the complete current source survives compaction");
+                AssertEqual("source", restored.DeliveredObservations.Single().EvidenceId, "synthetic archived body retains delivery authority");
+                restored.Messages.Single(item => item.SyntheticResourceObservation).ResourceEvidence.Clear();
+                AssertEqual(1, restored.DeliveredObservations.Count, "delivery is detached from mutable message projections");
+                foreach (var diagnostic in new[] { ToolResult.Ok("Verified.", "{\"checks\":[]}"),
+                    ToolResult.Error("Verification failed.", "{\"code\":\"check_failed\"}") })
+                {
+                    var verification = ContinuityResult("verify", "web.verify", diagnostic);
+                    verification.ResourceEvidence.Add(observation);
+                    var facts = new[] { ContinuityCall(verification), verification };
+                    var compiled = compiler.Compile(authority, new ChatMessage[0], facts, null,
+                        new ToolCatalogEntry[0], new AppSettings(), 12000,
+                        workingSet: ContextWorkingSet.Restore(session, facts, 1000));
+                    AssertContains(string.Join("\n", compiled.Messages.Select(item => item.Content)), body,
+                        "diagnostic input evidence cannot suppress the archived source body");
+                    AssertEqual(1, compiled.Receipt.RetainedBodies, "source body restored beside diagnostics");
+                    AssertEqual(1, compiled.DeliveredObservations.Count, "delivered source authorizes reuse");
+                    var diagnosticsOnly = compiler.Compile(authority, new ChatMessage[0], facts, null,
+                        new ToolCatalogEntry[0], new AppSettings(), 12000);
+                    AssertEqual(0, diagnosticsOnly.DeliveredObservations.Count, "diagnostics alone never authorize a source read");
+                }
+                var missingRead = ContinuityResult("missing_active", "common.resources_read", ToolResult.Ok("Read.",
+                    "{\"target\":\"VBA module: Review\",\"representation\":\"source\",\"complete\":true}"));
+                missingRead.ResourceEvidence.Add(observation);
+                missingRead.ResultPayload = PayloadRef.FromBlob(blobs.StoreText(missingRead.Content, "application/json"));
+                System.IO.File.Delete(blobs.PathFor(missingRead.ResultPayload.Sha256));
+                var missingFacts = new[] { ContinuityCall(missingRead), missingRead };
+                var recovered = compiler.Compile(authority, new ChatMessage[0], missingFacts, null,
+                    new ToolCatalogEntry[0], new AppSettings(), 12000,
+                    workingSet: ContextWorkingSet.Restore(session, missingFacts, 1000));
+                AssertEqual(1, recovered.Receipt.RetainedBodies, "unavailable active result cannot suppress a usable archive body");
+                AssertEqual(1, recovered.DeliveredObservations.Count, "only the hydrated archive body grants authority");
+                var staleAuthority = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new[] {
+                    new ResourceAuthoritySnapshot(scope, 2, null, 0, new[] {
+                        ResourceHeadState.Known(new ResourceRef(exact.Uri, "r2"), 2) }) }),
+                    "pack", new SkillCatalogSnapshot(null), null, 1);
+                var stale = compiler.Compile(staleAuthority, new ChatMessage[0], new ChatMessage[0], null,
+                    new ToolCatalogEntry[0], new AppSettings(), 12000, workingSet: set);
+                AssertEqual(0, stale.DeliveredObservations.Count, "stale archive evidence never authorizes a write");
                 System.IO.File.Delete(blobs.PathFor(payload.Sha256));
                 var omitted = compiler.Compile(authority, new ChatMessage[0], new ChatMessage[0], null,
                     new ToolCatalogEntry[0], new AppSettings(), 12000,
                     workingSet: ContextWorkingSet.Restore(session, new ChatMessage[0], 0));
                 AssertEqual(0, omitted.Receipt.HydratedPayloads, "zero body budget never touches missing CAS bytes");
                 AssertEqual(1, omitted.Receipt.EvictedBodies, "budget omission is observable independently of missing storage");
+                AssertEqual(0, omitted.DeliveredObservations.Count, "omitted body does not grant authority");
                 var activeResult = ContinuityResult("active_source", "common.resources_read", ToolResult.Ok("Read.",
                     new JObject { ["target"] = "VBA module: Review", ["representation"] = "source", ["complete"] = true, ["text"] = body }.ToString()));
                 activeResult.ResourceEvidence.Add(observation);
@@ -847,6 +886,7 @@ namespace RNAssistant.Harness
                 AssertEqual(0, deduplicated.Receipt.RetainedBodies, "an active body is not counted as archive restoration");
                 AssertTrue(deduplicated.Receipt.Deduplicated > 0, "active and archived bodies use one deduplication policy");
                 AssertContains(string.Join("\n", deduplicated.Messages.Select(item => item.Content)), body, "the active source remains complete");
+                AssertEqual(1, deduplicated.DeliveredObservations.Count, "active and archived source share delivery rules");
             });
         }
 

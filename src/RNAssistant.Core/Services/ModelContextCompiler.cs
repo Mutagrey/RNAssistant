@@ -268,30 +268,6 @@ namespace RNAssistant.Core.Services
                 if (atom.Messages[1].ResourceEffect == null && (tool == null || tool.Policy == null || !tool.Policy.MayHaveSideEffects)) continue;
                 atom.Kind = "terminal-mutation";
             }
-
-            var observed = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var atom in atoms.Where(item => !item.ArchivedBody).Reverse()
-                .Concat(atoms.Where(item => item.ArchivedBody).Reverse()))
-            {
-                if (atom.Kind == "resource-change" || atom.Evidence.Count == 0 ||
-                    atom.CausalFrameId == null && atom.Kind != "resource-evidence" &&
-                    atom.Kind != "current-source") continue;
-                var key = string.Join("\n", atom.Evidence.Select(e => e.Resource.Uri + "@" + e.Resource.Revision +
-                    ":" + e.View + ":" + JsonConvert.SerializeObject(e.Coverage)).OrderBy(value => value, StringComparer.Ordinal));
-                if (!observed.Add(key))
-                {
-                    if (atom.ArchivedBody || atom.Kind == "current-source" && atom.Messages.Any(message => message.SyntheticResourceObservation))
-                    {
-                        atom.Kind = "omitted-source";
-                        atom.Messages.Clear();
-                        receipt.Deduplicated++;
-                    }
-                    // Equal input evidence does not make a completed call stale or
-                    // its result redundant: different computations can read the same
-                    // snapshot. Keep actual outcomes and bodies; only synthetic
-                    // copies of a current source may be omitted.
-                }
-            }
             atoms.RemoveAll(item => item.Kind == "omitted-source");
 
             // All remaining current evidence is relevant to the active window. Hydrate
@@ -314,12 +290,23 @@ namespace RNAssistant.Core.Services
             var optionalReceipts = 0;
             var optionalCandidates = 0;
             var optionalBytes = Math.Min(MaximumOptionalOperationBytes, maximumPayloadBytes);
-            var materializationOrder = atoms.Where(item => !item.ArchivedBody && !item.ArchivedOperation && (item.Kind != "resource-change" || item.KeepPair))
+            var observedBodies = new HashSet<string>(StringComparer.Ordinal);
+            var materializationOrder = atoms.Where(item => !item.ArchivedBody && !item.ArchivedOperation &&
+                    item.Kind != "current-source" && (item.Kind != "resource-change" || item.KeepPair))
+                .Concat(atoms.Where(item => !item.ArchivedBody && item.Kind == "current-source").Reverse())
                 .Concat(atoms.Where(item => item.ArchivedBody).Reverse())
                 .Concat(atoms.Where(item => item.ArchivedOperation && item.MustKeep))
                 .Concat(atoms.Where(item => item.ArchivedOperation && !item.MustKeep).Reverse());
             foreach (var atom in materializationOrder)
             {
+                var bodyKey = BodyKey(atom);
+                if (bodyKey != null && observedBodies.Contains(bodyKey) &&
+                    (atom.ArchivedBody || atom.Kind == "current-source"))
+                {
+                    atom.Messages.Clear();
+                    receipt.Deduplicated++;
+                    continue;
+                }
                 if (!retentionBudgetInitialized && (atom.ArchivedBody || atom.ArchivedOperation))
                 {
                     receiptBudget = Math.Max(0, Math.Min(workingSet.Budget, budget -
@@ -476,6 +463,10 @@ namespace RNAssistant.Core.Services
                     receiptBudget -= bodyCost;
                     receipt.RetainedBodies++;
                 }
+                // Diagnostics can cite a source without exposing it. Only a body
+                // actually materialized above can suppress another copy, before CAS read.
+                bodyKey = BodyKey(atom);
+                if (bodyKey != null) observedBodies.Add(bodyKey);
                 if (atom.ArchivedOperation && atom.Messages.Count > 0)
                 {
                     var projected = atom.Messages.Single();
@@ -624,7 +615,25 @@ namespace RNAssistant.Core.Services
                 throw new PromptBudgetExceededException("Current evidence and causal frames use approximately " +
                     receipt.EstimatedTokens + " tokens at a message budget of " + budget +
                     " after correctness filtering. Compact context or select a narrower resource view.", true);
-            return new ModelContextSnapshot(authority, messages, receipt);
+            var delivered = messages.Where(message => message.SyntheticResourceObservation || IsResourceRead(message))
+                .SelectMany(message => message.ResourceEvidence ?? new List<ResourceEvidence>())
+                .Where(evidence => _reducer.Reduce(evidence, authority.Resources).State == EvidenceState.Current)
+                .GroupBy(evidence => evidence.EvidenceId, StringComparer.Ordinal).Select(group => group.First());
+            return new ModelContextSnapshot(authority, messages, receipt, delivered);
+        }
+
+        private static bool IsResourceRead(ChatMessage message)
+        {
+            ToolResultWireReadResult wire; string error;
+            return message.ToolName == "common.resources_read" && message.CompletedOperation == null &&
+                ToolResultHistoryReader.TryRead(message, out wire, out error) && wire.Result.Status == ToolResultStatus.Ok;
+        }
+
+        private static string BodyKey(ContextAtom atom)
+        {
+            if (atom.BodyOmitted || atom.Evidence.Count == 0 || !atom.Messages.Any(ExposesBody)) return null;
+            return string.Join("\n", atom.Evidence.Select(e => e.Resource.Uri + "@" + e.Resource.Revision +
+                ":" + e.View + ":" + JsonConvert.SerializeObject(e.Coverage)).OrderBy(value => value, StringComparer.Ordinal));
         }
 
         private static ContextAtom InteractionAtom(ChatMessage call, ChatMessage result, bool required)

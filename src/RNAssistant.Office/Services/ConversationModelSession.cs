@@ -146,11 +146,7 @@ namespace RNAssistant.Office.Services
             var exposed = new HashSet<string>(receipt.Arsenal.Tools.Select(item => item.Id), StringComparer.Ordinal);
             var activeTools = _runnableCatalog.Where(item => exposed.Contains(item.Id)).OrderBy(item => item.Id, StringComparer.Ordinal).ToArray();
             _session.LastContextReceipt = receipt;
-            _responseEvidence = messages.Where(message =>
-                    IsVisibleResourceRead(message) || message.SyntheticResourceObservation)
-                .SelectMany(item => item.ResourceEvidence ?? new List<ResourceEvidence>())
-                .Where(item => new RNAssistant.Core.Services.EvidenceStateReducer().Reduce(item, snapshot.Authority.Resources).State == EvidenceState.Current)
-                .GroupBy(item => item.EvidenceId, StringComparer.Ordinal).Select(group => group.First()).ToList();
+            _responseEvidence = snapshot.DeliveredObservations.ToList();
             var options = BuildRequestOptions(_mode, _settings.AgentResponseMode, activeTools, callContext, _session, _runCache);
             options.TraceStepId = stepId;
             options.TraceContextReceipt = receipt;
@@ -167,17 +163,6 @@ namespace RNAssistant.Office.Services
                 CallContext = callContext,
                 Options = options
             };
-        }
-
-        private static bool IsVisibleResourceRead(ChatMessage message)
-        {
-            if (message == null || message.ToolName != ResourceToolCatalog.ReadToolId ||
-                message.ToolResultProtocolVersion != ToolResultWire.CurrentVersion)
-                return false;
-            ToolResultWireReadResult wire;
-            string error;
-            return ToolResultHistoryReader.TryRead(message, out wire, out error) &&
-                wire.Result.Status == RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok;
         }
 
         internal void RebindAuthority(IReadOnlyList<ToolCatalogEntry> catalog, SkillCatalogSnapshot skills,

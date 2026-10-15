@@ -525,6 +525,17 @@ results and then checks the complete request budget. The durable event stream ke
 original calls/results; filtering never deletes them. Search results are bounded
 discovery metadata/snippets, not proof that the underlying body was read.
 
+The frozen `ModelContextSnapshot.DeliveredObservations` is the single runtime-only
+delivery projection consumed by Office and CLI. It includes current resource-read
+and synthetic source evidence only after materialization, projection and final
+budget selection. Native result roles and archived assistant views confer the
+same delivery evidence; diagnostics, operation receipts and omitted/stale bodies
+confer none. CLI still retains only previously admitted same-run file observations
+with exact whole-text coverage. This projection is neither a durable store nor a
+model field. Source deduplication reserves coverage only for a materialized body;
+successful/failed diagnostics that cite it, or an unavailable active payload,
+cannot suppress a usable archived copy.
+
 During budget folding/omission, `ModelContextCompiler` measures each projected atom
 once and updates only changed atom costs. These values live only in that compile
 call. Request-level calibration/intercept and the existing media rounding branch

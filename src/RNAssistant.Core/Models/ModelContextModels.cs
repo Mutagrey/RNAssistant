@@ -137,18 +137,25 @@ namespace RNAssistant.Core.Models
     {
         private readonly string _messages;
         private readonly string _receipt;
+        private readonly string _deliveredObservations;
         public string Id { get; private set; }
         public ModelAuthoritySnapshot Authority { get; private set; }
         // Consumers get detached values: repairing a request cannot change its frozen source.
         public IReadOnlyList<ChatMessage> Messages
         { get { return Array.AsReadOnly(JsonConvert.DeserializeObject<ChatMessage[]>(_messages)); } }
+        // Current observations whose bodies survived materialization and the final budget.
+        // Presentation (native result or synthetic archive view) does not grant authority.
+        public IReadOnlyList<ResourceEvidence> DeliveredObservations
+        { get { return Array.AsReadOnly(JsonConvert.DeserializeObject<ResourceEvidence[]>(_deliveredObservations)); } }
         public ContextReceipt Receipt { get { return JsonConvert.DeserializeObject<ContextReceipt>(_receipt); } }
-        public ModelContextSnapshot(ModelAuthoritySnapshot authority, IEnumerable<ChatMessage> messages, ContextReceipt receipt)
+        public ModelContextSnapshot(ModelAuthoritySnapshot authority, IEnumerable<ChatMessage> messages,
+            ContextReceipt receipt, IEnumerable<ResourceEvidence> deliveredObservations)
         {
             Id = receipt.SnapshotId;
             Authority = authority;
             _messages = JsonConvert.SerializeObject(messages);
             _receipt = JsonConvert.SerializeObject(receipt);
+            _deliveredObservations = JsonConvert.SerializeObject(deliveredObservations);
         }
     }
 }
