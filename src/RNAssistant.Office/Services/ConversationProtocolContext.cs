@@ -126,8 +126,7 @@ namespace RNAssistant.Office.Services
                 message.Activity.ToolCallId == pending.Call.Id);
             if (activity == null || !string.Equals(activity.Activity.ConfirmationCatalogSha256, pending.Policy.Revision, StringComparison.Ordinal))
                 throw HistoryFailure("Ожидающее действие не связано с сохранённым fingerprint каталога.");
-            var userIndex = session.Messages.FindLastIndex(message => message.Activity == null && !message.ProtocolMessage &&
-                string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase));
+            var userIndex = session.Messages.FindLastIndex(ConversationInputMessage.IsUserInput);
             if (userIndex < 0 || !string.Equals(session.Messages[userIndex].RunId, state.Summary.TurnId, StringComparison.Ordinal))
                 throw HistoryFailure("Confirmation continuation does not match the latest user turn.");
             var history = new List<AgentMessage> { AgentMessage.User(session.Messages[userIndex].Content) };

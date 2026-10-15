@@ -8,6 +8,60 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## Confirmation input ownership and persistence review — 2026-10-15
+
+**Closed host-neutral.** Current-user selection is shared; pending-tool attachment
+copies and role-only selection are removed. Model-input preparation declares its
+earlier message updates in the existing commit. Inbox terminal receipts and one
+Web revision reducer replace manual acknowledgement/removal merging.
+
+Original review: owners were unchanged between
+`cf7e1356` and `2e5e6a49`. The isolated probe uses the existing MockDemo assembly,
+the real controller and fake Office/model ports with disposable data; no Office,
+network model or user document was exercised. Concurrent storage/test edits are
+outside this evidence.
+
+- **P1 / Office confirmation input:** `AssistantController.LatestUserAttachments`
+  selects the last `Role=user` message without excluding protocol results.
+  With the default `ToolResultRole=user`, a capability result therefore replaces
+  the actual user input when pending attachments are captured. On approval,
+  the refresh callback passes empty attachments to routing and clears the real
+  user's `AttachmentAnalysis`. In the image/helper probe, requests 1–2 contain
+  the analysis; requests 3–4 after approvals contain neither analysis nor media.
+  This also reproduces with the same helper throughout. Original attachment bytes
+  remain stored; the defect is loss of model context during continuation.
+- **P2 / Office explicit message persistence:** confirmation refresh can change
+  `AttachmentAnalysis` on an earlier user message, but neither the kernel's
+  `_pendingMessageUpdates` nor the controller's `Skip(firstMessageIndex)` commit
+  names that message. With result role `tool` and an explicit helper change from
+  vision1 to vision2 while awaiting approval, the next request uses vision2, but
+  a fresh store load still contains vision1. A second approval calls vision2 again
+  (three helper calls instead of two), and the final stored message still contains
+  vision1. This is a missed consumer of the explicit-commit cutover: the previous
+  broad save included earlier messages. The same probe also observes the old
+  accepted-call `RunId` after controller reassignment; no independent user-visible
+  failure is claimed for that field alone.
+- **P2 / Web inbox reconciliation:** the existing
+  [cross-window removal risk](#chat-transcript-review--2026-10-12) also has a local
+  delayed-acknowledgement variant, reproduced below. Both leave a nonexistent
+  pending bubble and repeated history fetches.
+
+Implemented changes and regression coverage:
+
+| Owner | Change and code to retire | Required regression |
+|---|---|---|
+| Office conversation input / model preparation | Shared `ConversationInputMessage` selection supplies the actual user message. Confirmation derives its attachments at refresh time; pending-tool copies and both role-only attachment lookups are deleted. | Nine role/routing cases through two approvals and restart, plus image steering; native images and helper analysis reach the model. |
+| Office conversation writers | `ConversationRunInput.UpdatedMessages` feeds the existing kernel commit. Finalization explicitly names earlier touched messages; no generic body diff or second store. | Fresh-load analysis is checked before every model request. Helper change is persisted, second approval does not rerun it; accepted-call replay updates survive reload. |
+| Office inbox projection / Web | Bounded terminal receipt lookup uses the existing event projection. A single per-input revision reducer replaces separate submit/removal echo writes. Queue-only changes do not fetch history. | Remote removal, remove-before-submit-ack, applied-before-history, stale receipts and retry with the original operation ID. |
+
+Initial reproduction: `/tmp/rna-review-M0sQTS/{Program.cs,user-role.log,tool-role.log,inbox-repro.js,inbox.log}`.
+Resolution: rebuilt Harness and MockDemo; `--confirmation-input-test` 10 cases,
+existing `--unified-agent-test` and `--inbox-test` pass. Harness `inbox:` 9/9,
+`storage: runtime commits` 1/1, `kernel replay:` 10/10 and `protocol context:` 6/6
+pass, including failed append and known effect after preparation failure. Four Web
+scripts pass: `bridge-bootstrap`, `chat-inbox`, `multi-chat-requests`, `chat-sync`.
+No full-suite, real-model or Windows/Office/WebView2 qualification is claimed.
+
 ## Baseline test failures during architecture follow-through — 2026-10-15
 
 **Closed host-neutral.** The original eight Harness failures were independently
@@ -658,10 +712,16 @@ real-model or Windows/Office/WebView2 qualification is claimed.
   Explicit submission reveals its bubble, later updates preserve manual scrolling,
   and an empty queue no longer discards an unresolved echo. Chromium covers both
   Steer and Queue through real send/state/render handlers with controlled replies.
-- **Open cross-window removal receipts / inbox projection owner:** snapshots omit
+- **Fixed host-neutral removal receipts — 2026-10-15 / inbox projection owner:** previously snapshots omitted
   both applied and removed inputs. Removal from another window cannot be distinguished
   from history lag by absence alone; a retained echo needs an explicit terminal
-  receipt to resolve that case. Local successful removal still removes its bubble.
+  receipt to resolve that case. Reproduced again on 2026-10-15. A local variant also
+  reproduces: a push exposes a pending input, its removal succeeds, then the older
+  submit acknowledgement arrives. `submitInboxMessage` reinserts `acceptedInput`
+  before `applyChatInbox` rejects the stale snapshot. The bubble returns even though
+  the runtime queue is empty; polling then repeatedly requests history for an input
+  that will never appear. Bounded terminal receipts and the shared revision reducer
+  now resolve both cases; see the confirmation/input review above.
 - **Open older-page refresh / web history + chat projection owners:** code inspection
   shows full `getChatState`/push snapshots still carry the latest 80 messages. If a
   reader has loaded earlier pages, such a snapshot can remove the visible anchor

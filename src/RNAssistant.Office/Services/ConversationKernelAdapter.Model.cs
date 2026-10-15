@@ -103,7 +103,8 @@ namespace RNAssistant.Office.Services
                     ? new ConversationRunInput(_input.Settings, _input.Context, _input.Tools,
                         _input.Skills, _input.Attachments)
                     : await _refresh(cancellationToken).ConfigureAwait(false);
-                if (_steered) fresh = new ConversationRunInput(_input.Settings, fresh.Context, fresh.Tools, fresh.Skills, _input.Attachments);
+                if (_steered) fresh = new ConversationRunInput(_input.Settings, fresh.Context, fresh.Tools,
+                    fresh.Skills, _input.Attachments, fresh.UpdatedMessages);
                 UseInput(fresh);
             }
             _modelSession = await ConversationModelSession.CreateAsync(_adapter, _compaction, _attachments, _eventStore,

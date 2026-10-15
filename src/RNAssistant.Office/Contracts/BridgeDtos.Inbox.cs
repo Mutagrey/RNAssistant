@@ -4,6 +4,19 @@ using RNAssistant.Core.Models;
 
 namespace RNAssistant.Office.Contracts
 {
+    public sealed class ChatInboxRequest : ChatPayload
+    {
+        public List<string> ReceiptOperationIds { get; set; }
+    }
+
+    public sealed class ChatInputReceipt
+    {
+        public string Id { get; set; }
+        public string OperationId { get; set; }
+        public long Revision { get; set; }
+        public ConversationInputStatus Status { get; set; }
+    }
+
     public sealed class SubmitChatInputPayload : ChatPayload
     {
         public string OperationId { get; set; }
@@ -24,6 +37,7 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("epoch")] public string Epoch { get; set; }
         [JsonProperty("revision")] public long Revision { get; set; }
         [JsonProperty("items")] public List<ConversationInput> Items { get; set; }
+        [JsonProperty("receipts")] public List<ChatInputReceipt> Receipts { get; set; }
         [JsonProperty("acceptedInput", NullValueHandling = NullValueHandling.Ignore)]
         public ConversationInput AcceptedInput { get; set; }
         [JsonProperty("paused")] public bool Paused { get; set; }

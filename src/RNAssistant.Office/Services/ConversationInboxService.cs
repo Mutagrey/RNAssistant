@@ -127,14 +127,21 @@ namespace RNAssistant.Office.Services
                 if (!completed && !awaiting) PauseLocked(box, "Работа остановлена или завершилась с ошибкой");
             }
         }
-        internal ChatInboxResponse Snapshot(ChatSession session)
+        internal ChatInboxResponse Snapshot(ChatSession session, IReadOnlyList<string> receiptOperationIds = null)
         {
+            if (receiptOperationIds != null && (receiptOperationIds.Count > 128 ||
+                receiptOperationIds.Any(id => string.IsNullOrWhiteSpace(id) || id.Length > 128)))
+                throw new ArgumentException("Receipt lookup requires at most 128 operation IDs of 1–128 characters.");
+            var requested = new HashSet<string>(receiptOperationIds ?? new string[0], StringComparer.Ordinal);
             var box = Get(session);
             lock (box.Sync) return new ChatInboxResponse
             {
                 ChatId = session.Id, Epoch = _epoch, Revision = box.ViewRevision, Phase = box.Session.LastRun == null ? null : box.Session.LastRun.Phase, Running = box.Running || box.Worker,
                 Paused = box.Paused, PauseReason = box.PauseReason,
-                Items = box.Inputs.Where(IsPending).Select(Clone).ToList()
+                Items = box.Inputs.Where(IsPending).Select(Clone).ToList(),
+                Receipts = requested.Count == 0 ? new List<ChatInputReceipt>() : box.Inputs.Where(input => requested.Contains(input.OperationId))
+                    .Select(input => new ChatInputReceipt { Id = input.Id, OperationId = input.OperationId,
+                        Revision = input.Revision, Status = input.Status }).ToList()
             };
         }
         internal ConversationInput Find(ChatSession session, string id)
@@ -171,7 +178,7 @@ namespace RNAssistant.Office.Services
                 if (input.Delivery == InputDelivery.Steer && box.Accepting) box.Interrupt.Cancel();
             }
         }
-        internal void Update(ChatSession session, UpdateChatInputPayload request, string action)
+        internal ConversationInput Update(ChatSession session, UpdateChatInputPayload request, string action)
         {
             var box = Get(session);
             lock (box.Sync)
@@ -182,7 +189,7 @@ namespace RNAssistant.Office.Services
                 if (input != null && input.Revision == request.ExpectedRevision + 1 &&
                     ((action == "remove" && input.Status == ConversationInputStatus.Removed) ||
                      (action == "steer" && input.Delivery == InputDelivery.Steer) ||
-                     (action == "edit" && input.Status == ConversationInputStatus.Pending && input.Text == (request.Text ?? string.Empty)))) return;
+                     (action == "edit" && input.Status == ConversationInputStatus.Pending && input.Text == (request.Text ?? string.Empty)))) return input;
                 if (input == null || (input.Status != ConversationInputStatus.Pending &&
                     !(action == "remove" && input.Status == ConversationInputStatus.Delivering && box.Paused && !box.Running && !box.Worker)) ||
                     input.Revision != request.ExpectedRevision)
@@ -199,6 +206,7 @@ namespace RNAssistant.Office.Services
                 Write(box, input);
                 if (action == "steer") box.ExplicitSteers.Add(input.Id);
                 if (action == "steer" && box.Accepting) box.Interrupt.Cancel();
+                return input;
             }
         }
         internal void Pause(ChatSession session, string reason)

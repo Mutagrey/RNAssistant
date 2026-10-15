@@ -383,8 +383,7 @@ namespace RNAssistant.Office.Services
         {
             _context = context == null ? null : JsonConvert.DeserializeObject<DocumentContext>(JsonConvert.SerializeObject(context));
             _currentAttachments = attachments;
-            _currentUserId = (session.Messages ?? new List<ChatMessage>()).LastOrDefault(item =>
-                item != null && item.Role == "user" && !item.ProtocolMessage && item.Activity == null)?.Id;
+            _currentUserId = ConversationInputMessage.Latest(session)?.Id;
             bool currentAdmission;
             var restoredAdmissions = _toolPackJournal.ReadAccepted(out currentAdmission);
             _toolPack = CallableToolPack.Create(

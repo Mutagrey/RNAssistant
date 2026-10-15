@@ -1,5 +1,18 @@
 # RNAssistant Harness
 
+Confirmation input: after a host-neutral MockDemo build, run
+`dotnet demo/RNAssistant.MockDemo/bin/Debug/net8.0/RNAssistant.MockDemo.dll --confirmation-input-test`.
+Ten controlled cases cover user/developer/tool result roles, native images,
+unchanged/changed analysis helpers, two approvals with restart and image steering.
+Every primary request checks freshly loaded analysis; helper and mutation counts
+reject repeated work. Existing `--unified-agent-test`, `--inbox-test`, Harness
+`kernel replay:`, `protocol context:` and `storage: runtime commits` cover adjacent
+failure/recovery boundaries. `inbox:` also checks bounded terminal receipt lookup
+and replay; `bridge: typed input` checks its addressed DTO. Web
+`chat-inbox.test.js` covers local/remote removal, late acknowledgements, stale
+receipts and history ordering without redundant queue-only history fetches.
+These are fake-host/model checks, not Windows/Office qualification.
+
 `storage: CAS` covers misplaced/renamed published and unpublished resource journals,
 file/directory links and supported sibling cache/metadata paths.
 `resource cutover: frozen evidence` and `context continuity:` cover removed heads,

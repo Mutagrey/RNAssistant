@@ -141,7 +141,8 @@ namespace RNAssistant.Office
             int resourceStartIndex,
             string runId,
             ChatTurnResult completion,
-            Exception ex)
+            Exception ex,
+            IEnumerable<ChatMessage> updatedMessages = null)
         {
             if (ex != null)
             {
@@ -163,7 +164,8 @@ namespace RNAssistant.Office
             ChatResourceReferenceService.LinkMessageResources(session, resourceStartIndex);
             if (ex == null && (completion == null || !completion.WaitingForConfirmation))
                 ApplyTerminalRunResult(session);
-            SaveSessionChanges(session, session.Messages.Skip(firstMessageIndex));
+            SaveSessionChanges(session, session.Messages.Skip(firstMessageIndex)
+                .Concat(updatedMessages ?? new ChatMessage[0]).Where(message => message != null));
             RunCausalTrace.Summary(session);
             _chatRuns.UpdateSessionSnapshot(session.Id, runId, session);
         }
@@ -535,9 +537,7 @@ namespace RNAssistant.Office
                     {
                         ReportProgress(runProgress, "routing", attachmentRouting.ProgressMessage);
                     }
-                    var turnUserMessage = appendedUserMessage ?? (session.Messages ?? new List<ChatMessage>())
-                        .LastOrDefault(message => message != null && !message.ProtocolMessage &&
-                            string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase));
+                    var turnUserMessage = appendedUserMessage ?? ConversationInputMessage.Latest(session);
                     var setupStartMs = turnTimer.ElapsedMilliseconds;
                     var attachmentAnalysis = await _attachmentAnalysisService.EnsureAsync(
                         text,

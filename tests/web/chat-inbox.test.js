@@ -115,7 +115,8 @@ vm.runInContext(fs.readFileSync("web/js/app-chat-inbox.js", "utf8"), context);
   resolveSend({ chatId: "b", revision: 10, items: [{ Id: "edit", Text: "first edit", Revision: 2, Status: "Pending" }] });
   await saving;
   assert.equal(context.state.inboxEditDraft, reopened, "late save cannot discard a subsequently reopened edit");
-  transport = async () => ({ chatId: "b", revision: 11, items: [] });
+  transport = async () => ({ chatId: "b", revision: 11, items: [],
+    receipts: [{ Id: "edit", Revision: 3, Status: "Removed" }] });
   await context.changeInboxItem("removeChatInput", { Id: "edit", Revision: 2 });
   assert.equal(context.pendingChatInputs().some(item => item.Id === "edit"), false,
     "an explicit successful removal still removes the pending bubble");
@@ -132,5 +133,64 @@ vm.runInContext(fs.readFileSync("web/js/app-chat-inbox.js", "utf8"), context);
   assert.equal(calls.at(-1).payload.text, null);
   assert.equal(context.$("chatInput").value, "Unsent draft", "question answers preserve composer text");
   assert.equal(context.state.draftAttachments[0].Id, "second", "question answers preserve composer attachments");
-  console.log("PASS chat inbox: settings, ack/retry, chat isolation, stale projections, queue controls");
+  context.state.activeChatId = "receipts";
+  context.state.messages = [];
+  let historyReads = 0;
+  context.loadChatState = async () => { historyReads++; return {}; };
+  context.$("chatInput").value = "remove before acknowledgement";
+  transport = () => new Promise(resolve => { resolveSend = resolve; });
+  const lateSubmit = context.submitInboxMessage(context.$("chatInput").value, [], "receipts", "Queue");
+  const lateOperation = calls.at(-1).payload.operationId;
+  const accepted = { Id: "late", OperationId: lateOperation, Revision: 1, Text: "remove before acknowledgement", Status: "Pending" };
+  context.applyChatInbox({ chatId: "receipts", epoch: "e", revision: 1, items: [accepted], running: false });
+  transport = async () => ({ chatId: "receipts", epoch: "e", revision: 2, items: [], running: false,
+    receipts: [{ Id: "late", OperationId: lateOperation, Revision: 2, Status: "Removed" }] });
+  await context.changeInboxItem("removeChatInput", accepted);
+  assert.equal(context.pendingChatInputs().length, 0, "removal receipt drops the echo");
+  resolveSend({ chatId: "receipts", epoch: "e", revision: 1, items: [accepted], acceptedInput: accepted, running: false });
+  await lateSubmit;
+  assert.equal(context.pendingChatInputs().length, 0, "late submit cannot resurrect removed input");
+  assert.equal(historyReads, 0, "removed input does not cause a history refresh");
+  assert.equal(context.state.inboxSubmissions.receipts, undefined, "terminal receipt lives only until submit settles");
+
+  const remote = { Id: "remote", OperationId: "remote-op", Revision: 1, Status: "Pending", Text: "other window" };
+  context.applyChatInbox({ chatId: "receipts", epoch: "e", revision: 3, items: [remote], running: false });
+  transport = async (type, payload) => {
+    assert.equal(type, "getChatInbox");
+    assert.ok(payload.receiptOperationIds.includes("remote-op"), "poll requests terminal evidence for tracked input");
+    return { chatId: "receipts", epoch: "e", revision: 4, items: [], running: false,
+      receipts: [{ Id: "remote", OperationId: "remote-op", Revision: 2, Status: "Removed" }] };
+  };
+  await context.pollChatInbox();
+  assert.equal(context.pendingChatInputs().length, 0, "other-window removal clears its echo");
+  assert.equal(historyReads, 0, "queue-only removal does not fetch history");
+
+  const delivered = { Id: "delivered", OperationId: "delivered-op", Revision: 1, Status: "Pending", Text: "preserve until history" };
+  context.applyChatInbox({ chatId: "receipts", epoch: "e", revision: 5, items: [delivered], running: false });
+  transport = async () => ({ chatId: "receipts", epoch: "e", revision: 6, items: [], running: false,
+    receipts: [{ Id: "delivered", OperationId: "delivered-op", Revision: 3, Status: "Applied" }] });
+  await context.pollChatInbox();
+  assert.equal(context.pendingChatInputs()[0].Text, delivered.Text, "compact receipt preserves echo text");
+  assert.equal(context.pendingChatInputs()[0].Status, "Applied");
+  assert.equal(historyReads, 1, "applied receipt requests missing history");
+  context.applyChatInbox({ chatId: "receipts", epoch: "e", revision: 4, items: [],
+    receipts: [{ Id: "delivered", OperationId: "delivered-op", Revision: 2, Status: "Delivering" }] });
+  assert.equal(context.pendingChatInputs()[0].Status, "Applied", "stale receipt cannot downgrade input");
+  context.reconcileChatInputEchoes("receipts", [{ Id: "delivered" }]);
+  assert.equal(context.pendingChatInputs().length, 0, "only the exact history message retires an applied echo");
+
+  transport = () => new Promise(resolve => { resolveSend = resolve; });
+  const staleSend = context.submitInboxMessage("accepted before push", [], "receipts", "Queue");
+  const staleOperation = calls.at(-1).payload.operationId;
+  context.applyChatInbox({ chatId: "receipts", epoch: "e", revision: 8, items: [], running: true });
+  resolveSend({ chatId: "receipts", epoch: "e", revision: 7, items: [], acceptedInput: {
+    Id: "stale-ack", OperationId: staleOperation, Revision: 3, Status: "Applied", Text: "accepted before push" } });
+  await staleSend;
+  assert.equal(context.chatInbox().revision, 8, "old submit cannot replace a newer snapshot");
+  assert.equal(context.pendingChatInputs()[0].Id, "stale-ack", "old submit still resolves its outstanding operation");
+  context.reconcileChatInputEchoes("receipts", [{ Id: "stale-ack" }]);
+  context.applyChatInbox({ chatId: "receipts", epoch: "e", revision: 7, items: [], acceptedInput: {
+    Id: "stale-ack", OperationId: staleOperation, Revision: 3, Status: "Applied" } });
+  assert.equal(context.pendingChatInputs().length, 0, "settled old acknowledgement cannot recreate a rendered echo");
+  console.log("PASS chat inbox: ack/retry, stale receipts, local/remote removal, history ordering, queue controls");
 })().catch(error => { console.error(error); process.exitCode = 1; });

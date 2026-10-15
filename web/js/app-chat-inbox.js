@@ -7,34 +7,69 @@ function chatInputEchoes(chatId) {
   state.chatInputEchoes = state.chatInputEchoes || {};
   return state.chatInputEchoes[chatId] || (state.chatInputEchoes[chatId] = []);
 }
+function reconcileChatInputReceipt(chatId, item, allowInsert) {
+  var echoes = chatInputEchoes(chatId);
+  var index = echoes.findIndex(function (echo) {
+    return item.Id && echo.Id === item.Id || item.OperationId && echo.OperationId === item.OperationId;
+  });
+  var submission = (state.inboxSubmissions || {})[chatId];
+  if (!submission || !item.OperationId || submission.OperationId !== item.OperationId) submission = null;
+  var previous = index < 0 ? null : echoes[index];
+  if (submission && submission.receipt && (!previous || submission.receipt.Revision > (previous.Revision || 0)))
+    previous = submission.receipt;
+  if ((!allowInsert && !previous && !submission) || (previous && previous.Revision > item.Revision)) return false;
+  var receipt = Object.assign({}, previous || submission, item);
+  delete receipt.localStatus;
+  delete receipt.receipt;
+  // Retain a terminal revision only while its submit acknowledgement can still arrive.
+  if (submission) submission.receipt = receipt;
+  var rendered = submission && submission.renderedId === receipt.Id || chatId === state.activeChatId && (state.messages || []).some(function (message) {
+    return (message.Id || message.id) === receipt.Id;
+  });
+  if (receipt.Status === "Removed" || rendered) {
+    if (index >= 0) echoes.splice(index, 1);
+    return index >= 0;
+  }
+  var changed = index < 0 || !previous || previous.Revision !== receipt.Revision ||
+    previous.Status !== receipt.Status || previous.localStatus;
+  if (index >= 0) echoes[index] = receipt;
+  else echoes.push(receipt);
+  return !!changed;
+}
 function applyChatInbox(inbox, deferRender) {
   if (!inbox || !inbox.chatId) return;
   state.chatInboxes = state.chatInboxes || {};
   var old = state.chatInboxes[inbox.chatId];
-  if (old && old.epoch === inbox.epoch && old.revision > inbox.revision) return;
-  state.chatInboxes[inbox.chatId] = inbox;
+  var stale = old && old.epoch === inbox.epoch && old.revision > inbox.revision;
+  var changed = false;
+  if (!stale) {
+    state.chatInboxes[inbox.chatId] = inbox;
+    (inbox.items || []).forEach(function (item) {
+      changed = reconcileChatInputReceipt(inbox.chatId, item, true) || changed;
+    });
+  }
+  (inbox.receipts || []).forEach(function (item) {
+    changed = reconcileChatInputReceipt(inbox.chatId, item, false) || changed;
+  });
+  if (inbox.acceptedInput) {
+    var submission = (state.inboxSubmissions || {})[inbox.chatId];
+    if (!stale || submission && submission.OperationId === inbox.acceptedInput.OperationId)
+      changed = reconcileChatInputReceipt(inbox.chatId, inbox.acceptedInput, !stale) || changed;
+  }
+  if (stale) {
+    if (changed && !deferRender && inbox.chatId === state.activeChatId) renderChatInbox();
+    return;
+  }
   var endedRun = inbox.running === false && !state.activeSends[inbox.chatId] &&
     state.chatRuns && state.chatRuns[inbox.chatId];
   if (endedRun) endChatRunTracking(inbox.chatId);
-  var echoes = chatInputEchoes(inbox.chatId);
-  var items = (inbox.items || []).slice();
-  if (inbox.acceptedInput) items.push(inbox.acceptedInput);
-  items.forEach(function (item) {
-    var index = echoes.findIndex(function (echo) {
-      return echo.Id === item.Id || item.OperationId && echo.OperationId === item.OperationId;
-    });
-    if (item.Status === "Removed") {
-      if (index >= 0) echoes.splice(index, 1);
-    } else if (index >= 0) echoes[index] = item;
-    else echoes.push(item);
-  });
   if (inbox.chatId === state.activeChatId) {
     var announcer = $("inboxAnnouncer");
     if (announcer && (!old || old.revision !== inbox.revision)) announcer.textContent =
       "Ожидают отправки: " + (inbox.items || []).length + (inbox.paused ? ". Очередь приостановлена." : ".");
     renderSendControls();
     if (!deferRender && (!old || old.epoch !== inbox.epoch || old.revision !== inbox.revision ||
-        old.phase !== inbox.phase || old.running !== inbox.running || old.paused !== inbox.paused || inbox.acceptedInput)) renderChatInbox();
+        old.phase !== inbox.phase || old.running !== inbox.running || old.paused !== inbox.paused || changed)) renderChatInbox();
   }
   if (!deferRender && (endedRun || !old || old.running !== inbox.running)) renderChatSessions();
 }
@@ -44,7 +79,10 @@ function reconcileChatInputEchoes(chatId, messages) {
     if (!item.Id) return true; // Only an intake receipt can resolve an uncertain local send.
     // The history page may predate queue consumption even within one response.
     // Absence from the queue is not evidence that its user bubble was rendered.
-    return !(messages || []).some(function (message) { return (message.Id || message.id) === item.Id; });
+    var rendered = (messages || []).some(function (message) { return (message.Id || message.id) === item.Id; });
+    var submission = (state.inboxSubmissions || {})[chatId];
+    if (rendered && submission && submission.OperationId === item.OperationId) submission.renderedId = item.Id;
+    return !rendered;
   });
 }
 function runningMessageDelivery() {
@@ -85,13 +123,6 @@ async function submitInboxMessage(text, attachments, chatId, delivery, answers) 
     var inbox = await send("submitChatInput", { chatId: chatId, operationId: pending.OperationId,
       text: text, resourceDraftIds: attachments.map(attachmentId), delivery: delivery, answers: answers });
     pending.localStatus = "syncing";
-    // A newer push may precede this response; the exact intake receipt still resolves its echo.
-    if (inbox.acceptedInput) {
-      echoes = chatInputEchoes(chatId);
-      var echoIndex = echoes.findIndex(function (item) { return item.OperationId === pending.OperationId; });
-      if (echoIndex < 0) echoes.push(inbox.acceptedInput);
-      else if (!echoes[echoIndex].Id || echoes[echoIndex].Revision <= inbox.acceptedInput.Revision) echoes[echoIndex] = inbox.acceptedInput;
-    }
     applyChatInbox(inbox);
     delete state.inboxSubmissions[chatId];
     if (state.activeChatId === chatId) {
@@ -109,7 +140,7 @@ async function submitInboxMessage(text, attachments, chatId, delivery, answers) 
         if (!draft.text && !draft.attachments.length) delete state.chatDrafts[chatId];
       }
     }
-    refreshInboxChat(chatId);
+    if (chatInboxNeedsHistory(chatId)) refreshInboxChat(chatId);
     return true;
   } catch (error) {
     pending.localStatus = "unconfirmed";
@@ -137,9 +168,6 @@ async function changeInboxItem(action, item, text) {
   var editingDraft = state.inboxEditDraft;
   try {
     var response = await send(action, { chatId: chatId, inputId: item.Id, expectedRevision: item.Revision, text: text });
-    if (action === "removeChatInput") state.chatInputEchoes[chatId] = chatInputEchoes(chatId).filter(function (echo) { return echo.Id !== item.Id; });
-    if (action === "removeChatInput" && state.inboxSubmissions && state.inboxSubmissions[chatId] &&
-        state.inboxSubmissions[chatId].OperationId === item.OperationId) delete state.inboxSubmissions[chatId];
     if (state.inboxEditing === item.Id && state.inboxEditDraft === editingDraft) { state.inboxEditing = null; state.inboxEditDraft = null; }
     applyChatInbox(response);
     if (state.activeChatId === chatId) $("inboxStatus").textContent = "";
@@ -162,14 +190,26 @@ async function pollChatInbox() {
   state.inboxPolling = true;
   try {
     var previous = chatInbox(chatId);
-    var inbox = await send("getChatInbox", { chatId: chatId });
+    // Prioritize missing echoes so a large pending queue cannot starve terminal receipts.
+    var queuedIds = new Set((previous.items || []).map(function (item) { return item.Id; }));
+    var echoes = chatInputEchoes(chatId).filter(function (item) { return item.OperationId; });
+    var operationIds = echoes.filter(function (item) { return !queuedIds.has(item.Id); })
+      .concat(echoes.filter(function (item) { return queuedIds.has(item.Id); }))
+      .map(function (item) { return item.OperationId; }).slice(0, 128);
+    var inbox = await send("getChatInbox", { chatId: chatId, receiptOperationIds: operationIds });
     applyChatInbox(inbox);
-    if (inbox.epoch !== previous.epoch || inbox.revision !== previous.revision || inbox.running !== previous.running ||
-        state.activeChatId === chatId && pendingChatInputs().some(function (item) {
-          return item.Id && !(chatInbox(chatId).items || []).some(function (queued) { return queued.Id === item.Id; });
-        })) refreshInboxChat(chatId);
+    var current = chatInbox(chatId);
+    if (current.epoch !== previous.epoch || current.running !== previous.running ||
+        current.phase !== previous.phase || chatInboxNeedsHistory(chatId)) refreshInboxChat(chatId);
   } catch (_) { /* The normal bridge banner reports disconnection; keep the saved projection. */ }
   finally { state.inboxPolling = false; }
+}
+function chatInboxNeedsHistory(chatId) {
+  return chatInputEchoes(chatId).some(function (item) {
+    return item.Status === "Applied" && (chatId !== state.activeChatId || !(state.messages || []).some(function (message) {
+      return (message.Id || message.id) === item.Id;
+    }));
+  });
 }
 function initChatInbox() {
   if (state.inboxInitialized) return;

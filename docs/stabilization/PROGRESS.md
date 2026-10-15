@@ -1,5 +1,20 @@
 # Stabilization progress
 
+## Confirmation input and inbox receipts — 2026-10-15
+
+Three reproduced findings are closed host-neutral. Confirmation and model
+preparation share actual-user selection; pending attachment copies are removed.
+Initial/updated analysis and replay changes are named in existing commits, so
+restart retains the new analysis without repeating the helper. Bounded terminal
+input receipts and one Web revision reducer prevent removed echoes from returning
+after late acknowledgements; queue-only edits/removals no longer reload history.
+
+Validation: 10 new controller role/routing/restart/steer cases, existing unified
+controller and inbox scenarios, focused Harness inbox/commit/replay/context checks
+and four Web scripts pass. Details are in
+[RISK_REGISTER](RISK_REGISTER.md#confirmation-input-ownership-and-persistence-review--2026-10-15).
+No full-suite, real-model or Windows/Office/WebView2 qualification was run.
+
 ## Chat startup integrity and regression fixtures — 2026-10-15
 
 Owners: Core chat persistence and host-neutral test fixtures. The eight tracked

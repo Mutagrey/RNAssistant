@@ -2323,6 +2323,15 @@ accepted after the closing boundary becomes the next turn. During approval, stee
 invalidates the pending action and resumes the same kernel continuation and budgets
 without dispatching it. Model context and attachment analysis use the new input.
 
+`ConversationInputMessage` supplies the latest actual user message for initial
+preparation, confirmation preflight and model projection: protocol results and
+activity messages never qualify, regardless of their transport role. Confirmation
+derives attachments from that message at refresh time, including after steering;
+pending-tool records do not carry another attachment snapshot. Original attachments
+and cached analysis belong to the persisted message; routed primary attachments
+remain request-local. Analysis/replay changes use the existing explicit commit
+boundary described in [Session events](session-events.md).
+
 Queued messages execute separately, in FIFO order, through the same controller and
 kernel path. Explicit steers take priority. The background worker is controller-owned
 and included in bridge shutdown draining. Original document-session keys are rechecked
@@ -2340,5 +2349,8 @@ input paused. The event log remains the only durable queue store.
 
 Validation: focused harness `inbox:` and mock demo `--inbox-test` cover kernel,
 replay and actual controller/materialized-request delivery. `tests/web/chat-inbox.test.js`
-covers acknowledgement/retry and UI isolation. These checks do not establish real
+covers acknowledgement/retry, terminal receipts and UI isolation. MockDemo
+`--confirmation-input-test` covers image/helper input through two approvals and
+restart for user/developer/tool result roles, helper changes and image steering.
+These checks do not establish real
 Windows/Office/WebView2 qualification.

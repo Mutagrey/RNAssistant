@@ -202,6 +202,14 @@ and released media. Storage serializes those messages and preserves paired batch
 ordering without diffing every message body. Omitting a new message fails before
 append. Initial/user admission is saved before the first kernel fact.
 
+Office model-input preparation names changes to existing messages through
+`ConversationRunInput.UpdatedMessages`. The kernel drains these into its next
+explicit commit: initial attachment analysis precedes the first model request;
+confirmation analysis and accepted-call replay updates precede the next request.
+Controller finalization also names earlier messages touched during preparation,
+including its failure path. A message's position before the current run is not a
+reason to omit its update; no whole-history message diff is restored.
+
 The invocation cursor guards kernel appends; the store retains its existing
 current-session revision CAS. Other owners use `ConversationCommit`: user intake
 names its user-message append; checkpoints name updated messages; history rewrites
@@ -542,6 +550,20 @@ precedes draft loading, so a retry works after drafts were consumed; a matching
 receipt never restarts the worker. Queue edits preserve the original fingerprint.
 Receipts without a fingerprint are explicitly unavailable for retry. `sendChat`
 and its controller/browser path are removed; UI and MockDemo use this inbox route.
+
+Office `getChatInbox` accepts up to 128 `receiptOperationIds`. Its typed `receipts`
+contain only the known input's ID, operation ID, revision and status, including
+Applied/Removed, from the existing replayed input projection. Unknown IDs produce
+no receipt. Queue updates return a receipt for the changed operation. Regular
+snapshots still contain only pending items; terminal history is not copied into
+every poll or a second store.
+
+Web reconciles snapshots, submit acknowledgements and receipts through one
+per-input revision check. Removed drops its echo; Applied retains it until the
+exact message ID arrives in history. A terminal revision survives only while an
+outstanding submission can acknowledge an older state. Polls prioritize unresolved
+echoes and fetch history for explicit Applied receipts or run/epoch transitions,
+not mere queue edits/removals. Absence from the queue is never proof of delivery.
 
 Receipt `DeliveryRecorded` means the `applied` event was persisted, not that a run
 completed or a tool had an effect. It may advance from false to true. A receipt

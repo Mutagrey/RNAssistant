@@ -137,7 +137,22 @@ namespace RNAssistant.Harness
                 inbox.Update(session, new UpdateChatInputPayload { InputId = "b", ExpectedRevision = 1, Text = "edited" }, "edit");
                 AssertEqual("a", inbox.TakeNext(session, false).Id, "FIFO claim");
                 inbox.Applied(session, "a");
+                inbox.Submit(session, InboxInput("removed", "discard", InputDelivery.Queue));
+                var removed = inbox.Update(session, new UpdateChatInputPayload { InputId = "removed", ExpectedRevision = 1 }, "remove");
+                AssertEqual(ConversationInputStatus.Removed, removed.Status, "removal returns its receipt identity");
+                AssertEqual(removed.Revision, inbox.Update(session,
+                    new UpdateChatInputPayload { InputId = "removed", ExpectedRevision = 1 }, "remove").Revision, "removal retry is idempotent");
+                AssertEqual(0, inbox.Snapshot(session).Receipts.Count, "normal snapshots do not replay terminal history");
                 var recovered = new ConversationInboxService(events);
+                var receipts = recovered.Snapshot(session, new[] { "a", "removed", "unknown", "a" }).Receipts;
+                AssertEqual(2, receipts.Count, "bounded lookup deduplicates and only returns known operations");
+                AssertEqual(ConversationInputStatus.Applied, receipts.Single(item => item.OperationId == "a").Status, "applied receipt survives restart");
+                AssertEqual(ConversationInputStatus.Removed, receipts.Single(item => item.OperationId == "removed").Status, "removed receipt survives restart");
+                AssertEqual(removed.Revision, receipts.Single(item => item.OperationId == "removed").Revision, "terminal receipt preserves input revision");
+                var excessive = false;
+                try { recovered.Snapshot(session, Enumerable.Repeat("a", 129).ToArray()); }
+                catch (ArgumentException) { excessive = true; }
+                AssertTrue(excessive, "receipt lookup is bounded");
                 AssertTrue(recovered.Snapshot(session).Paused, "restart pauses");
                 AssertTrue(!recovered.TryStartWorker(session), "restart cannot execute retained messages");
                 AssertEqual("edited", recovered.FindOperation(session, "b", InboxInput("b", "second", InputDelivery.Queue).RequestFingerprint).Text,

@@ -58,7 +58,10 @@ namespace RNAssistant.Office
                 {
                     throw new InvalidOperationException("Pending tool was not found or was already resolved.");
                 }
-                SetToolCallReplay(session, pending.Command.ToolCallId, false, runId);
+                var updatedMessages = new List<ChatMessage>
+                {
+                    SetToolCallReplay(session, pending.Command.ToolCallId, false, runId)
+                };
                 RemovePendingAgentTool(pendingId);
 
                 var turnId = session.LastRun == null || string.IsNullOrWhiteSpace(session.LastRun.TurnId)
@@ -97,7 +100,6 @@ namespace RNAssistant.Office
                     progress, chatStateChanged);
 
                 settings.ToolResultRole = PendingToolResultRole(session, pending.Command, settings.ToolResultRole);
-                var continuationAttachments = pending.Attachments ?? LatestUserAttachments(session);
                 var tools = _toolCatalog.GetFreshConversationTools().Where(tool => tool.Enabled).ToList();
                 var skills = _skillCatalog.GetVisibleSkills().Where(skill => skill.Enabled).ToList();
                 try
@@ -107,25 +109,25 @@ namespace RNAssistant.Office
                     var confirmedCommand = CloneCommand(pending.Command);
                     var completion = await _conversationRunService.ConfirmAsync(
                         pendingId, confirmedCommand, session,
-                        new ConversationRunInput(settings, null, tools, skills, continuationAttachments),
+                        new ConversationRunInput(settings, null, tools, skills,
+                            ConversationInputMessage.Latest(session)?.Attachments, updatedMessages),
                         runProgress, RegisterPendingAgentTool, async token =>
                         {
                             tools = _toolCatalog.GetFreshConversationTools().Where(tool => tool.Enabled).ToList();
                             var context = LoadContext(session);
                             skills = _skillCatalog.GetVisibleSkills().Where(skill => skill.Enabled).ToList();
-                            SetToolCallReplay(session, pending.Command.ToolCallId, true);
+                            var replayCall = SetToolCallReplay(session, pending.Command.ToolCallId, true);
+                            var latestUserMessage = ConversationInputMessage.Latest(session);
+                            updatedMessages.Add(latestUserMessage);
                             var attachmentRouting = AttachmentModelRoutingService.Select(
                                 settings,
                                 session,
-                                continuationAttachments);
+                                latestUserMessage?.Attachments);
                             settings = attachmentRouting.Settings;
                             if (attachmentRouting.HasMedia)
                             {
                                 ReportProgress(runProgress, "routing", attachmentRouting.ProgressMessage);
                             }
-                            var latestUserMessage = (session.Messages ?? new List<ChatMessage>())
-                                .LastOrDefault(message => message != null && !message.ProtocolMessage &&
-                                    string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase));
                             await _attachmentAnalysisService.EnsureAsync(
                                 latestUserMessage == null ? string.Empty : latestUserMessage.Content,
                                 session,
@@ -133,13 +135,13 @@ namespace RNAssistant.Office
                                 attachmentRouting,
                                 runProgress,
                                 token).ConfigureAwait(false);
-                            continuationAttachments = attachmentRouting.PrimaryAttachments ?? new ChatAttachment[0];
-                            return new ConversationRunInput(settings, context, tools, skills, continuationAttachments);
+                            return new ConversationRunInput(settings, context, tools, skills,
+                                attachmentRouting.PrimaryAttachments, new[] { latestUserMessage, replayCall });
                         }, runCancellation.Token, supersedePending).ConfigureAwait(false);
 
                     FinalizeControllerRun(
                         session, firstRunMessageIndex, 0,
-                        runId, completion, null);
+                        runId, completion, null, updatedMessages);
                 }
                 catch (RunStoreException)
                 {
@@ -159,10 +161,14 @@ namespace RNAssistant.Office
                     }
                     var pendingMessage = session.Messages.LastOrDefault(message => message.Activity != null &&
                         message.Activity.ToolCallId == pending.Command.ToolCallId);
-                    if (pendingMessage != null) CloseRunningActivity(pendingMessage.Activity, ex is OperationCanceledException);
+                    if (pendingMessage != null)
+                    {
+                        CloseRunningActivity(pendingMessage.Activity, ex is OperationCanceledException);
+                        updatedMessages.Add(pendingMessage);
+                    }
                     FinalizeControllerRun(
                         session, firstRunMessageIndex, 0,
-                        runId, null, ex);
+                        runId, null, ex, updatedMessages);
                     throw;
                 }
 
@@ -175,17 +181,6 @@ namespace RNAssistant.Office
                 StartInboxWorker(session, (nextRun, phase, message, activity) => { if (progress != null) progress(phase, message, activity); }, chatStateChanged);
             }
             return response;
-        }
-
-        private static IReadOnlyList<ChatAttachment> LatestUserAttachments(ChatSession session)
-        {
-            var message = session == null || session.Messages == null
-                ? null
-                : session.Messages.LastOrDefault(item =>
-                    item != null && string.Equals(item.Role, "user", StringComparison.OrdinalIgnoreCase));
-            return message == null || message.Attachments == null
-                ? (IReadOnlyList<ChatAttachment>)new ChatAttachment[0]
-                : message.Attachments;
         }
 
         public ChatStateResponse CancelAgentTool(string pendingId, string chatId = null)
@@ -251,7 +246,6 @@ namespace RNAssistant.Office
                 PendingId = pendingId,
                 SessionId = session.Id,
                 Command = CloneCommand(command),
-                Attachments = new List<ChatAttachment>(LatestUserAttachments(session)),
                 IterationsUsed = session.LastRun == null ? 0 : session.LastRun.IterationsUsed,
                 ToolStepsUsed = session.LastRun == null ? 0 : session.LastRun.ToolStepsUsed,
                 CatalogFingerprint = registration == null
@@ -444,7 +438,6 @@ namespace RNAssistant.Office
                     PendingId = pendingId,
                     SessionId = session.Id,
                     Command = command,
-                    Attachments = UserAttachmentsForRun(session, message.RunId),
                     IterationsUsed = session.LastRun == null ? 0 : session.LastRun.IterationsUsed,
                     ToolStepsUsed = session.LastRun == null ? 0 : session.LastRun.ToolStepsUsed,
                     CatalogFingerprint = activity.ConfirmationCatalogSha256
@@ -452,21 +445,6 @@ namespace RNAssistant.Office
             }
 
             return null;
-        }
-
-        private static IReadOnlyList<ChatAttachment> UserAttachmentsForRun(ChatSession session, string runId)
-        {
-            if (string.IsNullOrWhiteSpace(runId))
-            {
-                return LatestUserAttachments(session);
-            }
-            var user = session.Messages.LastOrDefault(message =>
-                message != null &&
-                string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(message.RunId, runId, StringComparison.OrdinalIgnoreCase));
-            return user == null || user.Attachments == null
-                ? LatestUserAttachments(session)
-                : user.Attachments;
         }
 
         private static ChatActivity FindPendingActivity(ChatActivity activity, string pendingId)
@@ -580,13 +558,13 @@ namespace RNAssistant.Office
             return command;
         }
 
-        private static void SetToolCallReplay(
+        private static ChatMessage SetToolCallReplay(
             ChatSession session,
             string toolCallId,
             bool enabled,
             string runId = null)
         {
-            if (session == null || session.Messages == null || string.IsNullOrWhiteSpace(toolCallId)) return;
+            if (session == null || session.Messages == null || string.IsNullOrWhiteSpace(toolCallId)) return null;
             var call = session.Messages.LastOrDefault(message =>
                 message != null && message.ProtocolMessage &&
                 string.Equals(message.ToolCallId, toolCallId, StringComparison.Ordinal) &&
@@ -596,6 +574,7 @@ namespace RNAssistant.Office
                 call.ExcludeFromModelContext = !enabled;
                 if (!string.IsNullOrWhiteSpace(runId)) call.RunId = runId;
             }
+            return call;
         }
 
         private static bool IsToolResultProtocolMessage(ChatMessage message)
@@ -697,7 +676,6 @@ namespace RNAssistant.Office
             public string PendingId { get; set; }
             public string SessionId { get; set; }
             public ToolInvocation Command { get; set; }
-            public IReadOnlyList<ChatAttachment> Attachments { get; set; }
             public int IterationsUsed { get; set; }
             public int ToolStepsUsed { get; set; }
             public string CatalogFingerprint { get; set; }

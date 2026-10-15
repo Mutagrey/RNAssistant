@@ -344,7 +344,9 @@ namespace RNAssistant.Office.WebView
                         responsePayload = await RunBridgeWorkAsync(() => _controller.StopChatInbox(Payload<ChatPayload>(payload).ChatId), cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.GetChatInbox:
-                        responsePayload = await RunBridgeWorkAsync(() => _controller.GetChatInbox(Payload<ChatPayload>(payload).ChatId), cancellationToken).ConfigureAwait(false);
+                        var inboxRequest = Payload<ChatInboxRequest>(payload);
+                        responsePayload = await RunBridgeWorkAsync(() => _controller.GetChatInbox(
+                            inboxRequest.ChatId, inboxRequest.ReceiptOperationIds), cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.SubmitChatInput:
                         var inboxInput = Payload<SubmitChatInputPayload>(payload);

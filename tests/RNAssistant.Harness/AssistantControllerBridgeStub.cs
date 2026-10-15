@@ -17,7 +17,12 @@ namespace RNAssistant.Office
         public Task InboxWorkersDrained { get { return Task.CompletedTask; } }
         public void StopInboxWorkers() { }
         public ChatResourceDraftResponse StageSelectionInput(string mode, string chatId) { return new ChatResourceDraftResponse(); }
-        public ChatInboxResponse GetChatInbox(string chatId) { return new ChatInboxResponse { ChatId = chatId }; }
+        public ChatInboxResponse GetChatInbox(string chatId, IReadOnlyList<string> receiptOperationIds = null)
+        {
+            LastChatId = chatId;
+            LastReceiptOperationIds = receiptOperationIds;
+            return new ChatInboxResponse { ChatId = chatId };
+        }
         public ChatInboxResponse StopChatInbox(string chatId) { return GetChatInbox(chatId); }
         public ChatInboxResponse SubmitChatInput(SubmitChatInputPayload request, Action<string, string, string, ChatActivity> progress,
             Action<ChatStateResponse> changed)
@@ -47,6 +52,7 @@ namespace RNAssistant.Office
         public string LastChatText { get; private set; }
         public string LastChatId { get; private set; }
         public IReadOnlyList<string> LastResourceDraftIds { get; private set; }
+        public IReadOnlyList<string> LastReceiptOperationIds { get; private set; }
         public string LastResourceDraftId { get; private set; }
         public string LastResourceFileName { get; private set; }
         public string LastChatMode { get; private set; }

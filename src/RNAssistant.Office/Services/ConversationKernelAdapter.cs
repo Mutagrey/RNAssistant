@@ -23,9 +23,11 @@ namespace RNAssistant.Office.Services
         public IReadOnlyList<ToolCatalogEntry> Tools { get; private set; }
         public IReadOnlyList<SkillDefinition> Skills { get; private set; }
         public IReadOnlyList<ChatAttachment> Attachments { get; private set; }
+        public IReadOnlyList<ChatMessage> UpdatedMessages { get; private set; }
 
         public ConversationRunInput(AppSettings settings, DocumentContext context, IReadOnlyList<ToolCatalogEntry> tools,
-            IReadOnlyList<SkillDefinition> skills = null, IReadOnlyList<ChatAttachment> attachments = null)
+            IReadOnlyList<SkillDefinition> skills = null, IReadOnlyList<ChatAttachment> attachments = null,
+            IReadOnlyList<ChatMessage> updatedMessages = null)
         {
             Settings = (settings ?? new AppSettings()).Clone();
             Settings.NormalizeAgentPrompts();
@@ -33,6 +35,7 @@ namespace RNAssistant.Office.Services
             Tools = tools ?? new ToolCatalogEntry[0];
             Skills = skills ?? new SkillDefinition[0];
             Attachments = attachments ?? new ChatAttachment[0];
+            UpdatedMessages = updatedMessages ?? new ChatMessage[0];
         }
     }
 
@@ -114,6 +117,7 @@ namespace RNAssistant.Office.Services
         private void UseInput(ConversationRunInput input)
         {
             if (input == null) throw new ArgumentNullException(nameof(input));
+            _pendingMessageUpdates.AddRange(input.UpdatedMessages.Where(message => message != null));
             var publication = _executor.CaptureCatalogs();
             _input = new ConversationRunInput(PromptSettingsService.ApplyPublishedTemplates(input.Settings, publication.PromptsJson),
                 input.Context, input.Tools, input.Skills, input.Attachments);

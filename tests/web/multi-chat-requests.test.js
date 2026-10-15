@@ -56,14 +56,14 @@ context.refreshInboxChat = chatId => refreshedChats.push(chatId);
     "both chats own independent intake requests");
 
   requests[0].resolve({ chatId: "chat-a", epoch: "a", revision: 1, items: [],
-    acceptedInput: { Id: "input-a", OperationId: requests[0].payload.operationId, Text: "Первый" } });
+    acceptedInput: { Id: "input-a", OperationId: requests[0].payload.operationId, Text: "Первый", Revision: 3, Status: "Applied" } });
   await first;
   assert.deepEqual(refreshedChats, ["chat-a"], "background receipt refreshes only its own chat");
   assert.equal(context.state.activeChatId, "chat-b");
   assert.ok(context.state.pendingChatSubmits["chat-b"], "the second intake remains pending");
 
   requests[1].resolve({ chatId: "chat-b", epoch: "b", revision: 1, items: [],
-    acceptedInput: { Id: "input-b", OperationId: requests[1].payload.operationId, Text: "Второй" } });
+    acceptedInput: { Id: "input-b", OperationId: requests[1].payload.operationId, Text: "Второй", Revision: 3, Status: "Applied" } });
   await second;
   assert.deepEqual(refreshedChats, ["chat-a", "chat-b"]);
   assert.deepEqual(Object.keys(context.state.pendingChatSubmits), []);

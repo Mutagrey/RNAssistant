@@ -31,9 +31,9 @@ namespace RNAssistant.Office
             finally { ReleaseControllerRun(lease, ref trace); }
         }
 
-        public ChatInboxResponse GetChatInbox(string chatId)
+        public ChatInboxResponse GetChatInbox(string chatId, IReadOnlyList<string> receiptOperationIds = null)
         { if (string.IsNullOrWhiteSpace(chatId)) throw new ArgumentException("An explicit chat is required.");
-            return _inbox.Snapshot(LoadAddressedSession(chatId)); }
+            return _inbox.Snapshot(LoadAddressedSession(chatId), receiptOperationIds); }
 
         private ChatSession LoadInboxSession(string chatId)
         {
@@ -129,9 +129,9 @@ namespace RNAssistant.Office
         {
             var session = LoadInboxSession(request.ChatId);
             ConversationRunPolicy.RequireCurrentSession(session);
-            _inbox.Update(session, request, action);
+            var updated = _inbox.Update(session, request, action);
             StartInboxWorker(session, progress, changed);
-            return _inbox.Snapshot(session);
+            return _inbox.Snapshot(session, new[] { updated.OperationId });
         }
         public ChatInboxResponse ResumeChatInbox(string chatId,
             Action<string, string, string, ChatActivity> progress, Action<ChatStateResponse> changed)

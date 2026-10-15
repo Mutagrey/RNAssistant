@@ -116,13 +116,14 @@ namespace RNAssistant.Office.Services
             session.LastRun.ConversationPolicy = ConversationRunPolicy.ForSession(session, settings.AutoConfirmToolActions);
             if (string.IsNullOrWhiteSpace(session.LastRun.RunId)) session.LastRun.RunId = Guid.NewGuid().ToString("N");
             if (string.IsNullOrWhiteSpace(session.LastRun.TurnId)) session.LastRun.TurnId = session.LastRun.RunId;
-            var user = session.Messages.LastOrDefault(message => !message.ProtocolMessage && message.Role == "user");
+            var user = ConversationInputMessage.Latest(session);
             if (user != null) user.RunId = session.LastRun.TurnId;
             if (appendUserMessage || !_conversationStore.IsPersisted(session))
             {
                 _conversationStore.Commit(session, appendUserMessage ? ConversationCommit.UserInput(user) : new ConversationCommit());
             }
-            var input = new ConversationRunInput(settings, documentContext, tools, skills, attachments);
+            var input = new ConversationRunInput(settings, documentContext, tools, skills, attachments,
+                user == null ? null : new[] { user });
             using (var ports = CreatePorts(mode, text, session, input, progress, pendingToolRegistrar, cancellationToken))
             {
                 var result = await ConversationRunCoordinator.RunAsync(new AgentRunRequest(session.LastRun.RunId, session.LastRun.TurnId,
@@ -211,9 +212,7 @@ namespace RNAssistant.Office.Services
 
         private static string LatestUserRequest(ChatSession session)
         {
-            var message = (session == null ? null : session.Messages ?? new List<ChatMessage>())
-                .LastOrDefault(item => item != null && !item.ProtocolMessage &&
-                    string.Equals(item.Role, "user", StringComparison.OrdinalIgnoreCase));
+            var message = ConversationInputMessage.Latest(session);
             return message == null ? string.Empty : message.Content ?? string.Empty;
         }
 

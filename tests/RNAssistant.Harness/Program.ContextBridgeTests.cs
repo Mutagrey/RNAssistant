@@ -1067,6 +1067,12 @@ namespace RNAssistant.Harness
             AssertEqual("chatState", chatState["type"].Value<string>(), "chat state event type");
             AssertEqual("full", chatState["scope"].Value<string>(), "committed chat state event scope");
             AssertEqual("chat-1", chatState["payload"]["activeChatId"].Value<string>(), "chat state active id");
+            var inbox = JObject.Parse(bridge.HandleMessageAsync(
+                "{\"contractVersion\":2,\"id\":\"inbox-receipts\",\"type\":\"getChatInbox\",\"bridgeToken\":\"" + token +
+                "\",\"payload\":{\"chatId\":\"chat-2\",\"receiptOperationIds\":[\"input-b2\"]}}").GetAwaiter().GetResult());
+            AssertTrue(inbox["ok"].Value<bool>(), "typed receipt lookup succeeds");
+            AssertEqual("chat-2", controller.LastChatId, "receipt lookup remains chat-scoped");
+            AssertEqual("input-b2", controller.LastReceiptOperationIds.Single(), "receipt operation IDs cross the typed bridge");
         }
 
         private static void BridgeUsesTypedResourceIngestionPayloads()
