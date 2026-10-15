@@ -75,6 +75,13 @@ namespace RNAssistant.Office.Tools
                 recovery: outcome.Recovery)));
         }
 
+        internal static JObject ForModel(JToken data)
+        {
+            return RNAssistant.Core.Services.ModelResultProjection.SelectFields(data,
+                "type", "contractVersion", "id", "operation", "referencePath", "changed",
+                "code", "retryable", "field", "details");
+        }
+
         private static RuntimeResult Result(SkillAuthoringOutcome outcome)
         {
             if (outcome == null)

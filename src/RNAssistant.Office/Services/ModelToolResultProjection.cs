@@ -78,7 +78,8 @@ namespace RNAssistant.Office.Services
             if (!IsCapabilityResult(name) && !IsPlanningResult(name) && !IsHtmlResult(name) &&
                 !IsAuthoringResult(name) && !IsVbaResult(name) && !IsExcelResult(name))
                 return GenericForModel(name, source);
-            var data = IsExcelResult(name) || IsVbaResult(name) ? source.Data : source.Data.DeepClone();
+            var data = IsExcelResult(name) || IsVbaResult(name) || IsAuthoringResult(name)
+                ? source.Data : source.Data.DeepClone();
             var status = source.Result.Status;
             var message = source.Result.Message;
             if (IsCapabilityResult(name) && status == ToolResultStatus.Ok &&
@@ -99,7 +100,9 @@ namespace RNAssistant.Office.Services
             }
             else if (IsAuthoringResult(name))
             {
-                RemoveAuthoringRuntimeState(data);
+                data = ToolAuthoringCatalog.Owns(name) ? ToolAuthoringToolProjection.ForModel(data) :
+                    SkillAuthoringCatalog.Owns(name) ? SkillAuthoringToolHandler.ForModel(data) :
+                    PromptToolProjection.ForModel(data);
             }
             else if (IsExcelResult(name))
             {
@@ -405,24 +408,6 @@ namespace RNAssistant.Office.Services
             var preflight = root["preflight"] as JObject;
             if (preflight != null)
                 RemoveProperties(preflight, "runtimeExecuted");
-        }
-
-        private static void RemoveAuthoringRuntimeState(JToken token)
-        {
-            var value = token as JObject;
-            if (value != null)
-            {
-                RemoveProperties(value, "revision", "previousRevision",
-                    "expectedRevision", "beforeSha256", "intendedSha256",
-                    "expectedSha256", "actualSha256", "argumentsSha256",
-                    "storagePath", "fileName");
-                foreach (var property in value.Properties().ToList())
-                    RemoveAuthoringRuntimeState(property.Value);
-                return;
-            }
-            var array = token as JArray;
-            if (array == null) return;
-            foreach (var item in array) RemoveAuthoringRuntimeState(item);
         }
 
         private static bool IsExcelResult(string name)

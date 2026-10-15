@@ -46,6 +46,16 @@ namespace RNAssistant.Office.Tools
 
     internal static class PromptToolProjection
     {
+        internal static JObject ForModel(JToken data)
+        {
+            var result = RNAssistant.Core.Services.ModelResultProjection.SelectFields(data,
+                "type", "version", "fields", "changed", "code", "retryable", "field", "details");
+            var source = data as JObject;
+            foreach (var key in PromptSettingsService.TemplateKeys)
+                if (source?.Property(key) != null) result[key] = source[key].DeepClone();
+            return result;
+        }
+
         internal static ToolHandlerResult Project(PromptToolOutcome outcome)
         {
             return new ToolHandlerResult(Result(outcome), Effect(outcome.Effect),

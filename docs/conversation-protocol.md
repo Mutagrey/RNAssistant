@@ -2094,6 +2094,12 @@ Diagnostic trees, runtime refs, hashes и journal IDs не копируются 
 оболочки. Text/table payloads и значения пользовательских колонок сохраняются
 дословно, включая пользовательские поля `id`, `hash`, `revision`.
 
+Authoring-семейства Tool/Skill/Prompt выбирают разрешённые поля оболочки у своего
+владельца. Рекурсивное удаление полей по имени убрано: пользовательский JSON Schema
+в `parameters`, массивы `required` и исходный текст сохраняются целиком, даже если
+содержат `fileName`, `revision`, `storagePath` или буквальный `rna://`.
+Runtime-only поля удаляются только на известном уровне оболочки/component metadata.
+
 Find сообщает targets, отличительные сведения, полноту и недоступные источники.
 Read сообщает представление, exact coverage и содержимое; техническое обещание
 `hydratedForNextModelStep` не передаётся модели. Оно остаётся в raw diagnostics;

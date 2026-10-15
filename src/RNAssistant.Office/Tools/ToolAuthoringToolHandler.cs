@@ -68,6 +68,27 @@ namespace RNAssistant.Office.Tools
 
     internal static class ToolAuthoringToolProjection
     {
+        internal static JObject ForModel(JToken data)
+        {
+            // Parameters and source are authored content, never runtime metadata.
+            var result = RNAssistant.Core.Services.ModelResultProjection.SelectFields(data,
+                "type", "version", "id", "operation", "host", "changed", "name", "description",
+                "parameters", "executor", "code", "readme", "enabled", "requiresConfirmation",
+                "mutatesDocument", "mutatesLocalState", "agentCanRun", "riskLevel", "useWhen",
+                "doNotUseWhen", "capabilityStatus", "limitations", "retryable", "field", "details");
+            var components = (data as JObject)?["components"] as JArray;
+            if (components != null)
+            {
+                var projected = new JArray();
+                foreach (var component in components)
+                    projected.Add(component is JObject
+                        ? RNAssistant.Core.Services.ModelResultProjection.SelectFields(component, "name", "type", "code")
+                        : component.DeepClone());
+                result["components"] = projected;
+            }
+            return result;
+        }
+
         internal static ToolHandlerResult Project(
             ToolAuthoringOutcome outcome)
         {

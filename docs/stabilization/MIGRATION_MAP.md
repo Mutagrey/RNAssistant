@@ -28,11 +28,13 @@ gates; active tool compatibility adapter отсутствует. Windows/Office 
 ## Model result families — 2026-10-07
 
 Core `ModelResultProjection` owns closed resources/workspace-file envelopes;
-Office `ModelToolResultProjection` owns Excel and native VBA result metadata.
+Office `ModelToolResultProjection` owns Excel and native VBA result metadata;
+Tool/Skill/Prompt owners now provide closed authoring envelopes, preserving opaque
+schemas and source text without recursive field removal.
 There is no second result store or fallback for these families. Typed recovery is
 rendered at this shared boundary, not copied into domain `DataJson` by ToolRuntime.
 
-The existing capability, HTML, authoring, Word/PowerPoint/Outlook and custom-package
+The existing capability, HTML, Word/PowerPoint/Outlook and custom-package
 projections remain explicitly outside this slice. Owner: Office domain result
 producers / model projection. Removal gate for each remaining generic/field-removal
 branch: inventory its real payloads, switch its consumers and actual-wire tests to

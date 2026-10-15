@@ -98,6 +98,31 @@ namespace RNAssistant.Harness
             }");
             var fixtures = new[]
             {
+                new { Tool = ToolAuthoringCatalog.UpsertToolId, Source = JToken.Parse(@"{
+                    'id':'fixture.report','parameters':{'type':'object','properties':{
+                        'fileName':{'type':'string'},'revision':{'type':'string'},
+                        'record':{'type':'object','properties':{'storagePath':{'type':'string'}}}},
+                        'required':['fileName','revision','record']},
+                    'components':[{'name':'Main','type':'StdModule','fileName':'internal.bas','code':'literal rna://example/data'}],
+                    'revision':'runtime-secret','newRuntimeMetadata':{'trace':'hidden'}
+                }"), Expected = JToken.Parse(@"{
+                    'id':'fixture.report','parameters':{'type':'object','properties':{
+                        'fileName':{'type':'string'},'revision':{'type':'string'},
+                        'record':{'type':'object','properties':{'storagePath':{'type':'string'}}}},
+                        'required':['fileName','revision','record']},
+                    'components':[{'name':'Main','type':'StdModule','code':'literal rna://example/data'}]
+                }") },
+                new { Tool = SkillAuthoringCatalog.UpsertToolId, Source = JToken.Parse(@"{
+                    'id':'fixture.skill','operation':'update','changed':true,'referencePath':'references/source.md',
+                    'revision':'runtime-secret','expectedRevision':'expected-secret','newRuntimeMetadata':{}}
+                "), Expected = JToken.Parse(@"{
+                    'id':'fixture.skill','operation':'update','changed':true,'referencePath':'references/source.md'}") },
+                new { Tool = PromptToolCatalog.SaveToolId, Source = JToken.Parse(@"{
+                    'systemPrompt':'literal rna://example/data and revision','fields':['systemPrompt'],
+                    'expectedSha256':'runtime-secret','code':'verification_failed','retryable':false}
+                "), Expected = JToken.Parse(@"{
+                    'systemPrompt':'literal rna://example/data and revision','fields':['systemPrompt'],
+                    'code':'verification_failed','retryable':false}") },
                 new { Tool = ExcelReadToolIds.Inspect, Source = JToken.Parse(@"{
                     'sheet':'Data','rows':[{'id':7,'revision':'edition-2','nested':{'hash':null}}],
                     'details':{'code':'fixture_failure','message':'Inspect cells.','scopeSha256':'hidden'},
