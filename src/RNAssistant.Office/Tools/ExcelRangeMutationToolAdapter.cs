@@ -2,6 +2,7 @@ using RNAssistant.Office.Domains;
 using System;
 using System.Collections.Generic;
 using System.Threading;
+using Newtonsoft.Json;
 using RNAssistant.Office.Domains.Excel;
 
 namespace RNAssistant.Office.Tools
@@ -9,23 +10,28 @@ namespace RNAssistant.Office.Tools
     internal sealed class ExcelRangeMutationToolAdapter
     {
         private readonly ExcelRangeMutationService _service;
+        private readonly ExcelDeleteRowsColumnsService _deleteService;
 
         internal ExcelRangeMutationToolAdapter(IExcelRangeMutationBackend backend)
         {
             _service = new ExcelRangeMutationService(
                 backend ?? throw new ArgumentNullException(nameof(backend)));
+            _deleteService = new ExcelDeleteRowsColumnsService(backend);
         }
 
         internal DomainOutcome Execute(
             string toolId,
             IDictionary<string, object> arguments,
             Action markDispatchPossible,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken, string preparedStateJson = null)
         {
             arguments = arguments ??
                 new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
             switch (toolId)
             {
+                case ExcelRangeMutationToolIds.DeleteRowsColumns:
+                    return _deleteService.Delete(DeletionRequest(arguments), markDispatchPossible, cancellationToken,
+                        string.IsNullOrWhiteSpace(preparedStateJson) ? null : JsonConvert.DeserializeObject<ExcelDeletionPreparedState>(preparedStateJson));
                 case ExcelRangeMutationToolIds.ClearRange:
                     return _service.Clear(new ExcelClearRangeRequest
                     {
@@ -94,6 +100,24 @@ namespace RNAssistant.Office.Tools
                         "Unsupported Excel range mutation tool: " + toolId,
                         nameof(toolId));
             }
+        }
+
+        internal ExcelDeletionPreparedState PrepareDeletion(IDictionary<string, object> arguments, CancellationToken cancellationToken)
+        { return _deleteService.Prepare(DeletionRequest(arguments), cancellationToken); }
+
+        private static ExcelDeleteRowsColumnsRequest DeletionRequest(IDictionary<string, object> arguments)
+        {
+            var scope = ToolArgumentReader.String(arguments, "scope", string.Empty);
+            var axis = ToolArgumentReader.String(arguments, "axis", string.Empty);
+            return new ExcelDeleteRowsColumnsRequest
+            {
+                Sheet = ToolArgumentReader.String(arguments, "sheet", string.Empty),
+                Table = ToolArgumentReader.String(arguments, "table", null),
+                Scope = scope == "table" ? ExcelDeletionScope.Table : scope == "worksheet" ? ExcelDeletionScope.Worksheet : (ExcelDeletionScope)(-1),
+                Axis = axis == "rows" ? ExcelDeletionAxis.Rows : axis == "columns" ? ExcelDeletionAxis.Columns : (ExcelDeletionAxis)(-1),
+                Start = ToolArgumentReader.Int32(arguments, "start", 0),
+                Count = ToolArgumentReader.Int32(arguments, "count", 0)
+            };
         }
     }
 }

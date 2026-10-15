@@ -12,7 +12,7 @@ using Excel = Microsoft.Office.Interop.Excel;
 
 namespace RNAssistant.OfficeHosts
 {
-    internal sealed class ExcelRangeMutationInteropBackend :
+    internal sealed partial class ExcelRangeMutationInteropBackend :
         IExcelRangeMutationBackend
     {
         private readonly ExcelDocumentSession _session;
@@ -115,13 +115,16 @@ namespace RNAssistant.OfficeHosts
         {
             var rows = Convert.ToInt32(range.Rows.Count);
             var columns = Convert.ToInt32(range.Columns.Count);
+            var tableHeader = spec.Kind == ExcelRangeMutationKind.Clear && spec.ClearWhat != "formats"
+                ? FindTableHeader(range, sheet) : null;
             var observation = new JObject
             {
                 ["kind"] = spec.Kind.ToString(),
                 ["sheet"] = sheet.Name,
                 ["address"] = range.Address[false, false],
                 ["rows"] = rows,
-                ["columns"] = columns
+                ["columns"] = columns,
+                ["tableHeader"] = tableHeader == null ? JValue.CreateNull() : JToken.FromObject(tableHeader)
             };
             bool satisfied;
             switch (spec.Kind)
@@ -152,8 +155,20 @@ namespace RNAssistant.OfficeHosts
                 Columns = columns,
                 CellCount = (long)rows * columns,
                 StateToken = Hash(observation.ToString(Formatting.None)),
-                Satisfied = satisfied
+                Satisfied = satisfied,
+                TableHeader = tableHeader
             };
+        }
+
+        private static ExcelRangeTableHeader FindTableHeader(Excel.Range range, Excel.Worksheet sheet)
+        {
+            foreach (Excel.ListObject table in sheet.ListObjects)
+            {
+                var header = table.HeaderRowRange;
+                if (header == null || sheet.Application.Intersect(range, header) == null) continue;
+                return new ExcelRangeTableHeader { TableName = table.Name, Address = header.Address[false, false] };
+            }
+            return null;
         }
 
         private Excel.Range ResolveRange(

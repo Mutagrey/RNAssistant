@@ -444,7 +444,7 @@ namespace RNAssistant.Harness
                 { "PowerPoint", powerpoint },
                 { "Outlook", outlook }
             };
-            AssertEqual(14, excel.Count, "complete Excel tool count");
+            AssertEqual(15, excel.Count, "complete Excel tool count");
             AssertEqual(8, word.Count, "complete Word tool count");
             AssertEqual(8, powerpoint.Count, "complete PowerPoint tool count");
             AssertEqual(4, outlook.Count, "complete Outlook tool count");

@@ -132,6 +132,7 @@ namespace RNAssistant.Core.Tools
         // True includes an ambiguous runtime entry; it does not assert that a
         // domain mutation actually happened. False certifies no dispatch.
         public bool MayHaveDispatched { get; private set; }
+        public bool WasCancelled { get; private set; }
         public string PendingId { get; private set; }
         public string PreparedStateJson { get; private set; }
         public string ConfirmationDataJson { get; private set; }
@@ -154,7 +155,7 @@ namespace RNAssistant.Core.Tools
             System.Collections.Generic.IReadOnlyList<RNAssistant.Core.Models.ResourceEvidence> resourceEvidence = null,
             RNAssistant.Core.Models.ResourceEffect resourceEffect = null, string authorityCommitId = null,
             System.Collections.Generic.IReadOnlyList<RNAssistant.Core.Models.ResourceMutationReadBack> resourceReadBack = null,
-            ToolRecoveryContract recovery = null)
+            ToolRecoveryContract recovery = null, bool wasCancelled = false)
         {
             Context = context ?? throw new ArgumentNullException(nameof(context));
             if (!Enum.IsDefined(typeof(ToolExecutionOutcome), outcome)) throw new ArgumentOutOfRangeException(nameof(outcome));
@@ -175,6 +176,8 @@ namespace RNAssistant.Core.Tools
                 throw new ArgumentException("Confirmation data exceeds the runtime bound.", nameof(confirmationDataJson));
             if (outcome == ToolExecutionOutcome.NotDispatched && mayHaveDispatched)
                 throw new ArgumentException("A non-dispatched call cannot have been dispatched.", nameof(mayHaveDispatched));
+            if (wasCancelled && outcome != ToolExecutionOutcome.NotDispatched)
+                throw new ArgumentException("Cancellation metadata requires a non-dispatched call.", nameof(wasCancelled));
             if (awaitingUser && outcome != ToolExecutionOutcome.Ok)
                 throw new ArgumentException("Only a successful local interaction can await user input.", nameof(awaitingUser));
             if (outcome != ToolExecutionOutcome.Error && recovery != null)
@@ -187,6 +190,7 @@ namespace RNAssistant.Core.Tools
             Message = message ?? string.Empty;
             ModelResultJson = modelResultJson;
             MayHaveDispatched = mayHaveDispatched;
+            WasCancelled = wasCancelled;
             PendingId = pendingId;
             PreparedStateJson = preparedStateJson;
             ConfirmationDataJson = confirmationDataJson;
@@ -214,7 +218,7 @@ namespace RNAssistant.Core.Tools
             return new ToolExecutionRecord(Context, Outcome, CompletedUtc, Message, ModelResultJson,
                 MayHaveDispatched, PendingId, AwaitingUser, ToolStepsConsumed, DocumentRuntimeId, Evidence,
                 committedResult, PreparedStateJson, ConfirmationDataJson, ResourceEvidence, commit.Effect, commit.CommitId,
-                ResourceReadBack, Recovery);
+                ResourceReadBack, Recovery, WasCancelled);
         }
     }
 }

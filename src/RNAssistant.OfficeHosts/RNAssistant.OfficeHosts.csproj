@@ -97,6 +97,7 @@
     <Compile Include="Excel\ExcelChartInteropBackend.cs" />
     <Compile Include="Excel\ExcelFindReplaceInteropBackend.cs" />
     <Compile Include="Excel\ExcelRangeMutationInteropBackend.cs" />
+    <Compile Include="Excel\ExcelRangeMutationInteropBackend.Delete.cs" />
     <Compile Include="Excel\ExcelInteropBackend.cs" />
     <Compile Include="Excel\ExcelSheetInteropBackend.cs" />
     <Compile Include="Excel\ExcelTableInteropBackend.cs" />

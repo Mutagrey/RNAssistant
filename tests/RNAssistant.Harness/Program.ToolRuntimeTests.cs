@@ -581,6 +581,8 @@ namespace RNAssistant.Harness
                     registrar: (context, preparation) => { source.Cancel(); throw new OperationCanceledException(source.Token); });
                 var result = await f.Runtime.ExecuteAsync(f.Context(), source.Token);
                 AssertEqual(ToolExecutionOutcome.NotDispatched, result.Outcome, "cancelled registration does not become an execution error");
+                AssertTrue(result.WasCancelled, "cancelled registration carries explicit cancellation");
+                AssertEqual("cancelled", ToolRunResultFactory.Create(result).Status, "real cancellation remains visible");
                 AssertEqual(0, f.Handler.Calls, "cancelled registration cannot reach the handler");
             }
             foreach (var write in new[] { false, true })
@@ -599,6 +601,7 @@ namespace RNAssistant.Harness
                 AssertEqual(!dispatch ? ToolExecutionOutcome.NotDispatched : write ? ToolExecutionOutcome.Unknown : ToolExecutionOutcome.Error,
                     result.Outcome, "cancellation cannot hide a possible write");
                 AssertEqual(dispatch, result.MayHaveDispatched, "cancellation retains dispatch evidence");
+                AssertEqual(!dispatch, result.WasCancelled, "post-dispatch uncertainty cannot become an ordinary cancellation");
                 AssertEqual(1, f.Handler.Calls, "cancellation never retries");
             }
             using (var source = new CancellationTokenSource())
@@ -779,6 +782,28 @@ namespace RNAssistant.Harness
             AssertEqual(JTokenType.String,
                 RuntimeData(projection.DataJson)["stamp"].Type,
                 "ISO text is not converted into a date token");
+        }
+
+        private static void ToolRunResultDistinguishesCancellationFromRejection()
+        {
+            var context = new ToolRuntimeFixture().Context();
+            foreach (var code in new[] { "repeated_unknown_tool_call", "repeated_tool_failure", "repeated_tool_no_progress", (string)null })
+            {
+                var record = new ToolExecutionRecord(context, ToolExecutionOutcome.NotDispatched, context.StartedUtc,
+                    "Not dispatched; cancellation wording is not evidence.", mayHaveDispatched: false,
+                    result: code == null ? null : RuntimeResult.Error("Blocked repeat", new JObject { ["code"] = code }.ToString()));
+                var projection = ToolRunResultFactory.Create(record);
+                AssertEqual("error", projection.Status, "runtime rejection is not a cancellation");
+                AssertEqual(code ?? "tool_not_dispatched", projection.ErrorCode, "exact rejection reason survives projection");
+                AssertEqual(0, projection.ToolStepsConsumed, "rejected calls do not become executed attempts");
+                var activity = RNAssistant.Office.AgentTranscript.CreateToolActivity(new ToolInvocation { ToolId = context.Call.Name }, projection, "tool");
+                AssertEqual("failed", activity.Status, "UI receives the failure channel with its reason");
+            }
+            var cancelled = new ToolExecutionRecord(context, ToolExecutionOutcome.NotDispatched, context.StartedUtc,
+                "Stopped", mayHaveDispatched: false, wasCancelled: true);
+            var materialized = new ToolResultMaterialization(RuntimeResult.Error("Stopped", "{\"code\":\"tool_not_dispatched\"}"));
+            AssertEqual("cancelled", ToolRunResultFactory.Create(cancelled, materialized).Status,
+                "terminal materialization cannot erase an actual cancellation");
         }
 
         private static void ToolRunResultProjectionCannotChangeExecution()

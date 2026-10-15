@@ -71,6 +71,33 @@ source/text selector, not a raw URI, cursor or mutation guard. The exact
 provider/index limits and incomplete-source semantics are owned by
 [Resource Fabric](resource-fabric.md#large-document-text-navigation--2026-10-14).
 
+### Excel row and column deletion
+
+Owner: `ExcelDeleteRowsColumnsService` in Office; the bound Excel backend owns COM.
+`excel.delete_rows_columns` removes consecutive `rows` or `columns` using explicit
+`sheet`, `scope`, one-based `start` and positive `count`. `scope=table` also requires
+the exact `table` name; indexes are relative to that table, with row indexes
+excluding headers and totals. `scope=worksheet` deletes whole worksheet rows or
+columns and forbids a table argument. A table must retain at least one column;
+all data rows may be removed. There is no implicit worksheet fallback.
+
+For the extra seventh column in `filesTB`, use table scope, `axis=columns`,
+`start=7`, `count=1`. The adapter uses Excel's
+[ListColumn.Delete](https://learn.microsoft.com/en-us/office/vba/api/excel.listcolumn.delete),
+which does not remove the worksheet column. `excel.clear_range` only clears content
+or formatting; clearing table header values is refused before dispatch with
+`excel_clear_table_header` and guidance to the structural deletion tool.
+
+Preparation captures the exact target before confirmation; execution rechecks that
+snapshot under the document gate. Worksheet guards also retain the used-range
+extent to reject newly added data outside the prepared observation window.
+The operation observes at most 100,000 cells and verifies the remaining table
+dimensions/names or worksheet cell shifts, constant values and formula positions.
+Excel owns formula-reference rewriting and recalculation; this check does not
+certify formula semantics, formatting, charts or dependent objects. Unknown effects
+remain unknown and cannot be automatically retried. Real Windows/Excel qualification
+is open, including empty tables, totals, formulas, protection and partial COM failure.
+
 ### Workspace CLI file tools (development)
 
 The independent CLI advertises `common.resources_find/read` and the exact

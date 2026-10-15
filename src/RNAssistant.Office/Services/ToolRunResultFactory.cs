@@ -44,7 +44,7 @@ namespace RNAssistant.Office.Services
                     code ?? "tool_effect_uncertain");
                 result.Retryable = retryable ?? false;
             }
-            else if (record.Outcome == ToolExecutionOutcome.NotDispatched)
+            else if (record.WasCancelled)
             {
                 result = ToolRunResult.Cancelled(record.Message);
             }
@@ -54,7 +54,9 @@ namespace RNAssistant.Office.Services
                 bool? retryable;
                 ReadErrorMetadata(data, out code, out retryable);
                 result = ToolRunResult.Error(record.Message, data, code ??
-                    (record.Context.IsConfirmed && !record.MayHaveDispatched
+                    (record.Outcome == ToolExecutionOutcome.NotDispatched
+                        ? "tool_not_dispatched"
+                        : record.Context.IsConfirmed && !record.MayHaveDispatched
                         ? "pending_tool_catalog_changed"
                         : "tool_execution_failed"), retryable ?? false);
             }

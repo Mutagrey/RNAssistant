@@ -327,6 +327,10 @@ namespace RNAssistant.Harness
                 "unknown replay rejection reaches the model");
             AssertEqual(2, f.Tools.Calls.Count,
                 "intervening success does not redispatch the unknown write");
+            var rejected = f.Store.Events.Last(e => e.Execution != null).Execution;
+            AssertTrue(!rejected.WasCancelled, "unknown replay rejection is not user cancellation");
+            AssertEqual("repeated_unknown_tool_call", RNAssistant.Office.Services.ToolRunResultFactory.Create(rejected).ErrorCode,
+                "the rejected replay keeps its reason in the actual Office projection");
         }
 
         private static async Task KernelAllowsInspectionAfterUnknownEffect()

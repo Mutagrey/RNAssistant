@@ -140,8 +140,28 @@ namespace RNAssistant.Harness
                 StateToken = FakeRangeMutationState(
                     sheet, bounds, address, request.Spec),
                 Satisfied = FakeRangeMutationSatisfied(
-                    sheet, bounds, address, request.Spec)
+                    sheet, bounds, address, request.Spec),
+                TableHeader = FindFakeTableHeader(sheet, bounds, request.Spec)
             };
+        }
+
+        private static ExcelRangeTableHeader FindFakeTableHeader(
+            FakeSheet sheet, FakeRange bounds, ExcelRangeMutationSpec spec)
+        {
+            if (spec.Kind != ExcelRangeMutationKind.Clear || spec.ClearWhat == "formats") return null;
+            foreach (var table in sheet.Tables.Where(item => item.HasHeaders))
+            {
+                var tableRange = ParseRange(table.Range);
+                if (tableRange.Start.Row < bounds.Start.Row || tableRange.Start.Row > bounds.End.Row ||
+                    tableRange.Start.Column > bounds.End.Column || tableRange.End.Column < bounds.Start.Column) continue;
+                return new ExcelRangeTableHeader
+                {
+                    TableName = table.Name,
+                    Address = ColumnLetters(tableRange.Start.Column) + tableRange.Start.Row + ":" +
+                        ColumnLetters(tableRange.End.Column) + tableRange.Start.Row
+                };
+            }
+            return null;
         }
 
         private FakeSheet ResolveFakeRangeSheet(string sheetName)
@@ -189,6 +209,8 @@ namespace RNAssistant.Harness
                 ["sheet"] = sheet.Name,
                 ["address"] = address
             };
+            var tableHeader = FindFakeTableHeader(sheet, bounds, spec);
+            root["tableHeader"] = tableHeader == null ? JValue.CreateNull() : JToken.FromObject(tableHeader);
             var key = RangeMutationKey(sheet.Name, address);
             if (spec.Kind == ExcelRangeMutationKind.Clear ||
                 spec.Kind == ExcelRangeMutationKind.Sort)

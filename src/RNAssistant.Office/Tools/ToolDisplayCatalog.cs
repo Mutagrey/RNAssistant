@@ -39,6 +39,8 @@ namespace RNAssistant.Office.Tools
             { "excel.add_sheet", new ToolDisplayMetadata("Создание листа", "Создаю лист", ToolDisplayOperation.Write) },
             { "excel.add_table", new ToolDisplayMetadata("Создание таблицы", "Создаю таблицу", ToolDisplayOperation.Write) },
             { "excel.clear_range", new ToolDisplayMetadata("Очистка диапазона", "Очищаю диапазон", ToolDisplayOperation.Delete) },
+            { "excel.delete_rows_columns", new ToolDisplayMetadata("Удаление строк или столбцов", "Удаляю строки или столбцы", ToolDisplayOperation.Delete,
+                new[] { "sheet", "scope", "table", "axis", "start", "count" }) },
             { "excel.create_chat_chart", new ToolDisplayMetadata("Создание диаграммы в чате", "Создаю диаграмму в чате", ToolDisplayOperation.Chart) },
             { "excel.delete_chart", new ToolDisplayMetadata("Удаление диаграммы", "Удаляю диаграмму", ToolDisplayOperation.Delete) },
             { "excel.filter_range", new ToolDisplayMetadata("Фильтрация диапазона", "Фильтрую диапазон", ToolDisplayOperation.Write) },

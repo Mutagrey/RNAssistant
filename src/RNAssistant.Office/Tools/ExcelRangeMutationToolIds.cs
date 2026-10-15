@@ -6,6 +6,7 @@ namespace RNAssistant.Office.Tools
     {
         internal const string FormatRange = "excel.format_range";
         internal const string ClearRange = "excel.clear_range";
+        internal const string DeleteRowsColumns = "excel.delete_rows_columns";
         internal const string SortRange = "excel.sort_range";
         internal const string FilterRange = "excel.filter_range";
 
@@ -13,6 +14,7 @@ namespace RNAssistant.Office.Tools
         {
             return string.Equals(toolId, FormatRange, StringComparison.Ordinal) ||
                 string.Equals(toolId, ClearRange, StringComparison.Ordinal) ||
+                string.Equals(toolId, DeleteRowsColumns, StringComparison.Ordinal) ||
                 string.Equals(toolId, SortRange, StringComparison.Ordinal) ||
                 string.Equals(toolId, FilterRange, StringComparison.Ordinal);
         }

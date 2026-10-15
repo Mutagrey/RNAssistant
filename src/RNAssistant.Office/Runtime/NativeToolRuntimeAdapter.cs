@@ -156,9 +156,9 @@ namespace RNAssistant.Office.Runtime
                         throw new InvalidOperationException(
                             "Excel range mutation handler dependencies are unavailable.");
                     binding = ExcelRangeMutationToolHandler.BindingFor(registration.Descriptor.Id);
-                    handler = new ExcelRangeMutationToolHandler(
-                        registration.Descriptor.Id, excelRangeMutations,
-                        hostRuntime, session);
+                    handler = registration.Descriptor.Id == ExcelRangeMutationToolIds.DeleteRowsColumns
+                        ? (IToolHandler)new ExcelDeleteRowsColumnsToolHandler(excelRangeMutations, hostRuntime, session)
+                        : new ExcelRangeMutationToolHandler(registration.Descriptor.Id, excelRangeMutations, hostRuntime, session);
                 }
                 else if (ExcelTableToolIds.Owns(registration.Descriptor.Id))
                 {

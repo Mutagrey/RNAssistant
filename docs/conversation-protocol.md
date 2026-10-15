@@ -147,6 +147,11 @@ when the required source body is absent or invalidated.
 Unknown mutation effects remain visible in cumulative run health and the terminal
 summary, but do not stop the current run by themselves. Schema 41 and v7 require
 an explicit model action: `tool`, `done`, `blocked` or `needs_input`.
+`ToolExecutionOutcome.NotDispatched` alone is not a cancellation. The runtime's
+explicit `WasCancelled` fact identifies cancelled/superseded calls; rejected
+replays and other undispatched work retain their error code and explanation in
+Office/Web. These presentation distinctions do not change dispatch, counts or
+the prohibition on repeating an unknown effect.
 `RunViewState.GoalVerification=not_assessed` records that no independent general
 goal check occurred. The UI shows this separately from verified write/no-change
 counts when the model chooses `done`; clean execution health never certifies the

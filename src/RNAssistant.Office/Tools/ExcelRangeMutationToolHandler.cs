@@ -1,6 +1,8 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Domains.Excel;
@@ -8,21 +10,23 @@ using RNAssistant.Office.Runtime;
 
 namespace RNAssistant.Office.Tools
 {
-    internal sealed class ExcelRangeMutationToolHandler : IManagedMutationToolHandler
+    internal class ExcelRangeMutationToolHandler : IManagedMutationToolHandler
     {
         private static readonly ToolBinding FormatBinding =
             new ToolBinding("excel.range.format.v1");
         private static readonly ToolBinding ClearBinding =
             new ToolBinding("excel.range.clear.v1");
+        private static readonly ToolBinding DeleteBinding =
+            new ToolBinding("excel.rows_columns.delete.v1");
         private static readonly ToolBinding SortBinding =
             new ToolBinding("excel.range.sort.v1");
         private static readonly ToolBinding FilterBinding =
             new ToolBinding("excel.range.filter.v1");
 
         private readonly string _toolId;
-        private readonly ExcelRangeMutationToolAdapter _adapter;
-        private readonly HostRuntime _runtime;
-        private readonly ChatSession _session;
+        protected readonly ExcelRangeMutationToolAdapter _adapter;
+        protected readonly HostRuntime _runtime;
+        protected readonly ChatSession _session;
 
         internal ExcelRangeMutationToolHandler(
             string toolId,
@@ -46,6 +50,7 @@ namespace RNAssistant.Office.Tools
             {
                 case ExcelRangeMutationToolIds.FormatRange: return FormatBinding;
                 case ExcelRangeMutationToolIds.ClearRange: return ClearBinding;
+                case ExcelRangeMutationToolIds.DeleteRowsColumns: return DeleteBinding;
                 case ExcelRangeMutationToolIds.SortRange: return SortBinding;
                 case ExcelRangeMutationToolIds.FilterRange: return FilterBinding;
                 default: return null;
@@ -69,7 +74,7 @@ namespace RNAssistant.Office.Tools
                             _toolId,
                             context.Arguments,
                             context.MarkDispatchPossible,
-                            cancellationToken);
+                            cancellationToken, context.PreparedStateJson);
                     }, terminalOutcome => context.Complete(OfficeDomainResult.Project(terminalOutcome)), context.CompleteFailure);
                 return Task.FromResult(OfficeDomainResult.Project(outcome));
             }
@@ -83,7 +88,7 @@ namespace RNAssistant.Office.Tools
             }
         }
 
-        private static OfficeDocumentExecutionExpectation Target(ChatSession session)
+        protected static OfficeDocumentExecutionExpectation Target(ChatSession session)
         {
             return new OfficeDocumentExecutionExpectation
             {
@@ -92,6 +97,35 @@ namespace RNAssistant.Office.Tools
                 RuntimeDocumentKey = session.LastRun == null
                     ? string.Empty : session.LastRun.DocumentRuntimeKey
             };
+        }
+    }
+
+    internal sealed class ExcelDeleteRowsColumnsToolHandler : ExcelRangeMutationToolHandler, IPreparableToolHandler
+    {
+        internal ExcelDeleteRowsColumnsToolHandler(ExcelRangeMutationToolAdapter adapter, HostRuntime runtime, ChatSession session)
+            : base(ExcelRangeMutationToolIds.DeleteRowsColumns, adapter, runtime, session) { }
+
+        public Task<ToolPreparationResult> PrepareAsync(ToolHandlerContext context, CancellationToken cancellationToken)
+        {
+            try
+            {
+                if (_session == null) throw new ExcelRangeMutationBackendException("Deletion requires an active chat session.", "excel_range_session_required", false);
+                var state = _runtime.ReadDocument(Target(_session), cancellationToken,
+                    () => _adapter.PrepareDeletion(context.Arguments, cancellationToken));
+                var selected = state.Selection;
+                var message = "Delete " + selected.Count + " " + selected.Axis.ToString().ToLowerInvariant() +
+                    " starting at " + selected.Start + " in " + (selected.Scope == ExcelDeletionScope.Table
+                        ? "table '" + selected.Table + "' on " : "worksheet ") + selected.Sheet + ".";
+                return Task.FromResult(new ToolPreparationResult(RNAssistant.Core.Tools.Contracts.ToolResult.Ok(message),
+                    JsonConvert.SerializeObject(state)));
+            }
+            catch (OfficeDocumentGuardException ex) { return OfficeToolFailure.GuardPreparation(ex); }
+            catch (HostRuntime.MutationLockException ex) { return OfficeToolFailure.LockPreparation(ex); }
+            catch (ExcelRangeMutationBackendException ex)
+            {
+                return Task.FromResult(new ToolPreparationResult(RNAssistant.Core.Tools.Contracts.ToolResult.Error(ex.Message,
+                    new JObject { ["code"] = ex.ErrorCode, ["retryable"] = false }.ToString(Formatting.None)), null));
+            }
         }
     }
 }

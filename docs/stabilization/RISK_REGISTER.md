@@ -2140,3 +2140,32 @@ reproduces three failures also seen with the continuity changes:
 Owner: catalog/settings read boundary and resource fork/restore. Investigate as
 separate slices; do not waive these tests or label the full harness green. No user
 history or copied artifact was deleted to make the checks pass.
+
+## Excel structural deletion and false cancellation labels — 2026-10-15
+
+Owners: Office Excel deletion domain/bound backend; Core execution metadata and
+Office/Web presentation. A screenshot showed `clear_range` repeatedly targeting
+an extra table header, with runtime replay refusals displayed as cancellations.
+The cancellation mapping is reproduced in code and corrected with explicit
+`WasCancelled` metadata. The exact original COM failure cannot be established
+from the screenshot alone.
+
+`excel.delete_rows_columns` now supports explicit table/worksheet scopes. Table
+header clear refuses before dispatch and points to structural deletion. Target
+preparation survives approval; drift and possible partial effects never authorize
+replay. Five focused fake-backend scenarios pass, including the seven-to-six
+column example, both axes/scopes, invalid selection, drift, divergent/unavailable
+read-back and confirmation state. Cancellation projection and Web checks pass.
+
+**Open Windows/Excel evidence:** the new COM path was not built or executed here.
+Verify table column/row deletion with totals, hidden headers, last data row,
+formula reference rewriting, nearby data, worksheet shifts, protection, bound
+workbook switching/closure and partial COM failure. Cell/structure read-back is
+not qualification of formatting, charts or dependent formula semantics.
+
+The full R61 inventory check still reports seven Common catalog differences
+outside this change: `common.file_create/copy/patch`, `common.resources_search`,
+`common.resources_outline`, `common.resources_read` and `common.skills_load`.
+The updated Excel rows match the captured catalog. Owner: Common catalog/property
+inventory maintenance; review those contracts before refreshing their baseline.
+This task does not alter those Common contracts.

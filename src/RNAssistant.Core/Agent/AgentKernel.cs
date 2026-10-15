@@ -55,14 +55,14 @@ namespace RNAssistant.Core.Agent
             if (rejectPending)
             {
                 await RecordNotDispatchedAsync(state, pending.Call, pending.Policy, pending.StepId,
-                    "User rejected the pending confirmation.").ConfigureAwait(false);
+                    "User rejected the pending confirmation.", cancelled: true).ConfigureAwait(false);
                 return await FinishAsync(state, RunLifecycle.Cancelled, "confirmation_denied",
                     "Pending tool call was rejected without dispatch.").ConfigureAwait(false);
             }
             if (supersedePending || (_input != null && _input.HasPendingInput))
             {
                 await RecordNotDispatchedAsync(state, pending.Call, pending.Policy, pending.StepId,
-                    "Pending approval superseded by a new user message.").ConfigureAwait(false);
+                    "Pending approval superseded by a new user message.", cancelled: true).ConfigureAwait(false);
                 return await LoopAsync(state, cancellationToken).ConfigureAwait(false);
             }
             var execution = await ExecuteOneAsync(state, pending.Call, pending.Policy, pending.StepId,
@@ -190,7 +190,7 @@ namespace RNAssistant.Core.Agent
                         // technical failure prevents the rest of an accepted batch.
                         for (var rest = index + 1; rest < response.ToolCalls.Count; rest++)
                             await RecordNotDispatchedAsync(state, response.ToolCalls[rest], policies[rest], stepId,
-                                "Run ended before dispatch.").ConfigureAwait(false);
+                                "Run ended before dispatch.", cancelled: result.Lifecycle == RunLifecycle.Cancelled).ConfigureAwait(false);
                         return await FinishAsync(state, result.Lifecycle, result.Reason, result.AssistantMessage).ConfigureAwait(false);
                     }
                 }
@@ -251,7 +251,7 @@ namespace RNAssistant.Core.Agent
         {
             if (cancellationToken.IsCancellationRequested)
             {
-                await RecordNotDispatchedAsync(state, call, policy, stepId, "Cancelled before dispatch.", confirmed).ConfigureAwait(false);
+                await RecordNotDispatchedAsync(state, call, policy, stepId, "Cancelled before dispatch.", confirmed, cancelled: true).ConfigureAwait(false);
                 return state.Summary(RunLifecycle.Cancelled, "cancelled", "Run cancelled.");
             }
             var remaining = state.Limits.MaxToolSteps - state.ToolSteps + chargedSteps;
@@ -273,7 +273,7 @@ namespace RNAssistant.Core.Agent
                 try { await Task.Delay(retryDelay, cancellationToken).ConfigureAwait(false); }
                 catch (OperationCanceledException)
                 {
-                    await RecordNotDispatchedAsync(state, call, policy, stepId, "Cancelled before retry dispatch.").ConfigureAwait(false);
+                    await RecordNotDispatchedAsync(state, call, policy, stepId, "Cancelled before retry dispatch.", cancelled: true).ConfigureAwait(false);
                     return state.Summary(RunLifecycle.Cancelled, "cancelled", "Run cancelled.");
                 }
             }
@@ -289,7 +289,7 @@ namespace RNAssistant.Core.Agent
                 if (cancellationToken.IsCancellationRequested)
                 {
                     record = new ToolExecutionRecord(context, ToolExecutionOutcome.NotDispatched, CompletionTime(context),
-                        "Cancelled before dispatch.", mayHaveDispatched: false);
+                        "Cancelled before dispatch.", mayHaveDispatched: false, wasCancelled: true);
                     stop = RunLifecycle.Cancelled;
                 }
                 else if (!policy.Matches(_tools.Describe(call)))
@@ -314,7 +314,8 @@ namespace RNAssistant.Core.Agent
                 record = new ToolExecutionRecord(context,
                     cancelled && !enteredRuntime ? ToolExecutionOutcome.NotDispatched
                         : enteredRuntime && policy.MayHaveSideEffects ? ToolExecutionOutcome.Unknown : ToolExecutionOutcome.Error,
-                    CompletionTime(context), ex.Message, mayHaveDispatched: enteredRuntime);
+                    CompletionTime(context), ex.Message, mayHaveDispatched: enteredRuntime,
+                    wasCancelled: cancelled && !enteredRuntime);
                 stop = cancelled ? RunLifecycle.Cancelled : RunLifecycle.Failed;
             }
             if (record.ToolStepsConsumed > remaining) stop = RunLifecycle.Failed;
@@ -339,7 +340,7 @@ namespace RNAssistant.Core.Agent
                 {
                     state.Pending = null;
                     await RecordNotDispatchedAsync(state, call, policy, stepId,
-                        "Confirmation cancelled before dispatch.").ConfigureAwait(false);
+                        "Confirmation cancelled before dispatch.", cancelled: true).ConfigureAwait(false);
                 }
                 return state.Summary(stop ?? RunLifecycle.Cancelled, "execution_interrupted", record.Message);
             }
@@ -355,12 +356,12 @@ namespace RNAssistant.Core.Agent
         }
 
         private async Task RecordNotDispatchedAsync(State state, ToolCall call, ToolPolicySnapshot policy,
-            string stepId, string message, bool confirmed = false, string code = null)
+            string stepId, string message, bool confirmed = false, string code = null, bool cancelled = false)
         {
             var context = new ToolExecutionContext(call, policy, state.RunId, state.TurnId, stepId, _utcNow(), confirmed, 0);
             var record = new ToolExecutionRecord(context, ToolExecutionOutcome.NotDispatched, CompletionTime(context), message, mayHaveDispatched: false,
                 result: code == null ? null : RNAssistant.Core.Tools.Contracts.ToolResult.Error(message,
-                    Newtonsoft.Json.JsonConvert.SerializeObject(new { code, dispatched = false })));
+                    Newtonsoft.Json.JsonConvert.SerializeObject(new { code, dispatched = false })), wasCancelled: cancelled);
             state.Messages.Add(AgentMessage.ToolResult(record));
             await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.ToolCompleted, state.Summary(),
                 stepId, execution: record)).ConfigureAwait(false);

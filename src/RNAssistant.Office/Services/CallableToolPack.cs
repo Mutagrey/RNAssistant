@@ -34,6 +34,7 @@ namespace RNAssistant.Office.Services
             "excel.add_sheet",
             "excel.rename_sheet",
             "excel.clear_range",
+            "excel.delete_rows_columns",
             "excel.sort_range",
             "excel.filter_range");
 

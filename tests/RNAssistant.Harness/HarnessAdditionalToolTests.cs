@@ -157,7 +157,7 @@ namespace RNAssistant.Harness
         {
             var expectedHostCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
             {
-                { "Excel", 14 },
+                { "Excel", 15 },
                 { "Word", 8 },
                 { "PowerPoint", 8 },
                 { "Outlook", 4 }

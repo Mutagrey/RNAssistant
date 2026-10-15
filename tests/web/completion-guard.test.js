@@ -480,6 +480,17 @@ tests.push(["one step narration groups all calls and completion replaces its run
   assert.equal(walk(node).filter(n => /is-live-current/.test(n.className)).length, 1);
 }]);
 
+tests.push(["undispatched repeats keep actionable reasons instead of cancellation", () => {
+  for (const code of ["repeated_unknown_tool_call", "repeated_tool_failure", "repeated_tool_no_progress", "excel_clear_table_header"]) {
+    const activity = { Kind: "tool", ToolId: "excel.clear_range", Status: "failed", ErrorCode: code,
+      ExecutionEvidence: { Dispatch: "NotDispatched", Effect: "Unreported" } };
+    assert.equal(context.activityPresentationState(activity), "warning");
+    assert.doesNotMatch(context.activityDisplayResult(activity), /Отменено|Не удалось начать действие/);
+    assert.match(context.activityDisplayResult(activity), /Повтор не выполнен|Очистка не удаляет столбец/);
+  }
+  assert.equal(context.activityDisplayResult({ Status: "cancelled" }), "Отменено");
+}]);
+
 for (const [name, test] of tests) {
   test();
   process.stdout.write("PASS run view UI: " + name + "\n");

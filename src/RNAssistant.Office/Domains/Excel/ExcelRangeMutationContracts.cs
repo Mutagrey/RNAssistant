@@ -100,6 +100,12 @@ namespace RNAssistant.Office.Domains.Excel
         public string ExpectedStateToken { get; set; }
     }
 
+    public sealed class ExcelRangeTableHeader
+    {
+        public string TableName { get; set; }
+        public string Address { get; set; }
+    }
+
     public sealed class ExcelRangeMutationSnapshot
     {
         public ExcelRangeMutationKind Kind { get; set; }
@@ -110,12 +116,15 @@ namespace RNAssistant.Office.Domains.Excel
         public long CellCount { get; set; }
         public string StateToken { get; set; }
         public bool Satisfied { get; set; }
+        public ExcelRangeTableHeader TableHeader { get; set; }
     }
 
     public interface IExcelRangeMutationBackend
     {
         ExcelRangeMutationSnapshot Read(ExcelRangeMutationReadRequest request);
         void Apply(ExcelRangeMutationApplyRequest request, Action markDispatchPossible);
+        ExcelDeletionSnapshot Read(ExcelDeletionReadRequest request);
+        void Delete(ExcelDeletionApplyRequest request, Action markDispatchPossible);
     }
 
     public sealed class ExcelRangeMutationBackendException : InvalidOperationException

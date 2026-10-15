@@ -1146,6 +1146,16 @@ and case-only rename remain WQ-EXCEL gates. See
 
 ## Typed Excel range mutation owner (Phase 11T3)
 
+`excel deletion:` checks table/worksheet row and column deletion, header-clear
+recovery, preservation of cells outside the table, invalid selectors, pre-dispatch
+drift, missing/divergent read-back, non-retry, and exact prepared-state confirmation
+(including new worksheet data outside the original window). It uses the production
+runtime/domain with a fake backend. `tool run result: rejection is not cancellation`,
+`tool runtime: cancellation`, `kernel: unknown call remains non-repeatable` and
+`node tests/web/completion-guard.test.js` cover the separate cancellation projection.
+No Office/VSTO build or real COM qualification is implied; Excel formula rewriting,
+totals/empty-table COM behavior and protected/shared tables remain Windows evidence.
+
 `excel range mutation:` covers exact native ownership for clear/sort/filter/format,
 public defaults, separate values/formats clear behavior, whole-row sorting, filter
 state, verified no-op/change, selector rejection, exact pre-dispatch drift,

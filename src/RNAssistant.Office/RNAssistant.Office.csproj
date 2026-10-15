@@ -122,6 +122,8 @@
     <Compile Include="Domains\Excel\ExcelFindReplaceService.cs" />
     <Compile Include="Domains\Excel\ExcelRangeMutationContracts.cs" />
     <Compile Include="Domains\Excel\ExcelRangeMutationService.cs" />
+    <Compile Include="Domains\Excel\ExcelDeleteRowsColumnsContracts.cs" />
+    <Compile Include="Domains\Excel\ExcelDeleteRowsColumnsService.cs" />
     <Compile Include="Domains\Excel\ExcelSheetContracts.cs" />
     <Compile Include="Domains\Excel\ExcelSheetService.cs" />
     <Compile Include="Domains\Excel\ExcelTableContracts.cs" />

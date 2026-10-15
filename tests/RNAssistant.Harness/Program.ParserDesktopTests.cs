@@ -1164,6 +1164,8 @@ namespace RNAssistant.Harness
             public void Rename(ExcelRenameSheetApplyRequest request, Action markDispatchPossible) { BeforeRead?.Invoke(FakeOfficeAdapter.ExcelSheetRenameOperation); _inner.Rename(request, markDispatchPossible); }
             public ExcelRangeMutationSnapshot Read(ExcelRangeMutationReadRequest request) { BeforeRead?.Invoke(FakeOfficeAdapter.ExcelRangeMutationReadOperation); return _inner.Read(request); }
             public void Apply(ExcelRangeMutationApplyRequest request, Action markDispatchPossible) { BeforeRead?.Invoke(FakeOfficeAdapter.ExcelRangeMutationApplyOperation); _inner.Apply(request, markDispatchPossible); }
+            public ExcelDeletionSnapshot Read(ExcelDeletionReadRequest request) { BeforeRead?.Invoke(FakeOfficeAdapter.ExcelDeletionReadOperation); return _inner.Read(request); }
+            public void Delete(ExcelDeletionApplyRequest request, Action markDispatchPossible) { BeforeRead?.Invoke(FakeOfficeAdapter.ExcelDeletionApplyOperation); _inner.Delete(request, markDispatchPossible); }
             public ExcelTableCollectionSnapshot Read(ExcelTableReadRequest request) { BeforeRead?.Invoke(FakeOfficeAdapter.ExcelTableReadOperation); return _inner.Read(request); }
             public void Add(ExcelTableApplyRequest request, Action markDispatchPossible) { BeforeRead?.Invoke(FakeOfficeAdapter.ExcelTableAddOperation); _inner.Add(request, markDispatchPossible); }
             public ExcelChatChartSourceSnapshot ReadChatSource(ExcelChatChartSourceRequest request) { BeforeRead?.Invoke(FakeOfficeAdapter.ExcelChartSourceReadOperation); return _inner.ReadChatSource(request); }

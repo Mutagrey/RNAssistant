@@ -48,9 +48,10 @@ common.vba_restore_backup	Excel,PowerPoint,Word	agent	vba.public.vba.restore.bac
 common.vba_write_module	Excel,PowerPoint,Word	agent	vba.public.vba.write.module.intent.v2	3d6045631316a1a9eefad58f0243dcf185166711eb3cc5f7c253fa260ee1e8da	code,componentType,mode,moduleName	-
 excel.add_sheet	Excel	agent	excel.sheet.add.v1	99d883fd3b627f9ce92f8bd3b765f210719c7deed42c1ceade44176371e7e7d1	name	-
 excel.add_table	Excel	agent	excel.table.add.v1	1397379d5db933b10b9acb2c3a86dd8ebcf401ca1ed408986ae6b3e6913b3ea1	hasHeaders,name,sheet,sourceRange,style	-
-excel.clear_range	Excel	agent	excel.range.clear.v1	6e1b384e54e44bddcb193e2808d6afb5bff6411486d2e03b2de9416e8056ee3a	address,clearWhat,sheet	-
+excel.clear_range	Excel	agent	excel.range.clear.v1	8c550ea3d0177ba16b6118f1b7446bc3b940c3ce2dd25934697c0db636ac6a56	address,clearWhat,sheet	-
 excel.create_chat_chart	Excel	agent	excel.chart.chat.v1	37bbccbd7aceb12d4c0b3453ad389b019b0e4fe1299c9f52920b064e9ae12342	address,chartType,sheet,title	-
 excel.delete_chart	Excel	agent	excel.chart.delete.v1	711829110840a72c7d0cc5de140d8f8d01c0aad9ae83a8fdc7d8f51000ce461c	chartName,sheet	-
+excel.delete_rows_columns	Excel	agent	excel.rows_columns.delete.v1	e61c3a379da2afa9f234434e49bb7bc11531a940cad01fd371f2d4056a8351ba	axis,count,scope,sheet,start,table	-
 excel.filter_range	Excel	agent	excel.range.filter.v1	0266476847ebdc848f01e527895dc451f414d25b00042cd64309773edb63124f	address,criteria,field,sheet	-
 excel.find_cells	Excel	agent	excel.find.cells.resource.v1	c94fd92ae4805bafacda6787476fe211183e21e9cd5b23309812f54f7535cf74	address,contextChars,lookIn,matchCase,maxResults,mode,query,scope,sheet,wholeWord	-
 excel.format_range	Excel	agent	excel.range.format.v1	c3eff161dea1fac728ce190d1b80c92f3c55040f5af697bcfb1ef4c7fdffcc52	address,autoFit,bold,fillColor,fontColor,horizontalAlignment,italic,numberFormat,sheet	-

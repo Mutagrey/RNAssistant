@@ -332,7 +332,8 @@ namespace RNAssistant.Core.Tools
 
         private static ToolExecutionRecord NotDispatched(ToolExecutionContext context, string message)
         {
-            return Record(context, ToolExecutionOutcome.NotDispatched, null, false, ToolEffectEvidence.None, message: message);
+            return Record(context, ToolExecutionOutcome.NotDispatched, null, false, ToolEffectEvidence.None,
+                message: message, wasCancelled: true);
         }
 
         private static ToolExecutionRecord Record(ToolExecutionContext context, ToolExecutionOutcome outcome,
@@ -340,7 +341,7 @@ namespace RNAssistant.Core.Tools
             string message = null, string preparedStateJson = null, string confirmationDataJson = null,
             IReadOnlyList<RNAssistant.Core.Models.ResourceEvidence> resourceEvidence = null,
             IReadOnlyList<RNAssistant.Core.Models.ResourceMutationReadBack> resourceReadBack = null,
-            ToolRecoveryContract recovery = null)
+            ToolRecoveryContract recovery = null, bool wasCancelled = false)
         {
             var completed = DateTime.UtcNow;
             if (completed < context.StartedUtc) completed = context.StartedUtc;
@@ -349,7 +350,7 @@ namespace RNAssistant.Core.Tools
                 evidence: new ToolExecutionEvidence(dispatched ? ToolDispatchEvidence.MayHaveDispatched : ToolDispatchEvidence.NotDispatched, effect),
                 result: result, preparedStateJson: preparedStateJson, confirmationDataJson: confirmationDataJson,
                 resourceEvidence: resourceEvidence, resourceReadBack: resourceReadBack,
-                recovery: recovery);
+                recovery: recovery, wasCancelled: wasCancelled);
         }
 
     }

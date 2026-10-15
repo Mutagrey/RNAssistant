@@ -210,6 +210,22 @@ namespace RNAssistant.Office.Domains.Excel
         private static void ValidateSelectors(
             ExcelRangeMutationSnapshot snapshot, ExcelRangeMutationSpec spec)
         {
+            if (spec.Kind == ExcelRangeMutationKind.Clear && spec.ClearWhat != "formats" &&
+                snapshot.TableHeader != null)
+                throw new ExcelRangeMutationBackendException(
+                    "Cannot clear values in the header of table '" + snapshot.TableHeader.TableName +
+                    "' (" + snapshot.Sheet + "!" + snapshot.TableHeader.Address +
+                    "). Excel keeps column names; clearing a header does not remove the column. " +
+                    "Clear only data rows, rename the header, or use excel.delete_rows_columns with scope=table " +
+                    "if the task requires removing the table column. Nothing was dispatched.",
+                    "excel_clear_table_header", false,
+                    new JObject
+                    {
+                        ["table"] = snapshot.TableHeader.TableName,
+                        ["headerAddress"] = snapshot.TableHeader.Address,
+                        ["sheet"] = snapshot.Sheet,
+                        ["address"] = snapshot.Address
+                    }.ToString(Formatting.None));
             if (spec.Kind == ExcelRangeMutationKind.Sort &&
                 spec.KeyColumn > snapshot.Columns)
                 throw new ExcelRangeMutationBackendException(

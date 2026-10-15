@@ -66,6 +66,7 @@
     <Compile Include="..\RNAssistant.Testing\FakeOfficeAdapter.ExcelWrite.cs" Link="FakeOfficeAdapter.ExcelWrite.cs" />
     <Compile Include="..\RNAssistant.Testing\FakeOfficeAdapter.ExcelFindReplace.cs" Link="FakeOfficeAdapter.ExcelFindReplace.cs" />
     <Compile Include="..\RNAssistant.Testing\FakeOfficeAdapter.ExcelRangeMutation.cs" Link="FakeOfficeAdapter.ExcelRangeMutation.cs" />
+    <Compile Include="..\RNAssistant.Testing\FakeOfficeAdapter.ExcelDelete.cs" Link="FakeOfficeAdapter.ExcelDelete.cs" />
     <Compile Include="..\RNAssistant.Testing\FakeOfficeAdapter.ExcelTable.cs" Link="FakeOfficeAdapter.ExcelTable.cs" />
     <Compile Include="..\RNAssistant.Testing\FakeOfficeAdapter.ExcelChart.cs" Link="FakeOfficeAdapter.ExcelChart.cs" />
     <Compile Include="..\RNAssistant.Testing\FakeOfficeAdapter.ExcelSheet.cs" Link="FakeOfficeAdapter.ExcelSheet.cs" />
