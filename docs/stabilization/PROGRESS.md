@@ -18,6 +18,11 @@ Data Templates gates. [Current contract](../data-templates.md#shared-application
 Runtime clear is exclusive with bridge workspace requests and revokes the selected
 root, preventing the same panel from clearing its journal during file read-back.
 
+Next Data Templates scope: [loader/project UI design](../data-templates.md#planned-loader-and-project-ui)
+starts in M1, with drag-and-drop/file/folder selection, parameter and mapping views,
+and versioned format help. The first usable workflow develops through M1–M3;
+M5 retains advanced batch/consolidation work. This is accepted scope, not shipped UI.
+
 ## Data Templates shared manifest foundation — 2026-10-16
 
 M1 now has a typed Core manifest/storage facet over `WorkspaceFileService`, with

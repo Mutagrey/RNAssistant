@@ -3,7 +3,8 @@
 Status: portable M0 proof and M1 project-manifest foundation implemented (2026-10-16).
 Owner: Data Templates domain; portable JS in `web/tabular`, shared manifest storage
 in Core `TabularProjectStore` over `WorkspaceFileService`.
-This is the canonical contract for the implemented slice, not a second roadmap.
+This is the canonical domain contract; planned scope is marked separately from
+implemented behavior and uses the original proposal's M0–M7 stages.
 Retire it only if the domain is removed or its contract moves to another named
 owner. Architecture decision: [ADR-0014](decisions/ADR-0014-data-templates.md).
 
@@ -246,6 +247,63 @@ outcome and existence observation. It does not claim the original attempt succee
 or open a project implicitly; a subsequent explicit open validates the current file.
 Malformed responses cannot report project success or file absence.
 
+## Planned loader and project UI
+
+Accepted UX scope (2026-10-16); not implemented by the metadata tab above.
+Owner: Data Templates for project views and semantics; the shared workspace
+application owns selection, file access and operation lifetime. The original
+proposal defines logical views and canonical data, but leaves drag-and-drop and
+detailed interaction design unspecified. Its M5 UI expansion must not postpone
+design or the first usable loader until after the extraction engine is complete.
+
+The next M1 slice starts with a concrete screen/state design and a reviewable
+prototype in the existing application. Use one project viewer with the current
+chat and Library. Define both narrow Office-panel and wider layouts, navigation,
+empty/loading/error/read-only states, progress/cancellation, unsaved edits and
+source/project switching before wiring the first complete workflow.
+
+| View | Required interaction |
+|---|---|
+| Sources | Drag-and-drop and explicit file/folder pickers; multiple files, visible folder contents and inclusion selection; source queue with recognition status, workbook/sheet/block preview, template candidates and per-item diagnostics. Folder recursion, unsupported files and duplicates must be visible choices/outcomes. |
+| Templates | Searchable catalog, recognized signatures, draft/published versions, test results and reusable template creation/editing. Show source-grid roles and a preview before applying a transformation. |
+| Parameters and dictionaries | Search/filter by stable parameter ID, name, meaning, type, unit, dimensions and status; aliases, proposals and conflicts remain visible. |
+| Mapping | A source-to-canonical map showing labels/codes/units and their target parameters/dimensions; inspect rule scope, priority, confirmation and affected records. Unmapped/ambiguous values are explicit; suggestions become rules only through the shared domain workflow. |
+| Data and validation | Source/result grid, normalized records, quality filters and diagnostics; explain a value through its exact source cells, extraction rule and mapping. |
+| Results and export | Run status, produced datasets, export contents and supported output formats; distinguish preview, tested draft and published result. |
+| Format and help | Versioned canonical format reference with examples, field meanings, folder layout and supported capabilities, available from the viewer and in portable export. |
+
+These are logical sections, not a requirement to squeeze seven permanent tabs
+into a narrow pane. The design must make the main sequence clear: select sources
+→ recognize/choose a template → resolve mapping → inspect/test → publish/export.
+Simple file loading must not require opening every section. Drag-and-drop has
+equivalent keyboard-accessible picker commands. Folder selection/import is
+adapter-specific: native workspace access uses existing authority; standalone
+offers supported file/folder import and states its save capabilities explicitly.
+Browser file metadata never grants native path access.
+
+Canonical data documentation is a deliverable alongside the M2 schema, before
+mapping controls depend on it. Specify parameter/dimension/period/value/unit,
+record grain, observation/total roles, temporal semantics, missing/error states
+and provenance, with a worked source → mapping → observation example. Also
+document template, dictionary, binding and dataset files, schema versions and
+validation errors. Keep this distinct from the implemented metadata-only
+`project.json` and M0 probe envelope; neither is the canonical extraction format.
+Unknown format versions must fail explicitly. Help examples must match the
+versioned schema and fixtures used by the engine.
+
+| Original stage | UI delivery |
+|---|---|
+| Next M1 slice | Reviewable screen/state prototype and typed interaction boundaries, followed by the source selection shell. No claim of recognition before its adapter/engine exists. |
+| M1–M3 | First real end-to-end flow for a supported workbook: loading, preview, parameter/mapping inspection, diagnostics and draft/test/publish through the common domain service. Deliver usable controls alongside each capability. |
+| M4 | Portable picker/import/export and the format/help reference using the same engine and documented capability differences. |
+| M5 | Batch execution over selected folder inputs, scoped dictionary/mapping edits, comparison/consolidation, multiple blocks and output workbook templates. |
+
+Feature code belongs in thematic `app-*.js` modules; `app.js` only binds shared
+navigation/rendering. UI and agent operations consume the same typed domain
+commands and rules. Drafts, mapping rules and results belong to project files;
+view state is not another durable store. Later workspace M7 adoption must reuse
+these views/contracts instead of introducing another project shell or file owner.
+
 ## Integration gaps and next boundary
 
 Remaining boundaries after the initial source review at `c33da7df` and the
@@ -266,7 +324,10 @@ Next slices, coordinated with the workspace owners:
    and host adapters separate; Office remains Framework 4.8 without a direct
    reference to the net8.0 Runtime assembly. Host-neutral independent work below
    does not wait for Office qualification.
-2. Attach the exact Excel source independently of project identity, then connect
+2. Design the [loader/project UI](#planned-loader-and-project-ui) and canonical
+   format examples alongside the first supported source workflow. Keep the
+   interface extensible by section; deliver it incrementally through M1–M3.
+3. Attach the exact Excel source independently of project identity, then connect
    capture/execution and domain draft/test/publish. Keep source grants, project
    write authority and immutable evidence separate. Multi-file activation remains
    a domain publication step: stage members, verify read-back, then switch the
