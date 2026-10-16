@@ -33,6 +33,8 @@ function switchTab(name) {
     renderInstructions();
   } else if (name === "settings") {
     renderSettings();
+  } else if (name === "workspace" && window.RNAssistantWorkspace) {
+    window.RNAssistantWorkspace.show();
   } else if (name === "artifacts" && typeof renderHtmlWorkspace === "function") {
     renderHtmlWorkspace();
     if (window.RNAssistantArtifactCatalog) window.RNAssistantArtifactCatalog.show();
@@ -70,6 +72,7 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 
   bindChatActions();
+  if (window.RNAssistantWorkspace) window.RNAssistantWorkspace.bind();
   bindContextActions();
   bindVbaActions();
   bindHtmlWorkspaceActions();

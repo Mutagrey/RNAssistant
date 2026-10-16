@@ -6,8 +6,11 @@ using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using RNAssistant.Application;
+using RNAssistant.Application.Contracts;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Diagnostics;
@@ -17,6 +20,7 @@ namespace RNAssistant.Office.WebView
     public sealed class AssistantWebBridge : IDisposable
     {
         private AssistantController _controller;
+        private readonly WorkspaceApplicationService _workspaces;
         private readonly Action<string> _postMessageJson;
         private readonly BridgeRequestCancellationRegistry _cancellations;
         private readonly string _bridgeToken;
@@ -64,8 +68,14 @@ namespace RNAssistant.Office.WebView
         }
 
         public AssistantWebBridge(AssistantController controller, Action<string> postMessageJson)
+            : this(controller, postMessageJson, new WorkspaceApplicationService(controller.StoragePaths))
+        { }
+
+        public AssistantWebBridge(AssistantController controller, Action<string> postMessageJson,
+            WorkspaceApplicationService workspaces)
         {
             _controller = controller;
+            _workspaces = workspaces ?? throw new ArgumentNullException(nameof(workspaces));
             _postMessageJson = postMessageJson;
             _cancellations = new BridgeRequestCancellationRegistry();
             _bridgeToken = Guid.NewGuid().ToString("N");
@@ -108,7 +118,8 @@ namespace RNAssistant.Office.WebView
                 {
                     if (_disposed) throw new OperationCanceledException("Bridge is closing.");
                     var telemetry = type == BridgeOperationId.ReportClientTiming;
-                    var needsExclusiveBinding = type == BridgeOperationId.CreateOfficeHostChat;
+                    var needsExclusiveBinding = type == BridgeOperationId.CreateOfficeHostChat ||
+                        type == BridgeOperationId.ClearRuntimeData;
                     if (!telemetry && (_hostSwitchPending || (needsExclusiveBinding && _requestsInFlight != 0)))
                         throw new BridgeSwitchBusyException();
                     if (!telemetry)
@@ -149,6 +160,25 @@ namespace RNAssistant.Office.WebView
 
                 switch (type)
                 {
+                    case BridgeOperationId.GetWorkspaceState:
+                        responsePayload = await RunBridgeWorkAsync(_workspaces.ReadState, cancellationToken).ConfigureAwait(false);
+                        break;
+                    case BridgeOperationId.OpenWorkspace:
+                        var workspaceOpen = Payload<OpenWorkspaceRequest>(payload);
+                        responsePayload = await RunBridgeWorkAsync(() => _workspaces.OpenWorkspace(workspaceOpen), cancellationToken).ConfigureAwait(false);
+                        break;
+                    case BridgeOperationId.CreateTabularProject:
+                        var projectCreate = Payload<CreateTabularProjectRequest>(payload);
+                        responsePayload = await RunBridgeWorkAsync(() => _workspaces.CreateTabularProject(projectCreate), cancellationToken).ConfigureAwait(false);
+                        break;
+                    case BridgeOperationId.OpenTabularProject:
+                        var projectOpen = Payload<WorkspaceProjectPathRequest>(payload);
+                        responsePayload = await RunBridgeWorkAsync(() => _workspaces.OpenTabularProject(projectOpen), cancellationToken).ConfigureAwait(false);
+                        break;
+                    case BridgeOperationId.ReconcileWorkspaceFile:
+                        var workspaceReconcile = Payload<WorkspaceProjectPathRequest>(payload);
+                        responsePayload = await RunBridgeWorkAsync(() => _workspaces.ReconcileFile(workspaceReconcile), cancellationToken).ConfigureAwait(false);
+                        break;
                     case BridgeOperationId.ReportClientTiming:
                         var clientTiming = Payload<ClientTimingPayload>(payload);
                         if ((string.Equals(clientTiming.Kind, "startup", StringComparison.Ordinal) ||
@@ -446,6 +476,7 @@ namespace RNAssistant.Office.WebView
                         break;
                     case BridgeOperationId.ClearRuntimeData:
                         responsePayload = Bootstrap(_controller.ClearRuntimeData());
+                        _workspaces.Reset();
                         break;
                     case BridgeOperationId.GetTools:
                         responsePayload = _controller.GetTools();
@@ -783,6 +814,12 @@ namespace RNAssistant.Office.WebView
             {
                 return SerializeFailure(id, ex.Message, ex.Message, "bridge_switch_busy", false);
             }
+            catch (WorkspaceApplicationException ex)
+            { return SerializeFailure(id, ex.Message, ex.Message, ex.Code, false); }
+            catch (WorkspaceFileException ex)
+            { return SerializeFailure(id, ex.Message, ex.Message, ex.Code, false); }
+            catch (TabularProjectException ex)
+            { return SerializeFailure(id, ex.Message, ex.Message, ex.Code, false); }
             catch (Exception ex)
             {
                 RuntimeLog.Error("WebView bridge request failed.", ex);

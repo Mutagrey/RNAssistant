@@ -29,7 +29,6 @@ namespace RNAssistant.Runtime
         private readonly ChatStore _chats;
         private readonly WorkspaceStore _workspaces;
         private readonly WorkspaceFileService _files;
-        private readonly TabularProjectStore _tabularProjects;
         private readonly ChatBlobStore _payloads;
         private readonly WorkspaceWebSnapshotStore _webSnapshots;
 
@@ -39,7 +38,6 @@ namespace RNAssistant.Runtime
             _chats = new ChatStore(paths);
             _workspaces = new WorkspaceStore(paths);
             _files = new WorkspaceFileService(paths);
-            _tabularProjects = new TabularProjectStore(_files);
             _payloads = new ChatBlobStore(paths);
             _webSnapshots = new WorkspaceWebSnapshotStore(paths, _files);
         }
@@ -101,12 +99,6 @@ namespace RNAssistant.Runtime
         {
             return _files.ReconcileUncertain(workspace, relativePath);
         }
-
-        public TabularProjectSnapshot CreateTabularProject(WorkspaceDescriptor workspace, string manifestPath, string name)
-        { return _tabularProjects.Create(workspace, manifestPath, name); }
-
-        public TabularProjectSnapshot OpenTabularProject(WorkspaceDescriptor workspace, string manifestPath)
-        { return _tabularProjects.Open(workspace, manifestPath); }
 
         public Task<WebVerificationResult> VerifyWebAsync(WorkspaceDescriptor workspace,
             string entryPath, CancellationToken cancellationToken = default(CancellationToken), string snapshotId = null,

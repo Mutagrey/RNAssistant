@@ -13,6 +13,7 @@ namespace RNAssistant.Office
 {
     public sealed class AssistantController
     {
+        internal RNAssistant.Core.Storage.AppDataPaths StoragePaths { get; } = RNAssistant.Core.Storage.AppDataPaths.CreateDefault();
         internal event Action<LlmRequestDiagnosticUpdate> ModelRequestDiagnostics;
         public Task InboxWorkersDrained { get { return Task.CompletedTask; } }
         public void StopInboxWorkers() { }

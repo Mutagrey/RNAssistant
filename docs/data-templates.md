@@ -158,8 +158,8 @@ explicit cutover; they never write the new project in parallel.
 it has no direct file I/O, separate registry, mutable CAS copy or journal.
 Its models and implementation are included in both the existing Core Framework
 4.8 project and the shared-source development build. Office gains no .NET 8 dependency.
-`WorkspaceConversationService` exposes typed create/open operations to the current
-CLI consumer. Office UI adoption remains a separate workspace M7 integration.
+`WorkspaceApplicationService` now exposes the same typed operations to CLI and
+the Office panel, independently of conversation orchestration.
 
 The current portable `project.json` has exactly four fields:
 
@@ -203,7 +203,48 @@ rna project open --workspace /absolute/workspace --path reports/project.json --r
 
 These commands need no chat, model, workbook or browser. Files are discoverable
 through the existing `resources`/`open` operations. This single-file foundation
-does not yet implement draft/test/publish, multi-file activation or a project viewer.
+does not yet implement draft/test/publish or multi-file activation.
+
+### Shared application and UI
+
+The **Рабочая папка** tab accepts an absolute path to an existing directory and an
+explicit read-only choice. It creates/opens the domain manifest by a relative path
+and shows its name/location as inert text. The current view covers metadata only.
+Office chats and their existing artifacts retain their current ownership; this
+tab does not attach workspace files to model context or bind an Excel source.
+
+`src/RNAssistant.Application` is one shared application source module, compiled via
+one `.projitems` import in Office Framework 4.8 and the existing CLI Runtime build.
+It references Core only. The previous Runtime-only project facade was removed;
+CLI `project create/open` and the bridge now consume `WorkspaceApplicationService`
+and its typed contracts directly. No file logic or conversation runtime is copied.
+The packaging seam and removal gate are in [MIGRATION_MAP](stabilization/MIGRATION_MAP.md#workspace-first-adapters--2026-10-04).
+
+Each panel/CLI invocation owns one ephemeral workspace selection. Opening a root
+issues a new binding ID, including when reopening the same root with different
+permissions. Project commands must match it; selection changes and file operations
+are serialized. The binding is application authority, not portable manifest data
+or a model parameter. Failed root selection retains the previous selection; failed
+project operations clear the old project projection. The service uses the host's
+configured state directory and the bridge keeps it across Office controller changes.
+Panel reload reads this state; application restart requires explicit root selection.
+No extra selected-root/project registry is persisted.
+
+The bridge's `getWorkspaceState`, `openWorkspace`, `createTabularProject`,
+`openTabularProject` and `reconcileWorkspaceFile` use the existing token/operation
+catalog and worker boundary. UI serializes commands, retains the exact uncertain
+path for inspection and does not upgrade an opened read-only binding when a
+checkbox is edited. Closing the panel drains accepted work through the existing
+bridge lifecycle. No Office gate is held by workspace file work.
+Runtime clearing uses the bridge's exclusive request boundary, so it cannot remove
+the file journal during an accepted workspace operation; successful clearing also
+revokes the selection.
+
+Unknown writes and lost replies never trigger creation retries. **Проверить
+состояние файла** invokes explicit existing reconciliation and returns its typed
+outcome and existence observation. It does not claim the original attempt succeeded
+or open a project implicitly; a subsequent explicit open validates the current file.
+Malformed responses cannot report project success or file absence.
 
 ## Integration gaps and next boundary
 
@@ -212,7 +253,7 @@ manifest implementation:
 
 | Boundary | Existing owner / remaining work |
 |---|---|
-| Shared workspace application → project files | Shared Core manifest create/open/revalidation and a typed Runtime/CLI consumer are implemented. Office adoption of workspace application operations and the project viewer are unfinished. Reuse these compatible contracts/file owners when composing that UI. |
+| Shared workspace application → project files | Compatible shared application commands, CLI and a thin Office panel metadata view are implemented. Real Windows UI evidence, workspace-owned UI chats, the file tree/resource views and full M7 lifetime/reconnect integration remain open. |
 | Live Excel capture | `ExcelResourceProvider` resolves explicit ranges through `ExcelReadService` and the bound document scope. It does not yet feed this probe; capture consistency, unsaved values, dependencies and richer cell availability remain open. |
 | Application-owned execution | `AssistantPaneControl` owns the current WebView2 and trusts its exact root document; frame navigation is limited to about:blank/srcdoc. A browser proof does not authorize broadening that policy or prove WebView2 Worker behavior. |
 | Publication | Draft/test/publish and exact source/module/dictionary pins must use existing authority/journal owners. Verified manifest creation is not a template publication; probe JSON cannot authorize one. |
@@ -220,14 +261,11 @@ manifest implementation:
 
 Next slices, coordinated with the workspace owners:
 
-1. Adapt the Office UI through the shared typed application boundary, reusing
-   the compatible Core project/file contracts. `RNAssistant.Runtime` currently
-   targets only `net8.0` and
-   references BrowserHost; Office targets .NET Framework 4.8. A direct reference
-   is not viable. Factor only the required common contracts/use cases into a
-   compatible application boundary, keeping browser/host adapters separate; do
-   not copy Runtime or move its conversation orchestration into Core. Any actual
-   temporary Office adapter needs its owner and M7 removal gate in MIGRATION_MAP.
+1. Qualify the shared project commands in Windows/Office and extend the existing
+   shared application boundary as workspace M7 consumers are adopted. Keep browser
+   and host adapters separate; Office remains Framework 4.8 without a direct
+   reference to the net8.0 Runtime assembly. Host-neutral independent work below
+   does not wait for Office qualification.
 2. Attach the exact Excel source independently of project identity, then connect
    capture/execution and domain draft/test/publish. Keep source grants, project
    write authority and immutable evidence separate. Multi-file activation remains
@@ -245,7 +283,15 @@ Shared project storage: Harness filter `tabular project:` covers create/reopen,
 read-only refusal, relocation, malformed metadata, foreign-workspace binding,
 external drift, historical bytes and uncertain-write recovery. A focused CLI
 smoke verifies the actual create/open consumer across processes, refusals and
-discovery through the shared resource catalog. These do not qualify Office UI.
+discovery through the shared resource catalog.
+
+`workspace application:` covers stale/readonly binding refusal, failure projections,
+Office controller replacement, off-UI file dispatch and typed unknown/reconciliation
+through the real bridge with a fake Office controller, plus runtime-reset exclusion
+while file read-back is pending. `workspace-projects.test.js`
+uses the shipped UI and CSS with controlled typed replies for duplicate clicks,
+readonly/stale bindings, inert metadata, explicit pinned-path inspection, malformed
+receipts and narrow light/dark layout. These do not qualify real Windows/Office UI.
 
 For JS changes, run only the affected scripts (Playwright/browser must already be available):
 

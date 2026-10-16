@@ -143,4 +143,5 @@
     <Compile Include="..\..\src\RNAssistant.Desktop\OfficeTargetRegistry.cs" Link="Desktop\OfficeTargetRegistry.cs" />
     <Compile Include="..\..\src\RNAssistant.OfficeHosts\Targets\OfficeTargetDescriptor.cs" Link="OfficeHosts\Targets\OfficeTargetDescriptor.cs" />
   </ItemGroup>
+  <Import Project="..\..\src\RNAssistant.Application\RNAssistant.Application.projitems" />
 </Project>

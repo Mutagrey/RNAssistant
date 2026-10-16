@@ -10,4 +10,5 @@
     <ProjectReference Include="../RNAssistant.BrowserHost/RNAssistant.BrowserHost.csproj" />
     <Reference Include="Newtonsoft.Json" HintPath="../../packages/Newtonsoft.Json.13.0.3/lib/net6.0/Newtonsoft.Json.dll" />
   </ItemGroup>
+  <Import Project="../RNAssistant.Application/RNAssistant.Application.projitems" />
 </Project>

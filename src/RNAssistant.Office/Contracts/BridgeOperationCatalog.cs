@@ -11,6 +11,11 @@ namespace RNAssistant.Office.Contracts
     {
         ReportClientTiming,
         [BridgeOperationPolicy(false, 30)] Init,
+        GetWorkspaceState,
+        OpenWorkspace,
+        CreateTabularProject,
+        OpenTabularProject,
+        ReconcileWorkspaceFile,
         ListChats,
         GetChatState,
         GetPreviousChatMessages,

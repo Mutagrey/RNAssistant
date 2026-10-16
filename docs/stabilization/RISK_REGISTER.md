@@ -15,13 +15,12 @@ application integration, with existing file/resource/WebView host owners.
 The [portable M0 proof](../data-templates.md) passes focused JS/browser checks;
 it has no native tools or publication authority.
 
-- Shared workspace application operations are not yet adopted by Office UI.
-  The Core manifest facet and typed Runtime/CLI consumer now pass create/reopen,
-  read-only, relocation, drift, foreign-workspace and unknown-effect checks.
-  Close the remaining workspace M7 UI slice using these compatible Core contracts,
-  `WorkspaceStore` and `WorkspaceFileService`. Runtime is net8.0 while Office is
-  .NET Framework 4.8: do not copy orchestration or add a direct Runtime reference.
-  Bind the Office source independently of workspace/project identity.
+- Shared project commands now serve CLI and a thin Office panel through a
+  compatible application source module. Core file checks, fake-controller bridge
+  lifetime/worker/unknown-effect checks and browser UI checks pass. Real
+  Windows/Office validation, workspace-owned UI chats, file views and full M7
+  reconnect adoption remain open. Keep Framework 4.8 compatibility and bind the
+  Office source independently of workspace/project identity.
 - Normalized fixtures do not prove unsaved live Excel values, a consistent
   disjoint capture or metadata availability. Close with bound provider capture,
   exact dependencies and Windows/Excel evidence; do not synthesize unavailable

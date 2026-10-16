@@ -77,6 +77,15 @@ Office adapter до завершения runtime shutdown без ожидани�
 
 ## Activation and target selection
 
+The **Рабочая папка** panel is independent of Office target selection. It opens an
+existing directory and creates/opens Data Templates manifests through the same
+compatible application source used by CLI. Root changes issue a new binding;
+stale project requests are refused. These typed bridge operations run on a worker
+boundary and retain the existing shutdown/drain behavior. Project metadata does
+not attach files to a document chat or grant model access. See
+[the scoped contract](data-templates.md#shared-application-and-ui); native
+Windows/Office behavior remains unqualified.
+
 Desktop принимает `--host`, `--hwnd`, `--pid`/`--process-id`,
 `--document-path`, `--document-title`, `--selection`, `--target`,
 `--target-base64` и `--action`. Native wrappers передают window handle и target

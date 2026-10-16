@@ -32,6 +32,7 @@
   <link rel="stylesheet" href="css/app-context-chips.css?v=sidebar-polish-20260723-1">
   <link rel="stylesheet" href="css/app-models.css?v=model-tables-20260930-1">
   <link rel="stylesheet" href="css/app-workspace.css?v=diagnostics-clarity-20260930-1">
+  <link rel="stylesheet" href="css/app-workspace-projects.css?v=workspace-projects-20261016-1">
   <link rel="stylesheet" href="css/app-json-viewer.css?v=json-height-20260929-1">
   <link rel="stylesheet" href="css/app-text-viewer.css?v=artifact-text-20260831-1">
   <link rel="stylesheet" href="css/app-sequence-viewer.css?v=artifact-gallery-20260902-1">
@@ -57,6 +58,7 @@
   <div class="shell">
     <nav class="tabs" aria-label="Разделы ассистента">
       <button class="tab active" data-section="chat" data-tab="chat">Чат</button>
+      <button class="tab" data-section="workspace" data-tab="workspace">Рабочая папка</button>
       <button class="tab" data-section="artifacts" data-tab="artifacts">Артефакты</button>
       <button class="tab" data-section="vba" data-tab="vba">VBA</button>
       <button class="tab" id="libraryRootTab" data-section="library" data-default-tab="instructions">Библиотека</button>
@@ -610,6 +612,39 @@
               <div class="vba-meta" id="vbaMetaBox"></div>
             </div>
           </section>
+        </div>
+      </section>
+
+      <section class="panel" id="tab-workspace">
+        <div class="workspace-projects">
+          <div class="panel-head"><h2>Рабочая папка</h2><button type="button" class="secondary" id="workspaceRefresh">Обновить состояние</button></div>
+          <p class="workspace-hint">Проекты хранятся в выбранной папке. Выбор документа Office её не меняет.</p>
+          <div class="workspace-form">
+            <label for="workspaceRoot">Полный путь к существующей папке</label>
+            <input id="workspaceRoot" type="text" placeholder="C:\Projects\Reports" autocomplete="off" spellcheck="false">
+            <label class="workspace-check"><input id="workspaceReadOnly" type="checkbox"> Открыть только для чтения</label>
+            <div><button type="button" id="workspaceOpen">Открыть папку</button></div>
+          </div>
+          <p id="workspaceSelection" class="workspace-selection">Рабочая папка не выбрана.</p>
+          <fieldset id="workspaceProjectFields" class="workspace-form" disabled>
+            <legend>Data Templates</legend>
+            <label for="workspaceProjectPath">Путь к проекту внутри папки</label>
+            <input id="workspaceProjectPath" type="text" value="project.json" placeholder="reports/project.json" autocomplete="off" spellcheck="false">
+            <label for="workspaceProjectName">Имя нового проекта</label>
+            <input id="workspaceProjectName" type="text" maxlength="200" autocomplete="off">
+            <div class="workspace-actions">
+              <button type="button" id="workspaceProjectOpen">Открыть проект</button>
+              <button type="button" id="workspaceProjectCreate" class="secondary">Создать проект</button>
+            </div>
+            <p class="workspace-hint">Создание сохраняет описание проекта. Шаблоны и подключение источников будут добавлены следующим этапом.</p>
+          </fieldset>
+          <div id="workspaceProjectResult" hidden>
+            <h3 id="workspaceProjectTitle"></h3>
+            <p id="workspaceProjectLocation" class="workspace-selection"></p>
+            <p class="workspace-hint">Описание прочитано при открытии. Повторное открытие проверит изменения файла.</p>
+          </div>
+          <p id="workspaceStatus" role="status" aria-live="polite"></p>
+          <button type="button" id="workspaceReconcile" class="secondary" hidden>Проверить состояние файла</button>
         </div>
       </section>
 
@@ -1186,6 +1221,7 @@
   <script src="js/app-chat-run.js?v=response-render-timing-20260928-1-usage-20261002-1-navigation-20261002-1-inbox-20261002-1-large-chat-1-run-isolation-1-transcript-20261012-1-settings-delivery-1"></script>
   <script src="js/app-chat.js?v=office-chat-20261014-1"></script>
   <script src="js/app-chat-edit.js?v=chat-sync-20260903-1-usage-20261002-1"></script>
-  <script src="js/app.js?v=artifact-catalog-20261002-1"></script>
+  <script src="js/app-workspace-projects.js?v=workspace-projects-20261016-1"></script>
+  <script src="js/app.js?v=workspace-projects-20261016-1"></script>
 </body>
 </html>

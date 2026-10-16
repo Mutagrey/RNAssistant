@@ -14,6 +14,16 @@ The owner is the existing `WorkspaceFileService`; these tests do not qualify the
 future Office UI, capture or template publication. The existing CLI exposes
 `project create/open` for process-level smoke checks without a model or Office.
 
+`workspace application:` checks selection/permission binding, refusal projections,
+controller-independent lifetime, file dispatch off the UI callback and typed
+unknown/reconciliation through the real bridge with a fake controller. It also
+excludes runtime clear during file dispatch/read-back and revokes selection after
+an explicit reset. Browser
+`node tests/web/workspace-projects.test.js` checks the shipped UI/CSS with controlled
+replies: single flight, readonly/stale binding, inert metadata, pinned-path explicit
+inspection, malformed receipts and narrow light/dark layouts. Use the usual
+Playwright `BROWSER_EXECUTABLE` override. These do not qualify Windows/Office.
+
 `chat relocation:` covers occupied destinations, blocked parent creation, invalid
 projection rollback, deletion while waiting for the document lock, explicit retry
 and transient drafts. It checks unchanged event bytes on refusal and history after

@@ -22,6 +22,7 @@ namespace RNAssistant.Office
         private readonly string _runtimeId = Guid.NewGuid().ToString("N");
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly AppDataPaths _paths;
+        internal AppDataPaths StoragePaths { get { return _paths; } }
         private readonly SettingsService _settingsService;
         private readonly ChatStore _chatStore;
         private readonly ArtifactWorkingSetService _artifactWorkingSet;

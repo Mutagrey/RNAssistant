@@ -32,6 +32,14 @@ kernel, model protocol, tool runtime, frozen Core `ModelContextCompiler` and can
 uses its document-owned composition until the M6–M9 cutovers; this is an in-flight
 architecture, not a claim that the UI and CLI have identical context preparation.
 
+The initial workspace project UI uses a shared application source module in
+`src/RNAssistant.Application`, imported into Office and the CLI build. It owns
+ephemeral workspace selection and typed project commands over Core storage, with
+no Office/browser dependency. The bridge keeps that context across document
+controller changes. This does not migrate chats or model file tools; see
+[Data Templates](data-templates.md#shared-application-and-ui) and the
+[packaging seam](stabilization/MIGRATION_MAP.md#workspace-first-adapters--2026-10-04).
+
 The optional development Chromium runner uses `RNAssistant.BrowserHost`, a small
 .NET 8 executable referenced by Runtime. It owns only its browser process tree and
 temporary profile, with a private caller pipe and a bounded safety lifetime. It has

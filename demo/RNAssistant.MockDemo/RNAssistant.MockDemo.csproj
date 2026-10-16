@@ -143,4 +143,5 @@
           Link="libSkiaSharp.dll"
           CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+  <Import Project="..\..\src\RNAssistant.Application\RNAssistant.Application.projitems" />
 </Project>

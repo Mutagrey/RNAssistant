@@ -1,5 +1,23 @@
 # Stabilization progress
 
+## Shared workspace project application and UI — 2026-10-16
+
+The Office panel and CLI now use one compatible application source module for
+workspace selection, project create/open and explicit uncertain-file inspection.
+Selections are independent of Office controllers and pinned by an ephemeral
+binding; stale requests cannot inherit another selection's write permission.
+The old Runtime-only project facade is removed. Common storage/CAS/journal owners
+and Office Framework 4.8 are preserved; packaging is tracked in MIGRATION_MAP.
+
+Validation: four focused `workspace application:` Harness checks, four browser
+UI groups, bridge-bootstrap regression and process-level shared CLI smoke pass;
+CLI builds. The narrow metadata view does not complete M7:
+workspace-owned UI chats, file views/reconnect and real Windows/Office validation
+remain open. Live Excel capture, template publication and export remain separate
+Data Templates gates. [Current contract](../data-templates.md#shared-application-and-ui).
+Runtime clear is exclusive with bridge workspace requests and revokes the selected
+root, preventing the same panel from clearing its journal during file read-back.
+
 ## Data Templates shared manifest foundation — 2026-10-16
 
 M1 now has a typed Core manifest/storage facet over `WorkspaceFileService`, with

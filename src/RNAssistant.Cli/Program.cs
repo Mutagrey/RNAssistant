@@ -7,6 +7,8 @@ using System.Text;
 using System.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using RNAssistant.Application;
+using RNAssistant.Application.Contracts;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
@@ -25,6 +27,7 @@ namespace RNAssistant.Cli
             catch (ArgumentException ex) { Console.Error.WriteLine(ex.Message); return 2; }
             catch (WorkspaceFileException ex) { Console.Error.WriteLine(ex.Code + ": " + ex.Message); return 5; }
             catch (TabularProjectException ex) { Console.Error.WriteLine(ex.Code + ": " + ex.Message); return 5; }
+            catch (WorkspaceApplicationException ex) { Console.Error.WriteLine(ex.Code + ": " + ex.Message); return 5; }
             catch (Exception ex) { Console.Error.WriteLine(ex.Message); return 5; }
         }
 
@@ -63,6 +66,19 @@ namespace RNAssistant.Cli
             var stateRoot = Environment.GetEnvironmentVariable("RNA_STATE_ROOT");
             var paths = string.IsNullOrWhiteSpace(stateRoot)
                 ? AppDataPaths.CreateDefault() : AppDataPaths.CreateForRoot(stateRoot);
+            if (args[0] == "project")
+            {
+                var projects = new WorkspaceApplicationService(paths);
+                var selection = projects.OpenWorkspace(new OpenWorkspaceRequest {
+                    RootPath = root, ReadOnly = options.ContainsKey("read-only") });
+                var project = args[1] == "create"
+                    ? projects.CreateTabularProject(new CreateTabularProjectRequest {
+                        BindingId = selection.Workspace.BindingId, ManifestPath = Required(options, "path"), Name = Required(options, "name") })
+                    : projects.OpenTabularProject(new WorkspaceProjectPathRequest {
+                        BindingId = selection.Workspace.BindingId, ManifestPath = Required(options, "path") });
+                Output(jsonl, args[1] == "create" ? "project.created" : "project.opened", project);
+                return 0;
+            }
             var service = new WorkspaceConversationService(paths);
             var workspace = service.OpenWorkspace(root, args[0] == "workspace" && options.ContainsKey("create"),
                 !options.ContainsKey("read-only"));
@@ -78,14 +94,6 @@ namespace RNAssistant.Cli
                     profile = "development", capabilities = service.AvailableToolIds(workspace,
                         ConversationRunPolicy.For(Value(options, "mode", ChatModes.Agent)).Mode,
                         ParseMutationPolicy(Value(options, "mutation-policy", "ask"))) });
-                return 0;
-            }
-            if (args[0] == "project")
-            {
-                var project = args[1] == "create"
-                    ? service.CreateTabularProject(workspace, Required(options, "path"), Required(options, "name"))
-                    : service.OpenTabularProject(workspace, Required(options, "path"));
-                Output(jsonl, args[1] == "create" ? "project.created" : "project.opened", project);
                 return 0;
             }
             if (args[0] == "session" && args.Length >= 2 && args[1] == "create")
