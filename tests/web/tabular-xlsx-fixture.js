@@ -1,7 +1,7 @@
 "use strict";
 // Test-only ZIP producer/fixture mutations. Uses Node zlib, never the production ZIP reader.
 const fs = require("node:fs"), path = require("node:path"), zlib = require("node:zlib");
-const source = path.resolve(__dirname, "../../web/tabular/examples/matrix-source.xlsx");
+const source = path.resolve(__dirname, "../../web/data-templates/core/examples/matrix-source.xlsx");
 function parts() {
     const input = fs.readFileSync(source), result = new Map(); let position = 0;
     while (input.readUInt32LE(position) === 0x04034b50) {

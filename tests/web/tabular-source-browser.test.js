@@ -1,7 +1,7 @@
 "use strict";
 const assert = require("node:assert/strict"), fs = require("node:fs"), path = require("node:path"), http = require("node:http");
 const { chromium } = require("playwright");
-const root = path.resolve(__dirname, "../../web/tabular"), input = fs.readFileSync(path.join(root, "examples/matrix-xlsx-extraction.json"), "utf8");
+const root = path.resolve(__dirname, "../../web/data-templates/core"), input = fs.readFileSync(path.join(root, "examples/matrix-xlsx-extraction.json"), "utf8");
 // Virtual leading space makes a valid ZIP32 80 MiB larger without allocating a whole file.
 // This checks bounded random reads, not representative workbook parsing performance.
 const prefix = 80 * 1048576, archive = fs.readFileSync(path.join(root, "examples/matrix-source.xlsx"));
@@ -13,7 +13,7 @@ for (let position = directory; position < end;) {
 archive.writeUInt32LE(directory + prefix, end + 16);
 const length = prefix + archive.length, reads = [];
 const scripts = ["selectors.js", "snapshot.js", "json.js", "decimal.js", "sources.js", "byte-source.js", "expression.js", "template.js", "transform.js", "engine.js", "executor.js"];
-const assets = new Set([...scripts, "worker.js", "xlsx-zip.js", "xlsx-reader.js", "js/vendor/sax.js"]);
+const assets = new Set([...scripts, "worker.js", "xlsx-zip.js", "xlsx-reader.js", "vendor/sax.js"]);
 const fakeWorkers = {
     "old.js": 'postMessage({type:"ready",protocol:4,revision:"tabular-core-2"});',
     "range.js": 'request({offset:0,count:262145});',
@@ -50,7 +50,7 @@ const fakeWorkers = {
                 fakeWorkers[file] + '};'); return;
         }
         if (!assets.has(file)) { response.writeHead(404); response.end(); return; }
-        response.end(fs.readFileSync(path.join(root, file === "js/vendor/sax.js" ? "../" + file : file)));
+        response.end(fs.readFileSync(path.join(root, file === "vendor/sax.js" ? "../" + file : file)));
     });
     await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
     const browser = await chromium.launch({ headless: true,

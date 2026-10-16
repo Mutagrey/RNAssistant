@@ -171,7 +171,7 @@ namespace RNAssistant.Application
                 ["Content-Length"] = body.Length.ToString(CultureInfo.InvariantCulture),
                 ["Cross-Origin-Resource-Policy"] = "same-origin", ["Referrer-Policy"] = "no-referrer",
                 ["Content-Security-Policy"] = "default-src 'none'; script-src 'self'; " +
-                    (document ? "worker-src " + _prefix + "tabular/worker.js; connect-src " + _prefix + "descriptor.json " + _prefix + "source; " : "worker-src 'none'; connect-src 'none'; ") +
+                    (document ? "worker-src " + _prefix + "data-templates/core/worker.js; connect-src " + _prefix + "descriptor.json " + _prefix + "source; " : "worker-src 'none'; connect-src 'none'; ") +
                     "base-uri 'none'; form-action 'none'; frame-src 'none'; frame-ancestors 'none'; object-src 'none'"
             };
             if (sequence != 0)

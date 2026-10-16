@@ -1,7 +1,13 @@
 # RNAssistant Harness
 
-Data Templates M0/M2 is JavaScript-only: run `node tests/web/tabular-core.test.js`,
-`node tests/web/tabular-matrix.test.js`, `node tests/web/tabular-universal.test.js`,
+Data Templates is an independent source project in `web/data-templates`.
+`node tests/web/data-templates-export.test.js` checks exported closure/hashes,
+source tests, file-origin UI/extraction/download and static-origin XLSX Worker
+execution without RNAssistant. Browser tests use Playwright and optionally
+`BROWSER_EXECUTABLE`; no Office/VSTO build is needed.
+
+Data Templates M0/M2 is JavaScript-only: run `node web/data-templates/tests/core.test.js`,
+`node web/data-templates/tests/matrix.test.js`, `node web/data-templates/tests/universal.test.js`,
 `node tests/web/tabular-xlsx.test.js` and
 `node tests/web/tabular-browser.test.js` (Playwright, optional
 `BROWSER_EXECUTABLE`). They cover bounded selectors, immutable capture, Worker

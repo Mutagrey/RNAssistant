@@ -57,7 +57,7 @@ const entries = new Map();
 for (const item of manifest.files) {
   assert.ok(packages.has(item.package), "unknown owner " + item.package);
   assert.equal(entries.has(item.path), false, "duplicate runtime path " + item.path);
-  assert.match(item.path, /^(?:js|css)\/vendor\//);
+  assert.match(item.path, /^(?:js|css|data-templates)\/vendor\//);
   assert.match(item.provenanceUrl, /^https:\/\//);
   const absolute = path.join(web, item.path);
   assert.ok(fs.existsSync(absolute), "missing runtime file " + item.path);
@@ -68,7 +68,9 @@ for (const item of manifest.files) {
 const feather = packages.get("feather-icons");
 assert.equal(feather.sourceOnly, true);
 assert.equal(manifest.files.some(item => item.package === feather.id), false, "source-only icons must not add a runtime package");
-const actual = filesBelow(path.join(web, "js/vendor")).concat(filesBelow(path.join(web, "css/vendor"))).map(webPath).sort();
+const licenses = new Set(manifest.packages.flatMap(item => item.licenseFiles.map(file => file.path)));
+const actual = ["js/vendor", "css/vendor", "data-templates/vendor"].flatMap(folder => filesBelow(path.join(web, folder)))
+  .map(webPath).filter(file => !licenses.has(file)).sort();
 assert.deepEqual(Array.from(entries.keys()).sort(), actual, "manifest must include every and only vendored runtime file");
 assert.ok(packages.has("wunderbaum"));
 assert.equal(packages.get("wunderbaum").version, "0.14.1");

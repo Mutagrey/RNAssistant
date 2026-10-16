@@ -1,24 +1,35 @@
-# ADR-0014: Portable Data Templates core and file-owned projects
+# ADR-0014: Independent Data Templates application and file-owned data projects
 
 Status: accepted for scoped implementation, 2026-10-16. M0 is partial.
 Owner: Data Templates domain. Baseline reviewed: `c33da7df`.
 
 ## Decision
 
-Data Templates is a file-backed tabular transformation project using the existing
-AgentKernel, ToolRuntime, Resource Fabric, workspace file owner, CAS and journal.
-One portable plain-JavaScript core owns selector/template semantics. C# will own
-typed application integration, exact source/session guards and publication; COM
-remains in OfficeHosts. It will not implement another template interpreter.
+Data Templates is an independent web application developed as a workspace project.
+Its authoritative source now lives in `web/data-templates`: the same UI, plain-JS
+engine, Worker, examples and portable tests are used inside and outside RNAssistant.
+Co-location in this repository is a delivery choice, not a runtime dependency.
+No Office, AgentKernel, ToolRuntime, Resource Fabric, CAS or journal is required
+for the browser application. RNAssistant's adapter reuses those existing owners
+when the agent develops/uses the application or the user grants native capabilities.
+C# owns only host integration, exact source/session guards and native publication;
+COM remains in OfficeHosts. Neither owns a second template interpreter.
+
+The application project (HTML/CSS/JS, schemas, tests and docs) and user data projects
+(sources, templates, dictionaries, mappings and results) are different scopes.
+`application.json` is the distribution manifest; a data project's `project.json`
+does not install executable code or confer native permission. Agent skills describe
+development/use workflows; tools expose existing file/test operations and typed
+application commands. Ordinary import must not depend on a conversation or agent run.
 
 Data Templates consumes the workspace architecture in
 [ADR-0013](ADR-0013-workspace-first-runtime.md). Workspace identity/session/file
 ownership stays generic; `project.json` adds domain configuration inside that
 scope. Excel is a separately bound source, not the project's owner. Implement the
-necessary shared workspace application slice before an Office-specific project
-API; this does not require migrating all old authored artifacts first. Current
-.NET 8 Runtime and .NET Framework 4.8 Office composition need a compatible shared
-boundary, not a direct assembly reference or duplicated application runtime.
+necessary generic workspace capabilities before an Office-specific project API;
+this does not require migrating all old authored artifacts first. The product
+remains C# 7.3/.NET Framework 4.8. The existing .NET 8 CLI/Harness is a separate
+development host, not a runtime requirement of Data Templates.
 
 Templates, dictionaries and mappings are data. Executable JS changes are a
 separate developer workflow with exact module capture and publication. Neither
@@ -32,6 +43,36 @@ lifetime. Only the bounded shipped core may use explicit cooperative execution;
 unavailable Worker execution is an error, never a hidden switch to another engine
 or `RNAssistant.JsWorker.exe`. Arbitrary extensions require a separately qualified
 interruptible realm and cannot run inside the privileged root UI.
+
+## Independent application clarification — 2026-10-16
+
+The original proposal's early standalone/export requirement precedes further
+native parser dispatch. The former M4-only export sequencing was too late.
+Application UI, processing queue, parsing, recognition, template language, mapping,
+validation and canonical export belong to this project; RNAssistant provides
+optional file/Office/execution capabilities through adapters. Its existing native
+queue prepares immutable sources only and must not become another business pipeline.
+
+The first cut moves the shared loader/core and its tests into the standalone source
+project and adds explicit folder export. It retains existing behavior; full data
+project persistence, processing UI and dataset export are not completed by that move.
+The root RNAssistant UI still loads only installed, shipped UI scripts. Editable
+workspace JS needs a dedicated isolated viewer/executor, never root-script injection.
+
+Trusted host transport must stay outside editable application code. Each future
+native run captures and hashes an immutable application package, input templates,
+dictionaries and granted source capabilities. App updates should change those
+captured files without recompiling C# when the host protocol is unchanged.
+The current compiled `TabularRuntimePin` remains a temporary conservative adapter;
+do not remove its checks until scoped package admission, isolation and revocation
+replace it. Owners/consumers/removal gates are in
+[MIGRATION_MAP](../stabilization/MIGRATION_MAP.md#data-templates-application-adapters--2026-10-16).
+
+Folder/ZIP is the primary portable distribution; a single HTML is a derived format.
+The existing HTML Library may link/launch/export an application once its capability
+contract is implemented. It must not become a second editable store or implicitly
+include large private source files in an application package. Browser and native
+adapters expose capability differences explicitly.
 
 ## Language/core clarification — 2026-10-16
 

@@ -3,7 +3,7 @@ const assert = require("node:assert/strict"), fs = require("node:fs"), path = re
 const { spawn } = require("node:child_process"), { createInterface } = require("node:readline");
 const { chromium } = require("playwright");
 const root = path.resolve(__dirname, "../.."), dll = path.join(root, "tests/RNAssistant.Harness/bin/Debug/net8.0/RNAssistant.Harness.dll");
-const input = fs.readFileSync(path.join(root, "web/tabular/examples/matrix-xlsx-extraction.json"), "utf8");
+const input = fs.readFileSync(path.join(root, "web/data-templates/core/examples/matrix-xlsx-extraction.json"), "utf8");
 
 function nativeHost(channelMode) {
     assert.ok(fs.existsSync(dll), "Build the host-neutral Harness once before this test.");

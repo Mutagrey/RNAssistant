@@ -1,5 +1,31 @@
 # Stabilization progress
 
+## Independent Data Templates application and early export — 2026-10-16
+
+The target is now explicit: Data Templates is a standalone workspace-project web
+application; RNAssistant develops/uses it through optional adapters. Application
+source and user data projects are distinct. This supersedes the native-parser-first
+and late-M4-export sequencing below. The product host remains .NET Framework 4.8.
+
+The shared loader markup/views/state, portable engine/Worker, examples, semantic
+tests and XML parser/license now live once in `web/data-templates`. Browser and
+RNAssistant composition use the same UI; native chooser/preparation stays outside
+the exported project. Explicit folder export captures an allowlisted closure with
+hashes, rejects outside/symlink paths and refuses existing destinations. No new
+runtime/build dependency, second UI or interpreter was introduced.
+
+Exported-package checks exercise file-origin selection and normalized extraction,
+report download and the XLSX Worker oracle through static test delivery without
+RNAssistant. Native UI/queue regressions and package/resource checks remain focused.
+Windows/Office/WebView2 and real 80 MB processing are still unqualified.
+
+Next: complete the standalone integrated processing UI/queue/result export, then
+replace compiled app-code pins with per-run workspace-package capture and a
+qualified isolated viewer/host adapter. The current root UI accepts installed
+shipped code only. Full data-project lifecycle, other format readers and native
+publication remain open. [Contract](../data-templates.md#application-project-and-data-projects),
+[temporary adapters](MIGRATION_MAP.md#data-templates-application-adapters--2026-10-16).
+
 ## Dedicated tabular host and acknowledged native output — 2026-10-16
 
 The application pane now owns a lazy separate WebView2 executor. Its native adapter

@@ -1,6 +1,6 @@
 "use strict";
 const assert = require("node:assert/strict"), fs = require("node:fs"), path = require("node:path"), vm = require("node:vm");
-const folder = path.resolve(__dirname, "../../web/tabular");
+const folder = path.resolve(__dirname, "../core");
 const context = vm.createContext({ setTimeout, clearTimeout, performance, AbortController });
 for (const file of ["selectors.js", "snapshot.js", "json.js", "decimal.js", "sources.js", "expression.js", "template.js", "transform.js", "engine.js", "executor.js"])
     vm.runInContext(fs.readFileSync(path.join(folder, file), "utf8"), context, { filename: file });

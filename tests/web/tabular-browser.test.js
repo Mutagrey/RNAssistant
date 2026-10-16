@@ -6,14 +6,14 @@ const http = require("node:http");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 const { chromium } = require("playwright");
-const root = path.resolve(__dirname, "../../web/tabular");
+const root = path.resolve(__dirname, "../../web/data-templates/core");
 const fixture = path.join(root, "examples/disjoint-capture.json");
 const input = fs.readFileSync(fixture, "utf8");
 const matrixFixture = path.join(root, "examples/matrix-extraction.json"), matrixInput = fs.readFileSync(matrixFixture, "utf8");
 const xlsxFixture = path.join(root, "examples/matrix-xlsx-extraction.json"), xlsxInput = fs.readFileSync(xlsxFixture, "utf8");
 const { source: xlsxSource } = require("./tabular-xlsx-fixture");
-const assets = ["index.html", "probe.css", "probe.js", "selectors.js", "snapshot.js", "json.js", "decimal.js", "sources.js", "byte-source.js", "expression.js", "template.js", "transform.js", "engine.js", "executor.js", "worker.js", "xlsx-zip.js", "xlsx-reader.js", "js/vendor/sax.js"];
-const assetPath = file => path.join(root, file === "js/vendor/sax.js" ? "../" + file : file);
+const assets = ["index.html", "probe.css", "probe.js", "selectors.js", "snapshot.js", "json.js", "decimal.js", "sources.js", "byte-source.js", "expression.js", "template.js", "transform.js", "engine.js", "executor.js", "worker.js", "xlsx-zip.js", "xlsx-reader.js", "vendor/sax.js"];
+const assetPath = file => path.join(root, file === "vendor/sax.js" ? "../" + file : file);
 
 (async () => {
     // The loopback server is a test host only. The portable page also runs from file:// below.

@@ -106,8 +106,8 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
         throw new Error("Unexpected bridge call: " + type);
       };
     });
-    for (const file of ["app-data-source-intake.js", "app-data-operation-view.js", "app-data-templates-view.js", "app-workspace-sources-view.js", "app-workspace-sources.js", "app-data-templates.js", "app-workspace-projects.js"])
-      await page.addScriptTag({ path: path.join(root, "js", file) });
+    for (const file of ["data-templates/ui/source-intake.js", "data-templates/ui/operation-view.js", "data-templates/ui/loader-view.js", "data-templates/ui/shell.js", "data-templates/ui/loader.js", "js/app-workspace-sources-view.js", "js/app-workspace-sources.js", "js/app-data-templates.js", "js/app-workspace-projects.js"])
+      await page.addScriptTag({ path: path.join(root, file) });
     await page.evaluate(() => { RNAssistantDataTemplates.bind(); RNAssistantWorkspace.bind(); return RNAssistantWorkspace.show(); });
     await page.locator("#wsSourceBrowse").click();
     await page.locator("[data-ws-directory]").click();

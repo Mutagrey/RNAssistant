@@ -1,7 +1,7 @@
 /* Visual contract for the whole loader. Theme colors come from the host palette.
    Override these on the viewer root to change density, typography or surfaces;
    operation and selection behavior must not depend on CSS values. */
-.workspace-projects {
+.data-templates {
   --dt-surface: var(--panel);
   --dt-surface-muted: var(--secondary-bg);
   --dt-border: var(--line);

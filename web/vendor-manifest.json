@@ -526,7 +526,7 @@
       "dependencyNotes": "Standalone Data Templates Worker only. Strict incremental XML parser; no main UI or authored HTML activation. Node stream entry points are not used.",
       "licenseFiles": [
         {
-          "path": "licenses/sax-1.6.1/LICENSE.md",
+          "path": "data-templates/vendor/sax-LICENSE.md",
           "sha256": "8a1af140fdfbf5afd3df27f7e662f989c5b963a300020dfafce42033cae9e004"
         }
       ]
@@ -886,7 +886,7 @@
       "localTransform": "Wrap standalone fontkit UMD and exact Noto Sans TTF bytes as inert source text; attach the OFL notice for standalone exports."
     },
     {
-      "path": "js/vendor/sax.js",
+      "path": "data-templates/vendor/sax.js",
       "package": "sax",
       "bytes": 50818,
       "sha256": "1cdc1270d987cb0f6ee66dd8efb01c50511aa14d17b6163bbbffb21df8cf1c06",

@@ -1,0 +1,33 @@
+/* Standalone host palette and base controls. The domain UI uses the same tokens in RNAssistant. */
+:root {
+  color-scheme: light dark;
+  --bg: #f8fafc; --panel: #fff; --secondary-bg: #f1f5f9;
+  --text: #203047; --muted: #64748b; --line: #dce3ec; --line-strong: #bdcbdc;
+  --control-border: #c5d0de; --accent: #407bdd; --accent-strong: #315f9f;
+  --button-accent-bg: #edf3fc; --button-primary-bg: #285887; --button-primary-text: #fff;
+  --button-primary-bg-hover: #234e79; --danger: #b7323d; --success: #26734d;
+  font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: var(--bg); color: var(--text);
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #141c28; --panel: #1b2636; --secondary-bg: #243246;
+    --text: #e5ecf5; --muted: #a2b2c7; --line: #34445c; --line-strong: #536681;
+    --control-border: #52647e; --accent: #83b1fc; --accent-strong: #97bfff;
+    --button-accent-bg: #263e5e; --button-primary-bg: #386ca6; --button-primary-bg-hover: #447fbd;
+    --danger: #ff939c; --success: #83d6b2; }
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; }
+.data-templates { max-width: 1120px; margin: 0 auto; padding: 32px; }
+h2, h3, h4 { margin: 0; }
+button, input, select { font: inherit; }
+button { cursor: pointer; border: 1px solid var(--control-border); border-radius: 6px;
+  background: var(--panel); color: var(--text); padding: 8px 12px; }
+button:hover { background: var(--secondary-bg); }
+button:disabled { cursor: default; opacity: .5; }
+button svg { width: 16px; height: 16px; vertical-align: middle; margin-right: 5px;
+  fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+a { color: var(--accent-strong); text-underline-offset: 3px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+@media (max-width: 600px) { .data-templates { padding: 20px 16px; } }

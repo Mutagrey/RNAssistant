@@ -19,6 +19,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     const section = index.match(/<section class="panel" id="tab-workspace">[\s\S]*?<\/section>/)[0].replace('class="panel"', 'class="panel active"');
     await page.setContent(`<style>${css}</style><div class="shell">${tabs}<main class="content">${section}</main></div>`);
     await page.evaluate(() => {
+      document.querySelector(".workspace-projects").append(document.getElementById("dtHostWorkspace").content.cloneNode(true));
       window.calls = [];
       window.nativeState = { type: "rnassistant.workspaceState", contractVersion: 1, revision: 0, workspace: null, project: null };
       window.send = (type, payload) => {

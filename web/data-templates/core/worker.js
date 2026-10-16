@@ -2,7 +2,7 @@
 
 // Only fixed shipped modules and declared operations. No project scripts/URLs or network source reads.
 importScripts("selectors.js", "snapshot.js", "json.js", "decimal.js", "sources.js", "byte-source.js", "expression.js", "template.js", "transform.js", "engine.js",
-    "../js/vendor/sax.js", "xlsx-zip.js", "xlsx-reader.js");
+    "../vendor/sax.js", "xlsx-zip.js", "xlsx-reader.js");
 
 let accepted = false, requestId = null, pendingBatch = null, pendingRead = null, readSequence = 0;
 self.onmessage = async function (event) {

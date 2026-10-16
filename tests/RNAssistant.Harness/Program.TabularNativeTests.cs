@@ -28,38 +28,38 @@ namespace RNAssistant.Harness
                 }
                 var bundle = TabularRuntimeBundle.Capture(captured);
                 AssertEqual(TabularRuntimeBundle.Capture(shipped).Sha256, bundle.Sha256, "package pin is reproducible");
-                var worker = File.ReadAllText(Path.Combine(captured, "tabular/worker.js"));
-                File.WriteAllText(Path.Combine(captured, "tabular/worker.js"), "throw Error('changed');");
-                using (var input = bundle.OpenAsset("tabular/worker.js"))
+                var worker = File.ReadAllText(Path.Combine(captured, "data-templates/core/worker.js"));
+                File.WriteAllText(Path.Combine(captured, "data-templates/core/worker.js"), "throw Error('changed');");
+                using (var input = bundle.OpenAsset("data-templates/core/worker.js"))
                 using (var reader = new StreamReader(input))
                 {
                     AssertTrue(!input.CanWrite, "module bytes are read-only");
                     AssertEqual(worker, reader.ReadToEnd(), "captured bytes survive installation drift");
                 }
                 ExpectSourceQueueError("tabular_bundle_invalid", () => TabularRuntimeBundle.Capture(captured));
-                File.WriteAllText(Path.Combine(captured, "tabular/worker.js"), worker);
+                File.WriteAllText(Path.Combine(captured, "data-templates/core/worker.js"), worker);
                 var manifestPath = Path.Combine(captured, "tabular/runtime-lock.json");
                 var manifest = File.ReadAllText(manifestPath);
                 var replacement = Encoding.UTF8.GetBytes("throw Error('self-repinned module');");
-                File.WriteAllBytes(Path.Combine(captured, "tabular/worker.js"), replacement);
+                File.WriteAllBytes(Path.Combine(captured, "data-templates/core/worker.js"), replacement);
                 var repinned = JObject.Parse(manifest);
-                var workerPin = repinned["files"].Single(file => (string)file["path"] == "tabular/worker.js");
+                var workerPin = repinned["files"].Single(file => (string)file["path"] == "data-templates/core/worker.js");
                 workerPin["bytes"] = replacement.Length;
                 using (var sha = SHA256.Create()) workerPin["sha256"] = HexSourceHash(sha.ComputeHash(replacement));
                 File.WriteAllText(manifestPath, repinned.ToString(Newtonsoft.Json.Formatting.Indented).Replace("\r\n", "\n") + "\n");
                 ExpectSourceQueueError("tabular_bundle_invalid", () => TabularRuntimeBundle.Capture(captured));
-                File.WriteAllText(Path.Combine(captured, "tabular/worker.js"), worker);
+                File.WriteAllText(Path.Combine(captured, "data-templates/core/worker.js"), worker);
                 foreach (var invalid in new[] {
                     manifest.Replace("\"workerProtocol\": 5", "\"workerProtocol\": 4"),
                     manifest.Replace("\"formatVersion\": 1", "\"formatVersion\": 1,\n  \"formatVersion\": 1"),
-                    manifest.Replace("\"js/vendor/sax.js\"", "\"../injected.js\""),
+                    manifest.Replace("\"data-templates/vendor/sax.js\"", "\"../injected.js\""),
                     manifest.TrimEnd(), manifest + "{}" })
                 {
                     File.WriteAllText(manifestPath, invalid);
                     ExpectSourceQueueError("tabular_bundle_invalid", () => TabularRuntimeBundle.Capture(captured));
                 }
-                AssertTrue(bundle.OpenAsset("../tabular/worker.js") == null && bundle.OpenAsset("index.html") == null &&
-                    bundle.OpenAsset("tabular/examples/matrix-source.xlsx") == null, "no aliases, main UI, fixtures or project scripts");
+                AssertTrue(bundle.OpenAsset("../data-templates/core/worker.js") == null && bundle.OpenAsset("index.html") == null &&
+                    bundle.OpenAsset("data-templates/core/examples/matrix-source.xlsx") == null, "no aliases, main UI, fixtures or project scripts");
             });
         }
 
@@ -78,11 +78,11 @@ namespace RNAssistant.Harness
                         using (var response = session.HandleAsync("GET", session.EntryUri).GetAwaiter().GetResult())
                         {
                             AssertEqual(200, response.StatusCode, "pinned entry");
-                            AssertTrue(response.Headers["Content-Security-Policy"].Contains("worker-src " + prefix + "tabular/worker.js;"), "only the pinned worker URL");
+                            AssertTrue(response.Headers["Content-Security-Policy"].Contains("worker-src " + prefix + "data-templates/core/worker.js;"), "only the pinned worker URL");
                             AssertEqual("no-store", response.Headers["Cache-Control"], "capability responses never enter cache");
                             AssertTrue(!response.Headers.ContainsKey("Access-Control-Allow-Origin"), "no cross-origin authority");
                         }
-                        using (var response = session.HandleAsync("GET", prefix + "tabular/worker.js").GetAwaiter().GetResult())
+                        using (var response = session.HandleAsync("GET", prefix + "data-templates/core/worker.js").GetAwaiter().GetResult())
                         {
                             AssertTrue(response.Headers["Content-Security-Policy"].Contains("connect-src 'none'"), "Worker cannot fetch native bytes or network directly");
                             AssertTrue(response.Headers["Content-Security-Policy"].Contains("worker-src 'none'"), "Worker cannot spawn children");
@@ -95,7 +95,7 @@ namespace RNAssistant.Harness
                             AssertEqual(bundle.Sha256, (string)descriptor["bundleSha256"], "exact module pin in runtime metadata");
                             AssertEqual("book.xlsx", (string)descriptor["label"], "no workspace authority locator");
                         }
-                        foreach (var route in new[] { "tabular/../worker.js", "tabular/%77orker.js", "tabular/worker.js?x=1", "tabular/worker.js#x", "../index.html", "project.json" })
+                        foreach (var route in new[] { "data-templates/core/../worker.js", "data-templates/core/%77orker.js", "data-templates/core/worker.js?x=1", "data-templates/core/worker.js#x", "../index.html", "project.json" })
                             AssertNativeStatus(session, 404, "GET", prefix + route);
                         AssertNativeStatus(session, 404, "GET", "https://foreign.invalid/" + session.EntryUri);
                         AssertNativeStatus(session, 404, "GET", session.EntryUri, "null");
@@ -161,7 +161,7 @@ namespace RNAssistant.Harness
         {
             var state = CreateSourceQueueProject(app, paths);
             var sourcePath = Path.Combine(state.Workspace.RootPath, "book.xlsx");
-            File.Copy(Path.Combine(FindHarnessRepositoryRoot(), "web/tabular/examples/matrix-source.xlsx"), sourcePath);
+            File.Copy(Path.Combine(FindHarnessRepositoryRoot(), "web/data-templates/core/examples/matrix-source.xlsx"), sourcePath);
             var queue = app.PrepareSources(SourceQueueRequest(state, new System.Collections.Generic.List<string> { "book.xlsx" }));
             queue = WaitSourceQueue(app, queue.QueueId, page => page.State == WorkspaceSourceQueueState.Finished);
             AssertEqual(1, queue.Prepared, "source prepared");

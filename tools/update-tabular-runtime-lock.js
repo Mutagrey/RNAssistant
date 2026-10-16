@@ -1,10 +1,27 @@
 "use strict";
 const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto"), assert = require("node:assert/strict");
 const root = path.resolve(__dirname, "../web");
-const paths = ["js/vendor/sax.js", ...["byte-source.js", "decimal.js", "engine.js", "executor.js", "expression.js", "json.js",
-    "native-channel.js", "native-runtime.js", "runtime.html", "selectors.js", "snapshot.js", "sources.js", "template.js", "transform.js", "worker.js",
-    "xlsx-reader.js", "xlsx-zip.js"].map(file => "tabular/" + file)].sort();
-const engine = fs.readFileSync(path.join(root, "tabular/engine.js"), "utf8");
+const paths = [
+    "data-templates/core/byte-source.js",
+    "data-templates/core/decimal.js",
+    "data-templates/core/engine.js",
+    "data-templates/core/executor.js",
+    "data-templates/core/expression.js",
+    "data-templates/core/json.js",
+    "data-templates/core/selectors.js",
+    "data-templates/core/snapshot.js",
+    "data-templates/core/sources.js",
+    "data-templates/core/template.js",
+    "data-templates/core/transform.js",
+    "data-templates/core/worker.js",
+    "data-templates/core/xlsx-reader.js",
+    "data-templates/core/xlsx-zip.js",
+    "data-templates/vendor/sax.js",
+    "tabular/native-channel.js",
+    "tabular/native-runtime.js",
+    "tabular/runtime.html"
+];
+const engine = fs.readFileSync(path.join(root, "data-templates/core/engine.js"), "utf8");
 const manifest = { formatVersion: 1, workerProtocol: Number(engine.match(/protocol: (\d+)/)[1]),
     engineRevision: engine.match(/const revision = "([^"]+)"/)[1], entry: "tabular/runtime.html",
     files: paths.map(file => {

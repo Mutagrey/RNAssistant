@@ -42,7 +42,7 @@ namespace RNAssistant.Harness
                     Hold = channelMode == "hold-batch" ? "Batch" : channelMode == "hold-validation" ? "Validate" : null,
                     Held = kind => Console.WriteLine(JsonConvert.SerializeObject(new { held = kind })) };
                 var channel = channelMode == null ? null : new TabularExecutionChannel(
-                    File.ReadAllText(Path.Combine(FindHarnessRepositoryRoot(), "web/tabular/examples/matrix-xlsx-extraction.json")),
+                    File.ReadAllText(Path.Combine(FindHarnessRepositoryRoot(), "web/data-templates/core/examples/matrix-xlsx-extraction.json")),
                     bundle.Sha256, 10000, sink,
                     json => Console.WriteLine(JsonConvert.SerializeObject(new { command = json })), () => session.ClientCloseConfirmed);
                 listener.Prefixes.Add(origin + "/");

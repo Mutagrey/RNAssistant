@@ -53,5 +53,5 @@
       container.hidden = true;
     } });
   }
-  root.RNAssistantDataOperationView = Object.freeze({ create: create });
+  root.DataTemplatesOperationView = Object.freeze({ create: create });
 }(window));

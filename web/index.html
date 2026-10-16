@@ -32,9 +32,9 @@
   <link rel="stylesheet" href="css/app-context-chips.css?v=sidebar-polish-20260723-1">
   <link rel="stylesheet" href="css/app-models.css?v=model-tables-20260930-1">
   <link rel="stylesheet" href="css/app-workspace.css?v=diagnostics-clarity-20260930-1">
-  <link rel="stylesheet" href="css/app-data-templates-tokens.css?v=data-loader-20261016-3">
+  <link rel="stylesheet" href="data-templates/styles/tokens.css?v=portable-20261016-1">
   <link rel="stylesheet" href="css/app-workspace-projects.css?v=workspace-nav-20261016-1">
-  <link rel="stylesheet" href="css/app-data-templates.css?v=data-loader-20261016-3">
+  <link rel="stylesheet" href="data-templates/styles/loader.css?v=portable-20261016-1">
   <link rel="stylesheet" href="css/app-workspace-sources.css?v=project-sources-20261016-1">
   <link rel="stylesheet" href="css/app-json-viewer.css?v=json-height-20260929-1">
   <link rel="stylesheet" href="css/app-text-viewer.css?v=artifact-text-20260831-1">
@@ -619,11 +619,8 @@
       </section>
 
       <section class="panel" id="tab-workspace">
-        <div class="workspace-projects">
-          <header class="dt-header">
-            <div><p class="dt-eyebrow">DATA TEMPLATES</p><h2>Данные и шаблоны</h2><p class="dt-subtitle">От разных источников к единой структуре.</p></div>
-            <span class="dt-phase">Подбор источников</span>
-          </header>
+        <div class="workspace-projects data-templates"></div>
+        <template id="dtHostWorkspace">
           <details class="workspace-settings" id="workspaceSettings" open>
             <summary><span class="workspace-context-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 7V5h6l2 2h10v12H3Z"/></svg></span><span class="workspace-context-copy"><strong id="workspaceContextTitle">Подключить проект</strong><span id="workspaceContextHint">Рабочая папка и параметры проекта</span></span><span class="workspace-chevron" aria-hidden="true">⌄</span></summary>
             <div class="workspace-settings-body">
@@ -652,27 +649,8 @@
           </details>
           <p id="workspaceStatus" role="status" aria-live="polite"></p>
           <button type="button" id="workspaceReconcile" class="secondary" hidden>Проверить состояние файла</button>
-
-          <div class="dt-navigation">
-            <div class="dt-tabs" role="tablist" aria-label="Разделы проекта">
-              <button type="button" role="tab" id="dtTabSources" data-dt-view="sources" aria-controls="dtViewSources" aria-selected="true">Источники</button>
-              <button type="button" role="tab" id="dtTabTemplates" data-dt-view="templates" aria-controls="dtViewTemplates" aria-selected="false" tabindex="-1">Шаблоны</button>
-              <button type="button" role="tab" id="dtTabParameters" data-dt-view="parameters" aria-controls="dtViewParameters" aria-selected="false" tabindex="-1">Параметры</button>
-              <button type="button" role="tab" id="dtTabMapping" data-dt-view="mapping" aria-controls="dtViewMapping" aria-selected="false" tabindex="-1">Маппинг</button>
-              <button type="button" role="tab" id="dtTabResults" data-dt-view="results" aria-controls="dtViewResults" aria-selected="false" tabindex="-1">Результаты</button>
-              <button type="button" role="tab" id="dtTabFormat" data-dt-view="format" aria-controls="dtViewFormat" aria-selected="false" tabindex="-1">О формате</button>
-            </div>
-            <label class="dt-mobile-nav" for="dtViewSelect">Раздел проекта<select id="dtViewSelect"><option value="sources">Источники</option><option value="templates">Шаблоны</option><option value="parameters">Параметры</option><option value="mapping">Маппинг</option><option value="results">Результаты</option><option value="format">О формате</option></select></label>
-          </div>
-
-          <div class="dt-operation dt-card" id="dtOperation" role="region" aria-label="Текущая операция" hidden>
-            <div class="dt-operation-head"><div><span class="dt-operation-stage" data-operation-part="stage"></span><h4 data-operation-part="title"></h4></div><div class="dt-operation-actions"><span data-operation-part="elapsed"></span><button type="button" id="dtCancelIntake" data-operation-part="cancel">Отменить</button><button type="button" class="dt-text-button" data-operation-part="dismiss" hidden>Скрыть</button></div></div>
-            <div class="dt-operation-meter" data-operation-part="meter"><progress data-operation-part="progress" aria-label="Прогресс текущего этапа"></progress><span data-operation-part="percent"></span></div>
-            <p class="dt-operation-current" data-operation-part="current"></p>
-            <div class="dt-operation-metrics"><span data-operation-part="count"></span><span data-operation-part="detail"></span></div>
-            <p class="dt-operation-note" data-operation-part="note"></p>
-          </div>
-          <div class="dt-intake-status"><p id="dtIntakeStatus" role="status" aria-live="polite"></p></div>
+        </template>
+        <template id="dtHostActivity">
           <div id="wsSourceActivity" class="ws-source-activity dt-card" hidden aria-label="Подготовка источников">
             <div class="ws-source-heading"><div><p class="dt-eyebrow">ПОДГОТОВКА ИСТОЧНИКОВ</p><h4 id="wsQueueTitle"></h4></div><button type="button" id="wsQueueRefresh" class="dt-text-button">Обновить</button></div>
             <p id="wsQueueCounts" class="ws-source-muted" role="status" aria-live="polite"></p>
@@ -683,9 +661,8 @@
             <p class="dt-footnote">Сохраняем точные снимки файлов для дальнейшего анализа. Распознавание и преобразование пока не запускаются.</p>
           </div>
           <p id="wsSourceStatus" class="ws-source-status" role="status" aria-live="polite"></p>
-
-          <div class="dt-view" id="dtViewSources" role="tabpanel" aria-labelledby="dtTabSources" tabindex="0">
-            <div class="dt-section-heading"><div><h3 id="dtSourceHeading">Начните с источников</h3><p id="dtSourceIntro">Добавьте файлы, которые хотите привести к общей структуре.</p></div></div>
+        </template>
+        <template id="dtHostSources">
             <div class="ws-source-selection dt-card">
               <div class="ws-source-heading"><div><h4>Из рабочей папки</h4><p id="wsSourceContext" class="ws-source-muted">Откройте проект, чтобы подготовить его источники.</p></div><button type="button" id="wsSourceBrowse">Выбрать файлы</button></div>
               <div id="wsSourcePicker" hidden>
@@ -713,63 +690,7 @@
               <nav class="dt-pagination" id="wsQueuePages" aria-label="Страницы очереди"><span id="wsQueueRange"></span><div><button type="button" id="wsQueuePrevious" aria-label="Предыдущая страница очереди">←</button><button type="button" id="wsQueueNext" aria-label="Следующая страница очереди">→</button></div></nav>
             </div>
             <p class="dt-footnote ws-local-intro">Файлы вне рабочей папки можно предварительно подобрать ниже. Для подготовки поместите их в рабочую папку и выберите через «Из рабочей папки».</p>
-            <div class="dt-intake-layout">
-              <div class="dt-dropzone" id="dtDropzone" role="region" aria-label="Добавление источников" aria-describedby="dtSelectionNote">
-                <div class="dt-drop-icon" aria-hidden="true"><svg viewBox="0 0 40 40"><path d="M12 7H8a3 3 0 0 0-3 3v22a3 3 0 0 0 3 3h19a3 3 0 0 0 3-3v-5M15 5h13l7 7v12H15Z"/><path d="M28 5v8h7M20 19h9M20 23h5"/></svg></div>
-                <h4>Перетащите файлы или папку</h4>
-                <p class="dt-drop-caption">Один отчёт или целая подборка</p>
-                <div class="dt-picker-actions"><button type="button" class="dt-primary" id="dtChooseFiles"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Выбрать файлы</button><button type="button" id="dtChooseFolder"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7V5h6l2 2h10v12H3Z"/></svg>Выбрать папку</button></div>
-                <div class="dt-format-labels" id="dtFormatLabels" aria-label="Форматы источников"></div>
-                <input type="file" id="dtFiles" multiple hidden>
-                <input type="file" id="dtFolder" webkitdirectory multiple hidden>
-              </div>
-              <aside class="dt-guide" id="dtIntakeGuide" aria-label="Порядок работы">
-                <p class="dt-eyebrow">КАК ЭТО РАБОТАЕТ</p>
-                <ol><li><span>01</span><div><strong>Соберите источники</strong><p>Проверьте состав файлов и выберите нужные.</p></div></li><li><span>02</span><div><strong>Настройте соответствия</strong><p>Шаблон свяжет исходные поля с параметрами.</p></div></li><li><span>03</span><div><strong>Проверьте результат</strong><p>У каждого значения будет связь с источником.</p></div></li></ol>
-                <p class="dt-guide-note">Сейчас доступен первый шаг. Анализ и преобразование будут добавлены далее.</p>
-              </aside>
-            </div>
-            <div id="dtSourceQueue" class="dt-source-queue dt-card" hidden>
-              <div class="dt-queue-toolbar"><div><h4>Файлы <span id="dtFileCount" class="dt-count"></span></h4><p id="dtSelectionCount"></p></div><button type="button" class="dt-text-button" id="dtClearSources">Очистить список</button></div>
-              <p class="dt-load-note" id="dtSourceLoadNote" hidden></p>
-              <div class="dt-queue-filters"><input id="dtSourceSearch" type="search" placeholder="Найти файл…" aria-label="Поиск источников"><select id="dtSourceFilter" aria-label="Формат источников"><option value="">Все форматы</option></select></div>
-              <details class="dt-list-options"><summary>Фильтры и порядок<span id="dtListOptionsHint"></span></summary><div>
-                <label>Показать<select id="dtSourceState"><option value="">Все файлы</option><option value="included">Выбранные</option><option value="excluded">Невыбранные</option><option value="attention">Требуют внимания</option></select></label>
-                <label>Порядок<select id="dtSourceSort"><option value="added">По добавлению</option><option value="name">По имени</option><option value="size">Сначала крупные</option><option value="path">По пути</option></select></label>
-              </div></details>
-              <div class="dt-list-heading"><label><input type="checkbox" id="dtSelectVisible"> Выбрать показанные</label><span>Состав подборки</span></div>
-              <ul class="dt-source-list" id="dtSourceList" aria-label="Подобранные файлы"></ul>
-              <nav class="dt-pagination" id="dtPagination" aria-label="Страницы источников" hidden><span id="dtPageRange" role="status"></span><div><button type="button" id="dtPreviousPage" aria-label="Предыдущая страница">←</button><select id="dtSourcePage" aria-label="Страница источников"></select><button type="button" id="dtNextPage" aria-label="Следующая страница">→</button></div></nav>
-              <p class="dt-no-matches" id="dtNoMatches" hidden>Таких файлов нет. Измените поиск или формат.</p>
-            </div>
-            <aside id="dtSourceDetail" class="dt-source-detail dt-card" hidden aria-label="Сведения об источнике"><div class="dt-detail-heading"><h4 id="dtDetailTitle"></h4><button type="button" class="dt-text-button" id="dtCloseDetail">Закрыть</button></div><dl id="dtDetailMetadata"></dl><p id="dtDetailNote"></p></aside>
-            <p id="dtSelectionNote" class="dt-footnote">Пока доступен только подбор, без анализа. Файлы не копируются в проект; список очищается при смене проекта или перезагрузке.</p>
-          </div>
-
-          <div class="dt-view" id="dtViewTemplates" role="tabpanel" aria-labelledby="dtTabTemplates" tabindex="0" hidden>
-            <div class="dt-section-heading"><div><h3>Шаблоны преобразования</h3><p>Повторяемые правила для файлов с похожей структурой.</p></div><span class="dt-phase">Следующий этап</span></div>
-            <div class="dt-empty-state"><span class="dt-empty-symbol" aria-hidden="true">▤</span><h4>Здесь будет библиотека шаблонов</h4><p>Шаблон определит нужные листы, колонки или поля JSON. Черновик можно будет проверить на источнике перед публикацией.</p><button type="button" data-dt-go="sources">Перейти к источникам</button></div>
-          </div>
-          <div class="dt-view" id="dtViewParameters" role="tabpanel" aria-labelledby="dtTabParameters" tabindex="0" hidden>
-            <div class="dt-section-heading"><div><h3>Параметры и справочники</h3><p>Общие определения, независимые от названий в исходных файлах.</p></div><span class="dt-phase">Следующий этап</span></div>
-            <div class="dt-empty-state"><span class="dt-empty-symbol" aria-hidden="true">≡</span><h4>Единый язык для ваших данных</h4><p>Для каждого параметра будут заданы смысл, тип, единица измерения и допустимые значения. Синонимы и спорные соответствия останутся видимыми.</p><button type="button" data-dt-go="format">Посмотреть модель данных</button></div>
-          </div>
-          <div class="dt-view" id="dtViewMapping" role="tabpanel" aria-labelledby="dtTabMapping" tabindex="0" hidden>
-            <div class="dt-section-heading"><div><h3>Карта соответствий</h3><p>Связь исходных полей с параметрами проекта.</p></div><span class="dt-phase">Следующий этап</span></div>
-            <div class="dt-mapping-guide" aria-label="Принцип маппинга"><div><small>ИСТОЧНИК</small><strong>Поле или ячейка</strong><p>Имя, код, единица</p></div><span aria-hidden="true">→</span><div><small>ПРАВИЛО</small><strong>Соответствие</strong><p>Условия и область действия</p></div><span aria-hidden="true">→</span><div><small>ОБЩАЯ СХЕМА</small><strong>Параметр</strong><p>Смысл, тип, измерения</p></div></div>
-            <p class="dt-explanation">Это схема будущего редактора. После распознавания здесь появятся реальные поля, предложения соответствий и конфликты. У каждого правила будет видна область применения.</p>
-          </div>
-          <div class="dt-view" id="dtViewResults" role="tabpanel" aria-labelledby="dtTabResults" tabindex="0" hidden>
-            <div class="dt-section-heading"><div><h3>Данные и проверка</h3><p>Результат преобразования, его качество и происхождение.</p></div><span class="dt-phase">Следующий этап</span></div>
-            <div class="dt-empty-state"><span class="dt-empty-symbol" aria-hidden="true">☷</span><h4>Результатов пока нет</h4><p>Здесь появятся предпросмотр данных, диагностика и экспорт. Выбор файлов сам по себе не запускает анализ и не создаёт результат.</p><button type="button" data-dt-go="sources">Перейти к источникам</button></div>
-          </div>
-          <div class="dt-view" id="dtViewFormat" role="tabpanel" aria-labelledby="dtTabFormat" tabindex="0" hidden>
-            <div class="dt-section-heading"><div><h3>О форматах и общей модели</h3><p>Разные источники сохраняют свою структуру и происхождение.</p></div></div>
-            <div class="dt-format-grid" id="dtFormatGuide"></div>
-            <div class="dt-reference"><div class="dt-detail-heading"><h4>Каноническое наблюдение</h4><span class="dt-phase">Модель проектируется</span></div><p>Единица результата связывает параметр, контекст и значение. Ниже — основа модели; окончательная схема и её версия появятся вместе с обработкой.</p><dl><dt>Параметр</dt><dd>Что измеряем: стабильный идентификатор и определение.</dd><dt>Измерения и период</dt><dd>К какому объекту, варианту и времени относится значение.</dd><dt>Значение и единица</dt><dd>Тип и единица заданы явно. Ноль, пропуск и ошибка различаются.</dd><dt>Роль</dt><dd>Наблюдение, отчётный итог или вычисленное значение.</dd><dt>Происхождение</dt><dd>Файл и точное место: ячейка, строка CSV или путь в JSON.</dd></dl><p class="dt-reference-note">Обычные таблицы объектов и операций также будут поддерживаться — текстовые поля не требуется превращать в показатели.</p></div>
-            <details class="dt-format-details"><summary>Что уже доступно</summary><p>Выбор файлов и папок, сохранение состава источников в проекте и очередь подготовки с прогрессом и отменой. Подготовка сохраняет точные снимки файлов для дальнейшего анализа.</p><p><code>project.json</code> версии 2 содержит описание проекта и список источников. Преобразованные данные имеют отдельный канонический формат, описанный выше. Подключение парсеров к очереди, распознавание и выполнение шаблонов — следующие этапы.</p></details>
-          </div>
-        </div>
+        </template>
       </section>
 
       <section class="panel" id="tab-artifacts">
@@ -1345,12 +1266,14 @@
   <script src="js/app-chat-run.js?v=response-render-timing-20260928-1-usage-20261002-1-navigation-20261002-1-inbox-20261002-1-large-chat-1-run-isolation-1-transcript-20261012-1-settings-delivery-1"></script>
   <script src="js/app-chat.js?v=office-chat-20261014-1"></script>
   <script src="js/app-chat-edit.js?v=chat-sync-20260903-1-usage-20261002-1"></script>
-  <script src="js/app-data-source-intake.js?v=data-loader-20261016-3"></script>
-  <script src="js/app-data-operation-view.js?v=data-loader-20261016-3"></script>
-  <script src="js/app-data-templates-view.js?v=workspace-sources-20261016-1"></script>
+  <script src="data-templates/ui/source-intake.js?v=portable-20261016-1"></script>
+  <script src="data-templates/ui/operation-view.js?v=portable-20261016-1"></script>
+  <script src="data-templates/ui/loader-view.js?v=portable-20261016-1"></script>
   <script src="js/app-workspace-sources-view.js?v=project-sources-20261016-1"></script>
   <script src="js/app-workspace-sources.js?v=project-sources-20261016-1"></script>
-  <script src="js/app-data-templates.js?v=workspace-sources-20261016-1"></script>
+  <script src="data-templates/ui/shell.js?v=portable-20261016-1"></script>
+  <script src="data-templates/ui/loader.js?v=portable-20261016-1"></script>
+  <script src="js/app-data-templates.js?v=portable-20261016-1"></script>
   <script src="js/app-workspace-projects.js?v=project-sources-20261016-1"></script>
   <script src="js/app.js?v=data-loader-20261016-2"></script>
 </body>

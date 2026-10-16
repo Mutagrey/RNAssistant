@@ -1,7 +1,7 @@
 "use strict";
 const assert = require("node:assert/strict"), fs = require("node:fs"), path = require("node:path"), vm = require("node:vm");
 const context = vm.createContext({ Blob, AbortController });
-vm.runInContext(fs.readFileSync(path.resolve(__dirname, "../../web/tabular/byte-source.js"), "utf8"), context);
+vm.runInContext(fs.readFileSync(path.resolve(__dirname, "../../web/data-templates/core/byte-source.js"), "utf8"), context);
 const api = context.RNTabularByteSource;
 const rejects = (promise, code) => assert.rejects(promise, error => error.code === code);
 

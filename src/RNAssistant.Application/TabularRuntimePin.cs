@@ -3,6 +3,6 @@ namespace RNAssistant.Application
 {
     internal static class TabularRuntimePin
     {
-        internal const string Sha256 = "713c2c0c9415e2a8f16ea6aa0543d3d60a291d9cb08aed57f4c64ae3df13ebc2";
+        internal const string Sha256 = "de82e64495f1d8a9077c603db5a9562ed70f8fc6191ffd0f8c8c11d96002635a";
     }
 }

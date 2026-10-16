@@ -40,7 +40,7 @@
                         throw failure("NATIVE_SOURCE_READ_FAILED", "Native source range was refused or mismatched.");
                     return reply.arrayBuffer();
                 }, close: () => {} }); // Byte-source disposal aborts its fetch before native drain below.
-            executor = root.RNTabularExecutor.create({ mode: "worker", workerUrl: new URL("tabular/worker.js", base).href,
+            executor = root.RNTabularExecutor.create({ mode: "worker", workerUrl: new URL("data-templates/core/worker.js", base).href,
                 expectedRevision: descriptor.engineRevision });
             result = await executor.extractXlsxSource(input, source, settings);
         } catch (error) {

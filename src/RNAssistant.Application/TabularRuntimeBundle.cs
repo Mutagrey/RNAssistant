@@ -20,10 +20,24 @@ namespace RNAssistant.Application
         public string Sha256 { get; private set; }
 
         internal static readonly string[] ApprovedPaths = new[] {
-            "js/vendor/sax.js", "tabular/byte-source.js", "tabular/decimal.js", "tabular/engine.js",
-            "tabular/executor.js", "tabular/expression.js", "tabular/json.js", "tabular/native-channel.js", "tabular/native-runtime.js",
-            EntryPath, "tabular/selectors.js", "tabular/snapshot.js", "tabular/sources.js", "tabular/template.js",
-            "tabular/transform.js", "tabular/worker.js", "tabular/xlsx-reader.js", "tabular/xlsx-zip.js"
+            "data-templates/core/byte-source.js",
+            "data-templates/core/decimal.js",
+            "data-templates/core/engine.js",
+            "data-templates/core/executor.js",
+            "data-templates/core/expression.js",
+            "data-templates/core/json.js",
+            "data-templates/core/selectors.js",
+            "data-templates/core/snapshot.js",
+            "data-templates/core/sources.js",
+            "data-templates/core/template.js",
+            "data-templates/core/transform.js",
+            "data-templates/core/worker.js",
+            "data-templates/core/xlsx-reader.js",
+            "data-templates/core/xlsx-zip.js",
+            "data-templates/vendor/sax.js",
+            "tabular/native-channel.js",
+            "tabular/native-runtime.js",
+            "tabular/runtime.html"
         };
 
         private sealed class Manifest

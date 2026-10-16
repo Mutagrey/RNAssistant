@@ -3,5 +3,6 @@ build/RNAssistant.GitArchive.props export-subst
 web/tabular/*.js text eol=lf
 web/tabular/runtime.html text eol=lf
 web/tabular/runtime-lock.json text eol=lf
-web/js/vendor/sax.js text eol=lf
+web/data-templates/** text=auto eol=lf
+web/data-templates/**/*.xlsx -text
 src/RNAssistant.Application/TabularRuntimePin.cs text eol=lf

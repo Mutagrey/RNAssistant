@@ -1,7 +1,7 @@
 "use strict";
 const assert = require("node:assert/strict");
 const fs = require("node:fs"), path = require("node:path"), vm = require("node:vm");
-const root = path.resolve(__dirname, "../../web/tabular"), context = vm.createContext({});
+const root = path.resolve(__dirname, "../core"), context = vm.createContext({});
 for (const file of ["selectors.js", "snapshot.js", "json.js", "decimal.js", "sources.js", "expression.js", "template.js", "transform.js", "engine.js"])
     vm.runInContext(fs.readFileSync(path.join(root, file), "utf8"), context, { filename: file });
 const engine = context.RNTabularEngine, templates = context.RNTabularTemplate;

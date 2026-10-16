@@ -37,8 +37,8 @@ const selected = (name, contents = "selection fixture") => ({ name, mimeType: "a
         return structuredClone(nativeState);
       };
     });
-    for (const file of ["app-data-source-intake.js", "app-data-operation-view.js", "app-data-templates-view.js", "app-workspace-sources-view.js", "app-workspace-sources.js", "app-data-templates.js", "app-workspace-projects.js"])
-      await page.addScriptTag({ path: path.join(root, "js", file) });
+    for (const file of ["data-templates/ui/source-intake.js", "data-templates/ui/operation-view.js", "data-templates/ui/loader-view.js", "data-templates/ui/shell.js", "data-templates/ui/loader.js", "js/app-workspace-sources-view.js", "js/app-workspace-sources.js", "js/app-data-templates.js", "js/app-workspace-projects.js"])
+      await page.addScriptTag({ path: path.join(root, file) });
     await page.evaluate(() => { RNAssistantDataTemplates.bind(); RNAssistantWorkspace.bind(); return RNAssistantWorkspace.show(); });
     assert.equal(await page.locator("#workspaceSettings").getAttribute("open"), "");
     assert.equal(await page.locator("#dtFiles").getAttribute("accept"), ".xlsx,.csv,.json");
@@ -47,7 +47,7 @@ const selected = (name, contents = "selection fixture") => ({ name, mimeType: "a
     assert.equal(await page.locator("#dtViewTemplates").isVisible(), true);
     await page.keyboard.press("End");
     assert.equal(await page.locator("#dtViewFormat").isVisible(), true);
-    assert.match(await page.locator("#dtViewFormat").innerText(), /Модель проектируется/);
+    assert.match(await page.locator("#dtViewFormat").innerText(), /Схема ядра/);
     await page.locator("#dtTabSources").click();
     if (process.env.RNA_DATA_SCREENSHOTS) {
       fs.mkdirSync(process.env.RNA_DATA_SCREENSHOTS, { recursive: true });
@@ -177,7 +177,7 @@ const selected = (name, contents = "selection fixture") => ({ name, mimeType: "a
     const progressEvidence = await page.evaluate(async () => {
       const updates = [], controller = new AbortController();
       const files = Array.from({ length: 100 }, (_, i) => new File(["abc"], i + ".csv"));
-      await RNAssistantSourceIntake.fromFiles(files, { signal: controller.signal, progress: snapshot => updates.push({ snapshot, at: performance.now() }) });
+      await DataTemplatesSourceIntake.fromFiles(files, { signal: controller.signal, progress: snapshot => updates.push({ snapshot, at: performance.now() }) });
       return updates;
     });
     const last = progressEvidence.at(-1).snapshot;

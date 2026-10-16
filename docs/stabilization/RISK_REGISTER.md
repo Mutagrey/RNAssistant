@@ -15,6 +15,14 @@ application integration, with existing file/resource/WebView host owners.
 The [portable M0/M2 core](../data-templates.md) passes focused JS/browser checks;
 matrix records/provisional batches have no native tools or publication authority.
 
+- Architecture boundary: the independent application source project and folder
+  export now exist, with shared UI/core and exported-package browser evidence.
+  Full standalone processing UI/data-project lifecycle remains open and precedes
+  further native parser dispatch. The compiled app-code hash pin and shipped-root
+  UI mounting are temporary adapters with [removal gates](MIGRATION_MAP.md#data-templates-application-adapters--2026-10-16).
+  Close them through immutable per-run project-package capture, typed capabilities
+  and isolated viewer/executor evidence; preserve current checks until cutover.
+  App updates must not require rebuilding C# when the host protocol is unchanged.
 - Shared project commands now serve CLI and a thin Office panel through a
   compatible application source module. Core file checks, fake-controller bridge
   lifetime/worker/unknown-effect checks and browser UI checks pass. Real
@@ -33,7 +41,8 @@ matrix records/provisional batches have no native tools or publication authority
   qualified on Windows here. Close the remaining gate with actual request interception,
   navigation/permissions, hidden-controller/response-stream behavior, renderer failure,
   startup cancellation/drain and hard-stop latency. Keep project input/result pins separate.
-- No project publication/export is implemented. Probe JSON cannot act as a
+- Application folder export is implemented; user data-project publication/export
+  remains open. Probe JSON cannot act as a
   passing test receipt. Close with existing journal/authority publication,
   stale-input rejection, read-back and complete portable dependency capture.
   M2 batch acknowledgement is consumption, not publication: a later failure must

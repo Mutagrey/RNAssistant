@@ -18,6 +18,20 @@ gates; active tool compatibility adapter отсутствует. Windows/Office 
 проверкой resource-consumer cleanup (2026-09-07). Порядок задаёт
 [Resource MASTER](resource-cutover/MASTER.md), владельцев — [Resource Fabric](../resource-fabric.md).
 
+## Data Templates application adapters — 2026-10-16
+
+Data Templates is an independent application source workspace in
+`web/data-templates`, distinct from user data projects. The shared UI/core and
+semantic tests have moved there; old copies/consumers are removed. Browser folder
+export excludes native integration. These remaining seams are explicit, not the
+target product architecture. [Contract](../data-templates.md#application-project-and-data-projects).
+
+| Temporary seam | Owner / current consumers | Removal gate |
+|---|---|---|
+| Compiled `TabularRuntimePin` and fixed application-module list in `TabularRuntimeBundle` | Native execution adapter; `WorkspaceTabularResourceSession`, `TabularWebViewExecutor`, Harness and native browser integration tests. Trusted `web/tabular/native-*` stays outside the portable source project. | Replace app-code pins with an immutable captured workspace package per run, checked host protocol and scoped capabilities. Qualify admission/isolation/revocation/drain, switch all native consumers and delete the compiled app pin/list. Never simply permit arbitrary workspace scripts or widen the root UI CSP. |
+| Shipped loader mounted in the RNAssistant root UI | `web/js/app-data-templates.js` mounts the one shared shell/owner and native workspace slots. It loads installed code only; no editable workspace JS is admitted. | A qualified isolated project viewer and typed adapter commands mount this same application package without root-script injection. Switch the launcher and remove the shipped-root mounting seam; preserve shared UI/state modules. |
+| Native preparation queue precedes integrated processing | `WorkspaceSourceQueue`, `app-workspace-sources.js`, CLI/Office preparation commands. It creates exact source snapshots and does not parse templates. | The application's own standalone processing workflow consumes browser or prepared-native source capabilities through the same commands. Retain the preparation service for native acquisition, but remove any UI-specific orchestration once those consumers switch. Do not add a second C# business-processing queue. |
+
 ## Runtime commit boundary — 2026-10-15
 
 All production conversation writers now use explicit `ConversationCommit` /

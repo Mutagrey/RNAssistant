@@ -129,6 +129,6 @@
     }
     return collect(roots, options);
   }
-  root.RNAssistantSourceIntake = Object.freeze({ formats: formats, limits: limits,
+  root.DataTemplatesSourceIntake = Object.freeze({ formats: formats, limits: limits,
     formatFor: formatFor, fromFiles: fromFiles, fromDrop: fromDrop });
 }(window));

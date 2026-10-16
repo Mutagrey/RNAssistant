@@ -1,8 +1,8 @@
 "use strict";
 const assert = require("node:assert/strict"), fs = require("node:fs"), path = require("node:path"), vm = require("node:vm");
 const { Blob, File } = require("node:buffer"), { parts, zip, source } = require("./tabular-xlsx-fixture");
-const folder = path.resolve(__dirname, "../../web/tabular"), context = vm.createContext({ Blob, AbortController, TextDecoder, ReadableStream, DecompressionStream });
-vm.runInContext(fs.readFileSync(path.join(folder, "../js/vendor/sax.js"), "utf8"), context);
+const folder = path.resolve(__dirname, "../../web/data-templates/core"), context = vm.createContext({ Blob, AbortController, TextDecoder, ReadableStream, DecompressionStream });
+vm.runInContext(fs.readFileSync(path.join(folder, "../vendor/sax.js"), "utf8"), context);
 for (const name of ["selectors.js", "snapshot.js", "json.js", "decimal.js", "sources.js", "byte-source.js", "expression.js", "template.js", "transform.js", "engine.js", "xlsx-zip.js", "xlsx-reader.js"])
     vm.runInContext(fs.readFileSync(path.join(folder, name), "utf8"), context, { filename: name });
 const json = value => JSON.parse(JSON.stringify(value));
@@ -132,7 +132,7 @@ async function refuses(change, code, options) {
     console.log("PASS XLSX pull boundary: directory above 256 KiB uses bounded sequential range requests");
 
     // Independently produced OOXML exercises ordinary library output, not only handcrafted fixtures.
-    const carrier = fs.readFileSync(path.join(folder, "../js/vendor/sheetjs.source.js"), "utf8");
+    const carrier = fs.readFileSync(path.join(folder, "../../js/vendor/sheetjs.source.js"), "utf8");
     const vendor = vm.createContext({}); let sheetjsSource;
     vm.runInNewContext(carrier, { window: { RNAssistantHtmlVendorRuntime: { register: (_, value) => { sheetjsSource = value.js; } } } });
     vm.runInContext(sheetjsSource, vendor);

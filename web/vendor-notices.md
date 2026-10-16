@@ -26,7 +26,7 @@ manifest or those URLs.
 | JSZip | 3.10.2 | MIT OR GPL-3.0-or-later | [`licenses/jszip-3.10.2/LICENSE.markdown`](licenses/jszip-3.10.2/LICENSE.markdown) |
 | Wunderbaum | 0.14.1 | MIT | [`licenses/wunderbaum-0.14.1/LICENSE`](licenses/wunderbaum-0.14.1/LICENSE) |
 | Viewer.js | 1.12.0 | MIT | [`licenses/viewerjs-1.12.0/LICENSE`](licenses/viewerjs-1.12.0/LICENSE) |
-| sax | 1.6.1 | BlueOak-1.0.0 | [`licenses/sax-1.6.1/LICENSE.md`](licenses/sax-1.6.1/LICENSE.md) |
+| sax | 1.6.1 | BlueOak-1.0.0 | [`data-templates/vendor/sax-LICENSE.md`](data-templates/vendor/sax-LICENSE.md) |
 
 KaTeX ships only the 20 WOFF2 files used by current WebView2. Its local CSS is a
 documented derivative of the exact 0.16.11 distribution: unused `.woff`/`.ttf`
@@ -103,7 +103,7 @@ another Data Templates runtime parser.
 The main UI admits only its local resource route in `connect-src`, keeps
 `font-src 'self'` and, while the worker
 allowlist is empty, `worker-src 'none'`. It has no admitted WASM/Worker runtime.
-The separate `web/tabular` proof has its own fixed Worker and CSP, documented in
+The separate `web/data-templates/core` proof has its own fixed Worker and CSP, documented in
 [Data Templates](../docs/data-templates.md#bounded-xlsx-reader); it grants no native
 execution permission and does not close the main UI's Worker gate.
 A future local worker is permitted only after one atomic change adds its exact

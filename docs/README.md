@@ -37,7 +37,7 @@ direct cutover объясняют порядок уже выполненной �
 | Trajectory queries and export | [Trajectory query](trajectory-query.md), [export](trajectory-export.md) |
 | CAS lifecycle and GC | [CAS maintenance](cas-maintenance.md) |
 | Artifacts and viewers | [Artifact Library](artifact-library.md) |
-| Data Templates: source models, language/core and integration gates | [Data Templates](data-templates.md), [ADR-0014](decisions/ADR-0014-data-templates.md) |
+| Data Templates: independent app workspace, export, UI/core and host adapters | [Data Templates](data-templates.md), [ADR-0014](decisions/ADR-0014-data-templates.md) |
 | VBA safety, packages, UserForms | [Mutation journal](vba-mutation-journal.md), [packages](vba-tool-packages.md), [UserForms](vba-userforms.md) |
 | Desktop shell and Office target selection | [Desktop runtime](desktop-runtime.md) |
 | Проверка на Windows/Office и evidence | [Проверка](qualification.md), [release](operations/RELEASE_PROCESS.md) |

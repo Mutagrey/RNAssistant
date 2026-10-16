@@ -28,7 +28,7 @@
     const events = new AbortController();
     const listen = (element, event, handler) => element.addEventListener(event, handler, { signal: events.signal });
     let state = { sources: [], busy: false }, selectedId = null, dragDepth = 0, pageIndex = 0;
-    const operationView = root.RNAssistantDataOperationView.create(el("Operation"), { cancel: actions.cancel, dismiss: actions.dismiss });
+    const operationView = root.DataTemplatesOperationView.create(el("Operation"), { cancel: actions.cancel, dismiss: actions.dismiss });
     function show(name, focus) {
       const active = tabs.find(tab => tab.dataset.dtView === name);
       if (!active) return;
@@ -102,9 +102,9 @@
       const visible = matches.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize), available = visible.filter(source => source.available);
       if (!visible.some(source => source.id === selectedId)) selectedId = null;
       el("SourceQueue").hidden = sources.length === 0;
-      const populated = sources.length > 0 || state.hasWorkspaceSources;
+      const populated = sources.length > 0 || state.hasExternalSources;
       el("SourceHeading").textContent = populated ? "Источники" : "Начните с источников";
-      el("SourceIntro").textContent = state.hasWorkspaceSources ? "Выбранные файлы и состояние подготовки."
+      el("SourceIntro").textContent = state.hasExternalSources ? "Выбранные файлы и состояние подготовки."
         : sources.length ? "Отметьте файлы для дальнейшей обработки." : "Добавьте файлы, которые хотите привести к общей структуре.";
       el("IntakeGuide").hidden = populated; el("Dropzone").parentElement.dataset.populated = String(populated);
       el("FileCount").textContent = String(sources.length);
@@ -224,5 +224,5 @@
       dispose: () => { events.abort(); operationView.dispose(); el("Dropzone").dataset.dragging = "false"; }
     });
   }
-  root.RNAssistantDataTemplatesView = Object.freeze({ create: create });
+  root.DataTemplatesLoaderView = Object.freeze({ create: create });
 }(window));

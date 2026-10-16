@@ -4,7 +4,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
-const root = path.resolve(__dirname, "../../web/tabular");
+const root = path.resolve(__dirname, "../core");
 const context = vm.createContext({});
 for (const file of ["selectors.js", "snapshot.js", "json.js", "decimal.js", "sources.js", "expression.js", "template.js", "transform.js", "engine.js"])
     vm.runInContext(fs.readFileSync(path.join(root, file), "utf8"), context, { filename: file });

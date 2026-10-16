@@ -1,41 +1,118 @@
 # Data Templates
 
-Status: portable M0 proof, M1 project-manifest/source-selection foundation and the
-M2 source-independent language/core foundation and bounded XLSX reader (2026-10-16).
-One observation executor handles both matrix orientations, record fields and nested
-JSON captures; real XLSX uses the existing reader in the separate Worker probe.
-The loader saves workspace source declarations and controls the shared preparation
-queue. The portable XLSX reader now accepts bounded pull-byte sources through its
-Worker protocol. The shared application owns exact, cancellable range reads and a
-pinned resource session exercised end to end with a real Worker. A dedicated
-WebView2 adapter and typed, acknowledged native result channel are implemented;
-actual Windows host qualification, queue parser dispatch and publication remain open.
-Owner: Data Templates domain; portable JS in `web/tabular`, shared manifest storage
-in Core `TabularProjectStore` over `WorkspaceFileService`.
+Status: independent application foundation and early folder export, alongside the
+existing M0 proof, M1 manifest/source selection and M2 universal core/XLSX reader
+(2026-10-16). The same loader UI and JS core now belong to `web/data-templates`.
+The exported source project runs without RNAssistant and includes its own entry,
+examples, semantic tests and export tool. Full processing UI, data-project storage,
+recognition, dataset publication and other file readers remain open.
+
+RNAssistant's optional adapter still saves source declarations and controls native
+preparation. Exact byte reads, the pinned resource session, WebView2 executor and
+acknowledged native output exist; actual Windows host qualification and parser
+dispatch remain open. Their completion follows the standalone application boundary.
+Owner: Data Templates application; native file authority remains with
+`WorkspaceFileService`, with the existing `TabularProjectStore` integration adapter.
 This is the canonical domain contract; planned scope is marked separately from
 implemented behavior and uses the original proposal's M0–M7 stages.
 Retire it only if the domain is removed or its contract moves to another named
 owner. Architecture decision: [ADR-0014](decisions/ADR-0014-data-templates.md).
 
-## Current slice
+## Application project and data projects
 
-[The core probe](../web/tabular/index.html) offers three explicit operations through
+Data Templates is an independent workspace-project web application. RNAssistant
+can develop it, test it and use it through tools; ordinary use does not require
+an agent, chat, Office or RNAssistant runtime. Keeping its source in this repository
+does not make it part of the assistant's business domain. The product host remains
+C# 7.3/.NET Framework 4.8; neither that host nor the existing .NET 8 CLI/Harness
+is required by the browser application.
+
+| Scope | Authority and responsibility |
+|---|---|
+| Application source project | `web/data-templates/`: HTML/CSS/JS, UI, core, Worker, examples, tests, docs and `application.json`. Agent edits ordinary workspace files. |
+| User data project | Separate files: `project.json`, sources, templates, dictionaries, mappings and results. Selecting a project does not load executable JS or grant filesystem/native access. |
+| Data Templates application | UI and processing commands, processing queue, recognition, readers, language, validation, canonical results and export. This is the target owner even where a feature is not implemented yet. |
+| Browser adapter | User-selected Files, browser execution/save capabilities and explicit limitations. No RNAssistant globals, path grants or native credentials. |
+| RNAssistant adapter | Agent workflow, generic workspace file/history owners, exact source capabilities, isolated execution and optional Office. The preparation queue supplies immutable inputs; it must not become another parser or business queue. |
+
+There is one UI and one engine. Browser `ui/browser.js` and native
+`web/js/app-data-templates.js` compose the same owner/view modules; native controls
+occupy named shell slots. Domain markup lives once in `ui/shell.js`, visual tokens
+in `styles/`, state/File lifetime in `ui/loader.js`, and parsing in `core/`.
+Changing the UI does not require a second UI implementation or C# recompilation.
+Future functional screens use this same boundary; workspace M7 must reuse it.
+
+The native root currently loads **installed shipped UI only**. Editable application
+code must run in a dedicated isolated viewer/executor after scoped package admission;
+neither a Worker nor a manifest hash alone grants native authority. Trusted transport
+(`web/tabular/native-*`, native DTO/channel/resource owner) stays outside the app
+project. The current compiled `TabularRuntimePin` is transitional: preserve its
+checks until immutable per-run project-package capture, host protocol checks,
+capability admission, isolation and revocation replace it. That replacement must
+allow app/template/operator updates without rebuilding RNAssistant while its host
+protocol stays compatible. See [migration gates](stabilization/MIGRATION_MAP.md#data-templates-application-adapters--2026-10-16).
+
+Skills are development/use instructions for the agent. Tools operate on project
+files, tests and the application's typed commands; they do not duplicate the JS
+importer in C# or make an agent run part of normal file processing.
+
+## Standalone application and export
+
+[Open the application](../web/data-templates/index.html).
+It preserves the loader's pick/drop/search/navigation/progress/cancel behavior.
+The Templates view opens the existing core verification tool; it is still a separate
+probe, not a completed integrated processing screen. Native chooser/preparation
+controls exist only in the RNAssistant adapter.
+
+The application is an ordinary static file project without npm or a bundler.
+Export from the repository with this development-only Node command:
+
+```sh
+node web/data-templates/tools/export.js /absolute/path/to/new-folder
+```
+
+Only the explicit `application.json.files` are captured. The export refuses outside
+paths, symlinks, duplicate members, an existing destination and an output inside the
+source project. It includes code, examples, tests and the XML-parser license;
+it includes no native bridge, chats, grants, credentials or user data. The generated
+`application.lock.json` records every member's bytes and SHA-256. It is a package
+inventory, not a native permission, passing test or result-publication receipt.
+The exporter bounds **application code** to 2 MiB/member, 8 MiB total and 200 members;
+these are unrelated to input workbook limits. Failed filesystem writes report failure;
+any partial output must be inspected or replaced explicitly, never reported complete.
+
+On `file://`, the loader and explicit cooperative normalized-input probe work.
+XLSX requires a real Worker and static HTTP(S) delivery where file-origin Workers
+are unavailable; there is no server-side application runtime or hidden fallback.
+Export verification runs the exported Files/XLSX/Worker scenario outside the repository.
+Full data-project import/export, direct browser directory persistence, archive/single-HTML
+packaging and Library launch remain separate capabilities to implement.
+
+Folder/ZIP is the target primary distribution; HTML is a derived export. Existing
+HTML artifacts may link/launch the application after the capability adapter exists.
+Do not make the old HTML aggregate a second mutable store or include 80 MB sources
+by silently increasing its 20 MiB package budget. User data is exported separately
+and only by explicit selection. [Application guide](../web/data-templates/README.md).
+
+## Current core slice
+
+[The core probe](../web/data-templates/core/index.html) offers three explicit operations through
 the same executor: M0 snapshot inspection, [M2 extraction](#language-and-execution-core)
 and [bounded XLSX extraction](#bounded-xlsx-reader).
 For inspection it runs a normalized, bounded capture through
 the same plain JavaScript in a dedicated Worker or explicit cooperative mode.
-Select [disjoint-capture.json](../web/tabular/examples/disjoint-capture.json) with
+Select [disjoint-capture.json](../web/data-templates/core/examples/disjoint-capture.json) with
 the file picker. It includes two separated value bands and their headers, plus a
 right-hand year marker. The result preserves `J12` as row 12 / column 10 and keeps
 `P5` / `P12` at their original addresses. No period or total is inferred yet.
 
 For extraction select `Выполнить шаблон` and
-[matrix-extraction.json](../web/tabular/examples/matrix-extraction.json). It produces
+[matrix-extraction.json](../web/data-templates/core/examples/matrix-extraction.json). It produces
 16 canonical observations with source/rule evidence, including two years and
 separate annual totals. The download is a report with at most 20 preview records,
 not a published dataset. For a real XLSX select `Прочитать XLSX`,
-[matrix-xlsx-extraction.json](../web/tabular/examples/matrix-xlsx-extraction.json)
-and [matrix-source.xlsx](../web/tabular/examples/matrix-source.xlsx). The file stays
+[matrix-xlsx-extraction.json](../web/data-templates/core/examples/matrix-xlsx-extraction.json)
+and [matrix-source.xlsx](../web/data-templates/core/examples/matrix-source.xlsx). The file stays
 outside the JSON envelope and is read only inside its Worker. None of these
 operations reads live Excel/YAML or writes project files. Native manifest creation/opening is described below; no `tabular.*`
 tool/skill is exposed and the main loader is not yet connected to this executor.
@@ -576,12 +653,12 @@ reader is claimed.
 
 | Requirement / contract | Working example | Focused check | Remaining limit |
 |---|---|---|---|
-| Explicit roles independent of axes | [matrix-roles](../web/tabular/examples/matrix-roles.json), [matrix-transposed](../web/tabular/examples/matrix-transposed.json) | `tabular-universal`: same independent four-record business oracle, native cell lineage; browser Worker | One bounded matrix block, no layout recognition/anchors |
-| Disjoint bands, context dependencies, totals | [matrix-extraction](../web/tabular/examples/matrix-extraction.json) | `tabular-matrix`: independent 16-record oracle, DAG/type/bounds refusals | Quarter/custom calendars and repeated blocks deferred |
-| Records/fields, dimensions, mapping | [records-extraction](../web/tabular/examples/records-extraction.json), [CSV source](../web/tabular/examples/observations-source.csv) | `tabular-universal`: canonical oracle, native field evidence, missing/conflicts | CSV encoding/dialect/header/malformed-record byte reader pending |
-| Nested paths, null/absent, exact numbers | [json-extraction](../web/tabular/examples/json-extraction.json), [JSON source](../web/tabular/examples/observations-source.json) | `tabular-universal`: same oracle, pointers/escapes, exact large numeric token, structure/type refusal | One explicit array, bounded capture; streaming file decoder pending |
+| Explicit roles independent of axes | [matrix-roles](../web/data-templates/core/examples/matrix-roles.json), [matrix-transposed](../web/data-templates/core/examples/matrix-transposed.json) | `tabular-universal`: same independent four-record business oracle, native cell lineage; browser Worker | One bounded matrix block, no layout recognition/anchors |
+| Disjoint bands, context dependencies, totals | [matrix-extraction](../web/data-templates/core/examples/matrix-extraction.json) | `tabular-matrix`: independent 16-record oracle, DAG/type/bounds refusals | Quarter/custom calendars and repeated blocks deferred |
+| Records/fields, dimensions, mapping | [records-extraction](../web/data-templates/core/examples/records-extraction.json), [CSV source](../web/data-templates/core/examples/observations-source.csv) | `tabular-universal`: canonical oracle, native field evidence, missing/conflicts | CSV encoding/dialect/header/malformed-record byte reader pending |
+| Nested paths, null/absent, exact numbers | [json-extraction](../web/data-templates/core/examples/json-extraction.json), [JSON source](../web/data-templates/core/examples/observations-source.json) | `tabular-universal`: same oracle, pointers/escapes, exact large numeric token, structure/type refusal | One explicit array, bounded capture; streaming file decoder pending |
 | Numeric precision/transforms | `round(...,2,"half-even")` in all four fixtures; exact `scale` tests | `tabular-universal`: signed ties, overflow, exact multiplication; `tabular-matrix`: locale/missing checks | No general arithmetic, currency conversion or implicit rounding |
-| Real XLSX → explanations | [matrix-xlsx-extraction](../web/tabular/examples/matrix-xlsx-extraction.json) + [matrix-source.xlsx](../web/tabular/examples/matrix-source.xlsx) | `tabular-xlsx`: independent values, cell/rule/context/mapping/formula evidence; browser Worker | Supported XLSX subset only; other Excel formats still required below |
+| Real XLSX → explanations | [matrix-xlsx-extraction](../web/data-templates/core/examples/matrix-xlsx-extraction.json) + [matrix-source.xlsx](../web/data-templates/core/examples/matrix-source.xlsx) | `tabular-xlsx`: independent values, cell/rule/context/mapping/formula evidence; browser Worker | Supported XLSX subset only; other Excel formats still required below |
 | Bounded input/output, cancellation, sink lifecycle | `RNTabularSources.records` 130-item pull fixture; existing executor/probe | `tabular-universal`: delayed sink stops reading, malformed page refusal, complete/abort; browser sequence/cancel checks | Queue parser dispatch, durable staging and publication pending |
 
 ### Extension and version boundary
@@ -938,7 +1015,7 @@ with a drop zone and a short workflow guide; after selection the drop zone becom
 compact and gives space to the file list. The other domain editors are explicitly
 marked as future work; Mapping shows a conceptual diagram, not fabricated rules.
 
-`app-data-source-intake.js` owns bounded browser file/directory enumeration and
+`ui/source-intake.js` owns bounded browser file/directory enumeration and
 one immutable format-hint catalog for XLSX, CSV and JSON. The controller owns the
 temporary selection; separate views own presentation, as described below.
 These modules do not read file contents, parse source data, write project files,
@@ -985,14 +1062,16 @@ modules without a framework, npm or a bundler.
 
 | Owner | Responsibility |
 |---|---|
-| `app-data-source-intake.js` | Browser enumeration, metadata hints, limits and coalesced progress; no DOM or content parsing. |
-| `app-data-templates.js` | Browser File handles, selection/context and enumeration lifetime; connects the workspace-source owner and passes metadata/actions to presentation. |
-| `app-data-templates-view.js` | Screen navigation, filters, pages, metadata details and DOM events; no bridge, File handles, readers or job ownership. |
+| `ui/source-intake.js` | Browser enumeration, metadata hints, limits and coalesced progress; no DOM or content parsing. |
+| `ui/loader.js` | Portable owner factory: browser File handles, selection/context and enumeration lifetime; passes metadata/actions to presentation. |
+| `ui/browser.js`, `web/js/app-data-templates.js` | Separate browser/native composition. The native adapter translates context and mounts native controls in named slots; it owns no domain parsing. |
+| `ui/loader-view.js` | Screen navigation, filters, pages, metadata details and DOM events; no bridge, File handles, readers or job ownership. |
 | `app-workspace-sources.js` | Typed native browsing, transient edits to saved relative paths, queue commands/recovery and bounded polling. Saves use the shared workspace controller; no body transfer or durable client store. |
 | `app-workspace-sources-view.js`, `app-workspace-sources.css` | Workspace chooser, queue navigation and progress presentation using the same loader tokens; no bridge or job lifecycle. |
-| `app-data-operation-view.js` | Shared progress component; renders supplied stage, counters, duration and terminal state; delegates cancel/dismiss without a timer or inferred success. |
-| `app-data-templates-tokens.css` | Loader-wide palette aliases, typography, spacing, radii and card/row density. Inherits the host light/dark theme. |
-| `app-data-templates.css`, `app-workspace-projects.css`, `index.html` | Layout, reusable visual classes and semantic markup; no business state derived from CSS. |
+| `ui/operation-view.js` | Shared progress component; renders supplied stage, counters, duration and terminal state; delegates cancel/dismiss without a timer or inferred success. |
+| `styles/tokens.css` | Loader-wide palette aliases, typography, spacing, radii and card/row density. Inherits the host light/dark theme. |
+| `ui/shell.js`, `styles/loader.css` | Single shared semantic markup and component layout; no business state derived from CSS. |
+| `styles/browser.css`, native `app-workspace-projects.css` | Host palettes/base styles and native workspace controls respectively. |
 
 View listeners are root-scoped, delegated for dynamic rows and disposed explicitly.
 Unmounting/remounting a view neither cancels accepted work nor drops the selection;
@@ -1070,9 +1149,10 @@ Parser dispatch must reuse these pins, dispose streams per item and connect the
 existing execution/sink contracts. See [large-source contract](resource-fabric.md).
 The following requirements belong to the first real reader/recognition workflow
 in M2–M3; M5 extends it with consolidation rather than retrofitting safe execution.
-Owner: Data Templates application integration over the shared workspace application,
-existing execution/event lifetime and file authority. No queue owned by a tab,
-second model loop, filesystem registry or independent durable status database.
+Owner: the independent Data Templates application. Its processing queue owns job
+lifetime across views and consumes browser/native file capabilities. RNAssistant
+retains native source preparation, file authority and effect receipts only. No queue
+owned by a tab, second model loop or duplicated native status database.
 
 - Start with **one heavy file at a time**, under a shared resource budget. Pending
   entries retain descriptors, not opened workbooks or all source buffers. Release
@@ -1113,14 +1193,17 @@ folder/template grouping and quick access to the current item and failures. Each
 item links to source preview, applied template/mapping and result/diagnostics.
 Navigation remains usable while processing; closing a screen does not stop work.
 Context switches cannot retarget an existing batch to another workspace/project.
-Use the shared workspace file/resource views, not a separate folder-root registry.
+In RNAssistant, use the existing workspace file/resource views and scope identity.
+The browser adapter uses explicitly selected Files/directories; neither creates a
+second native folder-root registry.
 
-Large collections require bounded pages from the workspace application projection
-and incremental event updates, not all rows in the DOM or all bodies in browser
-memory. The current 50-row presentation is the initial UI boundary, not proof of
+Large collections require bounded pages from the application queue projection
+and incremental updates, not all rows in the DOM or all bodies in browser memory.
+Native preparation pages remain an adapter projection. The current 50-row presentation is the initial UI boundary, not proof of
 thousand-file processing. Source declarations now persist in the versioned manifest;
-batch requests still need versioned project files through the existing file owner. Execution outcomes use the shared
-event contracts. No duplicate mutable queue journal in project JSON/localStorage.
+batch requests still need versioned project files through the selected project
+storage adapter. Native file effects use the existing file owner/event contracts;
+never mirror its durable journal into project JSON/localStorage.
 Restart recovery requires explicit resume and revalidation of source, template,
 dictionary and module revisions; no automatic effect replay or assumed File access.
 
@@ -1137,15 +1220,16 @@ hard cancellation uses the [Worker termination contract](https://developer.mozil
 
 Accepted UX scope (2026-10-16); current delivery includes source selection,
 workspace preparation controls and the viewer structure described above.
-Owner: Data Templates for project views and semantics; the shared workspace
-application owns selection, file access and operation lifetime. The original
+Owner: Data Templates for all project views, processing semantics and operation
+lifetime; the RNAssistant adapter retains generic workspace authority, exact native
+file access and the preparation queue. Browser capabilities use their own adapter. The original
 proposal defines logical views and canonical data, but leaves drag-and-drop and
 detailed interaction design unspecified. Its M5 UI expansion must not postpone
 design or the first usable loader until after the extraction engine is complete.
 
 The M1 source-selection slice establishes the screen/state design and a reviewable
-viewer in the existing application. Use one project viewer with the current
-chat and Library. Define both narrow Office-panel and wider layouts, navigation,
+viewer shared by the standalone application and RNAssistant. The native adapter
+can place it alongside the current chat and Library. Define both narrow Office-panel and wider layouts, navigation,
 empty/loading/error/read-only states, progress/cancellation, unsaved edits and
 source/project switching before wiring the first complete workflow.
 
@@ -1183,16 +1267,16 @@ versioned schema and fixtures used by the engine.
 | M1 source selection (implemented) | Responsive modular viewer, paged file/folder intake, cancellable enumeration progress, persisted workspace source declarations and guarded save/recovery. Typed extraction commands remain open. |
 | M2 matrix-language foundation (implemented) | JSON template → typed plan → normalized snapshot → batched canonical observations with lineage, in the separate portable probe. Native integration and full readers remain open. |
 | M2 bounded XLSX adapter (implemented) | Explicit file + template → selective ZIP/XML reading in a Worker → exact typed cells → the same canonical batches. Single-file probe only; queue parser dispatch and 80 MB qualification remain open. |
-| M1–M3 | First real end-to-end flow for a supported source: loading, preview, parameter/mapping inspection, diagnostics and draft/test/publish through the common domain service. Include the bounded processing queue, off-UI readers, resource budgets and cancellation from the first reader. Connect the bounded XLSX matrix through streamed workspace sources; add the remaining Excel families (including XLSB), CSV/JSON behind the same workflow and their own fixtures. Deliver usable controls alongside each capability. |
-| M4 | Portable picker/import/export and the format/help reference using the same engine and documented capability differences. |
+| M1–M3 | First real end-to-end flow for a supported source: loading, preview, parameter/mapping inspection, diagnostics and draft/test/publish through the common domain service. Include the bounded processing queue, off-UI readers, resource budgets and cancellation from the first reader. Connect the bounded XLSX matrix to the standalone processing UI first, then optional streamed workspace sources; add the remaining Excel families (including XLSB), CSV/JSON behind the same workflow and their own fixtures. Deliver usable controls alongside each capability. |
+| Early M0/M4 (foundation implemented) | One portable source project, shared loader, folder export, exported semantic tests and XLSX Worker probe. Finish the integrated standalone load → preview/mapping → validate → export scenario before native parser dispatch. Native data-project persistence and single-HTML/ZIP packaging are still open. |
 | M5 | Extend the existing queue with advanced batch execution, scoped dictionary/mapping edits, comparison/consolidation, multiple blocks and output workbook templates. |
 
 M1 file read-back establishes stored bytes, not a validated template publication.
 Domain draft/test/publish in M3 depends on M2 semantics and exact input/test evidence;
 the original plan's M1 publication wording must not bypass that dependency.
 
-Feature code belongs in thematic `app-*.js` modules; `app.js` only binds shared
-navigation/rendering. UI and agent operations consume the same typed domain
+Domain feature code belongs to thematic modules inside the application project.
+Native `app-*.js` modules compose adapters; `app.js` only binds shared navigation. UI and agent operations consume the same typed domain
 commands and rules. Drafts, mapping rules and results belong to project files;
 view state is not another durable store. Later workspace M7 adoption must reuse
 these views/contracts instead of introducing another project shell or file owner.
@@ -1208,37 +1292,49 @@ manifest implementation:
 | Live Excel capture | `ExcelResourceProvider` resolves explicit ranges through `ExcelReadService` and the bound document scope. It does not yet feed this probe; capture consistency, unsaved values, dependencies and richer cell availability remain open. |
 | Application-owned execution | `AssistantPaneControl` owns a lazy, separate WebView2 executor with navigation/permission/interception/lifetime controls and a typed acknowledged native channel. Chrome exercises the C#/JS channel, not the WebView2 adapter; actual Windows behavior and qualification remain open. |
 | Publication | Draft/test/publish and exact source/module/dictionary pins must use existing authority/journal owners. Verified manifest creation is not a template publication; probe JSON cannot authorize one. |
-| Source input and transfer | Browser intake and the workspace chooser feed preparation; native source declarations persist in the manifest. Exact range transport, a pinned runtime session and the dedicated host adapter are implemented; job input pins and queue parser dispatch remain open. The separate probe executes M2 over normalized snapshots and bounded XLSX. CSV/JSON readers, project closure and complete export/import remain open. |
+| Source input and transfer | Browser intake and the workspace chooser feed preparation; native source declarations persist in the manifest. Exact range transport, a pinned runtime session and the dedicated host adapter are implemented; job input pins and queue parser dispatch remain open. The separate probe executes M2 over normalized snapshots and bounded XLSX. Application folder closure/export is implemented; CSV/JSON readers and user data-project export/import remain open. |
 | Large files and batch execution | Enumeration/bounded lists, a separate XLSX Worker, shared source streams and an application-owned preparation queue with loader controls/progress are implemented. Storage has an actual 80-MiB binary test; parser dispatch, durable batch requests, native execution/CSP and representative Excel qualification remain open; see the [processing contract](#large-files-and-processing-queue--planned). |
 
 Next slices, coordinated with the workspace owners:
 
-1. Qualify the shared project commands in Windows/Office and extend the existing
-   shared application boundary as workspace M7 consumers are adopted. Keep browser
-   and host adapters separate; Office remains Framework 4.8 without a direct
-   reference to the net8.0 Runtime assembly. Host-neutral independent work below
-   does not wait for Office qualification.
-2. Use the implemented [language/core contract](#language-and-execution-core) and
-   independent oracle and XLSX reader to connect saved source declarations and parser
-   dispatch through the preparation queue and [loader/project UI](#planned-loader-and-project-ui). Qualify real reader
-   capabilities/memory before raising prototype limits. Deliver incrementally
-   through M1–M3 using the existing workspace/execution owners.
-3. Attach the exact Excel source independently of project identity, then connect
-   capture/execution and domain draft/test/publish. Keep source grants, project
-   write authority and immutable evidence separate. Multi-file activation remains
-   a domain publication step: stage members, verify read-back, then switch the
-   manifest pointer through the existing owner; do not claim atomic folder writes.
+1. Finish the integrated **standalone** workflow in the shared UI: explicit template
+   and source selection → bounded processing queue/progress/cancel → preview and
+   diagnostics → complete canonical result export. Separate browser project/result
+   storage from UI and parser owners. Keep real file-format capability reporting;
+   XLSB/other Excel families and CSV/JSON require their own readers and fixtures.
+2. Replace the compiled application-module whitelist with immutable per-run package
+   capture and a trusted host adapter outside that package. Add the isolated project
+   viewer and common typed application commands. UI and agent must call the same
+   commands; app changes must not require a C# rebuild. Keep current checks until
+   the replacement's scope/isolation/cancel/drain evidence is complete.
+3. Connect the same commands to exact prepared workspace sources and durable native
+   staging/publication. Reuse `WorkspaceFileService`, journal and source capabilities;
+   attach live Excel independently. Stage members, verify read-back and then switch
+   the manifest pointer; never claim atomic folder writes or replay unknown effects.
+4. Qualify the affected native paths on Windows/Office and representative 80 MB-class
+   batches. Browser/source-project work does not wait for Office qualification.
+   Full editors, recognition, format coverage and advanced M5 batch features continue
+   inside the independent application with explicit scope and evidence.
 
-This sequencing replaces the earlier Office-session-first project-root wording.
-The portable JS work remains applicable unchanged. M0 and M1–M3 are incomplete;
-full matrix DSL is not claimed. Tracked gates live in
-[the risk register](stabilization/RISK_REGISTER.md#data-templates-integration-gates--2026-10-16).
+This supersedes the previous native-parser-first and M4-late-export sequencing.
+No completed low-level work is discarded. The initial folder export and independent
+probe are evidence of portability, not completion of the loader's processing UX,
+full data-project lifecycle or the large-workbook gates. M0–M4 remain partial.
+Tracked gates live in [the risk register](stabilization/RISK_REGISTER.md#data-templates-integration-gates--2026-10-16).
 
 ## Verification
 
-`tabular-universal.test.js` covers the cross-model/orientation oracle, native
+`data-templates-export.test.js` captures the application outside the repository,
+verifies exact hashes and outside-path/symlink/overwrite refusal, then runs exported
+semantic tests, the real file-origin loader and normalized extraction/download.
+A static test origin executes the exported XLSX/Worker fixture without RNAssistant
+or assets outside the exported package. Narrow/wide light/dark views are checked.
+This proves the delivered foundation, not an integrated parser queue or native host.
+
+
+`web/data-templates/tests/universal.test.js` covers the cross-model/orientation oracle, native
 provenance, exact transformations, pull-input backpressure and sink lifecycle.
-`tabular-matrix.test.js` covers a hand-authored 16-record oracle with disjoint axes,
+`web/data-templates/tests/matrix.test.js` covers a hand-authored 16-record oracle with disjoint axes,
 two years, annual roles, exact decimal/missing semantics and rule/cell/mapping
 lineage. It rejects invalid schemas/expressions, duplicate JSON keys, context cycles,
 ambiguous mappings, incompatible units/grain and missing captures. Larger normalized
@@ -1323,9 +1419,10 @@ publication and real Windows/WebView2 picker/drop behavior remain unqualified.
 For JS changes, run only the affected scripts (Playwright/browser must already be available):
 
 ```sh
-node tests/web/tabular-core.test.js
-node tests/web/tabular-matrix.test.js
-node tests/web/tabular-universal.test.js
+node web/data-templates/tests/core.test.js
+node web/data-templates/tests/matrix.test.js
+node web/data-templates/tests/universal.test.js
+node tests/web/data-templates-export.test.js
 node tests/web/tabular-xlsx.test.js
 node tests/web/tabular-byte-source.test.js
 node tests/web/tabular-browser.test.js
