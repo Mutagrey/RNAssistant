@@ -1,0 +1,25 @@
+/* Visual contract for the whole loader. Theme colors come from the host palette.
+   Override these on the viewer root to change density, typography or surfaces;
+   operation and selection behavior must not depend on CSS values. */
+.workspace-projects {
+  --dt-surface: var(--panel);
+  --dt-surface-muted: var(--secondary-bg);
+  --dt-border: var(--line);
+  --dt-text-muted: var(--muted);
+  --dt-accent: var(--accent, #407bdd);
+  --dt-space-sm: 8px;
+  --dt-space-md: 12px;
+  --dt-space-lg: 16px;
+  --dt-space-xl: 24px;
+  --dt-radius: 12px;
+  --dt-control-radius: 6px;
+  --dt-font-caption: 11px;
+  --dt-font-small: 12px;
+  --dt-font-body: 13px;
+  --dt-font-title: 18px;
+  --dt-font-heading: 25px;
+  --dt-font-heading-narrow: 22px;
+  --dt-card-padding: var(--dt-space-lg);
+  --dt-row-padding: var(--dt-space-md) var(--dt-space-lg);
+}
+.dt-card { border: 1px solid var(--dt-border); border-radius: var(--dt-radius); background: var(--dt-surface); }

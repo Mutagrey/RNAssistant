@@ -24,6 +24,15 @@ replies: single flight, readonly/stale binding, inert metadata, pinned-path expl
 inspection, malformed receipts and narrow light/dark layouts. Use the usual
 Playwright `BROWSER_EXECUTABLE` override. These do not qualify Windows/Office.
 
+`node tests/web/data-templates.test.js` checks the loader's real browser file/folder
+selection, drops and directory batches, cancellation, stale-context callbacks,
+atomic enumeration limits, inert names, paged selection/filtering/sorting and keyboard
+navigation. It checks progress coalescing, unknown totals, view remount during
+enumeration and an 80 MiB sparse metadata-only selection with body reads forbidden.
+All views are checked at narrow/wide widths in light/dark themes. Optional
+`RNA_DATA_SCREENSHOTS=/absolute/path` saves visual previews. This metadata-only
+slice needs no C# build; it does not qualify parsing or Windows/WebView2 file access.
+
 `chat relocation:` covers occupied destinations, blocked parent creation, invalid
 projection rollback, deletion while waiting for the document lock, explicit retry
 and transient drafts. It checks unchanged event bytes on refusal and history after

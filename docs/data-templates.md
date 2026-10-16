@@ -1,6 +1,7 @@
 # Data Templates
 
-Status: portable M0 proof and M1 project-manifest foundation implemented (2026-10-16).
+Status: portable M0 proof, M1 project-manifest foundation and source-selection UI
+implemented (2026-10-16). Extraction/import is not implemented.
 Owner: Data Templates domain; portable JS in `web/tabular`, shared manifest storage
 in Core `TabularProjectStore` over `WorkspaceFileService`.
 This is the canonical domain contract; planned scope is marked separately from
@@ -208,9 +209,10 @@ does not yet implement draft/test/publish or multi-file activation.
 
 ### Shared application and UI
 
-The **Рабочая папка** tab accepts an absolute path to an existing directory and an
-explicit read-only choice. It creates/opens the domain manifest by a relative path
-and shows its name/location as inert text. The current view covers metadata only.
+The **Рабочая папка** tab contains the Data Templates viewer. Its collapsible
+project settings accept an absolute path to an existing directory and an explicit
+read-only choice. It creates/opens the domain manifest by a relative path and
+shows its name/location as inert text. Native project operations cover metadata only.
 Office chats and their existing artifacts retain their current ownership; this
 tab does not attach workspace files to model context or bind an Excel source.
 
@@ -247,24 +249,198 @@ outcome and existence observation. It does not claim the original attempt succee
 or open a project implicitly; a subsequent explicit open validates the current file.
 Malformed responses cannot report project success or file absence.
 
+### Source selection UI
+
+The implemented M1 viewer has Sources, Templates, Parameters, Mapping, Results and
+Format/help sections. Wide layouts use keyboard-navigable tabs; narrow panels use
+one section selector. Project settings are collapsed by default. Sources start
+with a drop zone and a short workflow guide; after selection the drop zone becomes
+compact and gives space to the file list. The other domain editors are explicitly
+marked as future work; Mapping shows a conceptual diagram, not fabricated rules.
+
+`app-data-source-intake.js` owns bounded browser file/directory enumeration and
+one immutable format-hint catalog for XLSX, CSV and JSON. The controller owns the
+temporary selection; separate views own presentation, as described below.
+These modules do not read file contents, parse source data, write project files,
+invoke a model or claim an import.
+The existing workspace application remains the only native project/file owner.
+There are no new bridge contracts, durable stores or Office target changes.
+
+The same intake path accepts picker files, a folder picker when supported, and
+dropped files/directories. Directory readers drain every batch and retain relative
+paths. Enumeration is atomic with respect to the current selection: failure,
+cancel or deadline adds no part of the incoming batch. Limits: 500 files in the
+selection, 2,000 enumerated entries per drop, 16 nested directory levels for entry
+traversal, 4,096 characters per displayed relative path and a 15-second deadline.
+These are enumeration limits, not parsing or workbook-memory budgets.
+
+The list supports search by relative path/name, format and inclusion/attention
+filters, natural name/path sorting, largest-first sorting, removal and metadata
+details. Pages contain at most 50 rows, with previous/next and direct page selection;
+"Select shown" affects only the current page, while selection totals cover all
+files. Filters reset the page; removal clamps it to the remaining pages. The
+attention filter includes unavailable files and possible duplicates. Additional
+filters/sorting are collapsed by default. Unknown extensions and empty files
+remain visible but cannot be included. Matching relative path, size and modification time marks a possible
+duplicate; it neither proves equal content nor deduplicates business records.
+Extensions are descriptive hints, not validation of bytes or a parsed schema.
+XLS/XLSB/XLSM and JSONL are not advertised as supported input adapters.
+
+Browser File handles and inclusion choices are held only in the current page.
+They are not resource authority or a saved project draft. The current workspace
+binding and selected manifest path delimit the selection; changing them clears
+it and cancels enumeration. Late callbacks cannot refill another context. Native
+workspace commands prevent starting new intake; refreshing the same context does
+not cancel an active enumeration. Page reload clears the list; the UI says so.
+Selecting a source folder does not open/change the workspace root, grant native
+path access or copy the source files. Persisting source selections is later domain
+work through the existing workspace file owner, with explicit source association.
+
+### Loader presentation architecture
+
+The separation applies to the whole loader, including future template, parameter,
+mapping, result and format screens. It uses static HTML/CSS and thematic plain-JS
+modules without a framework, npm or a bundler.
+
+| Owner | Responsibility |
+|---|---|
+| `app-data-source-intake.js` | Browser enumeration, metadata hints, limits and coalesced progress; no DOM or content parsing. |
+| `app-data-templates.js` | File handles, selection, context guards and operation lifetime; passes immutable metadata snapshots and explicit actions to presentation. |
+| `app-data-templates-view.js` | Screen navigation, filters, pages, metadata details and DOM events; no bridge, File handles, readers or job ownership. |
+| `app-data-operation-view.js` | Shared progress component; renders supplied stage, counters, duration and terminal state; delegates cancel/dismiss without a timer or inferred success. |
+| `app-data-templates-tokens.css` | Loader-wide palette aliases, typography, spacing, radii and card/row density. Inherits the host light/dark theme. |
+| `app-data-templates.css`, `app-workspace-projects.css`, `index.html` | Layout, reusable visual classes and semantic markup; no business state derived from CSS. |
+
+View listeners are root-scoped, delegated for dynamic rows and disposed explicitly.
+Unmounting/remounting a view neither cancels accepted work nor drops the selection;
+the controller survives it. Context replacement remains an explicit owner action.
+New functional screens can have their own view module using the same snapshot/action
+boundary, without adding another state store. Visual changes should change tokens,
+markup or renderers without modifying execution. Native controls, labels, keyboard
+navigation, focus restoration, explicit empty/error states and reduced-motion
+support remain part of the presentation contract.
+
+The operation card is outside the individual screens and stays visible when
+switching sections. Current progress covers **enumeration only**: current path,
+file count, total source size, elapsed time and cancellation. A percentage appears
+only for a known file count; folder traversal is indeterminate. Intermediate
+updates are coalesced to approximately 10 Hz and terminal counters are exact.
+The elapsed clock updates independently at 500 ms and is not a worker heartbeat.
+Progress updates do not rebuild the source list. Bytes are sums of File.size,
+not bytes read or measured RAM. A large-file hint starts at 64 MiB; this is a UI
+hint, not an admission limit or a claim of parsing support.
+
+### Input formats and adapter boundary
+
+Excel, CSV and JSON are accepted product scope. Each will have a portable reader
+behind a common source-to-canonical transformation workflow; acquisition, reading,
+template/mapping and publication are separate steps. Source identity must not
+require a workbook or sheet. Excel selectors stay specific to the matrix path.
+Canonical observations and entity/transaction tables remain independent of input
+format. Native C# integration will not duplicate these readers or the JS engine.
+
+| Planned reader | Configuration and source evidence |
+|---|---|
+| XLSX | Workbook/sheet/block selection; physical cell addresses, capture coverage and explicit formula/cache availability. Live Office capture remains a separate adapter. |
+| CSV | Explicit encoding, separator, quoting and header selection; record/column locations and raw text before declared type conversion. Preview must expose ambiguous separators/decimal conventions and malformed records. Leading-zero codes must not become numbers implicitly. |
+| JSON | Explicit record-array/object and field paths; preserve nesting, null/missing/type distinctions and JSON-pointer provenance. No implicit flattening of arbitrary nested objects. Numeric precision, duplicate keys and size/depth limits must be defined before accepting data. |
+
+Parsing success is separate from format recognition, template matching and valid
+canonical data. Future readers return typed values, native source locations,
+capabilities and diagnostics to the portable domain owner. Exact schema/adapter
+contracts will be fixed with M2 fixtures; the current extension catalog does not
+claim those readers exist. CSV/JSON source input is also distinct from JSON/YAML
+template definitions and the metadata-only project manifest.
+
+### Large files and processing queue — planned
+
+Accepted requirement: many mixed-size inputs, including XLSX around 80 MB. The
+current viewer only enumerates files; there is no processing queue or parser yet.
+The 500-file intake cap is an explicit prototype bound, not a final batch size.
+The following requirements belong to the first real reader/recognition workflow
+in M2–M3; M5 extends it with consolidation rather than retrofitting safe execution.
+Owner: Data Templates application integration over the shared workspace application,
+existing execution/event lifetime and file authority. No queue owned by a tab,
+second model loop, filesystem registry or independent durable status database.
+
+- Start with **one heavy file at a time**, under a shared resource budget. Pending
+  entries retain descriptors, not opened workbooks or all source buffers. Release
+  reader/Worker resources after each item. Increase concurrency only after measured
+  memory and UI-latency evidence; do not load every queued file in parallel.
+- Run decompression, parsing and matching outside the UI thread in an interruptible
+  application-owned executor. Do not silently run a large reader in cooperative
+  UI mode if that executor is unavailable. Capture exact module/source revisions
+  and settle the existing WebView2 lifecycle/CSP gate before native integration.
+- Bound compressed input, expanded ZIP parts, shared strings/styles, cells, nesting,
+  preview/result pages and caches separately. Compressed XLSX size is not a RAM
+  estimate. Use bounded reads/transfers and incremental parsing where the selected
+  reader actually supports it; avoid base64/full-text copies through UI/bridge.
+  A reader that materializes whole parts must disclose and qualify that limit.
+- Report real per-file stages (read, unpack, parse, recognize, validate, publish),
+  counters and diagnostics, plus queue totals by outcome. Unknown totals remain
+  indeterminate; byte counts are labeled by stage. Show a stalled/unresponsive
+  executor explicitly. CPU/RAM are shown only with actual telemetry, otherwise
+  unavailable; source volume and configured budgets are not measured consumption.
+- Cancel from outside the busy executor, with hard Worker termination where needed;
+  a queued cancel message alone cannot interrupt synchronous parser work. Discard
+  incomplete output. File effects already dispatched retain the existing owner's
+  read-back/unknown semantics; cancellation does not prove rollback or authorize
+  replay. Tune stage deadlines against real large inputs rather than inheriting
+  the small M0 probe's deadline.
+
+Queue entries need typed queued/running/completed/failed/cancelled states, with a
+separate unresolved-effect outcome where a write cannot be confirmed. Keep phase
+separate from outcome. Commands include pause **before the next file**, resume,
+cancel current/pending/all and explicit retry of selected failed items. Preserve
+verified completed outputs; never automatically retry unknown publication effects.
+One failed file produces an item diagnostic and a mixed batch summary, not false
+batch success. A failure of the shared executor/storage authority stops dispatch
+until resolved. Reordering pending items must not mutate running job pins.
+
+Navigation needs search by name/relative path, format/state/error filters, sorting,
+folder/template grouping and quick access to the current item and failures. Each
+item links to source preview, applied template/mapping and result/diagnostics.
+Navigation remains usable while processing; closing a screen does not stop work.
+Context switches cannot retarget an existing batch to another workspace/project.
+Use the shared workspace file/resource views, not a separate folder-root registry.
+
+Large collections require bounded pages from the workspace application projection
+and incremental event updates, not all rows in the DOM or all bodies in browser
+memory. The current 50-row presentation is the initial UI boundary, not proof of
+thousand-file processing. Persist batch requests/source associations in versioned
+project files through the existing file owner; execution outcomes use the shared
+event contracts. No duplicate mutable queue journal in project JSON/localStorage.
+Restart recovery requires explicit resume and revalidation of source, template,
+dictionary and module revisions; no automatic effect replay or assumed File access.
+
+Qualification must include real 80 MB-class workbooks, multiple queued books,
+high-expansion/many-shared-string cases, malformed/over-budget inputs, cancellation
+at each stage, repeated runs and memory release. Record peak memory, elapsed time,
+UI responsiveness and cancel latency on the actual Windows/Office/WebView2 target.
+The sparse 80 MiB selection fixture only proves that intake does not read bodies.
+No workbook size or batch-throughput guarantee is made before these measurements.
+The memory distinction follows Microsoft's [large spreadsheet parsing guidance](https://learn.microsoft.com/en-us/office/open-xml/spreadsheet/how-to-parse-and-read-a-large-spreadsheet);
+hard cancellation uses the [Worker termination contract](https://developer.mozilla.org/en-US/docs/Web/API/Worker/terminate).
+
 ## Planned loader and project UI
 
-Accepted UX scope (2026-10-16); not implemented by the metadata tab above.
+Accepted UX scope (2026-10-16); current delivery is limited to source selection
+and the viewer structure described above.
 Owner: Data Templates for project views and semantics; the shared workspace
 application owns selection, file access and operation lifetime. The original
 proposal defines logical views and canonical data, but leaves drag-and-drop and
 detailed interaction design unspecified. Its M5 UI expansion must not postpone
 design or the first usable loader until after the extraction engine is complete.
 
-The next M1 slice starts with a concrete screen/state design and a reviewable
-prototype in the existing application. Use one project viewer with the current
+The M1 source-selection slice establishes the screen/state design and a reviewable
+viewer in the existing application. Use one project viewer with the current
 chat and Library. Define both narrow Office-panel and wider layouts, navigation,
 empty/loading/error/read-only states, progress/cancellation, unsaved edits and
 source/project switching before wiring the first complete workflow.
 
 | View | Required interaction |
 |---|---|
-| Sources | Drag-and-drop and explicit file/folder pickers; multiple files, visible folder contents and inclusion selection; source queue with recognition status, workbook/sheet/block preview, template candidates and per-item diagnostics. Folder recursion, unsupported files and duplicates must be visible choices/outcomes. |
+| Sources | Drag-and-drop and explicit file/folder pickers for XLSX, CSV and JSON; multiple files, visible folder contents and inclusion selection; source queue with recognition status, format-appropriate preview (sheet/block, CSV records, JSON fields), template candidates and per-item diagnostics. Folder recursion, unsupported files and duplicates must be visible choices/outcomes. |
 | Templates | Searchable catalog, recognized signatures, draft/published versions, test results and reusable template creation/editing. Show source-grid roles and a preview before applying a transformation. |
 | Parameters and dictionaries | Search/filter by stable parameter ID, name, meaning, type, unit, dimensions and status; aliases, proposals and conflicts remain visible. |
 | Mapping | A source-to-canonical map showing labels/codes/units and their target parameters/dimensions; inspect rule scope, priority, confirmation and affected records. Unmapped/ambiguous values are explicit; suggestions become rules only through the shared domain workflow. |
@@ -293,10 +469,10 @@ versioned schema and fixtures used by the engine.
 
 | Original stage | UI delivery |
 |---|---|
-| Next M1 slice | Reviewable screen/state prototype and typed interaction boundaries, followed by the source selection shell. No claim of recognition before its adapter/engine exists. |
-| M1–M3 | First real end-to-end flow for a supported workbook: loading, preview, parameter/mapping inspection, diagnostics and draft/test/publish through the common domain service. Deliver usable controls alongside each capability. |
+| M1 source selection (implemented) | Responsive modular viewer, paged file/folder intake, cancellable enumeration progress and explicit metadata-only states. Persisted source association and typed extraction commands remain open. |
+| M1–M3 | First real end-to-end flow for a supported source: loading, preview, parameter/mapping inspection, diagnostics and draft/test/publish through the common domain service. Include the bounded processing queue, off-UI readers, resource budgets and cancellation from the first reader. Start with the bounded XLSX matrix; add CSV/JSON readers behind the same workflow and their own fixtures. Deliver usable controls alongside each capability. |
 | M4 | Portable picker/import/export and the format/help reference using the same engine and documented capability differences. |
-| M5 | Batch execution over selected folder inputs, scoped dictionary/mapping edits, comparison/consolidation, multiple blocks and output workbook templates. |
+| M5 | Extend the existing queue with advanced batch execution, scoped dictionary/mapping edits, comparison/consolidation, multiple blocks and output workbook templates. |
 
 Feature code belongs in thematic `app-*.js` modules; `app.js` only binds shared
 navigation/rendering. UI and agent operations consume the same typed domain
@@ -315,7 +491,8 @@ manifest implementation:
 | Live Excel capture | `ExcelResourceProvider` resolves explicit ranges through `ExcelReadService` and the bound document scope. It does not yet feed this probe; capture consistency, unsaved values, dependencies and richer cell availability remain open. |
 | Application-owned execution | `AssistantPaneControl` owns the current WebView2 and trusts its exact root document; frame navigation is limited to about:blank/srcdoc. A browser proof does not authorize broadening that policy or prove WebView2 Worker behavior. |
 | Publication | Draft/test/publish and exact source/module/dictionary pins must use existing authority/journal owners. Verified manifest creation is not a template publication; probe JSON cannot authorize one. |
-| Transfer | Picker/download works for this probe. File-backed project closure, missing dependencies, source inclusion and complete export/import are not implemented. |
+| Source input and transfer | The viewer selects files/folders with XLSX/CSV/JSON hints; no source parser, native association or persisted selection is connected yet. Picker/download works for the separate M0 probe. Project closure and complete export/import remain open. |
+| Large files and batch execution | Enumeration progress and bounded list rendering are implemented. The application-owned queue, off-UI readers, hard cancellation/resource budgets and real 80 MB-class qualification remain open; see the [processing contract](#large-files-and-processing-queue--planned). |
 
 Next slices, coordinated with the workspace owners:
 
@@ -324,9 +501,9 @@ Next slices, coordinated with the workspace owners:
    and host adapters separate; Office remains Framework 4.8 without a direct
    reference to the net8.0 Runtime assembly. Host-neutral independent work below
    does not wait for Office qualification.
-2. Design the [loader/project UI](#planned-loader-and-project-ui) and canonical
-   format examples alongside the first supported source workflow. Keep the
-   interface extensible by section; deliver it incrementally through M1–M3.
+2. Extend the [loader/project UI](#planned-loader-and-project-ui) with source
+   association, bounded format readers and canonical format examples alongside
+   the first supported source workflow. Deliver it incrementally through M1–M3.
 3. Attach the exact Excel source independently of project identity, then connect
    capture/execution and domain draft/test/publish. Keep source grants, project
    write authority and immutable evidence separate. Multi-file activation remains
@@ -353,6 +530,18 @@ while file read-back is pending. `workspace-projects.test.js`
 uses the shipped UI and CSS with controlled typed replies for duplicate clicks,
 readonly/stale bindings, inert metadata, explicit pinned-path inspection, malformed
 receipts and narrow light/dark layout. These do not qualify real Windows/Office UI.
+
+`data-templates.test.js` checks actual browser File and folder pickers, file drops,
+all directory batches, cancellation and late callbacks across project changes,
+atomic refusal of oversized/failed intake, inert names, duplicate choices and
+keyboard navigation. It also covers 50-row pages, page-scoped selection, state
+filters/sorting and focus when a filtered row disappears; exact/coalesced progress,
+unknown totals, cancellation across views and remount/refresh during a running operation.
+An 80 MiB sparse file is selected with browser body-read methods instrumented to
+fail; this verifies metadata-only intake, not XLSX parsing or its memory cost.
+It verifies all viewer sections at 360/740/1160 pixels in
+light/dark themes. Set `RNA_DATA_SCREENSHOTS` to save visual previews. Parsing,
+publication and real Windows/WebView2 picker/drop behavior remain unqualified.
 
 For JS changes, run only the affected scripts (Playwright/browser must already be available):
 

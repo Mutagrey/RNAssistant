@@ -25,8 +25,12 @@
     el("ProjectResult").hidden = !project;
     el("ProjectTitle").textContent = project ? project.name : "";
     el("ProjectLocation").textContent = project ? project.manifestPath : "";
+    el("ContextTitle").textContent = project ? project.name : workspace ? "Проект не выбран" : "Подключить проект";
+    el("ContextHint").textContent = workspace
+      ? workspace.rootPath + (workspace.readOnly ? " · Только чтение" : "") : "Рабочая папка и параметры проекта";
     el("Reconcile").hidden = !inspection;
     el("Reconcile").disabled = busy || !workspace || !inspection || inspection.bindingId !== workspace.bindingId;
+    if (window.RNAssistantDataTemplates) window.RNAssistantDataTemplates.setContext(view, busy);
   }
   function apply(response) {
     if (!response || response.type !== "rnassistant.workspaceState" || response.contractVersion !== 1 ||
@@ -75,7 +79,7 @@
         status(response.exists ? "Файл существует. Откройте проект, чтобы проверить его содержимое."
           : "Файл отсутствует. Создание можно запустить отдельным действием.", false);
       } else status(type === "createTabularProject" ? "Проект создан."
-        : type === "openTabularProject" ? "Проект открыт." : "Состояние папки обновлено.", false);
+        : type === "openTabularProject" ? "Проект открыт." : type === "getWorkspaceState" ? "" : "Рабочая папка открыта.", false);
     } catch (error) {
       if (ticket !== sequence) return;
       if (error.code === "workspace_binding_changed") { view = null; inspection = null; }

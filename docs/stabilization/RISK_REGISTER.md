@@ -31,6 +31,12 @@ it has no native tools or publication authority.
 - No project publication/export is implemented. Probe JSON cannot act as a
   passing test receipt. Close with existing journal/authority publication,
   stale-input rejection, read-back and complete portable dependency capture.
+- The loader's enumeration progress and 50-row pages do not prove processing of
+  many large files. Close the [queue/large-file gate](../data-templates.md#large-files-and-processing-queue--planned)
+  with workspace-owned dispatch, bounded off-UI readers, hard cancellation,
+  unresolved-write handling and measured peak memory/UI/cancel latency on real
+  80 MB-class XLSX batches in Windows/Office/WebView2. The sparse 80 MiB fixture
+  verifies metadata-only selection, not parsing or a workbook-size guarantee.
 
 No existing global HTML/transfer limit was raised; no imported JS, fake live
 source claim, hidden executor fallback or second mutable project store was added.

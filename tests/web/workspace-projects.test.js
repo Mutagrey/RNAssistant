@@ -28,6 +28,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     });
     await page.addScriptTag({ path: path.join(root, "js/app-workspace-projects.js") });
     await page.evaluate(() => { RNAssistantWorkspace.bind(); return RNAssistantWorkspace.show(); });
+    await page.locator("#workspaceSettings > summary").click();
     assert.equal(await page.locator("#workspaceProjectOpen").isDisabled(), true);
     await page.locator("#workspaceRoot").fill("C:\\Projects\\Reports");
     await page.locator("#workspaceOpen").click();

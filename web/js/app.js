@@ -72,6 +72,7 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 
   bindChatActions();
+  if (window.RNAssistantDataTemplates) window.RNAssistantDataTemplates.bind();
   if (window.RNAssistantWorkspace) window.RNAssistantWorkspace.bind();
   bindContextActions();
   bindVbaActions();

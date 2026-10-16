@@ -1,5 +1,29 @@
 # Stabilization progress
 
+## Data Templates source-selection UI — 2026-10-16
+
+The workspace tab now has a responsive Data Templates viewer with collapsible
+project settings, file/folder selection and drag-and-drop, paged inclusion lists
+with search, filters/sorting, and format help. XLSX, CSV and JSON share one selection workflow; the
+[domain contract](../data-templates.md#input-formats-and-adapter-boundary) defines
+their distinct future readers and source locations. Templates, parameters,
+mapping and result views identify their unimplemented operations explicitly.
+
+The whole loader now separates operation/selection ownership, view rendering,
+shared progress presentation and visual tokens. Enumeration progress remains
+visible across sections; remounting presentation preserves the job. The
+[large-file and queue contract](../data-templates.md#large-files-and-processing-queue--planned)
+requires bounded application-owned processing and off-UI parsing from M2–M3,
+before M5 consolidation. It reuses workspace lifetime/file owners.
+
+Seven focused loader browser groups pass: real file/folder inputs, directory batch
+draining, cancel/context-change guards, atomic limits/failures, progress/remount,
+paged filtering/selection and all views in narrow/wide light/dark layouts. An
+80 MiB sparse selection fixture is never read; this is not an XLSX benchmark.
+Existing workspace UI checks pass. No C# build or Office/VSTO validation was run.
+Source contents are not yet parsed or saved to the project; persisted source
+association, the real processing queue/readers and publication remain open.
+
 ## Shared workspace project application and UI — 2026-10-16
 
 The Office panel and CLI now use one compatible application source module for
