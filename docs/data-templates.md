@@ -3,7 +3,8 @@
 Status: portable M0 proof, M1 project-manifest/source-selection foundation and the
 first M2 matrix-language and bounded XLSX-reader slices implemented (2026-10-16).
 Matrix extraction works over normalized snapshots and explicitly selected XLSX
-files in the separate Worker probe. Application import/queue and publication remain open.
+files in the separate Worker probe. The shared application prepares queued workspace
+sources; loader association, parsing dispatch and publication remain open.
 Owner: Data Templates domain; portable JS in `web/tabular`, shared manifest storage
 in Core `TabularProjectStore` over `WorkspaceFileService`.
 This is the canonical domain contract; planned scope is marked separately from
@@ -483,7 +484,7 @@ tab does not attach workspace files to model context or bind an Excel source.
 `src/RNAssistant.Application` is one shared application source module, compiled via
 one `.projitems` import in Office Framework 4.8 and the existing CLI Runtime build.
 It references Core only. The previous Runtime-only project facade was removed;
-CLI `project create/open` and the bridge now consume `WorkspaceApplicationService`
+CLI `project create/open/prepare` and the bridge now consume `WorkspaceApplicationService`
 and its typed contracts directly. No file logic or conversation runtime is copied.
 The packaging seam and removal gate are in [MIGRATION_MAP](stabilization/MIGRATION_MAP.md#workspace-first-adapters--2026-10-04).
 
@@ -512,6 +513,47 @@ Unknown writes and lost replies never trigger creation retries. **Провери
 outcome and existence observation. It does not claim the original attempt succeeded
 or open a project implicitly; a subsequent explicit open validates the current file.
 Malformed responses cannot report project success or file absence.
+
+### Workspace source preparation queue
+
+`WorkspaceApplicationService` owns a transient queue of 1–500 distinct workspace-relative
+paths. `prepareWorkspaceSources` accepts the exact workspace binding, project selection
+revision and explicit file/batch byte budgets; `getWorkspaceSourceQueue` and
+`controlWorkspaceSourceQueue` address its opaque queue ID. `getWorkspaceState` exposes
+that ID for remounts. Queue progress has its own revision and does not invalidate the
+project selection. Browser names/metadata do not grant native file access.
+
+The background worker retains one source at a time through `WorkspaceFileService`,
+checks the pinned project before and after capture, and exposes only metadata in
+pages of at most 50 items. Search, state filters and path/size sorting are supported.
+Pending entries hold no opened files or bodies. One reader slot is shared across
+applications using the same state directory; waiting is cancellable. Active work
+participates in the existing runtime maintenance gate, without creating a chat/run.
+Workspace/project replacement and runtime reset refuse unfinished queues. Office
+controller changes retain the queue; panel disposal cancels it and drains its worker.
+
+States are `Pending`, `Running`, `Prepared`, `Failed`, `Cancelled`; queue completion
+does not imply every item succeeded. **Prepared means an exact retained source, not
+recognized, parsed or imported data.** Runtime-only `OpenPreparedSource` resolves the
+accepted pin; the UI receives no selectable resource ref, hash or body. Byte progress
+describes the current storage pass. Batch budgets count every successful capture,
+including one rejected by a later project check; retries do not reset the budget.
+
+Pause finishes the current item before stopping dispatch. Cancel current/pending/all
+and explicit retry of selected failed/cancelled items are separate commands. Local
+missing/oversized inputs fail individually; shared storage failures pause dispatch.
+Project drift or a missing manifest requires cancelling remaining work and explicitly reopening the project.
+No automatic retry or durable queue journal is introduced. Restart requires explicit
+selection/preparation again; already retained authority/CAS history remains intact.
+
+The CLI accepts `project prepare --workspace <workspace> --path <project.json>
+--sources-json '["source/book.xlsx","source/data.csv"]' --file-mib 96 --batch-mib 1024`.
+It reports progress and paged terminal results; Ctrl+C cancels and drains. Exit 0 means
+all sources prepared, 5 means failures/incomplete work, 130 means cancellation.
+Read-only workspace bindings may retain snapshots without changing project files.
+Loader association/presentation, durable batch requests, common execution events and
+parser dispatch remain the next integration boundary. Retaining XLSB/CSV/JSON bytes
+does not imply support for parsing those formats.
 
 ### Source selection UI
 
@@ -645,9 +687,10 @@ The 500-file intake cap is an explicit prototype bound, not a final batch size.
 The shared file owner now supplies `CaptureFile` and `OpenExactRead` for streamed,
 revision-pinned sources without the one-MiB whole-read barrier. Format-specific
 byte budgets remain explicit. The storage check uses a real 80-MiB binary fixture,
-not an Excel parsing benchmark. The queue must call this owner from its background
-executor, dispose source streams per item and preserve the source pin across UI
-navigation. See [large-source contract](resource-fabric.md).
+not an Excel parsing benchmark. The [preparation queue](#workspace-source-preparation-queue)
+now uses this owner in the background and retains exact pins across navigation.
+Parser dispatch must reuse these pins, dispose streams per item and connect the
+existing execution/sink contracts. See [large-source contract](resource-fabric.md).
 The following requirements belong to the first real reader/recognition workflow
 in M2–M3; M5 extends it with consolidation rather than retrofitting safe execution.
 Owner: Data Templates application integration over the shared workspace application,
@@ -789,7 +832,7 @@ manifest implementation:
 | Application-owned execution | `AssistantPaneControl` owns the current WebView2 and trusts its exact root document; frame navigation is limited to about:blank/srcdoc. A browser proof does not authorize broadening that policy or prove WebView2 Worker behavior. |
 | Publication | Draft/test/publish and exact source/module/dictionary pins must use existing authority/journal owners. Verified manifest creation is not a template publication; probe JSON cannot authorize one. |
 | Source input and transfer | The viewer selects files/folders with XLSX/CSV/JSON hints; no source parser, native association or persisted selection is connected there yet. The separate probe executes M2 over normalized snapshots and bounded XLSX. CSV/JSON readers, project closure and complete export/import remain open. |
-| Large files and batch execution | Enumeration progress/bounded lists, a separate single-file XLSX Worker and shared workspace source streams with cancellation/progress are implemented. Storage has an actual 80-MiB binary test; the application-owned queue, native execution/CSP integration and representative Excel qualification remain open; see the [processing contract](#large-files-and-processing-queue--planned). |
+| Large files and batch execution | Enumeration progress/bounded lists, a separate single-file XLSX Worker, shared workspace streams and an application-owned preparation queue with cancellation/progress are implemented. Storage has an actual 80-MiB binary test; loader association, parser dispatch, durable batch requests, native execution/CSP and representative Excel qualification remain open; see the [processing contract](#large-files-and-processing-queue--planned). |
 
 Next slices, coordinated with the workspace owners:
 
@@ -799,7 +842,7 @@ Next slices, coordinated with the workspace owners:
    reference to the net8.0 Runtime assembly. Host-neutral independent work below
    does not wait for Office qualification.
 2. Use the implemented [matrix contract](#matrix-language-and-execution-v1) and
-   independent oracle and XLSX reader to connect source association, the bounded queue and
+   independent oracle and XLSX reader to connect explicit source association, the preparation queue and
    the [loader/project UI](#planned-loader-and-project-ui). Qualify real reader
    capabilities/memory before raising prototype limits. Deliver incrementally
    through M1–M3 using the existing workspace/execution owners.
@@ -844,7 +887,10 @@ discovery through the shared resource catalog.
 `workspace application:` covers stale/readonly binding refusal, failure projections,
 Office controller replacement, off-UI file dispatch and typed unknown/reconciliation
 through the real bridge with a fake Office controller, plus runtime-reset exclusion
-while file read-back is pending. `workspace-projects.test.js`
+while file read-back is pending. Queue checks add serialized capture, bounded pages,
+pause/cancel/explicit retry, budgets, exact reads after source drift, project drift,
+maintenance exclusion and bridge disposal drain. CLI smoke covers mixed outcomes
+and read-only preparation without manifest changes. `workspace-projects.test.js`
 uses the shipped UI and CSS with controlled typed replies for duplicate clicks,
 readonly/stale bindings, inert metadata, explicit pinned-path inspection, malformed
 receipts and narrow light/dark layout. These do not qualify real Windows/Office UI.

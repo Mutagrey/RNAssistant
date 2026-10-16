@@ -31,13 +31,19 @@ create/reopen/read-only and workspace relocation, closed metadata/path refusal,
 external drift/foreign workspace, exact retained bytes and unknown write recovery.
 The owner is the existing `WorkspaceFileService`; these tests do not qualify the
 future Office UI, capture or template publication. The existing CLI exposes
-`project create/open` for process-level smoke checks without a model or Office.
+`project create/open/prepare` for process-level smoke checks without a model or Office.
 
 `workspace application:` checks selection/permission binding, refusal projections,
 controller-independent lifetime, file dispatch off the UI callback and typed
 unknown/reconciliation through the real bridge with a fake controller. It also
 excludes runtime clear during file dispatch/read-back and revokes selection after
-an explicit reset. Browser
+an explicit reset. Source queue coverage adds serialized capture, 50-item pages,
+search/filter/sort, pause/cancel/explicit retry, byte budgets, exact retained reads,
+project drift, maintenance exclusion and disposal drain across controller changes.
+These are preparation/lifetime checks, not parser or loader queue UI qualification.
+CLI `project prepare` accepts a JSON array of workspace-relative paths and explicit
+file/batch budgets; process smoke covers mixed outcomes and read-only capture without
+manifest changes. Browser
 `node tests/web/workspace-projects.test.js` checks the shipped UI/CSS with controlled
 replies: single flight, readonly/stale binding, inert metadata, pinned-path explicit
 inspection, malformed receipts and narrow light/dark layouts. Use the usual

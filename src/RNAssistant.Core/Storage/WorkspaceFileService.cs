@@ -192,8 +192,9 @@ namespace RNAssistant.Core.Storage
                 !name.EndsWith(".key", StringComparison.OrdinalIgnoreCase);
         }
 
-        public WorkspaceFileObservation ReadText(WorkspaceDescriptor workspace, string relativePath)
-        { return ReadContent(workspace, relativePath, false); }
+        public WorkspaceFileObservation ReadText(WorkspaceDescriptor workspace, string relativePath,
+            CancellationToken token = default(CancellationToken))
+        { return ReadContent(workspace, relativePath, false, token); }
 
         public WorkspaceFileObservation ReadBytes(WorkspaceDescriptor workspace, string relativePath)
         { return ReadContent(workspace, relativePath, true); }
@@ -279,10 +280,12 @@ namespace RNAssistant.Core.Storage
             { throw new WorkspaceFileException("snapshot_unavailable", "Exact source payload is missing or corrupt."); }
         }
 
-        private WorkspaceFileObservation ReadContent(WorkspaceDescriptor workspace, string relativePath, bool raw)
+        private WorkspaceFileObservation ReadContent(WorkspaceDescriptor workspace, string relativePath, bool raw,
+            CancellationToken token = default(CancellationToken))
         {
+            token.ThrowIfCancellationRequested();
             var path = ResolvePath(workspace, relativePath, false);
-            using (AcquireFileScope(path, out var id, out var scope))
+            using (AcquireFileScope(path, out var id, out var scope, token))
             {
                 EnsureNoUnresolved(scope);
                 ResolvePath(workspace, relativePath, false);
@@ -299,6 +302,7 @@ namespace RNAssistant.Core.Storage
                     ObserveUnknown(scope, id, ex.Code);
                     throw;
                 }
+                token.ThrowIfCancellationRequested();
                 var exact = Observe(scope, id, bytes, raw);
                 var snapshot = _authority.Capture(scope);
                 var viewName = raw ? ResourceRepresentations.Raw : ResourceRepresentations.Text;

@@ -1,5 +1,22 @@
 # Stabilization progress
 
+## Workspace source preparation queue — 2026-10-16
+
+The shared application now prepares bounded batches through typed bridge/CLI
+commands, with one streamed reader at a time, exact project/source pins, byte
+progress, pause, cancellation, explicit retry and 50-item pages. The queue survives
+Office controller changes; panel disposal cancels and drains it. Runtime clearing
+and CAS maintenance cannot overlap active preparation. No parser, second durable
+store, model run or Office runtime migration was introduced.
+
+Validation: eight focused `workspace application:` checks, four `tabular project:`
+checks, the CLI build and two process-level preparation smokes pass. Evidence covers
+mixed outcomes, read-only snapshots, budgets, drift, cancellation and bridge drain.
+Windows/Office was not run. Prepared bytes are not imported data: loader association
+and queue presentation, parser dispatch, durable batch requests/execution events,
+native execution/CSP and representative 80 MB Excel qualification remain open.
+[Contract and next boundary](../data-templates.md#workspace-source-preparation-queue).
+
 ## Workspace large-source file service — 2026-10-16
 
 The existing file owner now captures large sources through streamed CAS retention

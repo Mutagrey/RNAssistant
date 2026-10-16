@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
@@ -46,14 +47,15 @@ namespace RNAssistant.Core.Storage
             return Snapshot(workspace, _files.ReadText(workspace, ManifestPath(manifestPath)));
         }
 
-        public TabularProjectSnapshot RequireUnchanged(WorkspaceDescriptor workspace, TabularProjectSnapshot expected)
+        public TabularProjectSnapshot RequireUnchanged(WorkspaceDescriptor workspace, TabularProjectSnapshot expected,
+            CancellationToken token = default(CancellationToken))
         {
             if (workspace == null) throw new ArgumentNullException(nameof(workspace));
             if (expected == null) throw new ArgumentNullException(nameof(expected));
             if (!string.Equals(workspace.WorkspaceId, expected.WorkspaceId, StringComparison.Ordinal))
                 throw new TabularProjectException("project_workspace_mismatch",
                     "The opened project belongs to another workspace. Open it explicitly in this workspace.");
-            var observed = _files.ReadText(workspace, ManifestPath(expected.ManifestPath));
+            var observed = _files.ReadText(workspace, ManifestPath(expected.ManifestPath), token);
             if (observed.Reference.Uri != expected.ManifestReference.Uri ||
                 observed.Reference.Revision != expected.ManifestReference.Revision ||
                 observed.ContentSha256 != expected.ContentSha256)

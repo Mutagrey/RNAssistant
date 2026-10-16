@@ -44,6 +44,7 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("revision")] public long Revision { get; internal set; }
         [JsonProperty("workspace")] public WorkspaceSelectionDto Workspace { get; internal set; }
         [JsonProperty("project")] public WorkspaceProjectDto Project { get; internal set; }
+        [JsonProperty("sourceQueueId")] public string SourceQueueId { get; internal set; }
     }
 
     public sealed class WorkspaceReconcileResponse

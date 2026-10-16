@@ -49,11 +49,12 @@ namespace RNAssistant.Cli
                 options = Parse(args.Skip(2).ToArray());
             else if (args[0] == "project")
             {
-                if (args.Length < 2 || args[1] != "create" && args[1] != "open")
-                    throw new ArgumentException("Expected project create or project open.");
+                if (args.Length < 2 || args[1] != "create" && args[1] != "open" && args[1] != "prepare")
+                    throw new ArgumentException("Expected project create, project open or project prepare.");
                 options = Parse(args.Skip(2).ToArray());
                 Required(options, "path");
                 if (args[1] == "create") Required(options, "name");
+                if (args[1] == "prepare") Required(options, "sources-json");
             }
             else options = Parse(args.Skip(1).ToArray());
             if (options.ContainsKey("mutation-policy") && args[0] != "run" && args[0] != "answer" && args[0] != "env")
@@ -68,16 +69,19 @@ namespace RNAssistant.Cli
                 ? AppDataPaths.CreateDefault() : AppDataPaths.CreateForRoot(stateRoot);
             if (args[0] == "project")
             {
-                var projects = new WorkspaceApplicationService(paths);
-                var selection = projects.OpenWorkspace(new OpenWorkspaceRequest {
-                    RootPath = root, ReadOnly = options.ContainsKey("read-only") });
-                var project = args[1] == "create"
-                    ? projects.CreateTabularProject(new CreateTabularProjectRequest {
-                        BindingId = selection.Workspace.BindingId, ManifestPath = Required(options, "path"), Name = Required(options, "name") })
-                    : projects.OpenTabularProject(new WorkspaceProjectPathRequest {
-                        BindingId = selection.Workspace.BindingId, ManifestPath = Required(options, "path") });
-                Output(jsonl, args[1] == "create" ? "project.created" : "project.opened", project);
-                return 0;
+                using (var projects = new WorkspaceApplicationService(paths))
+                {
+                    var selection = projects.OpenWorkspace(new OpenWorkspaceRequest {
+                        RootPath = root, ReadOnly = options.ContainsKey("read-only") });
+                    var project = args[1] == "create"
+                        ? projects.CreateTabularProject(new CreateTabularProjectRequest {
+                            BindingId = selection.Workspace.BindingId, ManifestPath = Required(options, "path"), Name = Required(options, "name") })
+                        : projects.OpenTabularProject(new WorkspaceProjectPathRequest {
+                            BindingId = selection.Workspace.BindingId, ManifestPath = Required(options, "path") });
+                    if (args[1] == "prepare") return PrepareProjectSources(projects, project, options, jsonl);
+                    Output(jsonl, args[1] == "create" ? "project.created" : "project.opened", project);
+                    return 0;
+                }
             }
             var service = new WorkspaceConversationService(paths);
             var workspace = service.OpenWorkspace(root, args[0] == "workspace" && options.ContainsKey("create"),
@@ -849,6 +853,49 @@ namespace RNAssistant.Cli
                 finally { Console.CancelKeyPress -= handler; }
             }
         }
+        private static int PrepareProjectSources(WorkspaceApplicationService projects, WorkspaceStateDto project,
+            Dictionary<string, string> options, bool jsonl)
+        {
+            JArray paths;
+            try { paths = JArray.Parse(Required(options, "sources-json")); }
+            catch (JsonException) { throw new ArgumentException("--sources-json must be a JSON array of workspace-relative paths."); }
+            if (paths.Any(path => path.Type != JTokenType.String))
+                throw new ArgumentException("--sources-json must contain only path strings.");
+            var fileMiB = options.ContainsKey("file-mib") ? PositiveBoundedOption(options, "file-mib", 4096) : 96;
+            var batchMiB = options.ContainsKey("batch-mib") ? PositiveBoundedOption(options, "batch-mib", 65536) : 1024;
+            var page = projects.PrepareSources(new PrepareWorkspaceSourcesRequest {
+                BindingId = project.Workspace.BindingId, ProjectRevision = project.Revision,
+                Paths = paths.Select(path => (string)path).ToList(),
+                MaximumFileBytes = fileMiB * 1024L * 1024, MaximumBatchBytes = batchMiB * 1024L * 1024 });
+            var cancelled = 0;
+            ConsoleCancelEventHandler cancel = (sender, args) => {
+                args.Cancel = true; Interlocked.Exchange(ref cancelled, 1);
+                try { projects.ControlSourceQueue(new WorkspaceSourceControlRequest { QueueId = page.QueueId, Command = WorkspaceSourceCommand.CancelAll }); }
+                catch (ObjectDisposedException) { }
+            };
+            Console.CancelKeyPress += cancel;
+            try
+            {
+                long revision = -1;
+                while (true)
+                {
+                    if (page.Revision != revision) { Output(jsonl, "sources.progress", page); revision = page.Revision; }
+                    if (page.State == WorkspaceSourceQueueState.Finished || page.State == WorkspaceSourceQueueState.Paused) break;
+                    Thread.Sleep(100);
+                    page = projects.ReadSourceQueue(new WorkspaceSourcePageRequest { QueueId = page.QueueId });
+                }
+                // Emit every result as a bounded page, including failures beyond page one.
+                for (var offset = 0; offset < page.Total; offset += 50)
+                    Output(jsonl, "sources.result", projects.ReadSourceQueue(new WorkspaceSourcePageRequest { QueueId = page.QueueId, Offset = offset }));
+                return Volatile.Read(ref cancelled) != 0 ? 130 : page.Failed > 0 || page.Pending > 0 || page.Cancelled > 0 || page.ErrorCode != null ? 5 : 0;
+            }
+            finally
+            {
+                Console.CancelKeyPress -= cancel;
+                projects.CloseAsync().GetAwaiter().GetResult();
+            }
+        }
+
         private static void Help()
         {
             Console.WriteLine("RNAssistant workspace CLI (development profile)");
@@ -857,6 +904,7 @@ namespace RNAssistant.Cli
             Console.WriteLine("rna workspace open <path> [--read-only]");
             Console.WriteLine("rna project create --workspace <path> --path <relative-project.json> --name <text> [--jsonl]  (Data Templates manifest; create only)");
             Console.WriteLine("rna project open --workspace <path> --path <relative-project.json> [--read-only] [--jsonl]  (observe current manifest; no source execution)");
+            Console.WriteLine("rna project prepare --workspace <path> --path <relative-project.json> --sources-json '[\"file.xlsx\",\"file.csv\"]' [--file-mib 96] [--batch-mib 1024] [--read-only] [--jsonl]  (retain sources with progress; no parsing, Ctrl+C cancels)");
             Console.WriteLine("rna env --workspace <path> [--mode agent|plan] [--mutation-policy ask|deny]");
             Console.WriteLine("rna sessions --workspace <path> [--jsonl]");
             Console.WriteLine("rna session create --workspace <path> [--title <text>] [--jsonl]");

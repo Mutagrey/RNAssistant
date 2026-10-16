@@ -2,5 +2,7 @@
   <ItemGroup>
     <Compile Include="$(MSBuildThisFileDirectory)WorkspaceApplicationService.cs" Link="Application\WorkspaceApplicationService.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Contracts\WorkspaceProjectContracts.cs" Link="Application\Contracts\WorkspaceProjectContracts.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Contracts\WorkspaceSourceContracts.cs" Link="Application\Contracts\WorkspaceSourceContracts.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)WorkspaceSourceQueue.cs" Link="Application\WorkspaceSourceQueue.cs" />
   </ItemGroup>
 </Project>

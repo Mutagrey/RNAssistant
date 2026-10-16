@@ -30,6 +30,8 @@ namespace RNAssistant.Office.WebView
         private bool _disposed;
         private readonly TaskCompletionSource<bool> _requestsDrained =
             new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource<bool> _sourceWorkDrained =
+            new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly object _resourceChangesSync = new object();
         private readonly Dictionary<string, ResourceChangedMessage> _resourceChanges = new Dictionary<string, ResourceChangedMessage>();
         private readonly Timer _resourceChangesTimer;
@@ -47,6 +49,7 @@ namespace RNAssistant.Office.WebView
         private async Task DrainRequestsAsync()
         {
             await _requestsDrained.Task.ConfigureAwait(false);
+            await _sourceWorkDrained.Task.ConfigureAwait(false);
             await _controller.InboxWorkersDrained.ConfigureAwait(false);
         }
 
@@ -178,6 +181,16 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.ReconcileWorkspaceFile:
                         var workspaceReconcile = Payload<WorkspaceProjectPathRequest>(payload);
                         responsePayload = await RunBridgeWorkAsync(() => _workspaces.ReconcileFile(workspaceReconcile), cancellationToken).ConfigureAwait(false);
+                        break;
+                    case BridgeOperationId.PrepareWorkspaceSources:
+                        var sourcePrepare = Payload<PrepareWorkspaceSourcesRequest>(payload);
+                        responsePayload = await RunBridgeWorkAsync(() => _workspaces.PrepareSources(sourcePrepare), cancellationToken).ConfigureAwait(false);
+                        break;
+                    case BridgeOperationId.GetWorkspaceSourceQueue:
+                        responsePayload = _workspaces.ReadSourceQueue(Payload<WorkspaceSourcePageRequest>(payload));
+                        break;
+                    case BridgeOperationId.ControlWorkspaceSourceQueue:
+                        responsePayload = _workspaces.ControlSourceQueue(Payload<WorkspaceSourceControlRequest>(payload));
                         break;
                     case BridgeOperationId.ReportClientTiming:
                         var clientTiming = Payload<ClientTimingPayload>(payload);
@@ -475,6 +488,7 @@ namespace RNAssistant.Office.WebView
                         responsePayload = await _controller.TestModelConnectionAsync(cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.ClearRuntimeData:
+                        _workspaces.EnsureNoSourceWork();
                         responsePayload = Bootstrap(_controller.ClearRuntimeData());
                         _workspaces.Reset();
                         break;
@@ -875,6 +889,13 @@ namespace RNAssistant.Office.WebView
                 _resourceChangesTimer.Dispose();
             }
             _cancellations.Dispose();
+            _ = DrainWorkspaceSourcesAsync();
+        }
+
+        private async Task DrainWorkspaceSourcesAsync()
+        {
+            try { await Task.Run(_workspaces.CloseAsync).ConfigureAwait(false); _sourceWorkDrained.TrySetResult(true); }
+            catch (Exception error) { _sourceWorkDrained.TrySetException(error); }
         }
 
         private sealed class BridgeSwitchBusyException : InvalidOperationException

@@ -77,6 +77,13 @@ and provisional index visitors.
 
 ## Fail-closed collection
 
+Background workspace source preparation joins the same protocol through
+`RuntimeStorageActivity`: it acquires `run-registry.lck` before opening a unique
+`run_storage_*.lck`, releases coordination and holds its activity lock until work
+stops. Existing external-run detection therefore blocks maintenance without a
+synthetic chat/run or another index. A separate cancellable `source-reader.lck`
+serializes heavy source reads without holding maintenance coordination while waiting.
+
 Collection always performs a fresh audit inside the same maintenance window; it never trusts a previous UI report. The gate prevents new chat/VBA operations from starting and rejects collection while any local or external run remains active.
 
 Deletion is allowed only when reachability is complete. Any unreadable, corrupt, unsupported, misplaced, or projection-invalid source blocks all deletion. Managed roots and discovered source/blob entries that are reparse points, symlinks, or junctions are never traversed and are treated as unreadable/blocking. An incomplete final JSONL row also blocks GC even though normal append recovery can later trim that row. Missing or corrupt referenced content is never an orphan and is never deleted.
