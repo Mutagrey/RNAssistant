@@ -1,7 +1,8 @@
 # Data Templates
 
-Status: portable M0 proof, M1 project-manifest foundation and source-selection UI
-implemented (2026-10-16). Extraction/import is not implemented.
+Status: portable M0 proof, M1 project-manifest/source-selection foundation and the
+first M2 matrix-language slice implemented (2026-10-16). Matrix extraction works
+over normalized snapshots; file readers, application import and publication remain open.
 Owner: Data Templates domain; portable JS in `web/tabular`, shared manifest storage
 in Core `TabularProjectStore` over `WorkspaceFileService`.
 This is the canonical domain contract; planned scope is marked separately from
@@ -11,25 +12,34 @@ owner. Architecture decision: [ADR-0014](decisions/ADR-0014-data-templates.md).
 
 ## Current slice
 
-[The M0 page](../web/tabular/index.html) runs a normalized, bounded capture through
+[The core probe](../web/tabular/index.html) offers two explicit operations through
+the same executor: M0 snapshot inspection and [M2 matrix extraction](#matrix-language-and-execution-v1).
+For inspection it runs a normalized, bounded capture through
 the same plain JavaScript in a dedicated Worker or explicit cooperative mode.
 Select [disjoint-capture.json](../web/tabular/examples/disjoint-capture.json) with
 the file picker. It includes two separated value bands and their headers, plus a
 right-hand year marker. The result preserves `J12` as row 12 / column 10 and keeps
 `P5` / `P12` at their original addresses. No period or total is inferred yet.
 
-The page remains a capture probe, without template language, published datasets
-or Office integration. It does not read a live workbook, parse XLSX/YAML or write
-project files. Download produces only probe result JSON. Shared native manifest
-creation/opening is described below; no `tabular.*` tool/skill is exposed.
+For extraction select `Выполнить шаблон` and
+[matrix-extraction.json](../web/tabular/examples/matrix-extraction.json). It produces
+16 canonical observations with source/rule evidence, including two years and
+separate annual totals. The download is a report with at most 20 preview records,
+not a published dataset. Neither operation reads live Excel/XLSX/YAML or writes
+project files. Native manifest creation/opening is described below; no `tabular.*`
+tool/skill is exposed and the main loader is not yet connected to this executor.
 
 | Module | Responsibility |
 |---|---|
 | `selectors.js` | Bounded geometry and physical-coordinate set operations |
 | `snapshot.js` | Closed normalized cell schema, immutable reader, explicit coverage |
-| `engine.js` | Pure inspection; receives cancellation/progress/yield callbacks |
+| `json.js` | Bounded JSON decoding, duplicate/reserved-key and non-finite-number refusal |
+| `expression.js` | Expression syntax tree, type/scope binding to instructions, explicit value conversion and evidence |
+| `template.js` | Closed matrix/dictionary schemas, context dependency order and immutable matrix plan |
+| `matrix.js` | Canonical records, grain/unit checks, lineage and awaited provisional result batches |
+| `engine.js` | The two bounded operations over immutable input; no DOM or publication |
 | `executor.js` | One active job, Worker lifecycle, deadline, cancellation, contract revision check |
-| `worker.js` | Fixed shipped module loading and a single inspection message contract |
+| `worker.js` | Fixed shipped modules, declared operations and one acknowledged batch in flight |
 | `probe.js` | File picker, explicit mode, result presentation and download |
 
 Core modules have no DOM, filesystem, network, Office or native bridge access.
@@ -41,6 +51,8 @@ vendor dependency was added. Existing HTML artifacts and limits are unchanged.
 The version-1 **probe request** has only `version`, `snapshot`, `bounds`,
 `selection`, and optional `maxCells`. It is not the future project/template
 format. Unknown fields and versions fail; selectors are never executable JS.
+JSON input rejects duplicate keys (including escaped duplicates), reserved
+prototype keys, non-finite numbers and nesting beyond 32 levels before domain validation.
 
 The snapshot has `version`, `source`, `sheet`, and `ranges`. Each range has an
 explicit A1 `address` and a dense rectangular `cells` array. Array positions are
@@ -89,7 +101,7 @@ outside bounds fail; nothing is silently clipped. An empty selection is allowed.
 
 These limits bound this probe only. They do not increase HTML aggregate, transfer,
 Resource Fabric or web verification limits. The browser check prints exact asset
-count/bytes; M0 has eight executable/presentation files and no vendors. Future
+count/bytes; the current probe has twelve executable/presentation files and no vendors. Future
 YAML/XLSX dependencies need a separate size/license/capability review.
 
 ## Execution and portability
@@ -97,7 +109,8 @@ YAML/XLSX dependencies need a separate size/license/capability review.
 The executor outlives any result viewer. Closing the viewer does not cancel a
 run; cancellation, reset or disposal settles its Promise and releases resources.
 It rejects concurrent runs, stale protocol/revision handshakes and foreign job
-responses. Each Worker loads fixed relative scripts once, accepts one job and is
+responses. Worker protocol v2 declares `inspect` and `extract`; old handshakes fail
+explicitly. Each Worker loads fixed relative scripts once, accepts one job and is
 terminated on completion, error, cancellation or deadline. Worker absence or
 load failure returns `EXECUTOR_UNAVAILABLE`; there is no automatic fallback.
 The deadline includes startup and is checked against a monotonic clock before
@@ -116,6 +129,150 @@ native execution leases are not implemented. A Worker is not a permission
 sandbox. Imported JS is unsupported; the root RNAssistant UI must never execute
 project scripts through this probe. CSP and native-origin enforcement for the
 eventual WebView2 execution realm still require implementation and qualification.
+
+## Matrix language and execution v1
+
+This is the first supported M2 profile, not the full proposal's language or a
+production dataset publication format. The runnable fixture is the authoritative
+worked example alongside these rules and the closed validators. JSON is the
+implemented template notation; YAML is deferred as another decoder into the same
+syntax/model, never another interpreter or synchronized source file.
+
+The entry envelope is `{version:1, kind:"matrix-extraction", template, snapshot,
+dictionaries, dataset}`. Its immutable JSON text captures all inputs for this
+bounded run. `template.language:1` and `template.kind:"matrix"` select the profile.
+All fields shown in the example are required; unknown fields/versions are errors.
+No project/source/module authority is granted by IDs, revision labels or reports.
+
+The implementation separates these boundaries:
+
+1. `RNTabularExpression.parse` produces syntax nodes with character spans. It does
+   not read cells or execute expressions.
+2. `RNTabularExpression.compile` resolves names, permitted functions and types to
+   instructions; each expression retains its rule path, cell reads and context
+   references. It rejects variables outside their declared axis scope.
+3. `RNTabularTemplate.compile` orders context dependencies, rejects cycles and
+   conflicting columns, projects selectors to physical row/column axes, and
+   checks bounds/output budgets. The immutable plan contains no cells, UI, file
+   handles or authority. It is transient, not a second editable template format.
+   Execution accepts only plans produced by this compiler instance.
+4. `RNTabularMatrix.execute` binds headers/dictionaries against the immutable
+   snapshot, then yields records to a required asynchronous batch consumer. The
+   application owns staging, cancellation and any later publication.
+
+### Supported language profile
+
+Expression grammar is deliberately limited to JSON string literals, unsigned
+integer literals, `row`, `col`, `ctx.name`, and registered function calls. Nested
+calls are supported; arbitrary property access, executable JS, infix arithmetic,
+conditionals, loops and imported functions are not. Unsupported syntax/functions
+fail rather than being interpreted by JS. Diagnostic paths contain a JSON field
+path and expression character offset; source read/conversion errors also carry
+the available cell location.
+
+| Function | Typed result / rule |
+|---|---|
+| `cell("A", row)`, `cell(col, 5)` | Cell; literal column letters or `col`, literal positive row or `row`. Dynamic addresses are refused. |
+| `text(cell)` | Text from text/finite numeric cells; no implicit trimming or case folding for dictionary keys. Unsafe integer keys fail. |
+| `raw(cell)` | Tagged raw cell, preserving missing/error distinctions. |
+| `parse.year(text)` | Explicit four-digit year, 1000–9999. No guessed year. |
+| `parse.monthRu(text)` | Declared Russian month name/abbreviation, optional final dot; no date-system inference. |
+| `period.month(year, month)`, `period.year(year)` | Distinct monthly and annual periods. |
+| `lookup("parameters" or "units", text, "scope")` | Exact scoped dictionary target; dictionary and scope names are literals. Unknown/ambiguous mappings fail. |
+| `decimal(raw, "ru-RU" or "en-US")` | Canonical decimal text or a tagged missing value; explicit numeric locale. |
+
+Context expressions cannot use `row`/`col`. Row parameter/unit expressions can
+use `row`; column period expressions can use `col`; the value expression can use
+both. Context dependencies are evaluated once in topological order. Selectors
+retain M0 geometry/precedence and are projected to sorted unique physical axes.
+Each column belongs to exactly one semantic group; overlap is an error. Multiple
+groups do not shift physical coordinates across gaps.
+
+This profile puts parameters on rows and periods on columns. Horizontal parameter
+axes, multiple blocks, quarter/date functions, bindings, review proposals,
+aggregation, joins and extensions are later explicit capabilities. This resolves
+the original proposal's §6.4/§6.7 ambiguity: their possible architecture is not a
+claim that both orientations already work in v1. The current closed schema does
+not silently accept deferred constructs or policy fields.
+
+### Canonical observations and value semantics
+
+Each record contains `parameterId`, named `dimensions`, `period`, tagged `value`,
+`unitId`, `role`, `temporalMeaning` and `provenance`. Parameter IDs and dimension
+values are text. Supported roles are `observation` and `reported_total`; annual
+totals are not summed with months. Parameter metadata declares its dimension names,
+decimal value type, canonical unit and temporal meaning. The source unit must
+match exactly; implicit scaling/conversion is forbidden in this slice.
+
+The explicit uniqueness key within this extraction is parameter + dimension
+values + complete period + role. A duplicate is `DUPLICATE_OBSERVATION`, not an
+automatic sum/deduplication. This is a single-source example; cross-source inclusion
+and consolidation semantics must be declared before batch dataset publication.
+No stable observation identity or native dataset handle is synthesized by the engine.
+
+Decimal output is `{kind:"decimal", value:"1234.5"}`: canonical base-10 text,
+at most 38 total digits and 18 fractional places, without rounding or arithmetic.
+Leading/trailing insignificant zeros and negative zero are normalized. Russian
+text uses decimal comma and optional groups of three separated by space/NBSP/narrow
+NBSP; English text uses decimal point and optional comma groups. Invalid grouping,
+locale mismatch and overflow fail. Text decimals never pass through JS Number.
+Numeric source cells retain their already-rounded IEEE-754 value; unsafe integers
+are rejected and lost input precision cannot be recovered. Identifiers and
+explicitly textual high-precision values remain text. Future numeric readers need
+a versioned exact-decimal/raw-lexeme capability; they must not silently relabel
+numeric source cells as text to conceal the source type.
+
+Missing values preserve distinct reasons: `blank`, `empty-text`, `source-error`
+with the error detail, and `unavailable` with the capture reason. Zero is a decimal.
+Whitespace-only numeric text is invalid, not silently blank. A required missing
+header/key is an error rather than an invented parameter or period.
+
+Provenance has separate value/parameter/unit/period rule paths, source evidence
+including captured cell values, and exact scoped mapping decisions. Excel addresses
+are confined to `{kind:"cell", sheet, row, column, address}` source locations, not
+canonical business keys. For example, the July 2026 volume record uses `J12` for
+its value, `A12` for parameter code `0012`, `B12` for the unit, `J5` for July and
+`P5` for 2026. `P12` remains a separate reported annual total.
+
+### Batches, completion and limits
+
+`executor.extract(inputText, {signal, deadlineMs, onProgress, onBatch})` runs through
+the same application-independent executor as inspection. `onBatch` is required
+and awaited; Worker protocol v2 sends the next batch only after acknowledgement of
+the current sequence. Final summary counts must match acknowledged batches. There
+is no application processing queue yet; the executor still accepts one job.
+
+Batches are **provisional**. A consumer must discard/unpublish staging after an
+error, deadline, cancellation or consumer failure. Receiving a batch or returning
+from `onBatch` cannot activate a dataset. Only successful operation resolution
+establishes complete extraction; native publication still requires its separate
+guards/evidence/read-back. A final `coverage.complete` refers to execution over
+required captured dependencies, not absence of missing values or suitability for
+all workbooks. Missing-value counts are reported separately.
+
+| Bound | Current value |
+|---|---|
+| Input / snapshot / selector limits | Existing probe limits above; no increase |
+| Expression text / nodes / depth | 1,024 characters / 128 nodes / 16 levels |
+| Context expressions / column groups | 32 / 32 |
+| Parameters or units / mappings per dictionary | 1,000 / 4,000 |
+| Dataset dimensions / output records | 16 / 10,000 |
+| Record JSON including lineage | 65,536 UTF-16 code units |
+| Batch | Up to 64 records and 262,144 summed record JSON code units, plus array delimiters |
+| Deadline | Existing explicit 1–30,000 ms probe budget |
+
+Binding/extraction yield at bounded checkpoints and expose record progress. Hard
+Worker cancellation also works while waiting for a batch consumer. The explicit
+cooperative mode remains for the bounded shipped fixture/core; synchronous JSON
+decoding/compilation are bounded but cannot be interrupted mid-call there. Neither
+mode demonstrates arbitrary-extension isolation or 80 MB XLSX parsing. Axes are
+compact in the plan, but the existing bounded selector compiler and snapshot
+reader still materialize cells; real readers require the large-file gate below.
+
+The standalone probe stores only the first 20 records for display/download and
+marks whether that preview is complete. It never accumulates an unbounded result
+array. A failed run clears the previous report. Full dataset export, exact module
+hash pins, live capture, template publication and loader integration remain open.
 
 ## Relationship to workspace-first
 
@@ -338,6 +495,11 @@ template/mapping and publication are separate steps. Source identity must not
 require a workbook or sheet. Excel selectors stay specific to the matrix path.
 Canonical observations and entity/transaction tables remain independent of input
 format. Native C# integration will not duplicate these readers or the JS engine.
+The future source contract must expose its shape/capabilities explicitly: matrix
+cells, CSV records/fields or JSON object paths. `WorkbookReader` applies only to
+the matrix branch. Readers share typed values/diagnostics and tagged source
+locations; they must not invent Excel addresses for CSV/JSON or flatten arbitrary
+objects to fit the matrix grammar. Only the normalized matrix adapter exists now.
 
 | Planned reader | Configuration and source evidence |
 |---|---|
@@ -470,9 +632,14 @@ versioned schema and fixtures used by the engine.
 | Original stage | UI delivery |
 |---|---|
 | M1 source selection (implemented) | Responsive modular viewer, paged file/folder intake, cancellable enumeration progress and explicit metadata-only states. Persisted source association and typed extraction commands remain open. |
+| M2 matrix-language foundation (implemented) | JSON template → typed plan → normalized snapshot → batched canonical observations with lineage, in the separate portable probe. Native integration and full readers remain open. |
 | M1–M3 | First real end-to-end flow for a supported source: loading, preview, parameter/mapping inspection, diagnostics and draft/test/publish through the common domain service. Include the bounded processing queue, off-UI readers, resource budgets and cancellation from the first reader. Start with the bounded XLSX matrix; add CSV/JSON readers behind the same workflow and their own fixtures. Deliver usable controls alongside each capability. |
 | M4 | Portable picker/import/export and the format/help reference using the same engine and documented capability differences. |
 | M5 | Extend the existing queue with advanced batch execution, scoped dictionary/mapping edits, comparison/consolidation, multiple blocks and output workbook templates. |
+
+M1 file read-back establishes stored bytes, not a validated template publication.
+Domain draft/test/publish in M3 depends on M2 semantics and exact input/test evidence;
+the original plan's M1 publication wording must not bypass that dependency.
 
 Feature code belongs in thematic `app-*.js` modules; `app.js` only binds shared
 navigation/rendering. UI and agent operations consume the same typed domain
@@ -491,7 +658,7 @@ manifest implementation:
 | Live Excel capture | `ExcelResourceProvider` resolves explicit ranges through `ExcelReadService` and the bound document scope. It does not yet feed this probe; capture consistency, unsaved values, dependencies and richer cell availability remain open. |
 | Application-owned execution | `AssistantPaneControl` owns the current WebView2 and trusts its exact root document; frame navigation is limited to about:blank/srcdoc. A browser proof does not authorize broadening that policy or prove WebView2 Worker behavior. |
 | Publication | Draft/test/publish and exact source/module/dictionary pins must use existing authority/journal owners. Verified manifest creation is not a template publication; probe JSON cannot authorize one. |
-| Source input and transfer | The viewer selects files/folders with XLSX/CSV/JSON hints; no source parser, native association or persisted selection is connected yet. Picker/download works for the separate M0 probe. Project closure and complete export/import remain open. |
+| Source input and transfer | The viewer selects files/folders with XLSX/CSV/JSON hints; no source parser, native association or persisted selection is connected yet. The separate probe executes the bounded M2 matrix against normalized snapshots. Project closure and complete export/import remain open. |
 | Large files and batch execution | Enumeration progress and bounded list rendering are implemented. The application-owned queue, off-UI readers, hard cancellation/resource budgets and real 80 MB-class qualification remain open; see the [processing contract](#large-files-and-processing-queue--planned). |
 
 Next slices, coordinated with the workspace owners:
@@ -501,9 +668,11 @@ Next slices, coordinated with the workspace owners:
    and host adapters separate; Office remains Framework 4.8 without a direct
    reference to the net8.0 Runtime assembly. Host-neutral independent work below
    does not wait for Office qualification.
-2. Extend the [loader/project UI](#planned-loader-and-project-ui) with source
-   association, bounded format readers and canonical format examples alongside
-   the first supported source workflow. Deliver it incrementally through M1–M3.
+2. Use the implemented [matrix contract](#matrix-language-and-execution-v1) and
+   independent oracle to connect source association, bounded format readers and
+   the [loader/project UI](#planned-loader-and-project-ui). Qualify real reader
+   capabilities/memory before raising prototype limits. Deliver incrementally
+   through M1–M3 using the existing workspace/execution owners.
 3. Attach the exact Excel source independently of project identity, then connect
    capture/execution and domain draft/test/publish. Keep source grants, project
    write authority and immutable evidence separate. Multi-file activation remains
@@ -516,6 +685,15 @@ full matrix DSL is not claimed. Tracked gates live in
 [the risk register](stabilization/RISK_REGISTER.md#data-templates-integration-gates--2026-10-16).
 
 ## Verification
+
+`tabular-matrix.test.js` covers a hand-authored 16-record oracle with disjoint axes,
+two years, annual roles, exact decimal/missing semantics and rule/cell/mapping
+lineage. It rejects invalid schemas/expressions, duplicate JSON keys, context cycles,
+ambiguous mappings, incompatible units/grain and missing captures. Larger normalized
+fixtures exercise bounded batches, backpressure, cancellation, consumer errors and
+failure after provisional output. `tabular-browser.test.js` checks real Worker
+acknowledgement/sequence guards, consumer failure/cancellation and complete record
+parity with cooperative execution and the offline file-picker report.
 
 Shared project storage: Harness filter `tabular project:` covers create/reopen,
 read-only refusal, relocation, malformed metadata, foreign-workspace binding,
@@ -547,6 +725,7 @@ For JS changes, run only the affected scripts (Playwright/browser must already b
 
 ```sh
 node tests/web/tabular-core.test.js
+node tests/web/tabular-matrix.test.js
 node tests/web/tabular-browser.test.js
 ```
 

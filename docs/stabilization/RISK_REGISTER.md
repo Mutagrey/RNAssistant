@@ -12,8 +12,8 @@ exact-build gate.
 
 Open feature gates, not newly reproduced baseline failures. Owner: Data Templates
 application integration, with existing file/resource/WebView host owners.
-The [portable M0 proof](../data-templates.md) passes focused JS/browser checks;
-it has no native tools or publication authority.
+The [portable M0/M2 core](../data-templates.md) passes focused JS/browser checks;
+matrix records/provisional batches have no native tools or publication authority.
 
 - Shared project commands now serve CLI and a thin Office panel through a
   compatible application source module. Core file checks, fake-controller bridge
@@ -31,6 +31,9 @@ it has no native tools or publication authority.
 - No project publication/export is implemented. Probe JSON cannot act as a
   passing test receipt. Close with existing journal/authority publication,
   stale-input rejection, read-back and complete portable dependency capture.
+  M2 batch acknowledgement is consumption, not publication: a later failure must
+  leave earlier batches unpublished. The future native sink needs staging/cleanup
+  and unknown-write reconciliation through the existing owner.
 - The loader's enumeration progress and 50-row pages do not prove processing of
   many large files. Close the [queue/large-file gate](../data-templates.md#large-files-and-processing-queue--planned)
   with workspace-owned dispatch, bounded off-UI readers, hard cancellation,

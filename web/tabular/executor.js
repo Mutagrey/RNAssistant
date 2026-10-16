@@ -17,18 +17,20 @@
         const engine = root.RNTabularEngine, expectedRevision = options.expectedRevision || engine.revision;
         let active = null, disposed = false, sequence = 0;
 
-        function inspect(input, settings = {}) {
+        function run(operation, input, settings = {}) {
             if (disposed) return Promise.reject(failure("EXECUTOR_DISPOSED", "Executor is disposed."));
             if (active) return Promise.reject(failure("EXECUTOR_BUSY", "A run is already active."));
             if (typeof input !== "string" || input.length > engine.maxInputCharacters)
                 return Promise.reject(failure("INPUT_LIMIT", "Input is not bounded JSON text."));
+            if (operation === "extract" && typeof settings.onBatch !== "function")
+                return Promise.reject(failure("RESULT_SINK_REQUIRED", "Extraction requires a provisional batch consumer."));
             const deadlineMs = settings.deadlineMs === undefined ? 5000 : settings.deadlineMs;
             if (!Number.isInteger(deadlineMs) || deadlineMs < 1 || deadlineMs > 30000)
                 return Promise.reject(failure("EXECUTOR_DEADLINE_INVALID", "Deadline must be 1 to 30000 ms."));
             if (settings.signal && settings.signal.aborted)
                 return Promise.reject(failure("EXECUTION_CANCELLED", "Execution was cancelled."));
             return new Promise((resolve, reject) => {
-                const job = { id: ++sequence, stopped: false, worker: null, timer: null };
+                const job = { id: ++sequence, stopped: false, worker: null, timer: null, batchPending: false, batches: 0, records: 0 };
                 active = job;
                 const abort = () => finish(failure("EXECUTION_CANCELLED", "Execution was cancelled."));
                 function finish(error, result) {
@@ -60,8 +62,9 @@
                     if (mode === "cooperative") {
                         if (engine.revision !== expectedRevision)
                             throw failure("EXECUTOR_REVISION_MISMATCH", "Reload the shipped runtime before executing.");
-                        engine.inspect(input, { isCancelled: () => !current(),
-                            yieldControl: () => new Promise(done => setTimeout(done, 0)), onProgress: progress
+                        engine[operation](input, { isCancelled: () => !current(),
+                            yieldControl: () => new Promise(done => setTimeout(done, 0)), onProgress: progress,
+                            onBatch: settings.onBatch
                         }).then(result => { if (current()) finish(null, result); }, error => finish(error));
                         return;
                     }
@@ -69,7 +72,7 @@
                         throw failure("EXECUTOR_UNAVAILABLE", "Worker execution is unavailable in this context.");
                     job.worker = new root.Worker(workerUrl);
                     let ready = false;
-                    job.worker.onmessage = event => {
+                    job.worker.onmessage = async event => {
                         if (!current()) return;
                         try {
                             const message = event.data;
@@ -79,17 +82,35 @@
                                 if (message.protocol !== engine.protocol || message.revision !== expectedRevision)
                                     throw failure("EXECUTOR_REVISION_MISMATCH", "Worker runtime revision differs from its owner.");
                                 ready = true;
-                                job.worker.postMessage({ type: "inspect", id: job.id, protocol: engine.protocol,
+                                job.worker.postMessage({ type: operation, id: job.id, protocol: engine.protocol,
                                     revision: expectedRevision, input });
                             } else if (!ready || message.id !== job.id) {
                                 throw failure("EXECUTOR_PROTOCOL_INVALID", "Worker response belongs to another run.");
                             } else if (message.type === "progress") progress(message.progress);
+                            else if (message.type === "batch" && operation === "extract") {
+                                const batch = message.batch, limits = root.RNTabularTemplate.limits;
+                                if (job.batchPending || !batch || batch.version !== 1 || batch.sequence !== job.batches + 1 ||
+                                    !Array.isArray(batch.records) || !batch.records.length || batch.records.length > limits.batchRecords ||
+                                    job.records + batch.records.length > limits.records || JSON.stringify(batch.records).length > limits.batchCharacters + limits.batchRecords + 2)
+                                    throw failure("EXECUTOR_PROTOCOL_INVALID", "Invalid or out-of-order result batch.");
+                                job.batchPending = true;
+                                const batchSequence = batch.sequence, recordCount = batch.records.length;
+                                await settings.onBatch(batch);
+                                if (!current()) return;
+                                job.records += recordCount; job.batches++; job.batchPending = false;
+                                job.worker.postMessage({ type: "ack", id: job.id, sequence: batchSequence, protocol: engine.protocol });
+                            }
                             else if (message.type === "result") {
                                 if (!message.result || message.result.version !== 1 || message.result.engineRevision !== expectedRevision)
                                     throw failure("EXECUTOR_PROTOCOL_INVALID", "Worker returned a different result contract.");
+                                if (operation === "extract" && (job.batchPending || message.result.kind !== "matrix-extraction-result" ||
+                                    message.result.recordCount !== job.records || message.result.batchCount !== job.batches || !message.result.coverage || !message.result.coverage.complete))
+                                    throw failure("EXECUTOR_PROTOCOL_INVALID", "Extraction summary does not match acknowledged batches.");
                                 finish(null, message.result);
                             } else if (message.type === "error" && message.error) {
-                                finish(failure(message.error.code || "EXECUTION_FAILED", message.error.message, message.error.path));
+                                const error = failure(message.error.code || "EXECUTION_FAILED", message.error.message, message.error.path);
+                                if (message.error.location) error.location = message.error.location;
+                                finish(error);
                             } else throw failure("EXECUTOR_PROTOCOL_INVALID", "Unexpected Worker message.");
                         } catch (error) { finish(error); }
                     };
@@ -102,7 +123,8 @@
             });
         }
 
-        return Object.freeze({ inspect, dispose: () => {
+        return Object.freeze({ inspect: (input, settings) => run("inspect", input, settings),
+            extract: (input, settings) => run("extract", input, settings), dispose: () => {
             disposed = true;
             if (active) active.stop(failure("EXECUTOR_DISPOSED", "Executor was disposed during the run."));
         } });

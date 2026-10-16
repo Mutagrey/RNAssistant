@@ -3,7 +3,7 @@
 
     const selectors = root.RNTabularSelectors, snapshots = root.RNTabularSnapshot;
     const fail = selectors.fail;
-    const revision = "tabular-m0-1";
+    const revision = "tabular-m2-1";
     const maxInputCharacters = 1000000;
 
     // A bounded capture probe, not the template DSL or a publication operation.
@@ -15,9 +15,7 @@
         check();
         if (typeof requestText !== "string" || !requestText.length || requestText.length > maxInputCharacters)
             fail("INPUT_LIMIT", "", "Input must be at most 1000000 UTF-16 code units.");
-        let input;
-        try { input = JSON.parse(requestText); }
-        catch (_) { fail("JSON_INVALID", "", "Input is not valid JSON."); }
+        const input = root.RNTabularJson.parse(requestText);
         snapshots.object(input, ["version", "snapshot", "bounds", "selection", "maxCells"], "request");
         if (input.version !== 1) fail("VERSION_UNSUPPORTED", "version", "Unsupported probe request version.");
         const reader = snapshots.open(input.snapshot);
@@ -41,5 +39,16 @@
             counts: Object.freeze(counts), cells: Object.freeze(cells) });
     }
 
-    root.RNTabularEngine = Object.freeze({ revision, protocol: 1, maxInputCharacters, inspect });
+    async function extract(requestText, hooks) {
+        if (hooks.isCancelled()) fail("EXECUTION_CANCELLED", "", "Extraction was cancelled.");
+        const input = root.RNTabularJson.parse(requestText);
+        root.RNTabularTemplate.fields(input, ["version", "kind", "template", "snapshot", "dictionaries", "dataset"], "/");
+        if (input.version !== 1 || input.kind !== "matrix-extraction") fail("VERSION_UNSUPPORTED", "/", "Expected matrix-extraction version 1.");
+        const plan = root.RNTabularTemplate.compile(input.template);
+        const dictionaries = root.RNTabularTemplate.openDictionaries(input.dictionaries), reader = snapshots.open(input.snapshot);
+        const result = await root.RNTabularMatrix.execute(plan, reader, dictionaries, input.dataset, hooks);
+        return Object.freeze({ ...result, engineRevision: revision });
+    }
+
+    root.RNTabularEngine = Object.freeze({ revision, protocol: 2, maxInputCharacters, inspect, extract });
 }(globalThis));

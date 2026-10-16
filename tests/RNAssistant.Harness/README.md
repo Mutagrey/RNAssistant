@@ -1,10 +1,14 @@
 # RNAssistant Harness
 
-Data Templates M0 is JavaScript-only: run `node tests/web/tabular-core.test.js`
-and `node tests/web/tabular-browser.test.js` (Playwright, optional
+Data Templates M0/M2 is JavaScript-only: run `node tests/web/tabular-core.test.js`,
+`node tests/web/tabular-matrix.test.js` and `node tests/web/tabular-browser.test.js` (Playwright, optional
 `BROWSER_EXECUTABLE`). They cover bounded selectors, immutable capture, Worker
 cancel/deadline/reload, viewer-independent lifetime and offline file:// parity.
-They require no Harness build and do not qualify Office capture or publication.
+Matrix checks add an independent 16-record oracle, typed expressions/plans,
+scoped mappings, decimal/missing semantics, source/rule lineage, bounded batches
+and consumer backpressure/failure. Browser checks cover batch acknowledgement,
+cancellation and offline matrix parity. These require no Harness build and do not
+qualify Office capture, real XLSX parsing or publication.
 The scope and manual probe are in [Data Templates](../../docs/data-templates.md).
 
 Data Templates shared manifest storage: filter `tabular project:` checks

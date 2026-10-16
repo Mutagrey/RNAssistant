@@ -1,0 +1,360 @@
+{
+  "version": 1,
+  "kind": "matrix-extraction",
+  "template": {
+    "language": 1,
+    "kind": "matrix",
+    "id": "production-form",
+    "revision": 1,
+    "sheet": "Данные",
+    "bounds": "A1:AG20",
+    "context": {
+      "yearA": {
+        "expr": "parse.year(text(cell(\"P\", 5)))"
+      },
+      "yearB": {
+        "expr": "parse.year(text(cell(\"AD\", 5)))"
+      }
+    },
+    "rows": {
+      "select": "A12:A13",
+      "parameter": {
+        "expr": "lookup(\"parameters\", text(cell(\"A\", row)), \"production-form\")"
+      },
+      "unit": {
+        "expr": "lookup(\"units\", text(cell(\"B\", row)), \"production-form\")"
+      }
+    },
+    "columns": [
+      {
+        "id": "months-a",
+        "select": "C:D | J:K",
+        "period": {
+          "expr": "period.month(ctx.yearA, parse.monthRu(text(cell(col, 5))))"
+        },
+        "role": "observation"
+      },
+      {
+        "id": "annual-a",
+        "select": "P",
+        "period": {
+          "expr": "period.year(ctx.yearA)"
+        },
+        "role": "reported_total"
+      },
+      {
+        "id": "months-b",
+        "select": "R",
+        "period": {
+          "expr": "period.month(ctx.yearB, parse.monthRu(text(cell(col, 5))))"
+        },
+        "role": "observation"
+      },
+      {
+        "id": "annual-b",
+        "select": "AD",
+        "period": {
+          "expr": "period.year(ctx.yearB)"
+        },
+        "role": "reported_total"
+      },
+      {
+        "id": "later-year",
+        "select": "AF",
+        "period": {
+          "expr": "period.year(parse.year(text(cell(col, 5))))"
+        },
+        "role": "observation"
+      }
+    ],
+    "value": {
+      "expr": "decimal(raw(cell(col, row)), \"ru-RU\")"
+    }
+  },
+  "snapshot": {
+    "version": 1,
+    "source": {
+      "kind": "fixture",
+      "label": "Производство: разрывы, два года и годовые итоги"
+    },
+    "sheet": "Данные",
+    "ranges": [
+      {
+        "address": "C5:D5",
+        "cells": [
+          [
+            {
+              "kind": "text",
+              "value": "янв"
+            },
+            {
+              "kind": "text",
+              "value": "фев"
+            }
+          ]
+        ]
+      },
+      {
+        "address": "J5:K5",
+        "cells": [
+          [
+            {
+              "kind": "text",
+              "value": "июл"
+            },
+            {
+              "kind": "text",
+              "value": "авг"
+            }
+          ]
+        ]
+      },
+      {
+        "address": "P5",
+        "cells": [
+          [
+            {
+              "kind": "number",
+              "value": 2026
+            }
+          ]
+        ]
+      },
+      {
+        "address": "R5",
+        "cells": [
+          [
+            {
+              "kind": "text",
+              "value": "янв"
+            }
+          ]
+        ]
+      },
+      {
+        "address": "AD5",
+        "cells": [
+          [
+            {
+              "kind": "number",
+              "value": 2027
+            }
+          ]
+        ]
+      },
+      {
+        "address": "AF5",
+        "cells": [
+          [
+            {
+              "kind": "number",
+              "value": 2028
+            }
+          ]
+        ]
+      },
+      {
+        "address": "A12:B13",
+        "cells": [
+          [
+            {
+              "kind": "text",
+              "value": "0012"
+            },
+            {
+              "kind": "text",
+              "value": "т"
+            }
+          ],
+          [
+            {
+              "kind": "text",
+              "value": "0099"
+            },
+            {
+              "kind": "text",
+              "value": "т"
+            }
+          ]
+        ]
+      },
+      {
+        "address": "C12:D13",
+        "cells": [
+          [
+            {
+              "kind": "number",
+              "value": 10
+            },
+            {
+              "kind": "number",
+              "value": 0
+            }
+          ],
+          [
+            {
+              "kind": "text",
+              "value": "0,125"
+            },
+            {
+              "kind": "error",
+              "value": "#N/A"
+            }
+          ]
+        ]
+      },
+      {
+        "address": "J12:K13",
+        "cells": [
+          [
+            {
+              "kind": "blank"
+            },
+            {
+              "kind": "text",
+              "value": "1 234,50"
+            }
+          ],
+          [
+            {
+              "kind": "unavailable",
+              "reason": "formula-cache-absent"
+            },
+            {
+              "kind": "text",
+              "value": ""
+            }
+          ]
+        ]
+      },
+      {
+        "address": "P12:P13",
+        "cells": [
+          [
+            {
+              "kind": "number",
+              "value": 1000
+            }
+          ],
+          [
+            {
+              "kind": "number",
+              "value": 1.25
+            }
+          ]
+        ]
+      },
+      {
+        "address": "R12:R13",
+        "cells": [
+          [
+            {
+              "kind": "number",
+              "value": 20
+            }
+          ],
+          [
+            {
+              "kind": "number",
+              "value": 2
+            }
+          ]
+        ]
+      },
+      {
+        "address": "AD12:AD13",
+        "cells": [
+          [
+            {
+              "kind": "number",
+              "value": 2000
+            }
+          ],
+          [
+            {
+              "kind": "number",
+              "value": 3
+            }
+          ]
+        ]
+      },
+      {
+        "address": "AF12:AF13",
+        "cells": [
+          [
+            {
+              "kind": "number",
+              "value": 3000
+            }
+          ],
+          [
+            {
+              "kind": "text",
+              "value": "4,000"
+            }
+          ]
+        ]
+      }
+    ]
+  },
+  "dictionaries": {
+    "version": 1,
+    "revision": 1,
+    "units": [
+      {
+        "id": "t",
+        "name": "Тонны"
+      }
+    ],
+    "parameters": [
+      {
+        "id": "production.volume",
+        "name": "Объём производства",
+        "valueType": "decimal",
+        "unitId": "t",
+        "dimensions": [
+          "entity",
+          "variant"
+        ],
+        "temporalMeaning": "flow"
+      },
+      {
+        "id": "production.loss",
+        "name": "Потери",
+        "valueType": "decimal",
+        "unitId": "t",
+        "dimensions": [
+          "entity",
+          "variant"
+        ],
+        "temporalMeaning": "flow"
+      }
+    ],
+    "parameterMappings": [
+      {
+        "scope": "production-form",
+        "source": "0012",
+        "targetId": "production.volume"
+      },
+      {
+        "scope": "production-form",
+        "source": "0099",
+        "targetId": "production.loss"
+      }
+    ],
+    "unitMappings": [
+      {
+        "scope": "production-form",
+        "source": "т",
+        "targetId": "t"
+      }
+    ]
+  },
+  "dataset": {
+    "id": "production-example",
+    "dimensions": {
+      "entity": "plant-1",
+      "variant": "actual"
+    }
+  }
+}

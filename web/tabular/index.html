@@ -4,21 +4,27 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; worker-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'">
-  <title>Data Templates — M0</title>
+  <title>Data Templates — проверка ядра</title>
   <link rel="stylesheet" href="probe.css">
   <script defer src="selectors.js"></script>
   <script defer src="snapshot.js"></script>
+  <script defer src="json.js"></script>
+  <script defer src="expression.js"></script>
+  <script defer src="template.js"></script>
+  <script defer src="matrix.js"></script>
   <script defer src="engine.js"></script>
   <script defer src="executor.js"></script>
   <script defer src="probe.js"></script>
 </head>
 <body>
   <main>
-    <p class="eyebrow">RNAssistant · Data Templates · M0</p>
-    <h1>Проверка табличного снимка</h1>
-    <p>Проверочный сценарий переносимого ядра. Выберите JSON со снимком и диапазонами.
-      Результат сохраняет адреса и типы ячеек. Шаблоны и подключение к Excel ещё не реализованы.</p>
-    <label for="capture">Входной JSON (пример: examples/disjoint-capture.json)</label>
+    <p class="eyebrow">RNAssistant · Data Templates · M2</p>
+    <h1>Проверка переносимого ядра</h1>
+    <p>Выберите проверку снимка M0 или выполнение матрицы M2. Примеры находятся в папке examples.
+      Это работа с подготовленным снимком; чтение XLSX и публикация проекта ещё не подключены.</p>
+    <label for="operation">Операция</label>
+    <select id="operation"><option value="inspect">Исследовать снимок — disjoint-capture.json</option><option value="extract">Выполнить шаблон — matrix-extraction.json</option></select>
+    <label for="capture">Входной JSON</label>
     <input id="capture" type="file" accept=".json,application/json">
     <label for="mode">Исполнитель</label>
     <select id="mode">
@@ -27,14 +33,14 @@
     </select>
     <p id="modeNote" class="note"></p>
     <div class="actions">
-      <button id="run" disabled>Проверить снимок</button>
+      <button id="run" disabled>Выполнить</button>
       <button id="cancel" disabled>Отменить</button>
       <button id="reset">Перезапустить исполнитель</button>
-      <button id="download" disabled>Скачать результат JSON</button>
+      <button id="download" disabled>Скачать отчёт JSON</button>
     </div>
     <p id="status" role="status" aria-live="polite">Выберите входной JSON.</p>
     <details id="viewer" open>
-      <summary>Результат (первые 20 ячеек)</summary>
+      <summary>Результат (первые 20 ячеек или записей с происхождением)</summary>
       <pre id="result">Нет результата.</pre>
     </details>
   </main>

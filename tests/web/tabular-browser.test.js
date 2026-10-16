@@ -9,19 +9,20 @@ const { chromium } = require("playwright");
 const root = path.resolve(__dirname, "../../web/tabular");
 const fixture = path.join(root, "examples/disjoint-capture.json");
 const input = fs.readFileSync(fixture, "utf8");
-const assets = ["index.html", "probe.css", "probe.js", "selectors.js", "snapshot.js", "engine.js", "executor.js", "worker.js"];
+const matrixFixture = path.join(root, "examples/matrix-extraction.json"), matrixInput = fs.readFileSync(matrixFixture, "utf8");
+const assets = ["index.html", "probe.css", "probe.js", "selectors.js", "snapshot.js", "json.js", "expression.js", "template.js", "matrix.js", "engine.js", "executor.js", "worker.js"];
 
 (async () => {
     // The loopback server is a test host only. The portable page also runs from file:// below.
     const server = http.createServer((request, response) => {
         const file = request.url.slice(1);
         response.setHeader("Cache-Control", "no-store");
-        if (file === "busy-worker.js" || file === "foreign-worker.js") {
+        if (file === "busy-worker.js" || file === "foreign-worker.js" || file === "foreign-batch-worker.js") {
             response.setHeader("Content-Type", "text/javascript");
-            response.end('postMessage({type:"ready",protocol:1,revision:"tabular-m0-1"}); onmessage = event => {' +
-                (file === "busy-worker.js"
+            response.end('postMessage({type:"ready",protocol:2,revision:"tabular-m2-1"}); onmessage = event => {' +
+                (file === "foreign-batch-worker.js" ? 'postMessage({type:"batch",id:event.data.id,batch:{version:1,sequence:2,records:[{}]}});' : file === "busy-worker.js"
                     ? 'postMessage({type:"progress",id:event.data.id,progress:{completedCells:0,totalCells:1}}); while(true) {}'
-                    : 'postMessage({type:"result",id:event.data.id+1,result:{version:1,engineRevision:"tabular-m0-1"}});') + '}');
+                    : 'postMessage({type:"result",id:event.data.id+1,result:{version:1,engineRevision:"tabular-m2-1"}});') + '}');
         } else if (assets.includes(file)) {
             response.setHeader("Content-Type", file.endsWith(".js") ? "text/javascript" : file.endsWith(".css") ? "text/css" : "text/html");
             response.end(fs.readFileSync(path.join(root, file)));
@@ -91,6 +92,36 @@ const assets = ["index.html", "probe.css", "probe.js", "selectors.js", "snapshot
         assert.deepEqual(errors, []);
         console.log("PASS tabular Worker: cancellation, hard deadline, viewer-independent lifetime, reload and revision/run guards");
 
+        const matrixEvidence = await page.evaluate(async input => {
+            const make = (extra = {}) => RNTabularExecutor.create({ mode: "worker", workerUrl: "worker.js", ...extra });
+            const code = promise => promise.then(() => "unexpected-success", error => error.code || error.message);
+            const executor = make(); let release, entered, finished = false;
+            const firstBatch = new Promise(resolve => { entered = resolve; }), records = [];
+            const pending = executor.extract(input, { onBatch: async batch => {
+                records.push(...batch.records); entered(); await new Promise(resolve => { release = resolve; });
+            } }).then(value => { finished = true; return value; });
+            await firstBatch;
+            await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+            const held = !finished; release(); const summary = await pending;
+            const stop = new AbortController();
+            const cancelled = await code(executor.extract(input, { signal: stop.signal, onBatch: async () => stop.abort() }));
+            const sinkFailure = await code(executor.extract(input, { onBatch: async () => { throw new Error("sink rejected"); } }));
+            executor.dispose();
+            const forged = make({ workerUrl: "foreign-batch-worker.js" });
+            const outOfOrder = await code(forged.extract(input, { onBatch: async () => { throw new Error("must not reach sink"); } })); forged.dispose();
+            const direct = make({ mode: "cooperative" }), directRecords = [];
+            const directSummary = await direct.extract(input, { onBatch: async batch => directRecords.push(...batch.records) }); direct.dispose();
+            return { held, summary, records, cancelled, sinkFailure, outOfOrder, directSummary, directRecords };
+        }, matrixInput);
+        assert.equal(matrixEvidence.held, true, "the worker cannot complete before its result batch is acknowledged");
+        assert.equal(matrixEvidence.cancelled, "EXECUTION_CANCELLED");
+        assert.equal(matrixEvidence.sinkFailure, "sink rejected");
+        assert.equal(matrixEvidence.outOfOrder, "EXECUTOR_PROTOCOL_INVALID");
+        assert.equal(matrixEvidence.records.length, 16);
+        assert.deepEqual(matrixEvidence.summary, matrixEvidence.directSummary);
+        assert.deepEqual(matrixEvidence.records, matrixEvidence.directRecords);
+        console.log("PASS tabular matrix Worker: acknowledged batches, cancellation, consumer failure, sequence guard and core parity");
+
         const offline = await browser.newContext({ offline: true, acceptDownloads: true });
         const portable = await offline.newPage();
         portable.on("pageerror", error => errors.push(error.message));
@@ -115,10 +146,28 @@ const assets = ["index.html", "probe.css", "probe.js", "selectors.js", "snapshot
         await portable.waitForFunction(() => document.getElementById("status").textContent.includes("как UTF-8"));
         assert.equal(await portable.locator("#run").isDisabled(), true);
         assert.equal(await portable.locator("#download").isDisabled(), true);
+        await portable.locator("#operation").selectOption("extract");
+        await portable.locator("#capture").setInputFiles(matrixFixture);
+        await portable.locator("#run").click();
+        await portable.waitForFunction(() => document.getElementById("status").textContent.startsWith("Получено 16"));
+        const report = JSON.parse(await portable.locator("#result").textContent());
+        assert.deepEqual(report.preview.records, matrixEvidence.records);
+        assert.equal(report.preview.complete, true);
+        assert.deepEqual({ ...report, preview: undefined }, { ...matrixEvidence.summary, preview: undefined });
+        const matrixDownloadPromise = portable.waitForEvent("download");
+        await portable.locator("#download").click();
+        const matrixDownload = await matrixDownloadPromise;
+        assert.deepEqual(JSON.parse(fs.readFileSync(await matrixDownload.path(), "utf8")), report);
+        const invalidMatrix = JSON.parse(matrixInput); invalidMatrix.template.value.expr = "window.alert(1)";
+        await portable.locator("#capture").setInputFiles({ name: "invalid-template.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(invalidMatrix)) });
+        await portable.locator("#run").click();
+        await portable.waitForFunction(() => document.getElementById("status").textContent.startsWith("EXPRESSION_TYPE"));
+        assert.equal(await portable.locator("#download").isDisabled(), true);
+        assert.equal(await portable.locator("#result").textContent(), "Нет результата.");
         assert.deepEqual(errors, []);
         await offline.close();
-        console.log("PASS tabular portable: offline file://, separate scripts, picker/download, Worker parity and no stale result after failure");
-        console.log("Tabular M0 assets: " + assets.length + " files, " + assets.reduce((sum, file) => sum + fs.statSync(path.join(root, file)).size, 0) + " bytes; no vendor dependencies");
+        console.log("PASS tabular portable: offline file:// inspection/extraction, picker/report, Worker parity and no stale result after failure");
+        console.log("Tabular assets: " + assets.length + " files, " + assets.reduce((sum, file) => sum + fs.statSync(path.join(root, file)).size, 0) + " bytes; no vendor dependencies");
     } finally {
         if (browser) await browser.close();
         await new Promise(resolve => server.close(resolve));

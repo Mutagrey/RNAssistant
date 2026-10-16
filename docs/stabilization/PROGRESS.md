@@ -1,5 +1,26 @@
 # Stabilization progress
 
+## Data Templates M2 matrix-language foundation — 2026-10-16
+
+The portable core now compiles a closed JSON matrix template through typed
+expressions into an immutable bounded plan, binds scoped parameter/unit mappings
+and emits canonical observations with source/rule evidence. The worked fixture
+produces 16 records across disjoint columns, two monthly years and separate annual
+totals. Decimal text and missing reasons remain explicit; no implicit aggregation,
+unit conversion or guessed mapping is performed.
+
+Worker protocol v2 adds acknowledged provisional batches to the existing executor;
+the producer waits for its consumer and cancellation rejects the run without a
+completed result. The separate offline probe runs the same core and downloads a
+clearly bounded report. The main loader and project publication are not connected.
+
+Validation: three existing core groups, four matrix groups and three browser groups
+pass, including a hand-authored semantic oracle, compiler refusals, batch failures,
+Worker cancellation and offline parity. No C# build or Windows/Office validation
+was run. M0/native capture and full M1–M3 remain incomplete; real XLSX/CSV/JSON
+readers, processing queue, module pins and publication are the next boundaries.
+[Canonical contract and supported profile](../data-templates.md#matrix-language-and-execution-v1).
+
 ## Data Templates source-selection UI — 2026-10-16
 
 The workspace tab now has a responsive Data Templates viewer with collapsible
