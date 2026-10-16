@@ -104,6 +104,24 @@ namespace RNAssistant.Application
             }
         }
 
+        public WorkspaceStateDto SaveTabularProjectSources(SaveTabularProjectSourcesRequest request)
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            lock (_sync)
+            {
+                RequireBinding(request.BindingId);
+                RequireIdleSources();
+                if (_project == null || request.ProjectRevision != _revision || request.ManifestPath != _project.ManifestPath)
+                    throw new WorkspaceApplicationException("project_selection_changed", "Проект изменился. Обновите его состояние.");
+                var expected = _project;
+                // Revoke the old selection before any possible effect. A lost/unknown
+                // write cannot leave a stale project or prepared queue usable.
+                ClearProject();
+                _project = _projects.SaveSources(_workspace, expected, request.Paths);
+                return State();
+            }
+        }
+
         private void RequireBinding(string bindingId)
         {
             if (_disposed) throw new ObjectDisposedException(nameof(WorkspaceApplicationService));
@@ -214,7 +232,9 @@ namespace RNAssistant.Application
                     RootPath = _workspace.RootPath, ReadOnly = _workspace.ReadOnly },
                 Project = _project == null ? null : new WorkspaceProjectDto {
                     Name = _project.Manifest.Name, ManifestPath = _project.ManifestPath,
-                    FormatVersion = _project.Manifest.FormatVersion } };
+                    FormatVersion = _project.Manifest.FormatVersion,
+                    Sources = _project.Manifest.Sources.Select(source => new TabularProjectSourceDto {
+                        SourceId = source.SourceId, Path = source.Path }).ToArray() } };
         }
     }
 }

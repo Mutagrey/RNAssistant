@@ -49,12 +49,12 @@ namespace RNAssistant.Cli
                 options = Parse(args.Skip(2).ToArray());
             else if (args[0] == "project")
             {
-                if (args.Length < 2 || args[1] != "create" && args[1] != "open" && args[1] != "prepare")
-                    throw new ArgumentException("Expected project create, project open or project prepare.");
+                if (args.Length < 2 || args[1] != "create" && args[1] != "open" && args[1] != "prepare" && args[1] != "sources")
+                    throw new ArgumentException("Expected project create, open, sources or prepare.");
                 options = Parse(args.Skip(2).ToArray());
                 Required(options, "path");
                 if (args[1] == "create") Required(options, "name");
-                if (args[1] == "prepare") Required(options, "sources-json");
+                if (args[1] == "sources") Required(options, "sources-json");
             }
             else options = Parse(args.Skip(1).ToArray());
             if (options.ContainsKey("mutation-policy") && args[0] != "run" && args[0] != "answer" && args[0] != "env")
@@ -79,6 +79,14 @@ namespace RNAssistant.Cli
                         : projects.OpenTabularProject(new WorkspaceProjectPathRequest {
                             BindingId = selection.Workspace.BindingId, ManifestPath = Required(options, "path") });
                     if (args[1] == "prepare") return PrepareProjectSources(projects, project, options, jsonl);
+                    if (args[1] == "sources")
+                    {
+                        var saved = projects.SaveTabularProjectSources(new SaveTabularProjectSourcesRequest {
+                            BindingId = project.Workspace.BindingId, ManifestPath = project.Project.ManifestPath,
+                            ProjectRevision = project.Revision, Paths = ProjectSourcePaths(options) });
+                        Output(jsonl, "project.sources.saved", saved);
+                        return 0;
+                    }
                     Output(jsonl, args[1] == "create" ? "project.created" : "project.opened", project);
                     return 0;
                 }
@@ -853,19 +861,25 @@ namespace RNAssistant.Cli
                 finally { Console.CancelKeyPress -= handler; }
             }
         }
-        private static int PrepareProjectSources(WorkspaceApplicationService projects, WorkspaceStateDto project,
-            Dictionary<string, string> options, bool jsonl)
+        private static IReadOnlyList<string> ProjectSourcePaths(Dictionary<string, string> options)
         {
             JArray paths;
             try { paths = JArray.Parse(Required(options, "sources-json")); }
             catch (JsonException) { throw new ArgumentException("--sources-json must be a JSON array of workspace-relative paths."); }
             if (paths.Any(path => path.Type != JTokenType.String))
                 throw new ArgumentException("--sources-json must contain only path strings.");
+            return paths.Select(path => (string)path).ToArray();
+        }
+        private static int PrepareProjectSources(WorkspaceApplicationService projects, WorkspaceStateDto project,
+            Dictionary<string, string> options, bool jsonl)
+        {
+            var paths = options.ContainsKey("sources-json") ? ProjectSourcePaths(options)
+                : project.Project.Sources.Select(source => source.Path).ToArray();
             var fileMiB = options.ContainsKey("file-mib") ? PositiveBoundedOption(options, "file-mib", 4096) : 96;
             var batchMiB = options.ContainsKey("batch-mib") ? PositiveBoundedOption(options, "batch-mib", 65536) : 1024;
             var page = projects.PrepareSources(new PrepareWorkspaceSourcesRequest {
                 BindingId = project.Workspace.BindingId, ProjectRevision = project.Revision,
-                Paths = paths.Select(path => (string)path).ToList(),
+                Paths = paths.ToList(),
                 MaximumFileBytes = fileMiB * 1024L * 1024, MaximumBatchBytes = batchMiB * 1024L * 1024 });
             var cancelled = 0;
             ConsoleCancelEventHandler cancel = (sender, args) => {
@@ -904,7 +918,8 @@ namespace RNAssistant.Cli
             Console.WriteLine("rna workspace open <path> [--read-only]");
             Console.WriteLine("rna project create --workspace <path> --path <relative-project.json> --name <text> [--jsonl]  (Data Templates manifest; create only)");
             Console.WriteLine("rna project open --workspace <path> --path <relative-project.json> [--read-only] [--jsonl]  (observe current manifest; no source execution)");
-            Console.WriteLine("rna project prepare --workspace <path> --path <relative-project.json> --sources-json '[\"file.xlsx\",\"file.csv\"]' [--file-mib 96] [--batch-mib 1024] [--read-only] [--jsonl]  (retain sources with progress; no parsing, Ctrl+C cancels)");
+            Console.WriteLine("rna project sources --workspace <path> --path <relative-project.json> --sources-json '[\"file.xlsx\",\"file.csv\"]' [--jsonl]  (save source declarations; [] clears the selection)");
+            Console.WriteLine("rna project prepare --workspace <path> --path <relative-project.json> [--sources-json '[\"file.xlsx\",\"file.csv\"]'] [--file-mib 96] [--batch-mib 1024] [--read-only] [--jsonl]  (explicit preparation of saved or supplied paths; no parsing, Ctrl+C cancels)");
             Console.WriteLine("rna env --workspace <path> [--mode agent|plan] [--mutation-policy ask|deny]");
             Console.WriteLine("rna sessions --workspace <path> [--jsonl]");
             Console.WriteLine("rna session create --workspace <path> [--title <text>] [--jsonl]");

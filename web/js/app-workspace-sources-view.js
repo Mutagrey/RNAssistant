@@ -13,6 +13,7 @@
     const el = suffix => container.querySelector("#ws" + suffix), events = new AbortController();
     const listen = (element, type, callback) => element.addEventListener(type, callback, { signal: events.signal });
     let state = null, browseKey = "", queueKey = "", retries = new Set(), browseTimer = null, queueTimer = null;
+    let selectedKey = "", selectedOffset = 0;
     function pages(prefix, page) {
       const count = page ? page.matched : 0, offset = page ? page.offset : 0;
       el(prefix + "Pages").hidden = count <= 50;
@@ -51,6 +52,22 @@
       const badge = node("span", "ws-source-state", labels[item.state]); badge.dataset.state = item.state;
       row.append(check, copy, badge); return row;
     }
+    function selectedRows(disabled) {
+      const query = el("SelectedSearch").value.toLowerCase(), matches = state.chosen.filter(path => path.toLowerCase().includes(query));
+      selectedOffset = matches.length ? Math.min(selectedOffset, Math.floor((matches.length - 1) / 50) * 50) : 0;
+      const items = matches.slice(selectedOffset, selectedOffset + 50), key = JSON.stringify([items, disabled]);
+      if (key !== selectedKey) {
+        selectedKey = key;
+        replaceList(el("SelectedList"), items.map(path => {
+          const row = node("li", "ws-source-row"), copy = node("span", "ws-source-copy ws-source-name", path);
+          const button = node("button", "dt-text-button", "Убрать"); button.type = "button";
+          button.dataset.wsRemove = path; button.disabled = disabled; button.setAttribute("aria-label", "Убрать из подборки: " + path);
+          row.append(copy, button); return row;
+        }), "wsRemove");
+      }
+      el("SelectedEmpty").hidden = !!matches.length;
+      pages("Selected", { matched: matches.length, offset: selectedOffset });
+    }
     function render(snapshot) {
       if (!state) {
         el("QueueSearch").value = snapshot.filters.query;
@@ -61,10 +78,17 @@
       el("SourceBrowse").disabled = !enabled || state.contextBusy;
       el("SourceBrowse").textContent = state.unfinished ? "Посмотреть папку" : "Выбрать файлы";
       el("SourceContext").textContent = state.unfinished && state.queue ? "Файлов в очереди: " + state.queue.total + ". Список и состояния — ниже."
-        : enabled ? "Выберите файлы проекта и сохраните снимки для анализа." : "Откройте проект, чтобы подготовить его источники.";
-      el("SourceSelection").hidden = !state.chosen.length || state.unfinished;
+        : enabled ? "Выберите файлы для анализа. Подборку можно сохранить в проекте." : "Откройте проект, чтобы подготовить его источники.";
+      el("SourceSelection").hidden = !enabled || !state.chosen.length && !state.dirty || state.unfinished;
       el("SourceSelected").textContent = "Выбрано файлов: " + state.chosen.length + " из 500";
       ["SourcePrepare", "SourceClear", "SourceFileBudget", "SourceBatchBudget"].forEach(name => { el(name).disabled = disabled || !enabled; });
+      el("SourcePrepare").disabled = disabled || !enabled || !state.chosen.length;
+      const readOnly = enabled && state.context.workspace.readOnly;
+      el("SourceSave").disabled = disabled || !enabled || readOnly || !state.dirty;
+      el("SourceRevert").hidden = !state.dirty; el("SourceRevert").disabled = disabled;
+      el("SourcePersistence").textContent = state.dirty ? readOnly ? "Временная подборка · папка открыта только для чтения."
+        : "Есть несохранённые изменения в подборке." : "Состав сохранён в проекте. Подготовка запускается отдельно.";
+      selectedRows(disabled);
       el("BrowseLoading").textContent = state.browsing ? "Читаем папку…" : "";
       el("BrowseList").setAttribute("aria-busy", String(state.browsing));
       const files = state.files, available = files ? files.items.filter(item => !item.isDirectory && item.byteLength > 0) : [];
@@ -137,6 +161,12 @@
     listen(el("BrowsePrevious"), "click", () => browse(state.files.directory, Math.max(0, state.files.offset - 50)));
     listen(el("BrowseNext"), "click", () => browse(state.files.directory, state.files.offset + 50));
     listen(el("SourceClear"), "click", actions.clear);
+    listen(el("SourceSave"), "click", actions.save);
+    listen(el("SourceRevert"), "click", actions.revert);
+    listen(el("SelectedList"), "click", event => { const button = event.target.closest("[data-ws-remove]"); if (button) actions.remove(button.dataset.wsRemove); });
+    listen(el("SelectedSearch"), "input", () => { selectedOffset = 0; render(state); });
+    listen(el("SelectedPrevious"), "click", () => { selectedOffset = Math.max(0, selectedOffset - 50); render(state); });
+    listen(el("SelectedNext"), "click", () => { selectedOffset += 50; render(state); });
     listen(el("SourcePrepare"), "click", () => actions.prepare(Number(el("SourceFileBudget").value), Number(el("SourceBatchBudget").value)));
     listen(el("SourceActivity"), "click", event => {
       const button = event.target.closest("[data-ws-command]"); if (button) actions.control(button.dataset.wsCommand);
@@ -158,7 +188,8 @@
       el("SourcePicker").hidden = true; retries.clear();
       el("QueueSearch").value = el("QueueState").value = ""; el("QueueSort").value = "Added";
     }
-    function reset() { prepared(); el("BrowseDirectory").value = el("BrowseSearch").value = ""; clearTimeout(browseTimer); clearTimeout(queueTimer); }
+    function reset() { prepared(); el("BrowseDirectory").value = el("BrowseSearch").value = el("SelectedSearch").value = "";
+      selectedOffset = 0; el("SelectedDetails").open = false; clearTimeout(browseTimer); clearTimeout(queueTimer); }
     return Object.freeze({ render: render, prepared: prepared, reset: reset,
       dispose: () => { events.abort(); clearTimeout(browseTimer); clearTimeout(queueTimer); } });
   }

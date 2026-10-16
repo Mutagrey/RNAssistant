@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using RNAssistant.Core.Storage;
@@ -21,6 +22,18 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("name", Required = Required.Always)] public string Name { get; set; }
     }
 
+    public sealed class SaveTabularProjectSourcesRequest : WorkspaceProjectPathRequest
+    {
+        [JsonProperty("projectRevision", Required = Required.Always)] public long ProjectRevision { get; set; }
+        [JsonProperty("paths", Required = Required.Always)] public IReadOnlyList<string> Paths { get; set; }
+    }
+
+    public sealed class TabularProjectSourceDto
+    {
+        [JsonProperty("sourceId")] public string SourceId { get; internal set; }
+        [JsonProperty("path")] public string Path { get; internal set; }
+    }
+
     public sealed class WorkspaceSelectionDto
     {
         [JsonProperty("bindingId")] public string BindingId { get; internal set; }
@@ -35,6 +48,7 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("name")] public string Name { get; internal set; }
         [JsonProperty("manifestPath")] public string ManifestPath { get; internal set; }
         [JsonProperty("formatVersion")] public int FormatVersion { get; internal set; }
+        [JsonProperty("sources")] public IReadOnlyList<TabularProjectSourceDto> Sources { get; internal set; }
     }
 
     public sealed class WorkspaceStateDto

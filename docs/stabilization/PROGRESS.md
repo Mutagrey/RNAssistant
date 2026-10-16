@@ -1,5 +1,23 @@
 # Stabilization progress
 
+## Persistent project source declarations — 2026-10-16
+
+The loader and CLI now save source composition in a closed format-2 `project.json`
+through the existing file owner. Stable source IDs, exact manifest/selection guards,
+verified read-back and explicit uncertain-write inspection keep declarations separate
+from authority and queue outcomes. Opening restores the selection without replaying
+work. The UI adds bounded selected-file navigation, save/revert and visible temporary
+or read-only state; unfinished queues refuse source saves. Metadata-only format 1 is
+rejected without rewriting it; the explicit transition is documented in the contract.
+
+Validation: six project-storage and ten application Harness checks, seventeen browser
+groups, CLI build and cross-process save/open/read-only preparation smoke pass.
+Expanded composition was inspected at 360/1160 pixels in light/dark themes. No
+Office/VSTO validation was run. Next: native parser dispatch from saved declarations
+through the existing queue, with exact source/template/module pins; durable batch
+requests/common execution events and representative 80 MB Excel qualification remain
+open. [Contract](../data-templates.md#workspace-project-files).
+
 ## Workspace preparation queue in the loader — 2026-10-16
 
 The loader now selects explicit workspace files through the shared directory owner

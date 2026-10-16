@@ -182,6 +182,10 @@ namespace RNAssistant.Office.WebView
                         var workspaceReconcile = Payload<WorkspaceProjectPathRequest>(payload);
                         responsePayload = await RunBridgeWorkAsync(() => _workspaces.ReconcileFile(workspaceReconcile), cancellationToken).ConfigureAwait(false);
                         break;
+                    case BridgeOperationId.SaveTabularProjectSources:
+                        var sourceSave = Payload<SaveTabularProjectSourcesRequest>(payload);
+                        responsePayload = await RunBridgeWorkAsync(() => _workspaces.SaveTabularProjectSources(sourceSave), cancellationToken).ConfigureAwait(false);
+                        break;
                     case BridgeOperationId.PrepareWorkspaceSources:
                         var sourcePrepare = Payload<PrepareWorkspaceSourcesRequest>(payload);
                         responsePayload = await RunBridgeWorkAsync(() => _workspaces.PrepareSources(sourcePrepare), cancellationToken).ConfigureAwait(false);

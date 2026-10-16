@@ -91,6 +91,9 @@ namespace RNAssistant.Harness
                         AssertEqual(queue.QueueId, app.ReadState().SourceQueueId, "view can rediscover accepted queue");
                         ExpectSourceQueueError("source_queue_active", () => app.OpenWorkspace(new OpenWorkspaceRequest { RootPath = root }));
                         ExpectSourceQueueError("source_queue_active", app.Reset);
+                        ExpectSourceQueueError("source_queue_active", () => app.SaveTabularProjectSources(new SaveTabularProjectSourcesRequest {
+                            BindingId = state.Workspace.BindingId, ManifestPath = state.Project.ManifestPath,
+                            ProjectRevision = state.Revision, Paths = Array.Empty<string>() }));
                         ExpectSourceQueueError("source_queue_active", () => app.PrepareSources(SourceQueueRequest(state, new List<string> { "part-00.csv" })));
                         AssertEqual(WorkspaceSourceQueueState.Pausing, SourceCommand(app, queue.QueueId, WorkspaceSourceCommand.Pause).State,
                             "pause lets the current file settle");

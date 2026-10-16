@@ -39,7 +39,8 @@ matrix records/provisional batches have no native tools or publication authority
   captures, exact project/source pins, budgets, pause/cancel/retry, bounded pages
   and maintenance exclusion, with host-neutral lifecycle checks. The loader now
   selects workspace files explicitly and controls preparation, with typed-reply
-  browser checks and independent current-file progress. Durable source association,
+  browser checks and independent current-file progress. Source declarations persist
+  through guarded manifest saves with stable domain IDs and explicit recovery;
   parser dispatch and batch requests/common execution events remain open.
   The separate XLSX reader now has streamed selective reads,
   exact numeric cells, resource budgets and Worker cancellation; its 30,000-row

@@ -35,7 +35,7 @@
   <link rel="stylesheet" href="css/app-data-templates-tokens.css?v=data-loader-20261016-3">
   <link rel="stylesheet" href="css/app-workspace-projects.css?v=workspace-nav-20261016-1">
   <link rel="stylesheet" href="css/app-data-templates.css?v=data-loader-20261016-3">
-  <link rel="stylesheet" href="css/app-workspace-sources.css?v=workspace-sources-20261016-1">
+  <link rel="stylesheet" href="css/app-workspace-sources.css?v=project-sources-20261016-1">
   <link rel="stylesheet" href="css/app-json-viewer.css?v=json-height-20260929-1">
   <link rel="stylesheet" href="css/app-text-viewer.css?v=artifact-text-20260831-1">
   <link rel="stylesheet" href="css/app-sequence-viewer.css?v=artifact-gallery-20260902-1">
@@ -699,6 +699,8 @@
               </div>
               <div id="wsSourceSelection" hidden>
                 <div class="ws-source-heading"><p id="wsSourceSelected" class="ws-source-muted"></p><button type="button" id="wsSourceClear" class="dt-text-button">Снять выбор</button></div>
+                <div class="ws-source-save"><p id="wsSourcePersistence" class="ws-source-muted" role="status"></p><div><button type="button" id="wsSourceSave">Сохранить в проекте</button><button type="button" id="wsSourceRevert" class="dt-text-button">Вернуть сохранённое</button></div></div>
+                <details id="wsSelectedDetails" class="ws-source-details"><summary>Состав подборки</summary><input type="search" id="wsSelectedSearch" aria-label="Поиск среди выбранных источников" placeholder="Найти в подборке…" maxlength="128"><ul id="wsSelectedList" class="ws-source-list" aria-label="Выбранные источники проекта"></ul><p id="wsSelectedEmpty" class="ws-source-muted" hidden>Нет выбранных файлов.</p><nav class="dt-pagination" id="wsSelectedPages" aria-label="Страницы подборки"><span id="wsSelectedRange"></span><div><button type="button" id="wsSelectedPrevious" aria-label="Предыдущие источники">←</button><button type="button" id="wsSelectedNext" aria-label="Следующие источники">→</button></div></nav></details>
                 <details class="ws-source-budgets"><summary>Лимиты обработки</summary><div><label>Один файл, МБ<input type="number" id="wsSourceFileBudget" min="1" max="4096" value="96"></label><label>Вся подборка, МБ<input type="number" id="wsSourceBatchBudget" min="1" max="65536" value="1024"></label></div><p class="ws-source-muted">Обрабатывается один файл за раз. Лимит размера не означает расход памяти при разборе.</p></details>
                 <button type="button" id="wsSourcePrepare" class="dt-primary">Подготовить файлы</button>
               </div>
@@ -765,7 +767,7 @@
             <div class="dt-section-heading"><div><h3>О форматах и общей модели</h3><p>Разные источники сохраняют свою структуру и происхождение.</p></div></div>
             <div class="dt-format-grid" id="dtFormatGuide"></div>
             <div class="dt-reference"><div class="dt-detail-heading"><h4>Каноническое наблюдение</h4><span class="dt-phase">Модель проектируется</span></div><p>Единица результата связывает параметр, контекст и значение. Ниже — основа модели; окончательная схема и её версия появятся вместе с обработкой.</p><dl><dt>Параметр</dt><dd>Что измеряем: стабильный идентификатор и определение.</dd><dt>Измерения и период</dt><dd>К какому объекту, варианту и времени относится значение.</dd><dt>Значение и единица</dt><dd>Тип и единица заданы явно. Ноль, пропуск и ошибка различаются.</dd><dt>Роль</dt><dd>Наблюдение, отчётный итог или вычисленное значение.</dd><dt>Происхождение</dt><dd>Файл и точное место: ячейка, строка CSV или путь в JSON.</dd></dl><p class="dt-reference-note">Обычные таблицы объектов и операций также будут поддерживаться — текстовые поля не требуется превращать в показатели.</p></div>
-            <details class="dt-format-details"><summary>Что уже доступно</summary><p>Выбор файлов и папок, составление списка источников, создание и открытие описания проекта. Формат определяется по расширению; содержимое пока не читается.</p><p><code>project.json</code> версии 1 содержит только описание проекта. Это не формат преобразованных данных. Парсеры XLSX, CSV и JSON, сохранение подборки и выполнение шаблонов ещё не подключены.</p></details>
+            <details class="dt-format-details"><summary>Что уже доступно</summary><p>Выбор файлов и папок, сохранение состава источников в проекте и очередь подготовки с прогрессом и отменой. Подготовка сохраняет точные снимки файлов для дальнейшего анализа.</p><p><code>project.json</code> версии 2 содержит описание проекта и список источников. Преобразованные данные имеют отдельный канонический формат, описанный выше. Подключение парсеров к очереди, распознавание и выполнение шаблонов — следующие этапы.</p></details>
           </div>
         </div>
       </section>
@@ -1346,10 +1348,10 @@
   <script src="js/app-data-source-intake.js?v=data-loader-20261016-3"></script>
   <script src="js/app-data-operation-view.js?v=data-loader-20261016-3"></script>
   <script src="js/app-data-templates-view.js?v=workspace-sources-20261016-1"></script>
-  <script src="js/app-workspace-sources-view.js?v=workspace-sources-20261016-1"></script>
-  <script src="js/app-workspace-sources.js?v=workspace-sources-20261016-1"></script>
+  <script src="js/app-workspace-sources-view.js?v=project-sources-20261016-1"></script>
+  <script src="js/app-workspace-sources.js?v=project-sources-20261016-1"></script>
   <script src="js/app-data-templates.js?v=workspace-sources-20261016-1"></script>
-  <script src="js/app-workspace-projects.js?v=workspace-sources-20261016-1"></script>
+  <script src="js/app-workspace-projects.js?v=project-sources-20261016-1"></script>
   <script src="js/app.js?v=data-loader-20261016-2"></script>
 </body>
 </html>

@@ -19,8 +19,9 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       window.calls = [];
       window.nativeState = { type: "rnassistant.workspaceState", contractVersion: 1, revision: 2, sourceQueueId: null,
         workspace: { bindingId: "binding-a", workspaceId: "ws-a", rootPath: "C:\\Reports", readOnly: true },
-        project: { name: "Отчётность", manifestPath: "project.json", formatVersion: 1 } };
+        project: { name: "Отчётность", manifestPath: "project.json", formatVersion: 2, sources: [] } };
       window.q = null; window.losePrepare = false; window.malformed = false; window.holdBrowse = false;
+      window.loseSave = false; window.invalidSave = false; window.savedProject = null;
       window.catalog = Array.from({ length: 61 }, (_, i) => ({ name: "Отчёт-" + String(i).padStart(2, "0") + ".xlsb",
         path: "reports/Отчёт-" + String(i).padStart(2, "0") + ".xlsb", isDirectory: false, byteLength: 80 * 1048576 }));
       catalog[1].name = '<img onerror="alert(1)">.json'; catalog[1].path = "reports/" + catalog[1].name;
@@ -40,6 +41,25 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       window.send = async (type, payload) => {
         calls.push({ type, payload: structuredClone(payload) });
         if (type === "getWorkspaceState") return structuredClone(nativeState);
+        if (type === "saveTabularProjectSources") {
+          const previous = new Map(nativeState.project.sources.map(source => [source.path, source.sourceId]));
+          nativeState.project.sources = payload.paths.map((path, i) => ({ path,
+            sourceId: previous.get(path) || "src_" + (i + 1).toString(16).padStart(32, "0") }));
+          nativeState.revision++; nativeState.sourceQueueId = null;
+          savedProject = structuredClone(nativeState.project);
+          if (loseSave) { loseSave = false; throw Object.assign(new Error("Ответ записи потерян"), { code: "bridge_response_timeout" }); }
+          const result = structuredClone(nativeState);
+          if (invalidSave) { invalidSave = false; result.project.sources = []; }
+          return result;
+        }
+        if (type === "reconcileWorkspaceFile") {
+          nativeState.project = null; nativeState.revision++;
+          return { state: structuredClone(nativeState), exists: true, outcome: "AlreadyPublished" };
+        }
+        if (type === "openTabularProject") {
+          nativeState.project = structuredClone(savedProject); nativeState.revision++;
+          return structuredClone(nativeState);
+        }
         if (type === "browseWorkspaceFiles") {
           const all = payload.directory ? catalog.filter(item => !payload.query || item.name.includes(payload.query))
             : [{ name: "reports", path: "reports", isDirectory: true, byteLength: null }];
@@ -98,6 +118,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     await page.waitForFunction(() => document.getElementById("wsBrowseList").children.length === 11);
     await page.locator("#wsBrowseSelectPage").check();
     assert.match(await page.locator("#wsSourceSelected").innerText(), /61/);
+    assert.equal(await page.locator("#wsSourceSave").isDisabled(), true, "read-only selection cannot persist changes");
     await page.locator("#wsSourcePrepare").click();
     await page.waitForFunction(() => document.getElementById("wsQueueList").children.length === 50);
     assert.equal(await page.evaluate(() => calls.filter(call => call.type === "prepareWorkspaceSources").length), 1);
@@ -185,5 +206,73 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     assert.equal(await page.locator("#wsSourceActivity").isVisible(), false);
     assert.deepEqual(errors, []);
     console.log("PASS source UI: changed project rejects late directory results and clears transient choices");
+
+    const admissions = await page.evaluate(() => calls.filter(call => call.type === "prepareWorkspaceSources").length);
+    await page.evaluate(async () => {
+      nativeState = { ...nativeState, revision: 4, workspace: { ...nativeState.workspace, bindingId: "binding-b", readOnly: false },
+        project: { ...nativeState.project, sources: catalog.map((item, i) => ({ path: item.path, sourceId: "src_" + (i + 1).toString(16).padStart(32, "0") })) } };
+      await RNAssistantWorkspace.show();
+    });
+    assert.match(await page.locator("#wsSourcePersistence").innerText(), /Состав сохранён/);
+    assert.equal(await page.locator("#wsSourceSave").isDisabled(), true);
+    await page.locator("#wsSelectedDetails summary").click();
+    assert.equal(await page.locator("#wsSelectedList li").count(), 50);
+    assert.equal(await page.locator("#wsSelectedList img").count(), 0);
+    await page.locator("#wsSelectedNext").click();
+    assert.equal(await page.locator("#wsSelectedList li").count(), 11);
+    await page.locator("#wsSelectedSearch").fill("Отчёт-55");
+    await page.locator("[data-ws-remove]").click();
+    assert.match(await page.locator("#wsSourcePersistence").innerText(), /несохранённые/);
+    await page.locator("#wsSourceSave").click();
+    await page.waitForFunction(() => document.getElementById("workspaceStatus").textContent === "Состав источников сохранён.");
+    const save = await page.evaluate(() => calls.filter(call => call.type === "saveTabularProjectSources").at(-1));
+    assert.equal(save.payload.paths.length, 60); assert.equal(save.payload.projectRevision, 4);
+    assert.equal(save.payload.manifestPath, "other/project.json");
+    assert.match(await page.locator("#wsSourcePersistence").innerText(), /Состав сохранён/);
+    await page.evaluate(() => { RNAssistantDataTemplates.unbind(); RNAssistantDataTemplates.bind(); });
+    assert.match(await page.locator("#wsSourceSelected").innerText(), /60/);
+    await page.locator("#wsSourceClear").click();
+    assert.equal(await page.locator("#wsSourceSave").isEnabled(), true, "empty composition can be saved explicitly");
+    assert.equal(await page.locator("#wsSourcePrepare").isDisabled(), true);
+    await page.locator("#wsSourceRevert").click();
+    assert.match(await page.locator("#wsSourceSelected").innerText(), /60/);
+    assert.equal(await page.evaluate(() => calls.filter(call => call.type === "prepareWorkspaceSources").length), admissions, "opening/saving/remounting never starts preparation");
+    await page.locator("#wsSelectedDetails summary").click();
+    for (const width of [360, 1160]) {
+      await page.setViewportSize({ width, height: 940 });
+      for (const theme of ["light", "dark"]) {
+        await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, "saved composition fits " + width + " " + theme);
+        if (process.env.RNA_DATA_SCREENSHOTS) await page.screenshot({ path: path.join(process.env.RNA_DATA_SCREENSHOTS, `workspace-selection-${width}-${theme}.png`), fullPage: true, animations: "disabled" });
+      }
+    }
+    console.log("PASS source UI: persisted composition restores with bounded navigation, explicit save and revert");
+
+    await page.locator("#wsSourceClear").click();
+    await page.evaluate(() => { loseSave = true; });
+    await page.locator("#wsSourceSave").click();
+    await page.waitForFunction(() => !document.getElementById("workspaceReconcile").hidden);
+    assert.equal(await page.locator("#workspaceProjectResult").isVisible(), false, "lost save receipt is not project success");
+    const saves = await page.evaluate(() => calls.filter(call => call.type === "saveTabularProjectSources").length);
+    await page.locator("#workspaceProjectPath").fill("unrelated/project.json");
+    await page.locator("#workspaceReconcile").click();
+    await page.waitForFunction(() => document.getElementById("workspaceStatus").textContent.startsWith("Файл существует"));
+    assert.equal(await page.evaluate(() => calls.filter(call => call.type === "reconcileWorkspaceFile").at(-1).payload.manifestPath), "other/project.json");
+    assert.equal(await page.locator("#wsSourceSelection").isVisible(), false);
+    await page.locator("#workspaceProjectPath").fill("other/project.json");
+    await page.locator("#workspaceProjectOpen").click();
+    await page.waitForFunction(() => document.getElementById("workspaceStatus").textContent === "Проект открыт.");
+    assert.equal(await page.evaluate(() => calls.filter(call => call.type === "saveTabularProjectSources").length), saves, "inspection/open never replay a save");
+    assert.equal(await page.locator("#wsSourceSelection").isVisible(), false, "verified empty saved composition is restored");
+    await page.locator("#wsSourceBrowse").click();
+    await page.locator("[data-ws-directory]").click();
+    await page.locator("#wsBrowseSelectPage").check();
+    await page.evaluate(() => { invalidSave = true; });
+    await page.locator("#wsSourceSave").click();
+    await page.waitForFunction(() => document.getElementById("workspaceStatus").textContent.startsWith("Не удалось проверить"));
+    assert.equal(await page.locator("#workspaceProjectResult").isVisible(), false, "mismatched returned selection cannot report success");
+    assert.equal(await page.locator("#workspaceReconcile").isVisible(), true);
+    assert.deepEqual(errors, []);
+    console.log("PASS source UI: lost/mismatched save receipts pin inspection path and never replay writes");
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

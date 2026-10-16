@@ -14,6 +14,52 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void WorkspaceProjectSourcesSaveAndRecover()
+        {
+            WithTempPaths(paths =>
+            {
+                var files = new WorkspaceFileService(paths);
+                using (var app = new WorkspaceApplicationService(paths, files))
+                using (var bridge = new AssistantWebBridge(new AssistantController(), null, app))
+                {
+                    var initial = CreateSourceQueueProject(app, paths);
+                    var request = new SaveTabularProjectSourcesRequest { BindingId = initial.Workspace.BindingId,
+                        ManifestPath = initial.Project.ManifestPath, ProjectRevision = initial.Revision,
+                        Paths = new[] { "missing.xlsb", "data.json" } };
+                    var reply = WorkspaceBridgeCall(bridge, BridgeToken(bridge), "saveTabularProjectSources", request);
+                    AssertTrue((bool)reply["ok"], "save is a typed bridge operation");
+                    AssertEqual("missing.xlsb", (string)reply["payload"]["project"]["sources"][0]["path"], "verified source projection");
+                    var saved = app.ReadState();
+                    AssertTrue(saved.Revision > initial.Revision && saved.SourceQueueId == null, "save replaces the selected project without starting work");
+                    ExpectSourceQueueError("project_selection_changed", () => app.SaveTabularProjectSources(request));
+                    ExpectSourceQueueError("project_selection_changed", () => app.PrepareSources(SourceQueueRequest(initial, new System.Collections.Generic.List<string> { "missing.xlsb" })));
+                    request.ProjectRevision = saved.Revision; request.ManifestPath = "other/project.json";
+                    ExpectSourceQueueError("project_selection_changed", () => app.SaveTabularProjectSources(request));
+                    AssertTrue(app.ReadState().Project != null, "foreign path cannot disturb the selected project");
+                    request.ManifestPath = saved.Project.ManifestPath;
+                    var writes = 0;
+                    files.FaultPoint = stage => { if (stage == "after-dispatch") { writes++; throw new IOException("lost save result"); } };
+                    request.Paths = new[] { "new.csv" };
+                    reply = WorkspaceBridgeCall(bridge, BridgeToken(bridge), "saveTabularProjectSources", request);
+                    AssertEqual("effect_unknown", (string)reply["errorCode"], "unverified write is not success");
+                    AssertTrue(app.ReadState().Project == null, "unknown save revokes the previous project pin");
+                    var openedPath = new WorkspaceProjectPathRequest { BindingId = saved.Workspace.BindingId, ManifestPath = saved.Project.ManifestPath };
+                    var recovered = app.ReconcileFile(openedPath);
+                    AssertTrue(recovered.State.Project == null, "inspection does not implicitly reopen");
+                    var inspected = app.OpenTabularProject(openedPath);
+                    AssertEqual("new.csv", inspected.Project.Sources[0].Path, "explicit open observes recovered composition");
+                    AssertEqual(1, writes, "no automatic save replay");
+                    using (var restarted = new WorkspaceApplicationService(paths))
+                    {
+                        var root = restarted.OpenWorkspace(new OpenWorkspaceRequest { RootPath = initial.Workspace.RootPath, ReadOnly = true });
+                        var project = restarted.OpenTabularProject(new WorkspaceProjectPathRequest { BindingId = root.Workspace.BindingId, ManifestPath = "project.json" });
+                        AssertEqual(inspected.Project.Sources[0].SourceId, project.Project.Sources[0].SourceId, "restart restores declarations with stable IDs");
+                        AssertTrue(project.SourceQueueId == null, "restart never replays preparation");
+                    }
+                }
+            });
+        }
+
         private static void WorkspaceApplicationPinsSelection()
         {
             WithTempPaths(paths =>

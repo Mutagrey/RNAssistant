@@ -136,7 +136,7 @@ const selected = (name, contents = "selection fixture") => ({ name, mimeType: "a
     });
     await page.waitForFunction(() => typeof window.finishDirectory === "function");
     await page.evaluate(async () => {
-      nativeState = { ...nativeState, revision: 1, workspace: { bindingId: "binding-new", rootPath: "C:\\Reports", readOnly: true }, project: { name: "Reports", manifestPath: "project.json" } };
+      nativeState = { ...nativeState, revision: 1, workspace: { bindingId: "binding-new", rootPath: "C:\\Reports", readOnly: true }, project: { name: "Reports", manifestPath: "project.json", formatVersion: 2, sources: [] } };
       await RNAssistantWorkspace.show();
       finishDirectory([fileEntry("wrong-project.json")]);
     });

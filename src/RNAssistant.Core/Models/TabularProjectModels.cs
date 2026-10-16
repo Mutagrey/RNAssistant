@@ -1,11 +1,14 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using Newtonsoft.Json;
 
 namespace RNAssistant.Core.Models
 {
-    // Portable domain metadata. Workspace identity, grants and resource heads never live here.
+    // Portable domain declarations. Workspace identity, grants, queue outcomes and resource heads never live here.
     public sealed class TabularProjectManifest
     {
-        public const int CurrentFormatVersion = 1;
+        public const int CurrentFormatVersion = 2;
         public const string ProjectKind = "data-templates";
 
         [JsonProperty("kind", Required = Required.Always)]
@@ -16,15 +19,28 @@ namespace RNAssistant.Core.Models
         public string ProjectId { get; private set; }
         [JsonProperty("name", Required = Required.Always)]
         public string Name { get; private set; }
+        [JsonProperty("sources", Required = Required.Always)]
+        public IReadOnlyList<TabularProjectSource> Sources { get; private set; }
 
         [JsonConstructor]
-        public TabularProjectManifest(string kind, int formatVersion, string projectId, string name)
+        public TabularProjectManifest(string kind, int formatVersion, string projectId, string name,
+            IReadOnlyList<TabularProjectSource> sources)
         {
             Kind = kind;
             FormatVersion = formatVersion;
             ProjectId = projectId;
             Name = name;
+            Sources = sources == null ? null : Array.AsReadOnly(sources.ToArray());
         }
+    }
+
+    public sealed class TabularProjectSource
+    {
+        [JsonProperty("sourceId", Required = Required.Always)] public string SourceId { get; private set; }
+        [JsonProperty("path", Required = Required.Always)] public string Path { get; private set; }
+
+        [JsonConstructor]
+        public TabularProjectSource(string sourceId, string path) { SourceId = sourceId; Path = path; }
     }
 
     // An observed manifest, not a persistent project registry or permission token.

@@ -45,7 +45,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     await page.evaluate(() => document.getElementById("workspaceProjectCreate").click());
     assert.equal(await page.evaluate(() => calls.filter(call => call.type === "createTabularProject").length), 1, "double click admits one create");
     await page.evaluate(() => {
-      nativeState = { ...nativeState, revision: 2, project: { name: '<img src=x onerror="window.injected=true">', manifestPath: "reports/project.json", formatVersion: 1 } };
+      nativeState = { ...nativeState, revision: 2, project: { name: '<img src=x onerror="window.injected=true">', manifestPath: "reports/project.json", formatVersion: 2, sources: [] } };
       succeed(nativeState);
     });
     await page.waitForFunction(() => !document.getElementById("workspaceProjectResult").hidden);

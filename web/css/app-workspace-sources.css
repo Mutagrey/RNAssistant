@@ -38,6 +38,11 @@
 .ws-source-budgets label { display: grid; gap: 5px; min-width: 0; }
 .ws-source-budgets input { min-width: 0; width: 100%; }
 .ws-local-intro { margin: 24px 0 12px; }
+.ws-source-save { padding: var(--dt-space-md) 0; border-top: 1px solid var(--dt-border); }
+.ws-source-save > div { display: flex; flex-wrap: wrap; gap: var(--dt-space-sm); }
+.ws-source-details { font-size: var(--dt-font-small); margin: var(--dt-space-md) 0; }
+.ws-source-details summary { cursor: pointer; padding: var(--dt-space-sm) 0; }
+.ws-source-details input[type="search"] { margin: var(--dt-space-sm) 0; }
 .ws-source-queue .dt-pagination, .ws-source-selection .dt-pagination { padding: 12px 0 0; }
 @media (max-width: 600px) {
   .ws-source-heading { flex-wrap: wrap; }

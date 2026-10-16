@@ -14,10 +14,12 @@
   function invalid() { return new Error("Ответ приложения не удалось проверить. Обновите состояние очереди."); }
   function unfinished() { return busy || uncertain || !!queueId && (!queue || queue.state !== "Finished"); }
   function hasSources() { return chosen.size > 0 || !!queue; }
+  function savedPaths() { return context && context.project ? context.project.sources.map(source => source.path) : []; }
+  function dirty() { return JSON.stringify([...chosen.keys()]) !== JSON.stringify(savedPaths()); }
   function render() {
     if (view) view.render({ context: context, contextBusy: contextBusy, chosen: Array.from(chosen.keys()),
       files: files, browsing: browsing, queue: queue, rows: rows, filters: filters,
-      busy: busy, unfinished: unfinished(), uncertain: uncertain, notice: notice, error: error });
+      busy: busy, unfinished: unfinished(), uncertain: uncertain, dirty: dirty(), notice: notice, error: error });
     if (root.RNAssistantWorkspace && root.RNAssistantWorkspace.sourceWorkChanged) root.RNAssistantWorkspace.sourceWorkChanged();
     if (publishedPresence !== hasSources()) {
       publishedPresence = hasSources();
@@ -130,7 +132,8 @@
   function setContext(state, blocked) {
     const nextKey = state && state.workspace ? JSON.stringify([state.workspace.bindingId, state.revision, state.project && state.project.manifestPath]) : "";
     if (nextKey !== key) {
-      epoch++; key = nextKey; chosen = new Map(); files = queue = rows = null; queueId = null;
+      epoch++; key = nextKey; chosen = new Map(state && state.project ? state.project.sources.map(source => [source.path, true]) : []);
+      files = queue = rows = null; queueId = null;
       busy = uncertain = false; browseTicket++; browsing = false; clearTimeout(timer);
       filters = { offset: 0, query: "", state: null, sort: "Added" }; message("", false);
       if (view) view.reset();
@@ -151,6 +154,9 @@
     if (view) return;
     view = root.RNAssistantWorkspaceSourcesView.create(container, {
       browse: browse, prepare: prepare, control: control,
+      save: () => { if (!unfinished() && !contextBusy && dirty()) root.RNAssistantWorkspace.saveSources([...chosen.keys()]); },
+      revert: () => { if (!unfinished() && !contextBusy) { chosen = new Map(savedPaths().map(path => [path, true])); render(); } },
+      remove: path => { if (!unfinished() && !contextBusy) { chosen.delete(path); render(); } },
       refresh: () => root.RNAssistantWorkspace.show(),
       choose: (paths, include) => {
         if (unfinished() || contextBusy || !files) return;
@@ -160,7 +166,7 @@
         }
         candidates.forEach(item => { if (include) chosen.set(item.path, true); else chosen.delete(item.path); }); render();
       },
-      clear: () => { if (!unfinished()) { chosen.clear(); render(); } },
+      clear: () => { if (!unfinished() && !contextBusy) { chosen.clear(); render(); } },
       filter: value => { filters = { ...filters, ...value }; queryTicket++; readQueue(); }
     });
     render();

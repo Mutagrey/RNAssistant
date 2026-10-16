@@ -34,13 +34,17 @@ queue throughput, UI latency or Windows/Office behavior.
 Data Templates shared manifest storage: filter `tabular project:` checks
 create/reopen/read-only and workspace relocation, closed metadata/path refusal,
 external drift/foreign workspace, exact retained bytes and unknown write recovery.
+Source declaration checks cover stable IDs across restart/reordering, empty selections,
+closed schemas and count/byte bounds, missing paths and unknown-save recovery without replay.
 The owner is the existing `WorkspaceFileService`; these tests do not qualify the
 future Office UI, capture or template publication. The existing CLI exposes
-`project create/open/prepare` for process-level smoke checks without a model or Office.
+`project create/open/sources/prepare` for process-level smoke checks without a model or Office.
 
 `workspace application:` checks selection/permission binding, refusal projections,
 controller-independent lifetime, file dispatch off the UI callback and typed
-unknown/reconciliation through the real bridge with a fake controller. It also
+unknown/reconciliation through the real bridge with a fake controller. Source saves
+require the selected manifest/revision and revoke old pins before writing; stale saves,
+unfinished queues and unknown-write recovery are covered. It also
 excludes runtime clear during file dispatch/read-back and revokes selection after
 an explicit reset. Source queue coverage adds serialized capture, 50-item pages,
 search/filter/sort, pause/cancel/explicit retry, byte budgets, exact retained reads,
@@ -48,7 +52,7 @@ project drift, maintenance exclusion and disposal drain across controller change
 Metadata browsing checks add stable 50-entry pages, directory navigation, protected
 names, cancellation and stale bindings through the actual file owner/bridge without
 capturing bodies. These are preparation/lifetime checks, not parser qualification.
-CLI `project prepare` accepts a JSON array of workspace-relative paths and explicit
+CLI `project prepare` accepts saved declarations or an explicit JSON array of paths and
 file/batch budgets; process smoke covers mixed outcomes and read-only capture without
 manifest changes. Browser
 `node tests/web/workspace-projects.test.js` checks the shipped UI/CSS with controlled
@@ -60,7 +64,9 @@ Playwright `BROWSER_EXECUTABLE` override. These do not qualify Windows/Office.
 controlled bridge replies: paged selection and explicit budgets, independent current
 progress, filtering/paging, pause/cancel/retry, remount, invalid/lost reply recovery,
 late context results and narrow/wide light/dark layouts. `RNA_DATA_SCREENSHOTS` saves
-previews. These checks do not qualify native WebView2 access or Excel parsing.
+previews. It also covers persisted composition, bounded selection navigation/removal,
+save/revert/empty selection and lost/mismatched save replies with explicit pinned-path
+inspection. These checks do not qualify native WebView2 access or Excel parsing.
 
 `node tests/web/data-templates.test.js` checks the loader's real browser file/folder
 selection, drops and directory batches, cancellation, stale-context callbacks,

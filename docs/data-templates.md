@@ -4,8 +4,8 @@ Status: portable M0 proof, M1 project-manifest/source-selection foundation and t
 M2 source-independent language/core foundation and bounded XLSX reader (2026-10-16).
 One observation executor handles both matrix orientations, record fields and nested
 JSON captures; real XLSX uses the existing reader in the separate Worker probe.
-The loader selects workspace files and controls the shared preparation queue;
-durable associations, parsing dispatch and publication remain open.
+The loader saves workspace source declarations and controls the shared preparation
+queue; durable batch requests, parsing dispatch and publication remain open.
 Owner: Data Templates domain; portable JS in `web/tabular`, shared manifest storage
 in Core `TabularProjectStore` over `WorkspaceFileService`.
 This is the canonical domain contract; planned scope is marked separately from
@@ -174,7 +174,7 @@ these rules and executable examples are the current contract.
 | §6.7 construction rollout | Defers horizontal axes alongside repeated blocks/joins | It cannot defer §6.4's core invariant. Orientation independence is implemented now; richer layout discovery, reusable blocks and joins remain deferred. This is completion of original scope, not a new feature track. |
 | §6.1–6.2 schema → AST → typed bounded plan | Existing expression parser, type checks, context DAG and frozen plan were useful | Preserved and generalized. Plan records native source dependencies and scoped bindings; no executable generated JS. JSON notation only; YAML awaits a decoder into this same model. |
 | §5 grain, mappings, precision, explanation | Decimal text, exact mapping, missing tags and provisional batches already existed | Reused. Added record dimensions, native field/pointer evidence, exact scale/round and sink completion/abort. Entity/transaction **outputs** still require their own schema. |
-| §13 bounded execution | XLSX streamed reads; 64-record acknowledged output batches; shared source-preparation queue | Records now have a pull-page adapter. Queue prepares bytes only; source association, native parser dispatch/module pins and publication remain open. |
+| §13 bounded execution | XLSX streamed reads; 64-record acknowledged output batches; shared source-preparation queue | Records now have a pull-page adapter; source declarations persist in the manifest. Queue prepares bytes only; native parser dispatch/module pins and publication remain open. |
 
 ### Closed schema, syntax and immutable plan
 
@@ -558,21 +558,33 @@ Its models and implementation are included in both the existing Core Framework
 `WorkspaceApplicationService` now exposes the same typed operations to CLI and
 the Office panel, independently of conversation orchestration.
 
-The current portable `project.json` has exactly four fields:
+The current portable `project.json` uses format 2 with exactly five fields:
 
 ```json
 {
   "kind": "data-templates",
-  "formatVersion": 1,
+  "formatVersion": 2,
   "projectId": "tp_0123456789abcdef0123456789abcdef",
-  "name": "Quarterly reports"
+  "name": "Quarterly reports",
+  "sources": [
+    { "sourceId": "src_0123456789abcdef0123456789abcdef", "path": "input/report.xlsb" }
+  ]
 }
 ```
 
-This version is metadata only: it does not declare templates, sources, executable
-modules or published results. Unknown/duplicate fields, wrong types, unsupported
-versions and invalid identities fail without rewriting the file. The manifest
-limit is 16 KiB UTF-8; names allow 1–200 characters without controls. The file must
+This version contains metadata and source declarations, not executable modules,
+templates, prepared snapshots, queue outcomes or published results. `sources` is a
+required ordered array of 0–500 entries containing only `sourceId` and `path`.
+Paths are workspace-relative, use `/`, and exclude absolute paths, traversal and
+case-insensitive duplicates. Stable domain IDs survive saves/reordering of retained
+paths; a new path receives a new ID. They identify declarations, not file authority.
+Sources may be missing: preparation checks their actual accessibility and bytes.
+
+Unknown/duplicate fields, wrong types, unsupported versions and invalid identities
+fail without rewriting the file. Metadata-only format 1 is explicitly unsupported;
+there is no implicit upgrade. To retain an old manifest, inspect it and explicitly
+set `formatVersion` to 2 and add `sources: []`, or create a new project at another path.
+The manifest limit is 256 KiB UTF-8; names allow 1–200 characters without controls. The file must
 be named `project.json`, at the root or in a subdirectory. All containment, link,
 case-collision and protected-path checks remain with `WorkspaceFileService`.
 
@@ -583,6 +595,13 @@ path, exact file reference/hash, domain metadata and current read-only status.
 `RequireUnchanged` refuses a foreign workspace or changed file identity/revision.
 It checks an observation, not a long-lived lock or future write permission; later
 mutations still need the file owner's exact revision guard at dispatch.
+
+`SaveSources` validates the complete selection and manifest size, preserves stable
+source IDs, rechecks the observed manifest, then uses the existing guarded
+`ReplaceText` and verified read-back. It does not open/copy source files or create a
+second store. Changes from another editor fail without overwriting them. Removing
+a declaration never deletes its source file or retained history. Unknown writes
+use the same explicit reconciliation/open path as creation; they are never replayed.
 
 Multiple projects can share a workspace. A copied project may retain its domain
 ID, but must be explicitly opened in its own workspace/file authority. Workspace
@@ -596,6 +615,7 @@ Development CLI usage (existing CLI target; no Office migration is required):
 rna workspace open /absolute/workspace
 rna project create --workspace /absolute/workspace --path reports/project.json --name "Quarterly reports"
 rna project open --workspace /absolute/workspace --path reports/project.json --read-only
+rna project sources --workspace /absolute/workspace --path reports/project.json --sources-json '["input/report.xlsb","input/data.json"]'
 ```
 
 These commands need no chat, model, workbook or browser. Files are discoverable
@@ -608,7 +628,7 @@ The **Рабочая папка** tab contains the Data Templates viewer. Its pr
 start expanded, present folder selection and project opening as two steps, and can
 be collapsed. They accept an absolute path to an existing directory and an explicit
 read-only choice. It creates/opens the domain manifest by a relative path and
-shows its name/location as inert text. Project-manifest operations cover metadata only;
+shows its name/location as inert text. Project-manifest operations cover metadata and source declarations;
 the separate preparation commands retain source bytes as described below.
 Office chats and their existing artifacts retain their current ownership; this
 tab does not attach workspace files to model context or bind an Excel source.
@@ -616,7 +636,7 @@ tab does not attach workspace files to model context or bind an Excel source.
 `src/RNAssistant.Application` is one shared application source module, compiled via
 one `.projitems` import in Office Framework 4.8 and the existing CLI Runtime build.
 It references Core only. The previous Runtime-only project facade was removed;
-CLI `project create/open/prepare` and the bridge now consume `WorkspaceApplicationService`
+CLI `project create/open/sources/prepare` and the bridge now consume `WorkspaceApplicationService`
 and its typed contracts directly. No file logic or conversation runtime is copied.
 The packaging seam and removal gate are in [MIGRATION_MAP](stabilization/MIGRATION_MAP.md#workspace-first-adapters--2026-10-04).
 
@@ -631,7 +651,7 @@ Panel reload reads this state; application restart requires explicit root select
 No extra selected-root/project registry is persisted.
 
 The bridge's `getWorkspaceState`, `openWorkspace`, `createTabularProject`,
-`openTabularProject` and `reconcileWorkspaceFile` use the existing token/operation
+`openTabularProject`, `saveTabularProjectSources` and `reconcileWorkspaceFile` use the existing token/operation
 catalog and worker boundary. UI serializes commands, retains the exact uncertain
 path for inspection and does not upgrade an opened read-only binding when a
 checkbox is edited. Closing the panel drains accepted work through the existing
@@ -640,7 +660,14 @@ Runtime clearing uses the bridge's exclusive request boundary, so it cannot remo
 the file journal during an accepted workspace operation; successful clearing also
 revokes the selection.
 
-Unknown writes and lost replies never trigger creation retries. **Проверить
+Source saves match the binding, selected manifest path and selection revision,
+and refuse unfinished queues. Before saving, the old project/finished queue pins
+are revoked; the new project becomes usable only after verified read-back. A stale
+save cannot mutate a newer selection. State projects bounded declarations; opening
+or refreshing a project never starts a queue. Read-only bindings may use a temporary
+selection and prepare sources but cannot persist changes.
+
+Unknown writes and lost replies never trigger mutation retries. **Проверить
 состояние файла** invokes explicit existing reconciliation and returns its typed
 outcome and existence observation. It does not claim the original attempt succeeded
 or open a project implicitly; a subsequent explicit open validates the current file.
@@ -676,15 +703,19 @@ and explicit retry of selected failed/cancelled items are separate commands. Loc
 missing/oversized inputs fail individually; shared storage failures pause dispatch.
 Project drift or a missing manifest requires cancelling remaining work and explicitly reopening the project.
 No automatic retry or durable queue journal is introduced. Restart requires explicit
-selection/preparation again; already retained authority/CAS history remains intact.
+workspace/project opening and preparation; saved declarations restore the selection,
+and already retained authority/CAS history remains intact.
 
 The CLI accepts `project prepare --workspace <workspace> --path <project.json>
 --sources-json '["source/book.xlsx","source/data.csv"]' --file-mib 96 --batch-mib 1024`.
 It reports progress and paged terminal results; Ctrl+C cancels and drains. Exit 0 means
 all sources prepared, 5 means failures/incomplete work, 130 means cancellation.
+Omitting `--sources-json` explicitly prepares the manifest's saved selection;
+supplying it uses a temporary selection without saving it. `project sources` saves
+declarations separately; an empty array explicitly clears them.
 Read-only workspace bindings may retain snapshots without changing project files.
-Durable source associations/batch requests, common execution events and parser
-dispatch remain the next integration boundary. Retaining XLSB/CSV/JSON bytes
+Durable batch requests, common execution events and parser dispatch remain the next
+integration boundary. Retaining XLSB/CSV/JSON bytes
 does not imply support for parsing those formats.
 
 The loader's **Из рабочей папки** picker uses typed `browseWorkspaceFiles` over the
@@ -695,6 +726,13 @@ is explicit, workspace-relative and bounded to 500 files. Preparation accepts an
 accessible nonempty file, including the planned Excel families; this is not a reader
 capability claim. UI budgets initially allow 96 MiB per file and 1 GiB per batch and
 can be changed explicitly. Read-only project permissions are preserved.
+
+The chosen composition has a separate searchable 50-row view with per-file removal,
+explicit **Сохранить в проекте** and **Вернуть сохранённое**. Unsaved/read-only states
+are visible; clearing all entries can be saved. A saved composition restores on
+explicit project opening and remains distinct from preparation. A lost/malformed
+save receipt reveals the existing inspection controls pinned to the attempted
+manifest path; no save is resubmitted and no queue is implicitly restarted.
 
 Queue progress stays above project sections. The current item is projected separately
 from the filtered page, so progress survives search/paging. The UI offers pause/resume,
@@ -752,8 +790,8 @@ it and cancels enumeration. Late callbacks cannot refill another context. Native
 workspace commands prevent starting new intake; refreshing the same context does
 not cancel an active enumeration. Page reload clears the list; the UI says so.
 Selecting a source folder does not open/change the workspace root, grant native
-path access or copy the source files. Persisting source selections is later domain
-work through the existing workspace file owner, with explicit source association.
+path access or copy the source files. Only the separate explicit workspace-relative
+selection above can be saved; browser names never become native associations implicitly.
 
 ### Loader presentation architecture
 
@@ -766,7 +804,7 @@ modules without a framework, npm or a bundler.
 | `app-data-source-intake.js` | Browser enumeration, metadata hints, limits and coalesced progress; no DOM or content parsing. |
 | `app-data-templates.js` | Browser File handles, selection/context and enumeration lifetime; connects the workspace-source owner and passes metadata/actions to presentation. |
 | `app-data-templates-view.js` | Screen navigation, filters, pages, metadata details and DOM events; no bridge, File handles, readers or job ownership. |
-| `app-workspace-sources.js` | Typed native browsing, selected relative paths, queue commands/recovery and bounded polling. Backend remains the work owner; no body transfer or durable client store. |
+| `app-workspace-sources.js` | Typed native browsing, transient edits to saved relative paths, queue commands/recovery and bounded polling. Saves use the shared workspace controller; no body transfer or durable client store. |
 | `app-workspace-sources-view.js`, `app-workspace-sources.css` | Workspace chooser, queue navigation and progress presentation using the same loader tokens; no bridge or job lifecycle. |
 | `app-data-operation-view.js` | Shared progress component; renders supplied stage, counters, duration and terminal state; delegates cancel/dismiss without a timer or inferred success. |
 | `app-data-templates-tokens.css` | Loader-wide palette aliases, typography, spacing, radii and card/row density. Inherits the host light/dark theme. |
@@ -830,7 +868,7 @@ Parsing success is separate from format recognition, template matching and valid
 canonical data. Further readers return typed values, native source locations,
 capabilities and diagnostics to the portable domain owner. CSV/JSON normalized contracts and M2 fixtures are implemented above; the current
 extension catalog does not claim their production file readers exist. CSV/JSON source input is also distinct from JSON/YAML
-template definitions and the metadata-only project manifest.
+template definitions and the project manifest's metadata/source declarations.
 
 ### Large files and processing queue — planned
 
@@ -896,8 +934,8 @@ Use the shared workspace file/resource views, not a separate folder-root registr
 Large collections require bounded pages from the workspace application projection
 and incremental event updates, not all rows in the DOM or all bodies in browser
 memory. The current 50-row presentation is the initial UI boundary, not proof of
-thousand-file processing. Persist batch requests/source associations in versioned
-project files through the existing file owner; execution outcomes use the shared
+thousand-file processing. Source declarations now persist in the versioned manifest;
+batch requests still need versioned project files through the existing file owner. Execution outcomes use the shared
 event contracts. No duplicate mutable queue journal in project JSON/localStorage.
 Restart recovery requires explicit resume and revalidation of source, template,
 dictionary and module revisions; no automatic effect replay or assumed File access.
@@ -951,16 +989,16 @@ mapping controls depend on it. Specify parameter/dimension/period/value/unit,
 record grain, observation/total roles, temporal semantics, missing/error states
 and provenance, with a worked source → mapping → observation example. Also
 document template, dictionary, binding and dataset files, schema versions and
-validation errors. Keep this distinct from the implemented metadata-only
+validation errors. Keep this distinct from the implemented project declaration
 `project.json` and M0 probe envelope; neither is the canonical extraction format.
 Unknown format versions must fail explicitly. Help examples must match the
 versioned schema and fixtures used by the engine.
 
 | Original stage | UI delivery |
 |---|---|
-| M1 source selection (implemented) | Responsive modular viewer, paged file/folder intake, cancellable enumeration progress and explicit metadata-only states. Persisted source association and typed extraction commands remain open. |
+| M1 source selection (implemented) | Responsive modular viewer, paged file/folder intake, cancellable enumeration progress, persisted workspace source declarations and guarded save/recovery. Typed extraction commands remain open. |
 | M2 matrix-language foundation (implemented) | JSON template → typed plan → normalized snapshot → batched canonical observations with lineage, in the separate portable probe. Native integration and full readers remain open. |
-| M2 bounded XLSX adapter (implemented) | Explicit file + template → selective ZIP/XML reading in a Worker → exact typed cells → the same canonical batches. Single-file probe only; durable source association, queue parser dispatch and 80 MB qualification remain open. |
+| M2 bounded XLSX adapter (implemented) | Explicit file + template → selective ZIP/XML reading in a Worker → exact typed cells → the same canonical batches. Single-file probe only; queue parser dispatch and 80 MB qualification remain open. |
 | M1–M3 | First real end-to-end flow for a supported source: loading, preview, parameter/mapping inspection, diagnostics and draft/test/publish through the common domain service. Include the bounded processing queue, off-UI readers, resource budgets and cancellation from the first reader. Connect the bounded XLSX matrix through streamed workspace sources; add the remaining Excel families (including XLSB), CSV/JSON behind the same workflow and their own fixtures. Deliver usable controls alongside each capability. |
 | M4 | Portable picker/import/export and the format/help reference using the same engine and documented capability differences. |
 | M5 | Extend the existing queue with advanced batch execution, scoped dictionary/mapping edits, comparison/consolidation, multiple blocks and output workbook templates. |
@@ -997,7 +1035,7 @@ Next slices, coordinated with the workspace owners:
    reference to the net8.0 Runtime assembly. Host-neutral independent work below
    does not wait for Office qualification.
 2. Use the implemented [language/core contract](#language-and-execution-core) and
-   independent oracle and XLSX reader to connect durable source association and parser
+   independent oracle and XLSX reader to connect saved source declarations and parser
    dispatch through the preparation queue and [loader/project UI](#planned-loader-and-project-ui). Qualify real reader
    capabilities/memory before raising prototype limits. Deliver incrementally
    through M1–M3 using the existing workspace/execution owners.
@@ -1037,9 +1075,13 @@ changes also require `node tests/web/vendor-gate.test.js`.
 
 Shared project storage: Harness filter `tabular project:` covers create/reopen,
 read-only refusal, relocation, malformed metadata, foreign-workspace binding,
-external drift, historical bytes and uncertain-write recovery. A focused CLI
+external drift, historical bytes and uncertain-write recovery. Source checks add stable
+IDs across restart/reordering, empty selections, schema/count/byte bounds, missing
+file declarations and unknown-save reconciliation without replay. A focused CLI
 smoke verifies the actual create/open consumer across processes, refusals and
-discovery through the shared resource catalog.
+discovery through the shared resource catalog. Save/open/prepare smoke also checks
+cross-process declaration restoration, read-only preparation from saved paths and
+explicit clearing without deleting source files.
 
 `workspace application:` covers stale/readonly binding refusal, failure projections,
 Office controller replacement, off-UI file dispatch and typed unknown/reconciliation
@@ -1056,6 +1098,8 @@ receipts and narrow light/dark layout. These do not qualify real Windows/Office 
 typed replies: 61-file paging, inert filenames, read-only admission, explicit budgets,
 filter-independent progress, remount, pause/retry/cancel, invalid/lost reply recovery,
 late directory results after a context change and narrow/wide light/dark layouts.
+Saved-source checks cover restored composition, bounded search/removal, explicit
+save/revert, read-only refusal and lost/mismatched save receipts with pinned inspection.
 Harness checks exercise the actual directory owner/bridge without source capture,
 including stable pages, protected entries, cancellation and stale binding refusal.
 

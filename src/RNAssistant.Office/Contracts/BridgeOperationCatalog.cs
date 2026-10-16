@@ -15,6 +15,7 @@ namespace RNAssistant.Office.Contracts
         OpenWorkspace,
         CreateTabularProject,
         OpenTabularProject,
+        SaveTabularProjectSources,
         ReconcileWorkspaceFile,
         PrepareWorkspaceSources,
         BrowseWorkspaceFiles,
