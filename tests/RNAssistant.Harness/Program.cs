@@ -39,6 +39,8 @@ namespace RNAssistant.Harness
         {
             if (args != null && args.Length == 2 && args[0] == "--resource-workflow-live")
                 return ResourceWorkflowLive(args[1]);
+            if (args != null && args.Length == 1 && args[0] == "--tabular-source-host")
+                return TabularSourceHost();
             var tests = new List<HarnessTest>
             {
                 Test("harness: native async execution", HarnessRunsNativeAsync),
@@ -116,6 +118,9 @@ namespace RNAssistant.Harness
                 Test("workspace application: source reader pins selection and bounds", WorkspaceSourceReaderKeepsSelectionAndBounds),
                 Test("workspace application: source reader revocation drains pending I/O", WorkspaceSourceReaderRevokesBeforeIoDrains),
                 Test("workspace application: source reader open guards and application drain", WorkspaceSourceReaderApplicationCloseDrains),
+                Test("tabular native: package pins only approved shipped modules", TabularBundlePinsOnlyShippedModules),
+                Test("tabular native: exact resource scope and range protocol", TabularResourceSessionKeepsExactScope),
+                Test("tabular native: abandoned realm native deadline", TabularResourceSessionHasNativeDeadline),
                 Test("workspace application: paged metadata browsing and exact binding", WorkspaceBrowseKeepsSelectionBoundaries),
                 Test("workspace files: guarded create patch and external conflict", WorkspaceFilesGuardWrites),
                 Test("workspace files: paths and historical view", WorkspaceFilesRejectUnsafePaths),

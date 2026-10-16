@@ -1,1 +1,7 @@
 build/RNAssistant.GitArchive.props export-subst
+# Runtime package hashes must survive a Windows checkout byte-for-byte.
+web/tabular/*.js text eol=lf
+web/tabular/runtime.html text eol=lf
+web/tabular/runtime-lock.json text eol=lf
+web/js/vendor/sax.js text eol=lf
+src/RNAssistant.Application/TabularRuntimePin.cs text eol=lf

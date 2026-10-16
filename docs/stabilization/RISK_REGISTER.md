@@ -26,8 +26,11 @@ matrix records/provisional batches have no native tools or publication authority
   exact dependencies and Windows/Excel evidence; do not synthesize unavailable
   date-system, merge, formula-cache or formatting fields.
 - Worker contract labels are not module hash pins or security evidence.
-  Close with exact captured modules, application-owned WebView2 lifecycle,
-  native scope validation, CSP and hard cancellation in the actual host.
+  The shared runtime now captures approved shipped modules against a generated lock
+  and compiled package hash, and binds a revocable source resource scope. Chrome
+  checks the real C#/Worker path and dedicated CSP. Close the remaining gate with
+  application-owned WebView2 lifecycle, request interception, navigation/permissions
+  and hard cancellation in the actual host. Keep project input/result pins separate.
 - No project publication/export is implemented. Probe JSON cannot act as a
   passing test receipt. Close with existing journal/authority publication,
   stale-input rejection, read-back and complete portable dependency capture.
@@ -46,8 +49,9 @@ matrix records/provisional batches have no native tools or publication authority
   exact numeric cells, resource budgets and Worker cancellation. The shared native
   reader now pins selection/maintenance until I/O drains and supplies bounded ranges
   over protected temporary seek staging. Host-neutral checks cover encoding variants,
-  cancellation and cleanup; binary transport into the Worker, module/CSP qualification
-  and representative staging disk/RAM/throughput measurements remain open. Its 30,000-row
+  cancellation and cleanup. The resource handler now transfers actual snapshot ranges
+  to the Worker under captured module pins and CSP in the test host; production
+  WebView2 wiring and representative staging disk/RAM/throughput measurements remain open. Its 30,000-row
   fixture and writer interoperability do not establish 80 MB behavior or RAM cost.
   Stored formula caches have unknown freshness, and only consumed ZIP parts are
   CRC-checked; neither is a publication receipt. Close the [queue/large-file gate](../data-templates.md#large-files-and-processing-queue--planned)

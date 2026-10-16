@@ -1,5 +1,25 @@
 # Stabilization progress
 
+## Pinned runtime resources and native-to-Worker transport — 2026-10-16
+
+The shared application now captures 17 approved runtime assets against a generated
+lock and compiled SHA-256 pin. One resource session binds those immutable modules
+to a prepared source, serves bounded binary ranges with sequence receipts and
+revokes access on cancel/deadline/disposal. Its dedicated entry uses the same JS
+engine/Worker and waits for native cleanup; native revocation after parsing aborts
+provisional output. The main UI bridge/CSP and product runtime remain unchanged.
+
+Validation: focused Harness checks cover package drift/refusals, native scope and
+deadline; real Chrome tests use the same C# handler through a Harness-only loopback
+adapter. The exact 16-record oracle, CSP, cancellation, sink failure and native
+revocation pass, including reading retained bytes after live source replacement.
+No Windows/Office/VSTO validation was run and no production server was introduced.
+
+Next: a dedicated WebView2 executor adapter with host navigation/permission/resource
+interception and hard-stop lifecycle, then typed job/result integration and queue
+parser dispatch. Template/dictionary/dataset pins, publication and representative
+large-file performance remain open. [Contract](../data-templates.md#native-resource-session).
+
 ## Owned native source ranges and protected seek staging — 2026-10-16
 
 `WorkspaceSourceReader` replaces the unowned prepared-stream entry point. It admits

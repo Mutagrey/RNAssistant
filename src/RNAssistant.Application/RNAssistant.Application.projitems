@@ -5,6 +5,9 @@
     <Compile Include="$(MSBuildThisFileDirectory)Contracts\WorkspaceSourceContracts.cs" Link="Application\Contracts\WorkspaceSourceContracts.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)WorkspaceSourceQueue.cs" Link="Application\WorkspaceSourceQueue.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)WorkspaceSourceReader.cs" Link="Application\WorkspaceSourceReader.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)TabularRuntimeBundle.cs" Link="Application\TabularRuntimeBundle.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)TabularRuntimePin.cs" Link="Application\TabularRuntimePin.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)WorkspaceTabularResourceSession.cs" Link="Application\WorkspaceTabularResourceSession.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Contracts\WorkspaceFileContracts.cs" Link="Application\Contracts\WorkspaceFileContracts.cs" />
   </ItemGroup>
 </Project>

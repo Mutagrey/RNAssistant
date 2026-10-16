@@ -1,0 +1,93 @@
+{
+  "formatVersion": 1,
+  "workerProtocol": 5,
+  "engineRevision": "tabular-core-2",
+  "entry": "tabular/runtime.html",
+  "files": [
+    {
+      "path": "js/vendor/sax.js",
+      "bytes": 50818,
+      "sha256": "1cdc1270d987cb0f6ee66dd8efb01c50511aa14d17b6163bbbffb21df8cf1c06"
+    },
+    {
+      "path": "tabular/byte-source.js",
+      "bytes": 4474,
+      "sha256": "d9e140df075d2e9327eca4af2d119644f24915dda507c289e89b771d9f8fa3fa"
+    },
+    {
+      "path": "tabular/decimal.js",
+      "bytes": 4818,
+      "sha256": "0722eb03dd1e602b7fe1f3755de725cede814922b99e0f50df04a1fa18f23534"
+    },
+    {
+      "path": "tabular/engine.js",
+      "bytes": 4835,
+      "sha256": "277c23f95bfffeca76abd9aaa0e077e8c9ddb254165e1c72314e622b6fd75caa"
+    },
+    {
+      "path": "tabular/executor.js",
+      "bytes": 14103,
+      "sha256": "7b82e0ecbf9f65af8a188c9158e92083b895013c5b718464ed90af4c34b3e0e5"
+    },
+    {
+      "path": "tabular/expression.js",
+      "bytes": 11561,
+      "sha256": "7aea003a5aa5f91e82734ad4430f9f95b36870b996c171b7e0c161a49e6f3225"
+    },
+    {
+      "path": "tabular/json.js",
+      "bytes": 4015,
+      "sha256": "8daaa8fdbfa28be6fdb069e5883ea59c8fac8f1b47db1b2195fd4ff14724484c"
+    },
+    {
+      "path": "tabular/native-runtime.js",
+      "bytes": 5298,
+      "sha256": "40c31199d6f5168d209b8d58fe082a3aaef1f30e5ba896110c6c512078554942"
+    },
+    {
+      "path": "tabular/runtime.html",
+      "bytes": 668,
+      "sha256": "65d784b4a5efbb93b48d32a79fcb818b3e78400b53f7cead9788f4b0ff722126"
+    },
+    {
+      "path": "tabular/selectors.js",
+      "bytes": 8152,
+      "sha256": "4a2c433a0d3aa3a8ee6cc880d5a761eae58c026b00101757ae5bacfb2307f000"
+    },
+    {
+      "path": "tabular/snapshot.js",
+      "bytes": 6296,
+      "sha256": "23edfae139baf3c10713c4ebb6dd2cbd1d3cb7901949647c02fc8a0dc86bd63b"
+    },
+    {
+      "path": "tabular/sources.js",
+      "bytes": 11516,
+      "sha256": "19367f86055a8887eccf5b4da83ed097026a38b894cffa8756ba1800055a783d"
+    },
+    {
+      "path": "tabular/template.js",
+      "bytes": 14913,
+      "sha256": "d0d06c6a12ae6eb44cab68981a07783153944ef97fc71377fb93ff3001305c18"
+    },
+    {
+      "path": "tabular/transform.js",
+      "bytes": 7220,
+      "sha256": "ad6dfb2bcafb7da44976bf34cc4da2d419edadba7ca29898545333786c8a5725"
+    },
+    {
+      "path": "tabular/worker.js",
+      "bytes": 4479,
+      "sha256": "9065819c9be5c1eb9d6f80e5231c7944f4d26fa483b8d255e0e04bb7333f2db1"
+    },
+    {
+      "path": "tabular/xlsx-reader.js",
+      "bytes": 22182,
+      "sha256": "1e3ac5e394dab88396f5131e9db3431010c12b16d79d81edd4079cb1075b591b"
+    },
+    {
+      "path": "tabular/xlsx-zip.js",
+      "bytes": 11423,
+      "sha256": "7c8a2ea26856f2cdc530d9c81bee0a0ef1befc6223a15cc7f5a16b89b14fd4a5"
+    }
+  ]
+}

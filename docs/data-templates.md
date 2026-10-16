@@ -6,8 +6,9 @@ One observation executor handles both matrix orientations, record fields and nes
 JSON captures; real XLSX uses the existing reader in the separate Worker probe.
 The loader saves workspace source declarations and controls the shared preparation
 queue. The portable XLSX reader now accepts bounded pull-byte sources through its
-Worker protocol. The shared application now owns exact, cancellable range reads;
-native binary transport, parsing dispatch and publication remain open.
+Worker protocol. The shared application owns exact, cancellable range reads and a
+pinned resource session exercised end to end with a real Worker. WebView2 host
+integration, queue parser dispatch and publication remain open.
 Owner: Data Templates domain; portable JS in `web/tabular`, shared manifest storage
 in Core `TabularProjectStore` over `WorkspaceFileService`.
 This is the canonical domain contract; planned scope is marked separately from
@@ -150,11 +151,13 @@ cooperative mode fails with `XLSX_WORKER_REQUIRED`. A browser that denies Worker
 on `file://` can still run the two normalized-input operations, but not XLSX.
 
 The revision handshake is a **contract label**, not a content hash or trust
-proof. Exact captured module bytes, `engine.lock.json`, approved extensions and
-native execution leases are not implemented. A Worker is not a permission
-sandbox. Imported JS is unsupported; the root RNAssistant UI must never execute
-project scripts through this probe. CSP and native-origin enforcement for the
-eventual WebView2 execution realm still require implementation and qualification.
+proof. The [native resource session](#native-resource-session) now captures and
+serves exact shipped modules against a generated package lock and a compiled hash
+pin. Project `engine.lock.json`, extensions and native execution/result receipts
+remain open. A Worker alone is not a permission sandbox. Imported/project JS is
+unsupported; the root RNAssistant UI must never execute it through this probe.
+Dedicated-origin CSP is tested in Chrome; WebView2 host enforcement and lifetime
+still require implementation and qualification.
 
 ## Language and execution core
 
@@ -448,10 +451,62 @@ Staging has its own typed byte-progress phase, is cancellable and is deleted on
 close/failure; it has no reopen/recovery path or durable authority. See
 [source stream storage](resource-fabric.md).
 
-This closes native source ownership and seek access, **not native execution**.
-Module hashes, isolated execution/CSP, binary transport into the JS byte capability
-and queue parser dispatch remain explicit gates. No new C# interpreter or
-native/server runtime is introduced.
+The resource session below connects these ranges to the JS byte capability and
+pins the shipped modules. This does not yet connect the main WebView2 application
+or dispatch parsing from its queue. No new C# interpreter or server runtime is introduced.
+
+### Native resource session
+
+`TabularRuntimeBundle.Capture` accepts the installation's `web` directory from
+application configuration, never a workspace/UI path. It verifies the generated
+`tabular/runtime-lock.json` against `TabularRuntimePin` compiled into the application,
+then validates all 17 approved files and their lengths/SHA-256 hashes. The package
+is bounded to 512 KiB; immutable captured bytes serve every later request, including
+Worker imports. Changed, missing, linked or foreign modules fail admission. Updating
+a source file and its manifest together cannot bypass the compiled pin. Package
+updates use `node tools/update-tabular-runtime-lock.js --write` after code review;
+`--check` detects a stale manifest or compiled pin. Pinned text assets have LF
+checkout rules so Windows gets the same bytes. This is one approved shipped engine,
+not a project extension loader or publication receipt.
+
+`WorkspaceTabularResourceSession.OpenAsync` binds this bundle to one prepared source
+through the existing workspace application. Opening progress remains a typed callback
+from the reader. It creates a random per-session prefix on
+`https://rnassistant.tabular.invalid`, a native cancellation/deadline scope (default
+120 seconds, maximum 300 seconds), and a host-neutral resource handler:
+
+- `GET` serves the fixed entry/modules, a closed metadata descriptor and serial
+  `source?sequence=…&offset=…&count=…` binary ranges, bounded to 256 KiB.
+- Canonical method/URL/origin, range bounds and monotonically increasing sequence
+  are checked before source I/O; stale/foreign/aliased requests fail explicitly.
+  Responses have exact length/sequence/offset receipts, no-store/nosniff, same-origin
+  resource policy and no permissive CORS. No filesystem path or base64 body is exposed.
+- The entry CSP permits only its exact Worker URL and its descriptor/source fetches;
+  inline/evaluated scripts, frames, arbitrary/blob Workers and external fetches are
+  blocked. The Worker's response CSP denies network reads and child Workers while
+  permitting imports from the captured package. Main UI policy is unchanged.
+- `DELETE source` confirms native cleanup only after reader I/O drains. Native
+  cancellation, deadline or application disposal revokes the entire prefix. A later
+  cleanup request cannot turn that revocation into successful execution.
+
+`runtime.html` is a separate empty execution page; `native-runtime.js` feeds the same
+byte-source/executor/Worker APIs with a single explicit XLSX extraction. It verifies
+bounded descriptor/range receipts, forwards progress/cancellation and awaits native
+cleanup (bounded to five seconds) before returning success. A failed cleanup aborts
+even already-completed provisional sink output. `sink.complete` remains staging
+validation, never publication. There is no retry, arbitrary URL or cooperative path.
+The native owner must always call `CloseAsync` when disposing the realm; browser
+cleanup is not its sole lifetime mechanism. The native source deadline revokes reads;
+hard Worker/process termination still belongs to the pending host executor adapter.
+
+The Harness-only loopback host forwards real requests to this production handler;
+it is not shipped as an application server. The Chrome test traverses retained CAS →
+C# source reader → binary resource response → JS byte capability → real Worker →
+the existing 16-record oracle, including after the live file changes. It also checks
+CSP, cancellation, sink failure and native revocation after parsing. It does not
+qualify Windows/WebView2 request interception, top-level navigation/permissions,
+application-owned hidden-realm lifecycle, template/dictionary/dataset pins, result
+staging/publication or representative 80-MB throughput. Those remain integration gates.
 
 ### Working examples and remaining boundaries
 
@@ -1094,9 +1149,9 @@ manifest implementation:
 |---|---|
 | Shared workspace application → project files | Compatible application commands, CLI, project UI and a bounded directory chooser are implemented. Real Windows UI evidence, workspace-owned UI chats, richer resource views and full M7 lifetime/reconnect integration remain open. |
 | Live Excel capture | `ExcelResourceProvider` resolves explicit ranges through `ExcelReadService` and the bound document scope. It does not yet feed this probe; capture consistency, unsaved values, dependencies and richer cell availability remain open. |
-| Application-owned execution | `AssistantPaneControl` owns the current WebView2 and trusts its exact root document; frame navigation is limited to about:blank/srcdoc. A browser proof does not authorize broadening that policy or prove WebView2 Worker behavior. |
+| Application-owned execution | The pinned resource session and dedicated entry run end to end through a test host. `AssistantPaneControl` still owns only the main UI WebView2. Add a separate executor host with navigation/permission/interception/lifetime controls; a Chrome proof does not authorize broadening the main UI policy or qualify WebView2. |
 | Publication | Draft/test/publish and exact source/module/dictionary pins must use existing authority/journal owners. Verified manifest creation is not a template publication; probe JSON cannot authorize one. |
-| Source input and transfer | The viewer has browser file/folder intake and an explicit workspace-file chooser feeding preparation. Source association is transient; native parser dispatch and persisted selection remain open. The separate probe executes M2 over normalized snapshots and bounded XLSX. CSV/JSON readers, project closure and complete export/import remain open. |
+| Source input and transfer | Browser intake and the workspace chooser feed preparation; native source declarations persist in the manifest. Exact source range transport and a pinned runtime session are implemented; production host wiring/parser dispatch remain open. The separate probe executes M2 over normalized snapshots and bounded XLSX. CSV/JSON readers, project closure and complete export/import remain open. |
 | Large files and batch execution | Enumeration/bounded lists, a separate XLSX Worker, shared source streams and an application-owned preparation queue with loader controls/progress are implemented. Storage has an actual 80-MiB binary test; parser dispatch, durable batch requests, native execution/CSP and representative Excel qualification remain open; see the [processing contract](#large-files-and-processing-queue--planned). |
 
 Next slices, coordinated with the workspace owners:
@@ -1154,6 +1209,13 @@ Real Workers cover cancel/deadline/disposal, external source revocation, late by
 old/foreign/concurrent/out-of-order requests, excessive rereads, premature output,
 mismatched source receipts and cleanup failure. The source endpoint is test-only;
 these checks do not qualify native transport, module pins or Windows/WebView2.
+
+`tabular native:` in the Harness checks the compiled package pin, exact captured
+modules after installation drift, canonical resource routes, byte receipts,
+revocation/drain and the independent native deadline. After one Harness build,
+`tabular-native-browser.test.js` starts its test-only host and verifies the real
+C#/Worker path, CSP and the provisional-result failure cases described above.
+Run `node tools/update-tabular-runtime-lock.js --check` after runtime changes.
 
 Shared project storage: Harness filter `tabular project:` covers create/reopen,
 read-only refusal, relocation, malformed metadata, foreign-workspace binding,

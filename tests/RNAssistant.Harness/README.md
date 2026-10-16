@@ -32,6 +32,20 @@ qualify native source transport/module pins or representative 80-MB Excel throug
 After vendor changes run `node tests/web/vendor-gate.test.js` for hashes/licenses.
 The scope and manual probe are in [Data Templates](../../docs/data-templates.md).
 
+Native runtime transport: `tabular native:` covers the compiled module-bundle pin,
+immutable captured files, canonical resource routes, bounded range receipts,
+revocation/drain and a native deadline. After this Harness build run
+`node tests/web/tabular-native-browser.test.js` (Playwright/`BROWSER_EXECUTABLE`).
+It launches the Harness-only `--tabular-source-host`, forwarding actual requests to
+the production resource handler: retained C# snapshot → binary ranges → real Worker
+→ the 16-record oracle. It covers dedicated CSP, cancellation, sink failure and native
+revocation after parsing, with native storage activity drained before completion.
+There is no production HTTP server or Office dependency. These checks do not qualify
+Windows/WebView2 interception/lifecycle, the main loader's parser dispatch or large
+Excel throughput. `node tools/update-tabular-runtime-lock.js --check` verifies the
+shipped package manifest and generated compiled pin; update both with `--write`
+only after reviewing runtime changes. No npm/bundler is needed.
+
 `workspace files:` includes an actual 80-MiB source retained/read without a
 whole-body allocation, exact history after drift/deletion/restart, operation
 budgets, busy-file cancellation and missing/corrupt/unpublished source refusals.
