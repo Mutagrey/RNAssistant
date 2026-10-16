@@ -117,6 +117,7 @@
     <Compile Include="Models\AgentResponseModels.cs" />
     <Compile Include="Models\ChatModels.cs" />
     <Compile Include="Models\WorkspaceModels.cs" />
+    <Compile Include="Models\TabularProjectModels.cs" />
     <Compile Include="Models\WebProjectSnapshotModels.cs" />
     <Compile Include="Models\WebBrowserDiagnosticModels.cs" />
     <Compile Include="Services\RasterImageHeader.cs" />
@@ -247,6 +248,7 @@
     <Compile Include="Storage\AppDataPaths.cs" />
     <Compile Include="Storage\WorkspaceStore.cs" />
     <Compile Include="Storage\WorkspaceFileService.cs" />
+    <Compile Include="Storage\TabularProjectStore.cs" />
     <Compile Include="Storage\WorkspaceWebSnapshotStore.cs" />
     <Compile Include="Storage\WorkspaceWebSnapshotStore.Diagnostics.cs" />
     <Compile Include="Storage\AttachmentStore.cs" />

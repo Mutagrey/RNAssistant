@@ -1,5 +1,18 @@
 # Stabilization progress
 
+## Data Templates shared manifest foundation — 2026-10-16
+
+M1 now has a typed Core manifest/storage facet over `WorkspaceFileService`, with
+create/open, exact workspace/file binding and drift revalidation. The existing
+Runtime/CLI consumes it; Core Framework 4.8 includes the same code. No new root
+registry, file writer, CAS, journal or Office dependency on .NET 8 was introduced.
+
+Validation: four focused `tabular project:` Harness checks and a process-level
+CLI smoke pass (create/reopen, read-only/overwrite refusal and shared discovery).
+CLI builds successfully. Office UI, live Excel capture, draft/test/publication
+and export remain open; no Windows/Office/VSTO check was run.
+[Current contract](../data-templates.md#workspace-project-files).
+
 ## Data Templates portable proof — 2026-10-16
 
 M0 has started with a separate bounded JS capture/selector core, immutable typed
@@ -13,6 +26,13 @@ live capture, module hash pins, publication and project export remain open.
 [Current contract](../data-templates.md) and
 [integration gates](RISK_REGISTER.md#data-templates-integration-gates--2026-10-16)
 define the next slice. Existing stabilization priorities below are unchanged.
+
+Workspace overlap review: Data Templates consumes ADR-0013's generic workspace
+identity/file ownership. The next application slice belongs to the shared
+workspace boundary (including the net8.0/Framework 4.8 composition gap); Excel is
+a separately bound source. The [ownership and sequence](../data-templates.md#relationship-to-workspace-first)
+replace the earlier Office-session-first project wording. This review preceded
+the shared manifest implementation recorded above.
 
 ## Architecture review and metadata conflict correction — 2026-10-15
 

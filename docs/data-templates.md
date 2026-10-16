@@ -1,7 +1,8 @@
 # Data Templates
 
-Status: M0 started, portable capture/execution proof implemented (2026-10-16).
-Owner: Data Templates domain; portable implementation in `web/tabular`.
+Status: portable M0 proof and M1 project-manifest foundation implemented (2026-10-16).
+Owner: Data Templates domain; portable JS in `web/tabular`, shared manifest storage
+in Core `TabularProjectStore` over `WorkspaceFileService`.
 This is the canonical contract for the implemented slice, not a second roadmap.
 Retire it only if the domain is removed or its contract moves to another named
 owner. Architecture decision: [ADR-0014](decisions/ADR-0014-data-templates.md).
@@ -15,10 +16,10 @@ the file picker. It includes two separated value bands and their headers, plus a
 right-hand year marker. The result preserves `J12` as row 12 / column 10 and keeps
 `P5` / `P12` at their original addresses. No period or total is inferred yet.
 
-This is a capture probe, not a template language, file-backed project, published
-dataset or Office integration. No `tabular.*` tool/skill is exposed. It does not
-read a live workbook, parse XLSX/YAML, create a project, write source files or
-export a complete project. Download produces only the probe result JSON.
+The page remains a capture probe, without template language, published datasets
+or Office integration. It does not read a live workbook, parse XLSX/YAML or write
+project files. Download produces only probe result JSON. Shared native manifest
+creation/opening is described below; no `tabular.*` tool/skill is exposed.
 
 | Module | Responsibility |
 |---|---|
@@ -114,28 +115,139 @@ sandbox. Imported JS is unsupported; the root RNAssistant UI must never execute
 project scripts through this probe. CSP and native-origin enforcement for the
 eventual WebView2 execution realm still require implementation and qualification.
 
+## Relationship to workspace-first
+
+Data Templates is a domain project inside the workspace architecture accepted in
+[ADR-0013](decisions/ADR-0013-workspace-first-runtime.md). It must not introduce a
+separate project-root registry, conversation owner or filesystem authority. The
+[workspace reconciliation](stabilization/PROGRESS.md#workspace-plan-reconciliation-and-event-subscription--2026-10-05)
+records the existing implementation and open cutovers. Its M-numbers and Data
+Templates M-numbers describe different plans.
+
+| Concern | Shared workspace owner | Data Templates responsibility |
+|---|---|---|
+| Root, identity, writable/read-only association | Core `WorkspaceStore`, `WorkspaceDescriptor`, `.rnassistant/workspace.json` | Select a project manifest by a checked path inside the opened workspace; do not allocate another filesystem scope. |
+| Sessions and execution | `ChatStore`, coordinator/kernel; workspace application composition already exists in Runtime | Target workspace-owned sessions; attach an exact Office source separately when needed. Do not create a domain-specific chat or silently relocate existing document chats. |
+| Files, revisions, drift, uncertain effects | Core `WorkspaceFileService`, resource provider, authority/CAS/journal | Validate domain content and allowed project paths; delegate every file effect to that owner. |
+| UI resource reads, receipts, reconnect and run lifetime | Workspace application contracts and existing event feed; Office adoption remains open | Add a project viewer/commands to that application boundary, without another file tree, event stream or model loop. |
+| Template language, dictionaries, capture plan, test/publish | Data Templates domain and portable JS core | These are new domain semantics; a successful file write or generic web verification does not prove a valid template publication. |
+
+`project.json` owns domain metadata; templates, dictionaries, bindings and datasets
+will extend its versioned contract in later slices.
+`.rnassistant/workspace.json` describes RNAssistant's workspace association.
+They are not duplicate manifests and must not be synchronized as alternative
+sources of truth. The portable `projectId` is domain metadata, not
+workspace permission or a replacement for `WorkspaceId`. Runtime binds the opened
+workspace and exact project-manifest locator/revision. Start with the existing
+root-directory mount; multiple/external mounts are still workspace M2/M8 scope.
+
+The portable export must omit RNAssistant's `.rnassistant` control directory,
+workspace grants, chat state and resource leases. A copied/imported project gets
+an explicit workspace association through `WorkspaceStore`; copying the original
+workspace identity into a second existing root is already rejected by that owner.
+
+Workspace M2/M3 supply root and file ownership; M7 supplies the shared application
+and UI boundary; M8 supplies bound Office sources. New Data Templates files do not
+require completing M6 migration of every old HTML/MD/JSON authoring path first.
+The existing writers remain scoped to their existing artifacts until their own
+explicit cutover; they never write the new project in parallel.
+
+## Workspace project files
+
+`TabularProjectStore` is a domain storage facet using the existing file owner;
+it has no direct file I/O, separate registry, mutable CAS copy or journal.
+Its models and implementation are included in both the existing Core Framework
+4.8 project and the shared-source development build. Office gains no .NET 8 dependency.
+`WorkspaceConversationService` exposes typed create/open operations to the current
+CLI consumer. Office UI adoption remains a separate workspace M7 integration.
+
+The current portable `project.json` has exactly four fields:
+
+```json
+{
+  "kind": "data-templates",
+  "formatVersion": 1,
+  "projectId": "tp_0123456789abcdef0123456789abcdef",
+  "name": "Quarterly reports"
+}
+```
+
+This version is metadata only: it does not declare templates, sources, executable
+modules or published results. Unknown/duplicate fields, wrong types, unsupported
+versions and invalid identities fail without rewriting the file. The manifest
+limit is 16 KiB UTF-8; names allow 1–200 characters without controls. The file must
+be named `project.json`, at the root or in a subdirectory. All containment, link,
+case-collision and protected-path checks remain with `WorkspaceFileService`.
+
+Create uses the owner's guarded create and verified read-back; an existing target
+is never overwritten or adopted as success. Open observes current bytes and
+returns an immutable `TabularProjectSnapshot` with workspace ID, relative manifest
+path, exact file reference/hash, domain metadata and current read-only status.
+`RequireUnchanged` refuses a foreign workspace or changed file identity/revision.
+It checks an observation, not a long-lived lock or future write permission; later
+mutations still need the file owner's exact revision guard at dispatch.
+
+Multiple projects can share a workspace. A copied project may retain its domain
+ID, but must be explicitly opened in its own workspace/file authority. Workspace
+relocation is handled by `WorkspaceStore`; no project association is persisted
+separately. An uncertain write stays unresolved through restart. Ordinary open
+cannot conceal it; explicit existing `recover` inspects without replaying creation.
+
+Development CLI usage (existing CLI target; no Office migration is required):
+
+```sh
+rna workspace open /absolute/workspace
+rna project create --workspace /absolute/workspace --path reports/project.json --name "Quarterly reports"
+rna project open --workspace /absolute/workspace --path reports/project.json --read-only
+```
+
+These commands need no chat, model, workbook or browser. Files are discoverable
+through the existing `resources`/`open` operations. This single-file foundation
+does not yet implement draft/test/publish, multi-file activation or a project viewer.
+
 ## Integration gaps and next boundary
 
-Source review at `c33da7df` found these concrete gaps:
+Remaining boundaries after the initial source review at `c33da7df` and the
+manifest implementation:
 
 | Boundary | Existing owner / remaining work |
 |---|---|
-| Office → project files | `WorkspaceFileService` already owns guarded file writes, CAS observation and recovery in CLI. Office has no scoped project-root composition. Add typed create/open through that owner; no direct second file writer. |
+| Shared workspace application → project files | Shared Core manifest create/open/revalidation and a typed Runtime/CLI consumer are implemented. Office adoption of workspace application operations and the project viewer are unfinished. Reuse these compatible contracts/file owners when composing that UI. |
 | Live Excel capture | `ExcelResourceProvider` resolves explicit ranges through `ExcelReadService` and the bound document scope. It does not yet feed this probe; capture consistency, unsaved values, dependencies and richer cell availability remain open. |
 | Application-owned execution | `AssistantPaneControl` owns the current WebView2 and trusts its exact root document; frame navigation is limited to about:blank/srcdoc. A browser proof does not authorize broadening that policy or prove WebView2 Worker behavior. |
-| Publication | Project identity, draft/test/publish, manifest read-back and exact source/module/dictionary pins must use existing authority/journal owners. Probe JSON cannot authorize publication. |
+| Publication | Draft/test/publish and exact source/module/dictionary pins must use existing authority/journal owners. Verified manifest creation is not a template publication; probe JSON cannot authorize one. |
 | Transfer | Picker/download works for this probe. File-backed project closure, missing dependencies, source inclusion and complete export/import are not implemented. |
 
-Next slice: compose a user-selected project root with the existing file owner and
-the exact Office session; verify create/reopen and external drift before exposing
-project tools. The native capture/execution path also needs pinned inputs and
-typed DTOs. This is still M0;
-M1–M3 completion and full matrix DSL are not claimed. Tracked gates live in
+Next slices, coordinated with the workspace owners:
+
+1. Adapt the Office UI through the shared typed application boundary, reusing
+   the compatible Core project/file contracts. `RNAssistant.Runtime` currently
+   targets only `net8.0` and
+   references BrowserHost; Office targets .NET Framework 4.8. A direct reference
+   is not viable. Factor only the required common contracts/use cases into a
+   compatible application boundary, keeping browser/host adapters separate; do
+   not copy Runtime or move its conversation orchestration into Core. Any actual
+   temporary Office adapter needs its owner and M7 removal gate in MIGRATION_MAP.
+2. Attach the exact Excel source independently of project identity, then connect
+   capture/execution and domain draft/test/publish. Keep source grants, project
+   write authority and immutable evidence separate. Multi-file activation remains
+   a domain publication step: stage members, verify read-back, then switch the
+   manifest pointer through the existing owner; do not claim atomic folder writes.
+
+This sequencing replaces the earlier Office-session-first project-root wording.
+The portable JS work remains applicable unchanged. M0 and M1–M3 are incomplete;
+full matrix DSL is not claimed. Tracked gates live in
 [the risk register](stabilization/RISK_REGISTER.md#data-templates-integration-gates--2026-10-16).
 
 ## Verification
 
-Run only the affected scripts (Playwright/browser must already be available):
+Shared project storage: Harness filter `tabular project:` covers create/reopen,
+read-only refusal, relocation, malformed metadata, foreign-workspace binding,
+external drift, historical bytes and uncertain-write recovery. A focused CLI
+smoke verifies the actual create/open consumer across processes, refusals and
+discovery through the shared resource catalog. These do not qualify Office UI.
+
+For JS changes, run only the affected scripts (Playwright/browser must already be available):
 
 ```sh
 node tests/web/tabular-core.test.js

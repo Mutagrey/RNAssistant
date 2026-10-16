@@ -11,6 +11,15 @@ One portable plain-JavaScript core owns selector/template semantics. C# will own
 typed application integration, exact source/session guards and publication; COM
 remains in OfficeHosts. It will not implement another template interpreter.
 
+Data Templates consumes the workspace architecture in
+[ADR-0013](ADR-0013-workspace-first-runtime.md). Workspace identity/session/file
+ownership stays generic; `project.json` adds domain configuration inside that
+scope. Excel is a separately bound source, not the project's owner. Implement the
+necessary shared workspace application slice before an Office-specific project
+API; this does not require migrating all old authored artifacts first. Current
+.NET 8 Runtime and .NET Framework 4.8 Office composition need a compatible shared
+boundary, not a direct assembly reference or duplicated application runtime.
+
 Templates, dictionaries and mappings are data. Executable JS changes are a
 separate developer workflow with exact module capture and publication. Neither
 opening a project nor reading its manifest grants native permissions. Project

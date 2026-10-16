@@ -7,6 +7,13 @@ cancel/deadline/reload, viewer-independent lifetime and offline file:// parity.
 They require no Harness build and do not qualify Office capture or publication.
 The scope and manual probe are in [Data Templates](../../docs/data-templates.md).
 
+Data Templates shared manifest storage: filter `tabular project:` checks
+create/reopen/read-only and workspace relocation, closed metadata/path refusal,
+external drift/foreign workspace, exact retained bytes and unknown write recovery.
+The owner is the existing `WorkspaceFileService`; these tests do not qualify the
+future Office UI, capture or template publication. The existing CLI exposes
+`project create/open` for process-level smoke checks without a model or Office.
+
 `chat relocation:` covers occupied destinations, blocked parent creation, invalid
 projection rollback, deletion while waiting for the document lock, explicit retry
 and transient drafts. It checks unchanged event bytes on refusal and history after

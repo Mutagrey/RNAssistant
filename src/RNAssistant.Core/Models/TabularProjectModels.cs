@@ -1,0 +1,52 @@
+using Newtonsoft.Json;
+
+namespace RNAssistant.Core.Models
+{
+    // Portable domain metadata. Workspace identity, grants and resource heads never live here.
+    public sealed class TabularProjectManifest
+    {
+        public const int CurrentFormatVersion = 1;
+        public const string ProjectKind = "data-templates";
+
+        [JsonProperty("kind", Required = Required.Always)]
+        public string Kind { get; private set; }
+        [JsonProperty("formatVersion", Required = Required.Always)]
+        public int FormatVersion { get; private set; }
+        [JsonProperty("projectId", Required = Required.Always)]
+        public string ProjectId { get; private set; }
+        [JsonProperty("name", Required = Required.Always)]
+        public string Name { get; private set; }
+
+        [JsonConstructor]
+        public TabularProjectManifest(string kind, int formatVersion, string projectId, string name)
+        {
+            Kind = kind;
+            FormatVersion = formatVersion;
+            ProjectId = projectId;
+            Name = name;
+        }
+    }
+
+    // An observed manifest, not a persistent project registry or permission token.
+    // A later mutation must still use WorkspaceFileService's exact write guard.
+    public sealed class TabularProjectSnapshot
+    {
+        public string WorkspaceId { get; private set; }
+        public string ManifestPath { get; private set; }
+        public TabularProjectManifest Manifest { get; private set; }
+        public ResourceRef ManifestReference { get; private set; }
+        public string ContentSha256 { get; private set; }
+        public bool ReadOnly { get; private set; }
+
+        internal TabularProjectSnapshot(WorkspaceDescriptor workspace, string manifestPath,
+            TabularProjectManifest manifest, ResourceRef reference, string contentSha256)
+        {
+            WorkspaceId = workspace.WorkspaceId;
+            ManifestPath = manifestPath;
+            Manifest = manifest;
+            ManifestReference = reference.Copy();
+            ContentSha256 = contentSha256;
+            ReadOnly = workspace.ReadOnly;
+        }
+    }
+}

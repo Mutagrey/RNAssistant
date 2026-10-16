@@ -24,6 +24,7 @@ namespace RNAssistant.Cli
             catch (OperationCanceledException) { Console.Error.WriteLine("Cancelled."); return 130; }
             catch (ArgumentException ex) { Console.Error.WriteLine(ex.Message); return 2; }
             catch (WorkspaceFileException ex) { Console.Error.WriteLine(ex.Code + ": " + ex.Message); return 5; }
+            catch (TabularProjectException ex) { Console.Error.WriteLine(ex.Code + ": " + ex.Message); return 5; }
             catch (Exception ex) { Console.Error.WriteLine(ex.Message); return 5; }
         }
 
@@ -43,6 +44,14 @@ namespace RNAssistant.Cli
             }
             else if (args[0] == "session" && args.Length >= 2 && args[1] == "create")
                 options = Parse(args.Skip(2).ToArray());
+            else if (args[0] == "project")
+            {
+                if (args.Length < 2 || args[1] != "create" && args[1] != "open")
+                    throw new ArgumentException("Expected project create or project open.");
+                options = Parse(args.Skip(2).ToArray());
+                Required(options, "path");
+                if (args[1] == "create") Required(options, "name");
+            }
             else options = Parse(args.Skip(1).ToArray());
             if (options.ContainsKey("mutation-policy") && args[0] != "run" && args[0] != "answer" && args[0] != "env")
                 throw new ArgumentException("--mutation-policy applies only to run, answer or env; approval keeps the accepted policy.");
@@ -69,6 +78,14 @@ namespace RNAssistant.Cli
                     profile = "development", capabilities = service.AvailableToolIds(workspace,
                         ConversationRunPolicy.For(Value(options, "mode", ChatModes.Agent)).Mode,
                         ParseMutationPolicy(Value(options, "mutation-policy", "ask"))) });
+                return 0;
+            }
+            if (args[0] == "project")
+            {
+                var project = args[1] == "create"
+                    ? service.CreateTabularProject(workspace, Required(options, "path"), Required(options, "name"))
+                    : service.OpenTabularProject(workspace, Required(options, "path"));
+                Output(jsonl, args[1] == "create" ? "project.created" : "project.opened", project);
                 return 0;
             }
             if (args[0] == "session" && args.Length >= 2 && args[1] == "create")
@@ -830,6 +847,8 @@ namespace RNAssistant.Cli
             Console.WriteLine("run/answer/approve/deny/resume show bounded progress, file effects and verification summaries. Terminal input + output enable prompts automatically; --interactive requires a terminal; --no-interactive disables prompts; --jsonl never prompts.");
             Console.WriteLine("Approval requires explicit yes or no; Enter leaves it pending. Questions accept listed numbers (comma-separated for multiple choice) or text: <answer> when allowed. Esc/Ctrl+D leaves input pending; Ctrl+C exits 130. Recommended options are not selected automatically.");
             Console.WriteLine("rna workspace open <path> [--read-only]");
+            Console.WriteLine("rna project create --workspace <path> --path <relative-project.json> --name <text> [--jsonl]  (Data Templates manifest; create only)");
+            Console.WriteLine("rna project open --workspace <path> --path <relative-project.json> [--read-only] [--jsonl]  (observe current manifest; no source execution)");
             Console.WriteLine("rna env --workspace <path> [--mode agent|plan] [--mutation-policy ask|deny]");
             Console.WriteLine("rna sessions --workspace <path> [--jsonl]");
             Console.WriteLine("rna session create --workspace <path> [--title <text>] [--jsonl]");
