@@ -301,7 +301,8 @@ namespace RNAssistant.Core.Storage
         // A format/application chooses admission size. This API never allocates
         // the whole payload; the one-MiB preview budget does not apply to sources.
         public Stream OpenVerifiedRead(ChatBlobReference reference, long maximumBytes,
-            CancellationToken token = default(CancellationToken), Action<FileTransferProgress> progress = null)
+            CancellationToken token = default(CancellationToken), Action<FileTransferProgress> progress = null,
+            bool requireSeek = false)
         {
             if (maximumBytes < 1) throw new ArgumentOutOfRangeException(nameof(maximumBytes));
             token.ThrowIfCancellationRequested();
@@ -309,8 +310,9 @@ namespace RNAssistant.Core.Storage
             if (reference.ByteLength > maximumBytes) throw new InvalidDataException("CAS source exceeds the requested byte budget.");
             var protector = Protection();
             if (!ProtectionMatches(reference, protector)) throw new InvalidDataException("CAS protection does not match its reference.");
-            return CasBlobCodec.OpenVerifiedRead(PathFor(reference.Sha256), reference.ByteLength, reference.Sha256,
+            var stream = CasBlobCodec.OpenVerifiedRead(PathFor(reference.Sha256), reference.ByteLength, reference.Sha256,
                 protector, BlobPurpose(reference.Sha256, reference.ByteLength), token, progress);
+            return requireSeek ? SeekableBlobReadStream.Create(stream, _rootDirectory, protector, token, progress) : stream;
         }
 
         internal string PathFor(string sha256)

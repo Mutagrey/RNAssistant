@@ -6,7 +6,8 @@ One observation executor handles both matrix orientations, record fields and nes
 JSON captures; real XLSX uses the existing reader in the separate Worker probe.
 The loader saves workspace source declarations and controls the shared preparation
 queue. The portable XLSX reader now accepts bounded pull-byte sources through its
-Worker protocol; native source transport, parsing dispatch and publication remain open.
+Worker protocol. The shared application now owns exact, cancellable range reads;
+native binary transport, parsing dispatch and publication remain open.
 Owner: Data Templates domain; portable JS in `web/tabular`, shared manifest storage
 in Core `TabularProjectStore` over `WorkspaceFileService`.
 This is the canonical domain contract; planned scope is marked separately from
@@ -171,7 +172,7 @@ these rules and executable examples are the current contract.
 
 | Plan requirement | Verified existing basis | Required correction / current evidence |
 |---|---|---|
-| §3.1–3.3 one portable engine and distinct adapters | Plain JS, bounded selectors/cells, Worker; native `WorkspaceSourceQueue.OpenPrepared` uses `WorkspaceFileService.OpenExactRead` | Preserve those owners. `sources.js` prepares matrix/records/JSON inputs; `transform.js` is now the one observation executor. No C# interpreter or new storage/runtime. |
+| §3.1–3.3 one portable engine and distinct adapters | Plain JS, bounded selectors/cells, Worker; native `WorkspaceSourceQueue.OpenPreparedAsync` uses `WorkspaceFileService.OpenExactRead` | Preserve those owners. `sources.js` prepares matrix/records/JSON inputs; `transform.js` is now the one observation executor. No C# interpreter or new storage/runtime. |
 | §6.4 roles independent of physical axes | Old compiler permitted row parameter/unit and column period only; `matrix.js` also hardcoded that association | Both axes now accept explicitly typed semantic bindings. Normal/transposed fixtures independently match one business oracle. Old executor removed. |
 | §6.7 construction rollout | Defers horizontal axes alongside repeated blocks/joins | It cannot defer §6.4's core invariant. Orientation independence is implemented now; richer layout discovery, reusable blocks and joins remain deferred. This is completion of original scope, not a new feature track. |
 | §6.1–6.2 schema → AST → typed bounded plan | Existing expression parser, type checks, context DAG and frozen plan were useful | Preserved and generalized. Plan records native source dependencies and scoped bindings; no executable generated JS. JSON notation only; YAML awaits a decoder into this same model. |
@@ -327,8 +328,8 @@ it owns neither transformations nor success inference. The present probe prepare
 immutable JSON plus a selected immutable Blob, not verified native authority.
 
 `WorkspaceSourceQueue` remains the one application preparation owner. Its
-`OpenPreparedSource` must feed the format adapter/executor with the retained exact
-stream; `Prepared` is not parsed/imported/completed. Native parser dispatch and
+`OpenPreparedSourceAsync` must feed the format adapter/executor with retained exact
+byte ranges; `Prepared` is not parsed/imported/completed. Native parser dispatch and
 isolation/CSP/module-pin enforcement are **not wired yet**. This contract is their
 integration seam, not an additional queue, runtime, CAS or journal.
 
@@ -418,13 +419,39 @@ provides the same byte-source contract. The ZIP/XML readers no longer require Bl
 methods. No browser file is inferred to be a workspace path, and no whole workbook
 or base64 body crosses the result/control messages.
 
-This closes the portable reader's Blob dependency, **not native integration**.
-The shared workspace application must still bind `OpenPreparedSource` to an owned
-seek-capable transport, preserve the exact project/source pins, and dispose it with
-the queue job. Encoded CAS streams may be sequential: the adapter must declare and
-bound any seek staging without introducing another durable source store. Native
-module hashes, isolated execution/CSP, binary transport and queue parser dispatch
-remain explicit gates. No new C# interpreter or native/server runtime is introduced.
+The shared application's runtime-only `OpenPreparedSourceAsync(queueId,itemId,token,progress)`
+now admits a `WorkspaceSourceReader` against that queue's retained pin. It validates
+the exact project before and after opening, holds the existing storage maintenance
+activity and shared heavy-reader slot, and exposes fixed `ByteLength`, `Label`
+and `ReadRangeAsync(offset,count)`. Open/verification/staging/reads run off the caller
+thread. One read is allowed at a time, each at most 256 KiB; the cumulative bound is
+three source lengths. Invalid ranges are refused before I/O. No consumer can supply
+another path/ref. Source-file drift does not replace retained bytes; project drift
+refuses admission. Source selection/replacement stays blocked until the reader drains.
+
+Cancellation, cancel-current/all and application disposal revoke the reader
+synchronously. `CloseAsync`/`Drained` complete after in-flight I/O and all handles
+are closed; maintenance and the shared reader slot remain held through that drain.
+Late bytes from a cancelled read are discarded. An I/O/open failure closes the
+reader; callers must observe cleanup before dispatching another source. Viewer or
+Office controller changes do not own this lifetime. The old unowned stream entry
+point was removed.
+
+Sequential CAS encodings use the existing storage owner's explicit `requireSeek`
+mode: after verification, one decoded pass is staged into 256-KiB blocks in a single
+temporary handle. Encrypted storage stays encrypted with authenticated per-file and
+per-block purposes; all blocks retain in-memory SHA-256 checks. RAM holds bounded
+buffers, one decoded block and 32 bytes of hashes per source block (plus index/object
+overhead). Disk staging is the decoded length plus the existing protection envelope
+overhead per block. Unencoded CAS uses its verified seekable handle directly.
+Staging has its own typed byte-progress phase, is cancellable and is deleted on
+close/failure; it has no reopen/recovery path or durable authority. See
+[source stream storage](resource-fabric.md).
+
+This closes native source ownership and seek access, **not native execution**.
+Module hashes, isolated execution/CSP, binary transport into the JS byte capability
+and queue parser dispatch remain explicit gates. No new C# interpreter or
+native/server runtime is introduced.
 
 ### Working examples and remaining boundaries
 
@@ -738,7 +765,7 @@ controller changes retain the queue; panel disposal cancels it and drains its wo
 
 States are `Pending`, `Running`, `Prepared`, `Failed`, `Cancelled`; queue completion
 does not imply every item succeeded. **Prepared means an exact retained source, not
-recognized, parsed or imported data.** Runtime-only `OpenPreparedSource` resolves the
+recognized, parsed or imported data.** Runtime-only `OpenPreparedSourceAsync` resolves the
 accepted pin; the UI receives no selectable resource ref, hash or body. Byte progress
 describes the current storage pass. Batch budgets count every successful capture,
 including one rejected by a later project check; retries do not reset the budget.
@@ -1143,7 +1170,11 @@ Office controller replacement, off-UI file dispatch and typed unknown/reconcilia
 through the real bridge with a fake Office controller, plus runtime-reset exclusion
 while file read-back is pending. Queue checks add serialized capture, bounded pages,
 pause/cancel/explicit retry, budgets, exact reads after source drift, project drift,
-maintenance exclusion and bridge disposal drain. CLI smoke covers mixed outcomes
+maintenance exclusion and bridge disposal drain. Source-reader checks add range and
+amplification bounds, isolated buffers, selection/maintenance retention, project drift,
+off-caller verification, cancellation during a slot wait/read/open and disposal drain.
+Storage seek checks cover raw/compressed/encrypted combinations, backwards/cross-block
+reads, per-pass staging progress and cleanup on success/cancel/failure. CLI smoke covers mixed outcomes
 and read-only preparation without manifest changes. `workspace-projects.test.js`
 uses the shipped UI and CSS with controlled typed replies for duplicate clicks,
 readonly/stale bindings, inert metadata, explicit pinned-path inspection, malformed

@@ -1,5 +1,4 @@
 using System;
-using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -185,11 +184,11 @@ namespace RNAssistant.Application
             }
         }
 
-        public Stream OpenPreparedSource(string queueId, string itemId, CancellationToken token = default(CancellationToken))
+        public Task<WorkspaceSourceReader> OpenPreparedSourceAsync(string queueId, string itemId,
+            CancellationToken token = default(CancellationToken), Action<FileTransferProgress> progress = null)
         {
-            WorkspaceSourceQueue queue;
-            lock (_sync) queue = RequireQueue(queueId);
-            return queue.OpenPrepared(itemId, token);
+            // Admission pins the selection before the background open can begin.
+            lock (_sync) return RequireQueue(queueId).OpenPreparedAsync(itemId, token, progress);
         }
 
         public Task CloseAsync()
@@ -218,7 +217,7 @@ namespace RNAssistant.Application
         {
             if (_disposed) throw new ObjectDisposedException(nameof(WorkspaceApplicationService));
             if (_sources?.HasUnfinished == true)
-                throw new WorkspaceApplicationException("source_queue_active", "Завершите или отмените очередь перед сменой проекта.");
+                throw new WorkspaceApplicationException("source_queue_active", "Завершите работу с источниками перед сменой проекта.");
         }
 
         private void ClearProject()

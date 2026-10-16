@@ -5,7 +5,7 @@ using System.Threading;
 
 namespace RNAssistant.Core.Storage
 {
-    public enum FileTransferStage { Hashing, Compressing, Retaining, Verifying }
+    public enum FileTransferStage { Hashing, Compressing, Retaining, Verifying, Staging }
 
     // Counters belong to one pass, not to a fabricated overall percentage.
     public sealed class FileTransferProgress

@@ -37,7 +37,9 @@ whole-body allocation, exact history after drift/deletion/restart, operation
 budgets, busy-file cancellation and missing/corrupt/unpublished source refusals.
 `storage: source streams`, `storage: file CAS` and `storage: plaintext CAS` cover
 stream ownership, cancellation, compression/encryption and envelope-prefix
-compatibility. These are storage checks; they do not qualify large Excel parsing,
+compatibility. Source-stream checks also cover explicit seek staging across all
+encoding combinations, backwards/cross-block ranges, progress and scratch cleanup
+on completion/cancellation/failure. These are storage checks; they do not qualify large Excel parsing,
 queue throughput, UI latency or Windows/Office behavior.
 
 Data Templates shared manifest storage: filter `tabular project:` checks
@@ -61,6 +63,9 @@ project drift, maintenance exclusion and disposal drain across controller change
 Metadata browsing checks add stable 50-entry pages, directory navigation, protected
 names, cancellation and stale bindings through the actual file owner/bridge without
 capturing bodies. These are preparation/lifetime checks, not parser qualification.
+The focused `source reader` filter covers bounded ranges, amplification, isolated
+buffers, exact manifest/source pins, maintenance/selection guards, synchronous
+revocation, slot/read/open cancellation and application close draining in-flight I/O.
 CLI `project prepare` accepts saved declarations or an explicit JSON array of paths and
 file/batch budgets; process smoke covers mixed outcomes and read-only capture without
 manifest changes. Browser

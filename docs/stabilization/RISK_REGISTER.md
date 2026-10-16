@@ -43,8 +43,11 @@ matrix records/provisional batches have no native tools or publication authority
   through guarded manifest saves with stable domain IDs and explicit recovery;
   parser dispatch and batch requests/common execution events remain open.
   The separate XLSX reader now has streamed selective reads, bounded pull-byte input,
-  exact numeric cells, resource budgets and Worker cancellation. Native exact-stream
-  transport, seek staging and module/CSP qualification remain open. Its 30,000-row
+  exact numeric cells, resource budgets and Worker cancellation. The shared native
+  reader now pins selection/maintenance until I/O drains and supplies bounded ranges
+  over protected temporary seek staging. Host-neutral checks cover encoding variants,
+  cancellation and cleanup; binary transport into the Worker, module/CSP qualification
+  and representative staging disk/RAM/throughput measurements remain open. Its 30,000-row
   fixture and writer interoperability do not establish 80 MB behavior or RAM cost.
   Stored formula caches have unknown freshness, and only consumed ZIP parts are
   CRC-checked; neither is a publication receipt. Close the [queue/large-file gate](../data-templates.md#large-files-and-processing-queue--planned)

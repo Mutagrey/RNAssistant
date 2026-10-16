@@ -257,6 +257,7 @@
     <Compile Include="Storage\PdfAttachmentTextExtractor.cs" />
     <Compile Include="Storage\CasBlobCodec.cs" />
     <Compile Include="Storage\BlobReadStream.cs" />
+    <Compile Include="Storage\SeekableBlobReadStream.cs" />
     <Compile Include="Storage\FileTransferProgress.cs" />
     <Compile Include="Storage\RuntimeStorageActivity.cs" />
     <Compile Include="Storage\ChatHeaderReducer.cs" />

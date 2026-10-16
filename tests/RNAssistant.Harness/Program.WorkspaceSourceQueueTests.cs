@@ -103,8 +103,13 @@ namespace RNAssistant.Harness
                     queue = WaitSourceQueue(app, queue.QueueId, item => item.State == WorkspaceSourceQueueState.Paused && item.Running == 0);
                     AssertEqual(1, queue.Prepared, "pause preserves first completed source");
                     File.WriteAllText(Path.Combine(root, "large.bin"), "changed live source");
-                    using (var retained = app.OpenPreparedSource(queue.QueueId, queue.Items[0].Id))
-                    { AssertEqual(2L * 1024 * 1024, retained.Length, "runtime-only exact pin survives live replacement"); AssertEqual(0, retained.ReadByte(), "original source bytes"); }
+                    var retained = app.OpenPreparedSourceAsync(queue.QueueId, queue.Items[0].Id).GetAwaiter().GetResult();
+                    try
+                    {
+                        AssertEqual(2L * 1024 * 1024, retained.ByteLength, "runtime-only exact pin survives live replacement");
+                        AssertEqual((byte)0, retained.ReadRangeAsync(0, 1).GetAwaiter().GetResult()[0], "original source bytes");
+                    }
+                    finally { retained.CloseAsync().GetAwaiter().GetResult(); }
                     var preparedId = queue.Items[0].Id;
                     ExpectSourceQueueError("source_queue_invalid", () => app.ControlSourceQueue(new WorkspaceSourceControlRequest {
                         QueueId = queue.QueueId, Command = WorkspaceSourceCommand.RetrySelected, ItemIds = new List<string> { preparedId } }));
@@ -212,7 +217,7 @@ namespace RNAssistant.Harness
                     AssertEqual(0, queue.Prepared, "captured bytes alone cannot accept a changed project");
                     AssertEqual(1, queue.Pending, "project failure stops dispatch to later sources");
                     ExpectSourceQueueError("source_queue_reopen_project", () => SourceCommand(app, queue.QueueId, WorkspaceSourceCommand.Resume));
-                    ExpectSourceQueueError("source_queue_invalid", () => app.OpenPreparedSource(queue.QueueId, queue.Items[0].Id));
+                    ExpectSourceQueueError("source_queue_invalid", () => app.OpenPreparedSourceAsync(queue.QueueId, queue.Items[0].Id));
                     SourceCommand(app, queue.QueueId, WorkspaceSourceCommand.CancelPending);
                     WaitSourceQueue(app, queue.QueueId, item => item.State == WorkspaceSourceQueueState.Finished);
                     var inspected = app.OpenTabularProject(new WorkspaceProjectPathRequest { BindingId = state.Workspace.BindingId, ManifestPath = "project.json" });

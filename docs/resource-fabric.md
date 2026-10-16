@@ -50,11 +50,21 @@ cannot silently restore a missing/corrupt historical payload from the live file.
 then verifies the full retained body before returning a read-only stream on that
 same CAS handle. It does not acquire a live-file lease for the parser or refresh
 the head. Raw bodies support seeking; compressed/encrypted bodies decode
-sequentially without a plaintext scratch file. Consumers requiring random access
-must check `CanSeek`, not silently allocate the whole decoded body. Dispose the
-stream after each item. `CancellationToken` covers capture, a busy file-lease
+sequentially by default. A consumer may explicitly request `requireSeek: true`:
+sequential bodies are staged once into a delete-on-close temporary handle using
+256-KiB blocks. Storage encryption/authentication is preserved per block, with a
+unique scratch/block purpose and in-memory SHA-256 checks. The last decoded block
+is cached; the whole body is never allocated. Disk use is the decoded byte length
+plus protection overhead per block; hash metadata costs 32 bytes per block plus
+index/object overhead. Raw seekable CAS needs no staging. Scratch has no durable
+manifest, recovery or authority and is removed on success/cancel/failure; staging
+errors do not fall back to live files or whole-body allocation. The caller must
+hold a runtime storage activity until the stream and pending reads drain; the
+workspace application's `WorkspaceSourceReader` owns that lifecycle and the shared
+heavy-reader slot. Dispose the stream after each item.
+`CancellationToken` covers capture, a busy file-lease
 wait, verification and subsequent reads. `FileTransferProgress` reports typed
-per-pass byte counters, coalesced to about 10 Hz plus stage boundaries. Its
+per-pass byte counters (including `Staging`), coalesced to about 10 Hz plus stage boundaries. Its
 callbacks run on the caller's thread; the application executor must schedule
 capture/open/consumption off the UI and marshal metadata updates to presentation.
 

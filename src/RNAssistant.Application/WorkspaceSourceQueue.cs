@@ -27,6 +27,7 @@ namespace RNAssistant.Application
         private readonly List<Item> _items;
         private readonly CancellationTokenSource _lifetime = new CancellationTokenSource();
         private Task _worker = Task.CompletedTask;
+        private WorkspaceSourceReader _reader;
         private CancellationTokenSource _currentCancellation;
         private CancellationTokenSource _pumpCancellation;
         private bool _pumpRunning, _paused, _disposed;
@@ -59,8 +60,9 @@ namespace RNAssistant.Application
             _items = names.Select(path => new Item { Id = "si_" + Guid.NewGuid().ToString("N"), Path = path }).ToList();
         }
 
-        internal bool HasUnfinished { get { lock (_sync) return _pumpRunning || _items.Any(item => item.State == WorkspaceSourceState.Pending); } }
-        internal Task Drained { get { lock (_sync) return _worker; } }
+        internal bool HasUnfinished { get { lock (_sync) return _pumpRunning ||
+            (_reader != null && !_reader.Drained.IsCompleted) || _items.Any(item => item.State == WorkspaceSourceState.Pending); } }
+        internal Task Drained { get { lock (_sync) return Task.WhenAll(_worker, _reader?.Drained ?? Task.CompletedTask); } }
         internal void Start() { lock (_sync) Schedule(); }
 
         internal WorkspaceSourceQueuePage Read(WorkspaceSourcePageRequest request)
@@ -117,10 +119,10 @@ namespace RNAssistant.Application
                         if (_errorCode == "project_changed" || _errorCode == "project_workspace_mismatch" || _errorCode == "project_unavailable")
                             throw new WorkspaceApplicationException("source_queue_reopen_project", "Отмените оставшиеся файлы и заново откройте изменившийся проект.");
                         _paused = false; _errorCode = _errorMessage = null; break;
-                    case WorkspaceSourceCommand.CancelCurrent: _currentCancellation?.Cancel(); break;
+                    case WorkspaceSourceCommand.CancelCurrent: _currentCancellation?.Cancel(); _reader?.Dispose(); break;
                     case WorkspaceSourceCommand.CancelPending:
                         CancelPending(); if (_currentCancellation == null) _pumpCancellation?.Cancel(); break;
-                    case WorkspaceSourceCommand.CancelAll: CancelPending(); _pumpCancellation?.Cancel(); break;
+                    case WorkspaceSourceCommand.CancelAll: CancelPending(); _pumpCancellation?.Cancel(); _reader?.Dispose(); break;
                     case WorkspaceSourceCommand.RetrySelected:
                         var ids = request.ItemIds;
                         if (ids == null || ids.Count == 0 || ids.Count > MaximumItems || ids.Distinct().Count() != ids.Count ||
@@ -137,18 +139,30 @@ namespace RNAssistant.Application
             }
         }
 
-        internal Stream OpenPrepared(string itemId, CancellationToken token)
+        internal Task<WorkspaceSourceReader> OpenPreparedAsync(string itemId, CancellationToken token,
+            Action<FileTransferProgress> progress)
         {
-            WorkspaceFileSnapshot source;
             lock (_sync)
             {
+                token.ThrowIfCancellationRequested();
                 var item = _items.SingleOrDefault(candidate => candidate.Id == itemId);
                 if (_disposed || item?.State != WorkspaceSourceState.Prepared)
                     throw Invalid("Источник не подготовлен или очередь уже закрыта.");
-                source = item.Snapshot;
+                if (_reader != null && !_reader.Drained.IsCompleted)
+                    throw new WorkspaceApplicationException("source_reader_active", "Закройте предыдущий источник перед следующим чтением.");
+                _reader?.Drained.GetAwaiter().GetResult();
+                var source = item.Snapshot;
+                _reader = new WorkspaceSourceReader(source.ByteLength, Path.GetFileName(source.RelativePath));
+                return _reader.OpenAsync(_paths, cancellation =>
+                {
+                    _projects.RequireUnchanged(_workspace, _project, cancellation);
+                    // No consumer-supplied path/ref may replace the accepted runtime pin.
+                    var stream = _files.OpenExactRead(_workspace, source.RelativePath, source.Reference,
+                        _maximumFileBytes, cancellation, progress, requireSeek: true);
+                    try { _projects.RequireUnchanged(_workspace, _project, cancellation); return stream; }
+                    catch { stream.Dispose(); throw; }
+                }, token);
             }
-            // No UI-supplied path/ref may replace the accepted runtime pin.
-            return _files.OpenExactRead(_workspace, source.RelativePath, source.Reference, _maximumFileBytes, token);
         }
 
         private void Schedule()
@@ -269,7 +283,7 @@ namespace RNAssistant.Application
             lock (_sync)
             {
                 if (_disposed) return;
-                _disposed = true; CancelPending(); _lifetime.Cancel(); _revision++;
+                _disposed = true; CancelPending(); _lifetime.Cancel(); _reader?.Dispose(); _revision++;
                 if (!_pumpRunning) _lifetime.Dispose();
             }
         }

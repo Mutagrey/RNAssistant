@@ -1,5 +1,27 @@
 # Stabilization progress
 
+## Owned native source ranges and protected seek staging — 2026-10-16
+
+`WorkspaceSourceReader` replaces the unowned prepared-stream entry point. It admits
+the queue's exact pin, checks the selected project around opening and holds source
+selection, the shared heavy-reader slot and maintenance activity through I/O drain.
+Verification and bounded serial ranges run off the caller thread; cancellation
+revokes access immediately and discards late bytes. Application close drains reads
+as well as preparation. No bridge/body transport or parser was added.
+
+Sequential CAS encodings now support explicit seek staging in 256-KiB protected
+blocks using the existing storage owner. Raw CAS needs no staging. Temporary
+handles preserve encryption/authentication, verify block hashes and delete on close;
+staging has separate cancellable progress. No second durable source store was added.
+
+Validation: focused source-reader, source-stream, queue and bridge-lifetime Harness
+checks pass, covering encoding variants, range bounds, project drift, cancellation,
+late I/O and cleanup. Framework 4.8/C# 7.3 remain unchanged; no Office/VSTO validation
+was run. Next: pinned isolated native execution and binary transport into the JS
+byte capability, then queue parser dispatch. Representative large-workbook and
+staging disk/RAM/throughput qualification remain open.
+[Contract](../data-templates.md#bounded-byte-source).
+
 ## Bounded byte-source input for the portable XLSX executor — 2026-10-16
 
 The ZIP/XML reader no longer depends on Blob methods. One owned byte-source contract

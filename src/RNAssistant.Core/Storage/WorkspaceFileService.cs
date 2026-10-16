@@ -282,7 +282,8 @@ namespace RNAssistant.Core.Storage
         // The caller owns/disposes the stream and schedules this work off the UI
         // thread. No file lease is held while a parser consumes retained bytes.
         public Stream OpenExactRead(WorkspaceDescriptor workspace, string relativePath, ResourceRef exact, long maximumBytes,
-            CancellationToken token = default(CancellationToken), Action<FileTransferProgress> progress = null)
+            CancellationToken token = default(CancellationToken), Action<FileTransferProgress> progress = null,
+            bool requireSeek = false)
         {
             if (maximumBytes < 1) throw new ArgumentOutOfRangeException(nameof(maximumBytes));
             token.ThrowIfCancellationRequested();
@@ -290,14 +291,14 @@ namespace RNAssistant.Core.Storage
             var evidence = PublishedEvidence(exact, ResourceRepresentations.Raw);
             if (evidence.Payload.ByteLength > maximumBytes)
                 throw new WorkspaceFileException("file_too_large", "Source exceeds this operation's byte budget.");
-            return OpenRetainedStream(evidence.Payload, maximumBytes, token, progress);
+            return OpenRetainedStream(evidence.Payload, maximumBytes, token, progress, requireSeek);
         }
 
         private Stream OpenRetainedStream(PayloadRef payload, long maximumBytes, CancellationToken token,
-            Action<FileTransferProgress> progress)
+            Action<FileTransferProgress> progress, bool requireSeek = false)
         {
             if (payload == null) throw new WorkspaceFileException("snapshot_unavailable", "Exact source payload is unavailable.");
-            try { return _blobs.OpenVerifiedRead(payload.ToBlobReference(), maximumBytes, token, progress); }
+            try { return _blobs.OpenVerifiedRead(payload.ToBlobReference(), maximumBytes, token, progress, requireSeek); }
             catch (Exception error) when (error is IOException || error is InvalidDataException ||
                 error is UnauthorizedAccessException || error is CryptographicException)
             { throw new WorkspaceFileException("snapshot_unavailable", "Exact source payload is missing or corrupt."); }
