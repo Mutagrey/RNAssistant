@@ -1,0 +1,119 @@
+{
+  "formatVersion": 1,
+  "kind": "data-templates-vendors",
+  "packages": [
+    {
+      "id": "echarts",
+      "version": "5.6.0",
+      "license": "Apache-2.0",
+      "npmTarball": "https://registry.npmjs.org/echarts/-/echarts-5.6.0.tgz",
+      "npmIntegrity": "sha512-oTbVTsXfKuEhxftHqL5xprgLoc0k7uScAwtryCgWF6hPYFLRwOUHiFmHGCBKP5NPFNkDVopOieyUqYGH8Fa3kA==",
+      "gitHead": "fe42bc1ea3a8d2ef7864cfe303de34f480149d09",
+      "runtime": [
+        {
+          "path": "vendor/echarts.min.js",
+          "bytes": 1034102,
+          "sha256": "bf4a223524e40b77c304bec67e1222cf551f14880cf42c69dc046558e11c07b1",
+          "sourceUrl": "https://cdnjs.cloudflare.com/ajax/libs/echarts/5.6.0/echarts.min.js"
+        }
+      ],
+      "licenses": [
+        {
+          "path": "vendor/licenses/echarts/LICENSE",
+          "sha256": "634293835b43a6dd2094fa39182a3d9a6b9ca43b7fdb9ac354e8037af2a3093a",
+          "bytes": 11990
+        },
+        {
+          "path": "vendor/licenses/echarts/NOTICE",
+          "sha256": "fa99ac3af859d0e13166906dc53a73ad34a08898da7e8ae83407275496e9e30c",
+          "bytes": 168
+        },
+        {
+          "path": "vendor/licenses/echarts/LICENSE-d3",
+          "sha256": "e1211892da0b0e0585b7aebe8f98c1274fba15bafe47fa1f4ee8a7a502c06304",
+          "bytes": 1475
+        }
+      ]
+    },
+    {
+      "id": "sheetjs",
+      "version": "0.20.3",
+      "license": "Apache-2.0",
+      "npmTarball": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
+      "npmIntegrity": "sha512-oLDq3jw7AcLqKWH2AhCpVTZl8mf6X2YReP+Neh0SJUzV/BdZYjth94tG5toiMB1PPrYtxOCfaoUCkvtuH+3AJA==",
+      "gitHead": "8a7cfd47bde8258c0d91df6a737bf0136699cdf8",
+      "runtime": [
+        {
+          "path": "vendor/sheetjs.full.min.js",
+          "bytes": 951904,
+          "sha256": "cc015130aa8521e7f088f88898eba949ccdcbfb38df0bd129b44b7273c3a6f41",
+          "sourcePath": "dist/xlsx.full.min.js",
+          "sourceSha256": "cc015130aa8521e7f088f88898eba949ccdcbfb38df0bd129b44b7273c3a6f41"
+        }
+      ],
+      "licenses": [
+        {
+          "path": "vendor/licenses/sheetjs/LICENSE",
+          "sha256": "4d2a38ac35cda06a555c84074a819d413339cd3691b822cae50f8f322fe01f64",
+          "bytes": 11355
+        }
+      ]
+    },
+    {
+      "id": "tabulator",
+      "version": "6.5.0",
+      "license": "MIT",
+      "npmTarball": "https://registry.npmjs.org/tabulator-tables/-/tabulator-tables-6.5.0.tgz",
+      "npmIntegrity": "sha512-n0S4rvb2tGJnVBXoiB8ns1liGfSz+sgniG5a92vEY+Wqj3R4L2LB+bF29OeWmEJwo4KAsdhfeknW2S92s/mvMw==",
+      "gitHead": "c4f7f228e86936b9fa84b415a71d53acd913daf8",
+      "runtime": [
+        {
+          "path": "vendor/tabulator.min.js",
+          "bytes": 445323,
+          "sha256": "2ffd5e83ff622975ba3493c93700625d2710dbf0d416d0ec0e9d5219fabd5002",
+          "sourcePath": "dist/js/tabulator.min.js",
+          "sourceSha256": "297f32de082fe4593d385f3a1b16b901f5208b1702ff9f64f454f3460d911170",
+          "localTransform": "Removed source-map trailer; executable source is otherwise unchanged."
+        },
+        {
+          "path": "vendor/tabulator.min.css",
+          "bytes": 28451,
+          "sha256": "04db955d165fa3b47f67a9cc45fe1a36e5e30756c6e4d5f9f4b270c32300f15c",
+          "sourcePath": "dist/css/tabulator.min.css",
+          "sourceSha256": "b55e204b2f968cecc4d3663d37858093b31dd22d20f01d76f590726ee18f7e1f",
+          "localTransform": "Removed source-map trailer; executable source is otherwise unchanged."
+        }
+      ],
+      "licenses": [
+        {
+          "path": "vendor/licenses/tabulator/LICENSE",
+          "sha256": "191a2ee554684e1064c897b432f0e1bc6dfa714ca045d3f6ea2cf692cbd398b7",
+          "bytes": 1082
+        }
+      ]
+    },
+    {
+      "id": "sax",
+      "version": "1.6.1",
+      "license": "BlueOak-1.0.0",
+      "npmTarball": "https://registry.npmjs.org/sax/-/sax-1.6.1.tgz",
+      "npmIntegrity": "sha512-42tBVwLWnaQvW5zc4HbZrTuWccECCZfBi92FDuwtqxasH+JbPB3/FOKb1m222K42R4WxuxzzMsTswfzgtSu64Q==",
+      "gitHead": "961ceeefcc5186005466f2085aeb36f31b161e37",
+      "runtime": [
+        {
+          "path": "vendor/sax.js",
+          "bytes": 50818,
+          "sha256": "1cdc1270d987cb0f6ee66dd8efb01c50511aa14d17b6163bbbffb21df8cf1c06",
+          "sourcePath": "lib/sax.js"
+        }
+      ],
+      "licenses": [
+        {
+          "path": "vendor/sax-LICENSE.md",
+          "sha256": "8a1af140fdfbf5afd3df27f7e662f989c5b963a300020dfafce42033cae9e004",
+          "bytes": 1552
+        }
+      ]
+    }
+  ]
+}

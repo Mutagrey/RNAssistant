@@ -69,7 +69,12 @@ const feather = packages.get("feather-icons");
 assert.equal(feather.sourceOnly, true);
 assert.equal(manifest.files.some(item => item.package === feather.id), false, "source-only icons must not add a runtime package");
 const licenses = new Set(manifest.packages.flatMap(item => item.licenseFiles.map(file => file.path)));
-const actual = ["js/vendor", "css/vendor", "data-templates/vendor"].flatMap(folder => filesBelow(path.join(web, folder)))
+const appRoot = path.join(web, "data-templates");
+const appManifest = JSON.parse(fs.readFileSync(path.join(appRoot, "application.json"), "utf8"));
+const appVendors = require(path.join(appRoot, "tools/vendor-lock.js")).verifyVendors(appRoot, appManifest);
+assert.deepEqual(appVendors.packages.map(item => item.id), ["echarts", "sheetjs", "tabulator", "sax"]);
+const actual = ["js/vendor", "css/vendor"].flatMap(folder => filesBelow(path.join(web, folder)))
+  .concat([path.join(appRoot, "vendor/sax.js")])
   .map(webPath).filter(file => !licenses.has(file)).sort();
 assert.deepEqual(Array.from(entries.keys()).sort(), actual, "manifest must include every and only vendored runtime file");
 assert.ok(packages.has("wunderbaum"));
@@ -79,6 +84,7 @@ assert.ok(packages.has("viewerjs"));
 assert.equal(packages.get("viewerjs").version, "1.12.0");
 assert.deepEqual(packages.get("viewerjs").packageDependencies, {});
 console.log("PASS vendor gate: " + entries.size + " runtime files have exact size/hash and no unmanifested sibling");
+console.log("PASS Data Templates vendor lock: independent package closure and local licenses");
 
 for (const item of manifest.packages.filter(packageItem => packageItem.htmlWorkspace &&
     packageItem.htmlWorkspace.sourceCarrier !== "echarts-factory")) {

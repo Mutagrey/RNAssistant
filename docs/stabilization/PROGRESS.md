@@ -18,6 +18,9 @@ Exported-package checks exercise file-origin selection and normalized extraction
 report download and the XLSX Worker oracle through static test delivery without
 RNAssistant. Native UI/queue regressions and package/resource checks remain focused.
 Windows/Office/WebView2 and real 80 MB processing are still unqualified.
+Excel reader strategy is an explicit open decision: compare all-SheetJS, the current
+selective XLSX path plus format adapters, and other bounded options on real books
+before final Excel import or any 80 MB support claim.
 
 Next: complete the standalone integrated processing UI/queue/result export, then
 replace compiled app-code pins with per-run workspace-package capture and a

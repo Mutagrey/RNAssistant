@@ -81,6 +81,64 @@ The exporter bounds **application code** to 2 MiB/member, 8 MiB total and 200 me
 these are unrelated to input workbook limits. Failed filesystem writes report failure;
 any partial output must be inspected or replaced explicitly, never reported complete.
 
+### Local vendor policy
+
+The standalone application carries its own [vendor lock](../web/data-templates/vendor-lock.json)
+and license files. Export verifies every locked file's hash and refuses unlisted vendor
+files. It does not depend on RNAssistant's HTML-workspace vendor activation or CDN.
+Pinned browser assets are:
+
+| Library | Application owner and use | Current activation |
+|---|---|---|
+| [ECharts 5.6.0](https://echarts.apache.org/handbook/en/concepts/dataset/) | Results/quality visualization from bounded aggregates | Browser-only lazy `DataTemplatesVendors.load("echarts")`; no chart screen yet |
+| [Tabulator 6.5.0](https://www.tabulator.info/docs/6.x/virtual-dom/) | Parameter, mapping and result grids with bounded page input | Browser-only lazy `load("tabulator")`; no grid screen yet |
+| [SheetJS CE 0.20.3](https://docs.sheetjs.com/docs/miscellany/formats/) | Future XLSB/legacy Excel adapter and Excel export | Bundled, inactive; Worker reader/export adapter pending |
+| sax 1.6.1 | Incremental XML tokens in the existing selective XLSX Worker | Active only in that Worker |
+
+Charts do not own canonical calculations or transformation rules. Grid sorting and
+editing do not become another durable store; the app supplies limited pages and
+keeps mapping decisions in its domain state. SheetJS requires a whole workbook in
+memory even when preview rows are limited. Its future adapter needs explicit input
+admission, one heavy job at a time, Worker termination, typed cell/provenance checks
+and format-specific fixtures before XLSB/XLS/ODS or 80 MB-scale support is advertised.
+SheetJS parsing is synchronous inside that Worker: the UI can report byte-read and
+stage/elapsed progress and hard-cancel the Worker, but must not invent a granular
+parse percentage. Large XLSB/XLS may require a different bounded reader.
+The selective XLSX reader is the current large-workbook candidate, pending the
+[reader-strategy decision](#open-decision-excel-reader-strategy). Existing simple source
+selection does not need a grid library. CSV streaming and dialect handling may merit
+[Papa Parse](https://www.papaparse.com/docs.html) when the raw CSV reader is implemented; no CSV vendor or adapter is
+included now. Fuse.js and a UI framework are not needed for the current bounded
+search/static UI. Future shared views receive chart/grid factories from their
+composition adapter; they must not reach into browser globals. The RNAssistant
+adapter must admit the same capabilities explicitly when those views are connected.
+Main RNAssistant WebView admission remains unchanged.
+
+### Open decision: Excel reader strategy
+
+Owner: Data Templates application. The current selective XLSX reader plus SheetJS
+for other formats is a provisional approach, **not** a final commitment to maintain
+two readers. Before routing production XLSX imports through SheetJS, removing the
+selective reader, or claiming 80 MB-class Excel support, make and record an explicit
+choice: SheetJS for all Excel formats, a format/size-aware hybrid, or another bounded
+reader. An XLSB smoke test and the virtual 80-MiB XLSX fixture do not decide this.
+
+Compare the alternatives on representative real XLSX (including 80 MB-class files,
+many sheets, large selected sheets and deep selection ranges), XLSB and legacy XLS,
+both singly and in a mixed-file queue. Measure elapsed time, peak process/Worker
+memory, bytes read, responsiveness, cancellation latency and honest progress on the
+standalone browser and the target Windows WebView2 host. Check supported workbook
+variants and exact canonical parity: physical addresses, raw numeric lexemes or an
+explicit precision policy, leading-zero identifiers, blanks/errors, formula-cache
+availability, provenance and failure behavior. Include maintenance cost and vendor
+license/update path in the decision.
+
+Record the result and dispatch rule in this contract or a named ADR before the
+integrated Excel import is finalized. If SheetJS replaces the selective path, remove
+the old reader and its unused dependencies after parity checks; if both remain,
+define when each is selected and make the outcome visible. Until then, neither path
+is qualified by this document for representative 80 MB workloads.
+
 On `file://`, the loader and explicit cooperative normalized-input probe work.
 XLSX requires a real Worker and static HTTP(S) delivery where file-origin Workers
 are unavailable; there is no server-side application runtime or hidden fallback.
@@ -759,10 +817,12 @@ not a whole-file percentage. The probe shows part progress, elapsed time and can
 then canonical extraction progress. Parent-owned termination also cancels a busy
 parser or an unacknowledged batch. No completed report survives a failed/replaced run.
 
-The only new vendor is [sax 1.6.1](https://github.com/isaacs/sax-js), unmodified,
+The selective XLSX reader's only parser dependency is
+[sax 1.6.1](https://github.com/isaacs/sax-js), unmodified,
 with BlueOak-1.0.0 license and exact npm tarball integrity/file hashes recorded in
-the shared vendor manifest. It is not activated in the main WebView or authored
-HTML pool. Native deflate support is a required capability, not a JS decompression
+the shared vendor manifest and the standalone application's vendor lock. It is not
+activated in the main WebView or authored HTML pool. Native deflate support is a
+required capability, not a JS decompression
 fallback. Format references: [ZIP APPNOTE](https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT),
 [Compression Standard](https://compression.spec.whatwg.org/),
 [SpreadsheetML cells](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.spreadsheet.cell).

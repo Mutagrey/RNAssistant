@@ -39,14 +39,27 @@
     "tests/core.test.js",
     "tests/matrix.test.js",
     "tests/universal.test.js",
+    "tests/vendor-worker.js",
     "tools/export.js",
+    "tools/vendor-lock.js",
     "ui/browser.js",
+    "ui/browser-vendors.js",
     "ui/loader-view.js",
     "ui/loader.js",
     "ui/operation-view.js",
     "ui/shell.js",
     "ui/source-intake.js",
+    "vendor/echarts.min.js",
+    "vendor/licenses/echarts/LICENSE",
+    "vendor/licenses/echarts/LICENSE-d3",
+    "vendor/licenses/echarts/NOTICE",
+    "vendor/licenses/sheetjs/LICENSE",
+    "vendor/licenses/tabulator/LICENSE",
     "vendor/sax-LICENSE.md",
-    "vendor/sax.js"
+    "vendor/sax.js",
+    "vendor/sheetjs.full.min.js",
+    "vendor/tabulator.min.css",
+    "vendor/tabulator.min.js",
+    "vendor-lock.json"
   ]
 }

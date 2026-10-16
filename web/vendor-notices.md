@@ -97,8 +97,12 @@ Data Templates probe Worker. Its npm integrity, source revision and file/license
 hashes are manifested. The adapter uses strict namespaces/predefined entities,
 rejects DTDs and bounds XML/capture resources. The Node stream entry points are not
 used. No main UI startup or HTML-workspace activation was added. The existing
-SheetJS carrier is used only as an independent writer in the reader tests, not as
-another Data Templates runtime parser.
+SheetJS carrier is used as an independent writer in the bounded reader tests, not as
+another Data Templates runtime parser. The standalone application also carries
+separately locked local ECharts, Tabulator and SheetJS assets for its future screens
+and format adapter; its [vendor lock](data-templates/vendor-lock.json) and licenses
+travel with the folder export. Those assets are not admitted into the main WebView
+or the current native tabular executor.
 
 The main UI admits only its local resource route in `connect-src`, keeps
 `font-src 'self'` and, while the worker

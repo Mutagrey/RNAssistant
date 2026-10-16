@@ -1,6 +1,7 @@
 "use strict";
 // Development/export utility only. The delivered application has no Node dependency.
 const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto");
+const { verifyVendors } = require("./vendor-lock");
 const sourceRoot = path.resolve(__dirname, "..");
 const digest = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
 
@@ -14,6 +15,7 @@ function capture(root = sourceRoot) {
         new Set(manifest.files).size !== manifest.files.length ||
         ![manifest.entry, "application.json", "README.md"].every(file => manifest.files.includes(file)))
         throw Error("Invalid application manifest.");
+    verifyVendors(root, manifest);
     let total = 0;
     const files = manifest.files.map(file => {
         if (typeof file !== "string" || !/^[a-zA-Z0-9_./-]+$/.test(file) ||

@@ -1,6 +1,7 @@
 "use strict";
 const assert = require("node:assert/strict"), fs = require("node:fs"), os = require("node:os"), path = require("node:path");
 const crypto = require("node:crypto"), http = require("node:http"), { pathToFileURL } = require("node:url");
+const vm = require("node:vm");
 const { execFileSync } = require("node:child_process");
 const { chromium } = require("playwright");
 const { capture, exportApplication } = require("../../web/data-templates/tools/export");
@@ -34,6 +35,21 @@ const hash = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
         fs.writeFileSync(manifestPath, JSON.stringify(manifest));
         assert.throws(() => capture(output), /regular files/);
         fs.unlinkSync(path.join(output, "outside.js")); fs.writeFileSync(manifestPath, original);
+        const vendorFile = path.join(output, "vendor/sheetjs.full.min.js");
+        const vendorSource = fs.readFileSync(vendorFile);
+        fs.appendFileSync(vendorFile, "\n");
+        assert.throws(() => capture(output), /Vendor hash mismatch/);
+        fs.writeFileSync(vendorFile, vendorSource);
+        const vendorContext = vm.createContext({});
+        vm.runInContext(vendorSource.toString("utf8"), vendorContext);
+        const XLSX = vendorContext.XLSX;
+        assert.equal(XLSX.version, "0.20.3");
+        const workbook = XLSX.read(new Uint8Array(fs.readFileSync(path.join(output, "core/examples/matrix-source.xlsx"))),
+            { type: "array", dense: true });
+        const xlsb = XLSX.write(workbook, { type: "array", bookType: "xlsb" });
+        const reopened = XLSX.read(xlsb, { type: "array", dense: true });
+        assert.deepEqual(Array.from(reopened.SheetNames), Array.from(workbook.SheetNames));
+        assert.equal(reopened.Sheets[reopened.SheetNames[0]]["!data"][11][0].v, "0012");
         // The exported source project includes runnable semantic tests, not a repository dependency.
         execFileSync(process.execPath, [path.join(output, "tests/matrix.test.js")], { cwd: temporary });
         console.log("PASS export: exact closure, hashes, editable source/tests, overwrite/traversal/symlink refusals");
@@ -49,6 +65,29 @@ const hash = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
             if (!request.url().startsWith(filePrefix) && !(httpPrefix && request.url().startsWith(httpPrefix))) unexpected.push(request.url());
         });
         await page.goto(pathToFileURL(path.join(output, "index.html")).href);
+        assert.deepEqual(await page.evaluate(() => [typeof window.echarts, typeof window.Tabulator, typeof window.XLSX]),
+            ["undefined", "undefined", "undefined"]);
+        const chartAndGrid = await page.evaluate(async () => {
+            const echarts = await DataTemplatesVendors.load("echarts");
+            const chartNode = document.createElement("div");
+            chartNode.style.cssText = "width:320px;height:160px";
+            document.body.appendChild(chartNode);
+            const chart = echarts.init(chartNode);
+            chart.setOption({ xAxis: { type: "category", data: ["A", "B"] }, yAxis: {}, series: [{ type: "bar", data: [1, 2] }] });
+            const chartReady = chart.getOption().series[0].data.length === 2;
+            chart.dispose(); chartNode.remove();
+            const Tabulator = await DataTemplatesVendors.load("tabulator");
+            const gridNode = document.createElement("div");
+            document.body.appendChild(gridNode);
+            const table = new Tabulator(gridNode, { height: 160, data: [{ id: 1, label: "A" }],
+                columns: [{ title: "Name", field: "label" }] });
+            await new Promise(resolve => table.on("tableBuilt", resolve));
+            const gridReady = gridNode.querySelector(".tabulator-cell")?.textContent === "A";
+            table.destroy(); gridNode.remove();
+            return [chartReady, gridReady, typeof window.XLSX];
+        });
+        assert.deepEqual(chartAndGrid, [true, true, "undefined"]);
+        console.log("PASS standalone vendors: lazy local chart/grid, XLSB library fixture and inactive SheetJS UI");
         await page.locator("#dtFiles").setInputFiles({ name: "source.csv", mimeType: "text/csv", buffer: Buffer.from("a,b\n1,2\n") });
         await page.waitForFunction(() => document.getElementById("dtFileCount").textContent === "1");
         assert.equal(await page.evaluate(() => typeof RNAssistantWorkspace), "undefined");
@@ -89,6 +128,19 @@ const hash = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
         await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
         httpPrefix = "http://127.0.0.1:" + server.address().port + "/";
         await page.goto(httpPrefix + "core/index.html");
+        const sheetjsWorker = await page.evaluate(async bytes => {
+            const worker = new Worker("../tests/vendor-worker.js");
+            try {
+                return await new Promise((resolve, reject) => {
+                    const timer = setTimeout(() => reject(new Error("SheetJS Worker timed out")), 5000);
+                    worker.onerror = error => { clearTimeout(timer); reject(new Error(error.message)); };
+                    worker.onmessage = event => { clearTimeout(timer); resolve(event.data); };
+                    const buffer = new Uint8Array(bytes).buffer;
+                    worker.postMessage(buffer, [buffer]);
+                });
+            } finally { worker.terminate(); }
+        }, Array.from(new Uint8Array(xlsb)));
+        assert.deepEqual(sheetjsWorker, { version: "0.20.3", firstCode: "0012" });
         await page.locator("#operation").selectOption("extractXlsx");
         await page.locator("#capture").setInputFiles(path.join(output, "core/examples/matrix-xlsx-extraction.json"));
         await page.locator("#sourceFile").setInputFiles(path.join(output, "core/examples/matrix-source.xlsx"));
