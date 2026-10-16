@@ -37,6 +37,35 @@ operation. The resource lease then excludes another managed move until release;
 unrelated files retain independent leases. Immutable historical/snapshot reads
 continue through their existing published-CAS path.
 
+Large source files (2026-10-16): `WorkspaceFileService.CaptureFile` retains a file
+through the same locator, per-file lease, CAS and authority. The caller supplies
+an explicit byte budget for that operation; the one-MiB whole-view budget is not
+a source-file size limit. Hashing, retention and verification use fixed 80-KiB
+buffers and the same opened source handle. A completed capture returns a
+`WorkspaceFileSnapshot` with exact runtime evidence and no body array. Reobserving
+the same bytes reuses the revision only after verifying its retained body; it
+cannot silently restore a missing/corrupt historical payload from the live file.
+
+`OpenExactRead` validates path identity, published revision and whole raw view,
+then verifies the full retained body before returning a read-only stream on that
+same CAS handle. It does not acquire a live-file lease for the parser or refresh
+the head. Raw bodies support seeking; compressed/encrypted bodies decode
+sequentially without a plaintext scratch file. Consumers requiring random access
+must check `CanSeek`, not silently allocate the whole decoded body. Dispose the
+stream after each item. `CancellationToken` covers capture, a busy file-lease
+wait, verification and subsequent reads. `FileTransferProgress` reports typed
+per-pass byte counters, coalesced to about 10 Hz plus stage boundaries. Its
+callbacks run on the caller's thread; the application executor must schedule
+capture/open/consumption off the UI and marshal metadata updates to presentation.
+
+Existing `ReadText`/`ReadBytes`, model/preview delivery and guarded text mutations
+retain their bounded whole-body contracts. Source capture admission refusal does
+not publish a new observation. Cancellation before authority publication cannot
+claim a completed source; any unreferenced fully retained CAS body is handled by
+ordinary GC. No source registry, second durable cache or queue store was added.
+The focused storage test processes an actual 80-MiB fixture with no whole-source
+allocation; it does not qualify Excel parsing, UI responsiveness or Office.
+
 An explicit CLI `--read-only` open denies file mutations even when the workspace
 already has a manifest. The descriptor and root mount retain that permission for
 the open; workspace identity and later explicitly writable opens are unchanged.

@@ -256,6 +256,8 @@
     <Compile Include="Storage\BoundedLruCache.cs" />
     <Compile Include="Storage\PdfAttachmentTextExtractor.cs" />
     <Compile Include="Storage\CasBlobCodec.cs" />
+    <Compile Include="Storage\BlobReadStream.cs" />
+    <Compile Include="Storage\FileTransferProgress.cs" />
     <Compile Include="Storage\ChatHeaderReducer.cs" />
     <Compile Include="Storage\ChatStore.cs" />
     <Compile Include="Storage\ChatEventStoreAdapter.cs" />

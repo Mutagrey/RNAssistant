@@ -144,7 +144,8 @@ namespace RNAssistant.Core.Storage
             return result;
         }
 
-        internal void ProtectStream(Stream plaintext, Stream stored, string purpose)
+        internal void ProtectStream(Stream plaintext, Stream stored, string purpose,
+            CancellationToken token = default(CancellationToken), Action<int> advance = null)
         {
             if (plaintext == null) throw new ArgumentNullException("plaintext");
             if (stored == null) throw new ArgumentNullException("stored");
@@ -152,7 +153,7 @@ namespace RNAssistant.Core.Storage
             if (!stored.CanWrite) throw new ArgumentException("Stored stream must be writable.", "stored");
             if (!Encrypts)
             {
-                plaintext.CopyTo(stored, 81920);
+                FileTransferReporter.CopyTo(plaintext, stored, token, advance);
                 return;
             }
 
@@ -178,7 +179,7 @@ namespace RNAssistant.Core.Storage
                     using (var transform = aes.CreateEncryptor())
                     using (var crypto = new CryptoStream(authenticated, transform, CryptoStreamMode.Write, true))
                     {
-                        plaintext.CopyTo(crypto, 81920);
+                        FileTransferReporter.CopyTo(plaintext, crypto, token, advance);
                         crypto.FlushFinalBlock();
                     }
                 }

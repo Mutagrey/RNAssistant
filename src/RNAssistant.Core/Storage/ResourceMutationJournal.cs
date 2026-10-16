@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 
@@ -103,13 +104,15 @@ namespace RNAssistant.Core.Storage
 
         // A live mutation owns this short scope lease after confirmation and until
         // publication. Process death releases it; recovery never races a live writer.
-        public IDisposable AcquireScope(ResourceAuthorityScopeId scope, bool waitForOwner = false)
+        public IDisposable AcquireScope(ResourceAuthorityScopeId scope, bool waitForOwner = false,
+            CancellationToken token = default(CancellationToken))
         {
+            token.ThrowIfCancellationRequested();
             var directory = Path.GetDirectoryName(_path);
             StorageFileSystem.EnsureRegularDirectory(directory);
             var path = Path.Combine(directory, "mutation-" +
                 RNAssistant.Core.Tools.TextPatternEngine.Sha256(scope.ToString()) + ".lck");
-            if (waitForOwner) return StorageFileSystem.AcquireWriteLock(path);
+            if (waitForOwner) return StorageFileSystem.AcquireWriteLock(path, token);
             return new FileStream(path,
                 FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
         }

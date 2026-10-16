@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
@@ -25,6 +26,20 @@ namespace RNAssistant.Core.Storage
         public string ContentSha256 { get; internal set; }
         public ResourceEvidence Evidence { get; internal set; }
         public ResourceAuthorityCommit AuthorityCommit { get; internal set; }
+    }
+
+    // Runtime-only source pin. Content is opened separately, never serialized as
+    // a whole byte array or sent through a model/UI metadata response.
+    public sealed class WorkspaceFileSnapshot
+    {
+        public string RelativePath { get; private set; }
+        public ResourceEvidence Evidence { get; private set; }
+        public ResourceRef Reference { get { return Evidence.Resource.Copy(); } }
+        public long ByteLength { get { return Evidence.Payload.ByteLength; } }
+        public string ContentSha256 { get { return Evidence.ContentSha256; } }
+
+        internal WorkspaceFileSnapshot(string relativePath, ResourceEvidence evidence)
+        { RelativePath = relativePath; Evidence = evidence; }
     }
 
     public enum WorkspaceRecoveryOutcome
@@ -55,7 +70,8 @@ namespace RNAssistant.Core.Storage
         public int ScannedEntries { get; internal set; }
     }
 
-    // One file owner for bounded reads and text writes. The locator catalog is not a head store.
+    // One file owner for retained sources, bounded views and text writes.
+    // The locator catalog is not a head store.
     public sealed class WorkspaceFileService
     {
         internal const int MaximumTextBytes = 1024 * 1024;
@@ -182,6 +198,87 @@ namespace RNAssistant.Core.Storage
         public WorkspaceFileObservation ReadBytes(WorkspaceDescriptor workspace, string relativePath)
         { return ReadContent(workspace, relativePath, true); }
 
+        public WorkspaceFileSnapshot CaptureFile(WorkspaceDescriptor workspace, string relativePath, long maximumBytes,
+            CancellationToken token = default(CancellationToken), Action<FileTransferProgress> progress = null)
+        {
+            if (maximumBytes < 1) throw new ArgumentOutOfRangeException(nameof(maximumBytes));
+            token.ThrowIfCancellationRequested();
+            var path = ResolvePath(workspace, relativePath, false);
+            using (AcquireFileScope(path, out var id, out var scope, token))
+            {
+                token.ThrowIfCancellationRequested();
+                EnsureNoUnresolved(scope);
+                ResolvePath(workspace, relativePath, false);
+                if (!File.Exists(path))
+                {
+                    ObserveMissing(scope, id);
+                    throw new FileNotFoundException("Workspace file was not found.", path);
+                }
+                using (var source = new FileStream(path, FileMode.Open, FileAccess.Read,
+                    FileShare.Read, 81920, FileOptions.SequentialScan))
+                {
+                    if (source.Length > maximumBytes)
+                        throw new WorkspaceFileException("file_too_large", "Source exceeds this operation's byte budget.");
+                    long length;
+                    var hash = ChatBlobStore.HashFile(source, out length, token, progress);
+                    var state = _authority.Capture(scope);
+                    var previous = state.GetHead(Identity(id));
+                    var retained = previous?.Knowledge == HeadKnowledge.Known
+                        ? _authority.GetRevision(scope, previous.Revision) : null;
+                    ResourceRef exact;
+                    if (retained?.ContentSha256 == hash)
+                    {
+                        // A live match cannot silently repair a missing/corrupt
+                        // historical body. Validate its retained content first.
+                        using (OpenRetainedStream(retained.Payload, maximumBytes, token, progress)) { }
+                        exact = previous.Revision.Copy();
+                        _authority.RegisterView(scope, new ResourceRevisionView(exact, ResourceRepresentations.Raw,
+                            hash, retained.Payload, ResourceCoverage.Whole()));
+                    }
+                    else
+                    {
+                        var payload = PayloadRef.FromBlob(_blobs.StoreHashedFile(source, hash, length,
+                            "application/octet-stream", token, progress));
+                        token.ThrowIfCancellationRequested();
+                        exact = NewRevision(id);
+                        _authority.RegisterRevision(scope, new ResourceRevisionMetadata(exact, hash, payload, previous?.Revision));
+                        _authority.RegisterView(scope, new ResourceRevisionView(exact, ResourceRepresentations.Raw,
+                            hash, payload, ResourceCoverage.Whole()));
+                        token.ThrowIfCancellationRequested();
+                        _authority.Publish(ResourceAuthorityCommit.Create(scope, state.Generation, null,
+                            new[] { new ResourceHeadChange(Identity(id), previous,
+                                ResourceHeadState.Known(exact, state.Generation + 1)) },
+                            previous == null ? AuthorityCommitReason.InitialObservation : AuthorityCommitReason.ExternalDrift));
+                    }
+                    return new WorkspaceFileSnapshot(relativePath, PublishedEvidence(exact, ResourceRepresentations.Raw));
+                }
+            }
+        }
+
+        // The caller owns/disposes the stream and schedules this work off the UI
+        // thread. No file lease is held while a parser consumes retained bytes.
+        public Stream OpenExactRead(WorkspaceDescriptor workspace, string relativePath, ResourceRef exact, long maximumBytes,
+            CancellationToken token = default(CancellationToken), Action<FileTransferProgress> progress = null)
+        {
+            if (maximumBytes < 1) throw new ArgumentOutOfRangeException(nameof(maximumBytes));
+            token.ThrowIfCancellationRequested();
+            RequireExactPath(workspace, relativePath, exact);
+            var evidence = PublishedEvidence(exact, ResourceRepresentations.Raw);
+            if (evidence.Payload.ByteLength > maximumBytes)
+                throw new WorkspaceFileException("file_too_large", "Source exceeds this operation's byte budget.");
+            return OpenRetainedStream(evidence.Payload, maximumBytes, token, progress);
+        }
+
+        private Stream OpenRetainedStream(PayloadRef payload, long maximumBytes, CancellationToken token,
+            Action<FileTransferProgress> progress)
+        {
+            if (payload == null) throw new WorkspaceFileException("snapshot_unavailable", "Exact source payload is unavailable.");
+            try { return _blobs.OpenVerifiedRead(payload.ToBlobReference(), maximumBytes, token, progress); }
+            catch (Exception error) when (error is IOException || error is InvalidDataException ||
+                error is UnauthorizedAccessException || error is CryptographicException)
+            { throw new WorkspaceFileException("snapshot_unavailable", "Exact source payload is missing or corrupt."); }
+        }
+
         private WorkspaceFileObservation ReadContent(WorkspaceDescriptor workspace, string relativePath, bool raw)
         {
             var path = ResolvePath(workspace, relativePath, false);
@@ -234,11 +331,16 @@ namespace RNAssistant.Core.Storage
 
         private WorkspaceFileObservation ReadExactContent(WorkspaceDescriptor workspace, string relativePath, ResourceRef exact, string view)
         {
+            RequireExactPath(workspace, relativePath, exact);
+            return ReadPublishedContent(relativePath, exact, view);
+        }
+
+        private void RequireExactPath(WorkspaceDescriptor workspace, string relativePath, ResourceRef exact)
+        {
             var path = ResolvePath(workspace, relativePath, false);
             var id = FileIdentity(path);
             if (exact == null || !exact.IsExact || exact.Uri != ResourceUri.Create("file", id))
                 throw new WorkspaceFileException("invalid_resource_ref", "Exact reference does not belong to this file.");
-            return ReadPublishedContent(relativePath, exact, view);
         }
 
         internal WorkspaceFileObservation ReadSnapshotText(WorkspaceDescriptor workspace,
@@ -264,6 +366,19 @@ namespace RNAssistant.Core.Storage
 
         private WorkspaceFileObservation ReadPublishedContent(string relativePath, ResourceRef exact, string viewName)
         {
+            var evidence = PublishedEvidence(exact, viewName);
+            if (evidence.Payload.ByteLength > MaximumTextBytes)
+                throw new WorkspaceFileException("file_too_large", "Exact file exceeds the one MiB whole-read bound; use a retained source stream.");
+            var bytes = _blobs.ReadBytes(evidence.Payload.ToBlobReference());
+            if (bytes == null)
+                throw new WorkspaceFileException("snapshot_unavailable", "Exact file payload is missing or corrupt.");
+            return new WorkspaceFileObservation
+            { RelativePath = relativePath, Text = viewName == ResourceRepresentations.Text ? Decode(bytes) : null,
+                Bytes = bytes, Reference = exact.Copy(), ContentSha256 = evidence.ContentSha256, Evidence = evidence };
+        }
+
+        private ResourceEvidence PublishedEvidence(ResourceRef exact, string viewName)
+        {
             var address = ResourceUri.Parse(exact.Uri);
             if (!exact.IsExact || address.Provider != "file" || address.Segments.Count != 1)
                 throw new WorkspaceFileException("invalid_resource_ref", "A published exact file reference is required.");
@@ -279,18 +394,9 @@ namespace RNAssistant.Core.Storage
             if (view?.Payload == null || view.Coverage?.Kind != ResourceCoverageKinds.Whole ||
                 view.ContentSha256 != view.Payload.Sha256 || revision?.ContentSha256 != view.ContentSha256)
                 throw new WorkspaceFileException("snapshot_unavailable", "Exact whole-file view is unavailable.");
-            if (view.Payload.ByteLength > MaximumTextBytes)
-                throw new WorkspaceFileException("file_too_large", "Exact file exceeds the one MiB whole-read bound.");
-            var bytes = _blobs.ReadBytes(view.Payload.ToBlobReference());
-            if (bytes == null)
-                throw new WorkspaceFileException("snapshot_unavailable", "Exact file payload is missing or corrupt.");
-            return new WorkspaceFileObservation
-            { RelativePath = relativePath, Text = viewName == ResourceRepresentations.Text ? Decode(bytes) : null,
-                Bytes = bytes, Reference = exact.Copy(),
-                ContentSha256 = view.ContentSha256,
-                Evidence = new ResourceEvidence("ev_" + Guid.NewGuid().ToString("N"), scope, exact,
+            return new ResourceEvidence("ev_" + Guid.NewGuid().ToString("N"), scope, exact,
                     viewName, ResourceCoverage.Whole(), true, snapshot.Generation, view.Payload,
-                    contentSha256: view.ContentSha256) };
+                    contentSha256: view.ContentSha256);
         }
 
         public WorkspaceFileObservation CreateText(WorkspaceDescriptor workspace, string relativePath, string text,
@@ -947,12 +1053,13 @@ namespace RNAssistant.Core.Storage
                     "A possible previous file effect is unresolved; reconcile it before another write.");
         }
 
-        private IDisposable AcquireFileScope(string absolutePath, out string id, out ResourceAuthorityScopeId scope)
+        private IDisposable AcquireFileScope(string absolutePath, out string id, out ResourceAuthorityScopeId scope,
+            CancellationToken token = default(CancellationToken))
         {
             id = FileIdentity(absolutePath);
             scope = Scope(id);
             FaultPoint?.Invoke("before-file-lease");
-            var lease = _journal.AcquireScope(scope, true);
+            var lease = _journal.AcquireScope(scope, true, token);
             try
             {
                 // A move may have changed this path while we waited. Holding the

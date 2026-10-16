@@ -1,5 +1,21 @@
 # Stabilization progress
 
+## Workspace large-source file service — 2026-10-16
+
+The existing file owner now captures large sources through streamed CAS retention
+and published exact authority, independently of the one-MiB whole-view budget.
+Verified read-only streams, typed per-pass byte progress and cancellation cover
+capture, file-lease wait, verification and consumption. No second source store or
+runtime was introduced. Office remains C# 7.3 / .NET Framework 4.8.
+
+Validation: 14 focused workspace file groups and three CAS groups pass, including
+an actual 80-MiB source, bounded allocations, historical reads, corruption,
+cancellation, compression and encryption. Windows/Office was not run. This is
+storage evidence, not Excel throughput or UI qualification. Next: bind these
+source pins to the shared application queue and executor; XLSB/other Excel families
+are accepted reader scope in [Data Templates](../data-templates.md), still open
+alongside CSV/JSON and native execution/CSP. [File contract](../resource-fabric.md).
+
 ## Data Templates bounded XLSX reader — 2026-10-16
 
 The separate portable probe now reads a real selected XLSX in a dedicated Worker

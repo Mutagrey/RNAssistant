@@ -18,6 +18,14 @@ workbooks, Windows/WebView2, the application processing queue or publication.
 After vendor changes run `node tests/web/vendor-gate.test.js` for hashes/licenses.
 The scope and manual probe are in [Data Templates](../../docs/data-templates.md).
 
+`workspace files:` includes an actual 80-MiB source retained/read without a
+whole-body allocation, exact history after drift/deletion/restart, operation
+budgets, busy-file cancellation and missing/corrupt/unpublished source refusals.
+`storage: source streams`, `storage: file CAS` and `storage: plaintext CAS` cover
+stream ownership, cancellation, compression/encryption and envelope-prefix
+compatibility. These are storage checks; they do not qualify large Excel parsing,
+queue throughput, UI latency or Windows/Office behavior.
+
 Data Templates shared manifest storage: filter `tabular project:` checks
 create/reopen/read-only and workspace relocation, closed metadata/path refusal,
 external drift/foreign workspace, exact retained bytes and unknown write recovery.

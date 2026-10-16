@@ -4,22 +4,25 @@ using System.IO;
 using System.Linq;
 using System.Security;
 using System.Text;
+using System.Threading;
 
 namespace RNAssistant.Core.Storage
 {
     internal static class StorageFileSystem
     {
-        internal static IDisposable AcquireWriteLock(string path)
+        internal static IDisposable AcquireWriteLock(string path, CancellationToken token = default(CancellationToken))
         {
             EnsureRegularDirectory(Path.GetDirectoryName(path));
             var deadline = DateTime.UtcNow.AddSeconds(10);
             while (true)
             {
+                token.ThrowIfCancellationRequested();
                 try { return new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None); }
                 catch (IOException)
                 {
                     if (DateTime.UtcNow >= deadline) throw;
-                    System.Threading.Thread.Sleep(20);
+                    if (token.CanBeCanceled) token.WaitHandle.WaitOne(20);
+                    else Thread.Sleep(20);
                 }
             }
         }

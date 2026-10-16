@@ -41,54 +41,49 @@ namespace RNAssistant.Core.Storage
             return StoreBytes(bytes, contentType, hash, protector);
         }
 
-        public ChatBlobReference StoreFile(string sourcePath, string contentType)
+        public ChatBlobReference StoreFile(string sourcePath, string contentType,
+            CancellationToken token = default(CancellationToken), Action<FileTransferProgress> progress = null)
         {
             if (string.IsNullOrWhiteSpace(sourcePath)) throw new ArgumentException("Source path is required.", "sourcePath");
             using (var source = new FileStream(
                 sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, FileOptions.SequentialScan))
             {
                 long byteLength;
-                var hash = Sha256Stream(source, out byteLength);
-                var protector = Protection();
-                var path = PathFor(hash);
-                var verified = Matches(path, hash, byteLength, protector);
-                if (!verified)
-                {
-                    Directory.CreateDirectory(Path.GetDirectoryName(path));
-                    try
-                    {
-                        StorageFileSystem.WriteAtomic(path, tempPath =>
-                        {
-                            CasBlobCodec.EncodeFile(
-                                sourcePath,
-                                byteLength,
-                                contentType,
-                                protector,
-                                BlobPurpose(hash, byteLength),
-                                tempPath);
-                            if (!Matches(tempPath, hash, byteLength, protector))
-                            {
-                                throw new IOException("Streamed CAS payload does not match its source hash.");
-                            }
-                        });
-                        verified = true;
-                    }
-                    catch (IOException)
-                    {
-                        verified = Matches(path, hash, byteLength, protector);
-                        if (!verified) throw;
-                    }
-                }
-                if (!verified)
-                {
-                    throw new IOException("Content-addressed blob could not be verified after writing.");
-                }
-                if (source.Length != byteLength)
-                {
-                    throw new IOException("CAS source file changed while it was being stored.");
-                }
-                return CreateReference(hash, byteLength, contentType, protector);
+                var hash = HashFile(source, out byteLength, token, progress);
+                return StoreHashedFile(source, hash, byteLength, contentType, token, progress);
             }
+        }
+
+        // The file owner hashes under its existing file lease, then decides
+        // whether to reuse a retained revision or publish a new observation.
+        internal ChatBlobReference StoreHashedFile(FileStream source, string hash, long byteLength,
+            string contentType, CancellationToken token, Action<FileTransferProgress> progress)
+        {
+            token.ThrowIfCancellationRequested();
+            var protector = Protection();
+            var path = PathFor(hash);
+            if (!Matches(path, hash, byteLength, protector, token, progress))
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(path));
+                try
+                {
+                    StorageFileSystem.WriteAtomic(path, tempPath =>
+                    {
+                        CasBlobCodec.EncodeStream(source, byteLength, contentType, protector,
+                            BlobPurpose(hash, byteLength), tempPath, token, progress);
+                        if (!Matches(tempPath, hash, byteLength, protector, token, progress))
+                            throw new IOException("Streamed CAS payload does not match its source hash.");
+                    });
+                }
+                catch (IOException)
+                {
+                    if (!Matches(path, hash, byteLength, protector, token, progress)) throw;
+                }
+            }
+            token.ThrowIfCancellationRequested();
+            if (source.Length != byteLength)
+                throw new IOException("CAS source file changed while it was being stored.");
+            return CreateReference(hash, byteLength, contentType, protector);
         }
 
         internal bool HasVerifiedReference(ChatBlobReference reference)
@@ -303,6 +298,21 @@ namespace RNAssistant.Core.Storage
                 protector, BlobPurpose(reference.Sha256, reference.ByteLength), maximumBytes, token);
         }
 
+        // A format/application chooses admission size. This API never allocates
+        // the whole payload; the one-MiB preview budget does not apply to sources.
+        public Stream OpenVerifiedRead(ChatBlobReference reference, long maximumBytes,
+            CancellationToken token = default(CancellationToken), Action<FileTransferProgress> progress = null)
+        {
+            if (maximumBytes < 1) throw new ArgumentOutOfRangeException(nameof(maximumBytes));
+            token.ThrowIfCancellationRequested();
+            if (!ValidReference(reference)) throw new InvalidDataException("Invalid CAS reference.");
+            if (reference.ByteLength > maximumBytes) throw new InvalidDataException("CAS source exceeds the requested byte budget.");
+            var protector = Protection();
+            if (!ProtectionMatches(reference, protector)) throw new InvalidDataException("CAS protection does not match its reference.");
+            return CasBlobCodec.OpenVerifiedRead(PathFor(reference.Sha256), reference.ByteLength, reference.Sha256,
+                protector, BlobPurpose(reference.Sha256, reference.ByteLength), token, progress);
+        }
+
         internal string PathFor(string sha256)
         {
             var normalized = (sha256 ?? string.Empty).ToLowerInvariant();
@@ -360,28 +370,44 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        private static string Sha256Stream(FileStream stream, out long byteLength)
+        internal static string HashFile(FileStream stream, out long byteLength,
+            CancellationToken token, Action<FileTransferProgress> progress)
         {
             using (var sha = SHA256.Create())
             {
                 if (stream == null) throw new ArgumentNullException("stream");
                 stream.Position = 0;
                 byteLength = stream.Length;
-                var hash = sha.ComputeHash(stream);
-                if (stream.Position != byteLength)
+                var reporter = new FileTransferReporter(FileTransferStage.Hashing, byteLength, token, progress);
+                var buffer = new byte[81920];
+                long total = 0;
+                while (true)
+                {
+                    token.ThrowIfCancellationRequested();
+                    var count = stream.Read(buffer, 0, buffer.Length);
+                    if (count == 0) break;
+                    if (count > byteLength - total) throw new IOException("CAS source grew while it was being hashed.");
+                    sha.TransformBlock(buffer, 0, count, buffer, 0);
+                    total += count;
+                    reporter.Advance(count);
+                }
+                if (total != byteLength || stream.Length != byteLength)
                 {
                     throw new IOException("CAS source file changed while it was being hashed.");
                 }
-                return BitConverter.ToString(hash).Replace("-", string.Empty).ToLowerInvariant();
+                sha.TransformFinalBlock(new byte[0], 0, 0);
+                reporter.Complete();
+                return BitConverter.ToString(sha.Hash).Replace("-", string.Empty).ToLowerInvariant();
             }
         }
 
-        private bool Matches(string path, string expectedHash, long expectedLength, StorageProtector protector)
+        private bool Matches(string path, string expectedHash, long expectedLength, StorageProtector protector,
+            CancellationToken token = default(CancellationToken), Action<FileTransferProgress> progress = null)
         {
             try
             {
                 return CasBlobCodec.VerifyFile(path, expectedLength, expectedHash, protector,
-                    BlobPurpose(expectedHash, expectedLength));
+                    BlobPurpose(expectedHash, expectedLength), token, progress);
             }
             catch (InvalidDataException) { return false; }
         }

@@ -59,15 +59,15 @@ namespace RNAssistant.Core.Storage
             return plaintext;
         }
 
-        public static void EncodeFile(
-            string sourcePath,
+        public static void EncodeStream(
+            FileStream source,
             long plaintextLength,
             string contentType,
             StorageProtector protector,
             string purpose,
-            string destinationPath)
+            string destinationPath, CancellationToken token, Action<FileTransferProgress> progress)
         {
-            if (string.IsNullOrWhiteSpace(sourcePath)) throw new ArgumentException("Source path is required.", "sourcePath");
+            if (source == null) throw new ArgumentNullException(nameof(source));
             if (plaintextLength < 0) throw new ArgumentOutOfRangeException("plaintextLength");
             if (string.IsNullOrWhiteSpace(destinationPath)) throw new ArgumentException("Destination path is required.", "destinationPath");
             protector = protector ?? StorageProtector.None;
@@ -75,20 +75,22 @@ namespace RNAssistant.Core.Storage
             string compressedPath = null;
             try
             {
-                var encodedSource = TryCreateCompressedEnvelope(
-                    sourcePath,
+                var compressed = TryCreateCompressedEnvelope(
+                    source, destinationPath,
                     plaintextLength,
                     contentType,
-                    out compressedPath)
-                        ? compressedPath
-                        : sourcePath;
-                using (var input = new FileStream(
-                    encodedSource, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, FileOptions.SequentialScan))
-                using (var output = new FileStream(
-                    destinationPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, FileOptions.SequentialScan))
+                    out compressedPath, token, progress);
+                source.Position = 0;
+                using (var encoded = compressed ? new FileStream(compressedPath,
+                    FileMode.Open, FileAccess.Read, FileShare.Read, 81920, FileOptions.SequentialScan) : null)
+                using (var output = new FileStream(destinationPath, FileMode.CreateNew,
+                    FileAccess.Write, FileShare.None, 81920, FileOptions.SequentialScan))
                 {
-                    protector.ProtectStream(input, output, purpose);
+                    var input = encoded ?? source;
+                    var reporter = new FileTransferReporter(FileTransferStage.Retaining, input.Length, token, progress);
+                    protector.ProtectStream(input, output, purpose, token, reporter.Advance);
                     output.Flush(true);
+                    reporter.Complete();
                 }
             }
             finally
@@ -102,9 +104,49 @@ namespace RNAssistant.Core.Storage
             long expectedPlaintextLength,
             string expectedSha256,
             StorageProtector protector,
-            string purpose)
+            string purpose, CancellationToken token = default(CancellationToken), Action<FileTransferProgress> progress = null)
         {
-            return VerifyFile(path, expectedPlaintextLength, expectedSha256, protector, purpose, null, 0, CancellationToken.None);
+            var reporter = new FileTransferReporter(FileTransferStage.Verifying, expectedPlaintextLength, token, progress);
+            var valid = VerifyFile(path, expectedPlaintextLength, expectedSha256, protector, purpose, null, 0, token,
+                (bytes, count) => reporter.Advance(count), reporter.Reset);
+            if (valid) reporter.Complete();
+            return valid;
+        }
+
+        // Verify the entire pinned file before giving the caller any content.
+        // Keep the same handle for reads; never reopen a potentially replaced path.
+        internal static Stream OpenVerifiedRead(string path, long length, string hash,
+            StorageProtector protector, string purpose, CancellationToken token, Action<FileTransferProgress> progress)
+        {
+            FileStream stored = null;
+            Stream plaintext = null;
+            try
+            {
+                stored = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, FileOptions.RandomAccess);
+                var reporter = new FileTransferReporter(FileTransferStage.Verifying, length, token, progress);
+                bool compressed;
+                if (!VerifyStreamCore(stored, length, hash, protector, purpose, null, 0, token,
+                    (bytes, count) => reporter.Advance(count), reporter.Reset, out compressed))
+                    throw new InvalidDataException("Retained CAS body does not match its exact reference.");
+                reporter.Complete();
+                stored.Position = 0;
+                if (!compressed && !protector.Encrypts) return new BlobReadStream(stored, length, token);
+                plaintext = protector.OpenUnprotectedReadStream(stored, purpose, token);
+                if (!compressed) return new BlobReadStream(plaintext, length, token, stored);
+                var header = new byte[HeaderLength];
+                EnvelopeHeader envelope;
+                if (ReadUpTo(plaintext, header, 0, header.Length) != header.Length || !TryParseHeaderPrefix(header, out envelope))
+                    throw new InvalidDataException("Retained CAS header changed during reading.");
+                var gzip = new GZipStream(new LimitedReadStream(plaintext, envelope.PayloadLength), CompressionMode.Decompress);
+                return new BlobReadStream(gzip, length, token, plaintext, stored);
+            }
+            catch (Exception error)
+            {
+                plaintext?.Dispose();
+                stored?.Dispose();
+                if (error is VisitorFailure) ExceptionDispatchInfo.Capture(error.InnerException).Throw();
+                throw;
+            }
         }
 
         internal static byte[] ReadPrefixFile(string path, long expectedLength, string expectedHash,
@@ -121,16 +163,8 @@ namespace RNAssistant.Core.Storage
         {
             if (visit == null || reset == null || expectedLength < 0 || expectedLength > 20L * 1024 * 1024)
                 throw new ArgumentException("A bounded verified visitor is required.");
-            try
-            {
-                return VerifyFile(path, expectedLength, expectedHash, protector, purpose,
-                    null, 0, token, visit, reset);
-            }
-            catch (VisitorFailure error)
-            {
-                ExceptionDispatchInfo.Capture(error.InnerException).Throw();
-                throw;
-            }
+            return VerifyFile(path, expectedLength, expectedHash, protector, purpose,
+                null, 0, token, visit, reset);
         }
 
         private sealed class VisitorFailure : Exception
@@ -158,6 +192,8 @@ namespace RNAssistant.Core.Storage
                     return VerifyStream(stored, expectedPlaintextLength, expectedSha256, protector, purpose,
                         capture, maximumBytes, token, visit, reset);
             }
+            catch (VisitorFailure error)
+            { ExceptionDispatchInfo.Capture(error.InnerException).Throw(); throw; }
             catch (Exception error) when (error is IOException || error is InvalidDataException || error is UnauthorizedAccessException || error is CryptographicException)
             { return false; }
         }
@@ -172,6 +208,16 @@ namespace RNAssistant.Core.Storage
             StorageProtector protector, string purpose, Stream capture = null, int maximumBytes = 0,
             CancellationToken token = default(CancellationToken), Action<byte[], int> visit = null, Action reset = null)
         {
+            bool compressed;
+            return VerifyStreamCore(stored, expectedPlaintextLength, expectedSha256, protector, purpose,
+                capture, maximumBytes, token, visit, reset, out compressed);
+        }
+
+        private static bool VerifyStreamCore(Stream stored, long expectedPlaintextLength, string expectedSha256,
+            StorageProtector protector, string purpose, Stream capture, int maximumBytes,
+            CancellationToken token, Action<byte[], int> visit, Action reset, out bool compressed)
+        {
+            compressed = false;
             token.ThrowIfCancellationRequested();
             if (expectedPlaintextLength < 0 || string.IsNullOrWhiteSpace(expectedSha256)) return false;
             protector = protector ?? StorageProtector.None;
@@ -180,7 +226,8 @@ namespace RNAssistant.Core.Storage
             using (var plaintext = protector.OpenUnprotectedReadStream(stored, purpose, token))
                 result = VerifyPlaintextStream(plaintext, expectedPlaintextLength, expectedSha256,
                     capture, maximumBytes, token, visit);
-            if (result != VerificationResult.RetryAsRaw) return result == VerificationResult.Valid;
+            compressed = result == VerificationResult.ValidCompressed;
+            if (result != VerificationResult.RetryAsRaw) return compressed || result == VerificationResult.ValidRaw;
             if (capture != null) { capture.SetLength(0); capture.Position = 0; }
             reset?.Invoke();
             stored.Position = 0;
@@ -242,26 +289,24 @@ namespace RNAssistant.Core.Storage
         }
 
         private static bool TryCreateCompressedEnvelope(
-            string sourcePath,
+            FileStream source, string destinationPath,
             long plaintextLength,
             string contentType,
-            out string compressedPath)
+            out string compressedPath, CancellationToken token, Action<FileTransferProgress> progress)
         {
             compressedPath = null;
             if (plaintextLength < MinimumCompressionBytes || !Compressible(contentType)) return false;
-            var sourceDirectory = Path.GetDirectoryName(sourcePath) ?? string.Empty;
-            compressedPath = Path.Combine(
-                sourceDirectory,
-                "." + Path.GetFileName(sourcePath) + "." + Guid.NewGuid().ToString("N") + ".cas-gzip.tmp");
+            compressedPath = destinationPath + ".cas-gzip.tmp";
+            source.Position = 0;
             using (var output = new FileStream(
                 compressedPath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None, 81920, FileOptions.SequentialScan))
             {
                 WriteEnvelopeHeader(output, plaintextLength, 0);
-                using (var input = new FileStream(
-                    sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, FileOptions.SequentialScan))
                 using (var gzip = new GZipStream(output, CompressionLevel.Optimal, true))
                 {
-                    input.CopyTo(gzip, 81920);
+                    var reporter = new FileTransferReporter(FileTransferStage.Compressing, plaintextLength, token, progress);
+                    FileTransferReporter.CopyTo(source, gzip, token, reporter.Advance);
+                    reporter.Complete();
                 }
                 var payloadLength = output.Length - HeaderLength;
                 if (payloadLength > int.MaxValue)
@@ -309,7 +354,7 @@ namespace RNAssistant.Core.Storage
             {
                 return HashStream(plaintext, expectedLength, expectedSha256,
                     capture, maximumBytes, token, visit, prefix, prefixLength)
-                    ? VerificationResult.Valid
+                    ? VerificationResult.ValidRaw
                     : VerificationResult.Invalid;
             }
 
@@ -336,7 +381,7 @@ namespace RNAssistant.Core.Storage
                     {
                         throw new InvalidDataException("CAS compression envelope has trailing bytes.");
                     }
-                    return hashMatches ? VerificationResult.Valid : VerificationResult.Invalid;
+                    return hashMatches ? VerificationResult.ValidCompressed : VerificationResult.Invalid;
                 }
             }
             catch (Exception ex) when (ex is IOException || ex is InvalidDataException)
@@ -553,7 +598,8 @@ namespace RNAssistant.Core.Storage
         private enum VerificationResult
         {
             Invalid,
-            Valid,
+            ValidRaw,
+            ValidCompressed,
             RetryAsRaw
         }
 

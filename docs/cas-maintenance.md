@@ -34,6 +34,16 @@ Supplying exact source bytes can repair a damaged blob at its existing content
 address; an earlier reference, matching file size or valid envelope cannot bypass
 verification. No CAS format or identity changes are involved.
 
+`StoreFile` hashes and encodes the same open source handle with cancellable,
+bounded-buffer passes and stage progress. Temporary compressed/encoded writes
+are removed on failure/cancellation. `OpenVerifiedRead` authenticates, decodes and
+hashes the complete retained body before returning its read-only stream; it keeps
+that CAS handle open until disposal. Raw bodies are seekable; compressed/encrypted
+bodies remain sequential and never spill plaintext to a scratch file. Reads also
+observe cancellation. A caller supplies its source-byte budget independently of
+preview/text-response limits. Existing CAS format, protection and reachability
+rules apply unchanged to large workspace source revisions.
+
 Reference-only original/shared-context publication, model claim evidence, HTML
 member search and workspace move/delete/restore use `HasVerifiedReference`.
 Damaged dependencies are rejected before publication or mutation preparation;

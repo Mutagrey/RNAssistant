@@ -608,9 +608,22 @@ locations; they must not invent Excel addresses for CSV/JSON or flatten arbitrar
 objects to fit the matrix grammar. Normalized snapshots and the bounded XLSX matrix
 adapter exist in the separate probe; CSV/JSON source adapters are not implemented.
 
+Accepted Excel scope also includes XLSB, XLS, XLSM, XLTX, XLTM, legacy XLT/XLW and
+XML Spreadsheet 2003. These are planned reader capabilities, not formats already
+read by the XLSX probe. XML-based OOXML workbooks/templates can share the streaming
+XML path after explicit package/content-type validation. XLSB and binary XLS/XLT/
+XLW need a binary adapter with separate limits and fixtures; XML Spreadsheet needs
+its own schema reader. Do not route them through an XLSX extension alias or silently
+coerce all numbers through JS `Number`. Macros are never executed during import.
+Encrypted/password-protected inputs, unsupported legacy variants and add-in
+packages must yield a specific diagnostic; opening a file in Excel is not proof
+that the data reader supports it. Each adapter must expose seek/sequential access,
+precision, formula-cache and memory-budget capabilities before claiming support.
+
 | Reader / remaining scope | Configuration and source evidence |
 |---|---|
 | XLSX | The probe accepts an exact template sheet/rectangle and returns physical cell evidence, exact numeric lexemes and explicit formula/cache availability. General workbook preview/recognition and live Office capture remain separate work. |
+| Other Excel formats (planned) | XLSM/XLTX/XLTM use explicit OOXML package profiles; XLSB and XLS/XLT/XLW use a binary adapter; Spreadsheet 2003 XML uses its native schema. Each family needs independent fixtures, typed source evidence and measured limits. |
 | CSV | Explicit encoding, separator, quoting and header selection; record/column locations and raw text before declared type conversion. Preview must expose ambiguous separators/decimal conventions and malformed records. Leading-zero codes must not become numbers implicitly. |
 | JSON | Explicit record-array/object and field paths; preserve nesting, null/missing/type distinctions and JSON-pointer provenance. No implicit flattening of arbitrary nested objects. Numeric precision, duplicate keys and size/depth limits must be defined before accepting data. |
 
@@ -628,6 +641,12 @@ current main viewer only enumerates files; its processing queue/parser connectio
 is not implemented. The separate XLSX probe already uses one Worker per file with
 streaming reads, resource budgets and hard cancellation.
 The 500-file intake cap is an explicit prototype bound, not a final batch size.
+The shared file owner now supplies `CaptureFile` and `OpenExactRead` for streamed,
+revision-pinned sources without the one-MiB whole-read barrier. Format-specific
+byte budgets remain explicit. The storage check uses a real 80-MiB binary fixture,
+not an Excel parsing benchmark. The queue must call this owner from its background
+executor, dispose source streams per item and preserve the source pin across UI
+navigation. See [large-source contract](resource-fabric.md).
 The following requirements belong to the first real reader/recognition workflow
 in M2–M3; M5 extends it with consolidation rather than retrofitting safe execution.
 Owner: Data Templates application integration over the shared workspace application,
@@ -711,7 +730,7 @@ source/project switching before wiring the first complete workflow.
 
 | View | Required interaction |
 |---|---|
-| Sources | Drag-and-drop and explicit file/folder pickers for XLSX, CSV and JSON; multiple files, visible folder contents and inclusion selection; source queue with recognition status, format-appropriate preview (sheet/block, CSV records, JSON fields), template candidates and per-item diagnostics. Folder recursion, unsupported files and duplicates must be visible choices/outcomes. |
+| Sources | Drag-and-drop and explicit file/folder pickers for the declared Excel families, CSV and JSON; multiple files, visible folder contents and inclusion selection; source queue with recognition status, format-appropriate preview (sheet/block, CSV records, JSON fields), template candidates and per-item diagnostics. Reader support and selection hints must remain distinct. Folder recursion, unsupported files and duplicates must be visible choices/outcomes. |
 | Templates | Searchable catalog, recognized signatures, draft/published versions, test results and reusable template creation/editing. Show source-grid roles and a preview before applying a transformation. |
 | Parameters and dictionaries | Search/filter by stable parameter ID, name, meaning, type, unit, dimensions and status; aliases, proposals and conflicts remain visible. |
 | Mapping | A source-to-canonical map showing labels/codes/units and their target parameters/dimensions; inspect rule scope, priority, confirmation and affected records. Unmapped/ambiguous values are explicit; suggestions become rules only through the shared domain workflow. |
@@ -743,7 +762,7 @@ versioned schema and fixtures used by the engine.
 | M1 source selection (implemented) | Responsive modular viewer, paged file/folder intake, cancellable enumeration progress and explicit metadata-only states. Persisted source association and typed extraction commands remain open. |
 | M2 matrix-language foundation (implemented) | JSON template → typed plan → normalized snapshot → batched canonical observations with lineage, in the separate portable probe. Native integration and full readers remain open. |
 | M2 bounded XLSX adapter (implemented) | Explicit file + template → selective ZIP/XML reading in a Worker → exact typed cells → the same canonical batches. Single-file probe only; native source association, queue and 80 MB qualification remain open. |
-| M1–M3 | First real end-to-end flow for a supported source: loading, preview, parameter/mapping inspection, diagnostics and draft/test/publish through the common domain service. Include the bounded processing queue, off-UI readers, resource budgets and cancellation from the first reader. Start with the bounded XLSX matrix; add CSV/JSON readers behind the same workflow and their own fixtures. Deliver usable controls alongside each capability. |
+| M1–M3 | First real end-to-end flow for a supported source: loading, preview, parameter/mapping inspection, diagnostics and draft/test/publish through the common domain service. Include the bounded processing queue, off-UI readers, resource budgets and cancellation from the first reader. Connect the bounded XLSX matrix through streamed workspace sources; add the remaining Excel families (including XLSB), CSV/JSON behind the same workflow and their own fixtures. Deliver usable controls alongside each capability. |
 | M4 | Portable picker/import/export and the format/help reference using the same engine and documented capability differences. |
 | M5 | Extend the existing queue with advanced batch execution, scoped dictionary/mapping edits, comparison/consolidation, multiple blocks and output workbook templates. |
 
@@ -769,7 +788,7 @@ manifest implementation:
 | Application-owned execution | `AssistantPaneControl` owns the current WebView2 and trusts its exact root document; frame navigation is limited to about:blank/srcdoc. A browser proof does not authorize broadening that policy or prove WebView2 Worker behavior. |
 | Publication | Draft/test/publish and exact source/module/dictionary pins must use existing authority/journal owners. Verified manifest creation is not a template publication; probe JSON cannot authorize one. |
 | Source input and transfer | The viewer selects files/folders with XLSX/CSV/JSON hints; no source parser, native association or persisted selection is connected there yet. The separate probe executes M2 over normalized snapshots and bounded XLSX. CSV/JSON readers, project closure and complete export/import remain open. |
-| Large files and batch execution | Enumeration progress/bounded lists and a separate single-file XLSX Worker with streaming/budgets/cancellation are implemented. The application-owned queue, native execution/CSP integration and real 80 MB-class qualification remain open; see the [processing contract](#large-files-and-processing-queue--planned). |
+| Large files and batch execution | Enumeration progress/bounded lists, a separate single-file XLSX Worker and shared workspace source streams with cancellation/progress are implemented. Storage has an actual 80-MiB binary test; the application-owned queue, native execution/CSP integration and representative Excel qualification remain open; see the [processing contract](#large-files-and-processing-queue--planned). |
 
 Next slices, coordinated with the workspace owners:
 
