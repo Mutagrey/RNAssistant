@@ -1,14 +1,21 @@
 # RNAssistant Harness
 
 Data Templates M0/M2 is JavaScript-only: run `node tests/web/tabular-core.test.js`,
-`node tests/web/tabular-matrix.test.js` and `node tests/web/tabular-browser.test.js` (Playwright, optional
+`node tests/web/tabular-matrix.test.js`, `node tests/web/tabular-xlsx.test.js` and
+`node tests/web/tabular-browser.test.js` (Playwright, optional
 `BROWSER_EXECUTABLE`). They cover bounded selectors, immutable capture, Worker
 cancel/deadline/reload, viewer-independent lifetime and offline file:// parity.
 Matrix checks add an independent 16-record oracle, typed expressions/plans,
 scoped mappings, decimal/missing semantics, source/rule lineage, bounded batches
 and consumer backpressure/failure. Browser checks cover batch acknowledgement,
-cancellation and offline matrix parity. These require no Harness build and do not
-qualify Office capture, real XLSX parsing or publication.
+cancellation and offline matrix parity. XLSX checks cover a real selected file,
+exact numeric lexemes/formula-cache evidence, streamed ZIP/XML, CRC/size/schema
+refusals, bounded capture across 30,000 rows and existing SheetJS writer
+interoperability. The browser checks XLSX Worker transfer without UI body reads,
+byte progress/cancel/rerun and explicit refusal of cooperative execution. These
+require no Harness build and do not qualify Office capture, representative 80 MB
+workbooks, Windows/WebView2, the application processing queue or publication.
+After vendor changes run `node tests/web/vendor-gate.test.js` for hashes/licenses.
 The scope and manual probe are in [Data Templates](../../docs/data-templates.md).
 
 Data Templates shared manifest storage: filter `tabular project:` checks

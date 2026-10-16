@@ -35,7 +35,11 @@ matrix records/provisional batches have no native tools or publication authority
   leave earlier batches unpublished. The future native sink needs staging/cleanup
   and unknown-write reconciliation through the existing owner.
 - The loader's enumeration progress and 50-row pages do not prove processing of
-  many large files. Close the [queue/large-file gate](../data-templates.md#large-files-and-processing-queue--planned)
+  many large files. The separate XLSX reader now has streamed selective reads,
+  exact numeric cells, resource budgets and Worker cancellation; its 30,000-row
+  fixture and writer interoperability do not establish 80 MB behavior or RAM cost.
+  Stored formula caches have unknown freshness, and only consumed ZIP parts are
+  CRC-checked; neither is a publication receipt. Close the [queue/large-file gate](../data-templates.md#large-files-and-processing-queue--planned)
   with workspace-owned dispatch, bounded off-UI readers, hard cancellation,
   unresolved-write handling and measured peak memory/UI/cancel latency on real
   80 MB-class XLSX batches in Windows/Office/WebView2. The sparse 80 MiB fixture

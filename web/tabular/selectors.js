@@ -160,5 +160,5 @@
         }));
     }
 
-    root.RNTabularSelectors = Object.freeze({ select, rectangle, area, address, fail, maxCells: MAX_CELLS });
+    root.RNTabularSelectors = Object.freeze({ select, cell, rectangle, area, address, fail, maxCells: MAX_CELLS });
 }(globalThis));

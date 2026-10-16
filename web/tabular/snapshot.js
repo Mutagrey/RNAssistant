@@ -16,34 +16,49 @@
             fail("SCHEMA_INVALID", path, "Expected bounded nonempty text.");
     }
 
-    function copyCell(value, path) {
-        object(value, ["kind", "value", "reason"], path);
+    function copyCell(value, path, version = 1) {
+        object(value, version === 2 ? ["kind", "value", "reason", "lexeme", "formula"] : ["kind", "value", "reason"], path);
+        const formula = value.formula;
+        let metadata = {};
+        if (own(value, "formula")) {
+            object(formula, ["text", "type"], path + ".formula");
+            if (typeof formula.text !== "string" || formula.text.length > 32767 || !["normal", "shared", "array", "dataTable"].includes(formula.type))
+                fail("SCHEMA_INVALID", path + ".formula", "Invalid stored formula metadata.");
+            metadata = { formula: Object.freeze({ text: formula.text, type: formula.type }) };
+        }
         const kind = value.kind;
+        if (kind === "numeric" && version === 2) {
+            if (own(value, "value") || own(value, "reason") || typeof value.lexeme !== "string" || value.lexeme.length > 128 ||
+                !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d{1,4})?$/.test(value.lexeme))
+                fail("SCHEMA_INVALID", path, "An exact numeric cell requires a bounded decimal lexeme.");
+            return Object.freeze({ kind, lexeme: value.lexeme, ...metadata });
+        }
+        if (own(value, "lexeme")) fail("SCHEMA_INVALID", path, "Only exact numeric cells have a numeric lexeme.");
         if (!["number", "text", "boolean", "blank", "error", "unavailable"].includes(kind))
             fail("SCHEMA_INVALID", path + ".kind", "Unsupported cell kind.");
         if (kind === "unavailable") {
             if (own(value, "value")) fail("SCHEMA_INVALID", path, "An unavailable cell has no value.");
             text(value.reason, path + ".reason", 256);
-            return Object.freeze({ kind, reason: value.reason });
+            return Object.freeze({ kind, reason: value.reason, ...metadata });
         }
         if (own(value, "reason")) fail("SCHEMA_INVALID", path, "Only unavailable cells have a reason.");
         if (kind === "blank") {
             if (own(value, "value")) fail("SCHEMA_INVALID", path, "A blank cell has no value.");
-            return Object.freeze({ kind });
+            return Object.freeze({ kind, ...metadata });
         }
         if ((kind === "number" && (typeof value.value !== "number" || !Number.isFinite(value.value))) ||
             (kind === "boolean" && typeof value.value !== "boolean") ||
             (["text", "error"].includes(kind) && (typeof value.value !== "string" || value.value.length > 32767)) ||
             (kind === "error" && !value.value))
             fail("SCHEMA_INVALID", path + ".value", "Cell value does not match its kind.");
-        return Object.freeze({ kind, value: value.value });
+        return Object.freeze({ kind, value: value.value, ...metadata });
     }
 
     // This normalized input is data, not resource authority or live-capture evidence.
     // Missing coverage is never synthesized as an empty cell.
     function open(input) {
         object(input, ["version", "source", "sheet", "ranges"], "snapshot");
-        if (input.version !== 1) fail("VERSION_UNSUPPORTED", "snapshot.version", "Unsupported snapshot version.");
+        if (![1, 2].includes(input.version)) fail("VERSION_UNSUPPORTED", "snapshot.version", "Unsupported snapshot version.");
         object(input.source, ["kind", "label"], "snapshot.source");
         if (!["fixture", "retained-snapshot"].includes(input.source.kind))
             fail("SCHEMA_INVALID", "snapshot.source.kind", "M0 accepts fixtures and normalized retained snapshots only.");
@@ -67,7 +82,7 @@
                 row.forEach((value, columnIndex) => {
                     const address = geometry.address(box.firstRow + rowIndex, box.firstColumn + columnIndex);
                     if (cells.has(address)) fail("CAPTURE_OVERLAP", path, "Capture includes " + address + " more than once.");
-                    cells.set(address, copyCell(value, path + ".cells[" + rowIndex + "][" + columnIndex + "]"));
+                    cells.set(address, copyCell(value, path + ".cells[" + rowIndex + "][" + columnIndex + "]", input.version));
                 });
             });
         });
@@ -83,5 +98,5 @@
         });
     }
 
-    root.RNTabularSnapshot = Object.freeze({ open, object });
+    root.RNTabularSnapshot = Object.freeze({ open, object, copyCell });
 }(globalThis));

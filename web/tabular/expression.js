@@ -107,9 +107,10 @@
         if (cell.kind === "error") return freeze({ kind: "missing", reason: "source-error", detail: cell.value });
         if (cell.kind === "text" && cell.value === "") return freeze({ kind: "missing", reason: "empty-text" });
         let text;
-        if (cell.kind === "number") {
-            if (Number.isInteger(cell.value) && !Number.isSafeInteger(cell.value)) fail("DECIMAL_PRECISION", path, "Unsafe integer source; supply an exact text value.");
-            text = String(cell.value);
+        if (cell.kind === "number" || cell.kind === "numeric") {
+            if (cell.kind === "number" && Number.isInteger(cell.value) && !Number.isSafeInteger(cell.value)) fail("DECIMAL_PRECISION", path, "Unsafe integer source; supply an exact numeric lexeme.");
+            text = cell.kind === "numeric" ? cell.lexeme : String(cell.value);
+            text = text.replace(/^\+/, "").replace(/^(-?)\./, (_, sign) => sign + "0.");
             if (/[eE]/.test(text)) {
                 const [coefficient, exponent] = text.toLowerCase().split("e");
                 const negative = coefficient[0] === "-", parts = coefficient.replace(/^-/, "").split(".");
@@ -151,6 +152,7 @@
             if (node.op === "raw") return args[0];
             if (node.op === "text") {
                 const cell = args[0];
+                if (cell.kind === "numeric") return decimal(cell, "en-US", node.path).value;
                 if (cell.kind !== "text" && cell.kind !== "number") fail("CELL_TEXT_UNAVAILABLE", node.path, "Required header or key has no usable text/number value.");
                 if (cell.kind === "number" && Number.isInteger(cell.value) && !Number.isSafeInteger(cell.value)) fail("DECIMAL_PRECISION", node.path, "Unsafe integer cannot be used as a key.");
                 return String(cell.value);

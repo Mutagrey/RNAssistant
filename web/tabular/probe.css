@@ -11,6 +11,9 @@ button:disabled { cursor: default; opacity: .55; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 24px 0; }
 .note { font-size: 14px; color: light-dark(#4d5d74, #acb8ca); }
 #status { min-height: 24px; overflow-wrap: anywhere; }
+#progressView { margin: 12px 0 24px; }
+progress { width: min(100%, 480px); vertical-align: middle; accent-color: #477aca; }
+#elapsed { display: inline-block; padding-inline-start: 12px; font-variant-numeric: tabular-nums; }
 details { border: 1px solid #79869c; border-radius: 8px; padding: 16px; }
 summary { cursor: pointer; }
 pre { overflow: auto; max-height: 560px; font-size: 13px; }

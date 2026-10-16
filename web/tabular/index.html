@@ -20,12 +20,19 @@
   <main>
     <p class="eyebrow">RNAssistant · Data Templates · M2</p>
     <h1>Проверка переносимого ядра</h1>
-    <p>Выберите проверку снимка M0 или выполнение матрицы M2. Примеры находятся в папке examples.
-      Это работа с подготовленным снимком; чтение XLSX и публикация проекта ещё не подключены.</p>
+    <p>Проверьте снимок или выполните матричный шаблон на выбранном XLSX. Примеры находятся в папке examples.
+      XLSX читается в отдельном Worker; результат этой проверки не публикуется в проект.</p>
     <label for="operation">Операция</label>
-    <select id="operation"><option value="inspect">Исследовать снимок — disjoint-capture.json</option><option value="extract">Выполнить шаблон — matrix-extraction.json</option></select>
+    <select id="operation"><option value="inspect">Исследовать снимок — disjoint-capture.json</option><option value="extract">Выполнить шаблон — matrix-extraction.json</option><option value="extractXlsx">Прочитать XLSX — matrix-xlsx-extraction.json + matrix-source.xlsx</option></select>
     <label for="capture">Входной JSON</label>
     <input id="capture" type="file" accept=".json,application/json">
+    <div id="sourcePicker" hidden>
+      <label for="sourceFile">Исходная книга XLSX</label>
+      <input id="sourceFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+      <p class="note">Читается область, указанная в шаблоне. Формулы не пересчитываются: используются сохранённые значения,
+        их актуальность неизвестна. Лимит файла — 96 МиБ; дополнительные лимиты распаковки и данных могут отклонить книгу.
+        Работа с реальными книгами на 80 МБ ещё не квалифицирована.</p>
+    </div>
     <label for="mode">Исполнитель</label>
     <select id="mode">
       <option value="cooperative">Базовый — доверенное ограниченное ядро</option>
@@ -39,6 +46,7 @@
       <button id="download" disabled>Скачать отчёт JSON</button>
     </div>
     <p id="status" role="status" aria-live="polite">Выберите входной JSON.</p>
+    <div id="progressView" hidden><progress id="progress" aria-label="Обработка источника"></progress><span id="elapsed"></span></div>
     <details id="viewer" open>
       <summary>Результат (первые 20 ячеек или записей с происхождением)</summary>
       <pre id="result">Нет результата.</pre>

@@ -1,8 +1,9 @@
 # Data Templates
 
 Status: portable M0 proof, M1 project-manifest/source-selection foundation and the
-first M2 matrix-language slice implemented (2026-10-16). Matrix extraction works
-over normalized snapshots; file readers, application import and publication remain open.
+first M2 matrix-language and bounded XLSX-reader slices implemented (2026-10-16).
+Matrix extraction works over normalized snapshots and explicitly selected XLSX
+files in the separate Worker probe. Application import/queue and publication remain open.
 Owner: Data Templates domain; portable JS in `web/tabular`, shared manifest storage
 in Core `TabularProjectStore` over `WorkspaceFileService`.
 This is the canonical domain contract; planned scope is marked separately from
@@ -12,8 +13,9 @@ owner. Architecture decision: [ADR-0014](decisions/ADR-0014-data-templates.md).
 
 ## Current slice
 
-[The core probe](../web/tabular/index.html) offers two explicit operations through
-the same executor: M0 snapshot inspection and [M2 matrix extraction](#matrix-language-and-execution-v1).
+[The core probe](../web/tabular/index.html) offers three explicit operations through
+the same executor: M0 snapshot inspection, [M2 matrix extraction](#matrix-language-and-execution-v1)
+and [bounded XLSX extraction](#bounded-xlsx-reader).
 For inspection it runs a normalized, bounded capture through
 the same plain JavaScript in a dedicated Worker or explicit cooperative mode.
 Select [disjoint-capture.json](../web/tabular/examples/disjoint-capture.json) with
@@ -25,8 +27,11 @@ For extraction select `Выполнить шаблон` and
 [matrix-extraction.json](../web/tabular/examples/matrix-extraction.json). It produces
 16 canonical observations with source/rule evidence, including two years and
 separate annual totals. The download is a report with at most 20 preview records,
-not a published dataset. Neither operation reads live Excel/XLSX/YAML or writes
-project files. Native manifest creation/opening is described below; no `tabular.*`
+not a published dataset. For a real XLSX select `Прочитать XLSX`,
+[matrix-xlsx-extraction.json](../web/tabular/examples/matrix-xlsx-extraction.json)
+and [matrix-source.xlsx](../web/tabular/examples/matrix-source.xlsx). The file stays
+outside the JSON envelope and is read only inside its Worker. None of these
+operations reads live Excel/YAML or writes project files. Native manifest creation/opening is described below; no `tabular.*`
 tool/skill is exposed and the main loader is not yet connected to this executor.
 
 | Module | Responsibility |
@@ -37,14 +42,18 @@ tool/skill is exposed and the main loader is not yet connected to this executor.
 | `expression.js` | Expression syntax tree, type/scope binding to instructions, explicit value conversion and evidence |
 | `template.js` | Closed matrix/dictionary schemas, context dependency order and immutable matrix plan |
 | `matrix.js` | Canonical records, grain/unit checks, lineage and awaited provisional result batches |
-| `engine.js` | The two bounded operations over immutable input; no DOM or publication |
+| `xlsx-zip.js` | Selective ZIP32 reads, streamed native deflate, size/CRC checks and byte progress |
+| `xlsx-reader.js` | Bounded SpreadsheetML adapter, exact numeric lexemes, cache evidence and complete rectangle coverage |
+| `engine.js` | Declared bounded operations over immutable input; no DOM or publication |
 | `executor.js` | One active job, Worker lifecycle, deadline, cancellation, contract revision check |
 | `worker.js` | Fixed shipped modules, declared operations and one acknowledged batch in flight |
 | `probe.js` | File picker, explicit mode, result presentation and download |
 
-Core modules have no DOM, filesystem, network, Office or native bridge access.
-No C# DSL implementation, second agent loop, CAS, journal, package manager or
-vendor dependency was added. Existing HTML artifacts and limits are unchanged.
+Core modules have no DOM, filesystem authority, network, Office or native bridge access.
+The XLSX adapter receives a selected Blob capability, not an arbitrary path/URL.
+No C# DSL implementation, second agent loop, CAS, journal or package manager was
+added. One pinned XML parser is loaded only by the probe Worker. Existing HTML
+artifacts, main UI CSP and limits are unchanged.
 
 ## Probe input and coverage
 
@@ -61,12 +70,18 @@ Source metadata has only a descriptive `label` and `kind` (`fixture` or
 `retained-snapshot`). Uploaded metadata cannot assert a verified live capture and
 does not convey resource authority, permissions or publication evidence.
 
-Cells are closed tagged values: `number`, `text`, `boolean`, `blank`, `error`,
+Version-1 cells are closed tagged values: `number`, `text`, `boolean`, `blank`, `error`,
 `unavailable`. Value kinds require a corresponding `value`; blank has no value;
 unavailable requires `reason`. Zero, empty text, blank, Excel error text and an
 unavailable cached formula result remain distinct. Numbers retain IEEE-754
-semantics; identifiers must be text. Decimal arithmetic, dates, display text,
-formulas, number formats, merges and hidden/filter metadata are not implemented.
+semantics; identifiers must be text. Snapshot version 2 explicitly adds
+`{kind:"numeric", lexeme:"12345678901234567890.125"}` and optional
+`formula:{text,type}` evidence. A numeric lexeme is at most 128 characters with
+an optional decimal exponent; it never passes through JS Number. Formula type is
+`normal`, `shared`, `array` or `dataTable`; empty shared-formula text is retained,
+not reconstructed. Version 1 rejects these new fields/kinds. Decimal arithmetic,
+date conversion, display formatting, formula calculation, merge/hidden/filter
+semantics are not implemented.
 
 The reader copies source metadata and cells. The engine parses a bounded immutable
 input string once per run. A selected address outside the supplied capture fails
@@ -101,15 +116,17 @@ outside bounds fail; nothing is silently clipped. An empty selection is allowed.
 
 These limits bound this probe only. They do not increase HTML aggregate, transfer,
 Resource Fabric or web verification limits. The browser check prints exact asset
-count/bytes; the current probe has twelve executable/presentation files and no vendors. Future
-YAML/XLSX dependencies need a separate size/license/capability review.
+count/bytes; the current probe has fifteen executable/presentation files including
+the pinned 50,818-byte sax XML parser. Its license/source hashes are in the shared
+[vendor manifest](../web/vendor-manifest.json) and [notices](../web/vendor-notices.md).
+Future dependencies require their own size/license/capability review.
 
 ## Execution and portability
 
 The executor outlives any result viewer. Closing the viewer does not cancel a
 run; cancellation, reset or disposal settles its Promise and releases resources.
 It rejects concurrent runs, stale protocol/revision handshakes and foreign job
-responses. Worker protocol v2 declares `inspect` and `extract`; old handshakes fail
+responses. Worker protocol v3 declares `inspect`, `extract` and `extractXlsx`; old handshakes fail
 explicitly. Each Worker loads fixed relative scripts once, accepts one job and is
 terminated on completion, error, cancellation or deadline. Worker absence or
 load failure returns `EXECUTOR_UNAVAILABLE`; there is no automatic fallback.
@@ -121,7 +138,9 @@ core and periodic yields. It needs no server, Node, npm, fetch of adjacent JSON,
 browser flags or RNAssistant credentials. The user selects the input file.
 Cooperative cancellation is checked at bounded checkpoints; it cannot interrupt
 arbitrary JS. Worker mode is tested on a loopback HTTP origin supplied by the
-test harness, not a production server.
+test harness, not a production server. XLSX explicitly requires Worker execution;
+cooperative mode fails with `XLSX_WORKER_REQUIRED`. A browser that denies Workers
+on `file://` can still run the two normalized-input operations, but not XLSX.
 
 The revision handshake is a **contract label**, not a content hash or trust
 proof. Exact captured module bytes, `engine.lock.json`, approved extensions and
@@ -216,11 +235,13 @@ Leading/trailing insignificant zeros and negative zero are normalized. Russian
 text uses decimal comma and optional groups of three separated by space/NBSP/narrow
 NBSP; English text uses decimal point and optional comma groups. Invalid grouping,
 locale mismatch and overflow fail. Text decimals never pass through JS Number.
-Numeric source cells retain their already-rounded IEEE-754 value; unsafe integers
-are rejected and lost input precision cannot be recovered. Identifiers and
-explicitly textual high-precision values remain text. Future numeric readers need
-a versioned exact-decimal/raw-lexeme capability; they must not silently relabel
-numeric source cells as text to conceal the source type.
+Version-1 `number` cells retain their already-rounded IEEE-754 value; unsafe integers
+are rejected and lost input precision cannot be recovered. Version-2 `numeric`
+cells retain the raw decimal/exponent lexeme and normalize it without floating-point
+conversion. Numeric conversion is locale-independent; locale applies only to text.
+`text(numeric)` uses the exact normalized numeric value, never an Excel display mask.
+Identifiers and explicitly textual high-precision values remain text. The XLSX
+reader declares this exact-lexeme capability rather than relabeling numbers as text.
 
 Missing values preserve distinct reasons: `blank`, `empty-text`, `source-error`
 with the error detail, and `unavailable` with the capture reason. Zero is a decimal.
@@ -238,7 +259,7 @@ its value, `A12` for parameter code `0012`, `B12` for the unit, `J5` for July an
 
 `executor.extract(inputText, {signal, deadlineMs, onProgress, onBatch})` runs through
 the same application-independent executor as inspection. `onBatch` is required
-and awaited; Worker protocol v2 sends the next batch only after acknowledgement of
+and awaited; Worker protocol v3 sends the next batch only after acknowledgement of
 the current sequence. Final summary counts must match acknowledged batches. There
 is no application processing queue yet; the executor still accepts one job.
 
@@ -259,20 +280,105 @@ all workbooks. Missing-value counts are reported separately.
 | Dataset dimensions / output records | 16 / 10,000 |
 | Record JSON including lineage | 65,536 UTF-16 code units |
 | Batch | Up to 64 records and 262,144 summed record JSON code units, plus array delimiters |
-| Deadline | Existing explicit 1–30,000 ms probe budget |
+| Deadline | Normalized input: 1–30,000 ms; XLSX: 1–300,000 ms, default 120,000 ms |
 
 Binding/extraction yield at bounded checkpoints and expose record progress. Hard
 Worker cancellation also works while waiting for a batch consumer. The explicit
 cooperative mode remains for the bounded shipped fixture/core; synchronous JSON
 decoding/compilation are bounded but cannot be interrupted mid-call there. Neither
-mode demonstrates arbitrary-extension isolation or 80 MB XLSX parsing. Axes are
+mode demonstrates arbitrary-extension isolation or qualifies 80 MB XLSX parsing. Axes are
 compact in the plan, but the existing bounded selector compiler and snapshot
-reader still materialize cells; real readers require the large-file gate below.
+reader still materialize cells. The XLSX adapter scans its worksheet incrementally
+and retains only the bounded rectangle; full qualification requires the large-file gate below.
 
 The standalone probe stores only the first 20 records for display/download and
 marks whether that preview is complete. It never accumulates an unbounded result
 array. A failed run clears the previous report. Full dataset export, exact module
 hash pins, live capture, template publication and loader integration remain open.
+
+## Bounded XLSX reader
+
+Owner: the portable Data Templates source adapter. This is a single-file reader
+proof, not the application import/recognition queue. It introduces no source store,
+workspace binding, file grant, native bridge operation or publication writer.
+CSV and JSON still need their own readers and native source-location contracts.
+
+`executor.extractXlsx(inputText, sourceFile, {signal, deadlineMs, onProgress, onBatch})`
+passes an immutable File/Blob to a dedicated Worker without UI body reads, base64
+or whole-workbook JSON. The closed version-1 `matrix-xlsx-extraction` envelope has
+`template`, `dictionaries`, `dataset`, and `source:{formulaPolicy:"stored-cache"}`.
+The template's exact sheet/bounds select the capture. The same compiler, mappings,
+canonical record semantics and acknowledged batches then process the reader.
+The summary adds versioned `sourceCapabilities` and bounded `sourceDiagnostics`;
+source name and capabilities are descriptive, not verified revision/publication pins.
+
+The ZIP reader loads a bounded directory and reads only package metadata, the
+selected worksheet and referenced shared strings. It feeds 8 KiB compressed
+chunks through native `DecompressionStream("deflate-raw")` and incremental strict
+XML parsing. Required parsed parts must pass local/central boundary, actual size,
+CRC, XML and semantic checks before the matrix can emit records. Unconsumed parts
+are admitted by directory budgets but not decompressed or CRC-validated. This is
+not whole-package integrity validation or a source content hash. Native stream
+buffers are implementation-controlled; configured budgets are not measured RAM.
+
+The worksheet is scanned to completion while only cells in the declared rectangle
+are retained. The reader retains only needed shared-string entries while scanning
+their table. An absent cell becomes blank **only after** a complete successful
+worksheet parse; truncated/corrupt parts never yield a partial reader. The
+worksheet `<dimension>` hint does not establish coverage. Missing shared-string
+indices, duplicated/unordered coordinates and conflicting values fail explicitly.
+
+Supported profile: unencrypted ZIP32 with stored/deflated entries and optional
+data descriptors; UTF-8 transitional XLSX with explicit ordered cell coordinates,
+shared/inline/rich text, raw numeric lexemes, booleans, errors and stored formula
+caches. Relationship targets must stay inside the package; external sources are
+never followed. ZIP64, XLS/XLSB/XLSM, Strict OOXML, DTD/entity declarations,
+markup alternatives, captured cells with value/cell metadata, ISO-date cells and
+unsupported value structures are refused. Rich text is plain text with phonetic
+runs excluded; SpreadsheetML escapes are decoded once. Styles are not loaded or
+applied; numeric date serials stay raw numbers, with the workbook's 1900/1904 date
+system disclosed. No display-mask inference, implicit forward fill or date conversion.
+
+Formula evaluation is absent. Stored caches carry `{formula:{text,type}}` in cell
+evidence and `cacheFreshness:"unknown"` in source capabilities. A missing cache
+is `unavailable/formula-cache-absent`; cached empty text and zero remain distinct.
+The explicit `stored-cache` policy is required even when a selected book happens
+to have no formulas. Large or stale formula-heavy workbooks still need source
+validation appropriate to the eventual publication workflow.
+
+| Reader budget | Current proof limit |
+|---|---|
+| Compressed source | 96 MiB |
+| ZIP directory / entries | 2 MiB / 4,096 |
+| Declared expanded total / any part | 512 MiB / 256 MiB |
+| Metadata / selected worksheet / shared-string XML | 2 MiB / 256 MiB / 128 MiB |
+| Scanned worksheet cells / shared-string entries | 2,000,000 / 2,000,000 |
+| Retained rectangle / canonical observations | 100,000 cells / 10,000 records |
+| Retained cell strings, formulas and needed shared strings | 8 Mi UTF-16 code units |
+| XML nesting / attributes per element | 32 / 64; parser token buffer is also bounded |
+| Deadline | 120 seconds by default; explicit maximum 300 seconds |
+
+These are prototype admission limits, not a promise that all 80 MB workbooks fit
+or an automatic sizing rule. Progress reports the current part, expanded/part
+bytes and source bytes actually read, coalesced to about 10 Hz plus part boundaries.
+Source-read totals include metadata rereads and exclude skipped members; they are
+not a whole-file percentage. The probe shows part progress, elapsed time and cancel,
+then canonical extraction progress. Parent-owned termination also cancels a busy
+parser or an unacknowledged batch. No completed report survives a failed/replaced run.
+
+The only new vendor is [sax 1.6.1](https://github.com/isaacs/sax-js), unmodified,
+with BlueOak-1.0.0 license and exact npm tarball integrity/file hashes recorded in
+the shared vendor manifest. It is not activated in the main WebView or authored
+HTML pool. Native deflate support is a required capability, not a JS decompression
+fallback. Format references: [ZIP APPNOTE](https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT),
+[Compression Standard](https://compression.spec.whatwg.org/),
+[SpreadsheetML cells](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.spreadsheet.cell).
+
+Focused checks cover a hand-authored 16-record XLSX oracle, malformed archives/XML,
+exact 38-digit numbers, formula availability, a 30,000-row selective-read fixture,
+existing pinned SheetJS writer interoperability and real browser Worker lifecycle.
+They do **not** measure representative 80 MB workbook memory/latency, multiple-file
+queue throughput or Windows/WebView2 compatibility. Those gates remain open.
 
 ## Relationship to workspace-first
 
@@ -499,25 +605,28 @@ The future source contract must expose its shape/capabilities explicitly: matrix
 cells, CSV records/fields or JSON object paths. `WorkbookReader` applies only to
 the matrix branch. Readers share typed values/diagnostics and tagged source
 locations; they must not invent Excel addresses for CSV/JSON or flatten arbitrary
-objects to fit the matrix grammar. Only the normalized matrix adapter exists now.
+objects to fit the matrix grammar. Normalized snapshots and the bounded XLSX matrix
+adapter exist in the separate probe; CSV/JSON source adapters are not implemented.
 
-| Planned reader | Configuration and source evidence |
+| Reader / remaining scope | Configuration and source evidence |
 |---|---|
-| XLSX | Workbook/sheet/block selection; physical cell addresses, capture coverage and explicit formula/cache availability. Live Office capture remains a separate adapter. |
+| XLSX | The probe accepts an exact template sheet/rectangle and returns physical cell evidence, exact numeric lexemes and explicit formula/cache availability. General workbook preview/recognition and live Office capture remain separate work. |
 | CSV | Explicit encoding, separator, quoting and header selection; record/column locations and raw text before declared type conversion. Preview must expose ambiguous separators/decimal conventions and malformed records. Leading-zero codes must not become numbers implicitly. |
 | JSON | Explicit record-array/object and field paths; preserve nesting, null/missing/type distinctions and JSON-pointer provenance. No implicit flattening of arbitrary nested objects. Numeric precision, duplicate keys and size/depth limits must be defined before accepting data. |
 
 Parsing success is separate from format recognition, template matching and valid
-canonical data. Future readers return typed values, native source locations,
-capabilities and diagnostics to the portable domain owner. Exact schema/adapter
-contracts will be fixed with M2 fixtures; the current extension catalog does not
-claim those readers exist. CSV/JSON source input is also distinct from JSON/YAML
+canonical data. Further readers return typed values, native source locations,
+capabilities and diagnostics to the portable domain owner. CSV/JSON schema/adapter
+contracts will be fixed with their own M2 fixtures; the current extension catalog does not
+claim all those readers exist. CSV/JSON source input is also distinct from JSON/YAML
 template definitions and the metadata-only project manifest.
 
 ### Large files and processing queue — planned
 
 Accepted requirement: many mixed-size inputs, including XLSX around 80 MB. The
-current viewer only enumerates files; there is no processing queue or parser yet.
+current main viewer only enumerates files; its processing queue/parser connection
+is not implemented. The separate XLSX probe already uses one Worker per file with
+streaming reads, resource budgets and hard cancellation.
 The 500-file intake cap is an explicit prototype bound, not a final batch size.
 The following requirements belong to the first real reader/recognition workflow
 in M2–M3; M5 extends it with consolidation rather than retrofitting safe execution.
@@ -633,6 +742,7 @@ versioned schema and fixtures used by the engine.
 |---|---|
 | M1 source selection (implemented) | Responsive modular viewer, paged file/folder intake, cancellable enumeration progress and explicit metadata-only states. Persisted source association and typed extraction commands remain open. |
 | M2 matrix-language foundation (implemented) | JSON template → typed plan → normalized snapshot → batched canonical observations with lineage, in the separate portable probe. Native integration and full readers remain open. |
+| M2 bounded XLSX adapter (implemented) | Explicit file + template → selective ZIP/XML reading in a Worker → exact typed cells → the same canonical batches. Single-file probe only; native source association, queue and 80 MB qualification remain open. |
 | M1–M3 | First real end-to-end flow for a supported source: loading, preview, parameter/mapping inspection, diagnostics and draft/test/publish through the common domain service. Include the bounded processing queue, off-UI readers, resource budgets and cancellation from the first reader. Start with the bounded XLSX matrix; add CSV/JSON readers behind the same workflow and their own fixtures. Deliver usable controls alongside each capability. |
 | M4 | Portable picker/import/export and the format/help reference using the same engine and documented capability differences. |
 | M5 | Extend the existing queue with advanced batch execution, scoped dictionary/mapping edits, comparison/consolidation, multiple blocks and output workbook templates. |
@@ -658,8 +768,8 @@ manifest implementation:
 | Live Excel capture | `ExcelResourceProvider` resolves explicit ranges through `ExcelReadService` and the bound document scope. It does not yet feed this probe; capture consistency, unsaved values, dependencies and richer cell availability remain open. |
 | Application-owned execution | `AssistantPaneControl` owns the current WebView2 and trusts its exact root document; frame navigation is limited to about:blank/srcdoc. A browser proof does not authorize broadening that policy or prove WebView2 Worker behavior. |
 | Publication | Draft/test/publish and exact source/module/dictionary pins must use existing authority/journal owners. Verified manifest creation is not a template publication; probe JSON cannot authorize one. |
-| Source input and transfer | The viewer selects files/folders with XLSX/CSV/JSON hints; no source parser, native association or persisted selection is connected yet. The separate probe executes the bounded M2 matrix against normalized snapshots. Project closure and complete export/import remain open. |
-| Large files and batch execution | Enumeration progress and bounded list rendering are implemented. The application-owned queue, off-UI readers, hard cancellation/resource budgets and real 80 MB-class qualification remain open; see the [processing contract](#large-files-and-processing-queue--planned). |
+| Source input and transfer | The viewer selects files/folders with XLSX/CSV/JSON hints; no source parser, native association or persisted selection is connected there yet. The separate probe executes M2 over normalized snapshots and bounded XLSX. CSV/JSON readers, project closure and complete export/import remain open. |
+| Large files and batch execution | Enumeration progress/bounded lists and a separate single-file XLSX Worker with streaming/budgets/cancellation are implemented. The application-owned queue, native execution/CSP integration and real 80 MB-class qualification remain open; see the [processing contract](#large-files-and-processing-queue--planned). |
 
 Next slices, coordinated with the workspace owners:
 
@@ -669,7 +779,7 @@ Next slices, coordinated with the workspace owners:
    reference to the net8.0 Runtime assembly. Host-neutral independent work below
    does not wait for Office qualification.
 2. Use the implemented [matrix contract](#matrix-language-and-execution-v1) and
-   independent oracle to connect source association, bounded format readers and
+   independent oracle and XLSX reader to connect source association, the bounded queue and
    the [loader/project UI](#planned-loader-and-project-ui). Qualify real reader
    capabilities/memory before raising prototype limits. Deliver incrementally
    through M1–M3 using the existing workspace/execution owners.
@@ -694,6 +804,16 @@ fixtures exercise bounded batches, backpressure, cancellation, consumer errors a
 failure after provisional output. `tabular-browser.test.js` checks real Worker
 acknowledgement/sequence guards, consumer failure/cancellation and complete record
 parity with cooperative execution and the offline file-picker report.
+
+`tabular-xlsx.test.js` covers the selected-file reader with an independent XLSX
+oracle, numeric precision, formula-cache evidence, XML/ZIP refusals and resource
+limits. A 30,000-row fixture forbids whole-File reads and verifies that an unrelated
+ZIP member is skipped while capture stays bounded. The existing pinned SheetJS
+writer generates an additional interoperability fixture; it is not a runtime
+reader dependency. These tests use Node's native streams/deflate and zlib CRC32.
+Browser checks exercise the real XLSX File transfer, reject body reads on the UI,
+verify byte progress/cancellation/rerun and refuse cooperative fallback. Vendor
+changes also require `node tests/web/vendor-gate.test.js`.
 
 Shared project storage: Harness filter `tabular project:` covers create/reopen,
 read-only refusal, relocation, malformed metadata, foreign-workspace binding,
@@ -726,6 +846,7 @@ For JS changes, run only the affected scripts (Playwright/browser must already b
 ```sh
 node tests/web/tabular-core.test.js
 node tests/web/tabular-matrix.test.js
+node tests/web/tabular-xlsx.test.js
 node tests/web/tabular-browser.test.js
 ```
 

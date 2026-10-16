@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "scope": "RNAssistant static WebView UI and authored HTML workspace vendor source carriers",
+  "scope": "RNAssistant static WebView UI, authored HTML workspace vendor source carriers and standalone Data Templates XML parser",
   "sourceUrlsAreProvenanceOnly": true,
   "policy": {
     "runtimeNetwork": "deny",
@@ -512,6 +512,24 @@
           "sha256": "eb917650781dcf06a60b97cba9b05bf583931ec2d311d8a5548a8dca90a57e0f"
         }
       ]
+    },
+    {
+      "id": "sax",
+      "npmPackage": "sax",
+      "version": "1.6.1",
+      "license": "BlueOak-1.0.0",
+      "gitHead": "961ceeefcc5186005466f2085aeb36f31b161e37",
+      "npmTarball": "https://registry.npmjs.org/sax/-/sax-1.6.1.tgz",
+      "npmIntegrity": "sha512-42tBVwLWnaQvW5zc4HbZrTuWccECCZfBi92FDuwtqxasH+JbPB3/FOKb1m222K42R4WxuxzzMsTswfzgtSu64Q==",
+      "packageDependencies": {},
+      "browserRuntimeDependencies": [],
+      "dependencyNotes": "Standalone Data Templates Worker only. Strict incremental XML parser; no main UI or authored HTML activation. Node stream entry points are not used.",
+      "licenseFiles": [
+        {
+          "path": "licenses/sax-1.6.1/LICENSE.md",
+          "sha256": "8a1af140fdfbf5afd3df27f7e662f989c5b963a300020dfafce42033cae9e004"
+        }
+      ]
     }
   ],
   "files": [
@@ -866,6 +884,14 @@
       "sha256": "5c507afa505e8da7c2d6bebf47bfc2b2249bce207c723f85806b196e0dfae29d",
       "provenanceUrl": "https://registry.npmjs.org/@pdf-lib/fontkit/-/fontkit-1.1.1.tgz",
       "localTransform": "Wrap standalone fontkit UMD and exact Noto Sans TTF bytes as inert source text; attach the OFL notice for standalone exports."
+    },
+    {
+      "path": "js/vendor/sax.js",
+      "package": "sax",
+      "bytes": 50818,
+      "sha256": "1cdc1270d987cb0f6ee66dd8efb01c50511aa14d17b6163bbbffb21df8cf1c06",
+      "provenanceUrl": "https://registry.npmjs.org/sax/-/sax-1.6.1.tgz",
+      "upstreamPath": "lib/sax.js"
     }
   ]
 }

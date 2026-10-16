@@ -3,7 +3,7 @@
 
     const selectors = root.RNTabularSelectors, snapshots = root.RNTabularSnapshot;
     const fail = selectors.fail;
-    const revision = "tabular-m2-1";
+    const revision = "tabular-m2-xlsx-1";
     const maxInputCharacters = 1000000;
 
     // A bounded capture probe, not the template DSL or a publication operation.
@@ -20,7 +20,7 @@
         if (input.version !== 1) fail("VERSION_UNSUPPORTED", "version", "Unsupported probe request version.");
         const reader = snapshots.open(input.snapshot);
         const selected = selectors.select(input.selection, input.bounds, reader.sheet, input.maxCells);
-        const cells = [], counts = { number: 0, text: 0, boolean: 0, blank: 0, error: 0, unavailable: 0 };
+        const cells = [], counts = { number: 0, numeric: 0, text: 0, boolean: 0, blank: 0, error: 0, unavailable: 0 };
         for (let index = 0; index < selected.length; index++) {
             if (index % 128 === 0) {
                 check();
@@ -50,5 +50,19 @@
         return Object.freeze({ ...result, engineRevision: revision });
     }
 
-    root.RNTabularEngine = Object.freeze({ revision, protocol: 2, maxInputCharacters, inspect, extract });
+    async function extractXlsx(requestText, hooks) {
+        if (!root.RNTabularXlsxReader) fail("XLSX_CAPABILITY_UNAVAILABLE", "", "The XLSX reader must run in its dedicated Worker.");
+        if (hooks.isCancelled()) fail("EXECUTION_CANCELLED", "", "Extraction was cancelled.");
+        const input = root.RNTabularJson.parse(requestText);
+        root.RNTabularTemplate.fields(input, ["version", "kind", "template", "source", "dictionaries", "dataset"], "/");
+        if (input.version !== 1 || input.kind !== "matrix-xlsx-extraction") fail("VERSION_UNSUPPORTED", "/", "Expected matrix-xlsx-extraction version 1.");
+        root.RNTabularTemplate.fields(input.source, ["formulaPolicy"], "/source");
+        const plan = root.RNTabularTemplate.compile(input.template), dictionaries = root.RNTabularTemplate.openDictionaries(input.dictionaries);
+        const reader = await root.RNTabularXlsxReader.open(hooks.sourceFile,
+            { sheet: plan.sheet, bounds: input.template.bounds, formulaPolicy: input.source.formulaPolicy }, hooks);
+        const result = await root.RNTabularMatrix.execute(plan, reader, dictionaries, input.dataset, hooks);
+        return Object.freeze({ ...result, engineRevision: revision, sourceCapabilities: reader.capabilities, sourceDiagnostics: reader.diagnostics });
+    }
+
+    root.RNTabularEngine = Object.freeze({ revision, protocol: 3, maxInputCharacters, maxSourceBytes: 96 * 1048576, inspect, extract, extractXlsx });
 }(globalThis));

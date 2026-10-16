@@ -1,5 +1,24 @@
 # Stabilization progress
 
+## Data Templates bounded XLSX reader — 2026-10-16
+
+The separate portable probe now reads a real selected XLSX in a dedicated Worker
+and feeds the existing typed matrix engine. Selective ZIP/streamed XML reading
+retains a bounded rectangle and only needed shared strings; parsed parts are
+size/CRC checked. Versioned cells preserve exact numeric lexemes and stored
+formula-cache evidence. Byte/record progress, cancellation and acknowledged
+batches use the existing executor, with no UI body reads or cooperative fallback.
+
+Validation: six focused XLSX groups, existing core/matrix groups and four browser
+groups pass; pinned vendor integrity/license checks pass. Evidence includes a
+hand-authored canonical oracle, 30,000 unselected rows, selective reads and an
+independent SheetJS writer. No C# build or Windows/Office validation was run.
+This does not qualify representative 80 MB books or measured RAM/latency. The
+main loader's application queue/source association, CSV/JSON readers, native
+execution/CSP/module pins and publication remain open. Next: connect the accepted
+reader through the shared workspace application lifetime and bounded queue.
+[Reader contract and limits](../data-templates.md#bounded-xlsx-reader).
+
 ## Data Templates M2 matrix-language foundation — 2026-10-16
 
 The portable core now compiles a closed JSON matrix template through typed

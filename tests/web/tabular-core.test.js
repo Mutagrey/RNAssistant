@@ -50,7 +50,7 @@ const rejects = (text, code) => assert.rejects(engine.inspect(text, hooks), erro
         ["D12", 12, 4, { kind: "number", value: 0 }], ["J12", 12, 10, { kind: "blank" }],
         ["K12", 12, 11, { kind: "text", value: "0012" }], ["P12", 12, 16, { kind: "number", value: 1000 }]
     ]);
-    assert.deepEqual(result.counts, { number: 4, text: 5, boolean: 0, blank: 1, error: 0, unavailable: 0 });
+    assert.deepEqual(result.counts, { number: 4, numeric: 0, text: 5, boolean: 0, blank: 1, error: 0, unavailable: 0 });
     assert.equal(result.coverage.complete, true);
     assert.equal(result.coverage.returnedCells, 10);
     const input = request();

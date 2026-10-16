@@ -1,7 +1,8 @@
 "use strict";
 
-// Only shipped modules and the two declared operations. No project scripts/URLs.
-importScripts("selectors.js", "snapshot.js", "json.js", "expression.js", "template.js", "matrix.js", "engine.js");
+// Only fixed shipped modules and declared operations. No project scripts/URLs or network source reads.
+importScripts("selectors.js", "snapshot.js", "json.js", "expression.js", "template.js", "matrix.js", "engine.js",
+    "../js/vendor/sax.js", "xlsx-zip.js", "xlsx-reader.js");
 
 let accepted = false, requestId = null, pendingBatch = null;
 self.onmessage = async function (event) {
@@ -10,7 +11,7 @@ self.onmessage = async function (event) {
         message.sequence === pendingBatch.sequence && message.protocol === RNTabularEngine.protocol) {
         const resolve = pendingBatch.resolve; pendingBatch = null; resolve(); return;
     }
-    if (accepted || !message || !["inspect", "extract"].includes(message.type) || message.protocol !== RNTabularEngine.protocol ||
+    if (accepted || !message || !["inspect", "extract", "extractXlsx"].includes(message.type) || message.protocol !== RNTabularEngine.protocol ||
         message.revision !== RNTabularEngine.revision || !Number.isSafeInteger(message.id)) {
         self.postMessage({ type: "error", id: message && message.id,
             error: { code: "EXECUTOR_PROTOCOL_INVALID", path: "", message: "Invalid execution request." } });
@@ -18,10 +19,16 @@ self.onmessage = async function (event) {
     }
     accepted = true; requestId = message.id;
     try {
+        let lastProgress = -Infinity;
         const result = await RNTabularEngine[message.type](message.input, {
             isCancelled: () => false, // The owning executor terminates this dedicated Worker on cancel/deadline.
             yieldControl: () => new Promise(resolve => setTimeout(resolve, 0)),
-            onProgress: progress => self.postMessage({ type: "progress", id: message.id, progress }),
+            sourceFile: message.sourceFile,
+            onProgress: progress => {
+                const now = performance.now();
+                if (progress.phase === "reading-xlsx" && !progress.force && now - lastProgress < 100) return;
+                lastProgress = now; self.postMessage({ type: "progress", id: message.id, progress });
+            },
             onBatch: batch => new Promise(resolve => {
                 pendingBatch = { sequence: batch.sequence, resolve };
                 self.postMessage({ type: "batch", id: message.id, batch });

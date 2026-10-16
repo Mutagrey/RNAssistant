@@ -26,6 +26,7 @@ manifest or those URLs.
 | JSZip | 3.10.2 | MIT OR GPL-3.0-or-later | [`licenses/jszip-3.10.2/LICENSE.markdown`](licenses/jszip-3.10.2/LICENSE.markdown) |
 | Wunderbaum | 0.14.1 | MIT | [`licenses/wunderbaum-0.14.1/LICENSE`](licenses/wunderbaum-0.14.1/LICENSE) |
 | Viewer.js | 1.12.0 | MIT | [`licenses/viewerjs-1.12.0/LICENSE`](licenses/viewerjs-1.12.0/LICENSE) |
+| sax | 1.6.1 | BlueOak-1.0.0 | [`licenses/sax-1.6.1/LICENSE.md`](licenses/sax-1.6.1/LICENSE.md) |
 
 KaTeX ships only the 20 WOFF2 files used by current WebView2. Its local CSS is a
 documented derivative of the exact 0.16.11 distribution: unused `.woff`/`.ttf`
@@ -91,9 +92,20 @@ source-only: its JavaScript package and npm dependencies are not loaded at runti
 Lucide is not currently bundled; a future shared icon adapter requires its own
 pinned manifest entry and consumer switch.
 
+sax is the unmodified 50,818-byte incremental XML parser used only by the separate
+Data Templates probe Worker. Its npm integrity, source revision and file/license
+hashes are manifested. The adapter uses strict namespaces/predefined entities,
+rejects DTDs and bounds XML/capture resources. The Node stream entry points are not
+used. No main UI startup or HTML-workspace activation was added. The existing
+SheetJS carrier is used only as an independent writer in the reader tests, not as
+another Data Templates runtime parser.
+
 The main UI admits only its local resource route in `connect-src`, keeps
 `font-src 'self'` and, while the worker
-allowlist is empty, `worker-src 'none'`. There are no runtime WASM or worker files.
+allowlist is empty, `worker-src 'none'`. It has no admitted WASM/Worker runtime.
+The separate `web/tabular` proof has its own fixed Worker and CSP, documented in
+[Data Templates](../docs/data-templates.md#bounded-xlsx-reader); it grants no native
+execution permission and does not close the main UI's Worker gate.
 A future local worker is permitted only after one atomic change adds its exact
 manifest entry, local host factory/allowlist, cancellation/`terminate` ownership,
 CSP update and zero-network test. User-approved HTML-workspace HTTP access is a
