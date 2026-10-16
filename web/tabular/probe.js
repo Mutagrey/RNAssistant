@@ -71,13 +71,20 @@
         status.textContent = operation === "inspect" ? "Проверка снимка…" : "Выполнение шаблона…";
         try {
             const settings = { signal: cancellation.signal,
-                onBatch: async batch => { if (ticket === generation) preview.push(...batch.records.slice(0, Math.max(0, 20 - preview.length))); },
+                sink: {
+                    writeBatch: async batch => { if (ticket === generation && !cancellation.signal.aborted) preview.push(...batch.records.slice(0, Math.max(0, 20 - preview.length))); },
+                    complete: async () => {},
+                    abort: () => { preview.length = 0; }
+                },
                 onProgress: progress => {
                     if (ticket !== generation) return;
                     let completed, total;
                     if (progress.phase === "reading-xlsx") {
                         completed = progress.partBytes; total = progress.totalPartBytes;
                         status.textContent = "Чтение XLSX · " + progress.part + " · распаковано " + progress.expandedBytes.toLocaleString("ru-RU") + " байт.";
+                    } else if (progress.phase === "reading-records") {
+                        completed = progress.completedItems; total = progress.totalItems;
+                        status.textContent = "Прочитано " + completed + " из " + total + " исходных записей.";
                     } else {
                         completed = operation === "inspect" ? progress.completedCells : progress.completedRecords;
                         total = operation === "inspect" ? progress.totalCells : progress.totalRecords;

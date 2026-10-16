@@ -3,7 +3,7 @@
 
     const selectors = root.RNTabularSelectors, snapshots = root.RNTabularSnapshot;
     const fail = selectors.fail;
-    const revision = "tabular-m2-xlsx-1";
+    const revision = "tabular-core-2";
     const maxInputCharacters = 1000000;
 
     // A bounded capture probe, not the template DSL or a publication operation.
@@ -41,12 +41,12 @@
 
     async function extract(requestText, hooks) {
         if (hooks.isCancelled()) fail("EXECUTION_CANCELLED", "", "Extraction was cancelled.");
-        const input = root.RNTabularJson.parse(requestText);
+        const input = root.RNTabularJson.parse(requestText, "/snapshot/document");
         root.RNTabularTemplate.fields(input, ["version", "kind", "template", "snapshot", "dictionaries", "dataset"], "/");
-        if (input.version !== 1 || input.kind !== "matrix-extraction") fail("VERSION_UNSUPPORTED", "/", "Expected matrix-extraction version 1.");
+        if (input.version !== 2 || input.kind !== "extraction") fail("VERSION_UNSUPPORTED", "/", "Expected extraction version 2.");
         const plan = root.RNTabularTemplate.compile(input.template);
-        const dictionaries = root.RNTabularTemplate.openDictionaries(input.dictionaries), reader = snapshots.open(input.snapshot);
-        const result = await root.RNTabularMatrix.execute(plan, reader, dictionaries, input.dataset, hooks);
+        const dictionaries = root.RNTabularTemplate.openDictionaries(input.dictionaries), source = root.RNTabularSources.open(plan, input.snapshot);
+        const result = await root.RNTabularTransform.execute(plan, source, dictionaries, input.dataset, hooks);
         return Object.freeze({ ...result, engineRevision: revision });
     }
 
@@ -55,14 +55,16 @@
         if (hooks.isCancelled()) fail("EXECUTION_CANCELLED", "", "Extraction was cancelled.");
         const input = root.RNTabularJson.parse(requestText);
         root.RNTabularTemplate.fields(input, ["version", "kind", "template", "source", "dictionaries", "dataset"], "/");
-        if (input.version !== 1 || input.kind !== "matrix-xlsx-extraction") fail("VERSION_UNSUPPORTED", "/", "Expected matrix-xlsx-extraction version 1.");
+        if (input.version !== 2 || input.kind !== "xlsx-extraction") fail("VERSION_UNSUPPORTED", "/", "Expected xlsx-extraction version 2.");
         root.RNTabularTemplate.fields(input.source, ["formulaPolicy"], "/source");
         const plan = root.RNTabularTemplate.compile(input.template), dictionaries = root.RNTabularTemplate.openDictionaries(input.dictionaries);
+        if (plan.source.kind !== "matrix") fail("SOURCE_MODEL_MISMATCH", "/template/source", "XLSX requires a matrix source plan.");
         const reader = await root.RNTabularXlsxReader.open(hooks.sourceFile,
-            { sheet: plan.sheet, bounds: input.template.bounds, formulaPolicy: input.source.formulaPolicy }, hooks);
-        const result = await root.RNTabularMatrix.execute(plan, reader, dictionaries, input.dataset, hooks);
+            { sheet: plan.source.sheet, bounds: plan.source.bounds, formulaPolicy: input.source.formulaPolicy }, hooks);
+        const source = root.RNTabularSources.matrix(plan, reader);
+        const result = await root.RNTabularTransform.execute(plan, source, dictionaries, input.dataset, hooks);
         return Object.freeze({ ...result, engineRevision: revision, sourceCapabilities: reader.capabilities, sourceDiagnostics: reader.diagnostics });
     }
 
-    root.RNTabularEngine = Object.freeze({ revision, protocol: 3, maxInputCharacters, maxSourceBytes: 96 * 1048576, inspect, extract, extractXlsx });
+    root.RNTabularEngine = Object.freeze({ revision, protocol: 4, maxInputCharacters, maxSourceBytes: 96 * 1048576, inspect, extract, extractXlsx });
 }(globalThis));

@@ -27,8 +27,8 @@
                 return Promise.reject(failure("XLSX_WORKER_REQUIRED", "XLSX reading requires an interruptible Worker."));
             if (xlsx && (!(sourceFile instanceof Blob) || !sourceFile.size || sourceFile.size > engine.maxSourceBytes))
                 return Promise.reject(failure("XLSX_INPUT_LIMIT", "Select a nonempty XLSX file of at most 96 MiB."));
-            if (extraction && typeof settings.onBatch !== "function")
-                return Promise.reject(failure("RESULT_SINK_REQUIRED", "Extraction requires a provisional batch consumer."));
+            if (extraction && (!settings.sink || ["writeBatch", "complete", "abort"].some(name => typeof settings.sink[name] !== "function")))
+                return Promise.reject(failure("RESULT_SINK_REQUIRED", "Extraction requires writeBatch, complete and synchronous abort on a result sink."));
             const maximumDeadline = xlsx ? 300000 : 30000, deadlineMs = settings.deadlineMs === undefined ? (xlsx ? 120000 : 5000) : settings.deadlineMs;
             if (!Number.isInteger(deadlineMs) || deadlineMs < 1 || deadlineMs > maximumDeadline)
                 return Promise.reject(failure("EXECUTOR_DEADLINE_INVALID", "Deadline must be 1 to " + maximumDeadline + " ms."));
@@ -38,8 +38,17 @@
                 const job = { id: ++sequence, stopped: false, worker: null, timer: null, batchPending: false, batches: 0, records: 0 };
                 active = job;
                 const abort = () => finish(failure("EXECUTION_CANCELLED", "Execution was cancelled."));
-                function finish(error, result) {
+                function finish(error, result, sinkCompleted = false) {
                     if (job.stopped) return;
+                    if (!error && extraction && !sinkCompleted) {
+                        if (job.completing) return;
+                        job.completing = true;
+                        // Completion validates staging only; publication is a separate application command.
+                        if (job.worker) { job.worker.terminate(); job.worker = null; }
+                        Promise.resolve().then(() => { if (current()) return settings.sink.complete(result); })
+                            .then(() => { if (current()) finish(null, result, true); }, failure => finish(failure));
+                        return;
+                    }
                     job.stopped = true;
                     clearTimeout(job.timer);
                     if (settings.signal) settings.signal.removeEventListener("abort", abort);
@@ -48,7 +57,13 @@
                         job.worker.terminate();
                     }
                     if (active === job) active = null;
-                    if (error) reject(error); else resolve(result);
+                    if (error) {
+                        if (extraction) {
+                            try { settings.sink.abort(error); } // Must revoke staging even if a writeBatch Promise is still pending.
+                            catch (abortError) { error.sinkAbortFailure = abortError.message; }
+                        }
+                        reject(error);
+                    } else resolve(result);
                 }
                 job.stop = finish;
                 const started = performance.now();
@@ -69,7 +84,7 @@
                             throw failure("EXECUTOR_REVISION_MISMATCH", "Reload the shipped runtime before executing.");
                         engine[operation](input, { isCancelled: () => !current(),
                             yieldControl: () => new Promise(done => setTimeout(done, 0)), onProgress: progress,
-                            onBatch: settings.onBatch
+                            onBatch: extraction ? batch => settings.sink.writeBatch(batch) : undefined
                         }).then(result => { if (current()) finish(null, result); }, error => finish(error));
                         return;
                     }
@@ -100,15 +115,15 @@
                                     throw failure("EXECUTOR_PROTOCOL_INVALID", "Invalid or out-of-order result batch.");
                                 job.batchPending = true;
                                 const batchSequence = batch.sequence, recordCount = batch.records.length;
-                                await settings.onBatch(batch);
+                                await settings.sink.writeBatch(batch);
                                 if (!current()) return;
                                 job.records += recordCount; job.batches++; job.batchPending = false;
                                 job.worker.postMessage({ type: "ack", id: job.id, sequence: batchSequence, protocol: engine.protocol });
                             }
                             else if (message.type === "result") {
-                                if (!message.result || message.result.version !== 1 || message.result.engineRevision !== expectedRevision)
+                                if (!message.result || message.result.version !== (extraction ? 2 : 1) || message.result.engineRevision !== expectedRevision)
                                     throw failure("EXECUTOR_PROTOCOL_INVALID", "Worker returned a different result contract.");
-                                if (extraction && (job.batchPending || message.result.kind !== "matrix-extraction-result" ||
+                                if (extraction && (job.batchPending || message.result.kind !== "extraction-result" ||
                                     message.result.recordCount !== job.records || message.result.batchCount !== job.batches || !message.result.coverage || !message.result.coverage.complete))
                                     throw failure("EXECUTOR_PROTOCOL_INVALID", "Extraction summary does not match acknowledged batches.");
                                 finish(null, message.result);

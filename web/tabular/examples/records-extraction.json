@@ -1,0 +1,224 @@
+{
+  "version": 2,
+  "kind": "extraction",
+  "template": {
+    "language": 2,
+    "id": "orientation-example",
+    "revision": 1,
+    "context": {},
+    "bindings": {
+      "parameter": {
+        "expr": "lookup(\"parameters\", text(field(\"code\")), \"production-form\")"
+      },
+      "unit": {
+        "expr": "lookup(\"units\", text(field(\"unit\")), \"production-form\")"
+      },
+      "period": {
+        "expr": "period.month(parse.year(text(field(\"year\"))), parse.monthRu(text(field(\"month\"))))"
+      },
+      "value": {
+        "expr": "round(decimal(raw(field(\"amount\")), \"en-US\"), 2, \"half-even\")"
+      },
+      "role": {
+        "expr": "\"observation\""
+      },
+      "dimensions": {
+        "entity": {
+          "expr": "text(field(\"entity\"))"
+        }
+      }
+    },
+    "output": "observations",
+    "policies": {
+      "missing": "preserve",
+      "mapping": "error",
+      "duplicates": "error",
+      "conflicts": "error"
+    },
+    "source": {
+      "kind": "records",
+      "maxRecords": 100,
+      "fields": [
+        "code",
+        "unit",
+        "year",
+        "month",
+        "amount",
+        "entity"
+      ]
+    }
+  },
+  "snapshot": {
+    "version": 1,
+    "kind": "records",
+    "source": {
+      "kind": "fixture",
+      "label": "observations-source.csv / normalized fields, no CSV byte parser"
+    },
+    "records": [
+      {
+        "code": {
+          "kind": "text",
+          "value": "0012"
+        },
+        "unit": {
+          "kind": "text",
+          "value": "т"
+        },
+        "year": {
+          "kind": "text",
+          "value": "2026"
+        },
+        "month": {
+          "kind": "text",
+          "value": "янв"
+        },
+        "amount": {
+          "kind": "text",
+          "value": "10.125"
+        },
+        "entity": {
+          "kind": "text",
+          "value": "plant-1"
+        }
+      },
+      {
+        "code": {
+          "kind": "text",
+          "value": "0012"
+        },
+        "unit": {
+          "kind": "text",
+          "value": "т"
+        },
+        "year": {
+          "kind": "text",
+          "value": "2026"
+        },
+        "month": {
+          "kind": "text",
+          "value": "фев"
+        },
+        "amount": {
+          "kind": "text",
+          "value": "20.135"
+        },
+        "entity": {
+          "kind": "text",
+          "value": "plant-1"
+        }
+      },
+      {
+        "code": {
+          "kind": "text",
+          "value": "0099"
+        },
+        "unit": {
+          "kind": "text",
+          "value": "т"
+        },
+        "year": {
+          "kind": "text",
+          "value": "2026"
+        },
+        "month": {
+          "kind": "text",
+          "value": "янв"
+        },
+        "amount": {
+          "kind": "text",
+          "value": "0"
+        },
+        "entity": {
+          "kind": "text",
+          "value": "plant-1"
+        }
+      },
+      {
+        "code": {
+          "kind": "text",
+          "value": "0099"
+        },
+        "unit": {
+          "kind": "text",
+          "value": "т"
+        },
+        "year": {
+          "kind": "text",
+          "value": "2026"
+        },
+        "month": {
+          "kind": "text",
+          "value": "фев"
+        },
+        "amount": {
+          "kind": "text",
+          "value": ""
+        },
+        "entity": {
+          "kind": "text",
+          "value": "plant-1"
+        }
+      }
+    ]
+  },
+  "dictionaries": {
+    "version": 1,
+    "revision": 1,
+    "units": [
+      {
+        "id": "t",
+        "name": "Тонны"
+      }
+    ],
+    "parameters": [
+      {
+        "id": "production.volume",
+        "name": "Объём производства",
+        "valueType": "decimal",
+        "unitId": "t",
+        "dimensions": [
+          "entity",
+          "variant"
+        ],
+        "temporalMeaning": "flow"
+      },
+      {
+        "id": "production.loss",
+        "name": "Потери",
+        "valueType": "decimal",
+        "unitId": "t",
+        "dimensions": [
+          "entity",
+          "variant"
+        ],
+        "temporalMeaning": "flow"
+      }
+    ],
+    "parameterMappings": [
+      {
+        "scope": "production-form",
+        "source": "0012",
+        "targetId": "production.volume"
+      },
+      {
+        "scope": "production-form",
+        "source": "0099",
+        "targetId": "production.loss"
+      }
+    ],
+    "unitMappings": [
+      {
+        "scope": "production-form",
+        "source": "т",
+        "targetId": "t"
+      }
+    ]
+  },
+  "dataset": {
+    "id": "orientation-example",
+    "dimensions": {
+      "variant": "actual"
+    }
+  }
+}

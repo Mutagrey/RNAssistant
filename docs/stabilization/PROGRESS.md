@@ -1,5 +1,23 @@
 # Stabilization progress
 
+## Data Templates universal language/core foundation — 2026-10-16
+
+The original plan's axis independence is now an implemented invariant. Language 2
+uses explicit typed roles over matrix coordinates, named record fields and nested
+JSON paths; one immutable-plan executor emits canonical observations with source,
+expression/context and mapping evidence. Exact scale/round and JSON numeric tokens,
+pull-input pages and explicit sink completion/abort preserve bounded execution.
+The orientation-bound executor is removed; shipped consumers/examples switch together.
+Existing XLSX, Worker and native file/queue owners remain in place.
+
+Validation: targeted core, matrix, universal, XLSX and browser scripts pass (23 groups,
+including real Chrome Worker/offline execution). Independent oracles cover both matrix
+orientations, record/JSON models and real XLSX lineage. No build or Office/VSTO
+validation was run. CSV and streaming JSON file readers, XLSB/other Excel families,
+queue parser dispatch, exact native module pins/CSP, publication and representative
+80 MB Windows/Office qualification remain open. This completes part of the original
+scope, not all product v1. [Contract, reconciliation and evidence table](../data-templates.md#language-and-execution-core).
+
 ## Workspace source preparation queue — 2026-10-16
 
 The shared application now prepares bounded batches through typed bridge/CLI
@@ -71,7 +89,7 @@ pass, including a hand-authored semantic oracle, compiler refusals, batch failur
 Worker cancellation and offline parity. No C# build or Windows/Office validation
 was run. M0/native capture and full M1–M3 remain incomplete; real XLSX/CSV/JSON
 readers, processing queue, module pins and publication are the next boundaries.
-[Canonical contract and supported profile](../data-templates.md#matrix-language-and-execution-v1).
+[Canonical contract and supported profile](../data-templates.md#language-and-execution-core).
 
 ## Data Templates source-selection UI — 2026-10-16
 

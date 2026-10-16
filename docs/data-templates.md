@@ -1,10 +1,10 @@
 # Data Templates
 
 Status: portable M0 proof, M1 project-manifest/source-selection foundation and the
-first M2 matrix-language and bounded XLSX-reader slices implemented (2026-10-16).
-Matrix extraction works over normalized snapshots and explicitly selected XLSX
-files in the separate Worker probe. The shared application prepares queued workspace
-sources; loader association, parsing dispatch and publication remain open.
+M2 source-independent language/core foundation and bounded XLSX reader (2026-10-16).
+One observation executor handles both matrix orientations, record fields and nested
+JSON captures; real XLSX uses the existing reader in the separate Worker probe.
+The shared application prepares queued workspace sources; loader association, parsing dispatch and publication remain open.
 Owner: Data Templates domain; portable JS in `web/tabular`, shared manifest storage
 in Core `TabularProjectStore` over `WorkspaceFileService`.
 This is the canonical domain contract; planned scope is marked separately from
@@ -15,7 +15,7 @@ owner. Architecture decision: [ADR-0014](decisions/ADR-0014-data-templates.md).
 ## Current slice
 
 [The core probe](../web/tabular/index.html) offers three explicit operations through
-the same executor: M0 snapshot inspection, [M2 matrix extraction](#matrix-language-and-execution-v1)
+the same executor: M0 snapshot inspection, [M2 extraction](#language-and-execution-core)
 and [bounded XLSX extraction](#bounded-xlsx-reader).
 For inspection it runs a normalized, bounded capture through
 the same plain JavaScript in a dedicated Worker or explicit cooperative mode.
@@ -39,10 +39,12 @@ tool/skill is exposed and the main loader is not yet connected to this executor.
 |---|---|
 | `selectors.js` | Bounded geometry and physical-coordinate set operations |
 | `snapshot.js` | Closed normalized cell schema, immutable reader, explicit coverage |
-| `json.js` | Bounded JSON decoding, duplicate/reserved-key and non-finite-number refusal |
+| `json.js` | Bounded JSON decoding, duplicate/reserved-key refusal and exact source numeric tokens |
+| `decimal.js` | Exact lexical decimals, scale and explicit rounding |
+| `sources.js` | Prepared matrix, pull-record and nested JSON adapters with native locations |
 | `expression.js` | Expression syntax tree, type/scope binding to instructions, explicit value conversion and evidence |
-| `template.js` | Closed matrix/dictionary schemas, context dependency order and immutable matrix plan |
-| `matrix.js` | Canonical records, grain/unit checks, lineage and awaited provisional result batches |
+| `template.js` | Closed source/binding/dictionary schemas, context dependencies and immutable extraction plan |
+| `transform.js` | One canonical observation executor, grain/unit checks, lineage and awaited provisional batches |
 | `xlsx-zip.js` | Selective ZIP32 reads, streamed native deflate, size/CRC checks and byte progress |
 | `xlsx-reader.js` | Bounded SpreadsheetML adapter, exact numeric lexemes, cache evidence and complete rectangle coverage |
 | `engine.js` | Declared bounded operations over immutable input; no DOM or publication |
@@ -80,9 +82,9 @@ semantics; identifiers must be text. Snapshot version 2 explicitly adds
 `formula:{text,type}` evidence. A numeric lexeme is at most 128 characters with
 an optional decimal exponent; it never passes through JS Number. Formula type is
 `normal`, `shared`, `array` or `dataTable`; empty shared-formula text is retained,
-not reconstructed. Version 1 rejects these new fields/kinds. Decimal arithmetic,
-date conversion, display formatting, formula calculation, merge/hidden/filter
-semantics are not implemented.
+not reconstructed. Version 1 rejects these new fields/kinds. Cell capture performs no arithmetic. Exact scale/round are explicit expression
+operations; date conversion, display formatting, formula calculation and
+merge/hidden/filter semantics remain unimplemented.
 
 The reader copies source metadata and cells. The engine parses a bounded immutable
 input string once per run. A selected address outside the supplied capture fails
@@ -117,7 +119,7 @@ outside bounds fail; nothing is silently clipped. An empty selection is allowed.
 
 These limits bound this probe only. They do not increase HTML aggregate, transfer,
 Resource Fabric or web verification limits. The browser check prints exact asset
-count/bytes; the current probe has fifteen executable/presentation files including
+count/bytes; the current probe has seventeen executable/presentation files including
 the pinned 50,818-byte sax XML parser. Its license/source hashes are in the shared
 [vendor manifest](../web/vendor-manifest.json) and [notices](../web/vendor-notices.md).
 Future dependencies require their own size/license/capability review.
@@ -127,7 +129,7 @@ Future dependencies require their own size/license/capability review.
 The executor outlives any result viewer. Closing the viewer does not cancel a
 run; cancellation, reset or disposal settles its Promise and releases resources.
 It rejects concurrent runs, stale protocol/revision handshakes and foreign job
-responses. Worker protocol v3 declares `inspect`, `extract` and `extractXlsx`; old handshakes fail
+responses. Worker protocol v4 declares `inspect`, `extract` and `extractXlsx`; old handshakes fail
 explicitly. Each Worker loads fixed relative scripts once, accepts one job and is
 terminated on completion, error, cancellation or deadline. Worker absence or
 load failure returns `EXECUTOR_UNAVAILABLE`; there is no automatic fallback.
@@ -150,165 +152,293 @@ sandbox. Imported JS is unsupported; the root RNAssistant UI must never execute
 project scripts through this probe. CSP and native-origin enforcement for the
 eventual WebView2 execution realm still require implementation and qualification.
 
-## Matrix language and execution v1
+## Language and execution core
 
-This is the first supported M2 profile, not the full proposal's language or a
-production dataset publication format. The runnable fixture is the authoritative
-worked example alongside these rules and the closed validators. JSON is the
-implemented template notation; YAML is deferred as another decoder into the same
-syntax/model, never another interpreter or synchronized source file.
+This implements the universal **v1 foundation**, not every construction in the
+proposal. Serialized language revision is **2**: the former language-1 matrix
+schema cannot express the contract and is explicitly rejected. Product stage/v1,
+language revision, capture version and Worker protocol are separate numbers.
+All shipped consumers/examples use revision 2; there is no legacy interpreter or
+implicit orientation adapter. User files are not rewritten or deleted.
 
-The entry envelope is `{version:1, kind:"matrix-extraction", template, snapshot,
-dictionaries, dataset}`. Its immutable JSON text captures all inputs for this
-bounded run. `template.language:1` and `template.kind:"matrix"` select the profile.
-All fields shown in the example are required; unknown fields/versions are errors.
-No project/source/module authority is granted by IDs, revision labels or reports.
+### Targeted reconciliation with the original plan
 
-The implementation separates these boundaries:
+The supplied `RNAssistant_Data_Templates_IMPLEMENTATION_PLAN.md` is design input;
+these rules and executable examples are the current contract.
 
-1. `RNTabularExpression.parse` produces syntax nodes with character spans. It does
-   not read cells or execute expressions.
-2. `RNTabularExpression.compile` resolves names, permitted functions and types to
-   instructions; each expression retains its rule path, cell reads and context
-   references. It rejects variables outside their declared axis scope.
-3. `RNTabularTemplate.compile` orders context dependencies, rejects cycles and
-   conflicting columns, projects selectors to physical row/column axes, and
-   checks bounds/output budgets. The immutable plan contains no cells, UI, file
-   handles or authority. It is transient, not a second editable template format.
-   Execution accepts only plans produced by this compiler instance.
-4. `RNTabularMatrix.execute` binds headers/dictionaries against the immutable
-   snapshot, then yields records to a required asynchronous batch consumer. The
-   application owns staging, cancellation and any later publication.
+| Plan requirement | Verified existing basis | Required correction / current evidence |
+|---|---|---|
+| §3.1–3.3 one portable engine and distinct adapters | Plain JS, bounded selectors/cells, Worker; native `WorkspaceSourceQueue.OpenPrepared` uses `WorkspaceFileService.OpenExactRead` | Preserve those owners. `sources.js` prepares matrix/records/JSON inputs; `transform.js` is now the one observation executor. No C# interpreter or new storage/runtime. |
+| §6.4 roles independent of physical axes | Old compiler permitted row parameter/unit and column period only; `matrix.js` also hardcoded that association | Both axes now accept explicitly typed semantic bindings. Normal/transposed fixtures independently match one business oracle. Old executor removed. |
+| §6.7 construction rollout | Defers horizontal axes alongside repeated blocks/joins | It cannot defer §6.4's core invariant. Orientation independence is implemented now; richer layout discovery, reusable blocks and joins remain deferred. This is completion of original scope, not a new feature track. |
+| §6.1–6.2 schema → AST → typed bounded plan | Existing expression parser, type checks, context DAG and frozen plan were useful | Preserved and generalized. Plan records native source dependencies and scoped bindings; no executable generated JS. JSON notation only; YAML awaits a decoder into this same model. |
+| §5 grain, mappings, precision, explanation | Decimal text, exact mapping, missing tags and provisional batches already existed | Reused. Added record dimensions, native field/pointer evidence, exact scale/round and sink completion/abort. Entity/transaction **outputs** still require their own schema. |
+| §13 bounded execution | XLSX streamed reads; 64-record acknowledged output batches; shared source-preparation queue | Records now have a pull-page adapter. Queue prepares bytes only; source association, native parser dispatch/module pins and publication remain open. |
 
-### Supported language profile
+### Closed schema, syntax and immutable plan
 
-Expression grammar is deliberately limited to JSON string literals, unsigned
-integer literals, `row`, `col`, `ctx.name`, and registered function calls. Nested
-calls are supported; arbitrary property access, executable JS, infix arithmetic,
-conditionals, loops and imported functions are not. Unsupported syntax/functions
-fail rather than being interpreted by JS. Diagnostic paths contain a JSON field
-path and expression character offset; source read/conversion errors also carry
-the available cell location.
+An extraction request is `{version:2, kind:"extraction", template, snapshot,
+dictionaries, dataset}`. A template has **only and all** these top-level fields:
 
-| Function | Typed result / rule |
+```text
+language: 2
+id, revision
+source: Matrix | Records | Json
+context: {name: {expr: text}}
+bindings: {parameter?, unit?, period?, value?, role?, dimensions?: {name: {expr}}}
+output: "observations"
+policies: {missing:"preserve", mapping:"error", duplicates:"error", conflicts:"error"}
+```
+
+Each binding value is `{expr: text}`. Required roles are parameter, unit, period,
+value and role; every output iteration must bind each **exactly once** across the
+common bindings and applicable axis groups. Dimensions are separately named text
+bindings. Missing roles and duplicate/conflicting assignments fail during compile;
+there is no object-merge precedence or implicit orientation.
+
+| Source model | Source schema / read syntax / native location |
 |---|---|
-| `cell("A", row)`, `cell(col, 5)` | Cell; literal column letters or `col`, literal positive row or `row`. Dynamic addresses are refused. |
-| `text(cell)` | Text from text/finite numeric cells; no implicit trimming or case folding for dictionary keys. Unsafe integer keys fail. |
-| `raw(cell)` | Tagged raw cell, preserving missing/error distinctions. |
-| `parse.year(text)` | Explicit four-digit year, 1000–9999. No guessed year. |
-| `parse.monthRu(text)` | Declared Russian month name/abbreviation, optional final dot; no date-system inference. |
-| `period.month(year, month)`, `period.year(year)` | Distinct monthly and annual periods. |
-| `lookup("parameters" or "units", text, "scope")` | Exact scoped dictionary target; dictionary and scope names are literals. Unknown/ambiguous mappings fail. |
-| `decimal(raw, "ru-RU" or "en-US")` | Canonical decimal text or a tagged missing value; explicit numeric locale. |
+| Matrix | `{kind:"matrix", sheet, bounds, rows:[{id,select,bindings}], columns:[{id,select,bindings}]}`. A1/row/column selectors keep physical coordinates. `cell("A",row)` / `cell(col,5)` read scalars. Evidence: `{kind:"cell",sheet,row,column,address}`. |
+| Records (including normalized CSV) | `{kind:"records", fields:[unique field names], maxRecords}`. `field("code")` uses a declared name, never an Excel column. Capture: `{version:1,kind:"records",source,records:[{field:taggedScalar}]}`. Evidence: `{kind:"field",record:1,field:"code"}`; record is the 1-based logical data record, not a physical CSV line. |
+| JSON structure | `{kind:"json", collection:"/report/observations", maxRecords}`. The collection must resolve to an array; `path("/measure/code")` is a literal pointer relative to the current item. Capture: `{version:1,kind:"json",source,document:{...}}`. Evidence: `{kind:"json-pointer",pointer:"/report/observations/0/measure/code"}`. No implicit flattening. |
 
-Context expressions cannot use `row`/`col`. Row parameter/unit expressions can
-use `row`; column period expressions can use `col`; the value expression can use
-both. Context dependencies are evaluated once in topological order. Selectors
-retain M0 geometry/precedence and are projected to sorted unique physical axes.
-Each column belongs to exactly one semantic group; overlap is an error. Multiple
-groups do not shift physical coordinates across gaps.
+The matrix capture retains its existing snapshot v1/v2 schema and XLSX adapter.
+Records use the same scalar tags (including exact `numeric` lexemes), plus `null`
+and `absent`; formula metadata remains matrix-specific. JSON capture retains nested
+objects/arrays, text, booleans and null. Its numeric tokens are captured **before**
+JS Number conversion by the bounded envelope decoder; private token identity
+prevents an input object resembling `{kind:"numeric",lexeme:...}` from impersonating
+a scalar. Direct in-memory API numbers must be safe integers; precision already
+lost by a caller cannot be restored. Null, absent path, empty text and zero differ.
+Pointers use `~0`/`~1` escaping, no wildcards, predicates, scripts or property calls.
+Resolving a scalar binding to a structure is an error.
 
-This profile puts parameters on rows and periods on columns. Horizontal parameter
-axes, multiple blocks, quarter/date functions, bindings, review proposals,
-aggregation, joins and extensions are later explicit capabilities. This resolves
-the original proposal's §6.4/§6.7 ambiguity: their possible architecture is not a
-claim that both orientations already work in v1. The current closed schema does
-not silently accept deferred constructs or policy fields.
+`context` is an acyclic graph evaluated once, in dependency order. It accepts
+literals/other contexts and fixed matrix cells; per-record fields/paths and variable
+row/column coordinates are unavailable there. A row-group binding can use `row`,
+a column-group binding can use `col`, and common matrix bindings can use both.
+Records/JSON common bindings run per item. This permits the same period or parameter
+role on either matrix axis, or directly in a record field/path. Axis group overlap
+fails; disjoint coordinates remain in physical order, without shifting gaps.
 
-### Canonical observations and value semantics
+1. `RNTabularExpression.parse` returns frozen AST nodes with character spans.
+2. `compile` resolves literal names/functions, scope, context references and types.
+   Instructions retain expression text, rule path, offsets and typed reads.
+3. `RNTabularTemplate.compile` validates the closed source/output/policy schemas,
+   orders dependencies, resolves selectors and role ownership, and returns a frozen
+   `extraction-plan` v2. Source layout, dependency reads, contexts, regions, numeric
+   policy and output budget are separate from source values. No DOM/handle/authority
+   is stored in the plan, and it is not a second editable/durable template format.
+4. `RNTabularSources.open` prepares detached normalized input for that exact plan;
+   `matrix(plan, reader)` wraps the existing XLSX/snapshot reader. Only compiler-owned
+   plans and prepared inputs paired with that same plan reach `RNTabularTransform`.
+   `records(plan, metadata, count, readBatch)` is the bounded pull-source seam.
 
-Each record contains `parameterId`, named `dimensions`, `period`, tagged `value`,
-`unitId`, `role`, `temporalMeaning` and `provenance`. Parameter IDs and dimension
-values are text. Supported roles are `observation` and `reported_total`; annual
-totals are not summed with months. Parameter metadata declares its dimension names,
-decimal value type, canonical unit and temporal meaning. The source unit must
-match exactly; implicit scaling/conversion is forbidden in this slice.
+Unknown versions, fields, models, functions and policies fail. Diagnostics use a
+JSON field path plus expression offset and, where available, a native source
+location. Full source line/column mapping and YAML decoding remain open.
 
-The explicit uniqueness key within this extraction is parameter + dimension
-values + complete period + role. A duplicate is `DUPLICATE_OBSERVATION`, not an
-automatic sum/deduplication. This is a single-source example; cross-source inclusion
-and consolidation semantics must be declared before batch dataset publication.
-No stable observation identity or native dataset handle is synthesized by the engine.
+### Types, transformations and business semantics
 
-Decimal output is `{kind:"decimal", value:"1234.5"}`: canonical base-10 text,
-at most 38 total digits and 18 fractional places, without rounding or arithmetic.
-Leading/trailing insignificant zeros and negative zero are normalized. Russian
-text uses decimal comma and optional groups of three separated by space/NBSP/narrow
-NBSP; English text uses decimal point and optional comma groups. Invalid grouping,
-locale mismatch and overflow fail. Text decimals never pass through JS Number.
-Version-1 `number` cells retain their already-rounded IEEE-754 value; unsafe integers
-are rejected and lost input precision cannot be recovered. Version-2 `numeric`
-cells retain the raw decimal/exponent lexeme and normalize it without floating-point
-conversion. Numeric conversion is locale-independent; locale applies only to text.
-`text(numeric)` uses the exact normalized numeric value, never an Excel display mask.
-Identifiers and explicitly textual high-precision values remain text. The XLSX
-reader declares this exact-lexeme capability rather than relabeling numbers as text.
+Grammar: JSON string and unsigned integer literals, `row`, `col`, `ctx.name` and
+registered calls. No eval/Function, loops, arbitrary member access, imports, network,
+DOM, CLR or tools. Arithmetic is provided only through reviewed typed operations.
 
-Missing values preserve distinct reasons: `blank`, `empty-text`, `source-error`
-with the error detail, and `unavailable` with the capture reason. Zero is a decimal.
-Whitespace-only numeric text is invalid, not silently blank. A required missing
-header/key is an error rather than an invented parameter or period.
-
-Provenance has separate value/parameter/unit/period rule paths, source evidence
-including captured cell values, and exact scoped mapping decisions. Excel addresses
-are confined to `{kind:"cell", sheet, row, column, address}` source locations, not
-canonical business keys. For example, the July 2026 volume record uses `J12` for
-its value, `A12` for parameter code `0012`, `B12` for the unit, `J5` for July and
-`P5` for 2026. `P12` remains a separate reported annual total.
-
-### Batches, completion and limits
-
-`executor.extract(inputText, {signal, deadlineMs, onProgress, onBatch})` runs through
-the same application-independent executor as inspection. `onBatch` is required
-and awaited; Worker protocol v3 sends the next batch only after acknowledgement of
-the current sequence. Final summary counts must match acknowledged batches. There
-is no application processing queue yet; the executor still accepts one job.
-
-Batches are **provisional**. A consumer must discard/unpublish staging after an
-error, deadline, cancellation or consumer failure. Receiving a batch or returning
-from `onBatch` cannot activate a dataset. Only successful operation resolution
-establishes complete extraction; native publication still requires its separate
-guards/evidence/read-back. A final `coverage.complete` refers to execution over
-required captured dependencies, not absence of missing values or suitability for
-all workbooks. Missing-value counts are reported separately.
-
-| Bound | Current value |
+| Function | Type / behavior |
 |---|---|
-| Input / snapshot / selector limits | Existing probe limits above; no increase |
-| Expression text / nodes / depth | 1,024 characters / 128 nodes / 16 levels |
-| Context expressions / column groups | 32 / 32 |
-| Parameters or units / mappings per dictionary | 1,000 / 4,000 |
-| Dataset dimensions / output records | 16 / 10,000 |
-| Record JSON including lineage | 65,536 UTF-16 code units |
-| Batch | Up to 64 records and 262,144 summed record JSON code units, plus array delimiters |
-| Deadline | Normalized input: 1–30,000 ms; XLSX: 1–300,000 ms, default 120,000 ms |
+| `cell`, `field`, `path` | Native scalar access in the correct model/scope; names/paths are literals. |
+| `text(scalar)`, `raw(scalar)` | Text key/header or tagged raw value. No automatic trimming/case folding of mapping keys. Required unusable key/header fails. |
+| `parse.year(text)`, `parse.monthRu(text)` | Explicit 1000–9999 year and Russian month name/abbreviation. No guessed year/date system. |
+| `period.month(year,month)`, `period.year(year)` | Distinct monthly and annual periods. |
+| `lookup("parameters" or "units",text,"scope")` | Exact scoped mapping. Dictionary/scope are literals; unknown/ambiguous mappings fail. |
+| `decimal(raw,"ru-RU" or "en-US")` | Canonical decimal text or explicit missing tag. Locale affects text only. |
+| `scale(value,"1000")` | Exact decimal multiplication by a literal decimal factor. Missing tags propagate. |
+| `round(value,2,"half-even" or "half-away" or "truncate")` | Explicit 0–18 fractional places; signed ties have the named behavior. Missing tags propagate. |
 
-Binding/extraction yield at bounded checkpoints and expose record progress. Hard
-Worker cancellation also works while waiting for a batch consumer. The explicit
-cooperative mode remains for the bounded shipped fixture/core; synchronous JSON
-decoding/compilation are bounded but cannot be interrupted mid-call there. Neither
-mode demonstrates arbitrary-extension isolation or qualifies 80 MB XLSX parsing. Axes are
-compact in the plan, but the existing bounded selector compiler and snapshot
-reader still materialize cells. The XLSX adapter scans its worksheet incrementally
-and retains only the bounded rectangle; full qualification requires the large-file gate below.
+Decimal semantics: at most 38 digits and 18 fractional places, exact base-10 strings,
+normalized insignificant zeros/negative zero. `decimal.js` uses lexical conversion
+and BigInt coefficients; it never uses floating arithmetic for scale/round. Input
+and operation results exceeding the budget fail; an overflowing intermediate is
+not rescued by a later round. Rounding is never implicit. Russian text has decimal
+comma and validated space/NBSP/narrow-NBSP groups; English text uses decimal point
+and comma groups. Invalid grouping, whitespace-only text or locale mismatch fails.
+Legacy `number` snapshot cells disclose already-rounded IEEE-754 values and reject
+unsafe integer keys/values; `numeric` cells preserve raw decimal/exponent lexemes.
 
-The standalone probe stores only the first 20 records for display/download and
-marks whether that preview is complete. It never accumulates an unbounded result
-array. A failed run clears the previous report. Full dataset export, exact module
-hash pins, live capture, template publication and loader integration remain open.
+Dictionaries remain a separate closed v1 contract: parameters define stable ID,
+name, decimal value type, unit, dimension names and temporal meaning; mappings use
+exact `(scope,source) → targetId`. Identifiers remain strings. Source unit
+must equal the parameter's canonical unit **after explicit mapping**. A required
+scale must appear in the value expression; a unit label never triggers arithmetic.
+Currency conversion, fuzzy matching, candidate approval and rich parameter-registry
+metadata are not implemented. They cannot silently change an existing record.
+
+`dataset:{id,dimensions}` supplies external dimension bindings. A source binding
+may supply another dimension; a name present in both is a conflict even when the
+values match. No hidden default/override/candidate precedence exists. The resulting
+sorted dimension names must equal the parameter's grain. Future external-binding
+policies require explicit scope/evidence and conflict semantics, not object spread.
+
+Supported missing reasons are `blank`, `empty-text`, `null`, `absent`, `source-error`
+(with detail), and `unavailable` (with reason). Zero is numeric; missing required
+parameter/unit/period/dimension text cannot invent a binding. Malformed numeric text
+is an error, not a missing value. No error-row skip, fill-down, null-to-zero or review
+fallback is implicit. `missing:"preserve"` is the only implemented missing policy.
+
+### Canonical output and explanation
+
+One observation contains `parameterId`, named `dimensions`, typed `period`, tagged
+`value`, `unitId`, `role`, `temporalMeaning` and `provenance`. Supported roles are
+`observation` and `reported_total`; an annual report total coexists with months
+without automatic summation. The uniqueness key within the dataset/run is
+parameter + sorted dimensions + full period + role. Source identity is evidence,
+not an accidental business key. Duplicate observations fail, even if equal. The
+bounded grain index does not implement cross-file deduplication or consolidation.
+
+Provenance contains descriptive source, template ID/revision/language, dictionary
+revision, layout region and numeric policy. Each semantic binding includes the
+expression text, rule path, transitive context rules, captured values with native
+locations and exact mapping decisions. Dimensions explain source expressions or
+explicit `/dataset/dimensions/...` bindings. Layout changes alter provenance, while
+the canonical business fields remain equal. Stable observation IDs and exact native
+resource/module pins belong to later application publication, not this probe.
+
+The real XLSX example explains July 2026 volume using `J12`, parameter mapping
+`A12:0012 → production.volume`, unit `B12`, month `J5` and year context `P5`.
+`P12` is a separate reported annual total; stored formula/cache metadata is retained.
+
+### Input preparation, execution and result sink
+
+The application pipeline is:
+
+```text
+source adapter/descriptor → exact prepared inputs → compile/execute
+    → validate records/coverage → result sink completion → separate publication
+```
+
+Compilation also has a preflight role: it declares bounded selections/dependencies
+**before** expensive input capture. Native preparation must pin source inclusion,
+source bytes/revision, template, dictionaries, dataset bindings and shipped module
+bytes; the same pinned bundle then executes. UI supplies intent and displays progress;
+it owns neither transformations nor success inference. The present probe prepares
+immutable JSON plus a selected immutable Blob, not verified native authority.
+
+`WorkspaceSourceQueue` remains the one application preparation owner. Its
+`OpenPreparedSource` must feed the format adapter/executor with the retained exact
+stream; `Prepared` is not parsed/imported/completed. Native parser dispatch and
+isolation/CSP/module-pin enforcement are **not wired yet**. This contract is their
+integration seam, not an additional queue, runtime, CAS or journal.
+
+The portable executor API is `extract(inputText,{signal,deadlineMs,onProgress,sink})`
+and `extractXlsx(inputText,sourceFile,settings)`. The required result sink is:
+
+```text
+writeBatch({version:1, sequence, records}) -> awaited Promise
+complete(extractionSummary)              -> awaited Promise; validate/finalize staging
+abort(error)                            -> synchronous staging revocation
+```
+
+Only successful completion resolves the job. `complete` does **not** publish a
+project/dataset. Cancellation/deadline also applies while completion is pending.
+`abort` runs once on failure/cancel/disposal, including a pending write/completion;
+the sink must revoke access immediately and ignore its own late asynchronous work.
+It must not throw or return an asynchronous cleanup promise. Publication is a later
+application command through existing prepare/commit/read-back owners. Unknown
+publication effects remain unknown and are never automatically replayed.
+
+Worker protocol v4 transports provisional batches through internal `onBatch` hooks,
+one outstanding sequence at a time. Acknowledgement follows `writeBatch`; final
+summary counts must equal acknowledged batches. Low-level engine hooks are transport,
+not UI semantics. Partial output, callback failure or late source failure cannot
+return a completed summary. The probe keeps only 20 preview records and clears them
+on abort; it does not materialize/publish a dataset.
+
+Record input is pull-driven: `readBatch(offset,limit,hooks)` returns exactly
+`{offset,records,done}`. Declared count may be `null` (unknown); explicit EOF must
+agree with a known count, and total records cannot exceed the plan budget. At the
+budget boundary one bounded EOF probe is permitted; any extra record fails. A page
+may be short, but an empty nonterminal page is invalid. One page is copied/validated and consumed
+before another is requested. A waiting sink stops input read-ahead. The adapter owns
+stream disposal and exact source pins. Cancellation is checked around reads, output
+and cooperative checkpoints; a dedicated Worker provides hard termination.
+
+| Bound | Implemented limit / qualification |
+|---|---|
+| Normalized request | 1,000,000 UTF-16 units; detached in memory, **not** a streaming CSV/JSON file reader |
+| Matrix capture / selection | 100,000 cells; XLSX streams bytes but retains the bounded rectangle |
+| Record pull page | Up to 64 items / 262,144 JSON units including envelope |
+| Output / uniqueness index | 10,000 observations; no unbounded grain map |
+| Expression | 1,024 characters / 128 nodes / depth 16 |
+| Context / groups per physical axis | 32 / 32 |
+| Dictionary / mappings | 1,000 parameters or units / 4,000 per dictionary |
+| Dimensions / record with lineage | 16 / 65,536 JSON units |
+| Output batch | 64 records / 262,144 summed record JSON units, plus array delimiters |
+| Deadline | Normalized 1–30,000 ms; XLSX 1–300,000 ms, default 120,000 ms |
+
+Progress separates source byte/item reading, binding, extracting and validation.
+Unknown totals stay indeterminate. JSON decoding/compile are bounded synchronous
+work; source/output loops yield. Records can pull pages; JSON capture currently
+retains its bounded tree; XLSX retains its bounded rectangle. These limitations do
+not establish representative 80 MB throughput/RAM or native Office qualification.
+
+### Working examples and remaining boundaries
+
+Select any extraction envelope below with `Выполнить шаблон` in the existing probe.
+The raw CSV sample uses UTF-8, comma separation, double-quote escaping and its first
+record as the header; these are explicit example assumptions, not parser detection.
+The raw CSV/JSON samples show the native source structures; the normalized envelopes
+are the runnable fixtures. No production CSV byte parser or streaming JSON file
+reader is claimed.
+
+| Requirement / contract | Working example | Focused check | Remaining limit |
+|---|---|---|---|
+| Explicit roles independent of axes | [matrix-roles](../web/tabular/examples/matrix-roles.json), [matrix-transposed](../web/tabular/examples/matrix-transposed.json) | `tabular-universal`: same independent four-record business oracle, native cell lineage; browser Worker | One bounded matrix block, no layout recognition/anchors |
+| Disjoint bands, context dependencies, totals | [matrix-extraction](../web/tabular/examples/matrix-extraction.json) | `tabular-matrix`: independent 16-record oracle, DAG/type/bounds refusals | Quarter/custom calendars and repeated blocks deferred |
+| Records/fields, dimensions, mapping | [records-extraction](../web/tabular/examples/records-extraction.json), [CSV source](../web/tabular/examples/observations-source.csv) | `tabular-universal`: canonical oracle, native field evidence, missing/conflicts | CSV encoding/dialect/header/malformed-record byte reader pending |
+| Nested paths, null/absent, exact numbers | [json-extraction](../web/tabular/examples/json-extraction.json), [JSON source](../web/tabular/examples/observations-source.json) | `tabular-universal`: same oracle, pointers/escapes, exact large numeric token, structure/type refusal | One explicit array, bounded capture; streaming file decoder pending |
+| Numeric precision/transforms | `round(...,2,"half-even")` in all four fixtures; exact `scale` tests | `tabular-universal`: signed ties, overflow, exact multiplication; `tabular-matrix`: locale/missing checks | No general arithmetic, currency conversion or implicit rounding |
+| Real XLSX → explanations | [matrix-xlsx-extraction](../web/tabular/examples/matrix-xlsx-extraction.json) + [matrix-source.xlsx](../web/tabular/examples/matrix-source.xlsx) | `tabular-xlsx`: independent values, cell/rule/context/mapping/formula evidence; browser Worker | Supported XLSX subset only; other Excel formats still required below |
+| Bounded input/output, cancellation, sink lifecycle | `RNTabularSources.records` 130-item pull fixture; existing executor/probe | `tabular-universal`: delayed sink stops reading, malformed page refusal, complete/abort; browser sequence/cancel checks | Queue parser dispatch, durable staging and publication pending |
+
+### Extension and version boundary
+
+Mandatory v1 foundation: distinct source models, independent semantic roles, closed
+typed language, immutable bounded plan, explicit precision/missing/conflict policy,
+canonical observations/explanation and cancellable backpressured execution. These
+are implemented within the stated capture budgets. Full product v1 completion still
+requires the reader/integration gates; this section does not close them.
+
+Deferred constructions: YAML decoding, quarter/date/calendar support, repeated/field
+forms, anchors/end rules, hierarchical inheritance, reusable fragments, cross-sheet
+or cross-source enrichment, joins with declared cardinality, aggregations, external
+binding override/review and entity/transaction output schemas. A new construction
+adds a named typed source/operator/output variant plus a concrete fixture. It reuses
+the schema → AST → plan → prepared source → validated sink boundary; it must not
+reintroduce orientation assumptions or another interpreter. Entity/transaction rows
+need their own keys/types, not invented numeric parameters.
+
+Named pure functions are compiled by the shipped allowlist with input/output types,
+source dependencies, determinism/precision rules, budgets and provenance. They are
+not project-supplied JS callbacks. Compatible additions need capability/version
+checks and tests; changing existing syntax or semantics requires a language revision
+and coordinated consumer switch. Unsupported versions/capabilities fail explicitly.
+Capture and output versions evolve independently; protocol v4 and engine revision
+`tabular-core-2` are handshake labels, **not content hashes**. Exact module pinning
+and permission/isolation for any future executable extension remain separate gates.
 
 ## Bounded XLSX reader
 
 Owner: the portable Data Templates source adapter. This is a single-file reader
 proof, not the application import/recognition queue. It introduces no source store,
 workspace binding, file grant, native bridge operation or publication writer.
-CSV and JSON still need their own readers and native source-location contracts.
+CSV/JSON now have native normalized source models; their production file readers
+remain open (CSV dialect/encoding and streaming JSON byte decoding).
 
-`executor.extractXlsx(inputText, sourceFile, {signal, deadlineMs, onProgress, onBatch})`
+`executor.extractXlsx(inputText, sourceFile, {signal, deadlineMs, onProgress, sink})`
 passes an immutable File/Blob to a dedicated Worker without UI body reads, base64
-or whole-workbook JSON. The closed version-1 `matrix-xlsx-extraction` envelope has
+or whole-workbook JSON. The closed version-2 `xlsx-extraction` envelope has
 `template`, `dictionaries`, `dataset`, and `source:{formulaPolicy:"stored-cache"}`.
-The template's exact sheet/bounds select the capture. The same compiler, mappings,
+The template's exact `source.sheet/source.bounds` select the capture. The same compiler, mappings,
 canonical record semantics and acknowledged batches then process the reader.
 The summary adds versioned `sourceCapabilities` and bounded `sourceDiagnostics`;
 source name and capabilities are descriptive, not verified revision/publication pins.
@@ -644,12 +774,13 @@ template/mapping and publication are separate steps. Source identity must not
 require a workbook or sheet. Excel selectors stay specific to the matrix path.
 Canonical observations and entity/transaction tables remain independent of input
 format. Native C# integration will not duplicate these readers or the JS engine.
-The future source contract must expose its shape/capabilities explicitly: matrix
+The source contract exposes its shape explicitly: matrix
 cells, CSV records/fields or JSON object paths. `WorkbookReader` applies only to
 the matrix branch. Readers share typed values/diagnostics and tagged source
 locations; they must not invent Excel addresses for CSV/JSON or flatten arbitrary
-objects to fit the matrix grammar. Normalized snapshots and the bounded XLSX matrix
-adapter exist in the separate probe; CSV/JSON source adapters are not implemented.
+objects to fit the matrix grammar. Normalized matrix/record/JSON adapters and the
+bounded XLSX reader exist in the separate probe; CSV byte reading and streaming
+JSON file reading are not implemented. See [the language/source contract](#language-and-execution-core).
 
 Accepted Excel scope also includes XLSB, XLS, XLSM, XLTX, XLTM, legacy XLT/XLW and
 XML Spreadsheet 2003. These are planned reader capabilities, not formats already
@@ -672,9 +803,8 @@ precision, formula-cache and memory-budget capabilities before claiming support.
 
 Parsing success is separate from format recognition, template matching and valid
 canonical data. Further readers return typed values, native source locations,
-capabilities and diagnostics to the portable domain owner. CSV/JSON schema/adapter
-contracts will be fixed with their own M2 fixtures; the current extension catalog does not
-claim all those readers exist. CSV/JSON source input is also distinct from JSON/YAML
+capabilities and diagnostics to the portable domain owner. CSV/JSON normalized contracts and M2 fixtures are implemented above; the current
+extension catalog does not claim their production file readers exist. CSV/JSON source input is also distinct from JSON/YAML
 template definitions and the metadata-only project manifest.
 
 ### Large files and processing queue — planned
@@ -841,7 +971,7 @@ Next slices, coordinated with the workspace owners:
    and host adapters separate; Office remains Framework 4.8 without a direct
    reference to the net8.0 Runtime assembly. Host-neutral independent work below
    does not wait for Office qualification.
-2. Use the implemented [matrix contract](#matrix-language-and-execution-v1) and
+2. Use the implemented [language/core contract](#language-and-execution-core) and
    independent oracle and XLSX reader to connect explicit source association, the preparation queue and
    the [loader/project UI](#planned-loader-and-project-ui). Qualify real reader
    capabilities/memory before raising prototype limits. Deliver incrementally
@@ -859,6 +989,8 @@ full matrix DSL is not claimed. Tracked gates live in
 
 ## Verification
 
+`tabular-universal.test.js` covers the cross-model/orientation oracle, native
+provenance, exact transformations, pull-input backpressure and sink lifecycle.
 `tabular-matrix.test.js` covers a hand-authored 16-record oracle with disjoint axes,
 two years, annual roles, exact decimal/missing semantics and rule/cell/mapping
 lineage. It rejects invalid schemas/expressions, duplicate JSON keys, context cycles,
@@ -912,6 +1044,7 @@ For JS changes, run only the affected scripts (Playwright/browser must already b
 ```sh
 node tests/web/tabular-core.test.js
 node tests/web/tabular-matrix.test.js
+node tests/web/tabular-universal.test.js
 node tests/web/tabular-xlsx.test.js
 node tests/web/tabular-browser.test.js
 ```

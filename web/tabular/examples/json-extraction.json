@@ -1,0 +1,165 @@
+{
+  "version": 2,
+  "kind": "extraction",
+  "template": {
+    "language": 2,
+    "id": "orientation-example",
+    "revision": 1,
+    "context": {},
+    "bindings": {
+      "parameter": {
+        "expr": "lookup(\"parameters\", text(path(\"/measure/code\")), \"production-form\")"
+      },
+      "unit": {
+        "expr": "lookup(\"units\", text(path(\"/measure/unit\")), \"production-form\")"
+      },
+      "period": {
+        "expr": "period.month(parse.year(text(path(\"/when/year\"))), parse.monthRu(text(path(\"/when/month\"))))"
+      },
+      "value": {
+        "expr": "round(decimal(raw(path(\"/amount\")), \"en-US\"), 2, \"half-even\")"
+      },
+      "role": {
+        "expr": "\"observation\""
+      },
+      "dimensions": {
+        "entity": {
+          "expr": "text(path(\"/entity\"))"
+        }
+      }
+    },
+    "output": "observations",
+    "policies": {
+      "missing": "preserve",
+      "mapping": "error",
+      "duplicates": "error",
+      "conflicts": "error"
+    },
+    "source": {
+      "kind": "json",
+      "maxRecords": 100,
+      "collection": "/report/observations"
+    }
+  },
+  "snapshot": {
+    "version": 1,
+    "kind": "json",
+    "source": {
+      "kind": "fixture",
+      "label": "observations-source.json / normalized document, no streaming JSON byte parser"
+    },
+    "document": {
+      "report": {
+        "observations": [
+          {
+            "measure": {
+              "code": "0012",
+              "unit": "т"
+            },
+            "when": {
+              "year": 2026,
+              "month": "янв"
+            },
+            "amount": "10.125",
+            "entity": "plant-1"
+          },
+          {
+            "measure": {
+              "code": "0012",
+              "unit": "т"
+            },
+            "when": {
+              "year": 2026,
+              "month": "фев"
+            },
+            "amount": "20.135",
+            "entity": "plant-1"
+          },
+          {
+            "measure": {
+              "code": "0099",
+              "unit": "т"
+            },
+            "when": {
+              "year": 2026,
+              "month": "янв"
+            },
+            "amount": "0",
+            "entity": "plant-1"
+          },
+          {
+            "measure": {
+              "code": "0099",
+              "unit": "т"
+            },
+            "when": {
+              "year": 2026,
+              "month": "фев"
+            },
+            "amount": "",
+            "entity": "plant-1"
+          }
+        ]
+      }
+    }
+  },
+  "dictionaries": {
+    "version": 1,
+    "revision": 1,
+    "units": [
+      {
+        "id": "t",
+        "name": "Тонны"
+      }
+    ],
+    "parameters": [
+      {
+        "id": "production.volume",
+        "name": "Объём производства",
+        "valueType": "decimal",
+        "unitId": "t",
+        "dimensions": [
+          "entity",
+          "variant"
+        ],
+        "temporalMeaning": "flow"
+      },
+      {
+        "id": "production.loss",
+        "name": "Потери",
+        "valueType": "decimal",
+        "unitId": "t",
+        "dimensions": [
+          "entity",
+          "variant"
+        ],
+        "temporalMeaning": "flow"
+      }
+    ],
+    "parameterMappings": [
+      {
+        "scope": "production-form",
+        "source": "0012",
+        "targetId": "production.volume"
+      },
+      {
+        "scope": "production-form",
+        "source": "0099",
+        "targetId": "production.loss"
+      }
+    ],
+    "unitMappings": [
+      {
+        "scope": "production-form",
+        "source": "т",
+        "targetId": "t"
+      }
+    ]
+  },
+  "dataset": {
+    "id": "orientation-example",
+    "dimensions": {
+      "variant": "actual"
+    }
+  }
+}

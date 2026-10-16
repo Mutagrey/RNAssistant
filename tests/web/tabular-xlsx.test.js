@@ -3,7 +3,7 @@ const assert = require("node:assert/strict"), fs = require("node:fs"), path = re
 const { Blob, File } = require("node:buffer"), { parts, zip, source } = require("./tabular-xlsx-fixture");
 const folder = path.resolve(__dirname, "../../web/tabular"), context = vm.createContext({ Blob, TextDecoder, ReadableStream, DecompressionStream });
 vm.runInContext(fs.readFileSync(path.join(folder, "../js/vendor/sax.js"), "utf8"), context);
-for (const name of ["selectors.js", "snapshot.js", "json.js", "expression.js", "template.js", "matrix.js", "engine.js", "xlsx-zip.js", "xlsx-reader.js"])
+for (const name of ["selectors.js", "snapshot.js", "json.js", "decimal.js", "sources.js", "expression.js", "template.js", "transform.js", "engine.js", "xlsx-zip.js", "xlsx-reader.js"])
     vm.runInContext(fs.readFileSync(path.join(folder, name), "utf8"), context, { filename: name });
 const json = value => JSON.parse(JSON.stringify(value));
 const hooks = { isCancelled: () => false, yieldControl: async () => {}, onProgress: () => {} };
@@ -43,6 +43,11 @@ async function refuses(change, code, options) {
         { kind: "missing", reason: "unavailable", detail: "formula-cache-absent" }, { kind: "missing", reason: "empty-text" },
         { kind: "decimal", value: "1.25" }, { kind: "decimal", value: "2" }, { kind: "decimal", value: "3" }, { kind: "decimal", value: "4" }
     ]);
+    assert.equal(records[2].provenance.value.evidence[0].location.address, "J12");
+    assert.deepEqual(records[2].provenance.period.evidence.map(item => item.location.address), ["P5", "J5"]);
+    assert.equal(records[2].provenance.period.contexts[0].expression, 'parse.year(text(cell("P", 5)))');
+    assert.equal(records[2].provenance.parameter.mappings[0].targetId, "production.volume");
+    assert.equal(records[2].provenance.unit.evidence[0].location.address, "B12");
     assert.deepEqual(records[6].provenance.value.evidence[0].cell.formula, { text: "SUM(R12:AC12)", type: "normal" });
     assert.ok(progress.some(item => item.part === "xl/worksheets/sheet1.xml" && item.partBytes > 0));
     assert.ok(Object.isFrozen(reader));

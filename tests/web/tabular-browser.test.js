@@ -12,7 +12,7 @@ const input = fs.readFileSync(fixture, "utf8");
 const matrixFixture = path.join(root, "examples/matrix-extraction.json"), matrixInput = fs.readFileSync(matrixFixture, "utf8");
 const xlsxFixture = path.join(root, "examples/matrix-xlsx-extraction.json"), xlsxInput = fs.readFileSync(xlsxFixture, "utf8");
 const { source: xlsxSource } = require("./tabular-xlsx-fixture");
-const assets = ["index.html", "probe.css", "probe.js", "selectors.js", "snapshot.js", "json.js", "expression.js", "template.js", "matrix.js", "engine.js", "executor.js", "worker.js", "xlsx-zip.js", "xlsx-reader.js", "js/vendor/sax.js"];
+const assets = ["index.html", "probe.css", "probe.js", "selectors.js", "snapshot.js", "json.js", "decimal.js", "sources.js", "expression.js", "template.js", "transform.js", "engine.js", "executor.js", "worker.js", "xlsx-zip.js", "xlsx-reader.js", "js/vendor/sax.js"];
 const assetPath = file => path.join(root, file === "js/vendor/sax.js" ? "../" + file : file);
 
 (async () => {
@@ -22,10 +22,10 @@ const assetPath = file => path.join(root, file === "js/vendor/sax.js" ? "../" + 
         response.setHeader("Cache-Control", "no-store");
         if (file === "busy-worker.js" || file === "foreign-worker.js" || file === "foreign-batch-worker.js") {
             response.setHeader("Content-Type", "text/javascript");
-            response.end('postMessage({type:"ready",protocol:3,revision:"tabular-m2-xlsx-1"}); onmessage = event => {' +
+            response.end('postMessage({type:"ready",protocol:4,revision:"tabular-core-2"}); onmessage = event => {' +
                 (file === "foreign-batch-worker.js" ? 'postMessage({type:"batch",id:event.data.id,batch:{version:1,sequence:2,records:[{}]}});' : file === "busy-worker.js"
                     ? 'postMessage({type:"progress",id:event.data.id,progress:{completedCells:0,totalCells:1}}); while(true) {}'
-                    : 'postMessage({type:"result",id:event.data.id+1,result:{version:1,engineRevision:"tabular-m2-xlsx-1"}});') + '}');
+                    : 'postMessage({type:"result",id:event.data.id+1,result:{version:1,engineRevision:"tabular-core-2"}});') + '}');
         } else if (assets.includes(file)) {
             response.setHeader("Content-Type", file.endsWith(".js") ? "text/javascript" : file.endsWith(".css") ? "text/css" : "text/html");
             response.end(fs.readFileSync(assetPath(file)));
@@ -98,24 +98,27 @@ const assetPath = file => path.join(root, file === "js/vendor/sax.js" ? "../" + 
         const matrixEvidence = await page.evaluate(async input => {
             const make = (extra = {}) => RNTabularExecutor.create({ mode: "worker", workerUrl: "worker.js", ...extra });
             const code = promise => promise.then(() => "unexpected-success", error => error.code || error.message);
+            let completedSinks = 0, abortedSinks = 0;
+            const sink = writeBatch => ({ writeBatch, complete: async () => { completedSinks++; }, abort: () => { abortedSinks++; } });
             const executor = make(); let release, entered, finished = false;
             const firstBatch = new Promise(resolve => { entered = resolve; }), records = [];
-            const pending = executor.extract(input, { onBatch: async batch => {
+            const pending = executor.extract(input, { sink: sink(async batch => {
                 records.push(...batch.records); entered(); await new Promise(resolve => { release = resolve; });
-            } }).then(value => { finished = true; return value; });
+            }) }).then(value => { finished = true; return value; });
             await firstBatch;
             await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
             const held = !finished; release(); const summary = await pending;
             const stop = new AbortController();
-            const cancelled = await code(executor.extract(input, { signal: stop.signal, onBatch: async () => stop.abort() }));
-            const sinkFailure = await code(executor.extract(input, { onBatch: async () => { throw new Error("sink rejected"); } }));
+            const cancelled = await code(executor.extract(input, { signal: stop.signal, sink: sink(async () => stop.abort()) }));
+            const sinkFailure = await code(executor.extract(input, { sink: sink(async () => { throw new Error("sink rejected"); }) }));
             executor.dispose();
             const forged = make({ workerUrl: "foreign-batch-worker.js" });
-            const outOfOrder = await code(forged.extract(input, { onBatch: async () => { throw new Error("must not reach sink"); } })); forged.dispose();
+            const outOfOrder = await code(forged.extract(input, { sink: sink(async () => { throw new Error("must not reach sink"); }) })); forged.dispose();
             const direct = make({ mode: "cooperative" }), directRecords = [];
-            const directSummary = await direct.extract(input, { onBatch: async batch => directRecords.push(...batch.records) }); direct.dispose();
-            return { held, summary, records, cancelled, sinkFailure, outOfOrder, directSummary, directRecords };
+            const directSummary = await direct.extract(input, { sink: sink(async batch => directRecords.push(...batch.records)) }); direct.dispose();
+            return { held, summary, records, cancelled, sinkFailure, outOfOrder, directSummary, directRecords, completedSinks, abortedSinks };
         }, matrixInput);
+        assert.equal(matrixEvidence.completedSinks, 2); assert.equal(matrixEvidence.abortedSinks, 3);
         assert.equal(matrixEvidence.held, true, "the worker cannot complete before its result batch is acknowledged");
         assert.equal(matrixEvidence.cancelled, "EXECUTION_CANCELLED");
         assert.equal(matrixEvidence.sinkFailure, "sink rejected");
@@ -124,6 +127,19 @@ const assetPath = file => path.join(root, file === "js/vendor/sax.js" ? "../" + 
         assert.deepEqual(matrixEvidence.summary, matrixEvidence.directSummary);
         assert.deepEqual(matrixEvidence.records, matrixEvidence.directRecords);
         console.log("PASS tabular matrix Worker: acknowledged batches, cancellation, consumer failure, sequence guard and core parity");
+
+        const universal = await page.evaluate(async inputs => {
+            const executor = RNTabularExecutor.create({ mode: "worker", workerUrl: "worker.js" }), outputs = [];
+            for (const input of inputs) {
+                const records = [];
+                await executor.extract(input, { sink: { writeBatch: async batch => records.push(...batch.records), complete: async () => {}, abort: () => { records.length = 0; } } });
+                outputs.push(records.sort((a, b) => a.parameterId.localeCompare(b.parameterId) || a.period.month - b.period.month)
+                    .map(item => item.value.value || item.value.reason));
+            }
+            executor.dispose(); return outputs;
+        }, ["matrix-roles", "matrix-transposed", "records-extraction", "json-extraction"].map(name => fs.readFileSync(path.join(root, "examples/" + name + ".json"), "utf8")));
+        for (const values of universal) assert.deepEqual(values, ["0", "empty-text", "10.12", "20.14"]);
+        console.log("PASS universal Worker: explicit matrix axes, record fields, nested JSON paths and awaited result sinks");
 
         const offline = await browser.newContext({ offline: true, acceptDownloads: true });
         const portable = await offline.newPage();
@@ -161,7 +177,15 @@ const assetPath = file => path.join(root, file === "js/vendor/sax.js" ? "../" + 
         await portable.locator("#download").click();
         const matrixDownload = await matrixDownloadPromise;
         assert.deepEqual(JSON.parse(fs.readFileSync(await matrixDownload.path(), "utf8")), report);
-        const invalidMatrix = JSON.parse(matrixInput); invalidMatrix.template.value.expr = "window.alert(1)";
+        for (const name of ["records-extraction", "json-extraction"]) {
+            await portable.locator("#capture").setInputFiles(path.join(root, "examples/" + name + ".json"));
+            await portable.locator("#run").click();
+            await portable.waitForFunction(() => document.getElementById("status").textContent.startsWith("Получено 4"));
+            const nativeReport = JSON.parse(await portable.locator("#result").textContent());
+            assert.equal(nativeReport.preview.records[0].value.value, "10.12");
+            assert.equal(nativeReport.preview.complete, true);
+        }
+        const invalidMatrix = JSON.parse(matrixInput); invalidMatrix.template.bindings.value.expr = "window.alert(1)";
         await portable.locator("#capture").setInputFiles({ name: "invalid-template.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(invalidMatrix)) });
         await portable.locator("#run").click();
         await portable.waitForFunction(() => document.getElementById("status").textContent.startsWith("EXPRESSION_TYPE"));
@@ -202,15 +226,15 @@ const assetPath = file => path.join(root, file === "js/vendor/sax.js" ? "../" + 
             const file = document.getElementById("sourceFile").files[0];
             const executor = RNTabularExecutor.create({ mode: "worker", workerUrl: "worker.js" }), code = promise => promise.then(() => "unexpected-success", error => error.code);
             let batches = 0, bytes = 0; const controller = new AbortController();
-            const cancelled = await code(executor.extractXlsx(input, file, { signal: controller.signal, onBatch: async () => { batches++; }, onProgress: progress => {
+            const cancelled = await code(executor.extractXlsx(input, file, { signal: controller.signal, sink: { writeBatch: async () => { batches++; }, complete: async () => {}, abort: () => {} }, onProgress: progress => {
                 if (progress.phase === "reading-xlsx" && progress.partBytes > 0) { bytes = progress.partBytes; controller.abort(); }
             } }));
-            const rerun = await executor.extractXlsx(input, file, { onBatch: async () => {} }); executor.dispose();
+            const rerun = await executor.extractXlsx(input, file, { sink: { writeBatch: async () => {}, complete: async () => {}, abort: () => {} } }); executor.dispose();
             const cooperative = RNTabularExecutor.create({ mode: "cooperative" });
-            const fallback = await code(cooperative.extractXlsx(input, file, { onBatch: async () => {} })); cooperative.dispose();
+            const fallback = await code(cooperative.extractXlsx(input, file, { sink: { writeBatch: async () => {}, complete: async () => {}, abort: () => {} } })); cooperative.dispose();
             const invalid = RNTabularExecutor.create({ mode: "worker", workerUrl: "worker.js" });
-            const empty = await code(invalid.extractXlsx(input, new Blob([]), { onBatch: async () => {} }));
-            const large = await code(invalid.extractXlsx(input, new Blob([new ArrayBuffer(RNTabularEngine.maxSourceBytes + 1)]), { onBatch: async () => {} })); invalid.dispose();
+            const empty = await code(invalid.extractXlsx(input, new Blob([]), { sink: { writeBatch: async () => {}, complete: async () => {}, abort: () => {} } }));
+            const large = await code(invalid.extractXlsx(input, new Blob([new ArrayBuffer(RNTabularEngine.maxSourceBytes + 1)]), { sink: { writeBatch: async () => {}, complete: async () => {}, abort: () => {} } })); invalid.dispose();
             return { cancelled, batches, readBytes: bytes > 0, rerun: rerun.recordCount, fallback, empty, large };
         }, xlsxInput);
         assert.deepEqual(lifecycleXlsx, { cancelled: "EXECUTION_CANCELLED", batches: 0, readBytes: true, rerun: 16, fallback: "XLSX_WORKER_REQUIRED", empty: "XLSX_INPUT_LIMIT", large: "XLSX_INPUT_LIMIT" });

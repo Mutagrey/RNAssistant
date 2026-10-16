@@ -6,7 +6,7 @@ const path = require("node:path");
 const vm = require("node:vm");
 const root = path.resolve(__dirname, "../../web/tabular");
 const context = vm.createContext({});
-for (const file of ["selectors.js", "snapshot.js", "json.js", "expression.js", "template.js", "matrix.js", "engine.js"])
+for (const file of ["selectors.js", "snapshot.js", "json.js", "decimal.js", "sources.js", "expression.js", "template.js", "transform.js", "engine.js"])
     vm.runInContext(fs.readFileSync(path.join(root, file), "utf8"), context, { filename: file });
 const selectors = context.RNTabularSelectors, snapshots = context.RNTabularSnapshot, engine = context.RNTabularEngine;
 const json = value => JSON.parse(JSON.stringify(value));

@@ -1,0 +1,5 @@
+code,unit,year,month,amount,entity
+0012,т,2026,янв,10.125,plant-1
+0012,т,2026,фев,20.135,plant-1
+0099,т,2026,янв,0,plant-1
+0099,т,2026,фев,,plant-1

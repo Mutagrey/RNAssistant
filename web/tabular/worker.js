@@ -1,7 +1,7 @@
 "use strict";
 
 // Only fixed shipped modules and declared operations. No project scripts/URLs or network source reads.
-importScripts("selectors.js", "snapshot.js", "json.js", "expression.js", "template.js", "matrix.js", "engine.js",
+importScripts("selectors.js", "snapshot.js", "json.js", "decimal.js", "sources.js", "expression.js", "template.js", "transform.js", "engine.js",
     "../js/vendor/sax.js", "xlsx-zip.js", "xlsx-reader.js");
 
 let accepted = false, requestId = null, pendingBatch = null;

@@ -1,0 +1,54 @@
+{
+  "report": {
+    "observations": [
+      {
+        "measure": {
+          "code": "0012",
+          "unit": "т"
+        },
+        "when": {
+          "year": 2026,
+          "month": "янв"
+        },
+        "amount": "10.125",
+        "entity": "plant-1"
+      },
+      {
+        "measure": {
+          "code": "0012",
+          "unit": "т"
+        },
+        "when": {
+          "year": 2026,
+          "month": "фев"
+        },
+        "amount": "20.135",
+        "entity": "plant-1"
+      },
+      {
+        "measure": {
+          "code": "0099",
+          "unit": "т"
+        },
+        "when": {
+          "year": 2026,
+          "month": "янв"
+        },
+        "amount": "0",
+        "entity": "plant-1"
+      },
+      {
+        "measure": {
+          "code": "0099",
+          "unit": "т"
+        },
+        "when": {
+          "year": 2026,
+          "month": "фев"
+        },
+        "amount": "",
+        "entity": "plant-1"
+      }
+    ]
+  }
+}

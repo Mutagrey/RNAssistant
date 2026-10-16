@@ -2,7 +2,7 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs"), path = require("node:path"), vm = require("node:vm");
 const root = path.resolve(__dirname, "../../web/tabular"), context = vm.createContext({});
-for (const file of ["selectors.js", "snapshot.js", "json.js", "expression.js", "template.js", "matrix.js", "engine.js"])
+for (const file of ["selectors.js", "snapshot.js", "json.js", "decimal.js", "sources.js", "expression.js", "template.js", "transform.js", "engine.js"])
     vm.runInContext(fs.readFileSync(path.join(root, file), "utf8"), context, { filename: file });
 const engine = context.RNTabularEngine, templates = context.RNTabularTemplate;
 const json = value => JSON.parse(JSON.stringify(value));
@@ -18,7 +18,7 @@ async function rejects(change, code) {
     await assert.rejects(extract(value), error => error.code === code, code);
 }
 function larger() {
-    const value = example(); value.template.bounds = "A1:AG40"; value.template.rows.select = "A12:A31";
+    const value = example(); value.template.source.bounds = "A1:AG40"; value.template.source.rows[0].select = "A12:A31";
     for (const range of value.snapshot.ranges) if (/12:.*13$/.test(range.address)) {
         range.address = range.address.replace(/13$/, "31");
         range.cells = Array.from({ length: 20 }, (_, index) => {
@@ -56,7 +56,7 @@ function larger() {
     assert.deepEqual(records.map(record => [record.provenance.value.evidence[0].location.address, record.parameterId,
         record.period.year, record.period.month || null, record.role, record.value]), expected);
     assert.equal(summary.recordCount, 16); assert.equal(summary.missingValueCount, 4);
-    assert.deepEqual(summary.coverage, { complete: true, capturedCells: 28, readCells: 28 });
+    assert.deepEqual(summary.coverage, { complete: true, model: "matrix", capturedItems: 28, readLocations: 28 });
     const july = records[2];
     assert.deepEqual(july.provenance.period.evidence.map(item => item.location.address), ["P5", "J5"]);
     assert.deepEqual(july.provenance.parameter.mappings.map(item => [item.scope, item.source, item.targetId]), [["production-form", "0012", "production.volume"]]);
@@ -66,23 +66,23 @@ function larger() {
     console.log("PASS matrix: disjoint axes, two years, annual totals, canonical values and independent cell/mapping lineage oracle");
 
     const template = example().template, compiled = templates.compile(template);
-    template.context.yearA.expr = "broken"; template.columns[0].select = "A";
+    template.context.yearA.expr = "broken"; template.source.columns[0].select = "A";
     assert.equal(compiled.contexts[0].expression.type, "year");
-    assert.deepEqual(Array.from(compiled.columns, item => item.column), [3, 4, 10, 11, 16, 18, 30, 32]);
-    assert.ok(Object.isFrozen(compiled)); assert.ok(Object.isFrozen(compiled.value.program));
+    assert.deepEqual(Array.from(compiled.columns, item => item.position), [3, 4, 10, 11, 16, 18, 30, 32]);
+    assert.ok(Object.isFrozen(compiled)); assert.ok(Object.isFrozen(compiled.regions["parameters/months-a"].value.program));
     for (const [change, code] of [
-        [v => { v.template.language = 2; }, "VERSION_UNSUPPORTED"],
+        [v => { v.template.language = 1; }, "VERSION_UNSUPPORTED"],
         [v => { v.template.extra = true; }, "SCHEMA_INVALID"],
-        [v => { v.template.value.expr = 'eval("alert(1)")'; }, "EXPRESSION_TYPE"],
-        [v => { v.template.value.expr = 'decimal(raw(cell(col, row + 1)), "ru-RU")'; }, "EXPRESSION_INVALID"],
-        [v => { v.template.value.expr = 'decimal(raw(cell(ctx.yearA, row)), "ru-RU")'; }, "EXPRESSION_TYPE"],
-        [v => { v.template.rows.parameter.expr = 'text(cell("A", row))'; }, "EXPRESSION_TYPE"],
+        [v => { v.template.bindings.value.expr = 'eval("alert(1)")'; }, "EXPRESSION_TYPE"],
+        [v => { v.template.bindings.value.expr = 'decimal(raw(cell(col, row + 1)), "ru-RU")'; }, "EXPRESSION_INVALID"],
+        [v => { v.template.bindings.value.expr = 'decimal(raw(cell(ctx.yearA, row)), "ru-RU")'; }, "EXPRESSION_TYPE"],
+        [v => { v.template.source.rows[0].bindings.parameter.expr = 'text(cell("A", row))'; }, "EXPRESSION_TYPE"],
         [v => { v.template.context.yearA.expr = "ctx.yearB"; v.template.context.yearB.expr = "ctx.yearA"; }, "DEPENDENCY_CYCLE"],
         [v => { v.template.context.yearA.expr = "ctx.absent"; }, "REFERENCE_MISSING"],
         [v => { v.template.context.yearA.expr = 'parse.year(text(cell("P", row)))'; }, "EXPRESSION_TYPE"],
-        [v => { v.template.columns[1].select = "J"; }, "COLUMN_BINDING_CONFLICT"],
-        [v => { v.template.columns[0].period.expr = 'period.year("2026")'; }, "EXPRESSION_TYPE"],
-        [v => { v.template.rows.select = "A12 \\ A12"; }, "MATRIX_EMPTY"],
+        [v => { v.template.source.columns[1].select = "J"; }, "AXIS_BINDING_CONFLICT"],
+        [v => { v.template.source.columns[0].bindings.period.expr = 'period.year("2026")'; }, "EXPRESSION_TYPE"],
+        [v => { v.template.source.rows[0].select = "A12 \\ A12"; }, "MATRIX_EMPTY"],
         [v => { v.dictionaries.parameterMappings.push(v.dictionaries.parameterMappings[0]); }, "DICTIONARY_CONFLICT"],
         [v => { v.dictionaries.parameterMappings[0].targetId = "absent"; }, "REFERENCE_MISSING"],
         [v => { v.dictionaries.parameterMappings[0].source = "12"; }, "MAPPING_MISSING"],
@@ -91,11 +91,11 @@ function larger() {
         [v => { v.dictionaries.parameterMappings[1].targetId = "production.volume"; }, "DUPLICATE_OBSERVATION"],
         [v => { v.snapshot.ranges.find(range => range.address === "J5:K5").cells[0][0].value = "unknown"; }, "PERIOD_INVALID"],
         [v => { v.snapshot.ranges = v.snapshot.ranges.filter(range => range.address !== "P5"); }, "CAPTURE_INCOMPLETE"],
-        [v => { v.template.value.expr = 'decimal(raw(cell("AH", row)), "ru-RU")'; }, "DEPENDENCY_OUTSIDE_BOUNDS"]
+        [v => { v.template.bindings.value.expr = 'decimal(raw(cell("AH", row)), "ru-RU")'; }, "DEPENDENCY_OUTSIDE_BOUNDS"]
     ]) await rejects(change, code);
-    await rejects(v => { v.template.bounds = "A1:AG1000"; v.template.rows.select = "1:1000";
-        v.template.columns = [{ ...v.template.columns[0], select: "A:AG" }]; }, "RECORD_LIMIT");
-    await assert.rejects(engine.extract(JSON.stringify(example()).replace('"language":1', '"language":1,"language":1'), { ...hooks, onBatch: async () => {} }), error => error.code === "JSON_INVALID");
+    await rejects(v => { v.template.source.bounds = "A1:AG1000"; v.template.source.rows[0].select = "1:1000";
+        v.template.source.columns = [{ ...v.template.source.columns[0], select: "A:AG" }]; }, "RECORD_LIMIT");
+    await assert.rejects(engine.extract(JSON.stringify(example()).replace('"language":2', '"language":2,"language":2'), { ...hooks, onBatch: async () => {} }), error => error.code === "JSON_INVALID");
     for (const text of ['{"a":1,"\\u0061":2}', '{"a":1e999}', '{"a":01}', '{"a":1,}', '[1,]', '"unterminated', '{"a":"\\q"}'])
         assert.throws(() => context.RNTabularJson.parse(text), error => error.code === "JSON_INVALID");
     assert.throws(() => context.RNTabularJson.parse("[".repeat(34) + "0" + "]".repeat(34)), error => error.code === "INPUT_LIMIT");
@@ -116,7 +116,7 @@ function larger() {
         [{ kind: "text", value: "12 34,5" }, "DECIMAL_INVALID"],
         [{ kind: "text", value: "1.25" }, "DECIMAL_INVALID"], [{ kind: "boolean", value: true }, "DECIMAL_INVALID"]
     ]) await rejects(v => replaceValue(v, cell), code);
-    const english = example(); english.template.value.expr = 'decimal(raw(cell(col, row)), "en-US")';
+    const english = example(); english.template.bindings.value.expr = 'decimal(raw(cell(col, row)), "en-US")';
     english.snapshot.ranges.forEach(range => range.cells.forEach(row => row.forEach(cell => {
         if (cell.kind === "text" && cell.value.includes(",")) cell.value = cell.value.replace(/\u00a0/g, "").replace(",", ".");
     })));

@@ -1,13 +1,91 @@
 {
-  "version": 1,
-  "kind": "matrix-xlsx-extraction",
+  "version": 2,
+  "kind": "xlsx-extraction",
   "template": {
-    "language": 1,
-    "kind": "matrix",
+    "language": 2,
     "id": "production-form",
-    "revision": 1,
-    "sheet": "Данные",
-    "bounds": "A1:AG20",
+    "revision": 2,
+    "source": {
+      "kind": "matrix",
+      "sheet": "Данные",
+      "bounds": "A1:AG20",
+      "rows": [
+        {
+          "id": "parameters",
+          "select": "A12:A13",
+          "bindings": {
+            "parameter": {
+              "expr": "lookup(\"parameters\", text(cell(\"A\", row)), \"production-form\")"
+            },
+            "unit": {
+              "expr": "lookup(\"units\", text(cell(\"B\", row)), \"production-form\")"
+            }
+          }
+        }
+      ],
+      "columns": [
+        {
+          "id": "months-a",
+          "select": "C:D | J:K",
+          "bindings": {
+            "period": {
+              "expr": "period.month(ctx.yearA, parse.monthRu(text(cell(col, 5))))"
+            },
+            "role": {
+              "expr": "\"observation\""
+            }
+          }
+        },
+        {
+          "id": "annual-a",
+          "select": "P",
+          "bindings": {
+            "period": {
+              "expr": "period.year(ctx.yearA)"
+            },
+            "role": {
+              "expr": "\"reported_total\""
+            }
+          }
+        },
+        {
+          "id": "months-b",
+          "select": "R",
+          "bindings": {
+            "period": {
+              "expr": "period.month(ctx.yearB, parse.monthRu(text(cell(col, 5))))"
+            },
+            "role": {
+              "expr": "\"observation\""
+            }
+          }
+        },
+        {
+          "id": "annual-b",
+          "select": "AD",
+          "bindings": {
+            "period": {
+              "expr": "period.year(ctx.yearB)"
+            },
+            "role": {
+              "expr": "\"reported_total\""
+            }
+          }
+        },
+        {
+          "id": "later-year",
+          "select": "AF",
+          "bindings": {
+            "period": {
+              "expr": "period.year(parse.year(text(cell(col, 5))))"
+            },
+            "role": {
+              "expr": "\"observation\""
+            }
+          }
+        }
+      ]
+    },
     "context": {
       "yearA": {
         "expr": "parse.year(text(cell(\"P\", 5)))"
@@ -16,59 +94,17 @@
         "expr": "parse.year(text(cell(\"AD\", 5)))"
       }
     },
-    "rows": {
-      "select": "A12:A13",
-      "parameter": {
-        "expr": "lookup(\"parameters\", text(cell(\"A\", row)), \"production-form\")"
-      },
-      "unit": {
-        "expr": "lookup(\"units\", text(cell(\"B\", row)), \"production-form\")"
+    "bindings": {
+      "value": {
+        "expr": "decimal(raw(cell(col, row)), \"ru-RU\")"
       }
     },
-    "columns": [
-      {
-        "id": "months-a",
-        "select": "C:D | J:K",
-        "period": {
-          "expr": "period.month(ctx.yearA, parse.monthRu(text(cell(col, 5))))"
-        },
-        "role": "observation"
-      },
-      {
-        "id": "annual-a",
-        "select": "P",
-        "period": {
-          "expr": "period.year(ctx.yearA)"
-        },
-        "role": "reported_total"
-      },
-      {
-        "id": "months-b",
-        "select": "R",
-        "period": {
-          "expr": "period.month(ctx.yearB, parse.monthRu(text(cell(col, 5))))"
-        },
-        "role": "observation"
-      },
-      {
-        "id": "annual-b",
-        "select": "AD",
-        "period": {
-          "expr": "period.year(ctx.yearB)"
-        },
-        "role": "reported_total"
-      },
-      {
-        "id": "later-year",
-        "select": "AF",
-        "period": {
-          "expr": "period.year(parse.year(text(cell(col, 5))))"
-        },
-        "role": "observation"
-      }
-    ],
-    "value": {
-      "expr": "decimal(raw(cell(col, row)), \"ru-RU\")"
+    "output": "observations",
+    "policies": {
+      "missing": "preserve",
+      "mapping": "error",
+      "duplicates": "error",
+      "conflicts": "error"
     }
   },
   "dictionaries": {

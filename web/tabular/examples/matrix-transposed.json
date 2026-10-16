@@ -1,0 +1,202 @@
+{
+  "version": 2,
+  "kind": "extraction",
+  "template": {
+    "language": 2,
+    "id": "orientation-example",
+    "revision": 1,
+    "context": {},
+    "bindings": {
+      "value": {
+        "expr": "round(decimal(raw(cell(col, row)), \"en-US\"), 2, \"half-even\")"
+      }
+    },
+    "output": "observations",
+    "policies": {
+      "missing": "preserve",
+      "mapping": "error",
+      "duplicates": "error",
+      "conflicts": "error"
+    },
+    "source": {
+      "kind": "matrix",
+      "sheet": "Data",
+      "bounds": "A1:D4",
+      "rows": [
+        {
+          "id": "rows",
+          "select": "3:4",
+          "bindings": {
+            "period": {
+              "expr": "period.month(parse.year(text(cell(\"A\", row))), parse.monthRu(text(cell(\"B\", row))))"
+            },
+            "role": {
+              "expr": "\"observation\""
+            }
+          }
+        }
+      ],
+      "columns": [
+        {
+          "id": "columns",
+          "select": "C:D",
+          "bindings": {
+            "parameter": {
+              "expr": "lookup(\"parameters\", text(cell(col, 1)), \"production-form\")"
+            },
+            "unit": {
+              "expr": "lookup(\"units\", text(cell(col, 2)), \"production-form\")"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "snapshot": {
+    "version": 1,
+    "source": {
+      "kind": "fixture",
+      "label": "matrix-transposed.json"
+    },
+    "sheet": "Data",
+    "ranges": [
+      {
+        "address": "A1:D4",
+        "cells": [
+          [
+            {
+              "kind": "text",
+              "value": "code"
+            },
+            {
+              "kind": "text",
+              "value": ""
+            },
+            {
+              "kind": "text",
+              "value": "0012"
+            },
+            {
+              "kind": "text",
+              "value": "0099"
+            }
+          ],
+          [
+            {
+              "kind": "text",
+              "value": "unit"
+            },
+            {
+              "kind": "text",
+              "value": ""
+            },
+            {
+              "kind": "text",
+              "value": "т"
+            },
+            {
+              "kind": "text",
+              "value": "т"
+            }
+          ],
+          [
+            {
+              "kind": "text",
+              "value": "2026"
+            },
+            {
+              "kind": "text",
+              "value": "янв"
+            },
+            {
+              "kind": "text",
+              "value": "10.125"
+            },
+            {
+              "kind": "text",
+              "value": "0"
+            }
+          ],
+          [
+            {
+              "kind": "text",
+              "value": "2026"
+            },
+            {
+              "kind": "text",
+              "value": "фев"
+            },
+            {
+              "kind": "text",
+              "value": "20.135"
+            },
+            {
+              "kind": "text",
+              "value": ""
+            }
+          ]
+        ]
+      }
+    ]
+  },
+  "dictionaries": {
+    "version": 1,
+    "revision": 1,
+    "units": [
+      {
+        "id": "t",
+        "name": "Тонны"
+      }
+    ],
+    "parameters": [
+      {
+        "id": "production.volume",
+        "name": "Объём производства",
+        "valueType": "decimal",
+        "unitId": "t",
+        "dimensions": [
+          "entity",
+          "variant"
+        ],
+        "temporalMeaning": "flow"
+      },
+      {
+        "id": "production.loss",
+        "name": "Потери",
+        "valueType": "decimal",
+        "unitId": "t",
+        "dimensions": [
+          "entity",
+          "variant"
+        ],
+        "temporalMeaning": "flow"
+      }
+    ],
+    "parameterMappings": [
+      {
+        "scope": "production-form",
+        "source": "0012",
+        "targetId": "production.volume"
+      },
+      {
+        "scope": "production-form",
+        "source": "0099",
+        "targetId": "production.loss"
+      }
+    ],
+    "unitMappings": [
+      {
+        "scope": "production-form",
+        "source": "т",
+        "targetId": "t"
+      }
+    ]
+  },
+  "dataset": {
+    "id": "orientation-example",
+    "dimensions": {
+      "entity": "plant-1",
+      "variant": "actual"
+    }
+  }
+}

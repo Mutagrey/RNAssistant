@@ -33,6 +33,30 @@ unavailable Worker execution is an error, never a hidden switch to another engin
 or `RNAssistant.JsWorker.exe`. Arbitrary extensions require a separately qualified
 interruptible realm and cannot run inside the privileged root UI.
 
+## Language/core clarification — 2026-10-16
+
+The original proposal's §6.4 is an invariant: parameter, period, unit, dimension
+and value roles do not belong to physical rows/columns. §6.7 defers richer layout
+constructions, not this invariant. This completes the accepted universal scope;
+it is not an additional feature track.
+
+The initial orientation-bound matrix profile is replaced by language revision 2
+with explicit semantic bindings over matrix, record/field and JSON-path models.
+One typed compiler and observation executor own all three. Old language 1 is
+explicitly refused; no fallback, second interpreter or automatic user-file migration
+is introduced. The existing selectors, dictionary/value semantics, XLSX reader,
+Worker, file authority and preparation queue are retained. Canonical source locations
+stay native; CSV/JSON never acquire fabricated Excel coordinates.
+
+Source preparation, immutable execution plans, record validation and provisional
+result sinks are distinct from publication. Sink completion finalizes staging only;
+abort revokes it. Native parser dispatch must consume the existing queue's exact
+source pins, not reconstruct authority from UI metadata. The working foundation,
+examples, checks and limits are owned by [Data Templates](../data-templates.md#language-and-execution-core).
+CSV/JSON production file readers, other Excel families including XLSB, full output
+schemas and native integration remain open. A normalized-source proof does not
+qualify those readers or the 80 MB/Office gates.
+
 ## Initial boundary and consequences
 
 The first implemented proof covers normalized disjoint capture, bounded selectors,

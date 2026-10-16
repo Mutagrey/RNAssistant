@@ -1,13 +1,18 @@
 # RNAssistant Harness
 
 Data Templates M0/M2 is JavaScript-only: run `node tests/web/tabular-core.test.js`,
-`node tests/web/tabular-matrix.test.js`, `node tests/web/tabular-xlsx.test.js` and
+`node tests/web/tabular-matrix.test.js`, `node tests/web/tabular-universal.test.js`,
+`node tests/web/tabular-xlsx.test.js` and
 `node tests/web/tabular-browser.test.js` (Playwright, optional
 `BROWSER_EXECUTABLE`). They cover bounded selectors, immutable capture, Worker
 cancel/deadline/reload, viewer-independent lifetime and offline file:// parity.
 Matrix checks add an independent 16-record oracle, typed expressions/plans,
 scoped mappings, decimal/missing semantics, source/rule lineage, bounded batches
-and consumer backpressure/failure. Browser checks cover batch acknowledgement,
+and consumer backpressure/failure. Universal checks compare normal/transposed
+matrices, record fields and nested JSON against an independent four-record oracle;
+they cover native provenance, exact scale/round/JSON numeric tokens, input pull pages,
+conflicts and result-sink completion/abort. Raw CSV/JSON example files do not imply
+production file-reader readiness. Browser checks cover all source shapes, batch acknowledgement,
 cancellation and offline matrix parity. XLSX checks cover a real selected file,
 exact numeric lexemes/formula-cache evidence, streamed ZIP/XML, CRC/size/schema
 refusals, bounded capture across 30,000 rows and existing SheetJS writer

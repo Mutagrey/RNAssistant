@@ -1,9 +1,9 @@
 (function (root) {
     "use strict";
-    const fail = root.RNTabularSelectors.fail;
+    const fail = root.RNTabularSelectors.fail, numeric = new WeakMap();
 
     // Template input must not silently accept duplicate keys or non-finite JSON numbers.
-    function parse(text) {
+    function parse(text, exactNumberRoot) {
         if (typeof text !== "string" || !text.length || text.length > 1000000)
             fail("INPUT_LIMIT", "", "Expected at most 1000000 UTF-16 code units of JSON.");
         let position = 0, nodes = 0;
@@ -21,7 +21,7 @@
             }
             error("Unterminated JSON string.");
         }
-        function value(depth) {
+        function value(depth, path) {
             space();
             if (++nodes > 200000 || depth > 32) fail("INPUT_LIMIT", "@" + position, "JSON structure exceeds its budget.");
             const character = text[position];
@@ -39,7 +39,8 @@
                         if (Object.prototype.hasOwnProperty.call(result, key)) error("Duplicate JSON property: " + key);
                         if (text[position++] !== ":") error("Expected a colon.");
                     }
-                    const item = value(depth + 1);
+                    const segment = object ? key.replace(/~/g, "~0").replace(/\//g, "~1") : String(result.length);
+                    const item = value(depth + 1, path + "/" + segment);
                     if (object) result[key] = item; else result.push(item);
                     space();
                     if (text[position] === end) { position++; return result; }
@@ -54,13 +55,17 @@
             const match = /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/.exec(text.slice(position));
             if (!match) error("Expected a JSON value.");
             position += match[0].length;
+            if (exactNumberRoot && (path === exactNumberRoot || path.startsWith(exactNumberRoot + "/"))) {
+                const result = Object.freeze({ kind: "numeric", lexeme: match[0] });
+                numeric.set(result, match[0]); return result;
+            }
             const number = Number(match[0]);
             if (!Number.isFinite(number)) error("Non-finite JSON number.");
             return number;
         }
-        const result = value(0); space();
+        const result = value(0, ""); space();
         if (position !== text.length) error("Unexpected JSON suffix.");
         return result;
     }
-    root.RNTabularJson = Object.freeze({ parse });
+    root.RNTabularJson = Object.freeze({ parse, numericLexeme: value => numeric.get(value) });
 }(globalThis));

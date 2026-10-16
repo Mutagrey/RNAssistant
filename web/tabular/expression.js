@@ -1,7 +1,7 @@
 (function (root) {
     "use strict";
     const geometry = root.RNTabularSelectors, fail = geometry.fail;
-    const freeze = Object.freeze;
+    const freeze = Object.freeze, decimal = root.RNTabularDecimal.convert;
     const months = ["январь|янв", "февраль|фев", "март|мар", "апрель|апр", "май|мая", "июнь|июн",
         "июль|июл", "август|авг", "сентябрь|сен|сент", "октябрь|окт", "ноябрь|ноя|нояб", "декабрь|дек"];
 
@@ -73,7 +73,7 @@
             const exact = expected => types.length === expected.length && types.every((type, index) => type === expected[index]);
             let type;
             if (node.name === "cell") {
-                if (args.length !== 2) reject("cell requires a column and row.");
+                if (scope.model !== "matrix" || args.length !== 2) reject("cell requires a matrix column and row.");
                 let column, row;
                 if (args[0].op === "variable" && args[0].name === "col") column = "col";
                 else if (args[0].op === "literal" && types[0] === "text" && /^[A-Za-z]{1,3}$/.test(args[0].value))
@@ -82,71 +82,52 @@
                 if (args[1].op === "variable" && args[1].name === "row") row = "row";
                 else if (args[1].op === "literal" && types[1] === "integer" && args[1].value >= 1 && args[1].value <= 1048576) row = args[1].value;
                 else reject("A cell row must be a positive literal or row.");
-                const read = freeze({ op: "cell", type: "cell", column, row, path: location }); reads.push(read); return read;
+                const read = freeze({ op: "cell", type: "scalar", column, row, path: location }); reads.push(read); return read;
             }
-            if (node.name === "text" && exact(["cell"])) type = "text";
-            else if (node.name === "raw" && exact(["cell"])) type = "raw";
+            if (node.name === "field" || node.name === "path") {
+                if (!scope.item || !exact(["text"]) || args[0].op !== "literal") reject("Source access requires a literal field/path in item scope.");
+                if (node.name === "field" && (scope.model !== "records" || !scope.fields.includes(args[0].value))) reject("Unknown record field.");
+                if (node.name === "path") {
+                    if (scope.model !== "json") reject("path requires a JSON source.");
+                    root.RNTabularSources.pointer(args[0].value, location);
+                }
+                const read = freeze({ op: node.name, type: "scalar", key: args[0].value, path: location });
+                reads.push(read); return read;
+            }
+            if (node.name === "text" && exact(["scalar"])) type = "text";
+            else if (node.name === "raw" && exact(["scalar"])) type = "raw";
             else if (node.name === "parse.year" && exact(["text"])) type = "year";
             else if (node.name === "parse.monthRu" && exact(["text"])) type = "month";
             else if (node.name === "period.month" && exact(["year", "month"])) type = "period";
             else if (node.name === "period.year" && exact(["year"])) type = "period";
             else if (node.name === "decimal" && exact(["raw", "text"]) && args[1].op === "literal" && ["ru-RU", "en-US"].includes(args[1].value)) type = "value";
+            else if (node.name === "scale" && exact(["value", "text"]) && args[1].op === "literal") {
+                root.RNTabularDecimal.scale({ kind: "missing" }, args[1].value, location); type = "value";
+            }
+            else if (node.name === "round" && exact(["value", "integer", "text"]) && args[1].op === "literal" && args[1].value <= 18 &&
+                args[2].op === "literal" && ["half-even", "half-away", "truncate"].includes(args[2].value)) type = "value";
             else if (node.name === "lookup" && exact(["text", "text", "text"]) && args[0].op === "literal" && args[2].op === "literal" &&
                 ["parameters", "units"].includes(args[0].value)) type = args[0].value === "parameters" ? "parameter" : "unit";
             else reject("Unknown function or invalid arguments: " + node.name);
             return freeze({ op: node.name, args: freeze(args), type, path: location });
         }
         const program = bind(ast);
-        return freeze({ type: program.type, program, reads: freeze(reads), contexts: freeze(Array.from(contexts)), path });
-    }
-
-    // Exact lexical conversion, no arithmetic/rounding. Numeric cells retain their already-rounded IEEE-754 value.
-    function decimal(cell, locale, path) {
-        if (cell.kind === "blank") return freeze({ kind: "missing", reason: "blank" });
-        if (cell.kind === "unavailable") return freeze({ kind: "missing", reason: "unavailable", detail: cell.reason });
-        if (cell.kind === "error") return freeze({ kind: "missing", reason: "source-error", detail: cell.value });
-        if (cell.kind === "text" && cell.value === "") return freeze({ kind: "missing", reason: "empty-text" });
-        let text;
-        if (cell.kind === "number" || cell.kind === "numeric") {
-            if (cell.kind === "number" && Number.isInteger(cell.value) && !Number.isSafeInteger(cell.value)) fail("DECIMAL_PRECISION", path, "Unsafe integer source; supply an exact numeric lexeme.");
-            text = cell.kind === "numeric" ? cell.lexeme : String(cell.value);
-            text = text.replace(/^\+/, "").replace(/^(-?)\./, (_, sign) => sign + "0.");
-            if (/[eE]/.test(text)) {
-                const [coefficient, exponent] = text.toLowerCase().split("e");
-                const negative = coefficient[0] === "-", parts = coefficient.replace(/^-/, "").split(".");
-                const digits = parts.join(""), point = parts[0].length + Number(exponent);
-                if (Math.abs(point) > 38) fail("DECIMAL_PRECISION", path, "Decimal expansion exceeds its budget.");
-                text = (negative ? "-" : "") + (point <= 0 ? "0." + "0".repeat(-point) + digits
-                    : point >= digits.length ? digits + "0".repeat(point - digits.length) : digits.slice(0, point) + "." + digits.slice(point));
-            }
-        } else if (cell.kind === "text") {
-            text = cell.value.trim();
-            const pattern = locale === "ru-RU" ? /^[+-]?(?:\d+|\d{1,3}(?:[ \u00a0\u202f]\d{3})+)(?:,\d+)?$/
-                : /^[+-]?(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d+)?$/;
-            if (!pattern.test(text)) fail("DECIMAL_INVALID", path, "Value does not match the declared numeric locale.");
-            text = locale === "ru-RU" ? text.replace(/[ \u00a0\u202f]/g, "").replace(",", ".") : text.replace(/,/g, "");
-        } else fail("DECIMAL_INVALID", path, "A decimal requires a text or number cell.");
-        const negative = text[0] === "-", parts = text.replace(/^[+-]/, "").split(".");
-        const integer = parts[0].replace(/^0+(?=\d)/, ""), fraction = (parts[1] || "").replace(/0+$/, "");
-        if (integer.length + fraction.length > 38 || fraction.length > 18) fail("DECIMAL_PRECISION", path, "Decimal exceeds 38 digits or 18 fractional places; no rounding applied.");
-        const value = integer + (fraction ? "." + fraction : "");
-        return freeze({ kind: "decimal", value: (negative && value !== "0" ? "-" : "") + value });
+        return freeze({ type: program.type, text, ast, program, reads: freeze(reads), contexts: freeze(Array.from(contexts)), path });
     }
 
     function evaluate(expression, environment) {
         const evidence = new Map(), mappings = new Map();
         const merge = result => {
-            result.evidence.forEach(item => evidence.set(item.rule + ":" + item.location.address, item));
+            result.evidence.forEach(item => evidence.set(item.rule + ":" + JSON.stringify(item.location), item));
             result.mappings.forEach(item => mappings.set(JSON.stringify(item), item));
         };
         function run(node) {
             if (node.op === "literal") return node.value;
             if (node.op === "variable") return environment[node.name];
             if (node.op === "context") { const value = environment.contexts.get(node.name); merge(value); return value.value; }
-            if (node.op === "cell") {
-                const item = environment.read(node.row === "row" ? environment.row : node.row,
-                    node.column === "col" ? environment.col : node.column, node.path);
-                evidence.set(node.path + ":" + item.location.address, freeze({ ...item, rule: node.path })); return item.cell;
+            if (["cell", "field", "path"].includes(node.op)) {
+                const item = environment.read(node, environment);
+                evidence.set(node.path + ":" + JSON.stringify(item.location), freeze({ ...item, rule: node.path })); return item.cell;
             }
             const args = node.args.map(run);
             if (node.op === "raw") return args[0];
@@ -169,6 +150,8 @@
             if (node.op === "period.month") return freeze({ kind: "month", year: args[0], month: args[1] });
             if (node.op === "period.year") return freeze({ kind: "year", year: args[0] });
             if (node.op === "decimal") return decimal(args[0], args[1], node.path);
+            if (node.op === "scale") return root.RNTabularDecimal.scale(args[0], args[1], node.path);
+            if (node.op === "round") return root.RNTabularDecimal.round(args[0], args[1], args[2], node.path);
             if (node.op === "lookup") {
                 const value = environment.lookup(args[0], args[1], args[2], node.path);
                 const mapping = freeze({ dictionary: args[0], scope: args[2], source: args[1], targetId: value.id, rule: node.path });
