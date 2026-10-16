@@ -1,5 +1,12 @@
 # RNAssistant Harness
 
+Data Templates M0 is JavaScript-only: run `node tests/web/tabular-core.test.js`
+and `node tests/web/tabular-browser.test.js` (Playwright, optional
+`BROWSER_EXECUTABLE`). They cover bounded selectors, immutable capture, Worker
+cancel/deadline/reload, viewer-independent lifetime and offline file:// parity.
+They require no Harness build and do not qualify Office capture or publication.
+The scope and manual probe are in [Data Templates](../../docs/data-templates.md).
+
 `chat relocation:` covers occupied destinations, blocked parent creation, invalid
 projection rollback, deletion while waiting for the document lock, explicit retry
 and transient drafts. It checks unchanged event bytes on refusal and history after

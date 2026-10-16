@@ -8,6 +8,30 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## Data Templates integration gates — 2026-10-16
+
+Open feature gates, not newly reproduced baseline failures. Owner: Data Templates
+application integration, with existing file/resource/WebView host owners.
+The [portable M0 proof](../data-templates.md) passes focused JS/browser checks;
+it has no native tools or publication authority.
+
+- Office has no scoped project-root path through `WorkspaceFileService` yet.
+  Close with typed session/project selection and guarded manifest create/reopen,
+  read-back and external-drift checks through the existing owner.
+- Normalized fixtures do not prove unsaved live Excel values, a consistent
+  disjoint capture or metadata availability. Close with bound provider capture,
+  exact dependencies and Windows/Excel evidence; do not synthesize unavailable
+  date-system, merge, formula-cache or formatting fields.
+- Worker contract labels are not module hash pins or security evidence.
+  Close with exact captured modules, application-owned WebView2 lifecycle,
+  native scope validation, CSP and hard cancellation in the actual host.
+- No project publication/export is implemented. Probe JSON cannot act as a
+  passing test receipt. Close with existing journal/authority publication,
+  stale-input rejection, read-back and complete portable dependency capture.
+
+No existing global HTML/transfer limit was raised; no imported JS, fake live
+source claim, hidden executor fallback or second mutable project store was added.
+
 ## Architecture and regression review — 2026-10-15
 
 Reviewed `a05ffe96` with the pre-existing follow-up-input test/doc changes retained.

@@ -1,5 +1,19 @@
 # Stabilization progress
 
+## Data Templates portable proof — 2026-10-16
+
+M0 has started with a separate bounded JS capture/selector core, immutable typed
+cells, explicit Worker/cooperative execution and an offline file-picker probe.
+Both focused Web scripts pass, including real Chromium Worker cancellation and
+deadline, viewer-independent lifetime, reload guards and file:// result parity.
+No C# build, Harness, Windows/Office/WebView2 or real-model check was run.
+
+This is not a completed M0 or M1–M3 implementation: Office file-root composition,
+live capture, module hash pins, publication and project export remain open.
+[Current contract](../data-templates.md) and
+[integration gates](RISK_REGISTER.md#data-templates-integration-gates--2026-10-16)
+define the next slice. Existing stabilization priorities below are unchanged.
+
 ## Architecture review and metadata conflict correction — 2026-10-15
 
 Review of `a05ffe96` found and fixed a Core stale-write defect: a refused scalar

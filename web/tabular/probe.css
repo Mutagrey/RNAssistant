@@ -1,0 +1,16 @@
+:root { color-scheme: light dark; font-family: system-ui, sans-serif; line-height: 1.5; }
+body { margin: 0; background: light-dark(#f4f6fa, #161b24); color: light-dark(#182235, #e1e7f0); }
+main { max-width: 880px; margin: 32px auto; padding: 24px; }
+h1 { line-height: 1.2; margin-top: 8px; }
+.eyebrow { color: light-dark(#3c587a, #9eb8d8); font-size: 13px; letter-spacing: .06em; }
+label { display: block; font-weight: 600; margin: 24px 0 8px; }
+input, select, button { font: inherit; max-width: 100%; }
+select, button { padding: 8px 12px; border: 1px solid #79869c; border-radius: 6px; }
+button { cursor: pointer; }
+button:disabled { cursor: default; opacity: .55; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 24px 0; }
+.note { font-size: 14px; color: light-dark(#4d5d74, #acb8ca); }
+#status { min-height: 24px; overflow-wrap: anywhere; }
+details { border: 1px solid #79869c; border-radius: 8px; padding: 16px; }
+summary { cursor: pointer; }
+pre { overflow: auto; max-height: 560px; font-size: 13px; }
