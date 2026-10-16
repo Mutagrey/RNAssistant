@@ -1,0 +1,49 @@
+.ws-source-selection, .ws-source-queue, .ws-source-activity { padding: var(--dt-card-padding); margin-bottom: var(--dt-space-lg); min-width: 0; }
+.ws-source-selection input:not([type="checkbox"]), .ws-source-filters input, .ws-source-filters select {
+  min-height: 36px; padding: 8px 10px; border: 1px solid var(--control-border); border-radius: var(--dt-control-radius);
+  background: var(--dt-surface); color: var(--text); font: inherit; font-size: var(--dt-font-small); box-sizing: border-box;
+}
+.ws-source-selection input[type="checkbox"], .ws-source-queue input[type="checkbox"] { accent-color: var(--dt-accent); flex: none; }
+#tab-workspace :is(.ws-source-selection, .ws-source-queue, .ws-source-activity) button:not(.dt-primary) { background: var(--dt-surface); color: var(--text); border: 1px solid var(--control-border); }
+#tab-workspace :is(.ws-source-selection, .ws-source-queue, .ws-source-activity) button:not(.dt-primary):hover:not(:disabled) { background: var(--dt-surface-muted); }
+.ws-source-selection summary, .ws-source-actions summary { cursor: pointer; padding: 5px 0; }
+.ws-source-heading { display: flex; justify-content: space-between; align-items: center; gap: var(--dt-space-md); }
+.ws-source-heading > div { min-width: 0; }
+.ws-source-heading h4 { font-size: var(--dt-font-body); font-weight: 600; line-height: 1.5; }
+.ws-source-heading button { flex: none; }
+.ws-source-muted, .ws-source-status, .ws-source-error { color: var(--dt-text-muted); font-size: var(--dt-font-small); line-height: 1.6; margin: 6px 0; overflow-wrap: anywhere; }
+.ws-source-error, .ws-source-status[data-error="true"] { color: var(--danger); }
+.ws-source-status:empty { display: none; }
+.ws-source-path, .ws-source-filters, .ws-source-actions { display: flex; gap: var(--dt-space-sm); margin: var(--dt-space-md) 0; }
+.ws-source-path input, .ws-source-filters input { flex: 1; min-width: 0; }
+.ws-source-selection input[type="search"] { width: 100%; }
+.ws-source-actions { flex-wrap: wrap; align-items: center; }
+.ws-source-actions details { font-size: var(--dt-font-small); }
+.ws-source-actions details > div { display: flex; flex-wrap: wrap; gap: var(--dt-space-sm); padding-top: var(--dt-space-sm); }
+.ws-source-current { font-size: var(--dt-font-body); overflow-wrap: anywhere; line-height: 1.5; margin: var(--dt-space-md) 0 0; }
+.ws-source-list-heading { display: flex; gap: var(--dt-space-sm); justify-content: space-between; font-size: var(--dt-font-small); color: var(--dt-text-muted); padding: var(--dt-space-md) 0; }
+.ws-source-list-heading label, .ws-source-file { display: flex; align-items: center; gap: var(--dt-space-md); min-width: 0; }
+.ws-source-list { list-style: none; padding: 0; margin: 0; max-height: 390px; overflow-y: auto; overscroll-behavior: contain; }
+.ws-source-row { display: flex; align-items: center; gap: var(--dt-space-md); padding: var(--dt-space-md) 0; border-top: 1px solid var(--dt-border); min-width: 0; }
+.ws-source-copy { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.ws-source-name { font-size: var(--dt-font-body); line-height: 1.5; overflow-wrap: anywhere; }
+.ws-source-file { flex: 1; cursor: pointer; }
+#tab-workspace .ws-source-folder { border: 0; background: transparent; text-align: left; padding: 4px 0; overflow-wrap: anywhere; font-size: var(--dt-font-body); }
+.ws-source-state { color: var(--dt-text-muted); font-size: var(--dt-font-caption); white-space: nowrap; }
+.ws-source-state[data-state="Prepared"] { color: var(--success, #39836b); }
+.ws-source-state[data-state="Failed"] { color: var(--danger); }
+.ws-source-state[data-state="Running"] { color: var(--dt-accent); }
+.ws-source-budgets { font-size: var(--dt-font-small); color: var(--dt-text-muted); margin: var(--dt-space-md) 0; }
+.ws-source-budgets > div { display: grid; grid-template-columns: 1fr 1fr; gap: var(--dt-space-md); margin-top: var(--dt-space-md); }
+.ws-source-budgets label { display: grid; gap: 5px; min-width: 0; }
+.ws-source-budgets input { min-width: 0; width: 100%; }
+.ws-local-intro { margin: 24px 0 12px; }
+.ws-source-queue .dt-pagination, .ws-source-selection .dt-pagination { padding: 12px 0 0; }
+@media (max-width: 600px) {
+  .ws-source-heading { flex-wrap: wrap; }
+  .ws-source-filters { flex-wrap: wrap; }
+  .ws-source-filters input { flex-basis: 100%; }
+  .ws-source-filters select { flex: 1; min-width: 0; }
+  .ws-source-list-heading { flex-wrap: wrap; }
+  .ws-source-state { align-self: flex-start; padding-top: 3px; }
+}

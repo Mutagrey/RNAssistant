@@ -13,12 +13,18 @@
     el("Status").dataset.error = error ? "true" : "false";
     el("Status").setAttribute("role", error ? "alert" : "status");
   }
+  function renderAvailability() {
+    if (!el("Open")) return;
+    var workspace = selected(), active = busy || window.RNAssistantWorkspaceSources && window.RNAssistantWorkspaceSources.hasUnfinished();
+    el("Root").disabled = el("ReadOnly").disabled = el("Open").disabled = !!active;
+    el("Refresh").disabled = busy;
+    el("ProjectFields").disabled = active || !workspace;
+    el("ProjectCreate").disabled = active || !workspace || workspace.readOnly;
+    el("ProjectName").disabled = active || !workspace || workspace.readOnly;
+  }
   function render() {
     var workspace = selected(), project = view && view.project;
-    el("Root").disabled = el("ReadOnly").disabled = el("Open").disabled = el("Refresh").disabled = busy;
-    el("ProjectFields").disabled = busy || !workspace;
-    el("ProjectCreate").disabled = busy || !workspace || workspace.readOnly;
-    el("ProjectName").disabled = busy || !workspace || workspace.readOnly;
+    renderAvailability();
     el("Selection").textContent = workspace
       ? "Выбрана папка: " + workspace.rootPath + (workspace.readOnly ? " · Только чтение" : " · Чтение и запись")
       : "Рабочая папка не выбрана.";
@@ -58,13 +64,13 @@
     unresolved_previous_effect: "Осталась незавершённая запись. Сначала проверьте состояние файла.",
     bridge_response_timeout: "Ответ не получен. Действие могло завершиться; повторное создание не выполняется.",
     path_outside_mount: "Укажите безопасный относительный путь внутри выбранной папки.",
-    project_invalid: "Описание проекта или его путь недопустимы. Проверьте project.json и имя проекта."
+    project_invalid: "Описание проекта или его путь недопустимы. Проверьте project.json и имя проекта.",
+    source_queue_active: "Завершите или отмените очередь источников перед сменой проекта."
   };
   async function request(type, payload, message) {
     if (busy) return;
     busy = true;
     var ticket = ++sequence;
-    if (view && type !== "getWorkspaceState" && type !== "openWorkspace") view.project = null;
     status(message, false); render();
     try {
       var response = await send(type, payload || {});
@@ -82,6 +88,7 @@
         : type === "openTabularProject" ? "Проект открыт." : type === "getWorkspaceState" ? "" : "Рабочая папка открыта.", false);
     } catch (error) {
       if (ticket !== sequence) return;
+      if (view && type !== "getWorkspaceState" && type !== "openWorkspace" && error.code !== "source_queue_active") view.project = null;
       if (error.code === "workspace_binding_changed") { view = null; inspection = null; }
       if (payload && payload.bindingId && ["effect_unknown", "unresolved_previous_effect", "bridge_response_timeout", "workspace_response_invalid", "bridge_transport_failed"].indexOf(error.code) >= 0)
         inspection = { bindingId: payload.bindingId, manifestPath: payload.manifestPath };
@@ -119,5 +126,5 @@
     render();
   }
   function show() { return request("getWorkspaceState", {}, "Читаем состояние папки…"); }
-  window.RNAssistantWorkspace = { bind: bind, show: show };
+  window.RNAssistantWorkspace = { bind: bind, show: show, sourceWorkChanged: renderAvailability };
 }());

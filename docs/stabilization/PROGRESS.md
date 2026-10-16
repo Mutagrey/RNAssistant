@@ -1,5 +1,21 @@
 # Stabilization progress
 
+## Workspace preparation queue in the loader — 2026-10-16
+
+The loader now selects explicit workspace files through the shared directory owner
+and starts/controls the existing preparation queue. Bounded metadata pages, name
+search, file/batch budgets, pause/cancel/retry and filter-independent current-file
+progress stay separate from parsing. A lost reply recovers by reading native state;
+project replacement is disabled while work is unfinished. Browser File handles are
+never inferred to be native paths. Presentation/controller modules reuse loader tokens.
+
+Validation: nine focused application checks and the existing bounded-directory check
+pass; four source-queue browser groups, seven loader groups and four workspace groups
+pass in Chrome. Visual checks cover 360/740/1160-pixel light/dark layouts. No Office/VSTO
+validation was run. Durable source/batch requests, parser dispatch, CSV/JSON and other
+Excel readers, native execution/CSP and representative 80 MB Excel qualification
+remain open. [Contract](../data-templates.md#workspace-source-preparation-queue).
+
 ## Data Templates universal language/core foundation — 2026-10-16
 
 The original plan's axis independence is now an implemented invariant. Language 2

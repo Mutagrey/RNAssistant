@@ -91,13 +91,18 @@ namespace RNAssistant.Application
                         : WorkspaceSourceQueueState.Running,
                     CapturedBytes = _capturedBytes, MaximumFileBytes = _maximumFileBytes, MaximumBatchBytes = _maximumBatchBytes,
                     ErrorCode = _errorCode, ErrorMessage = _errorMessage, Matched = selected.Length, Offset = offset,
-                    Items = selected.Skip(offset).Take(request.Limit).Select(item => new WorkspaceSourceItemDto {
-                        Id = item.Id, Path = item.Path, State = item.State, Phase = item.Phase, ByteLength = item.Snapshot?.ByteLength,
-                        ErrorCode = item.ErrorCode, ErrorMessage = item.ErrorMessage,
-                        Progress = item.Progress == null ? null : new WorkspaceSourceProgressDto {
-                            Stage = item.Progress.Stage, CompletedBytes = item.Progress.CompletedBytes, TotalBytes = item.Progress.TotalBytes }
-                    }).ToArray() };
+                    CurrentItem = ProjectItem(_items.FirstOrDefault(item => item.State == WorkspaceSourceState.Running)),
+                    Items = selected.Skip(offset).Take(request.Limit).Select(ProjectItem).ToArray() };
             }
+        }
+
+        private static WorkspaceSourceItemDto ProjectItem(Item item)
+        {
+            return item == null ? null : new WorkspaceSourceItemDto { Id = item.Id, Path = item.Path,
+                State = item.State, Phase = item.Phase, ByteLength = item.Snapshot?.ByteLength,
+                ErrorCode = item.ErrorCode, ErrorMessage = item.ErrorMessage,
+                Progress = item.Progress == null ? null : new WorkspaceSourceProgressDto {
+                    Stage = item.Progress.Stage, CompletedBytes = item.Progress.CompletedBytes, TotalBytes = item.Progress.TotalBytes } };
         }
 
         internal void Control(WorkspaceSourceControlRequest request)

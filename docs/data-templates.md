@@ -4,7 +4,8 @@ Status: portable M0 proof, M1 project-manifest/source-selection foundation and t
 M2 source-independent language/core foundation and bounded XLSX reader (2026-10-16).
 One observation executor handles both matrix orientations, record fields and nested
 JSON captures; real XLSX uses the existing reader in the separate Worker probe.
-The shared application prepares queued workspace sources; loader association, parsing dispatch and publication remain open.
+The loader selects workspace files and controls the shared preparation queue;
+durable associations, parsing dispatch and publication remain open.
 Owner: Data Templates domain; portable JS in `web/tabular`, shared manifest storage
 in Core `TabularProjectStore` over `WorkspaceFileService`.
 This is the canonical domain contract; planned scope is marked separately from
@@ -607,7 +608,8 @@ The **Рабочая папка** tab contains the Data Templates viewer. Its pr
 start expanded, present folder selection and project opening as two steps, and can
 be collapsed. They accept an absolute path to an existing directory and an explicit
 read-only choice. It creates/opens the domain manifest by a relative path and
-shows its name/location as inert text. Native project operations cover metadata only.
+shows its name/location as inert text. Project-manifest operations cover metadata only;
+the separate preparation commands retain source bytes as described below.
 Office chats and their existing artifacts retain their current ownership; this
 tab does not attach workspace files to model context or bind an Excel source.
 
@@ -681,9 +683,29 @@ The CLI accepts `project prepare --workspace <workspace> --path <project.json>
 It reports progress and paged terminal results; Ctrl+C cancels and drains. Exit 0 means
 all sources prepared, 5 means failures/incomplete work, 130 means cancellation.
 Read-only workspace bindings may retain snapshots without changing project files.
-Loader association/presentation, durable batch requests, common execution events and
-parser dispatch remain the next integration boundary. Retaining XLSB/CSV/JSON bytes
+Durable source associations/batch requests, common execution events and parser
+dispatch remain the next integration boundary. Retaining XLSB/CSV/JSON bytes
 does not imply support for parsing those formats.
+
+The loader's **Из рабочей папки** picker uses typed `browseWorkspaceFiles` over the
+existing file owner. It navigates one directory at a time, searches names and returns
+50 metadata rows per page, sorted within a bounded 5,000-entry scan. Truncation is
+visible; no recursive import or content read occurs during browsing. Source choice
+is explicit, workspace-relative and bounded to 500 files. Preparation accepts any
+accessible nonempty file, including the planned Excel families; this is not a reader
+capability claim. UI budgets initially allow 96 MiB per file and 1 GiB per batch and
+can be changed explicitly. Read-only project permissions are preserved.
+
+Queue progress stays above project sections. The current item is projected separately
+from the filtered page, so progress survives search/paging. The UI offers pause/resume,
+cancel current/pending/all, selected retries, state filters and path/size sorting.
+Preparation blocks context replacement until work is settled, including paused pending
+items. A lost/invalid reply requires state refresh and never automatically resubmits
+an action. Restoring `sourceQueueId` reads the existing queue after page reload; late
+progress cannot overwrite another context or a newer revision. While running, reads
+poll every 500 ms after the previous response, without rebuilding rows for byte
+progress alone. Prepared/failed/cancelled counts remain distinct; a finished mixed
+batch is not success.
 
 ### Source selection UI
 
@@ -700,7 +722,8 @@ temporary selection; separate views own presentation, as described below.
 These modules do not read file contents, parse source data, write project files,
 invoke a model or claim an import.
 The existing workspace application remains the only native project/file owner.
-There are no new bridge contracts, durable stores or Office target changes.
+This browser selection does not invoke the native preparation contracts described
+above, create a durable store or change the Office target.
 
 The same intake path accepts picker files, a folder picker when supported, and
 dropped files/directories. Directory readers drain every batch and retain relative
@@ -741,8 +764,10 @@ modules without a framework, npm or a bundler.
 | Owner | Responsibility |
 |---|---|
 | `app-data-source-intake.js` | Browser enumeration, metadata hints, limits and coalesced progress; no DOM or content parsing. |
-| `app-data-templates.js` | File handles, selection, context guards and operation lifetime; passes immutable metadata snapshots and explicit actions to presentation. |
+| `app-data-templates.js` | Browser File handles, selection/context and enumeration lifetime; connects the workspace-source owner and passes metadata/actions to presentation. |
 | `app-data-templates-view.js` | Screen navigation, filters, pages, metadata details and DOM events; no bridge, File handles, readers or job ownership. |
+| `app-workspace-sources.js` | Typed native browsing, selected relative paths, queue commands/recovery and bounded polling. Backend remains the work owner; no body transfer or durable client store. |
+| `app-workspace-sources-view.js`, `app-workspace-sources.css` | Workspace chooser, queue navigation and progress presentation using the same loader tokens; no bridge or job lifecycle. |
 | `app-data-operation-view.js` | Shared progress component; renders supplied stage, counters, duration and terminal state; delegates cancel/dismiss without a timer or inferred success. |
 | `app-data-templates-tokens.css` | Loader-wide palette aliases, typography, spacing, radii and card/row density. Inherits the host light/dark theme. |
 | `app-data-templates.css`, `app-workspace-projects.css`, `index.html` | Layout, reusable visual classes and semantic markup; no business state derived from CSS. |
@@ -757,7 +782,7 @@ navigation, focus restoration, explicit empty/error states and reduced-motion
 support remain part of the presentation contract.
 
 The operation card is outside the individual screens and stays visible when
-switching sections. Current progress covers **enumeration only**: current path,
+switching sections. The browser-selection card covers **enumeration only**: current path,
 file count, total source size, elapsed time and cancellation. A percentage appears
 only for a known file count; folder traversal is indeterminate. Intermediate
 updates are coalesced to approximately 10 Hz and terminal counters are exact.
@@ -810,8 +835,8 @@ template definitions and the metadata-only project manifest.
 ### Large files and processing queue — planned
 
 Accepted requirement: many mixed-size inputs, including XLSX around 80 MB. The
-current main viewer only enumerates files; its processing queue/parser connection
-is not implemented. The separate XLSX probe already uses one Worker per file with
+main viewer enumerates browser files and prepares explicitly selected workspace
+files through its queue; parser dispatch is not implemented. The separate XLSX probe uses one Worker per file with
 streaming reads, resource budgets and hard cancellation.
 The 500-file intake cap is an explicit prototype bound, not a final batch size.
 The shared file owner now supplies `CaptureFile` and `OpenExactRead` for streamed,
@@ -888,8 +913,8 @@ hard cancellation uses the [Worker termination contract](https://developer.mozil
 
 ## Planned loader and project UI
 
-Accepted UX scope (2026-10-16); current delivery is limited to source selection
-and the viewer structure described above.
+Accepted UX scope (2026-10-16); current delivery includes source selection,
+workspace preparation controls and the viewer structure described above.
 Owner: Data Templates for project views and semantics; the shared workspace
 application owns selection, file access and operation lifetime. The original
 proposal defines logical views and canonical data, but leaves drag-and-drop and
@@ -935,7 +960,7 @@ versioned schema and fixtures used by the engine.
 |---|---|
 | M1 source selection (implemented) | Responsive modular viewer, paged file/folder intake, cancellable enumeration progress and explicit metadata-only states. Persisted source association and typed extraction commands remain open. |
 | M2 matrix-language foundation (implemented) | JSON template → typed plan → normalized snapshot → batched canonical observations with lineage, in the separate portable probe. Native integration and full readers remain open. |
-| M2 bounded XLSX adapter (implemented) | Explicit file + template → selective ZIP/XML reading in a Worker → exact typed cells → the same canonical batches. Single-file probe only; native source association, queue and 80 MB qualification remain open. |
+| M2 bounded XLSX adapter (implemented) | Explicit file + template → selective ZIP/XML reading in a Worker → exact typed cells → the same canonical batches. Single-file probe only; durable source association, queue parser dispatch and 80 MB qualification remain open. |
 | M1–M3 | First real end-to-end flow for a supported source: loading, preview, parameter/mapping inspection, diagnostics and draft/test/publish through the common domain service. Include the bounded processing queue, off-UI readers, resource budgets and cancellation from the first reader. Connect the bounded XLSX matrix through streamed workspace sources; add the remaining Excel families (including XLSB), CSV/JSON behind the same workflow and their own fixtures. Deliver usable controls alongside each capability. |
 | M4 | Portable picker/import/export and the format/help reference using the same engine and documented capability differences. |
 | M5 | Extend the existing queue with advanced batch execution, scoped dictionary/mapping edits, comparison/consolidation, multiple blocks and output workbook templates. |
@@ -957,12 +982,12 @@ manifest implementation:
 
 | Boundary | Existing owner / remaining work |
 |---|---|
-| Shared workspace application → project files | Compatible shared application commands, CLI and a thin Office panel metadata view are implemented. Real Windows UI evidence, workspace-owned UI chats, the file tree/resource views and full M7 lifetime/reconnect integration remain open. |
+| Shared workspace application → project files | Compatible application commands, CLI, project UI and a bounded directory chooser are implemented. Real Windows UI evidence, workspace-owned UI chats, richer resource views and full M7 lifetime/reconnect integration remain open. |
 | Live Excel capture | `ExcelResourceProvider` resolves explicit ranges through `ExcelReadService` and the bound document scope. It does not yet feed this probe; capture consistency, unsaved values, dependencies and richer cell availability remain open. |
 | Application-owned execution | `AssistantPaneControl` owns the current WebView2 and trusts its exact root document; frame navigation is limited to about:blank/srcdoc. A browser proof does not authorize broadening that policy or prove WebView2 Worker behavior. |
 | Publication | Draft/test/publish and exact source/module/dictionary pins must use existing authority/journal owners. Verified manifest creation is not a template publication; probe JSON cannot authorize one. |
-| Source input and transfer | The viewer selects files/folders with XLSX/CSV/JSON hints; no source parser, native association or persisted selection is connected there yet. The separate probe executes M2 over normalized snapshots and bounded XLSX. CSV/JSON readers, project closure and complete export/import remain open. |
-| Large files and batch execution | Enumeration progress/bounded lists, a separate single-file XLSX Worker, shared workspace streams and an application-owned preparation queue with cancellation/progress are implemented. Storage has an actual 80-MiB binary test; loader association, parser dispatch, durable batch requests, native execution/CSP and representative Excel qualification remain open; see the [processing contract](#large-files-and-processing-queue--planned). |
+| Source input and transfer | The viewer has browser file/folder intake and an explicit workspace-file chooser feeding preparation. Source association is transient; native parser dispatch and persisted selection remain open. The separate probe executes M2 over normalized snapshots and bounded XLSX. CSV/JSON readers, project closure and complete export/import remain open. |
+| Large files and batch execution | Enumeration/bounded lists, a separate XLSX Worker, shared source streams and an application-owned preparation queue with loader controls/progress are implemented. Storage has an actual 80-MiB binary test; parser dispatch, durable batch requests, native execution/CSP and representative Excel qualification remain open; see the [processing contract](#large-files-and-processing-queue--planned). |
 
 Next slices, coordinated with the workspace owners:
 
@@ -972,8 +997,8 @@ Next slices, coordinated with the workspace owners:
    reference to the net8.0 Runtime assembly. Host-neutral independent work below
    does not wait for Office qualification.
 2. Use the implemented [language/core contract](#language-and-execution-core) and
-   independent oracle and XLSX reader to connect explicit source association, the preparation queue and
-   the [loader/project UI](#planned-loader-and-project-ui). Qualify real reader
+   independent oracle and XLSX reader to connect durable source association and parser
+   dispatch through the preparation queue and [loader/project UI](#planned-loader-and-project-ui). Qualify real reader
    capabilities/memory before raising prototype limits. Deliver incrementally
    through M1–M3 using the existing workspace/execution owners.
 3. Attach the exact Excel source independently of project identity, then connect
@@ -1026,6 +1051,13 @@ and read-only preparation without manifest changes. `workspace-projects.test.js`
 uses the shipped UI and CSS with controlled typed replies for duplicate clicks,
 readonly/stale bindings, inert metadata, explicit pinned-path inspection, malformed
 receipts and narrow light/dark layout. These do not qualify real Windows/Office UI.
+
+`workspace-sources.test.js` adds native chooser/queue presentation with controlled
+typed replies: 61-file paging, inert filenames, read-only admission, explicit budgets,
+filter-independent progress, remount, pause/retry/cancel, invalid/lost reply recovery,
+late directory results after a context change and narrow/wide light/dark layouts.
+Harness checks exercise the actual directory owner/bridge without source capture,
+including stable pages, protected entries, cancellation and stale binding refusal.
 
 `data-templates.test.js` checks actual browser File and folder pickers, file drops,
 all directory batches, cancellation and late callbacks across project changes,

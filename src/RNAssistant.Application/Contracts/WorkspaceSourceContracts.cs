@@ -85,5 +85,6 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("matched")] public int Matched { get; internal set; }
         [JsonProperty("offset")] public int Offset { get; internal set; }
         [JsonProperty("items")] public IReadOnlyList<WorkspaceSourceItemDto> Items { get; internal set; }
+        [JsonProperty("currentItem")] public WorkspaceSourceItemDto CurrentItem { get; internal set; }
     }
 }

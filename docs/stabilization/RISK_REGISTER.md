@@ -37,8 +37,10 @@ matrix records/provisional batches have no native tools or publication authority
 - The loader's enumeration progress and 50-row pages do not prove processing of
   many large files. The shared application's preparation queue now has serialized
   captures, exact project/source pins, budgets, pause/cancel/retry, bounded pages
-  and maintenance exclusion, with host-neutral lifecycle checks. Loader association,
-  parser dispatch and durable batch requests/common execution events remain open.
+  and maintenance exclusion, with host-neutral lifecycle checks. The loader now
+  selects workspace files explicitly and controls preparation, with typed-reply
+  browser checks and independent current-file progress. Durable source association,
+  parser dispatch and batch requests/common execution events remain open.
   The separate XLSX reader now has streamed selective reads,
   exact numeric cells, resource budgets and Worker cancellation; its 30,000-row
   fixture and writer interoperability do not establish 80 MB behavior or RAM cost.

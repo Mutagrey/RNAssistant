@@ -83,8 +83,11 @@ It scans at most 5000 entries; truncation reports `complete=false` with a narrow
 hint. Unavailable entries populate `unavailableScopes` and cannot prove an empty
 result. `scannedEntries` remains diagnostic metadata, outside the model projection. File descriptors expose metadata/stat without reading content or
 claiming an exact revision. The returned targets are sorted within the
-captured window, not across a truncated directory; there is no pagination or
-recursive search yet. Protected metadata and credential-shaped names stay hidden.
+captured window, not across a truncated directory. Model discovery has no pagination
+or recursive search. The same file owner's application browser uses offsets and
+50-row metadata pages within that sorted window; it reports scan truncation separately
+from remaining pages. Browsing stats entries without retaining bodies or publishing
+source authority. Protected metadata and credential-shaped names stay hidden.
 The file branch defaults to `type="file"`. Omitted/null/empty `directory` selects
 the workspace root; `/`, `.`, `..` and absolute paths are not aliases. A rejected
 directory keeps the file owner's error code and supplies this root-selection hint.

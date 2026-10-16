@@ -35,6 +35,7 @@
   <link rel="stylesheet" href="css/app-data-templates-tokens.css?v=data-loader-20261016-3">
   <link rel="stylesheet" href="css/app-workspace-projects.css?v=workspace-nav-20261016-1">
   <link rel="stylesheet" href="css/app-data-templates.css?v=data-loader-20261016-3">
+  <link rel="stylesheet" href="css/app-workspace-sources.css?v=workspace-sources-20261016-1">
   <link rel="stylesheet" href="css/app-json-viewer.css?v=json-height-20260929-1">
   <link rel="stylesheet" href="css/app-text-viewer.css?v=artifact-text-20260831-1">
   <link rel="stylesheet" href="css/app-sequence-viewer.css?v=artifact-gallery-20260902-1">
@@ -672,9 +673,44 @@
             <p class="dt-operation-note" data-operation-part="note"></p>
           </div>
           <div class="dt-intake-status"><p id="dtIntakeStatus" role="status" aria-live="polite"></p></div>
+          <div id="wsSourceActivity" class="ws-source-activity dt-card" hidden aria-label="Подготовка источников">
+            <div class="ws-source-heading"><div><p class="dt-eyebrow">ПОДГОТОВКА ИСТОЧНИКОВ</p><h4 id="wsQueueTitle"></h4></div><button type="button" id="wsQueueRefresh" class="dt-text-button">Обновить</button></div>
+            <p id="wsQueueCounts" class="ws-source-muted" role="status" aria-live="polite"></p>
+            <p id="wsQueueCurrent" class="ws-source-current"></p>
+            <div class="dt-operation-meter" id="wsQueueMeter"><progress id="wsQueueProgress" aria-label="Чтение текущего файла"></progress><span id="wsQueuePercent"></span></div>
+            <p id="wsQueueStage" class="ws-source-muted"></p>
+            <div class="ws-source-actions"><button type="button" id="wsQueuePause" data-ws-command="Pause">Пауза</button><button type="button" id="wsQueueResume" data-ws-command="Resume" hidden>Продолжить</button><button type="button" id="wsQueueCancel" data-ws-command="CancelAll">Отменить очередь</button><details id="wsQueueMore"><summary>Другие действия</summary><div><button type="button" data-ws-command="CancelCurrent">Отменить текущий файл</button><button type="button" data-ws-command="CancelPending">Отменить ожидающие</button></div></details></div>
+            <p class="dt-footnote">Сохраняем точные снимки файлов для дальнейшего анализа. Распознавание и преобразование пока не запускаются.</p>
+          </div>
+          <p id="wsSourceStatus" class="ws-source-status" role="status" aria-live="polite"></p>
 
           <div class="dt-view" id="dtViewSources" role="tabpanel" aria-labelledby="dtTabSources" tabindex="0">
             <div class="dt-section-heading"><div><h3 id="dtSourceHeading">Начните с источников</h3><p id="dtSourceIntro">Добавьте файлы, которые хотите привести к общей структуре.</p></div></div>
+            <div class="ws-source-selection dt-card">
+              <div class="ws-source-heading"><div><h4>Из рабочей папки</h4><p id="wsSourceContext" class="ws-source-muted">Откройте проект, чтобы подготовить его источники.</p></div><button type="button" id="wsSourceBrowse">Выбрать файлы</button></div>
+              <div id="wsSourcePicker" hidden>
+                <form id="wsBrowseForm" class="ws-source-path"><button type="button" id="wsBrowseUp" aria-label="В родительскую папку">↑</button><input id="wsBrowseDirectory" aria-label="Путь внутри рабочей папки" placeholder="Корень рабочей папки" autocomplete="off" spellcheck="false"><button type="submit">Открыть</button></form>
+                <input type="search" id="wsBrowseSearch" aria-label="Найти в текущей папке" placeholder="Найти в этой папке…" maxlength="128">
+                <div class="ws-source-list-heading"><label><input type="checkbox" id="wsBrowseSelectPage"> Выбрать файлы на странице</label><span id="wsBrowseLoading" role="status"></span></div>
+                <ul id="wsBrowseList" class="ws-source-list" aria-label="Файлы рабочей папки"></ul>
+                <p id="wsBrowseEmpty" class="ws-source-muted" hidden>Файлы не найдены.</p>
+                <p id="wsBrowseLimit" class="ws-source-muted" hidden>Показана часть большой папки: проверено до 5000 элементов. Откройте вложенную папку или укажите её относительный путь.</p>
+                <nav class="dt-pagination" id="wsBrowsePages" aria-label="Страницы рабочей папки"><span id="wsBrowseRange"></span><div><button type="button" id="wsBrowsePrevious" aria-label="Предыдущие файлы">←</button><button type="button" id="wsBrowseNext" aria-label="Следующие файлы">→</button></div></nav>
+              </div>
+              <div id="wsSourceSelection" hidden>
+                <div class="ws-source-heading"><p id="wsSourceSelected" class="ws-source-muted"></p><button type="button" id="wsSourceClear" class="dt-text-button">Снять выбор</button></div>
+                <details class="ws-source-budgets"><summary>Лимиты обработки</summary><div><label>Один файл, МБ<input type="number" id="wsSourceFileBudget" min="1" max="4096" value="96"></label><label>Вся подборка, МБ<input type="number" id="wsSourceBatchBudget" min="1" max="65536" value="1024"></label></div><p class="ws-source-muted">Обрабатывается один файл за раз. Лимит размера не означает расход памяти при разборе.</p></details>
+                <button type="button" id="wsSourcePrepare" class="dt-primary">Подготовить файлы</button>
+              </div>
+            </div>
+            <div id="wsQueueListCard" class="ws-source-queue dt-card" hidden>
+              <div class="ws-source-heading"><div><h4>Очередь файлов</h4><p class="ws-source-muted">Подготовленные снимки сохраняются при изменении оригиналов.</p></div><button type="button" id="wsQueueRetry" disabled>Повторить выбранные</button></div>
+              <div class="ws-source-filters"><input type="search" id="wsQueueSearch" aria-label="Поиск в очереди" placeholder="Найти файл…" maxlength="128"><select id="wsQueueState" aria-label="Состояние файлов"><option value="">Все состояния</option><option value="Pending">Ожидают</option><option value="Running">Обрабатываются</option><option value="Prepared">Подготовлены</option><option value="Failed">Ошибки</option><option value="Cancelled">Отменены</option></select><select id="wsQueueSort" aria-label="Порядок очереди"><option value="Added">По добавлению</option><option value="Path">По пути</option><option value="LargestFirst">Сначала крупные</option></select></div>
+              <ul id="wsQueueList" class="ws-source-list" aria-label="Состояния подготовки файлов"></ul>
+              <p id="wsQueueEmpty" class="ws-source-muted" hidden>Нет файлов с такими условиями.</p>
+              <nav class="dt-pagination" id="wsQueuePages" aria-label="Страницы очереди"><span id="wsQueueRange"></span><div><button type="button" id="wsQueuePrevious" aria-label="Предыдущая страница очереди">←</button><button type="button" id="wsQueueNext" aria-label="Следующая страница очереди">→</button></div></nav>
+            </div>
+            <p class="dt-footnote ws-local-intro">Файлы вне рабочей папки можно предварительно подобрать ниже. Для подготовки поместите их в рабочую папку и выберите через «Из рабочей папки».</p>
             <div class="dt-intake-layout">
               <div class="dt-dropzone" id="dtDropzone" role="region" aria-label="Добавление источников" aria-describedby="dtSelectionNote">
                 <div class="dt-drop-icon" aria-hidden="true"><svg viewBox="0 0 40 40"><path d="M12 7H8a3 3 0 0 0-3 3v22a3 3 0 0 0 3 3h19a3 3 0 0 0 3-3v-5M15 5h13l7 7v12H15Z"/><path d="M28 5v8h7M20 19h9M20 23h5"/></svg></div>
@@ -1309,9 +1345,11 @@
   <script src="js/app-chat-edit.js?v=chat-sync-20260903-1-usage-20261002-1"></script>
   <script src="js/app-data-source-intake.js?v=data-loader-20261016-3"></script>
   <script src="js/app-data-operation-view.js?v=data-loader-20261016-3"></script>
-  <script src="js/app-data-templates-view.js?v=data-loader-20261016-3"></script>
-  <script src="js/app-data-templates.js?v=data-loader-20261016-3"></script>
-  <script src="js/app-workspace-projects.js?v=data-loader-20261016-2"></script>
+  <script src="js/app-data-templates-view.js?v=workspace-sources-20261016-1"></script>
+  <script src="js/app-workspace-sources-view.js?v=workspace-sources-20261016-1"></script>
+  <script src="js/app-workspace-sources.js?v=workspace-sources-20261016-1"></script>
+  <script src="js/app-data-templates.js?v=workspace-sources-20261016-1"></script>
+  <script src="js/app-workspace-projects.js?v=workspace-sources-20261016-1"></script>
   <script src="js/app.js?v=data-loader-20261016-2"></script>
 </body>
 </html>

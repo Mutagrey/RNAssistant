@@ -102,9 +102,11 @@
       const visible = matches.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize), available = visible.filter(source => source.available);
       if (!visible.some(source => source.id === selectedId)) selectedId = null;
       el("SourceQueue").hidden = sources.length === 0;
-      el("SourceHeading").textContent = sources.length ? "Источники" : "Начните с источников";
-      el("SourceIntro").textContent = sources.length ? "Отметьте файлы для дальнейшей обработки." : "Добавьте файлы, которые хотите привести к общей структуре.";
-      el("IntakeGuide").hidden = sources.length > 0; el("Dropzone").parentElement.dataset.populated = String(sources.length > 0);
+      const populated = sources.length > 0 || state.hasWorkspaceSources;
+      el("SourceHeading").textContent = populated ? "Источники" : "Начните с источников";
+      el("SourceIntro").textContent = state.hasWorkspaceSources ? "Выбранные файлы и состояние подготовки."
+        : sources.length ? "Отметьте файлы для дальнейшей обработки." : "Добавьте файлы, которые хотите привести к общей структуре.";
+      el("IntakeGuide").hidden = populated; el("Dropzone").parentElement.dataset.populated = String(populated);
       el("FileCount").textContent = String(sources.length);
       const included = sources.filter(source => source.included), largest = included.reduce((max, source) => Math.max(max, source.size), 0);
       el("SelectionCount").textContent = "Выбрано: " + included.length + " из " + sources.length + " · " + size(included.reduce((sum, source) => sum + source.size, 0));

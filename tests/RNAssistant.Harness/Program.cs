@@ -110,6 +110,7 @@ namespace RNAssistant.Harness
                 Test("workspace application: source queue cancellation retry and budgets", WorkspaceSourceQueueCancelsAndRetries),
                 Test("workspace application: source queue rejects project drift", WorkspaceSourceQueueRejectsProjectDrift),
                 Test("workspace application: source bridge owns background lifetime", WorkspaceSourceBridgeOwnsWorkerLifetime),
+                Test("workspace application: paged metadata browsing and exact binding", WorkspaceBrowseKeepsSelectionBoundaries),
                 Test("workspace files: guarded create patch and external conflict", WorkspaceFilesGuardWrites),
                 Test("workspace files: paths and historical view", WorkspaceFilesRejectUnsafePaths),
                 Test("workspace files: exact provider snapshots", WorkspaceFilesRetainExactProviderSnapshots),

@@ -37,7 +37,7 @@ const selected = (name, contents = "selection fixture") => ({ name, mimeType: "a
         return structuredClone(nativeState);
       };
     });
-    for (const file of ["app-data-source-intake.js", "app-data-operation-view.js", "app-data-templates-view.js", "app-data-templates.js", "app-workspace-projects.js"])
+    for (const file of ["app-data-source-intake.js", "app-data-operation-view.js", "app-data-templates-view.js", "app-workspace-sources-view.js", "app-workspace-sources.js", "app-data-templates.js", "app-workspace-projects.js"])
       await page.addScriptTag({ path: path.join(root, "js", file) });
     await page.evaluate(() => { RNAssistantDataTemplates.bind(); RNAssistantWorkspace.bind(); return RNAssistantWorkspace.show(); });
     assert.equal(await page.locator("#workspaceSettings").getAttribute("open"), "");

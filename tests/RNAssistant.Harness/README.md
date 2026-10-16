@@ -45,7 +45,9 @@ excludes runtime clear during file dispatch/read-back and revokes selection afte
 an explicit reset. Source queue coverage adds serialized capture, 50-item pages,
 search/filter/sort, pause/cancel/explicit retry, byte budgets, exact retained reads,
 project drift, maintenance exclusion and disposal drain across controller changes.
-These are preparation/lifetime checks, not parser or loader queue UI qualification.
+Metadata browsing checks add stable 50-entry pages, directory navigation, protected
+names, cancellation and stale bindings through the actual file owner/bridge without
+capturing bodies. These are preparation/lifetime checks, not parser qualification.
 CLI `project prepare` accepts a JSON array of workspace-relative paths and explicit
 file/batch budgets; process smoke covers mixed outcomes and read-only capture without
 manifest changes. Browser
@@ -53,6 +55,12 @@ manifest changes. Browser
 replies: single flight, readonly/stale binding, inert metadata, pinned-path explicit
 inspection, malformed receipts and narrow light/dark layouts. Use the usual
 Playwright `BROWSER_EXECUTABLE` override. These do not qualify Windows/Office.
+
+`node tests/web/workspace-sources.test.js` checks the shipped chooser/queue UI with
+controlled bridge replies: paged selection and explicit budgets, independent current
+progress, filtering/paging, pause/cancel/retry, remount, invalid/lost reply recovery,
+late context results and narrow/wide light/dark layouts. `RNA_DATA_SCREENSHOTS` saves
+previews. These checks do not qualify native WebView2 access or Excel parsing.
 
 `node tests/web/data-templates.test.js` checks the loader's real browser file/folder
 selection, drops and directory batches, cancellation, stale-context callbacks,

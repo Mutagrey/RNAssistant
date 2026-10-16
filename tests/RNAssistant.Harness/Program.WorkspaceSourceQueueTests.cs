@@ -17,6 +17,45 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void WorkspaceBrowseKeepsSelectionBoundaries()
+        {
+            WithTempPaths(paths =>
+            {
+                var files = new WorkspaceFileService(paths);
+                using (var app = new WorkspaceApplicationService(paths, files))
+                {
+                    var state = CreateSourceQueueProject(app, paths);
+                    var reports = Path.Combine(state.Workspace.RootPath, "reports");
+                    Directory.CreateDirectory(Path.Combine(reports, "nested"));
+                    File.WriteAllText(Path.Combine(reports, ".env-private"), "hidden");
+                    for (var i = 0; i < 61; i++) File.WriteAllText(Path.Combine(reports, "source-" + i.ToString("D3") + ".xlsb"), "fixture");
+                    files.FaultPoint = stage => { throw new InvalidOperationException("Metadata browsing must not capture files or publish authority."); };
+                    var first = app.BrowseFiles(new BrowseWorkspaceFilesRequest { BindingId = state.Workspace.BindingId, Directory = "reports", Query = "source-" });
+                    var next = app.BrowseFiles(new BrowseWorkspaceFilesRequest { BindingId = state.Workspace.BindingId, Directory = "reports", Query = "source-", Offset = 50 });
+                    AssertEqual(50, first.Items.Count, "bounded directory page");
+                    AssertEqual(11, next.Items.Count, "remaining directory page");
+                    AssertEqual(61, first.Matched, "directory query matches before paging");
+                    AssertEqual(61, first.Items.Concat(next.Items).Select(item => item.Path).Distinct().Count(), "stable pages do not drop or repeat names");
+                    AssertEqual("reports/source-050.xlsb", next.Items[0].Path, "workspace-relative path, not a browser name");
+                    AssertEqual(7L, next.Items[0].ByteLength.Value, "metadata-only length");
+                    var folder = app.BrowseFiles(new BrowseWorkspaceFilesRequest { BindingId = state.Workspace.BindingId, Directory = "reports", Query = "nested" });
+                    AssertTrue(folder.Items.Single().IsDirectory && folder.Items[0].ByteLength == null, "directories are navigable, not source files");
+                    AssertEqual(0, app.BrowseFiles(new BrowseWorkspaceFilesRequest { BindingId = state.Workspace.BindingId, Directory = "reports", Query = ".env" }).Matched, "protected paths stay hidden");
+                    try { app.BrowseFiles(new BrowseWorkspaceFilesRequest { BindingId = state.Workspace.BindingId }, new CancellationToken(true)); throw new Exception("Expected cancellation"); }
+                    catch (OperationCanceledException) { }
+                    using (var bridge = new AssistantWebBridge(new AssistantController(), null, app))
+                    {
+                        var response = WorkspaceBridgeCall(bridge, BridgeToken(bridge), "browseWorkspaceFiles", new BrowseWorkspaceFilesRequest {
+                            BindingId = state.Workspace.BindingId, Directory = "reports", Query = "source-", Offset = 50 });
+                        AssertTrue((bool)response["ok"], "typed directory bridge");
+                        AssertEqual(11, response["payload"]["items"].Count(), "bridge metadata page");
+                        app.OpenWorkspace(new OpenWorkspaceRequest { RootPath = state.Workspace.RootPath, ReadOnly = true });
+                        ExpectSourceQueueError("workspace_binding_changed", () => app.BrowseFiles(new BrowseWorkspaceFilesRequest { BindingId = state.Workspace.BindingId }));
+                    }
+                }
+            });
+        }
+
         private static void WorkspaceSourceQueueSerializesAndPages()
         {
             WithTempPaths(paths =>
@@ -46,6 +85,9 @@ namespace RNAssistant.Harness
                         queue = ReadSourcePage(app, queue.QueueId);
                         AssertEqual(1, queue.Running, "one heavy file");
                         AssertEqual(61, queue.Pending, "pending entries keep only descriptors");
+                        var failures = app.ReadSourceQueue(new WorkspaceSourcePageRequest { QueueId = queue.QueueId, State = WorkspaceSourceState.Failed });
+                        AssertEqual(0, failures.Items.Count, "filter excludes running row");
+                        AssertEqual(queue.Items[0].Id, failures.CurrentItem.Id, "current progress is independent of page/filter");
                         AssertEqual(queue.QueueId, app.ReadState().SourceQueueId, "view can rediscover accepted queue");
                         ExpectSourceQueueError("source_queue_active", () => app.OpenWorkspace(new OpenWorkspaceRequest { RootPath = root }));
                         ExpectSourceQueueError("source_queue_active", app.Reset);

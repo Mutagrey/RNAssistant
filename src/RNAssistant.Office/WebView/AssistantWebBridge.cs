@@ -186,6 +186,10 @@ namespace RNAssistant.Office.WebView
                         var sourcePrepare = Payload<PrepareWorkspaceSourcesRequest>(payload);
                         responsePayload = await RunBridgeWorkAsync(() => _workspaces.PrepareSources(sourcePrepare), cancellationToken).ConfigureAwait(false);
                         break;
+                    case BridgeOperationId.BrowseWorkspaceFiles:
+                        var browseFiles = Payload<BrowseWorkspaceFilesRequest>(payload);
+                        responsePayload = await RunBridgeWorkAsync(() => _workspaces.BrowseFiles(browseFiles, cancellationToken), cancellationToken).ConfigureAwait(false);
+                        break;
                     case BridgeOperationId.GetWorkspaceSourceQueue:
                         responsePayload = _workspaces.ReadSourceQueue(Payload<WorkspaceSourcePageRequest>(payload));
                         break;

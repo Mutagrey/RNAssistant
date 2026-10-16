@@ -26,6 +26,7 @@
     const counts = new Map();
     sources.forEach(source => counts.set(signature(source), (counts.get(signature(source)) || 0) + 1));
     view.render(Object.freeze({ busy: !!job || contextBusy, notice: notice, activity: activitySnapshot(),
+      hasWorkspaceSources: !!window.RNAssistantWorkspaceSources && window.RNAssistantWorkspaceSources.hasSources(),
       sources: Object.freeze(sources.map(source => Object.freeze({ id: source.id, name: source.file.name,
         path: source.path, size: source.file.size, format: source.format, included: source.included,
         available: eligible(source), duplicate: counts.get(signature(source)) > 1 }))) }));
@@ -65,6 +66,7 @@
     }
   }
   function setContext(state, busy) {
+    if (window.RNAssistantWorkspaceSources) window.RNAssistantWorkspaceSources.setContext(state, busy);
     const workspace = state && state.workspace, project = state && state.project;
     const key = workspace ? JSON.stringify([workspace.bindingId, project ? project.manifestPath : null]) : "";
     if (key !== contextKey) {
@@ -100,9 +102,13 @@
         message("Список очищен. Исходные файлы не изменены.", false); render();
       }
     }));
+    if (window.RNAssistantWorkspaceSources) window.RNAssistantWorkspaceSources.bind(container);
     render();
   }
   // Detaching presentation never cancels accepted work or loses the temporary selection.
-  function unbind() { if (view) view.dispose(); view = null; }
-  window.RNAssistantDataTemplates = Object.freeze({ bind: bind, unbind: unbind, setContext: setContext });
+  function unbind() {
+    if (view) view.dispose(); view = null;
+    if (window.RNAssistantWorkspaceSources) window.RNAssistantWorkspaceSources.unbind();
+  }
+  window.RNAssistantDataTemplates = Object.freeze({ bind: bind, unbind: unbind, setContext: setContext, workspaceSourcesChanged: render });
 }());

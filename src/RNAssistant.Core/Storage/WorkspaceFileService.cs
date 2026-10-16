@@ -66,8 +66,19 @@ namespace RNAssistant.Core.Storage
     public sealed class WorkspaceDirectoryPage
     {
         public IReadOnlyList<string> Names { get; internal set; }
+        public IReadOnlyList<WorkspaceDirectoryEntry> Entries { get; internal set; }
         public bool Truncated { get; internal set; }
         public int ScannedEntries { get; internal set; }
+        public int MatchedEntries { get; internal set; }
+        public int Offset { get; internal set; }
+        public bool ScanLimitReached { get; internal set; }
+    }
+
+    public sealed class WorkspaceDirectoryEntry
+    {
+        public string Name { get; internal set; }
+        public bool IsDirectory { get; internal set; }
+        public long? ByteLength { get; internal set; }
     }
 
     // One file owner for retained sources, bounded views and text writes.
@@ -109,9 +120,11 @@ namespace RNAssistant.Core.Storage
         }
 
         public WorkspaceDirectoryPage ListPage(WorkspaceDescriptor workspace, string relativeDirectory = "",
-            string query = null, int limit = 200)
+            string query = null, int limit = 200, int offset = 0, CancellationToken token = default(CancellationToken))
         {
             if (limit < 1 || limit > 500) throw new ArgumentOutOfRangeException(nameof(limit));
+            token.ThrowIfCancellationRequested();
+            if (offset < 0 || offset >= 5000) throw new ArgumentOutOfRangeException(nameof(offset));
             if (query != null && (query.Length > 128 || query.Any(char.IsControl)))
                 throw new WorkspaceFileException("invalid_find_query", "Filename query exceeds the bounded text contract.");
             var directory = ResolvePath(workspace, relativeDirectory, true);
@@ -121,19 +134,29 @@ namespace RNAssistant.Core.Storage
             var truncated = false;
             foreach (var path in Directory.EnumerateFileSystemEntries(directory))
             {
+                token.ThrowIfCancellationRequested();
+                if (scanned == 5000) { truncated = true; break; }
                 scanned++;
                 var name = Path.GetFileName(path);
                 if (!StorageFileSystem.IsReparsePoint(path) && IsVisibleFileName(name) &&
                     (string.IsNullOrWhiteSpace(query) || name.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0))
                 {
-                    if (names.Count == limit) { truncated = true; break; }
                     names.Add(name);
                 }
-                if (scanned == 5000) { truncated = true; break; }
             }
             names.Sort(StringComparer.Ordinal);
+            offset = names.Count == 0 ? 0 : Math.Min(offset, (names.Count - 1) / limit * limit);
+            var page = names.Skip(offset).Take(limit).ToArray();
+            var entries = page.Select(name => {
+                token.ThrowIfCancellationRequested();
+                var path = ResolvePath(workspace, string.IsNullOrEmpty(relativeDirectory) ? name : relativeDirectory.TrimEnd('/', '\\') + "/" + name, false);
+                var isDirectory = (File.GetAttributes(path) & FileAttributes.Directory) != 0;
+                return new WorkspaceDirectoryEntry { Name = name, IsDirectory = isDirectory,
+                    ByteLength = isDirectory ? (long?)null : new FileInfo(path).Length };
+            }).ToArray();
             return new WorkspaceDirectoryPage
-            { Names = names.AsReadOnly(), Truncated = truncated, ScannedEntries = scanned };
+            { Names = page, Entries = entries, Truncated = truncated || offset + page.Length < names.Count,
+                ScannedEntries = scanned, MatchedEntries = names.Count, Offset = offset, ScanLimitReached = truncated };
         }
 
         // Metadata-only discovery. An identity-only reference is never proof that

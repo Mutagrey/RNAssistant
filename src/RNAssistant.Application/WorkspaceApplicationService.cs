@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using RNAssistant.Application.Contracts;
@@ -127,6 +128,26 @@ namespace RNAssistant.Application
                 queue.Start();
                 return queue.Read(new WorkspaceSourcePageRequest { QueueId = queue.Id });
             }
+        }
+
+        public WorkspaceFilesPage BrowseFiles(BrowseWorkspaceFilesRequest request, CancellationToken token = default(CancellationToken))
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            WorkspaceDescriptor workspace;
+            var binding = request.BindingId;
+            lock (_sync) { RequireBinding(binding); workspace = _workspace; }
+            var directory = (request.Directory ?? string.Empty).Replace('\\', '/');
+            if (directory.StartsWith("/", StringComparison.Ordinal))
+                throw new WorkspaceFileException("path_outside_mount", "Укажите относительный путь внутри рабочей папки.");
+            directory = directory.TrimEnd('/');
+            // Metadata I/O must not hold the application lock used by queue controls.
+            var page = _files.ListPage(workspace, directory, request.Query, 50, request.Offset, token);
+            lock (_sync) RequireBinding(binding);
+            return new WorkspaceFilesPage { BindingId = binding, Directory = directory,
+                Offset = page.Offset, Matched = page.MatchedEntries, ScanLimitReached = page.ScanLimitReached,
+                Items = page.Entries.Select(entry => new WorkspaceFileEntryDto { Name = entry.Name,
+                    Path = string.IsNullOrEmpty(directory) ? entry.Name : directory + "/" + entry.Name,
+                    IsDirectory = entry.IsDirectory, ByteLength = entry.ByteLength }).ToArray() };
         }
 
         public WorkspaceSourceQueuePage ReadSourceQueue(WorkspaceSourcePageRequest request)
