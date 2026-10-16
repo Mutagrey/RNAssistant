@@ -24,16 +24,16 @@
   <link rel="stylesheet" href="css/vendor/codemirror/addon/hint/show-hint.min.css">
   <link rel="stylesheet" href="css/vendor/wunderbaum.css">
   <link rel="stylesheet" href="css/vendor/viewer.min.css">
-  <link rel="stylesheet" href="css/app.css?v=composer-menu-20261013-1">
+  <link rel="stylesheet" href="css/app.css?v=workspace-nav-20261016-1">
   <link rel="stylesheet" href="css/app-chat.css?v=office-chat-20261014-1">
   <link rel="stylesheet" href="css/app-markdown.css?v=accent-chat-20261012-1">
-  <link rel="stylesheet" href="css/app-composer.css?v=composer-tooltips-20261015-1">
+  <link rel="stylesheet" href="css/app-composer.css?v=workspace-nav-20261016-1">
   <link rel="stylesheet" href="css/app-reasoning.css?v=accent-chat-20261012-1">
   <link rel="stylesheet" href="css/app-context-chips.css?v=sidebar-polish-20260723-1">
   <link rel="stylesheet" href="css/app-models.css?v=model-tables-20260930-1">
   <link rel="stylesheet" href="css/app-workspace.css?v=diagnostics-clarity-20260930-1">
   <link rel="stylesheet" href="css/app-data-templates-tokens.css?v=data-loader-20261016-3">
-  <link rel="stylesheet" href="css/app-workspace-projects.css?v=data-loader-20261016-3">
+  <link rel="stylesheet" href="css/app-workspace-projects.css?v=workspace-nav-20261016-1">
   <link rel="stylesheet" href="css/app-data-templates.css?v=data-loader-20261016-3">
   <link rel="stylesheet" href="css/app-json-viewer.css?v=json-height-20260929-1">
   <link rel="stylesheet" href="css/app-text-viewer.css?v=artifact-text-20260831-1">
@@ -51,7 +51,7 @@
   <link rel="stylesheet" href="css/app-artifacts.css?v=artifact-versions-20261014-1">
   <link rel="stylesheet" href="css/app-tree-adapter.css?v=tree-adapter-20260829-1">
   <link rel="stylesheet" href="css/app-html-workspace.css?v=html-memory-20261002-1">
-  <link rel="stylesheet" href="css/app-responsive.css?v=ui-narrow-20261015-1">
+  <link rel="stylesheet" href="css/app-responsive.css?v=workspace-nav-20261016-1">
   <link rel="stylesheet" href="css/app-agent.css?v=composer-layers-20261015-1">
   <link rel="stylesheet" href="css/app-agent-data.css?v=json-height-20260929-1">
   <link rel="stylesheet" href="css/app-theme.css?v=user-bubble-20261012-2">
@@ -623,25 +623,26 @@
             <div><p class="dt-eyebrow">DATA TEMPLATES</p><h2>Данные и шаблоны</h2><p class="dt-subtitle">От разных источников к единой структуре.</p></div>
             <span class="dt-phase">Подбор источников</span>
           </header>
-          <details class="workspace-settings" id="workspaceSettings">
+          <details class="workspace-settings" id="workspaceSettings" open>
             <summary><span class="workspace-context-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 7V5h6l2 2h10v12H3Z"/></svg></span><span class="workspace-context-copy"><strong id="workspaceContextTitle">Подключить проект</strong><span id="workspaceContextHint">Рабочая папка и параметры проекта</span></span><span class="workspace-chevron" aria-hidden="true">⌄</span></summary>
             <div class="workspace-settings-body">
               <div class="workspace-settings-grid">
-                <div class="workspace-form">
-                  <h3>Рабочая папка</h3>
+                <div class="workspace-form workspace-step">
+                  <div class="workspace-step-head"><span class="workspace-step-number" aria-hidden="true">1</span><div><h3>Выберите папку</h3><p>Локальная папка с файлами проекта.</p></div></div>
                   <label for="workspaceRoot">Полный путь к существующей папке</label>
                   <input id="workspaceRoot" type="text" placeholder="C:\Projects\Reports" autocomplete="off" spellcheck="false">
                   <label class="workspace-check"><input id="workspaceReadOnly" type="checkbox"> Только чтение</label>
-                  <div class="workspace-actions"><button type="button" id="workspaceOpen">Открыть папку</button><button type="button" class="secondary" id="workspaceRefresh">Обновить состояние</button></div>
+                  <div class="workspace-actions"><button type="button" id="workspaceOpen" class="dt-primary">Открыть папку</button><button type="button" class="secondary" id="workspaceRefresh">Обновить состояние</button></div>
                   <p id="workspaceSelection" class="workspace-hint workspace-selection">Рабочая папка не выбрана.</p>
                 </div>
-                <fieldset id="workspaceProjectFields" class="workspace-form" disabled>
-                  <legend>Проект</legend>
+                <fieldset id="workspaceProjectFields" class="workspace-form workspace-step" disabled>
+                  <legend class="workspace-sr-only">Проект</legend>
+                  <div class="workspace-step-head"><span class="workspace-step-number" aria-hidden="true">2</span><div><h3>Откройте или создайте проект</h3><p>Описание проекта внутри выбранной папки.</p></div></div>
                   <label for="workspaceProjectPath">Путь внутри рабочей папки</label>
                   <input id="workspaceProjectPath" type="text" value="project.json" placeholder="reports/project.json" autocomplete="off" spellcheck="false">
                   <label for="workspaceProjectName">Имя нового проекта</label>
                   <input id="workspaceProjectName" type="text" maxlength="200" placeholder="Например, управленческая отчётность" autocomplete="off">
-                  <div class="workspace-actions"><button type="button" id="workspaceProjectOpen">Открыть проект</button><button type="button" id="workspaceProjectCreate" class="secondary">Создать проект</button></div>
+                  <div class="workspace-actions"><button type="button" id="workspaceProjectOpen" class="dt-primary">Открыть проект</button><button type="button" id="workspaceProjectCreate" class="secondary">Создать проект</button></div>
                   <p class="workspace-hint">Сейчас сохраняется описание проекта. Подобранные ниже файлы в него ещё не записываются.</p>
                 </fieldset>
               </div>

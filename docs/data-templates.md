@@ -472,8 +472,9 @@ does not yet implement draft/test/publish or multi-file activation.
 
 ### Shared application and UI
 
-The **Рабочая папка** tab contains the Data Templates viewer. Its collapsible
-project settings accept an absolute path to an existing directory and an explicit
+The **Рабочая папка** tab contains the Data Templates viewer. Its project settings
+start expanded, present folder selection and project opening as two steps, and can
+be collapsed. They accept an absolute path to an existing directory and an explicit
 read-only choice. It creates/opens the domain manifest by a relative path and
 shows its name/location as inert text. Native project operations cover metadata only.
 Office chats and their existing artifacts retain their current ownership; this

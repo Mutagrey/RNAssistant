@@ -40,7 +40,7 @@ const selected = (name, contents = "selection fixture") => ({ name, mimeType: "a
     for (const file of ["app-data-source-intake.js", "app-data-operation-view.js", "app-data-templates-view.js", "app-data-templates.js", "app-workspace-projects.js"])
       await page.addScriptTag({ path: path.join(root, "js", file) });
     await page.evaluate(() => { RNAssistantDataTemplates.bind(); RNAssistantWorkspace.bind(); return RNAssistantWorkspace.show(); });
-    assert.equal(await page.locator("#workspaceSettings").getAttribute("open"), null);
+    assert.equal(await page.locator("#workspaceSettings").getAttribute("open"), "");
     assert.equal(await page.locator("#dtFiles").getAttribute("accept"), ".xlsx,.csv,.json");
     await page.locator("#dtTabSources").focus();
     await page.keyboard.press("ArrowRight");
