@@ -141,6 +141,57 @@ const hash = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
             } finally { worker.terminate(); }
         }, Array.from(new Uint8Array(xlsb)));
         assert.deepEqual(sheetjsWorker, { version: "0.20.3", firstCode: "0012" });
+        await page.setViewportSize({ width: 1160, height: 940 });
+        await page.goto(httpPrefix + "index.html");
+        await page.locator("#dtFiles").setInputFiles([
+            { name: "matrix-source.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                buffer: fs.readFileSync(path.join(output, "core/examples/matrix-source.xlsx")) },
+            { name: "unsupported.csv", mimeType: "text/csv", buffer: Buffer.from("a,b\n1,2\n") },
+            { name: "broken.xlsx", mimeType: "application/octet-stream", buffer: Buffer.from("not an xlsx") }
+        ]);
+        await page.waitForFunction(() => document.getElementById("dtFileCount").textContent === "3");
+        await page.locator("#dtTabTemplates").click();
+        await page.locator("#dtTemplateFile").setInputFiles(path.join(output, "core/examples/matrix-xlsx-extraction.json"));
+        await page.waitForFunction(() => !document.getElementById("dtStartProcessing").disabled);
+        await page.locator("#dtStartProcessing").click();
+        await page.waitForFunction(() => document.getElementById("dtResultCompleted").textContent === "1" &&
+            document.getElementById("dtResultFailed").textContent === "2");
+        assert.equal(await page.locator("#dtViewResults").isVisible(), true);
+        assert.equal(await page.locator("#dtResultRecords").innerText(), "16");
+        assert.match(await page.locator("#dtRunList").innerText(), /READER_UNAVAILABLE/);
+        assert.equal(await page.locator("#dtPreviewRows tr").count(), 16);
+        await page.locator("#dtTemplateFile").setInputFiles({ name: "other.json", mimeType: "application/json",
+            buffer: fs.readFileSync(path.join(output, "core/examples/matrix-xlsx-extraction.json")) });
+        const resultDownload = page.waitForEvent("download");
+        await page.locator("#dtDownloadResult").click();
+        const fullResult = JSON.parse(fs.readFileSync(await (await resultDownload).path(), "utf8"));
+        assert.equal(fullResult.kind, "data-templates-extraction");
+        assert.equal(fullResult.templateFile, "matrix-xlsx-extraction.json");
+        assert.equal(fullResult.records.length, fullResult.summary.recordCount);
+        assert.equal(fullResult.records[0].provenance.value.evidence[0].location.address, "C12");
+        assert.deepEqual(fullResult.records[0].value, normalized.preview.records[0].value);
+        if (process.env.RNA_DATA_SCREENSHOTS) {
+            fs.mkdirSync(process.env.RNA_DATA_SCREENSHOTS, { recursive: true });
+            await page.screenshot({ path: path.join(process.env.RNA_DATA_SCREENSHOTS, "results-wide.png"), animations: "disabled" });
+            await page.emulateMedia({ colorScheme: "light" });
+            await page.screenshot({ path: path.join(process.env.RNA_DATA_SCREENSHOTS, "results-light.png"), animations: "disabled" });
+            await page.emulateMedia({ colorScheme: "dark" });
+        }
+        await page.setViewportSize({ width: 360, height: 940 });
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+        if (process.env.RNA_DATA_SCREENSHOTS)
+            await page.locator("#dtResultPreview").screenshot({ path: path.join(process.env.RNA_DATA_SCREENSHOTS, "results-narrow.png"), animations: "disabled" });
+        await page.evaluate(() => {
+            document.getElementById("dtStartProcessing").click();
+            document.querySelector("#dtProcessOperation [data-operation-part=cancel]").click();
+        });
+        await page.waitForFunction(() => document.getElementById("dtRunFilter").querySelector('[value="cancelled"]') &&
+            document.getElementById("dtRunList").textContent.includes("Отменено") &&
+            !document.getElementById("dtStartProcessing").disabled);
+        assert.equal(await page.locator("#dtResultCompleted").innerText(), "0");
+        assert.equal(await page.locator("#dtDownloadResult").isVisible(), false);
+        console.log("PASS standalone workflow: selected sources → sequential XLSX queue, explicit errors, preview and complete JSON export");
+        await page.goto(httpPrefix + "core/index.html");
         await page.locator("#operation").selectOption("extractXlsx");
         await page.locator("#capture").setInputFiles(path.join(output, "core/examples/matrix-xlsx-extraction.json"));
         await page.locator("#sourceFile").setInputFiles(path.join(output, "core/examples/matrix-source.xlsx"));

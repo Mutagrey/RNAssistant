@@ -1072,8 +1072,10 @@ The implemented M1 viewer has Sources, Templates, Parameters, Mapping, Results a
 Format/help sections. Wide layouts use keyboard-navigable tabs; narrow panels use
 one section selector. Project settings are collapsed by default. Sources start
 with a drop zone and a short workflow guide; after selection the drop zone becomes
-compact and gives space to the file list. The other domain editors are explicitly
-marked as future work; Mapping shows a conceptual diagram, not fabricated rules.
+compact and gives space to the file list. Parameters and Mapping remain future
+editors; Mapping shows a conceptual diagram, not fabricated rules. The standalone
+Templates and Results sections now have a limited XLSX workflow; native composition
+still shows their future-state views.
 
 `ui/source-intake.js` owns bounded browser file/directory enumeration and
 one immutable format-hint catalog for XLSX, CSV and JSON. The controller owns the
@@ -1124,6 +1126,9 @@ modules without a framework, npm or a bundler.
 |---|---|
 | `ui/source-intake.js` | Browser enumeration, metadata hints, limits and coalesced progress; no DOM or content parsing. |
 | `ui/loader.js` | Portable owner factory: browser File handles, selection/context and enumeration lifetime; passes metadata/actions to presentation. |
+| `ui/processing.js`, `ui/browser-core.js` | Standalone queue owner and fixed lazy core loader. One Worker job per selected file; no parser logic or result bodies in the view. |
+| `ui/result-staging.js` | Provisional bounded per-file sink; accepts acknowledged batches, discards failures/cancellation and enables export only after completion. Durable large-result staging remains open. |
+| `ui/processing-view.js`, `styles/processing.css` | Standalone template picker, status navigation, progress and 20-record preview. Uses shared tokens and operation view. |
 | `ui/browser.js`, `web/js/app-data-templates.js` | Separate browser/native composition. The native adapter translates context and mounts native controls in named slots; it owns no domain parsing. |
 | `ui/loader-view.js` | Screen navigation, filters, pages, metadata details and DOM events; no bridge, File handles, readers or job ownership. |
 | `app-workspace-sources.js` | Typed native browsing, transient edits to saved relative paths, queue commands/recovery and bounded polling. Saves use the shared workspace controller; no body transfer or durable client store. |
@@ -1151,6 +1156,28 @@ The elapsed clock updates independently at 500 ms and is not a worker heartbeat.
 Progress updates do not rebuild the source list. Bytes are sums of File.size,
 not bytes read or measured RAM. A large-file hint starts at 64 MiB; this is a UI
 hint, not an admission limit or a claim of parsing support.
+
+### Standalone XLSX processing slice
+
+The browser composition snapshots selected File handles when a run starts and
+locks selection until it ends. It loads only fixed local core modules, runs one
+XLSX at a time in a Worker and displays a 50-row page of the queue with search and
+status filters. The current file has stage progress and elapsed time; cancellation
+terminates its Worker and marks remaining files cancelled. Failed files stay in
+the queue with explicit errors; successful files remain available for inspection.
+CSV/JSON selection is retained, but this queue reports `READER_UNAVAILABLE` for
+them. Unknown Excel extensions are not admitted by source selection.
+
+The `xlsx-extraction` v2 JSON template is selected separately from source files
+and limited to 1,000,000 UTF-8 bytes. Core validation still occurs per file. XLSX
+inputs are limited to 96 MiB each. The provisional sink holds at most 8 MiB of
+serialized records **per file**, gives the view only 20 preview records, and
+discards all provisional data on error or cancellation. A successful download is
+version-1 `data-templates-extraction` JSON with `source`, `templateFile`, the
+engine `summary` and every canonical `record` for that file. This is an extraction
+export, not a saved/published dataset or a project file. Larger complete outputs
+need durable/streamed browser staging before they can be offered. Neither the
+96-MiB admission cap nor the 8-MiB result cap qualifies real 80-MB workbooks.
 
 ### Input formats and adapter boundary
 
@@ -1327,8 +1354,8 @@ versioned schema and fixtures used by the engine.
 | M1 source selection (implemented) | Responsive modular viewer, paged file/folder intake, cancellable enumeration progress, persisted workspace source declarations and guarded save/recovery. Typed extraction commands remain open. |
 | M2 matrix-language foundation (implemented) | JSON template → typed plan → normalized snapshot → batched canonical observations with lineage, in the separate portable probe. Native integration and full readers remain open. |
 | M2 bounded XLSX adapter (implemented) | Explicit file + template → selective ZIP/XML reading in a Worker → exact typed cells → the same canonical batches. Single-file probe only; queue parser dispatch and 80 MB qualification remain open. |
-| M1–M3 | First real end-to-end flow for a supported source: loading, preview, parameter/mapping inspection, diagnostics and draft/test/publish through the common domain service. Include the bounded processing queue, off-UI readers, resource budgets and cancellation from the first reader. Connect the bounded XLSX matrix to the standalone processing UI first, then optional streamed workspace sources; add the remaining Excel families (including XLSB), CSV/JSON behind the same workflow and their own fixtures. Deliver usable controls alongside each capability. |
-| Early M0/M4 (foundation implemented) | One portable source project, shared loader, folder export, exported semantic tests and XLSX Worker probe. Finish the integrated standalone load → preview/mapping → validate → export scenario before native parser dispatch. Native data-project persistence and single-HTML/ZIP packaging are still open. |
+| M1–M3 (standalone queue/preview slice implemented) | XLSX File + JSON template now run through a bounded sequential Worker queue with per-file outcomes, progress, cancellation, 20-record preview and full per-file extraction export within the 8-MiB result budget. Parameter/mapping inspection, draft/test/publish, durable larger results and native parser dispatch remain open. Add other Excel families (including XLSB), CSV/JSON behind the same workflow and their own fixtures. |
+| Early M0/M4 (foundation implemented) | One portable source project, shared loader, folder export, exported semantic tests and XLSX Worker probe. Complete standalone mapping/validation, persistent data projects and large-result export before native parser dispatch. Single-HTML/ZIP packaging is still open. |
 | M5 | Extend the existing queue with advanced batch execution, scoped dictionary/mapping edits, comparison/consolidation, multiple blocks and output workbook templates. |
 
 M1 file read-back establishes stored bytes, not a validated template publication.
@@ -1357,10 +1384,10 @@ manifest implementation:
 
 Next slices, coordinated with the workspace owners:
 
-1. Finish the integrated **standalone** workflow in the shared UI: explicit template
-   and source selection → bounded processing queue/progress/cancel → preview and
-   diagnostics → complete canonical result export. Separate browser project/result
-   storage from UI and parser owners. Keep real file-format capability reporting;
+1. Extend the integrated **standalone** workflow: the XLSX queue, preview and
+   bounded complete extraction export now work. Add durable/streamed result storage,
+   template and mapping validation controls, project persistence and publication
+   through explicit domain commands. Keep real file-format capability reporting;
    XLSB/other Excel families and CSV/JSON require their own readers and fixtures.
 2. Replace the compiled application-module whitelist with immutable per-run package
    capture and a trusted host adapter outside that package. Add the isolated project
@@ -1475,6 +1502,11 @@ fail; this verifies metadata-only intake, not XLSX parsing or its memory cost.
 It verifies all viewer sections at 360/740/1160 pixels in
 light/dark themes. Set `RNA_DATA_SCREENSHOTS` to save visual previews. Parsing,
 publication and real Windows/WebView2 picker/drop behavior remain unqualified.
+
+`data-templates-export.test.js` also exercises the exported mixed XLSX/CSV/invalid
+queue, exact 16-record complete download, result pinning to the original template,
+cancel-before-Worker and narrow result layout. Large-book parsing and publication
+remain unqualified.
 
 For JS changes, run only the affected scripts (Playwright/browser must already be available):
 

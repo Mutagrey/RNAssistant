@@ -1,9 +1,9 @@
 (function (root) {
   "use strict";
-  function create() {
+  function create(options = {}) {
     const intake = root.DataTemplatesSourceIntake;
     let view = null, sources = [], nextId = 0, job = null, activity = null;
-    let contextKey = "", contextBusy = false, hasExternalSources = false, notice = { text: "", error: false };
+    let contextKey = "", contextBusy = false, processingBusy = false, hasExternalSources = false, notice = { text: "", error: false };
 
     // The owner retains File handles and operation lifetime; views receive metadata only.
     function activitySnapshot() {
@@ -23,17 +23,18 @@
     function signature(source) { return JSON.stringify([source.path, source.file.size, source.file.lastModified]); }
     function eligible(source) { return !!source.format && source.file.size > 0; }
     function render() {
-      if (!view) return;
       const counts = new Map();
       sources.forEach(source => counts.set(signature(source), (counts.get(signature(source)) || 0) + 1));
-      view.render(Object.freeze({ busy: !!job || contextBusy, notice: notice, activity: activitySnapshot(),
+      if (options.onChange) options.onChange();
+      if (!view) return;
+      view.render(Object.freeze({ busy: !!job || contextBusy || processingBusy, notice: notice, activity: activitySnapshot(),
         hasExternalSources: hasExternalSources,
         sources: Object.freeze(sources.map(source => Object.freeze({ id: source.id, name: source.file.name,
           path: source.path, size: source.file.size, format: source.format, included: source.included,
           available: eligible(source), duplicate: counts.get(signature(source)) > 1 }))) }));
     }
     async function add(start) {
-      if (job || contextBusy) return;
+      if (job || contextBusy || processingBusy) return;
       if (view) view.showSources();
       forgetActivity();
       const operation = { abort: new AbortController(), context: contextKey, started: performance.now(),
@@ -88,14 +89,14 @@
         cancel: () => { if (job) job.abort.abort(); },
         dismiss: forgetActivity,
         include: (ids, included) => {
-          if (job || contextBusy) return;
+          if (job || contextBusy || processingBusy) return;
           const selected = new Set(ids);
           sources.forEach(source => { if (selected.has(source.id) && eligible(source)) source.included = included; });
           render();
         },
-        remove: id => { if (!job && !contextBusy) { sources = sources.filter(source => source.id !== id); render(); } },
+        remove: id => { if (!job && !contextBusy && !processingBusy) { sources = sources.filter(source => source.id !== id); render(); } },
         clear: () => {
-          if (job || contextBusy) return;
+          if (job || contextBusy || processingBusy) return;
           forgetActivity(); sources = []; view.resetSelection();
           message("Список очищен. Исходные файлы не изменены.", false); render();
         }
@@ -110,7 +111,19 @@
       if (job) job.abort.abort();
       job = null; forgetActivity(); sources = []; unbind();
     }
-    return Object.freeze({ bind: bind, unbind: unbind, setContext: setContext, dispose: dispose });
+    function selectedSources() {
+      return Object.freeze(sources.filter(source => source.included && eligible(source)).map(source =>
+        Object.freeze({ id: source.id, file: source.file, path: source.path, format: source.format.id })));
+    }
+    function beginProcessing() {
+      if (job || contextBusy || processingBusy) return null;
+      processingBusy = true; const selected = selectedSources();
+      forgetActivity(); message("", false); render(); return selected;
+    }
+    function endProcessing() { if (processingBusy) { processingBusy = false; render(); } }
+    return Object.freeze({ bind: bind, unbind: unbind, setContext: setContext, selectedSources: selectedSources,
+      isBusy: () => !!job || contextBusy || processingBusy, beginProcessing: beginProcessing,
+      endProcessing: endProcessing, dispose: dispose });
   }
   root.DataTemplatesLoader = Object.freeze({ create: create });
 }(typeof globalThis !== "undefined" ? globalThis : this));

@@ -74,7 +74,9 @@
       });
       el("DetailNote").textContent = source.duplicate
         ? "Совпали путь, размер и дата изменения. Содержимое не сравнивалось — решите, нужны ли оба включения."
-        : source.available ? "Содержимое ещё не прочитано. Предпросмотр данных появится после подключения обработки этого формата."
+        : source.available ? container.dataset.dtProcessing === "true" && source.format.id === "xlsx"
+          ? "Содержимое ещё не прочитано. Выберите JSON-шаблон на вкладке «Шаблоны» и запустите обработку."
+          : "Содержимое ещё не прочитано. Предпросмотр для этого формата пока недоступен."
           : source.format ? "В файле нет данных. Выберите непустой файл."
             : "Для этого источника пока не запланирован импорт. Подготовьте файл XLSX, CSV или JSON.";
     }
@@ -111,7 +113,7 @@
       const included = sources.filter(source => source.included), largest = included.reduce((max, source) => Math.max(max, source.size), 0);
       el("SelectionCount").textContent = "Выбрано: " + included.length + " из " + sources.length + " · " + size(included.reduce((sum, source) => sum + source.size, 0));
       el("SourceLoadNote").hidden = largest < 64 * 1024 * 1024;
-      el("SourceLoadNote").textContent = "Крупный источник: " + size(largest) + ". Расход памяти при разборе может быть выше размера файла. Анализ пока не подключён.";
+      el("SourceLoadNote").textContent = "Крупный источник: " + size(largest) + ". Расход памяти при разборе может быть выше размера файла. Обработка крупных книг ещё не квалифицирована.";
       el("NoMatches").hidden = visible.length > 0;
       el("SelectVisible").checked = available.length > 0 && available.every(source => source.included);
       el("SelectVisible").indeterminate = available.some(source => source.included) && !el("SelectVisible").checked;
