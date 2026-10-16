@@ -15,6 +15,11 @@ host, rejects empty completion and blind replay, then reads the affected range
 and completes remaining work. It covers both response formats and tool/user result
 roles with custom prompts. These checks do not qualify real Excel or model behavior.
 
+`storage: metadata conflict preserves stale revision` checks title/model/reasoning
+conflicts through the conversation port. A refused write cannot adopt a foreign
+revision and authorize a later stale commit that removes an artifact or overwrites
+settings; exact journal bytes and successful write after explicit reload are checked.
+
 CAS publication integrity: `storage: CAS supplied` covers explicit restoration of
 the same artifact after raw/compressed and plaintext/encrypted corruption.
 `storage: CAS original` rejects damaged original/extraction parts before retaining
@@ -634,8 +639,8 @@ bindings), and rejects continuation after an unreturned member changes.
 
 Permanent test policy is defined in
 [development rules §9](../../docs/development-rules.md#9-тестирование-по-риску);
-the active stabilization application remains
-[master plan §22.1](../../docs/stabilization/STABILIZATION_MASTER_PLAN.md#221-минимальная-достаточная-проверка).
+current priorities and open evidence are in
+[PROGRESS](../../docs/stabilization/PROGRESS.md). The master plan is historical.
 Docs-only changes need diff/affected-link checks, not a harness build. A recorded
 pass is reusable only when its relevant sources/tests, dependencies, build settings
 and environment are unchanged. Explicit phase/release gates and the pre-commit

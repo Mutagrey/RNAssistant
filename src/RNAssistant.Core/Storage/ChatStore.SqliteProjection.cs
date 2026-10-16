@@ -692,6 +692,13 @@ namespace RNAssistant.Core.Storage
                     RemoveProjectionCache(path);
                     RemoveHeaderCache(path);
                 }
+                catch (ChatConcurrencyException)
+                {
+                    // Append rejected before writing. A foreign tail cannot
+                    // advance this still-stale projection's write authority.
+                    session.UpdatedUtc = previousUpdatedUtc;
+                    throw;
+                }
                 catch
                 {
                     session.UpdatedUtc = previousUpdatedUtc;

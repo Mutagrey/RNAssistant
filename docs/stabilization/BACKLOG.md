@@ -12,6 +12,12 @@
 новая возможность требует явной задачи, scope и owner; дефекты работающей системы
 приоритетнее расширения без конкретного пользовательского результата.
 
+Сверка 2026-10-15: актуальные воспроизведения и результаты выборочных проверок —
+в [ревью](RISK_REGISTER.md#architecture-and-regression-review--2026-10-15).
+Старые counts/failures относятся к названным там ревизиям. Приоритетные
+архитектурные slices — D05–D09 ниже; это предложения, а не завершённые изменения.
+Закрытые короткие записи сохраняют anchors исторических ссылок.
+
 ## CLI smoke fixtures lag current admission contracts — 2026-10-14
 
 Owner: workspace CLI tests. On isolated `3cb0b69f` plus the explicit completion
@@ -32,20 +38,16 @@ Closed for the three host-neutral confirmation replay fixtures: they now select
 also use actual skill selection, without changing runtime permission rules.
 
 Remaining owner: controlled CLI fixture.
-`application_requests_smoke.py` also assumes its initial file write auto-executes;
-it currently stops at AwaitingConfirmation. Refresh its declared approval policy
-before using it as application-request evidence.
+`application_requests_smoke.py` now explicitly supplies `--auto-confirm on`; the
+recorded setup omission is corrected in source. It was not rerun in this review,
+so application-request acceptance remains unverified here. The separate current
+`kernel replay:` failure is listed in the regression entry below.
 
 ## Transcript browser fixture dependency — 2026-10-14
 
-Owner: Web chat tests. `chat-transcript-layout.test.js` currently fails in Chromium
-at `applyChatInbox` with `ReferenceError: renderChatSessions is not defined`.
-Its isolated page does not provide that renderer, now called on inbox run-state
-transitions. Update the fixture to supply its intended sidebar boundary (or load
-the real renderer with its dependencies), then rerun this one browser test.
-The separate `chat-input-delivery.test.js` passes with the installed Chrome.
-This fixture gap is separate from Office host-chat creation and is not evidence
-of a production PowerPoint or COM failure.
+Closed 2026-10-15: the fixture supplies `renderChatSessions` and passes with bundled
+Playwright and installed Chrome. Queue placement, narrow themes, editing focus,
+scroll and history anchoring are covered. Real Office/WebView2 remains unqualified.
 
 ## Plan browser test cache-key assertion — 2026-10-14
 
@@ -103,12 +105,11 @@ scanned PDFs, page boundaries, stale revisions and cross-provider pagination.
 
 ## Artifact UI check fixture drift — 2026-10-13
 
-Owner: test fixtures. During the artifact tree/removal slice, existing checks had
-unrelated baseline failures: `artifact-library-projection.test.js` asserts the old
-`app-chat-session.js?v=office-chat-20260930-4` key while HEAD already uses
-`closed-document-20261012-1-transcript-20261012-1`; `html-preview-reuse.test.js`
-omits the existing preview `missingVendors` method from its stub. The same stub
-omission exists in `html-workspace-layout.test.js`.
+Owner: Web test fixtures. Rechecked 2026-10-15:
+`artifact-library-projection.test.js` passes; its old asset-key and selection
+failures are closed. `html-preview-reuse.test.js` still omits `missingVendors`
+from its stub and fails before its intended checks. The same source omission in
+`html-workspace-layout.test.js` was recorded earlier; that script was not rerun.
 
 The HTML false-success investigation also reached all eight behavioral groups in
 `html-workspace-source.test.js` and `html-workspace-write.test.js` before their
@@ -116,10 +117,11 @@ hard-coded asset-key assertions failed (`office-chat-20260930-3` in the source
 test). These failures do not establish a source/write behavior regression; update
 the delivery-key fixtures separately.
 
-Static inspection during chat-card consolidation also found stale assertions in
-`run-journal.test.js`: the `action-severity-20260930-1` agent asset key and the old
-`Журнал запуска` selector label. Reconcile these fixtures separately before using
-that script as evidence; it was not run for the card change.
+`run-journal.test.js` was rerun: behavioral groups pass before the obsolete
+`action-severity-20260930-1` asset assertion fails; the later old `Журнал запуска`
+label assertion still needs reconciliation. `chat-history-paging.test.js` also
+fails its closed-run commentary expectation. Preserve behavioral checks and lazy
+mount/unmount assertions while aligning fixtures with the canonical transcript.
 
 MockDemo's missing `SettingsService.HasPromptMigrationEvidence` fixture was repaired
 during unified-agent verification. Its artifact removal/restart assertions still
@@ -128,30 +130,26 @@ controller check does not qualify them or real Office delivery.
 
 ## Host-neutral Harness baseline failures — 2026-10-13
 
-Owners: Harness fixtures and the corresponding domain owners. Full-suite comparison
-against an isolated source archive of `10f78f40` found 24 existing failures, separate
-from the archive-only Git substitution fixture. They remain outside the unified
-intent/permissions change and are not reported as passing:
+Owners: Harness fixtures and the corresponding domain owners. The 24 failures at
+`10f78f40` and ten `agent:` failures at `0410126e` are historical counts. Subsequent
+storage/protocol fixes closed part of that set; do not present it as today's list.
+The [2026-10-15 correction](RISK_REGISTER.md#baseline-test-failures-during-architecture-follow-through--2026-10-15)
+also does not establish that later changes remain green.
 
-- Production-source inclusion and typed conversation-store architecture checks.
-- Nine agent protocol/history fixtures (wire version, folded outcomes, batching,
-  confirmation, after-state and bounded results), plus archived-read presentation.
-- Three event-integrity/corrupt-tail checks.
-- Five tool catalog/manual-execution checks (Outlook inventory, metadata, R61,
-  manual VBA observation), three resource-cutover checks, and bridge responsiveness.
+At `a05ffe96`, focused current-tree checks have seven failures: four `agent:`, one
+`kernel replay:`, the conversation-port architecture assertion and Common R61
+inventory. Exact names/results and the independently reproduced skill-budget
+defect are in the [new review](RISK_REGISTER.md#architecture-and-regression-review--2026-10-15).
+The Excel fixture expects 19 bootstrap/core schemas instead of the current 20.
+The replay fixture excludes every protocol message, conflicting with retained
+completed siblings; check exclusion of the incomplete call/result boundary instead.
+The VBA/macro failures still need exact request/admission localization; do not
+relabel them all as harmless fixture drift or raise budgets just to pass.
 
-Reproduce with the full `tests/RNAssistant.Harness` executable on that commit;
-localize each failure before changing production behavior or expectations. New
-permission, no-tool, streaming, recovery and controller cases are checked separately.
-The bridge responsiveness case passes alone after `7e07fb0f`, but still fails in
-the full-suite order; that integration/fixture gap remains open.
-
-Skill-package comparison on clean `0410126e` also reproduces ten `agent:` failures
-(42/52 pass): selectable response format still expects v6; folded write error and
-unknown; separate mutations; rejected VBA batch; macro loading; confirmation replay,
-confirmed after-state and failure continuation; oversized-result business fields.
-The skill-package changes do not close this baseline debt. Changed skill selection,
-HTML loader, editor and compiler cases use separate focused checks.
+Bridge responsiveness in full-suite order, manual VBA and the unselected resource
+cutover cases were not rerun; their earlier evidence gaps remain. Next change D09
+repairs the specific contract fixtures, then runs their filters. A new full-suite
+count is not inferred from this focused review.
 
 
 ## Real-model compaction/resume task completion — 2026-10-07
@@ -199,14 +197,9 @@ entire test. Other four architecture checks passed; no Office qualification impl
 
 ## Outlook compact catalog count assertion — 2026-10-05
 
-Owner: Tool catalog / Harness. The existing test
-`tools: compact catalog rejects removed aliases` expects 3 Outlook runnable tools
-but the catalog returns 4. Reproduced unchanged on the pre-slice HEAD
-`2a6525fe3f2f9d1162ca70103a8134d4b260c175` in an isolated source archive;
-the shared skills slice also fails only this assertion in its 16-test `catalog`
-filter (15 pass). Audit current public membership and correct the contract or
-expectation as a separate slice; do not weaken removed-alias checks. This is
-host-neutral evidence, not real Outlook qualification.
+Closed by current fixture changes; `tools: compact catalog rejects removed aliases`
+passes on 2026-10-15. This does not close the separate Common R61 inventory mismatch
+or real Outlook qualification.
 
 ## Source-inclusion harness guard and SDK projects — 2026-10-05
 
@@ -481,22 +474,15 @@ cover the defaults, while saved helper text must be reviewed separately.
 
 ## Artifact pagination integration evidence — 2026-10-02
 
-Owner: Artifact Library pagination. During concurrent pagination changes,
-`node tests/web/artifact-library-projection.test.js` fails at
-`refreshLibraryHeadSelection()` (expected `true`, received `false`). The same test
-passed before those changes. Reconcile the historical-selection fixture and paged
-head metadata before closing this integration check. Catalog/transfer-specific
-Harness, UI and real-controller checks pass independently; they do not close this
-shared projection check or Windows/WebView2 qualification.
+Closed host-neutral 2026-10-15: the complete
+`artifact-library-projection.test.js` passes, including historical selection and
+paged head metadata. Windows/WebView2 qualification remains separate.
 
 ## Resource context fixture drift — 2026-09-08
 
-Owner: resource context / harness. On the `d29b1f58` branch, unchanged provider
-search fails the existing
-`artifacts: prompt uses bounded working set` raw-metadata exclusion assertion
-(`runtime-secret-id` is searchable). Reconcile with the parallel projection fixes
-before declaring this integration gate closed. This failure is not changed by the
-working-set purpose/read-hint implementation. This is not Windows evidence.
+Closed by the [resource projection correction](RISK_REGISTER.md#resources-links-and-artifacts-review--2026-10-12).
+Rechecked 2026-10-15: `artifacts: prompt uses` passes 2/2, including bounded working
+set and logical heads. No Windows evidence is implied.
 
 ## Plan operation identity edge case — 2026-09-08
 
@@ -527,10 +513,15 @@ Windows/Office/WebView2 delivery remains unqualified.
 
 | Debt | Owner и проблема | Условие начала | Результат и проверка |
 |---|---|---|---|
-| D01 — compact current docs | Documentation owners. `architecture.md`, master plan и `PROGRESS.md` всё ещё содержат длинную историю и повторяют часть domain docs | После R61 или при изменении соответствующего canonical contract; historical master/progress archive — только после 16.1 с полным backlink inventory | `architecture.md` оставляет только layers/owners/flows; история остаётся evidence, но исчезает из default reading path. Проверка всех local links/anchors |
-| D02 — single composition path | Application. `AssistantController` одновременно orchestrates и конструирует concrete storage/runtime/model/catalog/session/diagnostics graph | Следующее изменение production lifecycle/dependency graph после текущих R61/WQ gates | Один существующий application-owned path владеет construction и dispose order. Не добавлять factory/interface только ради DI; новый composition type допустим лишь при удалении нескольких concrete construction paths и отрицательном production LOC. Targeted lifecycle + architecture checks |
+| D01 — compact current docs | Documentation owners. `architecture.md`, master plan и `PROGRESS.md` содержат длинную историю и повторяют часть domain docs | При изменении соответствующего canonical contract; перенос истории — только с backlink inventory, без прежнего общего R61/16.1 gate | Current docs оставляют layers/owners/flows и актуальный статус; история остаётся evidence. Проверка затронутых local links/anchors |
+| D02 — single composition path | Application. `AssistantController` одновременно orchestrates и конструирует concrete storage/runtime/model/catalog/session/diagnostics graph | Следующее конкретное изменение production lifecycle/dependency graph; Windows evidence остаётся отдельным gate | Один existing application owner владеет construction и dispose order. Новый composition type допустим при удалении нескольких construction paths; без factory/interface только ради DI. Targeted lifecycle + architecture checks |
 | D03 — typed bridge projections | Office Contracts / Web. Versioned operation catalog, shared cancellation/waits and init/navigation/progress casing are implemented in A3; embedded Core DTOs still have both-case readers | Next change to the specific embedded projection, with exact C#/JS shape identified | Switch the typed producer and consumers together, delete aliases, preserve opaque tool JSON. Remaining seam and removal gate: [MIGRATION_MAP](MIGRATION_MAP.md#runtime-commit-boundary--2026-10-15); Windows WebView delivery stays separate |
 | D04 — change-driven hotspot extraction | Владельцы Controller, ToolRuntime, prompts, storage и UI. Крупные файлы затрудняют локальные изменения, но не доказывают смешение ответственности | Только когда ближайший approved change требует чтения несвязанного behavior | Извлекается один тематический owner из `AssistantController*`, `OfficeToolExecutor`, `PromptContextInspectorService`, `ChatStore*` или крупного `app-*.js`; старый path удаляется, targeted tests сохраняют контракт |
+| D05 — complete skill admission | Core `SkillTaskService` + Office/Runtime request preparation. Половинный budget check допускает selection, после которого не компилируются следующий запрос и новый turn | Первый приоритет после исправленного metadata conflict; воспроизведение 32K — в risk review | Candidate → тот же frozen compiler с полными prompts, receipts, schemas и reserves → одна публикация. Удалить отдельную оценку как admission authority; без второго compiler или скрытого eviction. Проверить близкий budget, оба response formats, отказ без изменения selection, cold restart и одинаковый Office/CLI контракт |
+| D06 — one commit outcome and incremental projection | Core persistence. `CommitScalarMetadata` и `SaveInternalLocked` отдельно восстанавливают cursor; общий save всё ещё клонирует весь `Messages`, сравнивает metadata/artifacts и перестраивает derived bodies | Следующее изменение commit после закрытого stale-cursor дефекта | Один append outcome различает refusal и durable own append. Использовать существующие typed operations для затронутых projections; убрать дублирующий catch/recovery и ненужные полные clone/rebuild. Проверить stale writer, append fault, replay parity и счётчики работы на длинной истории; без O(1)/ускорения до измерений |
+| D07 — stable chat storage identity | Core chat storage / application binding. Document reassociation требует metadata append + `File.Move`; `MoveDocument` может перенести только часть чатов | Отдельное решение о layout до заявления crash-safe Save As; совместить с M7 partition seam из MIGRATION_MAP | Предпочтительное направление: стабильный путь по ChatId, document binding только в canonical events/catalog projection. Удалить физический rename из обычной перепривязки; не добавлять mutable mapping store. До cutover нужен явный отказ/перенос старого layout без fallback. Проверить crash boundaries, весь набор чатов, destination conflict и холодный catalog |
+| D08 — target-correlated inspection | Core progress/recovery + domain evidence producers. Любой successful independent read снимает `InspectionRequired`, включая чтение без evidence затронутого target | Следующее изменение unknown-effect continuation; текущее поведение явно является только workflow floor | Использовать имеющиеся typed impacts/evidence для текущего read затронутой цели вместо глобального bool. Удалить безусловный сброс по read policy. Проверить unrelated catalog read, несколько unknown targets, stale/partial coverage и restart; unknown history и replay prohibition не очищать |
+| D09 — contract-owned regression fixtures | Harness/Web test owners. Hard-coded counts/cache keys, неполная composition и старые replay ожидания скрывают полезный сигнал | Текущие семь Harness и четыре Web failures из review; сначала локализовать VBA admission | Проверять membership/semantic boundaries и script dependency graph; fixture composition строить через существующие helpers с явными policy/budget. Удалить дублирующие magic counts/датированные asset assertions, сохранив negative controls для removed aliases, source inclusion, lazy rendering и incomplete exchanges. Запустить только затронутые filters/scripts |
 
 Не проводить общий предварительный split/rename, массовый namespace move, новый
 service locator, второй store/read model или универсальный Office abstraction.
@@ -606,8 +597,9 @@ Remaining bounded follow-ups:
 - **Replay and evaluation:** reproducible replay/eval fixtures и aggregate
   latency/token/cost/outcome projections из canonical journal, без второго
   telemetry truth.
-- **Persistence seams:** оценить `ISessionPersistence`/`IBlobStore`; optional
-  SQLite разрешён только как disposable query accelerator, не durable authority.
+- **Persistence seams:** текущие `IConversationStore`/`IEventStore` и disposable
+  SQLite уже реализованы. Новый generic persistence/blob port требует отдельного
+  consumer и удаляемого пути; ближайшее конкретное сокращение — D06, не второй store.
 - **Desktop UX/runtime:** direct wrapper-to-pipe activation, docking modes и более
   широкий typed tool surface — отдельные slices. Controlled macro injection
   требует отдельного safety design, Trust Access detection и confirmation.

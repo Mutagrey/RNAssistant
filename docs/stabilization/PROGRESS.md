@@ -1,5 +1,27 @@
 # Stabilization progress
 
+## Architecture review and metadata conflict correction — 2026-10-15
+
+Review of `a05ffe96` found and fixed a Core stale-write defect: a refused scalar
+metadata change adopted another writer's revision, allowing a later stale commit
+to overwrite settings and remove a newly committed artifact from the projection.
+Refusal now keeps the old cursor; all three setters and explicit reload are covered.
+Focused metadata/SQLite/stale-save/relocation checks pass (1/5/1/6).
+
+Next priority: skill selection can persist successfully at 32K while the complete
+next request cannot fit; cold restart retains the selection and blocks even a
+model request to remove it. Unify candidate admission with the actual compiler
+before publication. Chat relocation crash consistency remains open. Proposed
+reductions in commit duplication, physical relocation and uncorrelated inspection
+are scoped with owners in [BACKLOG](BACKLOG.md#structural-debt).
+
+Current checks are not all green: `kernel:` 59/59, `agent:` 52/56,
+`kernel replay:` 9/10, `architecture:` 4/5; Common catalog inventory still fails.
+Four selected Web scripts pass, four fail existing fixture assumptions.
+[Review evidence and exact failures](RISK_REGISTER.md#architecture-and-regression-review--2026-10-15)
+supersede earlier passing counts for the current tree. No full-suite, live-model,
+CLI smoke or Windows/Office/VSTO qualification was run for this review.
+
 ## Skill and restart context continuity — 2026-10-15
 
 Core selection/pairing, Office recovery and CLI context preparation now preserve

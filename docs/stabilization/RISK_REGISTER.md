@@ -8,6 +8,74 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## Architecture and regression review — 2026-10-15
+
+Reviewed `a05ffe96` with the pre-existing follow-up-input test/doc changes retained.
+Scope: commit/concurrency boundaries, skill admission, unknown-effect continuation,
+chat UI and previously recorded fixture failures. This is a focused review, not
+full-suite, live-model or Windows/Office/VSTO qualification.
+
+**P1 fixed host-neutral / Core scalar metadata commits.**
+`CommitScalarMetadata` recovered the current journal tail after a rejected stale
+write and assigned that revision/hash to the unchanged stale `ChatSession`.
+A disposable two-reader reproduction first commits a new model and artifact,
+then rejects the old reader's title change. Before the fix, the old revision
+advanced 1 → 2; a subsequent ordinary commit succeeded, restored the old model
+and removed the new artifact from the current projection. Historical events/CAS
+were retained; this was lost current state, not physical blob deletion.
+Concurrency refusal now preserves the caller's cursor and timestamp without
+replaying the log. The same subsequent commit is rejected; cold reload preserves
+the winning model/artifact and permits a new explicit write. Regression covers
+title, model and reasoning setters, exact journal preservation and reload.
+No controller/COM behavior or on-disk format changed.
+
+**P1 open / Core skill selection and Office/Runtime request admission.**
+`SkillTaskService.Select` checks only bodies/dependency schemas against half the
+input budget, then persists selection. It does not admit the complete next
+request. A scripted Excel conversation with normal ToolStore/settings dependencies,
+32,768 context tokens, default 3,072 output tokens and default prompts accepts
+`common.skills_load(common.vba_code_editing)` as `ok`, then fails before the next
+model call: estimated messages 23,668 tokens versus 23,422 available. After cold
+reload, a new user request to remove the skill fails before any model call, with
+one selection still retained. At 65,536 tokens the same two-response script
+completes; that control is not a fix or real-model acceptance.
+The probe uses the built Harness production owners and a fake Excel adapter;
+no VBA mutation or HTTP dispatch occurs. This independently establishes an
+admission/liveness defect; it does not establish the cause of every VBA test
+failure below. Next change: stage a candidate skill/tool surface, admit it with
+the same complete frozen request/compiler and reserves used by dispatch, then
+publish once. Refusal must preserve the previous usable selection and return
+bounded feedback. Do not silently evict selected skills or enlarge budgets.
+
+**Existing open risks confirmed by source review:** chat relocation still appends
+the binding before physical rename; interruption between them is not covered by
+the six refusal tests. `AgentProgressTracker` clears its inspection floor after
+any successful independent read, even one without evidence for the affected
+target. This is the documented workflow floor, not a new claim that unknown
+effects become verified: health and replay guards remain unknown/protected.
+Concrete owners/removal gates are in [Structural debt](BACKLOG.md#structural-debt).
+
+Current regression evidence (filters overlap; no aggregate coverage claim):
+
+| Check | Result / remaining owner |
+|---|---|
+| Harness build before/after metadata correction | Pass; two existing PDF CA1416 warnings |
+| `kernel:` | 59/59 |
+| `agent:` | 52/56: write-unknown characterization, VBA batch, Excel core count 19 vs 20, arbitrary-macro admission fail; Office conversation fixtures/skill admission owners |
+| `kernel replay:` | 9/10: known unprojected effect expects all protocol messages excluded, while recovery now retains completed siblings; narrow incomplete-exchange assertion still needs reconciliation |
+| `architecture:` | 4/5: the 13 recorded concrete-storage references still fail the conversation-port assertion |
+| `tools: R61 built-in` | 0/1: the seven already recorded Common inventory differences remain |
+| Metadata conflict / SQLite / stale save / relocation | 1/1 (three setters), 5/5, 1/1, 6/6 after correction |
+| Compact catalog / artifact prompt | 1/1 and 2/2; old Outlook count and resource-metadata fixture entries can close |
+| Web passing | `chat-sync`, `chat-inbox`, `artifact-library-projection`, `chat-transcript-layout`; last uses bundled Playwright and installed Chrome |
+| Web failing | `chat-history-paging` contradicts retained commentary; `plan-document` and `run-journal` pin obsolete asset keys; `html-preview-reuse` omits `missingVendors` |
+
+Earlier `agent: 54/54` and `kernel replay: 10/10` are historical evidence for their
+tested snapshots, not a passing result for this tree. Failed checks preceded the
+metadata correction; their failure must not be attributed to that correction.
+Current CLI smoke suites were not rerun. The previously reported repeated-answer
+incident remains unresolved; these scripted probes do not explain the photographed answer.
+
 ## CAS reuse and publication integrity — 2026-10-15
 
 **Fixed host-neutral / Core CAS and its publication consumers.** Review began on
@@ -259,8 +327,9 @@ No full-suite, real-model or Windows/Office/WebView2 qualification is claimed.
 ## Baseline test failures during architecture follow-through — 2026-10-15
 
 **Closed host-neutral.** The original eight Harness failures were independently
-reproduced on baseline `4d716414`; all now pass. No Office effect or full-suite
-qualification is claimed.
+reproduced on baseline `4d716414`; all passed at that correction. Later current-tree
+failures are recorded in the [new review](#architecture-and-regression-review--2026-10-15).
+No Office effect or full-suite qualification is claimed.
 
 | Owner | Cause and correction | Evidence |
 |---|---|---|

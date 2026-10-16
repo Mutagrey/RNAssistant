@@ -106,6 +106,13 @@ must fit the budget: selection reserves at most half the input budget, and the
 complete compiler may explicitly refuse an oversized request; it never truncates
 active instructions while leaving their tools callable.
 
+This selection estimate is not complete request admission. The current 32K Excel
+VBA case can persist a selection that prevents both the next request and a later
+turn from compiling, including a request to remove that skill. This remains an
+[open admission defect](stabilization/RISK_REGISTER.md#architecture-and-regression-review--2026-10-15).
+The intended correction stages selection until the actual request compiler accepts
+the complete candidate; no automatic deselection or larger-budget fallback exists.
+
 The Library reader validates the published supporting-file basename for all three
 allowed directories (`references`, `scripts`, `assets`); it does not strip a fixed
 `references/` prefix from every path.

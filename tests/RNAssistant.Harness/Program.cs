@@ -395,6 +395,7 @@ namespace RNAssistant.Harness
                 Test("storage: sqlite projection pages messages", SqliteProjectionPagesMessages),
                 Test("storage: sqlite page preserves tombstone context", SqlitePagePreservesTombstoneContext),
                 Test("storage: sqlite metadata commit avoids full diff", SqliteMetadataCommitAvoidsFullDiff),
+                Test("storage: metadata conflict preserves stale revision", MetadataConflictPreservesStaleRevision),
                 Test("storage: sqlite cursor catches up after projection lag", SqliteCursorCatchesUpAfterLag),
                 Test("storage: corrupt sqlite index rebuilds from events", CorruptSqliteIndexRebuildsFromEvents),
                 Test("storage: corrupt sqlite row rebuilds from events", CorruptSqliteRowRebuildsFromEvents),

@@ -56,6 +56,12 @@ Metadata append and file rename are still separate durable operations: a crash o
 I/O failure after append can leave the stream at its old path with the new binding.
 No automatic relocation recovery or replay is claimed.
 
+A pre-append concurrency refusal preserves the caller's revision/hash and storage
+cursor. Reading a newer foreign tail does not refresh the stale projection or grant
+it write authority. Scalar title/model/reasoning commits follow this rule; callers
+must explicitly reload before a subsequent write. Recovery after an actual append
+failure remains separate from refusal before writing.
+
 Chat-list/header reads use a separate reducer checkpoint in SQLite. It retains scalar header/run metadata, message ids/protocol flags, minimal active-HTML artifact references/counts and CAS reference metadata. It does not materialize message/tool bodies or context or hydrate CAS. HTML counts come only from artifact event metadata; old events without that metadata report zero counts. Up to 64 reducer states are also cached in memory (maximum about 512 thousand characters each and 4 million in total).
 
 The indexed header derives per-chat storage usage. `JsonlByteLength` is the exact event file length. CAS totals deduplicate retained references by plaintext SHA-256: `CasLogicalByteLength` sums declared plaintext lengths, while `CasStoredByteLength` sums actual compressed/encrypted blob file lengths without loading their bodies. Shared blobs are counted for every chat that references them, so per-chat totals are diagnostic attribution rather than globally additive disk usage. Missing, invalid, or length-conflicting references raise a critical warning. Healthy chats warn at 64 MiB JSONL, 256 MiB combined JSONL plus stored CAS, or 512 MiB logical CAS; critical size thresholds are 256 MiB, 1 GiB, and 2 GiB respectively. These warnings are advisory: RNAssistant has no event retention or automatic history deletion.
@@ -165,7 +171,8 @@ policy and the final projection save.
 Artifact-body hydration, HTML revision activation, raw event/payload operations,
 projection reducers and CAS health/GC are not exposed by this port. Replaced broad
 conversation methods are Core-internal. The port now also exposes bounded message
-windows and direct scalar metadata commits from the derived index. The original
+windows from the derived index and direct scalar metadata commits to the canonical
+stream. The original
 9D4 cutover changed no format, replay rule, stream, writable snapshot or dual-write
 path. See
 [Phase 9D4 evidence](stabilization/PHASE_9D4_CONVERSATION_STORE.md).
@@ -334,7 +341,13 @@ projection budgets that text separately from tool outcome evidence; see
 
 New text/JSON/XML/VBA CAS bodies of at least 1 KiB are gzip-compressed only when the versioned envelope plus payload saves at least 128 bytes and 5%. SHA-256 and `ByteLength` always describe the original plaintext, so deduplication, references, exports, and health verification remain content-stable. Existing raw blobs remain readable and are not silently rewritten. With history encryption enabled, compression happens first and the complete compression envelope is then authenticated and encrypted; reads decrypt, bounded-decompress to the declared plaintext length, and finally verify SHA-256.
 
-An artifact body that was just stored or successfully hydrated keeps a transient trusted `(text, SHA-256, byte length)` tuple. Later metadata-only saves reuse the existing canonical blob without encoding, hashing, decrypting, or rereading it. A copied body with only a known reference still compares one UTF-8 hash and can avoid reading the existing blob. A missing or obviously truncated reference falls back to normal verified `StoreText`; explicit reads and CAS health scans continue to authenticate the complete content.
+An artifact body that was just stored or successfully hydrated keeps a transient
+trusted `(text, SHA-256, byte length)` tuple. Later metadata-only saves of that
+unchanged artifact reuse an availability hint without rereading unrelated bodies.
+A supplied/copied body without that trusted tuple goes through verified `StoreText`,
+which delegates to the byte writer and verifies an existing CAS object before reuse.
+Presence/length is not publication integrity. Explicit reads, reference-only
+publication and CAS health checks authenticate the complete content.
 
 - committed attachment bytes and extracted text use CAS references;
 - HTML workspace, chart, Markdown plan document, Task List, compaction, and other artifact bodies use the same CAS;
