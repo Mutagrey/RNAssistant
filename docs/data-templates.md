@@ -5,7 +5,8 @@ M2 source-independent language/core foundation and bounded XLSX reader (2026-10-
 One observation executor handles both matrix orientations, record fields and nested
 JSON captures; real XLSX uses the existing reader in the separate Worker probe.
 The loader saves workspace source declarations and controls the shared preparation
-queue; durable batch requests, parsing dispatch and publication remain open.
+queue. The portable XLSX reader now accepts bounded pull-byte sources through its
+Worker protocol; native source transport, parsing dispatch and publication remain open.
 Owner: Data Templates domain; portable JS in `web/tabular`, shared manifest storage
 in Core `TabularProjectStore` over `WorkspaceFileService`.
 This is the canonical domain contract; planned scope is marked separately from
@@ -43,6 +44,7 @@ tool/skill is exposed and the main loader is not yet connected to this executor.
 | `json.js` | Bounded JSON decoding, duplicate/reserved-key refusal and exact source numeric tokens |
 | `decimal.js` | Exact lexical decimals, scale and explicit rounding |
 | `sources.js` | Prepared matrix, pull-record and nested JSON adapters with native locations |
+| `byte-source.js` | Owned fixed-length byte capability, bounded serial reads, detached buffers and synchronous revocation; Blob is one adapter |
 | `expression.js` | Expression syntax tree, type/scope binding to instructions, explicit value conversion and evidence |
 | `template.js` | Closed source/binding/dictionary schemas, context dependencies and immutable extraction plan |
 | `transform.js` | One canonical observation executor, grain/unit checks, lineage and awaited provisional batches |
@@ -50,7 +52,7 @@ tool/skill is exposed and the main loader is not yet connected to this executor.
 | `xlsx-reader.js` | Bounded SpreadsheetML adapter, exact numeric lexemes, cache evidence and complete rectangle coverage |
 | `engine.js` | Declared bounded operations over immutable input; no DOM or publication |
 | `executor.js` | One active job, Worker lifecycle, deadline, cancellation, contract revision check |
-| `worker.js` | Fixed shipped modules, declared operations and one acknowledged batch in flight |
+| `worker.js` | Fixed shipped modules, declared operations, bounded source pulls and one acknowledged result batch in flight |
 | `probe.js` | File picker, explicit mode, result presentation and download |
 
 Core modules have no DOM, filesystem authority, network, Office or native bridge access.
@@ -120,7 +122,7 @@ outside bounds fail; nothing is silently clipped. An empty selection is allowed.
 
 These limits bound this probe only. They do not increase HTML aggregate, transfer,
 Resource Fabric or web verification limits. The browser check prints exact asset
-count/bytes; the current probe has seventeen executable/presentation files including
+count/bytes; the current probe has eighteen executable/presentation files including
 the pinned 50,818-byte sax XML parser. Its license/source hashes are in the shared
 [vendor manifest](../web/vendor-manifest.json) and [notices](../web/vendor-notices.md).
 Future dependencies require their own size/license/capability review.
@@ -130,7 +132,7 @@ Future dependencies require their own size/license/capability review.
 The executor outlives any result viewer. Closing the viewer does not cancel a
 run; cancellation, reset or disposal settles its Promise and releases resources.
 It rejects concurrent runs, stale protocol/revision handshakes and foreign job
-responses. Worker protocol v4 declares `inspect`, `extract` and `extractXlsx`; old handshakes fail
+responses. Worker protocol v5 declares `inspect`, `extract` and `extractXlsx`; old handshakes fail
 explicitly. Each Worker loads fixed relative scripts once, accepts one job and is
 terminated on completion, error, cancellation or deadline. Worker absence or
 load failure returns `EXECUTOR_UNAVAILABLE`; there is no automatic fallback.
@@ -330,8 +332,10 @@ stream; `Prepared` is not parsed/imported/completed. Native parser dispatch and
 isolation/CSP/module-pin enforcement are **not wired yet**. This contract is their
 integration seam, not an additional queue, runtime, CAS or journal.
 
-The portable executor API is `extract(inputText,{signal,deadlineMs,onProgress,sink})`
-and `extractXlsx(inputText,sourceFile,settings)`. The required result sink is:
+The portable executor API is `extract(inputText,{signal,deadlineMs,onProgress,sink})`,
+`extractXlsx(inputText,sourceFile,settings)` and
+`extractXlsxSource(inputText,byteSource,settings)`. Both XLSX entry points use one
+reader/execution path; only input acquisition differs. The required result sink is:
 
 ```text
 writeBatch({version:1, sequence, records}) -> awaited Promise
@@ -347,7 +351,7 @@ It must not throw or return an asynchronous cleanup promise. Publication is a la
 application command through existing prepare/commit/read-back owners. Unknown
 publication effects remain unknown and are never automatically replayed.
 
-Worker protocol v4 transports provisional batches through internal `onBatch` hooks,
+Worker protocol v5 transports provisional batches through internal `onBatch` hooks,
 one outstanding sequence at a time. Acknowledgement follows `writeBatch`; final
 summary counts must equal acknowledged batches. Low-level engine hooks are transport,
 not UI semantics. Partial output, callback failure or late source failure cannot
@@ -381,6 +385,46 @@ Unknown totals stay indeterminate. JSON decoding/compile are bounded synchronous
 work; source/output loops yield. Records can pull pages; JSON capture currently
 retains its bounded tree; XLSX retains its bounded rectangle. These limitations do
 not establish representative 80 MB throughput/RAM or native Office qualification.
+
+### Bounded byte source
+
+`RNTabularByteSource.create({byteLength,label,readRange,close})` creates an owned
+capability over already-pinned immutable bytes. It resolves no paths/URLs and grants
+no authority. Length and label are immutable; reads return exactly the requested
+`ArrayBuffer` or byte view. Reads are serialized, limited to 256 KiB, checked against
+the fixed length before dispatch, and copied out of provider-owned buffers before
+transfer. Shared buffers, short/oversized/wrong-type replies fail explicitly.
+The source passes an abort signal to its provider. `dispose` revokes access and
+settles a pending read immediately even if the provider ignores cancellation;
+`close` runs once and must synchronously revoke its backing access.
+
+`extractXlsxSource` takes ownership only after admission. Invalid mode/input/deadline,
+an already-cancelled signal or a busy/disposed executor leaves ownership with the
+caller. An admitted job closes its source on success, failure, cancellation,
+deadline or disposal. Closing the source externally also terminates its Worker.
+Cleanup failure aborts provisional staging instead of returning a successful result.
+One source cannot be reused after the job; explicit retries require new admission.
+
+Worker v5 sends one `{id,protocol,revision,sequence,offset,count}` source request at
+a time. The owner returns a transferable binary buffer with the same fields; neither
+side accepts a foreign or mismatched response. A result batch/summary cannot overtake
+a pending read. Per-job source traffic is bounded to three times its fixed length,
+accounting for ZIP metadata rereads. ZIP directories up to their existing 2-MiB
+limit are assembled from bounded reads; body decompression still consumes 8-KiB
+chunks. The engine compiles/validates its request before the first byte read.
+
+Selected browser Files still transfer directly to the Worker, where `fromBlob`
+provides the same byte-source contract. The ZIP/XML readers no longer require Blob
+methods. No browser file is inferred to be a workspace path, and no whole workbook
+or base64 body crosses the result/control messages.
+
+This closes the portable reader's Blob dependency, **not native integration**.
+The shared workspace application must still bind `OpenPreparedSource` to an owned
+seek-capable transport, preserve the exact project/source pins, and dispose it with
+the queue job. Encoded CAS streams may be sequential: the adapter must declare and
+bound any seek staging without introducing another durable source store. Native
+module hashes, isolated execution/CSP, binary transport and queue parser dispatch
+remain explicit gates. No new C# interpreter or native/server runtime is introduced.
 
 ### Working examples and remaining boundaries
 
@@ -423,7 +467,7 @@ source dependencies, determinism/precision rules, budgets and provenance. They a
 not project-supplied JS callbacks. Compatible additions need capability/version
 checks and tests; changing existing syntax or semantics requires a language revision
 and coordinated consumer switch. Unsupported versions/capabilities fail explicitly.
-Capture and output versions evolve independently; protocol v4 and engine revision
+Capture and output versions evolve independently; protocol v5 and engine revision
 `tabular-core-2` are handshake labels, **not content hashes**. Exact module pinning
 and permission/isolation for any future executable extension remain separate gates.
 
@@ -437,7 +481,8 @@ remain open (CSV dialect/encoding and streaming JSON byte decoding).
 
 `executor.extractXlsx(inputText, sourceFile, {signal, deadlineMs, onProgress, sink})`
 passes an immutable File/Blob to a dedicated Worker without UI body reads, base64
-or whole-workbook JSON. The closed version-2 `xlsx-extraction` envelope has
+or whole-workbook JSON. `extractXlsxSource` uses the same reader with the
+[bounded byte capability](#bounded-byte-source). The closed version-2 `xlsx-extraction` envelope has
 `template`, `dictionaries`, `dataset`, and `source:{formulaPolicy:"stored-cache"}`.
 The template's exact `source.sheet/source.bounds` select the capture. The same compiler, mappings,
 canonical record semantics and acknowledged batches then process the reader.
@@ -1073,6 +1118,16 @@ Browser checks exercise the real XLSX File transfer, reject body reads on the UI
 verify byte progress/cancellation/rerun and refuse cooperative fallback. Vendor
 changes also require `node tests/web/vendor-gate.test.js`.
 
+`tabular-byte-source.test.js` covers exact lengths/ranges, provider buffer reuse,
+serialization, revocation during a stalled read and invalid replies/cleanup.
+`tabular-source-browser.test.js` executes the same 16-record XLSX oracle through
+bounded binary range reads from a virtual 80-MiB ZIP envelope. Less than 1 MiB is
+transferred; this proves sparse random access, not large-workbook throughput.
+Real Workers cover cancel/deadline/disposal, external source revocation, late bytes,
+old/foreign/concurrent/out-of-order requests, excessive rereads, premature output,
+mismatched source receipts and cleanup failure. The source endpoint is test-only;
+these checks do not qualify native transport, module pins or Windows/WebView2.
+
 Shared project storage: Harness filter `tabular project:` covers create/reopen,
 read-only refusal, relocation, malformed metadata, foreign-workspace binding,
 external drift, historical bytes and uncertain-write recovery. Source checks add stable
@@ -1122,7 +1177,9 @@ node tests/web/tabular-core.test.js
 node tests/web/tabular-matrix.test.js
 node tests/web/tabular-universal.test.js
 node tests/web/tabular-xlsx.test.js
+node tests/web/tabular-byte-source.test.js
 node tests/web/tabular-browser.test.js
+node tests/web/tabular-source-browser.test.js
 ```
 
 The browser script accepts the repository's usual `BROWSER_EXECUTABLE` override;

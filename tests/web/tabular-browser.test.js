@@ -12,7 +12,7 @@ const input = fs.readFileSync(fixture, "utf8");
 const matrixFixture = path.join(root, "examples/matrix-extraction.json"), matrixInput = fs.readFileSync(matrixFixture, "utf8");
 const xlsxFixture = path.join(root, "examples/matrix-xlsx-extraction.json"), xlsxInput = fs.readFileSync(xlsxFixture, "utf8");
 const { source: xlsxSource } = require("./tabular-xlsx-fixture");
-const assets = ["index.html", "probe.css", "probe.js", "selectors.js", "snapshot.js", "json.js", "decimal.js", "sources.js", "expression.js", "template.js", "transform.js", "engine.js", "executor.js", "worker.js", "xlsx-zip.js", "xlsx-reader.js", "js/vendor/sax.js"];
+const assets = ["index.html", "probe.css", "probe.js", "selectors.js", "snapshot.js", "json.js", "decimal.js", "sources.js", "byte-source.js", "expression.js", "template.js", "transform.js", "engine.js", "executor.js", "worker.js", "xlsx-zip.js", "xlsx-reader.js", "js/vendor/sax.js"];
 const assetPath = file => path.join(root, file === "js/vendor/sax.js" ? "../" + file : file);
 
 (async () => {
@@ -22,7 +22,7 @@ const assetPath = file => path.join(root, file === "js/vendor/sax.js" ? "../" + 
         response.setHeader("Cache-Control", "no-store");
         if (file === "busy-worker.js" || file === "foreign-worker.js" || file === "foreign-batch-worker.js") {
             response.setHeader("Content-Type", "text/javascript");
-            response.end('postMessage({type:"ready",protocol:4,revision:"tabular-core-2"}); onmessage = event => {' +
+            response.end('postMessage({type:"ready",protocol:5,revision:"tabular-core-2"}); onmessage = event => {' +
                 (file === "foreign-batch-worker.js" ? 'postMessage({type:"batch",id:event.data.id,batch:{version:1,sequence:2,records:[{}]}});' : file === "busy-worker.js"
                     ? 'postMessage({type:"progress",id:event.data.id,progress:{completedCells:0,totalCells:1}}); while(true) {}'
                     : 'postMessage({type:"result",id:event.data.id+1,result:{version:1,engineRevision:"tabular-core-2"}});') + '}');

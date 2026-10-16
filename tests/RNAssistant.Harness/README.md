@@ -20,6 +20,15 @@ interoperability. The browser checks XLSX Worker transfer without UI body reads,
 byte progress/cancel/rerun and explicit refusal of cooperative execution. These
 require no Harness build and do not qualify Office capture, representative 80 MB
 workbooks, Windows/WebView2, the application processing queue or publication.
+
+`node tests/web/tabular-byte-source.test.js` checks bounded exact byte reads, buffer
+ownership, single flight, pending-read revocation and malformed replies/cleanup.
+`node tests/web/tabular-source-browser.test.js` uses real Workers and a test-only
+binary endpoint: the XLSX oracle from a virtual 80-MiB source transfers less than
+1 MiB, with 256-KiB range bounds, cancellation/deadlines, late data, protocol guards,
+preflight-before-read and staging abort on failure. XLSX tests also cover a ZIP
+directory larger than one transport chunk. No C# build is needed; these do not
+qualify native source transport/module pins or representative 80-MB Excel throughput.
 After vendor changes run `node tests/web/vendor-gate.test.js` for hashes/licenses.
 The scope and manual probe are in [Data Templates](../../docs/data-templates.md).
 

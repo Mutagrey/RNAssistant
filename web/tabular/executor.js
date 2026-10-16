@@ -17,7 +17,7 @@
         const engine = root.RNTabularEngine, expectedRevision = options.expectedRevision || engine.revision;
         let active = null, disposed = false, sequence = 0;
 
-        function run(operation, input, settings = {}, sourceFile) {
+        function run(operation, input, settings = {}, sourceFile, byteSource) {
             if (disposed) return Promise.reject(failure("EXECUTOR_DISPOSED", "Executor is disposed."));
             if (active) return Promise.reject(failure("EXECUTOR_BUSY", "A run is already active."));
             if (typeof input !== "string" || input.length > engine.maxInputCharacters)
@@ -25,8 +25,9 @@
             const extraction = operation !== "inspect", xlsx = operation === "extractXlsx";
             if (xlsx && mode !== "worker")
                 return Promise.reject(failure("XLSX_WORKER_REQUIRED", "XLSX reading requires an interruptible Worker."));
-            if (xlsx && (!(sourceFile instanceof Blob) || !sourceFile.size || sourceFile.size > engine.maxSourceBytes))
-                return Promise.reject(failure("XLSX_INPUT_LIMIT", "Select a nonempty XLSX file of at most 96 MiB."));
+            if (xlsx && (byteSource ? !root.RNTabularByteSource.isSource(byteSource) || byteSource.closed || byteSource.byteLength > engine.maxSourceBytes
+                : !(sourceFile instanceof Blob) || !sourceFile.size || sourceFile.size > engine.maxSourceBytes))
+                return Promise.reject(failure("XLSX_INPUT_LIMIT", "Select an open XLSX source of at most 96 MiB."));
             if (extraction && (!settings.sink || ["writeBatch", "complete", "abort"].some(name => typeof settings.sink[name] !== "function")))
                 return Promise.reject(failure("RESULT_SINK_REQUIRED", "Extraction requires writeBatch, complete and synchronous abort on a result sink."));
             const maximumDeadline = xlsx ? 300000 : 30000, deadlineMs = settings.deadlineMs === undefined ? (xlsx ? 120000 : 5000) : settings.deadlineMs;
@@ -35,9 +36,11 @@
             if (settings.signal && settings.signal.aborted)
                 return Promise.reject(failure("EXECUTION_CANCELLED", "Execution was cancelled."));
             return new Promise((resolve, reject) => {
-                const job = { id: ++sequence, stopped: false, worker: null, timer: null, batchPending: false, batches: 0, records: 0 };
+                const job = { id: ++sequence, stopped: false, worker: null, timer: null, batchPending: false, batches: 0, records: 0,
+                    readPending: false, reads: 0, readBytes: 0 };
                 active = job;
                 const abort = () => finish(failure("EXECUTION_CANCELLED", "Execution was cancelled."));
+                const sourceClosed = () => finish(failure("SOURCE_CLOSED", "Source capability was revoked during execution."));
                 function finish(error, result, sinkCompleted = false) {
                     if (job.stopped) return;
                     if (!error && extraction && !sinkCompleted) {
@@ -52,11 +55,19 @@
                     job.stopped = true;
                     clearTimeout(job.timer);
                     if (settings.signal) settings.signal.removeEventListener("abort", abort);
+                    if (byteSource) byteSource.signal.removeEventListener("abort", sourceClosed);
                     if (job.worker) {
                         job.worker.onmessage = job.worker.onerror = job.worker.onmessageerror = null;
                         job.worker.terminate();
                     }
                     if (active === job) active = null;
+                    if (byteSource) {
+                        try { byteSource.dispose(); }
+                        catch (closeError) {
+                            if (!error) error = failure("SOURCE_CLOSE_FAILED", "Source capability could not be closed.");
+                            error.sourceCloseFailure = closeError.message;
+                        }
+                    }
                     if (error) {
                         if (extraction) {
                             try { settings.sink.abort(error); } // Must revoke staging even if a writeBatch Promise is still pending.
@@ -79,6 +90,7 @@
                 job.timer = setTimeout(() => finish(failure("EXECUTION_TIMEOUT", "Execution deadline exceeded.")), deadlineMs);
                 try {
                     if (settings.signal) settings.signal.addEventListener("abort", abort, { once: true });
+                    if (byteSource) byteSource.signal.addEventListener("abort", sourceClosed, { once: true });
                     if (mode === "cooperative") {
                         if (engine.revision !== expectedRevision)
                             throw failure("EXECUTOR_REVISION_MISMATCH", "Reload the shipped runtime before executing.");
@@ -103,13 +115,27 @@
                                     throw failure("EXECUTOR_REVISION_MISMATCH", "Worker runtime revision differs from its owner.");
                                 ready = true;
                                 job.worker.postMessage({ type: operation, id: job.id, protocol: engine.protocol,
-                                    revision: expectedRevision, input, ...(xlsx ? { sourceFile } : {}) });
+                                    revision: expectedRevision, input, ...(xlsx ? byteSource
+                                        ? { source: { byteLength: byteSource.byteLength, label: byteSource.label } } : { sourceFile } : {}) });
                             } else if (!ready || message.id !== job.id) {
                                 throw failure("EXECUTOR_PROTOCOL_INVALID", "Worker response belongs to another run.");
+                            } else if (message.type === "source-read") {
+                                if (!byteSource || !xlsx || job.completing || job.readPending || job.batchPending ||
+                                    message.protocol !== engine.protocol || message.revision !== expectedRevision ||
+                                    message.sequence !== job.reads + 1 || !Number.isSafeInteger(message.offset) || !Number.isSafeInteger(message.count) ||
+                                    message.offset < 0 || message.count < 1 || message.count > root.RNTabularByteSource.maximumReadBytes ||
+                                    message.offset > byteSource.byteLength - message.count || job.readBytes + message.count > byteSource.byteLength * 3)
+                                    throw failure("EXECUTOR_PROTOCOL_INVALID", "Invalid or concurrent source range request.");
+                                job.readPending = true;
+                                const bytes = await byteSource.readRange(message.offset, message.count);
+                                if (!current()) return;
+                                job.reads++; job.readBytes += message.count; job.readPending = false;
+                                job.worker.postMessage({ type: "source-bytes", id: job.id, protocol: engine.protocol, revision: expectedRevision,
+                                    sequence: message.sequence, offset: message.offset, count: message.count, bytes: bytes.buffer }, [bytes.buffer]);
                             } else if (message.type === "progress") progress(message.progress);
                             else if (message.type === "batch" && extraction) {
                                 const batch = message.batch, limits = root.RNTabularTemplate.limits;
-                                if (job.batchPending || !batch || batch.version !== 1 || batch.sequence !== job.batches + 1 ||
+                                if (job.readPending || job.batchPending || !batch || batch.version !== 1 || batch.sequence !== job.batches + 1 ||
                                     !Array.isArray(batch.records) || !batch.records.length || batch.records.length > limits.batchRecords ||
                                     job.records + batch.records.length > limits.records || JSON.stringify(batch.records).length > limits.batchCharacters + limits.batchRecords + 2)
                                     throw failure("EXECUTOR_PROTOCOL_INVALID", "Invalid or out-of-order result batch.");
@@ -123,7 +149,7 @@
                             else if (message.type === "result") {
                                 if (!message.result || message.result.version !== (extraction ? 2 : 1) || message.result.engineRevision !== expectedRevision)
                                     throw failure("EXECUTOR_PROTOCOL_INVALID", "Worker returned a different result contract.");
-                                if (extraction && (job.batchPending || message.result.kind !== "extraction-result" ||
+                                if (extraction && (job.readPending || job.batchPending || message.result.kind !== "extraction-result" ||
                                     message.result.recordCount !== job.records || message.result.batchCount !== job.batches || !message.result.coverage || !message.result.coverage.complete))
                                     throw failure("EXECUTOR_PROTOCOL_INVALID", "Extraction summary does not match acknowledged batches.");
                                 finish(null, message.result);
@@ -145,10 +171,12 @@
 
         return Object.freeze({ inspect: (input, settings) => run("inspect", input, settings),
             extract: (input, settings) => run("extract", input, settings),
-            extractXlsx: (input, sourceFile, settings) => run("extractXlsx", input, settings, sourceFile), dispose: () => {
-            disposed = true;
-            if (active) active.stop(failure("EXECUTOR_DISPOSED", "Executor was disposed during the run."));
-        } });
+            extractXlsx: (input, sourceFile, settings) => run("extractXlsx", input, settings, sourceFile),
+            extractXlsxSource: (input, byteSource, settings) => run("extractXlsx", input, settings, null, byteSource),
+            dispose: () => {
+                disposed = true;
+                if (active) active.stop(failure("EXECUTOR_DISPOSED", "Executor was disposed during the run."));
+            } });
     }
 
     root.RNTabularExecutor = Object.freeze({ create });

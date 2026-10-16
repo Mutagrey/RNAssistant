@@ -1,5 +1,22 @@
 # Stabilization progress
 
+## Bounded byte-source input for the portable XLSX executor — 2026-10-16
+
+The ZIP/XML reader no longer depends on Blob methods. One owned byte-source contract
+serves selected Files and pull-based sources; Worker protocol v5 requests exact
+bounded binary ranges with one read in flight. Source revocation/cancel/deadline
+terminates work, failed cleanup aborts staging, and provisional results cannot
+overtake pending input. Old Worker protocols fail explicitly. No native bridge,
+source store, C# interpreter or Office runtime change was introduced.
+
+Validation: focused byte-source, XLSX and real-Worker checks cover range/sequence
+guards, provider failures, preflight, cancellation, late bytes and disposal. The
+16-record oracle also passes against a virtual 80-MiB ZIP envelope with less than
+1 MiB transferred; this is sparse access evidence, not a large-workbook benchmark.
+Existing selected-File/offline execution remains covered. No build or Office/VSTO
+validation was run. Next: application-owned exact-stream/seek transport and pinned
+isolated native execution, then queue parser dispatch. [Contract](../data-templates.md#bounded-byte-source).
+
 ## Persistent project source declarations — 2026-10-16
 
 The loader and CLI now save source composition in a closed format-2 `project.json`

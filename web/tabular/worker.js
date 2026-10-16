@@ -1,12 +1,21 @@
 "use strict";
 
 // Only fixed shipped modules and declared operations. No project scripts/URLs or network source reads.
-importScripts("selectors.js", "snapshot.js", "json.js", "decimal.js", "sources.js", "expression.js", "template.js", "transform.js", "engine.js",
+importScripts("selectors.js", "snapshot.js", "json.js", "decimal.js", "sources.js", "byte-source.js", "expression.js", "template.js", "transform.js", "engine.js",
     "../js/vendor/sax.js", "xlsx-zip.js", "xlsx-reader.js");
 
-let accepted = false, requestId = null, pendingBatch = null;
+let accepted = false, requestId = null, pendingBatch = null, pendingRead = null, readSequence = 0;
 self.onmessage = async function (event) {
     const message = event.data;
+    if (message && message.type === "source-bytes" && accepted && pendingRead) {
+        const read = pendingRead; pendingRead = null;
+        if (message.id !== requestId || message.protocol !== RNTabularEngine.protocol || message.sequence !== read.sequence ||
+            message.revision !== RNTabularEngine.revision || message.offset !== read.offset || message.count !== read.count ||
+            !(message.bytes instanceof ArrayBuffer) || message.bytes.byteLength !== read.count)
+            read.reject(Object.assign(new Error("Source response differs from the pending range."), { code: "EXECUTOR_PROTOCOL_INVALID" }));
+        else read.resolve(message.bytes);
+        return;
+    }
     if (message && message.type === "ack" && accepted && pendingBatch && message.id === requestId &&
         message.sequence === pendingBatch.sequence && message.protocol === RNTabularEngine.protocol) {
         const resolve = pendingBatch.resolve; pendingBatch = null; resolve(); return;
@@ -18,12 +27,26 @@ self.onmessage = async function (event) {
         return;
     }
     accepted = true; requestId = message.id;
+    let byteSource = null;
     try {
+        if (message.type === "extractXlsx") {
+            if (message.sourceFile && message.source) throw Object.assign(new Error("Choose one source capability."), { code: "EXECUTOR_PROTOCOL_INVALID" });
+            byteSource = message.sourceFile ? RNTabularByteSource.fromBlob(message.sourceFile)
+                : RNTabularByteSource.create({ byteLength: message.source && message.source.byteLength, label: message.source && message.source.label,
+                    readRange: (offset, count) => new Promise((resolve, reject) => {
+                        pendingRead = { sequence: ++readSequence, offset, count, resolve, reject };
+                        self.postMessage({ type: "source-read", id: requestId, protocol: RNTabularEngine.protocol,
+                            revision: RNTabularEngine.revision, sequence: readSequence, offset, count });
+                    }), close: () => {
+                        if (pendingRead) pendingRead.reject(Object.assign(new Error("Source closed."), { code: "SOURCE_CLOSED" }));
+                        pendingRead = null;
+                    } });
+        }
         let lastProgress = -Infinity;
         const result = await RNTabularEngine[message.type](message.input, {
             isCancelled: () => false, // The owning executor terminates this dedicated Worker on cancel/deadline.
             yieldControl: () => new Promise(resolve => setTimeout(resolve, 0)),
-            sourceFile: message.sourceFile,
+            byteSource,
             onProgress: progress => {
                 const now = performance.now();
                 if (progress.phase === "reading-xlsx" && !progress.force && now - lastProgress < 100) return;
@@ -39,6 +62,6 @@ self.onmessage = async function (event) {
         self.postMessage({ type: "error", id: message.id, error: {
             code: error.code || "EXECUTION_FAILED", path: error.path || "", message: error.message, location: error.location || null
         } });
-    }
+    } finally { if (byteSource) byteSource.dispose(); }
 };
 self.postMessage({ type: "ready", protocol: RNTabularEngine.protocol, revision: RNTabularEngine.revision });

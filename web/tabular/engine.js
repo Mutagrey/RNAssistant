@@ -59,12 +59,12 @@
         root.RNTabularTemplate.fields(input.source, ["formulaPolicy"], "/source");
         const plan = root.RNTabularTemplate.compile(input.template), dictionaries = root.RNTabularTemplate.openDictionaries(input.dictionaries);
         if (plan.source.kind !== "matrix") fail("SOURCE_MODEL_MISMATCH", "/template/source", "XLSX requires a matrix source plan.");
-        const reader = await root.RNTabularXlsxReader.open(hooks.sourceFile,
+        const reader = await root.RNTabularXlsxReader.open(hooks.byteSource,
             { sheet: plan.source.sheet, bounds: plan.source.bounds, formulaPolicy: input.source.formulaPolicy }, hooks);
         const source = root.RNTabularSources.matrix(plan, reader);
         const result = await root.RNTabularTransform.execute(plan, source, dictionaries, input.dataset, hooks);
         return Object.freeze({ ...result, engineRevision: revision, sourceCapabilities: reader.capabilities, sourceDiagnostics: reader.diagnostics });
     }
 
-    root.RNTabularEngine = Object.freeze({ revision, protocol: 4, maxInputCharacters, maxSourceBytes: 96 * 1048576, inspect, extract, extractXlsx });
+    root.RNTabularEngine = Object.freeze({ revision, protocol: 5, maxInputCharacters, maxSourceBytes: 96 * 1048576, inspect, extract, extractXlsx });
 }(globalThis));

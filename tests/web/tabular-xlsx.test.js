@@ -1,15 +1,19 @@
 "use strict";
 const assert = require("node:assert/strict"), fs = require("node:fs"), path = require("node:path"), vm = require("node:vm");
 const { Blob, File } = require("node:buffer"), { parts, zip, source } = require("./tabular-xlsx-fixture");
-const folder = path.resolve(__dirname, "../../web/tabular"), context = vm.createContext({ Blob, TextDecoder, ReadableStream, DecompressionStream });
+const folder = path.resolve(__dirname, "../../web/tabular"), context = vm.createContext({ Blob, AbortController, TextDecoder, ReadableStream, DecompressionStream });
 vm.runInContext(fs.readFileSync(path.join(folder, "../js/vendor/sax.js"), "utf8"), context);
-for (const name of ["selectors.js", "snapshot.js", "json.js", "decimal.js", "sources.js", "expression.js", "template.js", "transform.js", "engine.js", "xlsx-zip.js", "xlsx-reader.js"])
+for (const name of ["selectors.js", "snapshot.js", "json.js", "decimal.js", "sources.js", "byte-source.js", "expression.js", "template.js", "transform.js", "engine.js", "xlsx-zip.js", "xlsx-reader.js"])
     vm.runInContext(fs.readFileSync(path.join(folder, name), "utf8"), context, { filename: name });
 const json = value => JSON.parse(JSON.stringify(value));
 const hooks = { isCancelled: () => false, yieldControl: async () => {}, onProgress: () => {} };
 const config = { sheet: "Данные", bounds: "A1:AG20", formulaPolicy: "stored-cache" };
 const request = fs.readFileSync(path.join(folder, "examples/matrix-xlsx-extraction.json"), "utf8");
-const read = (bytes, extra = {}) => context.RNTabularXlsxReader.open(new File([bytes], "fixture.xlsx"), config, { ...hooks, ...extra });
+async function withSource(blob, action) {
+    const byteSource = context.RNTabularByteSource.fromBlob(blob);
+    try { return await action(byteSource); } finally { byteSource.dispose(); }
+}
+const read = (bytes, extra = {}) => withSource(new File([bytes], "fixture.xlsx"), byteSource => context.RNTabularXlsxReader.open(byteSource, config, { ...hooks, ...extra }));
 const at = (reader, address) => { const point = context.RNTabularSelectors.cell(address); return json(reader.read({ ...point, address, sheet: config.sheet })); };
 async function refuses(change, code, options) {
     const entries = parts(); change(entries);
@@ -33,8 +37,8 @@ async function refuses(change, code, options) {
     assert.throws(() => at(reader, "AH1"), error => error.code === "CAPTURE_INCOMPLETE");
     assert.throws(() => reader.read({ sheet: "Other", row: 1, column: 1, address: "A1" }), error => error.code === "CAPTURE_SHEET_MISMATCH");
     const records = [], progress = [];
-    const summary = await context.RNTabularEngine.extractXlsx(request, { ...hooks, sourceFile: new File([fs.readFileSync(source)], "matrix.xlsx"),
-        onBatch: async batch => records.push(...json(batch.records)), onProgress: item => progress.push(json(item)) });
+    const summary = await withSource(new File([fs.readFileSync(source)], "matrix.xlsx"), byteSource => context.RNTabularEngine.extractXlsx(request, { ...hooks, byteSource,
+        onBatch: async batch => records.push(...json(batch.records)), onProgress: item => progress.push(json(item)) }));
     assert.equal(summary.recordCount, 16); assert.equal(summary.missingValueCount, 4); assert.equal(summary.source.kind, "xlsx-file");
     assert.deepEqual(records.map(item => item.value), [
         { kind: "decimal", value: "10" }, { kind: "decimal", value: "0" }, { kind: "missing", reason: "blank" }, { kind: "decimal", value: "1234.5" },
@@ -57,7 +61,7 @@ async function refuses(change, code, options) {
     for (const [lexeme, expected] of [["12345678901234567890.123456789012345678", "12345678901234567890.123456789012345678"], ["+.5e+2", "50"], ["-0.000E-2", "0"], ["1.234e-3", "0.001234"]]) {
         const values = parts(); values.set(sheet, values.get(sheet).replace('<v>10</v>', '<v>' + lexeme + '</v>'));
         const output = [];
-        await context.RNTabularEngine.extractXlsx(request, { ...hooks, sourceFile: new Blob([zip(values)]), onBatch: async batch => output.push(...json(batch.records)) });
+        await withSource(new Blob([zip(values)]), byteSource => context.RNTabularEngine.extractXlsx(request, { ...hooks, byteSource, onBatch: async batch => output.push(...json(batch.records)) }));
         assert.equal(output[0].value.value, expected); assert.equal(output[0].provenance.value.evidence[0].cell.lexeme, lexeme);
     }
     const v2 = JSON.parse(fs.readFileSync(path.join(folder, "examples/disjoint-capture.json"), "utf8"));
@@ -108,12 +112,24 @@ async function refuses(change, code, options) {
         stream() { throw new Error("whole source stream"); }
         slice(start, end) { slices.push(end - start); return super.slice(start, end); }
     }
-    const bounded = await context.RNTabularXlsxReader.open(new SlicedFile([bytes], "many-rows.xlsx"), config, { ...hooks, onProgress: item => events.push(item) });
+    const bounded = await withSource(new SlicedFile([bytes], "many-rows.xlsx"), byteSource => context.RNTabularXlsxReader.open(byteSource, config, { ...hooks, onProgress: item => events.push(item) }));
     assert.equal(bounded.count, 660); assert.equal(bounded.diagnostics.scannedCells, 30030);
     assert.equal(bounded.diagnostics.storedCells, 30); assert.ok(bounded.diagnostics.sourceBytesRead < bytes.length / 2);
     assert.ok(Math.max(...slices) <= 65557); assert.ok(events.filter(item => item.part === sheet && item.partBytes > 0).length > 10);
     assert.deepEqual(at(bounded, "C12"), { kind: "numeric", lexeme: "10" });
     console.log("PASS XLSX bounded IO: 30000 unselected rows scanned incrementally, unrelated ZIP member unread, fixed capture and no whole-File reads");
+
+    const manyParts = parts();
+    for (let i = 0; i < 1000; i++) manyParts.set("unused/" + i + "-" + "x".repeat(300), "");
+    const largeDirectory = zip(manyParts), requests = [];
+    const pulled = context.RNTabularByteSource.create({ byteLength: largeDirectory.length, label: "Large directory.xlsx",
+        readRange: (offset, count) => { requests.push(count); return largeDirectory.subarray(offset, offset + count); }, close() {} });
+    try {
+        const reader = await context.RNTabularXlsxReader.open(pulled, config, hooks);
+        assert.deepEqual(at(reader, "C12"), { kind: "numeric", lexeme: "10" });
+        assert.equal(Math.max(...requests), 262144, "large directory is segmented at the byte source budget");
+    } finally { pulled.dispose(); }
+    console.log("PASS XLSX pull boundary: directory above 256 KiB uses bounded sequential range requests");
 
     // Independently produced OOXML exercises ordinary library output, not only handcrafted fixtures.
     const carrier = fs.readFileSync(path.join(folder, "../js/vendor/sheetjs.source.js"), "utf8");

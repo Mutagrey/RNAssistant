@@ -90,13 +90,13 @@
     }
 
     // One explicit matrix rectangle, raw stored values and source evidence. No display formatting/recalculation.
-    async function open(blob, config, hooks) {
+    async function open(byteSource, config, hooks) {
         root.RNTabularTemplate.fields(config, ["sheet", "bounds", "formulaPolicy"], "/source");
         if (typeof config.sheet !== "string" || !config.sheet || config.sheet.length > 128 || config.formulaPolicy !== "stored-cache")
             unsupported("/source", "An exact sheet and explicit stored-cache formula policy are required.");
         const box = geometry.rectangle(config.bounds), count = geometry.area(box);
         if (count > geometry.maxCells) fail("CAPTURE_LIMIT", "/source/bounds", "XLSX capture exceeds 100000 cells.");
-        const zip = await root.RNTabularXlsxZip.open(blob, hooks);
+        const zip = await root.RNTabularXlsxZip.open(byteSource, hooks);
         const types = new Map();
         await xml(zip, "[Content_Types].xml", limits.metadataBytes, "Types", contentTypes, { open(node, stack) {
             if (stack.length === 1) return;
@@ -251,7 +251,7 @@
                 cells.set(address, root.RNTabularSnapshot.copyCell({ kind: "text", value: strings.get(cell.index), ...(cell.formula ? { formula: cell.formula } : {}) }, address, 2));
             }
         }
-        const blank = freeze({ kind: "blank" }), source = freeze({ kind: "xlsx-file", label: typeof blob.name === "string" ? blob.name.slice(0, 256) : "Selected XLSX" });
+        const blank = freeze({ kind: "blank" }), source = freeze({ kind: "xlsx-file", label: byteSource.label });
         const capabilities = freeze({ version: 1, shape: "matrix", cellVersion: 2, numeric: "exact-lexeme", formulaPolicy: "stored-cache",
             cacheFreshness: "unknown", formatting: "not-applied", dateSystem, coverage: "complete-rectangle" });
         return freeze({ source, sheet: config.sheet, count, capabilities,

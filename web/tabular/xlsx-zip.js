@@ -22,23 +22,28 @@
 
     // Selective ZIP32 reader. Only consumed parts are inflated/CRC-checked; no filesystem extraction.
     // Native deflate is required, never replaced by synchronous whole-archive decompression.
-    async function open(blob, hooks) {
-        if (!(blob instanceof Blob) || !blob.size || blob.size > limits.fileBytes)
-            fail("XLSX_INPUT_LIMIT", "source", "XLSX must be a nonempty Blob of at most 96 MiB.");
+    async function open(source, hooks) {
+        if (!root.RNTabularByteSource.isSource(source) || source.closed || source.byteLength > limits.fileBytes)
+            fail("XLSX_INPUT_LIMIT", "source", "XLSX needs an open bounded byte source of at most 96 MiB.");
         const guard = () => { if (hooks.isCancelled()) fail("EXECUTION_CANCELLED", "source", "XLSX reading was cancelled."); };
         let sourceBytesRead = 0, expandedBytes = 0;
         const progress = (part, partBytes, totalPartBytes, force = false) => hooks.onProgress({ phase: "reading-xlsx",
-            part, sourceBytesRead, sourceBytes: blob.size, expandedBytes, partBytes, totalPartBytes, force });
+            part, sourceBytesRead, sourceBytes: source.byteLength, expandedBytes, partBytes, totalPartBytes, force });
         async function read(offset, size) {
             guard();
-            if (!Number.isSafeInteger(offset) || !Number.isSafeInteger(size) || offset < 0 || size < 0 || offset + size > blob.size)
+            if (!Number.isSafeInteger(offset) || !Number.isSafeInteger(size) || offset < 0 || size < 1 || offset > source.byteLength - size)
                 fail("XLSX_ZIP_INVALID", "source", "Truncated ZIP structure.");
-            const bytes = new Uint8Array(await blob.slice(offset, offset + size).arrayBuffer()); guard();
-            if (bytes.length !== size) fail("XLSX_ZIP_INVALID", "source", "Short ZIP read.");
+            // The bounded ZIP directory may exceed the transport chunk budget.
+            const bytes = new Uint8Array(size);
+            for (let position = 0; position < size;) {
+                guard();
+                const count = Math.min(size - position, root.RNTabularByteSource.maximumReadBytes);
+                bytes.set(await source.readRange(offset + position, count), position); guard(); position += count;
+            }
             sourceBytesRead += size; return bytes;
         }
         progress("directory", 0, null, true);
-        const tailOffset = Math.max(0, blob.size - 65557), tail = await read(tailOffset, blob.size - tailOffset);
+        const tailOffset = Math.max(0, source.byteLength - 65557), tail = await read(tailOffset, source.byteLength - tailOffset);
         const tv = new DataView(tail.buffer); let end = -1;
         for (let i = tail.length - 22; i >= 0; i--) if (tv.getUint32(i, true) === 0x06054b50 && i + 22 + tv.getUint16(i + 20, true) === tail.length) { end = i; break; }
         if (end < 0) fail("XLSX_ZIP_INVALID", "source", "ZIP end record is missing.");
@@ -137,7 +142,7 @@
             }
         }
         return freeze({ parts: freeze(Array.from(entries.keys())), consume,
-            statistics: () => freeze({ sourceBytesRead, sourceBytes: blob.size, expandedBytes, consumedParts: consumed.size }) });
+            statistics: () => freeze({ sourceBytesRead, sourceBytes: source.byteLength, expandedBytes, consumedParts: consumed.size }) });
     }
     root.RNTabularXlsxZip = freeze({ open, limits });
 }(globalThis));
