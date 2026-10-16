@@ -7,6 +7,9 @@
     if (progress.phase === "reading-xlsx") return "Чтение " + (progress.part || "XLSX") +
       (progress.totalPartBytes ? " · " + Math.floor(progress.partBytes / progress.totalPartBytes * 100) + "% части" : "");
     if (progress.phase === "reading-records") return "Исходные записи: " + progress.completedItems + " из " + progress.totalItems;
+    if (progress.phase === "staging-results") return "Сохранено " + progress.records + " записей · " +
+      Math.ceil(progress.bytes / 1048576) + " МиБ результата";
+    if (progress.phase === "verifying-result") return "Проверка сохранённого результата";
     if (progress.totalRecords) return "Записи: " + progress.completedRecords + " из " + progress.totalRecords;
     return "Обработка в Worker";
   }
@@ -20,12 +23,13 @@
       return Object.freeze({ templateName: template && template.name, templateLoading: templateLoading,
         selectedCount: sources.length, selectedXlsx: sources.filter(source => source.format === "xlsx").length,
         sourceBusy: loader.isBusy(), running: !!run, templateNotice: templateNotice, runNotice: runNotice,
+        storageMode: root.DataTemplatesResultStaging.mode(),
         queue: Object.freeze(queue.map(item => Object.freeze({ id: item.id, path: item.path, status: item.status,
           error: item.error, recordCount: item.result ? item.result.summary.recordCount : null, progress: progressText(item.progress) }))),
         selectedId: selectedId, selected: (() => {
           const item = queue.find(value => value.id === selectedId);
           return item && item.result ? Object.freeze({ path: item.path, status: item.status,
-            summary: item.result.summary, preview: item.result.preview, bytes: item.result.bytes })
+            summary: item.result.summary, preview: item.result.preview, bytes: item.result.bytes, mode: item.result.mode })
             : item ? Object.freeze({ path: item.path, status: item.status, error: item.error,
               progress: progressText(item.progress) }) : null;
         })(),
@@ -39,7 +43,10 @@
           note: "Один Worker и один файл одновременно. Отмена прерывает текущий файл и оставшуюся очередь." }) : lastActivity });
     }
     function render() { if (view && !disposed) view.render(snapshot()); }
-    function releaseResults() { queue.forEach(item => { if (item.store) item.store.discard(); }); queue = []; selectedId = null; }
+    function releaseResults() {
+      const previous = queue; queue = []; selectedId = null;
+      return Promise.all(previous.filter(item => item.store).map(item => item.store.discard()));
+    }
     async function chooseTemplate(file) {
       if (run || disposed) return;
       const ticket = ++templateTicket;
@@ -64,7 +71,7 @@
       const selection = loader.beginProcessing();
       if (!selection) { templateNotice = "Дождитесь окончания подбора источников."; render(); return; }
       if (!selection.length) { loader.endProcessing(); templateNotice = "Выберите хотя бы один источник."; render(); return; }
-      releaseResults(); lastActivity = null; runNotice = "";
+      const cleanup = releaseResults(); lastActivity = null; runNotice = "";
       const runningTemplate = template;
       queue = selection.map(source => ({ id: source.id, file: source.file, path: source.path, format: source.format,
         templateName: runningTemplate.name, status: "queued", error: "", progress: null, result: null, store: null }));
@@ -73,6 +80,8 @@
       run = operation; operation.timer = setInterval(render, 500); render(); view.showResults();
       let executor = null;
       try {
+        await cleanup;
+        if (operation.abort.signal.aborted) return;
         // Loading the fixed core also respects cancellation before the first Worker starts.
         if (queue.some(item => item.format === "xlsx" && item.file.size <= sourceLimit)) {
           const executorFactory = await root.DataTemplatesBrowserCore.load();
@@ -89,19 +98,44 @@
           if (!item.file.size || item.file.size > sourceLimit) {
             item.status = "failed"; item.error = "XLSX_INPUT_LIMIT: нужен непустой XLSX до 96 МиБ."; render(); continue;
           }
-          item.status = "running"; item.store = root.DataTemplatesResultStaging.create(); render();
+          item.status = "running"; render();
           try {
+            const retained = queue.reduce((sum, entry) => sum + (entry.result ? entry.result.bytes : 0), 0);
+            const remainingBytes = root.DataTemplatesResultStaging.totalMaximumBytes - retained;
+            if (remainingBytes < 1) throw Object.assign(new Error("Общий бюджет результатов 1 ГиБ исчерпан."), { code: "RESULT_STAGING_LIMIT" });
+            item.store = await root.DataTemplatesResultStaging.create({
+              source: { name: item.file.name, path: item.path, size: item.file.size },
+              templateName: item.templateName, remainingBytes: remainingBytes, signal: operation.abort.signal
+            });
+            if (operation.abort.signal.aborted) throw Object.assign(new Error("Обработка отменена."), { code: "EXECUTION_CANCELLED" });
             const summary = await executor.extractXlsx(runningTemplate.input, item.file, {
-              signal: operation.abort.signal, sink: item.store.sink,
+              signal: operation.abort.signal,
+              sink: {
+                writeBatch: async batch => {
+                  const receipt = await item.store.sink.writeBatch(batch);
+                  if (run === operation && !operation.abort.signal.aborted) {
+                    item.progress = { phase: "staging-results", records: receipt.records, bytes: receipt.bytes }; render();
+                  }
+                },
+                complete: item.store.sink.complete,
+                abort: item.store.sink.abort
+              },
               onProgress: progress => { if (run === operation) { item.progress = progress; render(); } }
             });
-            if (operation.abort.signal.aborted) { item.store.discard(); item.status = "cancelled"; break; }
-            item.result = item.store.snapshot();
-            if (item.result.summary !== summary) throw new Error("Результат приёмника не совпал с исполнителем.");
+            if (operation.abort.signal.aborted) throw Object.assign(new Error("Обработка отменена."), { code: "EXECUTION_CANCELLED" });
+            const staged = item.store.snapshot();
+            if (staged.summary !== summary) throw new Error("Результат приёмника не совпал с исполнителем.");
+            item.progress = { phase: "verifying-result" }; render();
+            await item.store.file(); // Read back size/availability before showing a successful result.
+            if (operation.abort.signal.aborted) throw Object.assign(new Error("Обработка отменена."), { code: "EXECUTION_CANCELLED" });
+            item.result = staged;
             item.status = "completed";
           } catch (error) {
-            item.store.discard(); item.status = operation.abort.signal.aborted ? "cancelled" : "failed";
-            item.error = operation.abort.signal.aborted ? "Обработка отменена." : errorText(error);
+            let cleanupError = null;
+            if (item.store) try { await item.store.discard(); } catch (failure) { cleanupError = failure; }
+            item.result = null;
+            item.status = cleanupError ? "failed" : operation.abort.signal.aborted ? "cancelled" : "failed";
+            item.error = cleanupError ? errorText(cleanupError) : operation.abort.signal.aborted ? "Обработка отменена." : errorText(error);
             if (operation.abort.signal.aborted) break;
           }
           render();
@@ -113,7 +147,7 @@
         if (executor) executor.dispose();
         clearInterval(operation.timer);
         if (operation.abort.signal.aborted) queue.filter(item => item.status === "queued" || item.status === "running")
-          .forEach(item => { if (item.store) item.store.discard(); item.status = "cancelled"; item.error = "Обработка отменена."; });
+          .forEach(item => { item.status = "cancelled"; item.error = "Обработка отменена."; });
         const completed = count("completed"), failed = count("failed"), cancelled = count("cancelled");
         lastActivity = Object.freeze({ state: cancelled ? "cancelled" : failed ? "failed" : "completed",
           stage: "Обработка XLSX", title: cancelled ? "Очередь остановлена" : failed ? "Завершено с ошибками" : "Обработка завершена",
@@ -127,13 +161,22 @@
         run = null; loader.endProcessing(); render();
       }
     }
-    function download(id) {
+    async function download(id) {
       const item = queue.find(value => value.id === id);
       if (!item || item.status !== "completed" || !item.store) return;
-      const blob = item.store.blob({ name: item.file.name, path: item.path, size: item.file.size }, item.templateName);
-      const url = URL.createObjectURL(blob), link = document.createElement("a");
-      link.href = url; link.download = (item.file.name.replace(/[^\p{L}\p{N}._-]+/gu, "_").slice(0, 80) || "result") + ".canonical.json";
-      link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+      try {
+        const file = await item.store.file();
+        if (disposed || !queue.includes(item) || item.status !== "completed") return;
+        const url = URL.createObjectURL(file), link = document.createElement("a");
+        link.href = url; link.download = (item.file.name.replace(/[^\p{L}\p{N}._-]+/gu, "_").slice(0, 80) || "result") + ".canonical.json";
+        link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+      } catch (error) {
+        if (disposed || !queue.includes(item) || item.status !== "completed") return;
+        item.result = null; item.status = "failed"; item.error = errorText(error);
+        try { await item.store.discard(); } catch (failure) { item.error = errorText(failure); }
+        lastActivity = null;
+        runNotice = "Не удалось подготовить полный экспорт. Результат этого файла помечен ошибкой."; render();
+      }
     }
     view = root.DataTemplatesProcessingView.create(container, {
       chooseTemplate: chooseTemplate, start: start, cancel: cancel, dismiss: () => { lastActivity = null; render(); },
@@ -142,7 +185,7 @@
     render();
     return Object.freeze({ sourcesChanged: render, dispose: () => {
       disposed = true; templateTicket++; if (run) { run.abort.abort(); clearInterval(run.timer); }
-      releaseResults(); if (view) view.dispose(); loader.endProcessing();
+      releaseResults().catch(() => {}); if (view) view.dispose(); loader.endProcessing();
     } });
   }
   root.DataTemplatesProcessing = Object.freeze({ create: create });

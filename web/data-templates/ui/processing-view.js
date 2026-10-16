@@ -24,7 +24,7 @@
     templates.insertAdjacentHTML("beforeend", `<div class="dt-process-intro dt-card" id="dtTemplateDrop" role="region" aria-label="Выбор или перетаскивание JSON-шаблона"><div><p class="dt-eyebrow">01 / ШАБЛОН</p><h4>Выберите правила извлечения</h4><p>JSON-шаблон описывает точные листы, области и правила. Для начала доступно чтение XLSX; выбранные CSV и JSON будут показаны в очереди с явной ошибкой формата.</p></div><div class="dt-template-picker"><input type="file" id="dtTemplateFile" accept=".json,application/json" hidden><button type="button" id="dtChooseTemplate">Выбрать JSON-шаблон</button><span id="dtTemplateName">Шаблон не выбран</span><small>Можно перетащить сюда .json</small></div></div>
       <div class="dt-process-start dt-card"><div><p class="dt-eyebrow">02 / ИСТОЧНИКИ</p><h4 id="dtProcessSelection">Источники не выбраны</h4><p>Очередь запускается по выбранным файлам на вкладке «Источники». По одному файлу в Worker, без чтения книг в интерфейсе.</p></div><div class="dt-process-actions"><button type="button" id="dtProcessSources">К источникам</button><button type="button" class="dt-primary" id="dtStartProcessing">Запустить обработку</button></div></div>
       <p class="dt-process-note" id="dtProcessNotice" role="status" aria-live="polite"></p>
-      <p class="dt-footnote">Пример: <a href="core/examples/matrix-xlsx-extraction.json" download>скачать JSON-шаблон</a> и добавить <a href="core/examples/matrix-source.xlsx" download>пример XLSX</a>. Результат запуска хранится только в текущей вкладке.</p>`);
+      <p class="dt-footnote">Пример: <a href="core/examples/matrix-xlsx-extraction.json" download>скачать JSON-шаблон</a> и добавить <a href="core/examples/matrix-source.xlsx" download>пример XLSX</a>.</p><p class="dt-footnote" id="dtStorageNote"></p>`);
     results.insertAdjacentHTML("beforeend", `<div class="dt-process-summary"><div class="dt-card"><small>ФАЙЛОВ</small><strong id="dtResultTotal">0</strong></div><div class="dt-card"><small>ГОТОВО</small><strong id="dtResultCompleted">0</strong></div><div class="dt-card"><small>ОШИБКИ</small><strong id="dtResultFailed">0</strong></div><div class="dt-card"><small>ЗАПИСЕЙ</small><strong id="dtResultRecords">0</strong></div></div>
       <div class="dt-operation dt-card" id="dtProcessOperation" role="region" aria-label="Обработка файлов" hidden><div class="dt-operation-head"><div><span class="dt-operation-stage" data-operation-part="stage"></span><h4 data-operation-part="title"></h4></div><div class="dt-operation-actions"><span data-operation-part="elapsed"></span><button type="button" data-operation-part="cancel">Отменить</button><button type="button" class="dt-text-button" data-operation-part="dismiss" hidden>Скрыть</button></div></div><div class="dt-operation-meter" data-operation-part="meter"><progress data-operation-part="progress" aria-label="Файлов завершено"></progress><span data-operation-part="percent"></span></div><p class="dt-operation-current" data-operation-part="current"></p><div class="dt-operation-metrics"><span data-operation-part="count"></span><span data-operation-part="detail"></span></div><p class="dt-operation-note" data-operation-part="note"></p></div>
       <p class="dt-process-note" id="dtResultNotice" role="status" aria-live="polite"></p>
@@ -57,7 +57,11 @@
       const button = event.target.closest("button[data-run-id]");
       if (button) actions.select(button.dataset.runId);
     });
-    listen(get("DownloadResult"), "click", () => { if (current) actions.download(current.selectedId); });
+    listen(get("DownloadResult"), "click", async () => {
+      if (!current) return;
+      const button = get("DownloadResult"); button.disabled = true;
+      try { await actions.download(current.selectedId); } finally { button.disabled = false; }
+    });
     function renderQueue(snapshot) {
       const list = get("RunList"), focused = list.contains(document.activeElement) ? document.activeElement.dataset.runId : null;
       const matching = snapshot.queue.filter(item => (!filter || item.status === filter) &&
@@ -96,7 +100,8 @@
       get("ResultMeta").replaceChildren(
         node("span", "", "Записей: " + selected.summary.recordCount),
         node("span", "", "Пропусков: " + selected.summary.missingValueCount),
-        node("span", "", "Объём записей: до " + Math.ceil(selected.bytes / 1024) + " КиБ"));
+        node("span", "", "Объём записей: до " + Math.ceil(selected.bytes / 1024) + " КиБ"),
+        node("span", "", selected.mode === "disk" ? "Временное хранилище браузера" : "В памяти вкладки"));
       get("PreviewRows").replaceChildren(...selected.preview.map(record => {
         const row = node("tr");
         [record.parameterId, displayPeriod(record), displayValue(record), displayCell(record)].forEach(value => row.append(node("td", "", value)));
@@ -112,6 +117,9 @@
       get("ChooseTemplate").disabled = snapshot.running || snapshot.templateLoading;
       get("StartProcessing").disabled = snapshot.running || snapshot.sourceBusy || snapshot.templateLoading || !snapshot.templateName || !snapshot.selectedCount;
       get("ProcessNotice").textContent = snapshot.templateNotice;
+      get("StorageNote").textContent = snapshot.storageMode === "disk"
+        ? "Результаты записываются порциями во временное хранилище браузера: до 256 МиБ на файл и 1 ГиБ за запуск. Квота браузера может быть меньше. Скачайте нужное до закрытия вкладки."
+        : "Файловое хранилище браузера недоступно. Результат хранится в памяти вкладки, до 8 МиБ на файл.";
       get("ResultNotice").textContent = snapshot.runNotice;
       ["Total", "Completed", "Failed", "Records"].forEach((part, index) => {
         get("Result" + part).textContent = String([snapshot.totals.total, snapshot.totals.completed, snapshot.totals.failed, snapshot.totals.records][index]);

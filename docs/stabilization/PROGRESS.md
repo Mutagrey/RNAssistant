@@ -16,19 +16,23 @@ runtime/build dependency, second UI or interpreter was introduced.
 
 The standalone viewer now connects browser source selection to a sequential XLSX
 Worker queue with a JSON template picker, per-file status/error navigation, progress,
-cancellation, 20-record preview and complete per-file JSON extraction export within
-an 8-MiB provisional-result budget. CSV/JSON and unsupported/invalid books fail
-visibly; no dataset is published. The queue and bounded result sink are outside DOM
+cancellation, 20-record preview and complete per-file JSON extraction export. The
+provisional sink now writes acknowledged output chunks to origin-private browser
+files (256 MiB per file, 1 GiB per run); explicit memory mode remains limited to
+8 MiB per file. Disk failures are visible and do not trigger a silent fallback.
+CSV/JSON and unsupported/invalid books fail visibly; no dataset is published.
+The queue and bounded result sink are outside DOM
 views. Exported-package browser checks cover a mixed batch, canonical 16-record
-output, cancellation and report download without RNAssistant. Native UI/queue
-regressions and package/resource checks remain focused.
+output, cancellation and report download without RNAssistant. A browser storage
+check covers complete JSON beyond 8 MiB, revocation/cleanup and memory mode.
+Native UI/queue regressions and package/resource checks remain focused.
 Windows/Office/WebView2 and real 80 MB processing are still unqualified.
 Excel reader strategy is an explicit open decision: compare all-SheetJS, the current
 selective XLSX path plus format adapters, and other bounded options on real books
 before final Excel import or any 80 MB support claim.
 
-Next: add durable/browser-streamed result staging and template/mapping validation
-controls to finish the standalone workflow, then
+Next: template/mapping validation controls, project-owned persistence and real
+large-workbook/quota qualification to finish the standalone workflow, then
 replace compiled app-code pins with per-run workspace-package capture and a
 qualified isolated viewer/host adapter. The current root UI accepts installed
 shipped code only. Full data-project lifecycle, other format readers and native

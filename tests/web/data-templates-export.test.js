@@ -151,6 +151,7 @@ const hash = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
         ]);
         await page.waitForFunction(() => document.getElementById("dtFileCount").textContent === "3");
         await page.locator("#dtTabTemplates").click();
+        assert.match(await page.locator("#dtStorageNote").innerText(), /256 МиБ/);
         await page.locator("#dtTemplateFile").setInputFiles(path.join(output, "core/examples/matrix-xlsx-extraction.json"));
         await page.waitForFunction(() => !document.getElementById("dtStartProcessing").disabled);
         await page.locator("#dtStartProcessing").click();
@@ -191,6 +192,75 @@ const hash = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
         assert.equal(await page.locator("#dtResultCompleted").innerText(), "0");
         assert.equal(await page.locator("#dtDownloadResult").isVisible(), false);
         console.log("PASS standalone workflow: selected sources → sequential XLSX queue, explicit errors, preview and complete JSON export");
+        const staging = await page.evaluate(async () => {
+            const api = DataTemplatesResultStaging;
+            const folder = await (await navigator.storage.getDirectory()).getDirectoryHandle("data-templates-provisional-v1");
+            const entries = async () => { let count = 0; for await (const _ of folder.entries()) count++; return count; };
+            const initial = await entries();
+            const options = { source: { name: "large.xlsx", path: "large.xlsx", size: 80 * 1048576 },
+                templateName: "template.json", remainingBytes: api.totalMaximumBytes };
+            const store = await api.create(options);
+            const records = Array.from({ length: 18 }, (_, id) => ({ id, value: "x".repeat(40000) }));
+            for (let batch = 0; batch < 12; batch++) await store.sink.writeBatch({ records });
+            await store.sink.complete({ recordCount: 216 });
+            const output = await store.file(), parsed = JSON.parse(await output.text());
+            const large = { mode: store.snapshot().mode, bytes: output.size, records: parsed.records.length,
+                template: parsed.templateFile, source: parsed.source.name };
+            await store.discard();
+            const afterComplete = await entries();
+            const cancelled = await api.create(options);
+            const pending = cancelled.sink.writeBatch({ records: [{ id: 1 }] });
+            cancelled.sink.abort();
+            const cancelledCode = await pending.then(() => "accepted", error => error.code);
+            await cancelled.discard();
+            const afterCancel = await entries();
+            const corrupted = await api.create(options);
+            await corrupted.sink.writeBatch({ records: [{ id: 1 }] });
+            const completion = corrupted.sink.complete({ recordCount: 1 });
+            const lateCode = await corrupted.sink.writeBatch({ records: [{ id: 2 }] })
+                .then(() => "accepted", error => error.code);
+            await completion;
+            for await (const [, handle] of folder.entries()) {
+                const writer = await handle.createWritable({ keepExistingData: false });
+                await writer.write("damaged"); await writer.close();
+            }
+            const corruptionCode = await corrupted.file().then(() => "accepted", error => error.code);
+            await corrupted.discard();
+            const afterCorruption = await entries();
+            Object.defineProperty(navigator.storage, "getDirectory", { value: undefined, configurable: true });
+            let memory;
+            try {
+                memory = await api.create(options);
+                await memory.sink.writeBatch({ records: [{ id: 1 }] });
+                await memory.sink.complete({ recordCount: 1 });
+                const parsedMemory = JSON.parse(await (await memory.file()).text());
+                const limited = await api.create({ ...options, remainingBytes: 16 });
+                const limitCode = await limited.sink.writeBatch({ records: [{ value: "over budget" }] })
+                    .then(() => "accepted", error => error.code);
+                limited.sink.abort(); await limited.discard();
+                return { large, initial, afterComplete, afterCancel, afterCorruption, cancelledCode, lateCode, corruptionCode,
+                    memoryMode: memory.snapshot().mode, memoryRecords: parsedMemory.records.length, limitCode };
+            } finally {
+                if (memory) await memory.discard();
+                delete navigator.storage.getDirectory;
+            }
+        });
+        assert.equal(staging.large.mode, "disk");
+        assert.equal(staging.large.records, 216);
+        assert.equal(staging.large.template, "template.json");
+        assert.equal(staging.large.source, "large.xlsx");
+        assert.ok(staging.large.bytes > 8 * 1048576);
+        assert.equal(staging.initial, 0);
+        assert.equal(staging.afterComplete, staging.initial);
+        assert.equal(staging.afterCancel, staging.initial);
+        assert.equal(staging.afterCorruption, staging.initial);
+        assert.equal(staging.cancelledCode, "RESULT_STAGING_CLOSED");
+        assert.equal(staging.lateCode, "RESULT_STAGING_CLOSED");
+        assert.equal(staging.corruptionCode, "RESULT_STAGING_INVALID");
+        assert.equal(staging.memoryMode, "memory");
+        assert.equal(staging.memoryRecords, 1);
+        assert.equal(staging.limitCode, "RESULT_STAGING_LIMIT");
+        console.log("PASS result staging: >8 MiB disk output, exact JSON, revoke/cleanup, read-back refusal and memory fallback");
         await page.goto(httpPrefix + "core/index.html");
         await page.locator("#operation").selectOption("extractXlsx");
         await page.locator("#capture").setInputFiles(path.join(output, "core/examples/matrix-xlsx-extraction.json"));

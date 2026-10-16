@@ -1127,7 +1127,7 @@ modules without a framework, npm or a bundler.
 | `ui/source-intake.js` | Browser enumeration, metadata hints, limits and coalesced progress; no DOM or content parsing. |
 | `ui/loader.js` | Portable owner factory: browser File handles, selection/context and enumeration lifetime; passes metadata/actions to presentation. |
 | `ui/processing.js`, `ui/browser-core.js` | Standalone queue owner and fixed lazy core loader. One Worker job per selected file; no parser logic or result bodies in the view. |
-| `ui/result-staging.js` | Provisional bounded per-file sink; accepts acknowledged batches, discards failures/cancellation and enables export only after completion. Durable large-result staging remains open. |
+| `ui/result-staging.js` | Provisional per-file sink: acknowledged chunks to origin-private browser files, with explicit bounded memory mode when disk storage is unavailable. Completion gates export; failure/cancel discards staging. This is not durable project storage. |
 | `ui/processing-view.js`, `styles/processing.css` | Standalone template picker, status navigation, progress and 20-record preview. Uses shared tokens and operation view. |
 | `ui/browser.js`, `web/js/app-data-templates.js` | Separate browser/native composition. The native adapter translates context and mounts native controls in named slots; it owns no domain parsing. |
 | `ui/loader-view.js` | Screen navigation, filters, pages, metadata details and DOM events; no bridge, File handles, readers or job ownership. |
@@ -1170,14 +1170,22 @@ them. Unknown Excel extensions are not admitted by source selection.
 
 The `xlsx-extraction` v2 JSON template is selected separately from source files
 and limited to 1,000,000 UTF-8 bytes. Core validation still occurs per file. XLSX
-inputs are limited to 96 MiB each. The provisional sink holds at most 8 MiB of
-serialized records **per file**, gives the view only 20 preview records, and
-discards all provisional data on error or cancellation. A successful download is
+inputs are limited to 96 MiB each. The provisional sink writes acknowledged
+batches to origin-private browser files when that API is available, with up to
+256 MiB of serialized records **per file** and 1 GiB retained **per run**. It keeps
+only 20 preview records in the view. If disk staging is unavailable, the UI states
+that the bounded in-memory mode admits at most 8 MiB per file. Disk errors do not
+silently switch modes. Error/cancellation revokes the result and awaits staging
+cleanup before the next file; cleanup failure is reported. A successful download is
 version-1 `data-templates-extraction` JSON with `source`, `templateFile`, the
 engine `summary` and every canonical `record` for that file. This is an extraction
-export, not a saved/published dataset or a project file. Larger complete outputs
-need durable/streamed browser staging before they can be offered. Neither the
-96-MiB admission cap nor the 8-MiB result cap qualifies real 80-MB workbooks.
+export, not a saved/published dataset or a project file. Results are removed when
+the user starts another run; closing the tab requests cleanup, but a browser crash
+can leave orphaned files. The next disk-stage creation attempts to remove files
+older than 24 hours without touching recent files another tab may own. Project
+persistence, quota/large-batch measurements and reliable crash cleanup remain open.
+Neither the 96-MiB input cap nor the staged-output budgets qualify real 80-MB
+workbooks.
 
 ### Input formats and adapter boundary
 
@@ -1354,8 +1362,8 @@ versioned schema and fixtures used by the engine.
 | M1 source selection (implemented) | Responsive modular viewer, paged file/folder intake, cancellable enumeration progress, persisted workspace source declarations and guarded save/recovery. Typed extraction commands remain open. |
 | M2 matrix-language foundation (implemented) | JSON template → typed plan → normalized snapshot → batched canonical observations with lineage, in the separate portable probe. Native integration and full readers remain open. |
 | M2 bounded XLSX adapter (implemented) | Explicit file + template → selective ZIP/XML reading in a Worker → exact typed cells → the same canonical batches. Single-file probe only; queue parser dispatch and 80 MB qualification remain open. |
-| M1–M3 (standalone queue/preview slice implemented) | XLSX File + JSON template now run through a bounded sequential Worker queue with per-file outcomes, progress, cancellation, 20-record preview and full per-file extraction export within the 8-MiB result budget. Parameter/mapping inspection, draft/test/publish, durable larger results and native parser dispatch remain open. Add other Excel families (including XLSB), CSV/JSON behind the same workflow and their own fixtures. |
-| Early M0/M4 (foundation implemented) | One portable source project, shared loader, folder export, exported semantic tests and XLSX Worker probe. Complete standalone mapping/validation, persistent data projects and large-result export before native parser dispatch. Single-HTML/ZIP packaging is still open. |
+| M1–M3 (standalone queue/preview slice implemented) | XLSX File + JSON template now run through a bounded sequential Worker queue with per-file outcomes, progress, cancellation, 20-record preview and full per-file extraction export. Browser disk staging raises the output budget to 256 MiB per file/1 GiB per run; memory mode stays at 8 MiB. Parameter/mapping inspection, draft/test/publish, project persistence and native parser dispatch remain open. Add other Excel families (including XLSB), CSV/JSON behind the same workflow and their own fixtures. |
+| Early M0/M4 (foundation implemented) | One portable source project, shared loader, folder export, exported semantic tests and XLSX Worker probe. Complete standalone mapping/validation, persistent data projects and large-result quota/performance qualification before native parser dispatch. Single-HTML/ZIP packaging is still open. |
 | M5 | Extend the existing queue with advanced batch execution, scoped dictionary/mapping edits, comparison/consolidation, multiple blocks and output workbook templates. |
 
 M1 file read-back establishes stored bytes, not a validated template publication.
@@ -1385,8 +1393,8 @@ manifest implementation:
 Next slices, coordinated with the workspace owners:
 
 1. Extend the integrated **standalone** workflow: the XLSX queue, preview and
-   bounded complete extraction export now work. Add durable/streamed result storage,
-   template and mapping validation controls, project persistence and publication
+   complete extraction export with provisional disk staging now work. Add template
+   and mapping validation controls, project persistence and publication
    through explicit domain commands. Keep real file-format capability reporting;
    XLSB/other Excel families and CSV/JSON require their own readers and fixtures.
 2. Replace the compiled application-module whitelist with immutable per-run package
@@ -1505,7 +1513,8 @@ publication and real Windows/WebView2 picker/drop behavior remain unqualified.
 
 `data-templates-export.test.js` also exercises the exported mixed XLSX/CSV/invalid
 queue, exact 16-record complete download, result pinning to the original template,
-cancel-before-Worker and narrow result layout. Large-book parsing and publication
+cancel-before-Worker, a complete disk-staged JSON result above 8 MiB, discard after
+revoke and the memory fallback, plus narrow result layout. Large-book parsing and publication
 remain unqualified.
 
 For JS changes, run only the affected scripts (Playwright/browser must already be available):
