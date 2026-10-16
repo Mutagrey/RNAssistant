@@ -7,8 +7,9 @@ JSON captures; real XLSX uses the existing reader in the separate Worker probe.
 The loader saves workspace source declarations and controls the shared preparation
 queue. The portable XLSX reader now accepts bounded pull-byte sources through its
 Worker protocol. The shared application owns exact, cancellable range reads and a
-pinned resource session exercised end to end with a real Worker. WebView2 host
-integration, queue parser dispatch and publication remain open.
+pinned resource session exercised end to end with a real Worker. A dedicated
+WebView2 adapter and typed, acknowledged native result channel are implemented;
+actual Windows host qualification, queue parser dispatch and publication remain open.
 Owner: Data Templates domain; portable JS in `web/tabular`, shared manifest storage
 in Core `TabularProjectStore` over `WorkspaceFileService`.
 This is the canonical domain contract; planned scope is marked separately from
@@ -156,8 +157,8 @@ serves exact shipped modules against a generated package lock and a compiled has
 pin. Project `engine.lock.json`, extensions and native execution/result receipts
 remain open. A Worker alone is not a permission sandbox. Imported/project JS is
 unsupported; the root RNAssistant UI must never execute it through this probe.
-Dedicated-origin CSP is tested in Chrome; WebView2 host enforcement and lifetime
-still require implementation and qualification.
+Dedicated-origin CSP and the native result channel are tested in Chrome;
+the WebView2 adapter's enforcement and lifetime still require Windows qualification.
 
 ## Language and execution core
 
@@ -460,7 +461,7 @@ or dispatch parsing from its queue. No new C# interpreter or server runtime is i
 `TabularRuntimeBundle.Capture` accepts the installation's `web` directory from
 application configuration, never a workspace/UI path. It verifies the generated
 `tabular/runtime-lock.json` against `TabularRuntimePin` compiled into the application,
-then validates all 17 approved files and their lengths/SHA-256 hashes. The package
+then validates all 18 approved files and their lengths/SHA-256 hashes. The package
 is bounded to 512 KiB; immutable captured bytes serve every later request, including
 Worker imports. Changed, missing, linked or foreign modules fail admission. Updating
 a source file and its manifest together cannot bypass the compiled pin. Package
@@ -497,7 +498,7 @@ even already-completed provisional sink output. `sink.complete` remains staging
 validation, never publication. There is no retry, arbitrary URL or cooperative path.
 The native owner must always call `CloseAsync` when disposing the realm; browser
 cleanup is not its sole lifetime mechanism. The native source deadline revokes reads;
-hard Worker/process termination still belongs to the pending host executor adapter.
+the dedicated host adapter observes source drain/revocation and closes its controller.
 
 The Harness-only loopback host forwards real requests to this production handler;
 it is not shipped as an application server. The Chrome test traverses retained CAS →
@@ -505,8 +506,64 @@ C# source reader → binary resource response → JS byte capability → real Wo
 the existing 16-record oracle, including after the live file changes. It also checks
 CSP, cancellation, sink failure and native revocation after parsing. It does not
 qualify Windows/WebView2 request interception, top-level navigation/permissions,
-application-owned hidden-realm lifecycle, template/dictionary/dataset pins, result
-staging/publication or representative 80-MB throughput. Those remain integration gates.
+application-owned hidden-realm lifecycle, template/dictionary/dataset pins, durable
+result staging/publication or representative 80-MB throughput. Those remain integration gates.
+
+### Dedicated native executor
+
+`AssistantPaneControl` owns a `TabularWebViewExecutor` independently of loader/result
+DOM views and Office-controller rebinding. It creates a separate invisible controller
+only when `ExecuteAsync` admits an explicit native resource session, bounded input
+and `ITabularResultSink`; no parser dispatch or new main-UI bridge command is enabled
+by this slice. One job can run per executor, including cleanup. Pane disposal cancels
+it and includes its drain task in the existing application shutdown boundary.
+
+The adapter uses an InPrivate profile and the installed WebView2 environment. It
+intercepts **all** request sources using the SDK's three-argument filter, including
+Worker imports, and delegates them to the pinned resource session. Only the first
+exact entry navigation is admitted. Frames, popups, permission prompts, downloads,
+script dialogs, host objects and developer tools are disabled/refused. Renderer
+failure ends the job. Missing native capabilities fail admission; there is no
+network, main-view, cooperative or older-filter fallback. Main UI CSP is unchanged.
+
+`native-channel.js` and the shared `TabularExecutionChannel` use typed protocol v1:
+
+- Native-generated job identity; one `Ready` → `Start` exchange, exact module pin,
+  closed canonical envelopes, monotonic output sequences and bounded message sizes.
+- At most one unacknowledged batch (64 records, at most 263,168 payload characters).
+  Native sink acceptance precedes acknowledgement; validation is separately awaited.
+  The host queues messages in delivery order outside the Office STA, with 32 pending
+  messages maximum. Source bytes still use the separate binary range transport.
+- Reading progress reports actual transferred bytes with an unknown total: selective
+  ZIP reads can skip or revisit ranges, so physical source length is not a progress
+  denominator. Extraction progress uses records and the known/unknown source total.
+- Result JSON remains opaque engine output inside typed batch/result objects. The
+  transport checks identity/order/bounds/count receipts; it neither reimplements the
+  DSL in C# nor supplies publication validation. Native output is always provisional.
+- `Validate` alone is not success. `Succeeded` requires the native source-close
+  receipt. Cancel, source revocation, deadline, sink/transport failure or later native
+  cleanup failure calls the sink's synchronous, thread-safe `Abort`; a pending write
+  must observe cancellation. Late completion cannot acknowledge or restore output.
+
+Cancellation closes the separate native controller without waiting for JS. The owner
+then waits for source I/O, resource deferrals, message consumers and sink drain.
+`TabularResponseBodyPool` retains at most 2 MiB/64 unconsumed response bodies, releases
+each at EOF, and revokes all remaining streams on close. Memory does not accumulate
+all source ranges for the duration of a job. Native controller creation itself has
+no cancellation API: the source/output are revoked immediately, late creation is
+closed before navigation, and the executor remains busy until that startup drains.
+Unconfirmed cleanup refuses subsequent jobs until the application owner is recreated.
+The shutdown behavior uses the SDK's [controller close API](https://learn.microsoft.com/en-us/dotnet/api/microsoft.web.webview2.core.corewebview2controller.close?view=webview2-dotnet-1.0.2903.40), not browser-process termination shared with other views.
+
+Harness checks exercise channel state/receipts, pending-write/validation cancellation,
+late output and body budgets. Chrome uses a test-only `chrome.webview` shim to exchange
+the real typed messages with C#, the real Worker and retained source; it reproduces
+the 16-record oracle, native sink failure, both cancellation points and bad acks.
+It does **not** execute the WebView2 adapter. Windows build and actual interception,
+sequential response-stream consumption, hidden-controller behavior, startup disposal,
+renderer failure and hard-stop latency remain unqualified. No Office/VSTO validation
+was run on the development Mac. Exact job input pins, a durable sink and queue parser
+dispatch are the next application integration slice.
 
 ### Working examples and remaining boundaries
 
@@ -1149,9 +1206,9 @@ manifest implementation:
 |---|---|
 | Shared workspace application → project files | Compatible application commands, CLI, project UI and a bounded directory chooser are implemented. Real Windows UI evidence, workspace-owned UI chats, richer resource views and full M7 lifetime/reconnect integration remain open. |
 | Live Excel capture | `ExcelResourceProvider` resolves explicit ranges through `ExcelReadService` and the bound document scope. It does not yet feed this probe; capture consistency, unsaved values, dependencies and richer cell availability remain open. |
-| Application-owned execution | The pinned resource session and dedicated entry run end to end through a test host. `AssistantPaneControl` still owns only the main UI WebView2. Add a separate executor host with navigation/permission/interception/lifetime controls; a Chrome proof does not authorize broadening the main UI policy or qualify WebView2. |
+| Application-owned execution | `AssistantPaneControl` owns a lazy, separate WebView2 executor with navigation/permission/interception/lifetime controls and a typed acknowledged native channel. Chrome exercises the C#/JS channel, not the WebView2 adapter; actual Windows behavior and qualification remain open. |
 | Publication | Draft/test/publish and exact source/module/dictionary pins must use existing authority/journal owners. Verified manifest creation is not a template publication; probe JSON cannot authorize one. |
-| Source input and transfer | Browser intake and the workspace chooser feed preparation; native source declarations persist in the manifest. Exact source range transport and a pinned runtime session are implemented; production host wiring/parser dispatch remain open. The separate probe executes M2 over normalized snapshots and bounded XLSX. CSV/JSON readers, project closure and complete export/import remain open. |
+| Source input and transfer | Browser intake and the workspace chooser feed preparation; native source declarations persist in the manifest. Exact range transport, a pinned runtime session and the dedicated host adapter are implemented; job input pins and queue parser dispatch remain open. The separate probe executes M2 over normalized snapshots and bounded XLSX. CSV/JSON readers, project closure and complete export/import remain open. |
 | Large files and batch execution | Enumeration/bounded lists, a separate XLSX Worker, shared source streams and an application-owned preparation queue with loader controls/progress are implemented. Storage has an actual 80-MiB binary test; parser dispatch, durable batch requests, native execution/CSP and representative Excel qualification remain open; see the [processing contract](#large-files-and-processing-queue--planned). |
 
 Next slices, coordinated with the workspace owners:

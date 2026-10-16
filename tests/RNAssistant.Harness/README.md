@@ -46,6 +46,16 @@ Excel throughput. `node tools/update-tabular-runtime-lock.js --check` verifies t
 shipped package manifest and generated compiled pin; update both with `--write`
 only after reviewing runtime changes. No npm/bundler is needed.
 
+`tabular channel:` checks typed native job/sequence guards, acknowledged sink writes,
+confirmed source cleanup, cancellation during pending write/validation, late output,
+post-result cleanup failure, and bounded response-body ownership/revocation. The same
+`tabular-native-browser.test.js` additionally connects the real C# channel to a
+test-only `chrome.webview` shim: the XLSX oracle, native sink failure, both pending
+sink cancellation points and a bad acknowledgement all run through the real Worker.
+These tests do not execute/compile `TabularWebViewExecutor`; Windows build, native
+interception, hidden-controller/stream behavior, startup disposal and hard-stop latency
+remain explicit target-host gates. The loader still prepares sources only.
+
 `workspace files:` includes an actual 80-MiB source retained/read without a
 whole-body allocation, exact history after drift/deletion/restart, operation
 budgets, busy-file cancellation and missing/corrupt/unpublished source refusals.

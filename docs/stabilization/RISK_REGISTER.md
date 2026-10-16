@@ -28,15 +28,18 @@ matrix records/provisional batches have no native tools or publication authority
 - Worker contract labels are not module hash pins or security evidence.
   The shared runtime now captures approved shipped modules against a generated lock
   and compiled package hash, and binds a revocable source resource scope. Chrome
-  checks the real C#/Worker path and dedicated CSP. Close the remaining gate with
-  application-owned WebView2 lifecycle, request interception, navigation/permissions
-  and hard cancellation in the actual host. Keep project input/result pins separate.
+  checks the real C#/Worker path, dedicated CSP and typed acknowledged output channel.
+  A separate application-owned WebView2 adapter is implemented, but not built or
+  qualified on Windows here. Close the remaining gate with actual request interception,
+  navigation/permissions, hidden-controller/response-stream behavior, renderer failure,
+  startup cancellation/drain and hard-stop latency. Keep project input/result pins separate.
 - No project publication/export is implemented. Probe JSON cannot act as a
   passing test receipt. Close with existing journal/authority publication,
   stale-input rejection, read-back and complete portable dependency capture.
   M2 batch acknowledgement is consumption, not publication: a later failure must
-  leave earlier batches unpublished. The future native sink needs staging/cleanup
-  and unknown-write reconciliation through the existing owner.
+  leave earlier batches unpublished. The native channel revokes output on cancellation
+  during write/validation and requires confirmed source cleanup before success. A durable
+  sink still needs staging/cleanup and unknown-write reconciliation through the existing owner.
 - The loader's enumeration progress and 50-row pages do not prove processing of
   many large files. The shared application's preparation queue now has serialized
   captures, exact project/source pins, budgets, pause/cancel/retry, bounded pages
@@ -50,8 +53,8 @@ matrix records/provisional batches have no native tools or publication authority
   reader now pins selection/maintenance until I/O drains and supplies bounded ranges
   over protected temporary seek staging. Host-neutral checks cover encoding variants,
   cancellation and cleanup. The resource handler now transfers actual snapshot ranges
-  to the Worker under captured module pins and CSP in the test host; production
-  WebView2 wiring and representative staging disk/RAM/throughput measurements remain open. Its 30,000-row
+  to the Worker under captured module pins and CSP in the test host; actual WebView2
+  qualification and representative staging disk/RAM/throughput measurements remain open. Its 30,000-row
   fixture and writer interoperability do not establish 80 MB behavior or RAM cost.
   Stored formula caches have unknown freshness, and only consumed ZIP parts are
   CRC-checked; neither is a publication receipt. Close the [queue/large-file gate](../data-templates.md#large-files-and-processing-queue--planned)

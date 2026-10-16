@@ -40,14 +40,19 @@
       "sha256": "8daaa8fdbfa28be6fdb069e5883ea59c8fac8f1b47db1b2195fd4ff14724484c"
     },
     {
+      "path": "tabular/native-channel.js",
+      "bytes": 4861,
+      "sha256": "5d3c848194eab0e8f7edfe8ca6e3d1f54603c2d3a9bfb0b7dbfc3e5d46a6e7b0"
+    },
+    {
       "path": "tabular/native-runtime.js",
-      "bytes": 5298,
-      "sha256": "40c31199d6f5168d209b8d58fe082a3aaef1f30e5ba896110c6c512078554942"
+      "bytes": 5392,
+      "sha256": "d3cc30835fe9be1b8c1dc9c22a25686535f3ebb56b01d887e2f9e7ff60a791e7"
     },
     {
       "path": "tabular/runtime.html",
-      "bytes": 668,
-      "sha256": "65d784b4a5efbb93b48d32a79fcb818b3e78400b53f7cead9788f4b0ff722126"
+      "bytes": 718,
+      "sha256": "c5858727fe23837d56562776569cfe675e97995bcd9f09ea8bb5846c362fe4b7"
     },
     {
       "path": "tabular/selectors.js",

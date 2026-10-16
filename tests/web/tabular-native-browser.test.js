@@ -5,14 +5,18 @@ const { chromium } = require("playwright");
 const root = path.resolve(__dirname, "../.."), dll = path.join(root, "tests/RNAssistant.Harness/bin/Debug/net8.0/RNAssistant.Harness.dll");
 const input = fs.readFileSync(path.join(root, "web/tabular/examples/matrix-xlsx-extraction.json"), "utf8");
 
-function nativeHost() {
+function nativeHost(channelMode) {
     assert.ok(fs.existsSync(dll), "Build the host-neutral Harness once before this test.");
-    const child = spawn("dotnet", [dll, "--tabular-source-host"], { cwd: root, stdio: ["pipe", "pipe", "pipe"] });
-    const pending = [], queued = []; let errorText = "", ended = false;
+    const child = spawn("dotnet", [dll, "--tabular-source-host", ...(channelMode ? [channelMode] : [])], { cwd: root, stdio: ["pipe", "pipe", "pipe"] });
+    const pending = [], queued = []; let errorText = "", ended = false, commandHandler;
     child.stderr.on("data", bytes => { errorText += bytes.toString(); });
     const lines = createInterface({ input: child.stdout });
     lines.on("line", line => {
-        try { const value = JSON.parse(line); const waiter = pending.shift(); if (waiter) waiter.resolve(value); else queued.push(value); }
+        try {
+            const value = JSON.parse(line);
+            if (value.command) { Promise.resolve(commandHandler(value.command)).catch(error => { errorText += error.message; child.kill(); }); return; }
+            const waiter = pending.shift(); if (waiter) waiter.resolve(value); else queued.push(value);
+        }
         catch (error) { errorText += line + "\n"; }
     });
     const exited = new Promise(resolve => child.on("exit", code => {
@@ -26,7 +30,9 @@ function nativeHost() {
             pending.push({ resolve: value => { clearTimeout(timer); resolve(value); }, reject: error => { clearTimeout(timer); reject(error); } });
         });
     }
-    return { next, async status() { child.stdin.write("status\n"); return next(); },
+    return { next, onCommand(handler) { commandHandler = handler; }, message(json) { if (!ended) child.stdin.write("message " + json + "\n"); },
+        async result() { child.stdin.write("result\n"); return next(); },
+        async status() { child.stdin.write("status\n"); return next(); },
         async revoke() { child.stdin.write("cancel\n"); assert.deepEqual(await next(), { revoked: true }); },
         async close() {
             if (!ended) { child.stdin.write("stop\n"); const result = await next(); assert.deepEqual(result, { stopped: true, activeStorage: false }); }
@@ -115,6 +121,48 @@ function nativeHost() {
                 }
                 assert.equal((await page.request.get(ready.entry)).status(), 410, "revoked bundle addresses are unusable");
                 console.log(`PASS native resource/Worker: ${mode}, exact retained file, pinned modules, drained native ownership`);
+            } finally { await page.close(); await host.close(); }
+        }
+        for (const mode of ["success", "sink-failure", "hold-batch", "hold-validation", "bad-ack"]) {
+            const host = nativeHost(mode), page = await browser.newPage();
+            try {
+                const ready = await host.next();
+                await page.exposeFunction("nativeSend", json => host.message(json));
+                await page.addInitScript(() => {
+                    window.nativeMessages = [];
+                    window.chrome = window.chrome || {};
+                    window.chrome.webview = {
+                        addEventListener(type, handler) { window.nativeReceive = data => handler({ data }); },
+                        postMessage(json) { window.nativeMessages.push(JSON.parse(json)); void window.nativeSend(json); }
+                    };
+                });
+                host.onCommand(json => page.evaluate(({ json, mode }) => {
+                    const command = JSON.parse(json);
+                    if (mode === "bad-ack" && command.kind === "Acknowledge") command.sequence++;
+                    window.nativeReceive(command);
+                }, { json, mode }));
+                await page.goto(ready.entry);
+                if (mode.startsWith("hold-")) {
+                    assert.deepEqual(await host.next(), { held: mode === "hold-batch" ? "Batch" : "Validate" });
+                    const kinds = await page.evaluate(() => nativeMessages.map(message => message.kind));
+                    assert.equal(kinds.filter(kind => kind === "Batch").length, 1);
+                    assert.equal(kinds.includes("Succeeded"), false, "no success while native sink is pending");
+                    if (mode === "hold-batch") assert.equal(kinds.includes("Validate"), false, "native batch backpressure");
+                    await host.revoke();
+                }
+                const result = await host.result();
+                if (mode === "success") {
+                    assert.deepEqual(result, { result: true, count: 16, error: null, staged: 16, validated: true, aborts: 0,
+                        sample: "2000", formula: "SUM(R12:AC12)" });
+                    const status = await host.status();
+                    assert.equal(status.closed, true); assert.equal(status.activeStorage, false);
+                } else {
+                    assert.equal(result.count, null); assert.equal(result.staged, 0); assert.equal(result.aborts, 1);
+                    assert.equal(result.validated, false);
+                    assert.equal(result.error, mode === "sink-failure" ? "test_sink_failed"
+                        : mode === "bad-ack" ? "NATIVE_CHANNEL_INVALID" : "OperationCanceledException");
+                }
+                console.log(`PASS native typed channel/Worker: ${mode}, acknowledged batches, provisional native sink`);
             } finally { await page.close(); await host.close(); }
         }
     } finally { await browser.close(); }

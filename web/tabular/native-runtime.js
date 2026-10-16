@@ -24,6 +24,7 @@
             const fields = ["version", "bundleSha256", "workerProtocol", "engineRevision", "byteLength", "label"];
             if (!descriptor || Object.keys(descriptor).length !== fields.length || fields.some(key => !Object.prototype.hasOwnProperty.call(descriptor, key)) ||
                 descriptor.version !== 1 || !/^[a-f0-9]{64}$/.test(descriptor.bundleSha256) ||
+                settings.bundleSha256 && descriptor.bundleSha256 !== settings.bundleSha256 ||
                 descriptor.workerProtocol !== root.RNTabularEngine.protocol || descriptor.engineRevision !== root.RNTabularEngine.revision ||
                 !Number.isSafeInteger(descriptor.byteLength) || descriptor.byteLength < 1 || descriptor.byteLength > root.RNTabularEngine.maxSourceBytes ||
                 typeof descriptor.label !== "string" || !descriptor.label.length || descriptor.label.length > 256)

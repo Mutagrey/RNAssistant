@@ -38,6 +38,11 @@ namespace RNAssistant.Application
         private Task _closing;
         public string EntryUri { get { return _prefix + TabularRuntimeBundle.EntryPath; } }
         public bool IsClosed { get { lock (_sync) return _closed || _source.IsClosed; } }
+        public string BundleSha256 { get { return _bundle.Sha256; } }
+        public bool ClientCloseConfirmed
+        { get { lock (_sync) return _clientClosed && _closing != null && _closing.Status == TaskStatus.RanToCompletion; } }
+        public Task SourceDrained { get { return _source.Drained; } }
+        public bool WasRevoked { get { lock (_sync) return !_clientClosed && _source.IsClosed; } }
 
         private sealed class Descriptor
         {

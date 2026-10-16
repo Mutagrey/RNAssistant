@@ -21,7 +21,7 @@ namespace RNAssistant.Application
 
         internal static readonly string[] ApprovedPaths = new[] {
             "js/vendor/sax.js", "tabular/byte-source.js", "tabular/decimal.js", "tabular/engine.js",
-            "tabular/executor.js", "tabular/expression.js", "tabular/json.js", "tabular/native-runtime.js",
+            "tabular/executor.js", "tabular/expression.js", "tabular/json.js", "tabular/native-channel.js", "tabular/native-runtime.js",
             EntryPath, "tabular/selectors.js", "tabular/snapshot.js", "tabular/sources.js", "tabular/template.js",
             "tabular/transform.js", "tabular/worker.js", "tabular/xlsx-reader.js", "tabular/xlsx-zip.js"
         };

@@ -39,8 +39,8 @@ namespace RNAssistant.Harness
         {
             if (args != null && args.Length == 2 && args[0] == "--resource-workflow-live")
                 return ResourceWorkflowLive(args[1]);
-            if (args != null && args.Length == 1 && args[0] == "--tabular-source-host")
-                return TabularSourceHost();
+            if (args != null && args.Length >= 1 && args.Length <= 2 && args[0] == "--tabular-source-host")
+                return TabularSourceHost(args.Length == 2 ? args[1] : null);
             var tests = new List<HarnessTest>
             {
                 Test("harness: native async execution", HarnessRunsNativeAsync),
@@ -121,6 +121,10 @@ namespace RNAssistant.Harness
                 Test("tabular native: package pins only approved shipped modules", TabularBundlePinsOnlyShippedModules),
                 Test("tabular native: exact resource scope and range protocol", TabularResourceSessionKeepsExactScope),
                 Test("tabular native: abandoned realm native deadline", TabularResourceSessionHasNativeDeadline),
+                Test("tabular channel: acknowledgement and native completion receipt", TabularChannelAcknowledgesAndConfirmsCleanup),
+                Test("tabular channel: revoke pending sink and reject late output", TabularChannelRevokesPendingSink),
+                Test("tabular channel: closed schema and job sequence guards", TabularChannelRefusesMalformedAndForeignMessages),
+                Test("tabular channel: bounded native response bodies and revocation", TabularResponseBodiesAreBoundedAndRevoked),
                 Test("workspace application: paged metadata browsing and exact binding", WorkspaceBrowseKeepsSelectionBoundaries),
                 Test("workspace files: guarded create patch and external conflict", WorkspaceFilesGuardWrites),
                 Test("workspace files: paths and historical view", WorkspaceFilesRejectUnsafePaths),

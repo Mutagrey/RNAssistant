@@ -118,6 +118,8 @@ namespace RNAssistant.Harness
                         ExpectSourceQueueError("source_queue_active", app.Reset);
                         AssertTrue(new ChatRunRegistry(paths).HasExternalRuns(), "resource scope holds maintenance activity");
                         AssertNativeStatus(session, 204, "DELETE", prefix + "source");
+                        AssertTrue(session.ClientCloseConfirmed && !session.WasRevoked && session.SourceDrained.IsCompleted,
+                            "ordinary browser cleanup is distinct from native revocation");
                         AssertNativeStatus(session, 410, "GET", prefix + "source?sequence=2&offset=0&count=1");
                         AssertNativeStatus(session, 410, "GET", session.EntryUri);
                         AssertNativeStatus(session, 204, "DELETE", prefix + "source");
@@ -142,6 +144,8 @@ namespace RNAssistant.Harness
                     try
                     {
                         AssertTrue(SpinWait.SpinUntil(() => session.IsClosed, 5000), "native deadline revokes abandoned page access");
+                        AssertTrue(session.WasRevoked && !session.ClientCloseConfirmed, "native executor observes source revocation independently of JavaScript");
+                        session.SourceDrained.GetAwaiter().GetResult();
                         AssertNativeStatus(session, 410, "GET", session.EntryUri);
                         var prefix = session.EntryUri.Substring(0, session.EntryUri.Length - TabularRuntimeBundle.EntryPath.Length);
                         AssertNativeStatus(session, 410, "DELETE", prefix + "source");

@@ -8,6 +8,9 @@
     <Compile Include="$(MSBuildThisFileDirectory)TabularRuntimeBundle.cs" Link="Application\TabularRuntimeBundle.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)TabularRuntimePin.cs" Link="Application\TabularRuntimePin.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)WorkspaceTabularResourceSession.cs" Link="Application\WorkspaceTabularResourceSession.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)TabularExecutionChannel.cs" Link="Application\TabularExecutionChannel.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)TabularResponseBodyPool.cs" Link="Application\TabularResponseBodyPool.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Contracts\TabularExecutionContracts.cs" Link="Application\Contracts\TabularExecutionContracts.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Contracts\WorkspaceFileContracts.cs" Link="Application\Contracts\WorkspaceFileContracts.cs" />
   </ItemGroup>
 </Project>

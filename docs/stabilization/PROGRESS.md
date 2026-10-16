@@ -1,5 +1,25 @@
 # Stabilization progress
 
+## Dedicated tabular host and acknowledged native output — 2026-10-16
+
+The application pane now owns a lazy separate WebView2 executor. Its native adapter
+restricts navigation/permissions/resources, closes the controller on cancellation,
+source revocation or failure, and drains source I/O, resource bodies and message/sink
+work. The main UI policy and .NET Framework 4.8 product target are unchanged.
+
+The shared typed channel acknowledges each provisional batch only after native sink
+acceptance. Validation and confirmed source cleanup precede success; cancellation or
+cleanup failure revokes output, including a pending write/validation. Response buffers
+are bounded independently of workbook size. Harness checks and real Chrome/C# channel
+checks pass, including the 16-record oracle, sink failure and stale acknowledgement.
+
+The actual WebView2 adapter has NOT been built/qualified on Windows here. Interception,
+hidden-controller lifecycle, startup cancellation/drain, sequential response streams
+and hard-stop latency remain target-host evidence. No Office/VSTO validation was run.
+Next: exact template/dictionary/dataset job pins and a durable provisional sink, then
+queue parser dispatch and UI processing progress through the existing workspace owner.
+The loader still performs preparation only. [Contract](../data-templates.md#dedicated-native-executor).
+
 ## Pinned runtime resources and native-to-Worker transport — 2026-10-16
 
 The shared application now captures 17 approved runtime assets against a generated

@@ -28,13 +28,15 @@ namespace RNAssistant.Office.WebView
         private readonly System.Threading.CancellationTokenSource _lifetimeCancellation;
         private WebView2 _webView;
         private CoreWebView2Controller _webViewController;
+        public TabularWebViewExecutor TabularExecutor { get; private set; }
         private Stopwatch _initialNavigationTimer;
         private string _trustedDocumentUri;
         private bool _webContentWantsKeyboard;
         private volatile bool _resourcesDisposed;
         public Task RequestsDrained
         {
-            get { return Task.WhenAll(_bridge.RequestsDrained, _resourceRequestsDrained.Task); }
+            get { return Task.WhenAll(_bridge.RequestsDrained, _resourceRequestsDrained.Task,
+                TabularExecutor == null ? Task.CompletedTask : TabularExecutor.Drained); }
         }
         private IntPtr _lastExternalFocusWindow;
         public Action<string, string, bool> MailboxNavigationRequested
@@ -206,6 +208,8 @@ namespace RNAssistant.Office.WebView
                 : string.Empty;
 
             var core = _webView.CoreWebView2;
+            if (TabularExecutor != null) TabularExecutor.Dispose();
+            TabularExecutor = new TabularWebViewExecutor(core.Environment, Handle);
             core.WebMessageReceived += OnWebMessageReceived;
             core.NavigationStarting += OnNavigationStarting;
             core.NavigationCompleted += OnNavigationCompleted;
@@ -681,6 +685,7 @@ namespace RNAssistant.Office.WebView
                 }
                 Load -= OnLoad;
                 try { _lifetimeCancellation.Cancel(); } catch (ObjectDisposedException) { }
+                if (TabularExecutor != null) TabularExecutor.Dispose();
                 DetachInitializedWebView();
                 _bridge.Dispose();
                 if (_resourceRequestsDrained.Task.IsCompleted)

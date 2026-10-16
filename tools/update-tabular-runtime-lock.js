@@ -2,7 +2,7 @@
 const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto"), assert = require("node:assert/strict");
 const root = path.resolve(__dirname, "../web");
 const paths = ["js/vendor/sax.js", ...["byte-source.js", "decimal.js", "engine.js", "executor.js", "expression.js", "json.js",
-    "native-runtime.js", "runtime.html", "selectors.js", "snapshot.js", "sources.js", "template.js", "transform.js", "worker.js",
+    "native-channel.js", "native-runtime.js", "runtime.html", "selectors.js", "snapshot.js", "sources.js", "template.js", "transform.js", "worker.js",
     "xlsx-reader.js", "xlsx-zip.js"].map(file => "tabular/" + file)].sort();
 const engine = fs.readFileSync(path.join(root, "tabular/engine.js"), "utf8");
 const manifest = { formatVersion: 1, workerProtocol: Number(engine.match(/protocol: (\d+)/)[1]),
