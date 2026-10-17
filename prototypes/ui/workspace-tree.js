@@ -3,6 +3,7 @@
   var P = window.Prototype, E = P.escape, I = P.icon;
 
   P.initWorkspaceTree = function (s) {
+    s.chatSequence = 0;
     s.workspaceScope = "office";
     s.treeSearchOpen = false;
     s.treeSearch = "";
@@ -42,7 +43,7 @@
     if (s.workspaceScope === "office") parents.sort(function (a, b) { return Number(!!current && b.id === current.id) - Number(!!current && a.id === current.id) || Number(b.open) - Number(a.open) || a.name.localeCompare(b.name, "ru"); });
     return parents.map(function (parent) {
       var ownMatch = parent.name.toLocaleLowerCase("ru").includes(query);
-      var ids = Object.keys(s.chats).filter(function (id) { return s.chats[id].parent === parent.id; });
+      var ids = Object.keys(s.chats).filter(function (id) { return s.chats[id].parent === parent.id; }).sort(function (a, b) { return (s.chats[b].order || 0) - (s.chats[a].order || 0); });
       var children = ids.filter(function (id) { return !query || ownMatch || s.chats[id].title.toLocaleLowerCase("ru").includes(query); }).map(function (id) {
         var c = s.chats[id], running = c.status === "running", waiting = ["approval", "needs-input"].includes(c.status);
         return { key: "chat:" + id, title: c.title, chat: id, selected: id === s.chatId, kind: "chat",
@@ -61,7 +62,7 @@
     var s = P.state;
     var scope = function (key, title, icon) { return '<button role="menuitemradio" data-scope="' + key + '" aria-checked="' + (s.workspaceScope === key) + '">' + I(icon) + '<span>' + title + '</span>' + (s.workspaceScope === key ? I("check") : '') + '</button>'; };
     var scopeTitle = s.workspaceScope === "office" ? "Документы Office" : "Проекты";
-    var picker = '<details class="popover scope-switcher"><summary aria-label="Раздел рабочей области: ' + scopeTitle + '" title="' + scopeTitle + ' · сменить раздел" aria-haspopup="menu">' + I(s.workspaceScope === "office" ? "office" : "folder") + '<span>' + scopeTitle + '</span>' + I("down") + '</summary><div class="popover-menu" role="menu" aria-label="Раздел рабочей области">' + scope("office", "Документы Office", "office") + scope("projects", "Проекты", "folder") + '</div></details>';
+    var picker = P.panelMenu(scopeTitle, "Раздел рабочей области", s.workspaceScope === "office" ? "office" : "folder", "scope-switcher", scope("office", "Документы Office", "office") + scope("projects", "Проекты", "folder"));
     var launcher = s.workspaceScope === "office" ? '<details class="office-launch popover"><summary>' + I("plus") + 'Новый документ Office' + I("down") + '</summary><div class="popover-menu">' + ["Excel", "Word", "PowerPoint", "Outlook"].map(function (host) { return '<button data-action="launch-office:' + host + '">' + P.officeIcon(host) + '<span class="office-launch-name">' + host + '</span><small>Новый чат</small></button>'; }).join("") + '</div></details>' : '';
     var toolbar = '<div class="workspace-heading scope-heading' + (s.treeSearchOpen ? ' searching' : '') + '">' + picker + '<div class="tree-toolbar">' + P.sidebarSearchButton("tree", s.treeSearchOpen, s.treeSearch) + '<input type="search" class="tree-search-input" data-tree-search placeholder="Найти…" aria-label="Найти документ, папку или чат" value="' + E(s.treeSearch) + '"' + (s.treeSearchOpen ? '' : ' hidden') + '>' + P.iconButton("Новый чат", "new-scoped-chat", "plus") + '</div></div>';
     return '<div class="workspace-switcher">' + toolbar + '</div><section class="workspace-tree">' + launcher + '<div class="tree-scroll">' + P.renderTreeContents() + '</div>' + '</section>';

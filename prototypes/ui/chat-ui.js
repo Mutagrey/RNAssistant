@@ -2,6 +2,12 @@
   "use strict";
   var P = window.Prototype, E = P.escape, I = P.icon, G = P.go;
   P.inspectorTitles = { context: "Контекст чата", abilities: "Возможности агента", usage: "Использование контекста", request: "Запрос и ответ модели", activity: "Ход работы", changes: "Изменения", model: "Модель и параметры", attach: "Добавить в контекст", queue: "Ожидающие сообщения" };
+  var inspectorIcons = { context: "paperclip", abilities: "spark", usage: "chart", request: "braces", activity: "clock", changes: "edit", model: "layers", attach: "plus", queue: "chat" };
+  P.inspectorNavigation = function (active) {
+    return P.panelMenu(P.inspectorTitles[active], "Раздел боковой панели", inspectorIcons[active], "inspector-switcher", Object.keys(P.inspectorTitles).map(function (key) {
+      return '<button role="menuitemradio" aria-checked="' + (key === active) + '" data-go="chat/' + key + '">' + I(inspectorIcons[key]) + '<span>' + E(P.inspectorTitles[key]) + '</span>' + (key === active ? I("check") : '') + '</button>';
+    }).join(""));
+  };
   P.sampleMessages = function () { return [
     { role: "user", text: "Сравни сентябрь с августом. Что изменилось в продажах и на что стоит обратить внимание?" },
     { role: "assistant", kind: "report", changes: { complete: true, items: [{ title: "Итоги сентября.md", scope: "Материал чата", availability: "available", beforeExists: true, afterExists: true, before: "# Итоги сентября\n\nПервый вариант отчёта.\n", after: P.fixtures.report }] }, text: "В сентябре выручка выросла на 18,4%. Москва и Казань дали основной прирост. По Самаре есть пропуски в исходных данных." }

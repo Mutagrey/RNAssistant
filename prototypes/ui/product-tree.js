@@ -109,6 +109,10 @@
     var saved = positions[key], initial = visibleAncestor(selected) || record.rows.values().next().value;
     setFocus(initial, false);
     root.scrollTop = saved ? saved.scroll : 0;
+    record.selection = selected && selected.dataset.treeKey;
+    if (selected && saved && saved.selection !== record.selection) requestAnimationFrame(function () {
+      if (root.isConnected && root.getBoundingClientRect().height) selected.firstElementChild.scrollIntoView({ block: "nearest" });
+    });
     if (saved && saved.focus && saved.route === record.route && record.rows.has(saved.focus)) {
       requestAnimationFrame(function () { if (root.isConnected) setFocus(visibleAncestor(record.rows.get(saved.focus)), true); });
     }
@@ -119,7 +123,7 @@
       mounts.forEach(function (record, root) {
         if (scope && !scope.contains(root)) return;
         var focused = root.contains(document.activeElement) && document.activeElement.closest("li[role=treeitem]");
-        positions[record.key] = { scroll: root.scrollTop, route: record.route, focus: !record.navigating && focused ? focused.dataset.treeKey : null };
+        positions[record.key] = { scroll: root.scrollTop, route: record.route, selection: record.selection, focus: !record.navigating && focused ? focused.dataset.treeKey : null };
         record.events.abort(); mounts.delete(root);
       });
     }

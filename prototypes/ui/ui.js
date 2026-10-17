@@ -36,8 +36,9 @@
     check: '<path d="m5 12 4 4L19 6"/>',
     clock: '<circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/>',
     panel: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/>',
+    panelLeft: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/>',
     menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
-    link: '<path d="m10 14 4-4M8 16l-1 1a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0m2 1 1-1a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0"/>',
+    link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.72-1.71"/>',
     download: '<path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/>',
     upload: '<path d="M12 16V4m-5 5 5-5 5 5M4 16v5h16v-5"/>',
     copy: '<rect x="8" y="8" width="12" height="13" rx="2"/><path d="M15 8V3H3v13h5"/>',
@@ -66,10 +67,13 @@
   P.go = function (label, route, icon, kind) { return '<button type="button" class="button ' + (kind || "") + '" data-go="' + route + '">' + (icon ? P.icon(icon) : "") + P.escape(label) + '</button>'; };
   P.iconButton = function (label, action, name, extra) { return '<button type="button" class="icon-btn ' + (extra || "") + '" data-action="' + action + '" aria-label="' + P.escape(label) + '" title="' + P.escape(label) + '">' + P.icon(name) + '</button>'; };
   P.iconGo = function (label, route, name) { return '<button type="button" class="icon-btn" data-go="' + P.escape(route) + '" aria-label="' + P.escape(label) + '" title="' + P.escape(label) + '">' + P.icon(name || "right") + '</button>'; };
+  P.panelMenu = function (title, label, icon, className, items) {
+    return '<details class="popover panel-switcher ' + className + '"><summary aria-label="' + P.escape(label + ": " + title) + '" title="' + P.escape(title + " · сменить раздел") + '" aria-haspopup="menu">' + P.icon(icon) + '<span>' + P.escape(title) + '</span>' + P.icon("down") + '</summary><div class="popover-menu" role="menu" aria-label="' + P.escape(label) + '">' + items + '</div></details>';
+  };
   P.badge = function (label, kind) { return '<span class="badge ' + (kind || "") + '"><span class="badge-dot"></span>' + P.escape(label) + '</span>'; };
   P.notice = function (title, text, kind, actions) { return '<div class="notice ' + (kind || "") + '" role="' + (kind === "danger" ? "alert" : "status") + '">' + P.icon(kind === "success" ? "check" : "warning") + '<div class="row-copy"><strong>' + P.escape(title) + '</strong><p>' + P.escape(text) + '</p>' + (actions ? '<div class="actions">' + actions + '</div>' : "") + '</div></div>'; };
   P.search = function (placeholder, name) { return '<label class="search">' + P.icon("search") + '<input type="search" placeholder="' + placeholder + '" aria-label="' + placeholder + '" data-search="' + name + '"></label>'; };
-  P.header = function (title, breadcrumb, actions) { return '<header class="page-header">' + (P.state.standalone ? "" : P.iconButton("Открыть навигацию", "navigation", "menu", "menu-btn")) + '<div class="page-heading"><div class="breadcrumb">' + P.escape(breadcrumb) + '</div><h1 title="' + P.escape(title) + '">' + P.escape(title) + '</h1></div><div class="header-actions">' + (actions || "") + '</div></header>'; };
+  P.header = function (title, breadcrumb, actions) { return '<header class="page-header">' + (P.state.standalone ? "" : P.iconButton("Открыть навигацию", "navigation", "panelLeft", "menu-btn")) + '<div class="page-heading"><div class="breadcrumb">' + P.escape(breadcrumb) + '</div><h1 title="' + P.escape(title) + '">' + P.escape(title) + '</h1></div><div class="header-actions">' + (actions || "") + '</div></header>'; };
   P.tabs = function (items, current) { return '<nav class="tabs" aria-label="Разделы экрана">' + items.map(function (v) { return '<button data-go="' + v[1] + '"' + (current === v[1] ? ' aria-current="page"' : "") + '>' + P.escape(v[0]) + '</button>'; }).join("") + '</nav>'; };
   P.menu = function (items, label) { return '<details class="popover"><summary class="icon-btn" aria-label="' + P.escape(label || "Дополнительные действия") + '" title="' + P.escape(label || "Дополнительные действия") + '">' + P.icon("more") + '</summary><div class="popover-menu">' + items.map(function (v) { return v === "-" ? '<hr>' : '<button data-' + (v[1].indexOf("/") >= 0 ? "go" : "action") + '="' + v[1] + '" class="' + (v[3] || "") + '">' + P.icon(v[2] || "right") + P.escape(v[0]) + '</button>'; }).join("") + '</div></details>'; };
   P.empty = function (title, description, actions, icon) { return '<div class="empty">' + P.icon(icon || "files") + '<h2>' + P.escape(title) + '</h2><p>' + P.escape(description) + '</p><div class="actions">' + (actions || "") + '</div></div>'; };

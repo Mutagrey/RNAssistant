@@ -29,8 +29,8 @@
   function refreshSidebar() {
     P.productTree.unmount();
     document.getElementById("section-rail").innerHTML = P.renderSectionRail();
-    document.getElementById("global-nav").innerHTML = navigation();
-    if (dialog.open && dialog.dataset.view === "navigation") dialog.querySelector(".dialog-content").innerHTML = P.renderNavigationDrawer();
+    document.getElementById("global-nav").innerHTML = '<div class="navigation-content">' + navigation() + '</div>';
+    document.querySelector("#global-nav .workspace-heading").insertAdjacentHTML("afterbegin", P.iconButton("Свернуть навигацию", "navigation", "panelLeft", "nav-collapse"));
     P.productTree.mount();
   }
   function bindChat(id) {
@@ -91,8 +91,12 @@
     P.motion.render(surface, motionBefore, S.review + "/" + (S.route.startsWith("chat/") ? "chat/" + S.chatId : S.route));
     if (focusMain) document.getElementById(S.review === "app" ? "main" : "review-content").focus({ preventScroll: true });
     if (!focusMain && !nextFocus && composerFocus) { var input = document.getElementById("chat-input"); if (input) { input.focus({ preventScroll: true }); input.setSelectionRange(composerFocus.start, composerFocus.end); } }
-    if (nextFocus) { var target = document.querySelector(nextFocus); nextFocus = null; if (target) target.focus({ preventScroll: true }); }
-    if (S.drawerAfterNavigate) { S.drawerAfterNavigate = false; actions.navigation(); }
+    if (nextFocus) {
+      var target = document.querySelector(nextFocus), panelBack = document.querySelector('.inspector-compact-back'); nextFocus = null;
+      if (target && target.dataset.action === "toggle-inspector" && panelBack && getComputedStyle(panelBack).display !== "none") target = panelBack;
+      if (target) target.focus({ preventScroll: true });
+    }
+    if (S.openNavigationAfterNavigate) { S.openNavigationAfterNavigate = false; P.layout.setNavigation(true, true); }
   }
   P.refreshSidebar = refreshSidebar;
   P.isChatVisible = chatIsVisible;
@@ -140,11 +144,12 @@
     else if (route === "chat/offline") S.scenario = "offline";
     else if (S.scenario === "offline" && route.startsWith("chat/") && !chat().offline) S.scenario = "ready";
     render(true);
-    if (route === "chat/list" && document.getElementById("stage").clientWidth <= 820) actions.navigation();
+    if (route === "chat/list" && document.getElementById("stage").clientWidth <= 820) P.layout.setNavigation(true, true);
     announce("Открыто: " + (P.map.flatMap(function (g) { return g.nodes; }).find(function (n) { return n[2] === route; }) || ["", route])[1]);
   }
   function navigate(route) {
     closeDialog();
+    P.layout.closeCompactNavigation();
     if (location.hash === "#/" + route) applyRoute(route);
     else location.hash = "/" + route;
   }
@@ -196,7 +201,7 @@
     var parent = S.parents.find(function (p) { return p.id === (parentId || chat().parent) && p.scope === S.workspaceScope; }) || S.parents.find(function (p) { return p.scope === S.workspaceScope; });
     if (!parent) { showDialog("Сначала выберите рабочую область", '<p>Добавьте документ Office или откройте папку проекта. Затем можно создать связанный чат.</p>', S.workspaceScope === "office" ? B("Создать документ Excel", "launch-office:Excel", "plus") : G("Открыть проект", "projects/open", "folder")); return; }
     var id = "new-" + Date.now();
-    S.chats[id] = { title: "Новый чат", parent: parent.id, scope: parent.scope, document: parent.scope === "office" ? parent.name : null, offline: parent.scope === "office" && !parent.open, subtitle: "Без сообщений", draft: "", messages: [], attachments: [], plan: false, status: "ready", empty: true };
+    S.chats[id] = { title: "Новый чат", order: ++S.chatSequence, parent: parent.id, scope: parent.scope, document: parent.scope === "office" ? parent.name : null, offline: parent.scope === "office" && !parent.open, subtitle: "Без сообщений", draft: "", messages: [], attachments: [], plan: false, status: "ready", empty: true };
     bindChat(id);
     if (go !== false) navigate(chat().offline ? "chat/offline" : "chat/main");
   }
@@ -208,7 +213,7 @@
   }
   function forkChat(index) {
     var source = chat(), origin = S.chatId, id = "fork-" + Date.now();
-    S.chats[id] = { title: source.title + " · ветка", parent: source.parent, scope: source.scope, document: source.document, offline: source.offline,
+    S.chats[id] = { title: source.title + " · ветка", order: ++S.chatSequence, parent: source.parent, scope: source.scope, document: source.document, offline: source.offline,
       messages: JSON.parse(JSON.stringify(source.messages.slice(0, index + 1))),
       attachments: (source.attachments || []).slice(), model: source.model, reasoning: source.reasoning, plan: source.plan,
       draft: "", status: "ready", forkOf: origin };
@@ -225,7 +230,7 @@
     "toggle-chat-demo": function () { P.demo.toggle(); },
     "next-chat-demo": function () { P.demo.next(); },
     "scroll-chat-bottom": function () { P.chatScroll.bottom(); },
-    "navigation": function () { showDialog("Навигация", P.renderNavigationDrawer()); dialog.dataset.view = "navigation"; },
+    "navigation": function () { P.layout.setNavigation(!document.getElementById("app-shell").classList.contains("navigation-open"), true); },
     "close-dialog": closeDialog,
     "confirm": function () { var callback = confirmCallback; closeDialog(); confirmCallback = null; if (callback) callback(); },
     "open-project-dialog": function () { navigate("projects/open"); },
@@ -237,14 +242,14 @@
       S.treeSearchOpen = !S.treeSearchOpen;
       if (!S.treeSearchOpen) S.treeSearch = "";
       refreshSidebar();
-      var root = dialog.open && dialog.dataset.view === "navigation" ? dialog : document.getElementById("global-nav");
+      var root = document.getElementById("global-nav");
       root.querySelector(S.treeSearchOpen ? "[data-tree-search]" : "[data-action='toggle-tree-search']").focus();
     },
     "toggle-nav-search": function () {
       var section = P.activeSection(); S.navSearchOpen[section] = !S.navSearchOpen[section];
       if (!S.navSearchOpen[section]) S.navSearch[section] = "";
       refreshSidebar();
-      var root = dialog.open ? dialog : document.getElementById("global-nav");
+      var root = document.getElementById("global-nav");
       root.querySelector(S.navSearchOpen[section] ? "[data-nav-search]" : "[data-action='toggle-nav-search']").focus();
     },
     "rename-chat": function () { renameTreeChat(S.chatId); },
@@ -432,11 +437,10 @@
     if (el.dataset.section) {
       var section = P.sections.find(function (item) { return item.id === el.dataset.section; });
       if (!section) return;
-      S.drawerAfterNavigate = dialog.open || document.getElementById("stage").clientWidth <= 820;
+      S.openNavigationAfterNavigate = document.getElementById("app-shell").classList.contains("navigation-closed") || document.getElementById("stage").clientWidth <= 820;
       navigate(S.sectionRoutes[section.id] || section.route); return;
     }
     if (el.dataset.scope) {
-      var inDialog = dialog.open && dialog.dataset.view === "navigation";
       S.workspaceScope = el.dataset.scope; S.treeSearch = ""; S.treeSearchOpen = false;
       var candidate = S.lastScopeChat[S.workspaceScope];
       if (!S.chats[candidate]) candidate = Object.keys(S.chats).find(function (id) { return S.chats[id].scope === S.workspaceScope; });
@@ -444,10 +448,9 @@
       S.route = candidate && chat().offline ? "chat/offline" : "chat/main"; S.review = "app";
       nextFocus = '.scope-switcher > summary';
       history.pushState(null, "", "#/" + S.route); render(false);
-      if (inDialog) { actions.navigation(); dialog.querySelector('.scope-switcher > summary').focus(); }
       return;
     }
-    if (el.dataset.go) { navigate(el.dataset.go); return; }
+    if (el.dataset.go) { if (el.closest('.inspector-switcher')) nextFocus = '.inspector-switcher > summary'; navigate(el.dataset.go); return; }
     if (el.dataset.review) { S.review = el.dataset.review; render(true); return; }
     if (el.dataset.chat) { bindChat(el.dataset.chat); navigate(chat().offline ? "chat/offline" : "chat/main"); return; }
     if (el.dataset.module) { S.vbaModule = el.dataset.module; navigate("vba/code"); return; }
@@ -512,7 +515,7 @@
     }, 2200);
   });
   document.addEventListener("keydown", function (event) {
-    var picker = event.target.closest(".model-picker, .scope-switcher");
+    var picker = event.target.closest(".model-picker, .scope-switcher, .inspector-switcher");
     if (picker && ["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
       event.preventDefault(); picker.open = true;
       var options = Array.from(picker.querySelectorAll('[role="menuitemradio"]')), current = options.indexOf(document.activeElement);
@@ -525,6 +528,7 @@
       var menu = document.querySelector("details.popover[open]");
       if (menu) { menu.open = false; menu.querySelector("summary").focus(); event.preventDefault(); return; }
       if (event.target.closest(".inspector")) { event.preventDefault(); action("close-inspector"); return; }
+      if (event.target.closest("#global-nav")) { event.preventDefault(); P.layout.setNavigation(false, true); return; }
     }
     if (event.key === "Enter" && event.target.id === "chat-input" && !event.shiftKey && !event.isComposing && event.keyCode !== 229) {
       event.preventDefault(); if (!event.repeat) document.getElementById("composer").requestSubmit();

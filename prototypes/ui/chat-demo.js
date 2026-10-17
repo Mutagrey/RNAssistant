@@ -95,7 +95,7 @@
       clearTimeout(timer);
       var s = P.state, id = "demo-realistic", parent = s.parents.find(function (p) { return p.id === "office-sales"; });
       if (!parent) { parent = { id: "office-demo", scope: "office", name: "Продажи · демо.xlsx", host: "Excel", open: true }; s.parents.push(parent); }
-      s.chats[id] = { title: "Анализ продаж · живой пример", parent: parent.id, scope: "office", document: parent.name, messages: [], attachments: ["Продажи · сентябрь.xlsx", "Продажи · август.xlsx"], draft: "", demo: true, status: "running", usage: { input: 24600, limit: 128000 } };
+      s.chats[id] = { title: "Анализ продаж · живой пример", order: ++s.chatSequence, parent: parent.id, scope: "office", document: parent.name, messages: [], attachments: ["Продажи · сентябрь.xlsx", "Продажи · август.xlsx"], draft: "", demo: true, status: "running", usage: { input: 24600, limit: 128000 } };
       s.scenario = "ready"; s.demo = { chatId: id, step: -1, playing: true, materialId: "demo-report-" + Date.now() }; P.chatScroll.reset(id); P.openChat(id); advance();
     },
     toggle: function () { if (!P.state.demo) return P.demo.start(); if (P.state.demo.step === stages.length - 1) { P.demo.start(); return; } P.state.demo.playing = !P.state.demo.playing; if (P.state.demo.playing) schedule(); else clearTimeout(timer); P.refreshDemoControls(); },

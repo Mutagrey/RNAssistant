@@ -67,9 +67,14 @@
     if (kind === "collection") {
       var names = ["Москва", "Казань", "Самара"], rail = RNAssistantSequenceViewer.createRail({
         title: "Регионы", ariaLabel: "Элементы коллекции", count: 3, currentIndex: item.page - 1,
-        orientation: "horizontal", itemExtent: 140, itemLabel: function (i) { return names[i]; },
+        orientation: "horizontal", className: "collection-rail", showJump: false, showNumbers: false,
+        itemExtent: 156, itemLabel: function (i) { return names[i]; },
         onSelect: function (i) { item.page = i + 1; P.refresh(); },
-        renderItem: function (i, button, preview) { preview.textContent = ["7,42 млн ₽", "5,38 млн ₽", "Нет данных"][i]; return "ready"; }
+        renderItem: function (i, item, preview) {
+          var title = document.createElement("strong"), value = document.createElement("span");
+          title.textContent = names[i]; value.textContent = ["7,42 млн ₽", "5,38 млн ₽", "Нет данных"][i];
+          preview.append(title, value); return "ready";
+        }
       });
       target.appendChild(rail.element); auxiliaries.push(rail);
       var content = document.createElement("div"); content.className = "collection-page"; target.appendChild(content);

@@ -69,5 +69,4 @@
     var open = !!s.navSearchOpen[section], action = { library: ["Создать в библиотеке", "new-library", "plus"], materials: ["Добавить материал", "create-material", "plus"], projects: ["Открыть проект", "open-project-dialog", "folder"], vba: ["Обновить модули", "refresh-vba", "refresh"] }[section];
     return '<div class="workspace-heading' + (open ? ' searching' : '') + '"><div class="nav-label" title="' + title + '">' + title + '</div><div class="tree-toolbar">' + P.sidebarSearchButton("nav", open, s.navSearch[section] || "") + '<input class="tree-search-input" type="search" data-nav-search="' + section + '" value="' + E(s.navSearch[section] || "") + '" placeholder="Найти…" aria-label="Поиск: ' + title + '"' + (open ? '' : ' hidden') + '>' + (action ? P.iconButton(action[0], action[1], action[2]) : '') + '</div></div><div class="section-tree-scroll">' + P.renderSectionTree() + '</div>';
   };
-  P.renderNavigationDrawer = function () { return '<nav class="drawer-sections" aria-label="Разделы">' + P.renderSectionRail(true) + '</nav><div class="drawer-tree">' + P.renderNavigation() + '</div>'; };
 }());

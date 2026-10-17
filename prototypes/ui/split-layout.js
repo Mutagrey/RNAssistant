@@ -1,20 +1,56 @@
 (function () {
   "use strict";
   var P = window.Prototype, shell = document.getElementById("app-shell");
-  var storageKey = "rnassistant.prototype.panel-widths.v3", widths = {}, entries = [], drag, frame;
+  var storageKey = "rnassistant.prototype.panel-widths.v3", widths = {}, entries = [], drag, frame, navigationOpen = null;
+  var layoutMode, compactNavigationOpen = false;
   var keys = ["navigation", "inspector"];
   function readWidths() {
     try {
       var saved = JSON.parse(localStorage.getItem(storageKey) || "{}"); widths = {};
       keys.forEach(function (key) { if (saved && Number.isFinite(saved[key]) && saved[key] > 0) widths[key] = saved[key]; });
+      navigationOpen = saved && typeof saved.navigationOpen === "boolean" ? saved.navigationOpen : null;
     } catch (_) { /* Presentation preferences are optional in restricted browsers. */ }
   }
   readWidths();
   window.addEventListener("storage", function (event) { if (event.key === storageKey && !drag) { readWidths(); sync(); } });
 
-  function persist() { try { localStorage.setItem(storageKey, JSON.stringify(widths)); } catch (_) {} }
+  function persist() { try { localStorage.setItem(storageKey, JSON.stringify(Object.assign({}, widths, { navigationOpen: navigationOpen }))); } catch (_) {} }
+  function mode() {
+    var width = document.getElementById("stage").clientWidth;
+    return width <= 620 ? "single" : width <= 820 ? "compact" : "wide";
+  }
+  function setNavigationPreference(open) {
+    if (layoutMode === "wide") navigationOpen = open;
+    else compactNavigationOpen = open;
+  }
+  function syncNavigation() {
+    var nav = document.getElementById("global-nav"), focused = document.activeElement;
+    var nextMode = mode();
+    // A temporary compact pane must never hide the chat after a window resize.
+    if (nextMode !== layoutMode) { compactNavigationOpen = false; layoutMode = nextMode; }
+    var open = !nav.hidden && (layoutMode === "wide" ? navigationOpen !== false : compactNavigationOpen);
+    shell.classList.toggle("navigation-single", layoutMode === "single");
+    shell.classList.toggle("navigation-compact", layoutMode !== "wide");
+    shell.classList.toggle("navigation-open", open); shell.classList.toggle("navigation-closed", !open);
+    nav.inert = !open; nav.setAttribute("aria-hidden", String(!open));
+    var main = document.getElementById("main"), replacesMain = layoutMode === "single" && open;
+    main.inert = replacesMain; main.setAttribute("aria-hidden", String(replacesMain));
+    var rail = document.getElementById("section-rail"), hidesRail = layoutMode === "single" && !open;
+    rail.inert = hidesRail; rail.setAttribute("aria-hidden", String(hidesRail));
+    document.querySelectorAll(".menu-btn").forEach(function (button) {
+      var label = open ? "Свернуть навигацию" : "Открыть навигацию";
+      button.setAttribute("aria-expanded", String(open)); button.setAttribute("aria-controls", "global-nav");
+      button.setAttribute("aria-label", label); button.title = label;
+    });
+    if (!open && (nav.contains(focused) || focused.matches('[data-split="navigation"]'))) {
+      var button = document.querySelector(".menu-btn"); if (button) button.focus({ preventScroll: true });
+    }
+  }
   function visible(element) { return element && getComputedStyle(element).display !== "none"; }
-  function active(entry) { return entry.container.getBoundingClientRect().width > 0 && visible(entry.pane) && visible(entry.peer) && getComputedStyle(entry.pane).position !== "absolute"; }
+  function active(entry) {
+    if (entry.key === "navigation" && (layoutMode === "single" || shell.classList.contains("navigation-closed"))) return false;
+    return !document.getElementById("main").inert && entry.container.getBoundingClientRect().width > 0 && visible(entry.pane) && visible(entry.peer) && getComputedStyle(entry.pane).position !== "absolute";
+  }
   function limits(entry) {
     var reserve = 280;
     if (entry.pane.id === "global-nav") {
@@ -26,18 +62,30 @@
   }
   function clamp(value, range) { return Math.max(range.min, Math.min(range.max, value)); }
   function sync() {
+    if (drag && mode() !== layoutMode) { finish(false); return; }
+    syncNavigation();
     entries.forEach(function (entry) {
       entry.handle.hidden = !active(entry);
-      entry.pane.style.removeProperty("width");
-      if (entry.handle.hidden) return;
       var range = limits(entry), desired = widths[entry.key];
-      var width = Math.round(clamp(desired == null ? entry.pane.getBoundingClientRect().width : desired, range));
-      entry.pane.style.width = width + "px";
+      var width;
+      if (entry.key === "navigation") {
+        var defaultWidth = parseFloat(getComputedStyle(entry.pane).getPropertyValue("--pane-default"));
+        width = layoutMode === "single" ? shell.clientWidth - 52 : Math.round(clamp(desired == null ? defaultWidth : desired, range));
+        // Keep the content at its final width while its outer pane slides closed.
+        // Reading the animated width here would feed it back into ResizeObserver.
+        entry.pane.style.setProperty("--pane-width", width + "px");
+      } else {
+        if (entry.handle.hidden) return;
+        width = Math.round(clamp(desired == null ? parseFloat(getComputedStyle(entry.pane).getPropertyValue("--pane-default")) : desired, range));
+        entry.pane.style.setProperty("--pane-width", width + "px");
+      }
+      if (entry.handle.hidden) return;
       entry.handle.setAttribute("aria-valuemin", Math.ceil(range.min));
       entry.handle.setAttribute("aria-valuemax", Math.floor(range.max));
       entry.handle.setAttribute("aria-valuenow", width);
       entry.handle.setAttribute("aria-valuetext", width + " пикселей");
     });
+    if (!shell.classList.contains("layout-ready")) requestAnimationFrame(function () { shell.classList.add("layout-ready"); });
   }
   function schedule() {
     if (!frame) frame = requestAnimationFrame(function () { frame = null; sync(); });
@@ -81,15 +129,19 @@
     event.preventDefault();
     // A pointer resize must not leave the keyboard focus ring on the full divider.
     if (document.activeElement === entry.handle) entry.handle.blur();
+    document.body.classList.add("resizing-panels"); P.motion.finishPanel(entry.pane);
     drag = { entry: entry, pointerId: event.pointerId, x: event.clientX, width: entry.pane.getBoundingClientRect().width, preference: widths[entry.key] };
     entry.handle.setPointerCapture(event.pointerId);
     entry.handle.classList.add("dragging");
-    document.body.classList.add("resizing-panels");
   });
   shell.addEventListener("pointermove", function (event) {
     if (!drag || drag.pointerId !== event.pointerId) return;
     if (!event.buttons) { finish(true); return; }
-    resize(drag.entry, drag.width + (event.clientX - drag.x) * drag.entry.direction);
+    var width = drag.width + (event.clientX - drag.x) * drag.entry.direction;
+    if (drag.entry.key === "navigation" && width < drag.entry.min - 12) {
+      widths.navigation = drag.preference || drag.width; setNavigationPreference(false); finish(true); return;
+    }
+    resize(drag.entry, width);
   });
   shell.addEventListener("pointerup", function (event) { if (drag && drag.pointerId === event.pointerId) finish(true); });
   shell.addEventListener("pointercancel", function (event) { if (drag && drag.pointerId === event.pointerId) finish(false); });
@@ -101,21 +153,34 @@
   }, true);
   shell.addEventListener("dblclick", function (event) {
     var entry = targetEntry(event);
-    if (entry) { delete widths[entry.key]; sync(); persist(); }
+    if (entry) { delete widths[entry.key]; if (entry.key === "navigation") setNavigationPreference(true); sync(); persist(); }
   });
   shell.addEventListener("keydown", function (event) {
     var entry = targetEntry(event);
     if (!entry) return;
-    var range = limits(entry), width = entry.pane.getBoundingClientRect().width, step = event.shiftKey ? 40 : 12;
+    var range = limits(entry), width = Number(entry.handle.getAttribute("aria-valuenow")), step = event.shiftKey ? 40 : 12;
     if (event.key === "ArrowLeft") width -= step * entry.direction;
     else if (event.key === "ArrowRight") width += step * entry.direction;
     else if (event.key === "Home") width = range.min;
     else if (event.key === "End") width = range.max;
     else if (event.key === "Enter") { event.preventDefault(); delete widths[entry.key]; sync(); persist(); return; }
     else return;
+    if (entry.key === "navigation" && (event.key === "Home" || width < range.min)) {
+      event.preventDefault(); P.layout.setNavigation(false, true); return;
+    }
     event.preventDefault(); resize(entry, width); persist();
   });
   P.layout = {
+    setNavigation: function (open, focus) {
+      sync(); setNavigationPreference(open); persist(); sync();
+      if (focus) requestAnimationFrame(function () {
+        var target = open ? document.querySelector('#global-nav [role="treeitem"][tabindex="0"]') || document.querySelector('#global-nav button, #global-nav summary') : document.querySelector('.menu-btn');
+        if (target && target.focus) target.focus({ preventScroll: true });
+      });
+    },
+    closeCompactNavigation: function () {
+      if (mode() === "single" && shell.classList.contains("navigation-open")) P.layout.setNavigation(false);
+    },
     refresh: function () {
       finish(true);
       entries.forEach(function (entry) { entry.handle.remove(); });
@@ -123,7 +188,7 @@
       var main = document.getElementById("main"), body = main.querySelector(".body-split");
       add("navigation", document.getElementById("global-nav"), main, 1, 240, 460, "Ширина дерева раздела");
       if (body) {
-        add("inspector", body.querySelector(".inspector"), body.querySelector(".conversation"), -1, 220, 480, "Ширина правой панели");
+        add("inspector", body.querySelector(".inspector"), body.querySelector(".chat-main"), -1, 220, 480, "Ширина правой панели");
       }
       sync();
     }

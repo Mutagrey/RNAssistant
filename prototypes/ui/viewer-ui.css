@@ -26,7 +26,19 @@
 .product-viewer .rn-markdown-viewer h2 { font-size: 18px; margin: 22px 0 12px; }
 .product-viewer .rn-markdown-viewer p, .product-viewer .rn-markdown-viewer li { line-height: 1.8; margin-block: 12px; }
 .product-viewer .rn-markdown-viewer ul { padding-left: 22px; }
-.product-viewer[data-product-viewer="markdown"] > .rn-markdown-viewer > .rn-markdown-viewer-tabs { display: none; }
+.product-viewer:is([data-product-viewer="markdown"], [data-product-viewer="collection"]) .rn-markdown-viewer-tabs { display: none; }
+.product-viewer .collection-rail.is-horizontal { flex-direction: column; height: auto; gap: 8px; border: 0; background: none; border-radius: 0; }
+.product-viewer .collection-rail.is-horizontal .rn-sequence-header { display: flex; width: auto; gap: 8px; padding: 0; border: 0; }
+.product-viewer .collection-rail .rn-sequence-title { font-size: 12px; font-weight: 600; color: var(--ink); }
+.product-viewer .collection-rail .rn-sequence-count { padding: 1px 6px; border-radius: 5px; background: var(--surface-subtle); color: var(--ink-muted); }
+.product-viewer .collection-rail .rn-sequence-list { flex: none; height: 84px; scrollbar-width: thin; }
+.product-viewer .collection-rail.is-horizontal .rn-sequence-item { top: 0; width: 148px; height: 72px; padding: 11px 13px; border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.product-viewer .collection-rail .rn-sequence-item.active { border-color: var(--accent); }
+.product-viewer .collection-rail.is-horizontal .rn-sequence-preview { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 3px; height: auto; border: 0; background: none; box-shadow: none; }
+.product-viewer .collection-rail .rn-sequence-preview strong { font-size: 13px; font-weight: 600; color: var(--ink); }
+.product-viewer .collection-rail .rn-sequence-preview span { font-size: 12px; white-space: nowrap; }
+.collection-page { margin-top: 20px; padding-top: 8px; border-top: 1px solid var(--line); }
+.collection-page .rn-markdown-viewer { max-width: none; }
 .editor-body:has(> .product-viewer:is([data-product-viewer="pdf"], [data-product-viewer="image"], [data-product-viewer="json"], [data-product-viewer="text"])) { display: flex; flex-direction: column; overflow: hidden; }
 .editor-body > .product-viewer:is([data-product-viewer="pdf"], [data-product-viewer="image"], [data-product-viewer="json"], [data-product-viewer="text"]) { flex: 1; overflow: hidden; }
 .product-viewer .rn-pdf-viewer { display: flex; flex-direction: column; gap: 12px; height: 100%; min-height: 0; }
