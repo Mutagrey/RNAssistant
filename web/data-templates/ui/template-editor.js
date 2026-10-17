@@ -66,9 +66,10 @@
       const valid = !!(snapshot && snapshot.templateInspection), hasDraft = !!(snapshot && snapshot.draftName);
       get("EditorRuleTab").disabled = !valid && mode !== "rule";
       get("EditorRuleSelect").disabled = !valid || applying;
-      get("EditorApplyRule").disabled = !ruleDirty || !valid || applying || !!(snapshot && (snapshot.templateLoading || snapshot.running));
+      get("EditorApplyRule").disabled = !ruleDirty || !valid || applying ||
+        !!(snapshot && (snapshot.templateLoading || snapshot.running || snapshot.mappingPending));
       get("EditorDiscardRule").hidden = !ruleDirty;
-      get("DownloadTemplateDraft").disabled = !hasDraft || ruleDirty || applying;
+      get("DownloadTemplateDraft").disabled = !hasDraft || ruleDirty || applying || !!(snapshot && snapshot.mappingPending);
       get("EditorRuleTab").setAttribute("aria-pressed", String(mode === "rule"));
       get("EditorJsonTab").setAttribute("aria-pressed", String(mode === "json"));
       get("EditorRulePane").hidden = mode !== "rule";
@@ -85,6 +86,7 @@
     }
     async function open(path) {
       if (!snapshot || !snapshot.draftName || disposed) return;
+      if (snapshot.mappingPending) { container.querySelector("#dtTabMapping").click(); return; }
       if (ruleDirty && path && path !== selectedPath) {
         get("EditorRuleNotice").textContent = "Сначала примените или отмените текущую правку.";
         panel.scrollIntoView({ block: "nearest", behavior: "smooth" }); return;
@@ -129,7 +131,7 @@
       }
       snapshot = next;
       openButton.hidden = !next.draftName;
-      openButton.disabled = next.running;
+      openButton.disabled = next.running || next.mappingPending;
       if (!opened) return;
       get("EditorTitle").textContent = next.draftName || "Редактор";
       get("EditorState").textContent = next.templateLoading ? "Проверка…" : next.templateName ? next.draftDirty ? "Проверен · изменён" : "Проверен"
@@ -139,9 +141,10 @@
       if (jsonEditor && jsonEditor.getValue() !== (next.draftText || "")) {
         syncing = true; jsonEditor.setValue(next.draftText || ""); syncing = false;
       }
-      if (jsonEditor && jsonEditor.getOption("readOnly") !== !!next.running) jsonEditor.setOption("readOnly", !!next.running);
-      if (expressionEditor && expressionEditor.getOption("readOnly") !== !!next.running)
-        expressionEditor.setOption("readOnly", !!next.running);
+      const readOnly = !!(next.running || next.mappingPending);
+      if (jsonEditor && jsonEditor.getOption("readOnly") !== readOnly) jsonEditor.setOption("readOnly", readOnly);
+      if (expressionEditor && expressionEditor.getOption("readOnly") !== readOnly)
+        expressionEditor.setOption("readOnly", readOnly);
       const revised = entries(next.templateInspection);
       if (revised.length !== available.length || revised.some((item, index) =>
         item.path !== available[index].path || item.expression !== available[index].expression)) {

@@ -7,9 +7,9 @@
     if (value !== undefined) element.textContent = value;
     return element;
   };
-  function createList(panel, prefix, kindSelector) {
-    panel.innerHTML = `<div class="dt-inspection-heading"><div><p class="dt-eyebrow">${kindSelector ? "СООТВЕТСТВИЯ" : "СПРАВОЧНИК"}</p><h4 id="dt${prefix}Title"></h4></div><span class="dt-inspection-badge">Просмотр</span></div>
-      <p class="dt-inspection-note">Содержимое выбранного JSON-шаблона. Изменения и публикация здесь не выполняются.</p>
+  function createList(panel, prefix, kindSelector, onEdit) {
+    panel.innerHTML = `<div class="dt-inspection-heading"><div><p class="dt-eyebrow">${kindSelector ? "СООТВЕТСТВИЯ" : "СПРАВОЧНИК"}</p><h4 id="dt${prefix}Title"></h4></div><span class="dt-inspection-badge">${kindSelector ? "Проверено" : "Просмотр"}</span></div>
+      <p class="dt-inspection-note">${kindSelector ? "Соответствия текущего JSON-черновика. Изменения проверяются до применения; публикация здесь не выполняется." : "Содержимое выбранного JSON-шаблона. Изменения и публикация здесь не выполняются."}</p>
       <div class="dt-inspection-list"><div class="dt-inspection-controls">${kindSelector ? `<select id="dt${prefix}Kind" aria-label="Тип соответствий"><option value="parameter">Параметры</option><option value="unit">Единицы</option></select>` : ""}<input type="search" id="dt${prefix}Search" placeholder="Найти код или название…" aria-label="Поиск по списку"></div>
       <p class="dt-inspection-count" id="dt${prefix}Count"></p><div class="dt-inspection-table-wrap"><table class="dt-inspection-table"><thead><tr id="dt${prefix}Columns"></tr></thead><tbody id="dt${prefix}Rows"></tbody></table></div>
       <div class="dt-inspection-paging"><button type="button" id="dt${prefix}Previous">← Назад</button><span id="dt${prefix}Page"></span><button type="button" id="dt${prefix}Next">Далее →</button></div></div>`;
@@ -19,6 +19,13 @@
     if (kindSelector) get("Kind").addEventListener("change", () => { page = 0; renderPage(); }, { signal: events.signal });
     get("Previous").addEventListener("click", () => { page--; renderPage(); }, { signal: events.signal });
     get("Next").addEventListener("click", () => { page++; renderPage(); }, { signal: events.signal });
+    if (onEdit) get("Rows").addEventListener("click", event => {
+      const button = event.target.closest("button[data-mapping-path]");
+      if (button && current) {
+        const item = current.mappings.find(entry => entry.path === button.dataset.mappingPath);
+        if (item) onEdit(item);
+      }
+    }, { signal: events.signal });
     function renderPage() {
       if (!current) return;
       const type = kindSelector ? get("Kind").value : "parameter";
@@ -27,7 +34,7 @@
       const matching = source.filter(item => [item.id, item.name, item.unitId, item.unitName, item.scope, item.source, item.targetId]
         .some(value => value && value.toLocaleLowerCase().includes(query)));
       page = Math.max(0, Math.min(page, Math.ceil(matching.length / pageSize) - 1));
-      const labels = kindSelector ? ["Область", "Источник", "Канонический код"] : ["Код", "Название", "Единица", "Измерения"];
+      const labels = kindSelector ? ["Область", "Источник", "Канонический код", "Действие"] : ["Код", "Название", "Единица", "Измерения"];
       get("Columns").replaceChildren(...labels.map(label => node("th", "", label)));
       get("Rows").replaceChildren(...matching.slice(page * pageSize, (page + 1) * pageSize).map(item => {
         const row = node("tr"), values = kindSelector
@@ -35,6 +42,11 @@
         values.forEach((value, index) => {
           const cell = node("td", "", value); cell.dataset.label = labels[index]; row.append(cell);
         });
+        if (onEdit) {
+          const cell = node("td"), button = node("button", "dt-text-button", "Править");
+          button.type = "button"; button.dataset.mappingPath = item.path; cell.dataset.label = "Действие";
+          cell.append(button); row.append(cell);
+        }
         return row;
       }));
       get("Count").textContent = matching.length ? "Показано " + (page * pageSize + 1) + "–" + Math.min((page + 1) * pageSize, matching.length) + " из " + matching.length
@@ -75,7 +87,8 @@
     parameterPanel.hidden = true; mappingPanel.hidden = true;
     parameters.querySelector(".dt-section-heading").insertAdjacentElement("afterend", parameterPanel);
     mapping.querySelector(".dt-section-heading").insertAdjacentElement("afterend", mappingPanel);
-    const parameterList = createList(parameterPanel, "Parameter", false), mappingList = createList(mappingPanel, "Mapping", true);
+    const parameterList = createList(parameterPanel, "Parameter", false),
+      mappingList = createList(mappingPanel, "Mapping", true, actions && actions.editMapping);
     const events = new AbortController();
     summary.querySelector("#dtInspectionOpenParameters").addEventListener("click", () => container.querySelector("#dtTabParameters").click(), { signal: events.signal });
     summary.querySelector("#dtInspectionOpenMapping").addEventListener("click", () => container.querySelector("#dtTabMapping").click(), { signal: events.signal });
@@ -88,8 +101,9 @@
       if (current === inspection) return;
       current = inspection; summary.hidden = !inspection;
       parameterEmpty.hidden = !!inspection; mappingGuide.hidden = !!inspection; mappingExplanation.hidden = !!inspection;
-      parameterPhase.textContent = mappingPhase.textContent = inspection ? "Просмотр" : "Следующий этап";
-      mappingSubtitle.textContent = inspection ? "Правила соответствий из выбранного шаблона; значения источника проверяются при обработке." : initialMappingSubtitle;
+      parameterPhase.textContent = inspection ? "Просмотр" : "Следующий этап";
+      mappingPhase.textContent = inspection ? "Маппинг" : "Следующий этап";
+      mappingSubtitle.textContent = inspection ? "Правила соответствий из JSON-черновика; значения источника проверяются при обработке." : initialMappingSubtitle;
       parameterList.render(inspection); mappingList.render(inspection);
       if (!inspection) return;
       summary.querySelector("#dtInspectionTitle").textContent = inspection.template.id + " · ревизия " + inspection.template.revision;

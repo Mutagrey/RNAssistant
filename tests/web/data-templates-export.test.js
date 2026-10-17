@@ -234,6 +234,49 @@ const hash = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
         await page.waitForFunction(() => !document.getElementById("dtStartProcessing").disabled);
         assert.equal(await page.locator("#dtTemplateInspection").isVisible(), true);
         await page.locator("#dtCloseTemplateEditor").click();
+        await page.locator("#dtTabMapping").click();
+        await page.locator("#dtMappingAdd").click();
+        await page.locator("#dtMappingEditScope").fill("production-form");
+        await page.locator("#dtMappingEditSource").fill("0012");
+        await page.locator("#dtMappingEditTarget").selectOption("production.volume");
+        if (process.env.RNA_DATA_SCREENSHOTS) {
+            await page.locator("#dtMappingEditor").screenshot({ path: path.join(process.env.RNA_DATA_SCREENSHOTS, "mapping-editor-wide.png"), animations: "disabled" });
+            await page.setViewportSize({ width: 360, height: 940 });
+            assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+            await page.locator("#dtMappingEditor").screenshot({ path: path.join(process.env.RNA_DATA_SCREENSHOTS, "mapping-editor-narrow.png"), animations: "disabled" });
+            await page.setViewportSize({ width: 1160, height: 940 });
+        }
+        assert.equal(await page.locator("#dtStartProcessing").isDisabled(), true);
+        await page.locator("#dtMappingEditApply").click();
+        await page.waitForFunction(() => document.getElementById("dtMappingEditNotice").textContent.includes("DICTIONARY_CONFLICT"));
+        assert.equal(await page.locator("#dtStartProcessing").isDisabled(), true);
+        await page.locator("#dtMappingEditSource").fill("unused-synonym");
+        await page.locator("#dtMappingEditApply").click();
+        await page.waitForFunction(() => document.getElementById("dtProcessNotice").textContent.includes("Соответствие применено"));
+        assert.equal(await page.locator("#dtStartProcessing").isDisabled(), false);
+        await page.locator('#dtMappingRows button[data-mapping-path="/dictionaries/parameterMappings/2"]').click();
+        await page.locator("#dtMappingEditTarget").selectOption("production.loss");
+        await page.locator("#dtMappingEditApply").click();
+        await page.waitForFunction(() => document.getElementById("dtProcessNotice").textContent.includes("Соответствие применено") &&
+            document.getElementById("dtMappingEditor").hidden);
+        await page.locator("#dtMappingAdd").click();
+        await page.locator("#dtMappingEditKind").selectOption("unit");
+        await page.locator("#dtMappingEditScope").fill("production-form");
+        await page.locator("#dtMappingEditSource").fill("tonnes");
+        await page.locator("#dtMappingEditTarget").selectOption("t");
+        await page.locator("#dtMappingEditApply").click();
+        await page.waitForFunction(() => document.getElementById("dtMappingEditor").hidden &&
+            !document.getElementById("dtStartProcessing").disabled);
+        await page.locator("#dtTabTemplates").click();
+        await page.locator("#dtOpenTemplateEditor").click();
+        const mappedDownload = page.waitForEvent("download");
+        await page.locator("#dtDownloadTemplateDraft").click();
+        const mappedDraft = JSON.parse(fs.readFileSync(await (await mappedDownload).path(), "utf8"));
+        assert.deepEqual(mappedDraft.dictionaries.parameterMappings.at(-1), {
+            scope: "production-form", source: "unused-synonym", targetId: "production.loss" });
+        assert.deepEqual(mappedDraft.dictionaries.unitMappings.at(-1), {
+            scope: "production-form", source: "tonnes", targetId: "t" });
+        await page.locator("#dtCloseTemplateEditor").click();
         await page.locator("#dtInspectionOpenMapping").click();
         assert.equal(await page.locator("#dtMappingInspection").isVisible(), true);
         assert.match(await page.locator("#dtMappingRows").innerText(), /production.volume/);

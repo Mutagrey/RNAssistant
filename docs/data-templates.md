@@ -1177,8 +1177,11 @@ parses the bounded JSON with duplicate-key refusal, compiles the existing langua
 plan and validates dictionary targets, dataset metadata and XLSX formula policy.
 Invalid templates leave Run disabled with a code/path diagnostic. A summary view
 shows the selected sheet and bounds, planned record count and axis groups; the
-Parameters and Mapping tabs show searchable/paged read-only lists. Changing the
-template terminates stale validation. A JSON source editor retains invalid text
+Parameters and Mapping tabs show searchable/paged lists. The Mapping tab adds and
+edits exact scoped parameter/unit links in the same JSON draft. The full template
+is checked in the Worker before each mapping edit is applied; a pending or rejected
+edit blocks Run. Deletion, source-value suggestions and project save remain open.
+Changing the template terminates stale validation. A JSON source editor retains invalid text
 for correction; a focused expression editor selects an `expr` binding and checks
 the complete candidate in the same Worker before applying it. Pending or invalid
 edits cannot authorize a run. An explicit download exports the in-memory JSON
@@ -1187,9 +1190,13 @@ locally and loaded only on opening the editor; the app owns its thin wrapper and
 DSL mode, not RNAssistant's VBA/JSON editor callbacks. The DSL is the versioned
 `expr` language **inside** the template JSON, not a separate persisted document
 or interpreter. JSON source is the sole draft representation; the rule picker is
-a view of its last validated structure. Mapping edits and project-owned draft
-persistence remain open. CodeMirror 5 is already pinned in RNAssistant, works with
-the static no-bundler package and adds about 207 KiB of local, lazy-loaded assets;
+a view of its last validated structure. Mapping controls derive their target
+options from the same validated dictionaries and do not own a second draft.
+Pure `core/template-draft.js` applies structured changes to the validated JSON;
+the queue/controller owns draft state and the existing Worker/compiler decides
+whether the candidate is usable. Project-owned draft persistence remains open.
+CodeMirror 5 is already pinned in RNAssistant, works with the static no-bundler
+package and adds about 207 KiB of local, lazy-loaded assets;
 an editor-major upgrade is a separate decision. This preflight cannot prove
 that the selected workbook has the sheet, valid values or resolvable mapping keys:
 the same core validation and source-dependent checks still occur per file. XLSX
@@ -1385,7 +1392,7 @@ versioned schema and fixtures used by the engine.
 | M1 source selection (implemented) | Responsive modular viewer, paged file/folder intake, cancellable enumeration progress, persisted workspace source declarations and guarded save/recovery. Typed extraction commands remain open. |
 | M2 matrix-language foundation (implemented) | JSON template → typed plan → normalized snapshot → batched canonical observations with lineage, in the separate portable probe. Native integration and full readers remain open. |
 | M2 bounded XLSX adapter (implemented) | Explicit file + template → selective ZIP/XML reading in a Worker → exact typed cells → the same canonical batches. Single-file probe only; queue parser dispatch and 80 MB qualification remain open. |
-| M1–M3 (standalone queue/preview slice implemented) | XLSX File + JSON template now run through a bounded sequential Worker queue with per-file outcomes, progress, cancellation, 20-record preview and full per-file extraction export. Browser disk staging raises the output budget to 256 MiB per file/1 GiB per run; memory mode stays at 8 MiB. Parameter/mapping inspection and in-memory JSON/`expr` editing work; mapping edits, draft/test/publish, project persistence and native parser dispatch remain open. Add other Excel families (including XLSB), CSV/JSON behind the same workflow and their own fixtures. |
+| M1–M3 (standalone queue/preview slice implemented) | XLSX File + JSON template now run through a bounded sequential Worker queue with per-file outcomes, progress, cancellation, 20-record preview and full per-file extraction export. Browser disk staging raises the output budget to 256 MiB per file/1 GiB per run; memory mode stays at 8 MiB. Parameter/mapping inspection and in-memory JSON/`expr`/scoped mapping edits work; mapping deletion/suggestions, draft/test/publish, project persistence and native parser dispatch remain open. Add other Excel families (including XLSB), CSV/JSON behind the same workflow and their own fixtures. |
 | Early M0/M4 (foundation implemented) | One portable source project, shared loader, folder export, exported semantic tests and XLSX Worker probe. Complete standalone mapping/validation, persistent data projects and large-result quota/performance qualification before native parser dispatch. Single-HTML/ZIP packaging is still open. |
 | M5 | Extend the existing queue with advanced batch execution, scoped dictionary/mapping edits, comparison/consolidation, multiple blocks and output workbook templates. |
 
@@ -1445,7 +1452,7 @@ Tracked gates live in [the risk register](stabilization/RISK_REGISTER.md#data-te
 `data-templates-export.test.js` captures the application outside the repository,
 verifies exact hashes and outside-path/symlink/overwrite refusal, then runs exported
 semantic tests, the real file-origin loader and normalized extraction/download.
-A static test origin exercises the XLSX/Worker queue, JSON/`expr` editing and draft
+A static test origin exercises the XLSX/Worker queue, JSON/`expr`/mapping editing and draft
 download without RNAssistant or assets outside the exported package. Narrow/wide
 light/dark views are checked. Native host and 80-MB workbook behavior remain open.
 

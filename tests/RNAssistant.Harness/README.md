@@ -2,8 +2,9 @@
 
 Data Templates is an independent source project in `web/data-templates`.
 `node tests/web/data-templates-export.test.js` checks exported closure/hashes,
-source tests, file-origin UI/extraction/download and static-origin XLSX Worker
-execution without RNAssistant. Browser tests use Playwright and optionally
+source tests, file-origin UI/extraction/download, and static-origin XLSX Worker
+execution with JSON/DSL/mapping draft edits and validation, without RNAssistant.
+Browser tests use Playwright and optionally
 `BROWSER_EXECUTABLE`; no Office/VSTO build is needed.
 
 Data Templates M0/M2 is JavaScript-only: run `node web/data-templates/tests/core.test.js`,

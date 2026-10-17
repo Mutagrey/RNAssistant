@@ -35,9 +35,12 @@ self.onmessage = event => {
             commonRules: rules(input.template.bindings, "/template/bindings"),
             parameters: input.dictionaries.parameters.map(item => ({ id: item.id, name: item.name, unitId: item.unitId,
                 unitName: unitNames.get(item.unitId), dimensions: item.dimensions })),
+            units: input.dictionaries.units.map(item => ({ id: item.id, name: item.name })),
             mappings: [
-                ...input.dictionaries.parameterMappings.map(item => ({ kind: "parameter", ...item })),
-                ...input.dictionaries.unitMappings.map(item => ({ kind: "unit", ...item }))
+                ...input.dictionaries.parameterMappings.map((item, index) => ({ kind: "parameter", ...item,
+                    path: "/dictionaries/parameterMappings/" + index })),
+                ...input.dictionaries.unitMappings.map((item, index) => ({ kind: "unit", ...item,
+                    path: "/dictionaries/unitMappings/" + index }))
             ]
         } });
     } catch (error) {

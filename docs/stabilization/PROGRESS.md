@@ -27,7 +27,9 @@ mappings. The standalone app now has a lazy local CodeMirror JSON/`expr` editor:
 invalid JSON remains correctable, focused rule changes are checked before applying,
 and pending/invalid edits block Run. The in-memory draft can be downloaded explicitly.
 It is not a project save or publication. Workbook values and mapping keys still
-require per-file execution; editable mapping drafts remain open.
+require per-file execution. Scoped parameter/unit mappings can now be added or
+changed in that same draft with full Worker validation; an unapplied or rejected
+edit blocks Run. Mapping deletion/suggestions and project-owned persistence remain open.
 CSV/JSON and unsupported/invalid books fail visibly; no dataset is published.
 The queue and bounded result sink are outside DOM
 views. Exported-package browser checks cover a mixed batch, canonical 16-record

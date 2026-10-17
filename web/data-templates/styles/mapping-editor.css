@@ -1,0 +1,22 @@
+.dt-mapping-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px 0; }
+.dt-mapping-toolbar[hidden], .dt-mapping-editor[hidden] { display: none; }
+.dt-mapping-toolbar p { margin: 0; color: var(--dt-text-muted); font-size: var(--dt-font-small); line-height: 1.5; }
+.dt-mapping-toolbar button { flex: none; }
+.dt-mapping-editor { margin: 14px 20px 4px; padding: 16px; border: 1px solid var(--dt-border); border-radius: 9px; background: var(--dt-surface-muted); }
+.dt-mapping-editor-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.dt-mapping-editor-head h5 { margin: 0; font-size: 14px; font-weight: 600; }
+.dt-mapping-editor-head span { flex: none; color: var(--dt-text-muted); font-size: var(--dt-font-caption); }
+.dt-mapping-fields { display: grid; grid-template-columns: minmax(110px, .65fr) repeat(2, minmax(140px, 1fr)) minmax(180px, 1.25fr); gap: 10px; margin-top: 16px; }
+.dt-mapping-fields label { display: grid; align-content: start; gap: 6px; min-width: 0; color: var(--dt-text-muted); font-size: var(--dt-font-caption); font-weight: 600; }
+.dt-mapping-fields input, .dt-mapping-fields select { width: 100%; min-width: 0; min-height: 35px; padding: 7px 8px; border: 1px solid var(--control-border); border-radius: var(--dt-control-radius); background: var(--bg); color: var(--text); font-size: var(--dt-font-small); font-weight: 400; }
+.dt-mapping-editor-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 15px; }
+.dt-mapping-editor-foot p { margin: 0; color: var(--dt-text-muted); font-size: var(--dt-font-small); line-height: 1.5; overflow-wrap: anywhere; }
+.dt-mapping-editor-foot > div { display: flex; flex: none; flex-wrap: wrap; gap: 7px; }
+.dt-inspection-table td:last-child button { padding: 4px 7px; font-size: var(--dt-font-caption); white-space: nowrap; }
+@media (max-width: 780px) { .dt-mapping-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) {
+  .dt-mapping-toolbar, .dt-mapping-editor-foot { flex-direction: column; align-items: stretch; }
+  .dt-mapping-toolbar { padding: 14px 17px 0; }
+  .dt-mapping-editor { margin: 14px 17px 4px; }
+  .dt-mapping-fields { grid-template-columns: 1fr; }
+}
