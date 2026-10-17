@@ -39,12 +39,6 @@
     if (current.text !== project.text)
       fail("project_changed", "project.json изменён. Откройте папку проекта заново перед сохранением.");
   }
-  function draftName(name) {
-    const slug = String(name || "template").replace(/\.json$/i, "").replace(/[^\p{L}\p{N}._-]+/gu, "_")
-      .replace(/^[_\-.]+|[_\-.]+$/g, "");
-    const bounded = Array.from(slug).slice(0, 48).join("") || "template";
-    return "draft-" + Date.now() + "-" + root.crypto.randomUUID().replace(/-/g, "") + "-" + bounded + ".draft";
-  }
   async function draftsDirectory(project, create) {
     try { return await project.directory.getDirectoryHandle("drafts", { create: create }); }
     catch (error) { if (!create && missing(error)) return null; throw error; }
@@ -58,7 +52,7 @@
     if (decoder.decode(bytes) !== draft.input)
       fail("draft_encoding", "Черновик содержит некорректные символы Unicode.");
     await unchanged(project);
-    const directory = await draftsDirectory(project, true), name = draftName(draft.name);
+    const directory = await draftsDirectory(project, true), name = root.DataTemplatesDraftSession.newFileName(draft.name);
     try { await directory.getFileHandle(name); fail("target_exists", "Снимок уже существует."); }
     catch (error) { if (!missing(error)) throw error; }
     try {

@@ -2,10 +2,10 @@
 
 Status: independent application foundation and early folder export, alongside the
 existing M0 proof, M1 manifest/source selection and M2 universal core/XLSX reader
-(2026-10-16). The same loader UI and JS core now belong to `web/data-templates`.
+(2026-10-17). The same loader UI and JS core now belong to `web/data-templates`.
 The exported source project runs without RNAssistant and includes its own entry,
 examples, semantic tests and export tool. A standalone XLSX queue, template editor
-and browser project-draft snapshots work; recognition, durable results, dataset
+and browser/native project-draft snapshots work; recognition, durable results, dataset
 publication and other file readers remain open.
 
 RNAssistant's optional adapter still saves source declarations and controls native
@@ -38,8 +38,9 @@ is required by the browser application.
 
 There is one UI and one engine. Browser `ui/browser.js` and native
 `web/js/app-data-templates.js` compose the same owner/view modules; native controls
-occupy named shell slots. Domain markup lives once in `ui/shell.js`, visual tokens
-in `styles/`, state/File lifetime in `ui/loader.js`, and parsing in `core/`.
+occupy named shell slots and the Templates view. Domain markup lives once in
+`ui/shell.js`, visual tokens in `styles/`, source state/File lifetime in
+`ui/loader.js`, draft state in `ui/draft-session.js`, and parsing in `core/`.
 Changing the UI does not require a second UI implementation or C# recompilation.
 Future functional screens use this same boundary; workspace M7 must reuse it.
 
@@ -63,7 +64,10 @@ importer in C# or make an agent run part of normal file processing.
 It preserves the loader's pick/drop/search/navigation/progress/cancel behavior.
 The standalone Templates view validates and edits JSON rules and runs the XLSX
 queue; the separate core probe remains a development tool. Native chooser/preparation
-controls exist only in the RNAssistant adapter.
+controls and project draft commands exist only in the RNAssistant adapter. Its
+Templates view can select, edit, save, list and reopen raw JSON drafts through
+the same draft session and editor. The root UI does not validate rules or run a
+template; those capabilities belong to the isolated application Worker/host path.
 
 In browsers with the File System Access directory picker, the project card opens a
 user-selected folder containing a format-2 `project.json` or creates a **new
@@ -1165,6 +1169,7 @@ modules without a framework, npm or a bundler.
 | `ui/source-intake.js` | Browser enumeration, metadata hints, limits and coalesced progress; no DOM or content parsing. |
 | `ui/loader.js` | Portable owner factory: browser File handles, selection/context and enumeration lifetime; passes metadata/actions to presentation. |
 | `ui/processing.js`, `ui/browser-core.js` | Standalone queue owner and fixed lazy core loader. One Worker job per selected file; no parser logic or result bodies in the view. |
+| `ui/draft-session.js`, `ui/template-editor.js` | Shared raw JSON draft state and CodeMirror presentation. Browser composition supplies Worker inspection; native root supplies no inspector and labels snapshots unverified. |
 | `core/template-inspection-worker.js`, `ui/template-inspection.js` | Interruptible, time-limited standalone preflight using the same fixed language compiler and dictionary validator as extraction; no workbook read or project script execution. |
 | `ui/result-staging.js` | Provisional per-file sink: acknowledged chunks to origin-private browser files, with explicit bounded memory mode when disk storage is unavailable. Completion gates export; failure/cancel discards staging. This is not durable project storage. |
 | `ui/processing-view.js`, `styles/processing.css` | Standalone template picker, status navigation, progress and 20-record preview. Uses shared tokens and operation view. |
@@ -1173,6 +1178,7 @@ modules without a framework, npm or a bundler.
 | `ui/loader-view.js` | Screen navigation, filters, pages, metadata details and DOM events; no bridge, File handles, readers or job ownership. |
 | `app-workspace-sources.js` | Typed native browsing, transient edits to saved relative paths, queue commands/recovery and bounded polling. Saves use the shared workspace controller; no body transfer or durable client store. |
 | `app-workspace-sources-view.js`, `app-workspace-sources.css` | Workspace chooser, queue navigation and progress presentation using the same loader tokens; no bridge or job lifecycle. |
+| `app-workspace-drafts.js`, `app-workspace-drafts-view.js`, `app-workspace-drafts.css` | Native Templates composition for raw project snapshots; the workspace controller owns guarded typed bridge calls and recovery. No second validator, parser or durable client store. |
 | `ui/operation-view.js` | Shared progress component; renders supplied stage, counters, duration and terminal state; delegates cancel/dismiss without a timer or inferred success. |
 | `styles/tokens.css` | Loader-wide palette aliases, typography, spacing, radii and card/row density. Inherits the host light/dark theme. |
 | `ui/shell.js`, `styles/loader.css` | Single shared semantic markup and component layout; no business state derived from CSS. |
@@ -1230,12 +1236,15 @@ or interpreter. JSON source is the sole draft representation; the rule picker is
 a view of its last validated structure. Mapping controls derive their target
 options from the same validated dictionaries and do not own a second draft.
 Pure `core/template-draft.js` applies structured changes to the validated JSON;
-the queue/controller owns draft state and the existing Worker/compiler decides
-whether the candidate is usable. Explicit project-local draft snapshots are
-available in the standalone browser and through typed native commands; native
-draft UI and indexed template activation remain open.
-CodeMirror 5 is already pinned in RNAssistant, works with the static no-bundler
-package and adds about 207 KiB of local, lazy-loaded assets;
+the shared draft session owns raw text and pending edits, while the standalone
+Worker/compiler decides whether a candidate is usable. Explicit project-local
+raw snapshots are available in the standalone browser and native Templates UI;
+indexed template activation remains open. Native save/list/open use selected
+workspace binding and revision, with exact-file recovery for uncertain writes.
+The root UI deliberately labels raw drafts unverified and has no Worker preflight
+or Run action. CodeMirror 5 is pinned in both hosts: standalone assets load on
+opening the editor, while RNAssistant reuses its existing local instance. The
+static no-bundler package adds about 207 KiB of local editor assets;
 an editor-major upgrade is a separate decision. This preflight cannot prove
 that the selected workbook has the sheet, valid values or resolvable mapping keys:
 the same core validation and source-dependent checks still occur per file. XLSX
@@ -1431,7 +1440,7 @@ versioned schema and fixtures used by the engine.
 | M1 source selection (implemented) | Responsive modular viewer, paged file/folder intake, cancellable enumeration progress, persisted workspace source declarations and guarded save/recovery. Typed extraction commands remain open. |
 | M2 matrix-language foundation (implemented) | JSON template → typed plan → normalized snapshot → batched canonical observations with lineage, in the separate portable probe. Native integration and full readers remain open. |
 | M2 bounded XLSX adapter (implemented) | Explicit file + template → selective ZIP/XML reading in a Worker → exact typed cells → the same canonical batches. Single-file probe only; queue parser dispatch and 80 MB qualification remain open. |
-| M1–M3 (standalone queue/preview slice implemented) | XLSX File + JSON template now run through a bounded sequential Worker queue with per-file outcomes, progress, cancellation, 20-record preview and full per-file extraction export. Browser disk staging raises the output budget to 256 MiB per file/1 GiB per run; memory mode stays at 8 MiB. Parameter/mapping inspection and JSON/`expr`/scoped mapping edits work; the browser and typed native commands can keep exact raw draft snapshots in a selected project folder. Mapping deletion/suggestions, native draft UI, indexed templates, test/publish, durable results and native parser dispatch remain open. Add other Excel families (including XLSB), CSV/JSON behind the same workflow and their own fixtures. |
+| M1–M3 (standalone queue/preview slice implemented) | XLSX File + JSON template now run through a bounded sequential Worker queue with per-file outcomes, progress, cancellation, 20-record preview and full per-file extraction export. Browser disk staging raises the output budget to 256 MiB per file/1 GiB per run; memory mode stays at 8 MiB. Parameter/mapping inspection and JSON/`expr`/scoped mapping edits work; browser and native Templates UI keep exact raw draft snapshots in a selected project folder. The native root editor does not validate or execute rules. Mapping deletion/suggestions, indexed templates, test/publish, durable results and native parser dispatch remain open. Add other Excel families (including XLSB), CSV/JSON behind the same workflow and their own fixtures. |
 | Early M0/M4 (foundation implemented) | One portable source project, shared loader, folder export, exported semantic tests and XLSX Worker probe. Complete standalone mapping/validation, persistent data projects and large-result quota/performance qualification before native parser dispatch. Single-HTML/ZIP packaging is still open. |
 | M5 | Extend the existing queue with advanced batch execution, scoped dictionary/mapping edits, comparison/consolidation, multiple blocks and output workbook templates. |
 
@@ -1587,12 +1596,15 @@ cancel-before-Worker, a complete disk-staged JSON result above 8 MiB, discard af
 revoke and the memory fallback, plus narrow result layout. Large-book parsing and publication
 remain unqualified.
 
-For JS changes, run only the affected scripts (Playwright/browser must already be available):
+For JS changes, run only the affected scripts. The draft-session and workspace-draft
+command checks are Node-only; the other browser checks require Playwright:
 
 ```sh
 node web/data-templates/tests/core.test.js
 node web/data-templates/tests/matrix.test.js
 node web/data-templates/tests/universal.test.js
+node web/data-templates/tests/draft-session.test.js
+node tests/web/workspace-draft-commands.test.js
 node tests/web/data-templates-export.test.js
 node tests/web/tabular-xlsx.test.js
 node tests/web/tabular-byte-source.test.js

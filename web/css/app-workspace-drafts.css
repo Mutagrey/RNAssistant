@@ -1,0 +1,10 @@
+.dt-native-drafts { margin: 0 0 20px; padding: 20px 22px; }
+.dt-native-drafts .dt-project-drafts-head { align-items: center; }
+.dt-native-drafts h4 { font-size: 16px; font-weight: 600; }
+.dt-native-drafts #dtProjectDraftList { max-height: 300px; }
+.dt-native-drafts #dtNativeDraftNotice[data-error="true"] { color: var(--danger); }
+#dtNativeTemplateNotice:empty { display: none; }
+@media (max-width: 640px) {
+  .dt-native-drafts { padding: 16px; }
+  .dt-native-drafts .dt-project-drafts-head { align-items: stretch; }
+}

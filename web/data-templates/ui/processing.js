@@ -14,20 +14,18 @@
     return "Обработка в Worker";
   }
   function create(container, loader) {
-    let view, template = null, draft = null, draftDirty = false, draftGeneration = 0,
-      rulePending = false, mappingPending = false,
-      templateLoading = false, templateTicket = 0, templateAbort = null, validationTimer = null, run = null,
-      queue = [], selectedId = null, lastActivity = null, templateNotice = "", runNotice = "", disposed = false;
+    let view, run = null, queue = [], selectedId = null, lastActivity = null, runNotice = "", disposed = false;
+    const draftSession = root.DataTemplatesDraftSession.create({
+      inspect: root.DataTemplatesTemplateInspection.inspect,
+      onChange: render, busy: () => !!run || disposed
+    });
     const count = status => queue.filter(item => item.status === status).length;
     function snapshot() {
       const sources = loader.selectedSources(), active = run && queue.find(item => item.status === "running");
       const completed = count("completed"), failed = count("failed"), cancelled = count("cancelled");
-      return Object.freeze({ templateName: template && template.name, templateInspection: template && template.inspection,
-        draftName: draft && draft.name, draftText: draft && draft.input, draftDirty: draftDirty,
-        draftGeneration: draftGeneration,
-        rulePending: rulePending, mappingPending: mappingPending, templateLoading: templateLoading,
+      return Object.freeze({ ...draftSession.snapshot(),
         selectedCount: sources.length, selectedXlsx: sources.filter(source => source.format === "xlsx").length,
-        sourceBusy: loader.isBusy(), running: !!run, templateNotice: templateNotice, runNotice: runNotice,
+        sourceBusy: loader.isBusy(), running: !!run, runNotice: runNotice,
         storageMode: root.DataTemplatesResultStaging.mode(),
         queue: Object.freeze(queue.map(item => Object.freeze({ id: item.id, path: item.path, status: item.status,
           error: item.error, recordCount: item.result ? item.result.summary.recordCount : null, progress: progressText(item.progress) }))),
@@ -52,116 +50,14 @@
       const previous = queue; queue = []; selectedId = null;
       return Promise.all(previous.filter(item => item.store).map(item => item.store.discard()));
     }
-    async function chooseTemplate(file) {
-      if (run || disposed) return false;
-      if ((draftDirty || rulePending || mappingPending) &&
-        !root.confirm("Текущий черновик изменён. Заменить его выбранным файлом?")) return false;
-      const ticket = ++templateTicket;
-      draftGeneration++;
-      clearTimeout(validationTimer);
-      if (templateAbort) templateAbort.abort();
-      templateAbort = file ? new AbortController() : null;
-      template = null; draft = null; draftDirty = false; rulePending = false; mappingPending = false;
-      templateLoading = !!file; templateNotice = ""; render();
-      if (!file) return true;
-      try {
-        if (!file.size || file.size > 1000000) throw new Error("Нужен непустой JSON-шаблон до 1 000 000 байт.");
-        const input = new TextDecoder("utf-8", { fatal: true }).decode(await file.arrayBuffer());
-        if (ticket !== templateTicket || disposed) return;
-        draft = Object.freeze({ name: file.name, input: input }); render();
-        const inspection = await root.DataTemplatesTemplateInspection.inspect(input, templateAbort.signal);
-        if (ticket !== templateTicket || disposed) return;
-        template = Object.freeze({ name: file.name, input: input, inspection: inspection });
-        templateNotice = "Структура шаблона проверена. Данные источника и значения маппинга проверяются при обработке каждого файла.";
-      } catch (error) {
-        if (ticket === templateTicket && !disposed) templateNotice = "Шаблон «" + file.name + "» не принят: " + errorText(error);
-      } finally { if (ticket === templateTicket) { templateLoading = false; render(); } }
-      return true;
-    }
-    function currentDraft() {
-      return draft && !run && !rulePending && !mappingPending && !templateLoading && !disposed
-        ? Object.freeze({ name: draft.name, input: draft.input }) : null;
-    }
-    function loadDraft(name, input) {
-      return chooseTemplate(new File([input], name, { type: "application/json" }));
-    }
-    function changeDraft(input) {
-      if (!draft || run || mappingPending || disposed) return;
-      draft = Object.freeze({ name: draft.name, input: input }); draftDirty = true; template = null;
-      const ticket = ++templateTicket;
-      clearTimeout(validationTimer); if (templateAbort) templateAbort.abort();
-      templateAbort = new AbortController(); templateLoading = true;
-      templateNotice = "Проверяем изменённый JSON…"; render();
-      if (!input || input.length > 1000000) {
-        templateLoading = false; templateNotice = "INPUT_LIMIT: JSON-черновик должен содержать от 1 до 1 000 000 символов.";
-        render(); return;
-      }
-      const validationAbort = templateAbort;
-      validationTimer = setTimeout(async () => {
-        try {
-          const inspection = await root.DataTemplatesTemplateInspection.inspect(input, validationAbort.signal);
-          if (ticket !== templateTicket || disposed) return;
-          template = Object.freeze({ name: draft.name, input: input, inspection: inspection });
-          templateNotice = "Черновик проверен. Значения источника будут проверены при обработке.";
-        } catch (error) {
-          if (ticket === templateTicket && !disposed) templateNotice = "Черновик требует исправления: " + errorText(error);
-        } finally { if (ticket === templateTicket) { templateLoading = false; render(); } }
-      }, 300);
-    }
-    function ruleDirty(value) { if (rulePending !== value) { rulePending = value; render(); } }
-    function mappingDirty(value) { if (mappingPending !== value) { mappingPending = value; render(); } }
-    async function commitCandidate(candidate, successNotice, kind) {
-      if (candidate.length > 1000000) return { ok: false, message: "JSON-черновик превысит 1 000 000 символов." };
-      const ticket = ++templateTicket;
-      if (templateAbort) templateAbort.abort();
-      templateAbort = new AbortController(); templateLoading = true;
-      templateNotice = "Проверяем изменённый шаблон…"; render();
-      const validationAbort = templateAbort;
-      try {
-        const nextInspection = await root.DataTemplatesTemplateInspection.inspect(candidate, validationAbort.signal);
-        if (ticket !== templateTicket || disposed) return { ok: false, message: "Проверка прервана." };
-        draft = Object.freeze({ name: draft.name, input: candidate }); draftDirty = true;
-        if (kind === "rule") rulePending = false; else mappingPending = false;
-        template = Object.freeze({ name: draft.name, input: candidate, inspection: nextInspection });
-        templateNotice = successNotice;
-        return { ok: true };
-      } catch (error) {
-        if (ticket === templateTicket && !disposed) templateNotice = "Правка не принята: " + errorText(error);
-        return { ok: false, message: "Правка не принята: " + errorText(error) };
-      } finally { if (ticket === templateTicket) { templateLoading = false; render(); } }
-    }
-    async function applyRule(path, expression) {
-      if (!draft || !template || run || mappingPending || disposed)
-        return { ok: false, message: "Сначала закончите текущую правку JSON или маппинга." };
-      let candidate;
-      try { candidate = root.RNTabularTemplateDraft.replaceExpression(draft.input, template.inspection, path, expression); }
-      catch (error) { return { ok: false, message: errorText(error) }; }
-      return commitCandidate(candidate, "Правило применено; полный черновик проверен.", "rule");
-    }
-    async function applyMapping(edit) {
-      if (!draft || !template || run || rulePending || disposed)
-        return { ok: false, message: "Сначала закончите текущую правку JSON или правила." };
-      let candidate;
-      try { candidate = root.RNTabularTemplateDraft.upsertMapping(draft.input, template.inspection, edit); }
-      catch (error) { return { ok: false, message: errorText(error) }; }
-      return commitCandidate(candidate, "Соответствие применено; полный черновик проверен.", "mapping");
-    }
-    function downloadDraft() {
-      if (!draft || rulePending || mappingPending || disposed) return;
-      const file = new Blob([draft.input], { type: "application/json;charset=utf-8" });
-      const url = URL.createObjectURL(file), link = document.createElement("a");
-      link.href = url;
-      link.download = (draft.name.replace(/\.json$/i, "").replace(/[^\p{L}\p{N}._-]+/gu, "_").slice(0, 80) || "template") + ".draft.json";
-      link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
-    }
     function cancel() { if (run) run.abort.abort(); }
     async function start() {
-      if (run || templateLoading || !template || rulePending || mappingPending || disposed) return;
+      const runningTemplate = draftSession.validTemplate();
+      if (!runningTemplate || run || disposed) return;
       const selection = loader.beginProcessing();
-      if (!selection) { templateNotice = "Дождитесь окончания подбора источников."; render(); return; }
-      if (!selection.length) { loader.endProcessing(); templateNotice = "Выберите хотя бы один источник."; render(); return; }
+      if (!selection) { draftSession.setNotice("Дождитесь окончания подбора источников."); return; }
+      if (!selection.length) { loader.endProcessing(); draftSession.setNotice("Выберите хотя бы один источник."); return; }
       const cleanup = releaseResults(); lastActivity = null; runNotice = "";
-      const runningTemplate = template;
       queue = selection.map(source => ({ id: source.id, file: source.file, path: source.path, format: source.format,
         templateName: runningTemplate.name, status: "queued", error: "", progress: null, result: null, store: null }));
       selectedId = queue[0].id;
@@ -268,15 +164,15 @@
       }
     }
     view = root.DataTemplatesProcessingView.create(container, {
-      chooseTemplate: chooseTemplate, start: start, cancel: cancel, dismiss: () => { lastActivity = null; render(); },
+      chooseTemplate: draftSession.chooseFile, start: start, cancel: cancel, dismiss: () => { lastActivity = null; render(); },
       select: id => { selectedId = id; render(); }, download: download,
-      changeDraft: changeDraft, ruleDirty: ruleDirty, applyRule: applyRule, mappingDirty: mappingDirty,
-      applyMapping: applyMapping, downloadDraft: downloadDraft
+      changeDraft: draftSession.changeDraft, ruleDirty: draftSession.ruleDirty, applyRule: draftSession.applyRule,
+      mappingDirty: draftSession.mappingDirty, applyMapping: draftSession.applyMapping, downloadDraft: draftSession.download
     });
     render();
-    return Object.freeze({ sourcesChanged: render, currentDraft: currentDraft, loadDraft: loadDraft, dispose: () => {
-      disposed = true; templateTicket++; clearTimeout(validationTimer); if (run) { run.abort.abort(); clearInterval(run.timer); }
-      if (templateAbort) templateAbort.abort();
+    return Object.freeze({ sourcesChanged: render, currentDraft: draftSession.current,
+      loadDraft: draftSession.load, markDraftSaved: draftSession.markSaved, dispose: () => {
+      disposed = true; draftSession.dispose(); if (run) { run.abort.abort(); clearInterval(run.timer); }
       releaseResults().catch(() => {}); if (view) view.dispose(); loader.endProcessing();
     } });
   }

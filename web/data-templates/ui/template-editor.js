@@ -45,8 +45,8 @@
     panel.innerHTML = `<div class="dt-editor-heading"><div><p class="dt-eyebrow">ЧЕРНОВИК ШАБЛОНА</p><h4 id="dtEditorTitle">Редактор</h4><p id="dtEditorSummary">Правила в JSON и выражения используют одну проверку.</p></div><span class="dt-editor-state" id="dtEditorState"></span></div>
       <div class="dt-editor-toolbar"><div class="dt-editor-tabs" aria-label="Режим редактора"><button type="button" id="dtEditorRuleTab" aria-pressed="true">Выражения</button><button type="button" id="dtEditorJsonTab" aria-pressed="false">Исходный JSON</button></div><button type="button" class="dt-text-button" id="dtCloseTemplateEditor">Свернуть</button></div>
       <div id="dtEditorRulePane" class="dt-editor-body"><div class="dt-editor-rule-grid"><label for="dtEditorRuleSelect">Правило <select id="dtEditorRuleSelect" aria-label="Выберите выражение"></select></label><p id="dtEditorRulePath"></p></div><div id="dtEditorExpressionCode" class="dt-template-code dt-template-code-expression"></div><div class="dt-editor-rule-footer"><p id="dtEditorRuleNotice" role="status" aria-live="polite">Выберите правило и измените выражение.</p><div><button type="button" id="dtEditorDiscardRule" hidden>Отменить правку</button><button type="button" class="dt-primary" id="dtEditorApplyRule" disabled>Применить правило</button></div></div><details class="dt-editor-reference"><summary>Конструкции языка</summary><p><code>cell("A", row)</code> читает ячейку; <code>text(...)</code> и <code>raw(...)</code> задают тип; <code>lookup(...)</code> использует справочник; <code>decimal(...)</code>, <code>period.month(...)</code> и <code>period.year(...)</code> формируют канонические значения. Подсказки: Ctrl+Пробел.</p></details></div>
-      <div id="dtEditorJsonPane" class="dt-editor-body" hidden><p class="dt-editor-guidance">Полный документ шаблона. Каждая правка проверяется в отдельном Worker; ошибочный JSON можно исправить здесь.</p><div id="dtEditorJsonCode" class="dt-template-code dt-template-code-json"></div></div>
-      <div class="dt-editor-footer"><p>Изменения остаются в этой вкладке до явного скачивания. Скачивание создаёт JSON-черновик, не публикует dataset.</p><button type="button" id="dtDownloadTemplateDraft">Скачать JSON-черновик</button></div>`;
+      <div id="dtEditorJsonPane" class="dt-editor-body" hidden><p class="dt-editor-guidance" id="dtEditorJsonGuidance">Полный документ шаблона. Каждая правка проверяется в отдельном Worker; ошибочный JSON можно исправить здесь.</p><div id="dtEditorJsonCode" class="dt-template-code dt-template-code-json"></div></div>
+      <div class="dt-editor-footer"><p>Черновик остаётся в памяти до явного скачивания или сохранения в проекте. Эти действия не публикуют данные.</p><button type="button" id="dtDownloadTemplateDraft">Скачать JSON-черновик</button></div>`;
     anchor.insertAdjacentElement("afterend", panel);
     const get = id => panel.querySelector("#dt" + id), events = new AbortController();
     const listen = (element, type, handler) => element.addEventListener(type, handler, { signal: events.signal });
@@ -69,7 +69,8 @@
       get("EditorApplyRule").disabled = !ruleDirty || !valid || applying ||
         !!(snapshot && (snapshot.templateLoading || snapshot.running || snapshot.mappingPending));
       get("EditorDiscardRule").hidden = !ruleDirty;
-      get("DownloadTemplateDraft").disabled = !hasDraft || ruleDirty || applying || !!(snapshot && snapshot.mappingPending);
+      get("DownloadTemplateDraft").disabled = !hasDraft || !snapshot.draftWithinLimit || ruleDirty || applying ||
+        !!(snapshot && snapshot.mappingPending);
       get("EditorRuleTab").setAttribute("aria-pressed", String(mode === "rule"));
       get("EditorJsonTab").setAttribute("aria-pressed", String(mode === "json"));
       get("EditorRulePane").hidden = mode !== "rule";
@@ -97,7 +98,7 @@
         loadError = "";
         get("EditorSummary").textContent = "Загружаем локальный редактор…";
         try {
-          const loaded = await root.DataTemplatesVendors.load("codemirror");
+          const loaded = await (actions.loadCodeMirror ? actions.loadCodeMirror() : root.DataTemplatesVendors.load("codemirror"));
           if (disposed || !opened) return;
           CodeMirror = loaded;
           installExpressionMode(CodeMirror);
@@ -131,13 +132,18 @@
       }
       snapshot = next;
       openButton.hidden = !next.draftName;
+      openButton.textContent = next.templateUnverified ? "Редактировать JSON" : "Редактировать правила";
       openButton.disabled = next.running || next.mappingPending;
       if (!opened) return;
       get("EditorTitle").textContent = next.draftName || "Редактор";
-      get("EditorState").textContent = next.templateLoading ? "Проверка…" : next.templateName ? next.draftDirty ? "Проверен · изменён" : "Проверен"
-        : "Требует исправления";
+      get("EditorState").textContent = next.templateLoading ? "Проверка…" : next.templateUnverified ? "Без проверки" : next.templateName
+        ? next.draftDirty ? "Проверен · изменён" : "Проверен" : "Требует исправления";
       get("EditorSummary").textContent = loadError || (next.templateName ? "Правила и справочники проверены. Проверка значений файла выполняется при запуске."
-        : next.templateLoading ? "Worker проверяет текущий JSON." : "Исправьте ошибку в исходном JSON, затем повторите запуск.");
+        : next.templateUnverified ? "Сохраняется исходный JSON. Проверка правил и запуск доступны в автономном приложении."
+          : next.templateLoading ? "Worker проверяет текущий JSON." : "Исправьте ошибку в исходном JSON, затем повторите запуск.");
+      get("EditorJsonGuidance").textContent = next.templateUnverified
+        ? "Исходный JSON можно править и сохранять даже до проверки. Этот интерфейс не выполняет шаблон."
+        : "Полный документ шаблона. Каждая правка проверяется в отдельном Worker; ошибочный JSON можно исправить здесь.";
       if (jsonEditor && jsonEditor.getValue() !== (next.draftText || "")) {
         syncing = true; jsonEditor.setValue(next.draftText || ""); syncing = false;
       }

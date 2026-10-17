@@ -30,12 +30,17 @@ In a browser with a directory picker, a project card can create a new project
 subfolder or open a format-2 `project.json`; explicit saves create read-back-verified
 raw draft snapshots in `drafts/` without overwriting earlier edits. Invalid JSON
 can be saved and reopened for correction. These are not indexed/published templates.
-Native Core/Application, bridge and CLI can create, list and open the same raw
+Native Core/Application, bridge and CLI create, list and open the same raw
 project-local snapshots through `WorkspaceFileService`, with selected-project
-guards and explicit recovery of uncertain writes; native UI controls remain open.
+guards and explicit recovery of uncertain writes. The native Templates screen
+now reuses the application-owned draft session and CodeMirror editor to select,
+edit, save, list and reopen these snapshots. It does not claim template
+validation or execution in the root UI; those still require the isolated app
+Worker/host path. Host-neutral browser smoke covers the native round trip,
+uncertain-write recovery target and narrow layout; Windows/WebView2 remains open.
 Workbook values and mapping keys still require per-file execution. Scoped parameter/unit mappings can now be added or
 changed in that same draft with full Worker validation; an unapplied or rejected
-edit blocks Run. Mapping deletion/suggestions, native draft UI and durable
+edit blocks Run. Mapping deletion/suggestions and durable
 result persistence remain open.
 CSV/JSON and unsupported/invalid books fail visibly; no dataset is published.
 The queue and bounded result sink are outside DOM
@@ -48,7 +53,7 @@ Excel reader strategy is an explicit open decision: compare all-SheetJS, the cur
 selective XLSX path plus format adapters, and other bounded options on real books
 before final Excel import or any 80 MB support claim.
 
-Next: native draft UI and result persistence, plus real
+Next: result persistence, plus real
 large-workbook/quota qualification to finish the standalone workflow, then
 replace compiled app-code pins with per-run workspace-package capture and a
 qualified isolated viewer/host adapter. The current root UI accepts installed

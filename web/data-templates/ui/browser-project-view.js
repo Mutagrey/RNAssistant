@@ -78,6 +78,7 @@
       if (!draft) { message("Сначала выберите шаблон и завершите текущую правку или обработку."); return; }
       perform(async () => {
         await files.saveDraft(project, draft);
+        processing.markDraftSaved(draft.input);
         try { drafts = await files.listDrafts(project); return null; }
         catch (error) { return error; }
       }, error => error

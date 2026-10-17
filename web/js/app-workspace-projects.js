@@ -22,6 +22,10 @@
     el("ProjectCreate").disabled = active || !workspace || workspace.readOnly;
     el("ProjectName").disabled = active || !workspace || workspace.readOnly;
   }
+  function sourceWorkChanged() {
+    renderAvailability();
+    if (window.RNAssistantWorkspaceDrafts) window.RNAssistantWorkspaceDrafts.sourcesChanged();
+  }
   function render() {
     var workspace = selected(), project = view && view.project;
     renderAvailability();
@@ -146,5 +150,59 @@
     return request("saveTabularProjectSources", { bindingId: selected().bindingId, manifestPath: view.project.manifestPath,
       projectRevision: view.revision, paths: [...paths] }, "Сохраняем состав источников…");
   }
-  window.RNAssistantWorkspace = { bind: bind, show: show, saveSources: saveSources, sourceWorkChanged: renderAvailability };
+  var draftPattern = /^draft-\d{13}-[0-9a-f]{32}-[\p{L}\p{N}._-]{1,48}\.draft$/u;
+  function validDraft(item) {
+    return item && typeof item.file === "string" && draftPattern.test(item.file) &&
+      Number.isSafeInteger(item.savedAt) && item.savedAt > 0 && typeof item.label === "string" && item.label.length > 0 &&
+      Number.isSafeInteger(item.byteLength) && item.byteLength > 0 && item.byteLength <= 1000000;
+  }
+  function draftPath(manifestPath, file) {
+    return manifestPath.slice(0, manifestPath.lastIndexOf("/") + 1) + "drafts/" + file;
+  }
+  async function projectDraft(action, extra) {
+    var types = { save: "saveTabularProjectDraft", list: "listTabularProjectDrafts", open: "openTabularProjectDraft" };
+    var workspace = selected(), project = view && view.project;
+    if (!types[action] || !workspace || !project || busy || action === "save" &&
+      (workspace.readOnly || window.RNAssistantWorkspaceSources && window.RNAssistantWorkspaceSources.hasUnfinished()))
+      throw Object.assign(new Error("Сначала откройте проект и завершите текущую операцию."), { code: "project_unavailable" });
+    if ((action === "save" || action === "open") && (!extra || typeof extra.file !== "string" || !draftPattern.test(extra.file)))
+      throw invalidResponse();
+    var payload = { bindingId: workspace.bindingId, manifestPath: project.manifestPath,
+      projectRevision: view.revision, ...(extra || {}) };
+    var target = action === "save" ? draftPath(payload.manifestPath, payload.file) : null;
+    busy = true;
+    var ticket = ++sequence;
+    render();
+    try {
+      var response = await send(types[action], payload);
+      if (ticket !== sequence || !response || !response.state || !response.state.workspace || !response.state.project ||
+          response.state.workspace.bindingId !== payload.bindingId ||
+          response.state.project.manifestPath !== payload.manifestPath ||
+          (action === "save" ? response.state.revision <= payload.projectRevision :
+            response.state.revision !== payload.projectRevision)) throw invalidResponse();
+      if (action === "list") {
+        if (!Array.isArray(response.items) || response.items.length > 50 || !response.items.every(validDraft) ||
+            new Set(response.items.map(item => item.file)).size !== response.items.length) throw invalidResponse();
+      } else if (!validDraft(response.draft) || response.draft.file !== payload.file ||
+          action === "open" && (typeof response.input !== "string" ||
+            new TextEncoder().encode(response.input).length !== response.draft.byteLength)) throw invalidResponse();
+      apply(response.state);
+      inspection = null;
+      return response;
+    } catch (error) {
+      if (ticket === sequence) {
+        if (action === "save" && !["workspace_binding_changed", "project_selection_changed", "source_queue_active"].includes(error.code)) {
+          view.project = null;
+          inspection = { bindingId: payload.bindingId, manifestPath: target };
+        }
+        if (error.code === "workspace_binding_changed") { view = null; inspection = null; }
+        status(errors[error.code] || error.message || "Не удалось выполнить действие с черновиком.", true);
+      }
+      throw error;
+    } finally {
+      if (ticket === sequence) { busy = false; render(); }
+    }
+  }
+  window.RNAssistantWorkspace = { bind: bind, show: show, saveSources: saveSources,
+    projectDraft: projectDraft, sourceWorkChanged: sourceWorkChanged };
 }());
