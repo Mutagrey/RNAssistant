@@ -3,6 +3,65 @@
   "kind": "data-templates-vendors",
   "packages": [
     {
+      "id": "codemirror",
+      "version": "5.65.16",
+      "license": "MIT",
+      "npmTarball": "https://registry.npmjs.org/codemirror/-/codemirror-5.65.16.tgz",
+      "npmIntegrity": "sha512-br21LjYmSlVL0vFCPWPfhzUCT34FM/pAdK7rRIZwa0rrtrIdotvP4Oh4GUHsu2E3IrQMCfRkL/fN3ytMNxVQvg==",
+      "gitHead": "e84384b4210bc35300994de07c6333666f2a5c9e",
+      "runtime": [
+        {
+          "path": "vendor/codemirror/codemirror.min.js",
+          "bytes": 170535,
+          "sha256": "f102bb61fb2ac45c3a611847edd9948faad0ab22a83a2dfa9974be5031079b15",
+          "sourceUrl": "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"
+        },
+        {
+          "path": "vendor/codemirror/mode/javascript/javascript.min.js",
+          "bytes": 17315,
+          "sha256": "99b46f351b4b1ce8a14cdf04fe4235ecb429b5b7b986867034a7dc195a710a58",
+          "sourceUrl": "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"
+        },
+        {
+          "path": "vendor/codemirror/addon/edit/matchbrackets.min.js",
+          "bytes": 3096,
+          "sha256": "f359c5f395a2a08191557d40b61ef8c3893803da9019171cc44b8d9c8c7d4a3a",
+          "sourceUrl": "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"
+        },
+        {
+          "path": "vendor/codemirror/addon/edit/closebrackets.min.js",
+          "bytes": 3523,
+          "sha256": "df4a87dd3b175b509468755b74d06f0e82ff56f213f341f776c26ff0f0d27b37",
+          "sourceUrl": "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"
+        },
+        {
+          "path": "vendor/codemirror/addon/hint/show-hint.min.js",
+          "bytes": 10582,
+          "sha256": "9b8e07b45c581e8fbfb95d1f442b7a2d1946bd40451a8250f7fe332a7d8218e6",
+          "sourceUrl": "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/hint/show-hint.min.js"
+        },
+        {
+          "path": "vendor/codemirror/codemirror.min.css",
+          "bytes": 6037,
+          "sha256": "11077112ab6955d29fe41085c62365c7d4a2f00a570c7475e2aec2a8cbc85fc4",
+          "sourceUrl": "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css"
+        },
+        {
+          "path": "vendor/codemirror/addon/hint/show-hint.min.css",
+          "bytes": 529,
+          "sha256": "f6fbd102ae7fabc501b8e1618bc935d05dae8c8d82a89cf1cc89ac2db0dbcf69",
+          "sourceUrl": "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/hint/show-hint.min.css"
+        }
+      ],
+      "licenses": [
+        {
+          "path": "vendor/licenses/codemirror/LICENSE",
+          "bytes": 1113,
+          "sha256": "168a4becc968f5001e2ee2e0291b6e4daabafc1894a11ade1e11d56e96096e07"
+        }
+      ]
+    },
+    {
       "id": "echarts",
       "version": "5.6.0",
       "license": "Apache-2.0",

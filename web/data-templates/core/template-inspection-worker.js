@@ -20,16 +20,19 @@ self.onmessage = event => {
         RNTabularTemplate.id(input.dataset.id, "/dataset/id");
         RNTabularTemplate.dimensions(input.dataset.dimensions, "/dataset/dimensions");
         const unitNames = new Map(input.dictionaries.units.map(unit => [unit.id, unit.name]));
-        const rules = bindings => Object.entries(bindings).flatMap(([role, value]) => role === "dimensions"
-            ? Object.entries(value).map(([name, binding]) => ({ role: "dimension:" + name, expression: binding.expr }))
-            : [{ role, expression: value.expr }]);
-        const groups = axis => input.template.source[axis].map(group => ({ id: group.id, select: group.select,
-            rules: rules(group.bindings) }));
+        const pointer = name => name.replace(/~/g, "~0").replace(/\//g, "~1");
+        const rules = (bindings, base) => Object.entries(bindings).flatMap(([role, value]) => role === "dimensions"
+            ? Object.entries(value).map(([name, binding]) => ({ role: "dimension:" + name, expression: binding.expr,
+                path: base + "/dimensions/" + pointer(name) + "/expr" }))
+            : [{ role, expression: value.expr, path: base + "/" + pointer(role) + "/expr" }]);
+        const groups = axis => input.template.source[axis].map((group, index) => ({ id: group.id, select: group.select,
+            rules: rules(group.bindings, "/template/source/" + axis + "/" + index + "/bindings") }));
         self.postMessage({ type: "result", inspection: {
             template: plan.template, dataset: input.dataset.id, sheet: plan.source.sheet, bounds: plan.source.bounds,
             records: plan.totalRecords, rows: groups("rows"), columns: groups("columns"),
-            contexts: plan.contexts.map(item => ({ name: item.name, expression: input.template.context[item.name].expr })),
-            commonRules: rules(input.template.bindings),
+            contexts: plan.contexts.map(item => ({ name: item.name, expression: input.template.context[item.name].expr,
+                path: "/template/context/" + pointer(item.name) + "/expr" })),
+            commonRules: rules(input.template.bindings, "/template/bindings"),
             parameters: input.dictionaries.parameters.map(item => ({ id: item.id, name: item.name, unitId: item.unitId,
                 unitName: unitNames.get(item.unitId), dimensions: item.dimensions })),
             mappings: [

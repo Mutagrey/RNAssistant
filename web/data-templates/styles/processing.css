@@ -32,9 +32,10 @@
 .dt-inspection-rules > li:last-child { border-bottom: 0; }
 .dt-inspection-rules > li > .dt-inspection-expressions { grid-column: 1 / -1; }
 .dt-inspection-expressions { list-style: none; margin: 0; padding: 0; }
-.dt-inspection-expressions li { display: grid; grid-template-columns: minmax(80px, .25fr) minmax(0, 1fr); gap: 10px; padding: 6px 0; font-size: var(--dt-font-caption); }
+.dt-inspection-expressions li { display: grid; grid-template-columns: minmax(80px, .25fr) minmax(0, 1fr) auto; align-items: baseline; gap: 10px; padding: 6px 0; font-size: var(--dt-font-caption); }
 .dt-inspection-expressions strong { color: var(--dt-text-muted); font-weight: 600; overflow-wrap: anywhere; }
 .dt-inspection-expressions code { white-space: pre-wrap; overflow-wrap: anywhere; }
+.dt-inspection-expressions button { padding: 4px 7px; font-size: var(--dt-font-caption); }
 .dt-inspection-controls { display: flex; gap: 7px; margin-top: 14px; }
 .dt-inspection-controls select, .dt-inspection-controls input { min-width: 0; padding: 7px 8px; border: 1px solid var(--control-border); border-radius: var(--dt-control-radius); color: var(--text); background: var(--bg); font-size: var(--dt-font-caption); }
 .dt-inspection-controls input { flex: 1; width: 0; }
@@ -97,6 +98,8 @@
   .dt-inspection-table tr { display: grid; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--dt-border); }
   .dt-inspection-table td { min-width: 0; padding: 0; border: 0; }
   .dt-inspection-table td::before { display: block; content: attr(data-label); margin-bottom: 2px; color: var(--dt-text-muted); font-size: 10px; }
+  .dt-inspection-expressions li { grid-template-columns: minmax(0, 1fr) auto; }
+  .dt-inspection-expressions code { grid-column: 1 / -1; grid-row: 2; }
   .dt-template-picker, .dt-process-actions { justify-items: stretch; justify-content: flex-start; }
   .dt-process-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dt-run-heading { flex-wrap: wrap; }

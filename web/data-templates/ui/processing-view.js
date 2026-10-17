@@ -33,7 +33,8 @@
     const get = id => container.querySelector("#dt" + id), events = new AbortController();
     const listen = (element, type, handler) => element.addEventListener(type, handler, { signal: events.signal });
     const operation = root.DataTemplatesOperationView.create(get("ProcessOperation"), { cancel: actions.cancel, dismiss: actions.dismiss });
-    const templateView = root.DataTemplatesTemplateInspectionView.create(container);
+    const editorView = root.DataTemplatesTemplateEditor.create(container, actions);
+    const templateView = root.DataTemplatesTemplateInspectionView.create(container, { editRule: path => editorView.open(path) });
     let current = null, query = "", filter = "", page = 0;
     listen(get("ChooseTemplate"), "click", () => get("TemplateFile").click());
     listen(get("TemplateFile"), "change", () => { actions.chooseTemplate(get("TemplateFile").files[0] || null); get("TemplateFile").value = ""; });
@@ -114,10 +115,12 @@
       current = snapshot;
       get("TemplateName").textContent = snapshot.templateLoading ? "Проверяем шаблон…" : snapshot.templateName || "Шаблон не выбран";
       templateView.render(snapshot.templateInspection);
+      editorView.render(snapshot);
       get("ProcessSelection").textContent = snapshot.selectedCount ? "Выбрано " + snapshot.selectedCount + " файлов · XLSX: " + snapshot.selectedXlsx
         : "Источники не выбраны";
       get("ChooseTemplate").disabled = snapshot.running;
-      get("StartProcessing").disabled = snapshot.running || snapshot.sourceBusy || snapshot.templateLoading || !snapshot.templateName || !snapshot.selectedCount;
+      get("StartProcessing").disabled = snapshot.running || snapshot.sourceBusy || snapshot.templateLoading ||
+        snapshot.rulePending || !snapshot.templateName || !snapshot.selectedCount;
       get("ProcessNotice").textContent = snapshot.templateNotice;
       get("StorageNote").textContent = snapshot.storageMode === "disk"
         ? "Результаты записываются порциями во временное хранилище браузера: до 256 МиБ на файл и 1 ГиБ за запуск. Квота браузера может быть меньше. Скачайте нужное до закрытия вкладки."
@@ -130,7 +133,7 @@
       renderQueue(snapshot); renderDetail(snapshot);
     }
     return Object.freeze({ render: render, showResults: () => container.querySelector("#dtTabResults").click(),
-      dispose: () => { events.abort(); operation.dispose(); templateView.dispose(); } });
+      dispose: () => { events.abort(); operation.dispose(); templateView.dispose(); editorView.dispose(); } });
   }
   root.DataTemplatesProcessingView = Object.freeze({ create: create });
 }(window));

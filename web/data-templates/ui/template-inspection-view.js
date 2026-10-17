@@ -54,7 +54,7 @@
     }
     return Object.freeze({ render: render, dispose: () => { events.abort(); panel.remove(); } });
   }
-  function create(container) {
+  function create(container, actions) {
     const templates = container.querySelector("#dtViewTemplates"), parameters = container.querySelector("#dtViewParameters"),
       mapping = container.querySelector("#dtViewMapping"), anchor = templates.querySelector("#dtTemplateDrop");
     const parameterEmpty = parameters.querySelector(".dt-empty-state"), mappingGuide = mapping.querySelector(".dt-mapping-guide"),
@@ -79,6 +79,10 @@
     const events = new AbortController();
     summary.querySelector("#dtInspectionOpenParameters").addEventListener("click", () => container.querySelector("#dtTabParameters").click(), { signal: events.signal });
     summary.querySelector("#dtInspectionOpenMapping").addEventListener("click", () => container.querySelector("#dtTabMapping").click(), { signal: events.signal });
+    summary.querySelector("#dtInspectionRules").addEventListener("click", event => {
+      const button = event.target.closest("button[data-rule-path]");
+      if (button && actions && actions.editRule) actions.editRule(button.dataset.rulePath);
+    }, { signal: events.signal });
     let current = null;
     function render(inspection) {
       if (current === inspection) return;
@@ -102,6 +106,10 @@
       function appendRules(container, entries) {
         entries.forEach(entry => {
           const item = node("li"); item.append(node("strong", "", entry.role || entry.name), node("code", "", entry.expression));
+          if (entry.path && actions && actions.editRule) {
+            const button = node("button", "dt-text-button", "Править"); button.type = "button";
+            button.dataset.rulePath = entry.path; item.append(button);
+          }
           container.append(item);
         });
       }

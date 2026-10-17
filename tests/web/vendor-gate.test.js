@@ -72,7 +72,8 @@ const licenses = new Set(manifest.packages.flatMap(item => item.licenseFiles.map
 const appRoot = path.join(web, "data-templates");
 const appManifest = JSON.parse(fs.readFileSync(path.join(appRoot, "application.json"), "utf8"));
 const appVendors = require(path.join(appRoot, "tools/vendor-lock.js")).verifyVendors(appRoot, appManifest);
-assert.deepEqual(appVendors.packages.map(item => item.id), ["echarts", "sheetjs", "tabulator", "sax"]);
+assert.deepEqual(appVendors.packages.map(item => item.id), ["codemirror", "echarts", "sheetjs", "tabulator", "sax"]);
+assert.equal(appVendors.packages[0].version, packages.get("codemirror").version);
 const actual = ["js/vendor", "css/vendor"].flatMap(folder => filesBelow(path.join(web, folder)))
   .concat([path.join(appRoot, "vendor/sax.js")])
   .map(webPath).filter(file => !licenses.has(file)).sort();

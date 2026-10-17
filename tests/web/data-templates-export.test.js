@@ -65,8 +65,8 @@ const hash = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
             if (!request.url().startsWith(filePrefix) && !(httpPrefix && request.url().startsWith(httpPrefix))) unexpected.push(request.url());
         });
         await page.goto(pathToFileURL(path.join(output, "index.html")).href);
-        assert.deepEqual(await page.evaluate(() => [typeof window.echarts, typeof window.Tabulator, typeof window.XLSX]),
-            ["undefined", "undefined", "undefined"]);
+        assert.deepEqual(await page.evaluate(() => [typeof window.echarts, typeof window.Tabulator, typeof window.XLSX,
+            typeof window.CodeMirror]), ["undefined", "undefined", "undefined", "undefined"]);
         const chartAndGrid = await page.evaluate(async () => {
             const echarts = await DataTemplatesVendors.load("echarts");
             const chartNode = document.createElement("div");
@@ -159,8 +159,16 @@ const hash = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
         await page.waitForFunction(() => document.getElementById("dtProcessNotice").textContent.includes("EXPRESSION_TYPE"));
         assert.equal(await page.locator("#dtStartProcessing").isDisabled(), true);
         assert.equal(await page.locator("#dtTemplateInspection").isVisible(), false);
+        await page.locator("#dtOpenTemplateEditor").click();
+        await page.waitForFunction(() => !!document.querySelector("#dtEditorJsonCode .CodeMirror"));
+        assert.equal(await page.locator("#dtEditorJsonPane").isVisible(), true);
+        await page.evaluate(value => document.querySelector("#dtEditorJsonCode .CodeMirror").CodeMirror.setValue(value),
+            fs.readFileSync(path.join(output, "core/examples/matrix-xlsx-extraction.json"), "utf8"));
+        await page.waitForFunction(() => !document.getElementById("dtStartProcessing").disabled);
+        await page.locator("#dtCloseTemplateEditor").click();
         invalidTemplate.template.source.rows[0].bindings.parameter.expr = "lookup(\"parameters\", text(cell(\"A\", row)), \"production-form\")";
         invalidTemplate.dictionaries.parameterMappings[0].targetId = "missing";
+        page.once("dialog", dialog => dialog.accept());
         await page.locator("#dtTemplateFile").setInputFiles({ name: "invalid-mapping.json", mimeType: "application/json",
             buffer: Buffer.from(JSON.stringify(invalidTemplate)) });
         await page.waitForFunction(() => document.getElementById("dtProcessNotice").textContent.includes("REFERENCE_MISSING"));
@@ -184,6 +192,48 @@ const hash = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
         await page.locator("#dtTemplateInspection summary").click();
         assert.match(await page.locator("#dtInspectionRules").innerText(), /lookup\("parameters"/);
         assert.match(await page.locator("#dtInspectionRules").innerText(), /decimal\(raw/);
+        await page.locator('#dtInspectionRules button[data-rule-path="/template/source/rows/0/bindings/parameter/expr"]').click();
+        await page.waitForFunction(() => !!document.querySelector("#dtEditorExpressionCode .CodeMirror"));
+        assert.equal(await page.evaluate(() => typeof window.CodeMirror), "function");
+        assert.equal(await page.locator("#dtEditorRulePath").innerText(), "/template/source/rows/0/bindings/parameter/expr");
+        if (process.env.RNA_DATA_SCREENSHOTS) {
+            await page.screenshot({ path: path.join(process.env.RNA_DATA_SCREENSHOTS, "editor-wide.png"), fullPage: true, animations: "disabled" });
+            await page.locator("#dtTemplateEditor").screenshot({ path: path.join(process.env.RNA_DATA_SCREENSHOTS, "editor-wide-panel.png"), animations: "disabled" });
+            await page.emulateMedia({ colorScheme: "light" });
+            await page.locator("#dtTemplateEditor").screenshot({ path: path.join(process.env.RNA_DATA_SCREENSHOTS, "editor-light.png"), animations: "disabled" });
+            await page.emulateMedia({ colorScheme: "dark" });
+            await page.setViewportSize({ width: 360, height: 940 });
+            assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+            await page.locator("#dtTemplateEditor").screenshot({ path: path.join(process.env.RNA_DATA_SCREENSHOTS, "editor-narrow.png"), animations: "disabled" });
+            await page.setViewportSize({ width: 1160, height: 940 });
+        }
+        const originalRule = await page.evaluate(() => document.querySelector("#dtEditorExpressionCode .CodeMirror").CodeMirror.getValue());
+        await page.evaluate(() => document.querySelector("#dtEditorExpressionCode .CodeMirror").CodeMirror.setValue("unknown()"));
+        assert.equal(await page.locator("#dtStartProcessing").isDisabled(), true);
+        await page.locator('#dtInspectionRules button[data-rule-path="/template/source/rows/0/bindings/unit/expr"]').click();
+        assert.equal(await page.evaluate(() => document.querySelector("#dtEditorExpressionCode .CodeMirror").CodeMirror.getValue()), "unknown()");
+        assert.equal(await page.locator("#dtEditorRulePath").innerText(), "/template/source/rows/0/bindings/parameter/expr");
+        await page.locator("#dtEditorApplyRule").click();
+        await page.waitForFunction(() => document.getElementById("dtEditorRuleNotice").textContent.includes("EXPRESSION_TYPE"));
+        assert.equal(await page.locator("#dtStartProcessing").isDisabled(), true);
+        await page.evaluate(value => document.querySelector("#dtEditorExpressionCode .CodeMirror").CodeMirror.setValue(value + " "), originalRule);
+        await page.locator("#dtEditorApplyRule").click();
+        await page.waitForFunction(() => document.getElementById("dtProcessNotice").textContent.includes("Правило применено"));
+        assert.equal(await page.locator("#dtStartProcessing").isDisabled(), false);
+        const draftDownload = page.waitForEvent("download");
+        await page.locator("#dtDownloadTemplateDraft").click();
+        const draftFile = await draftDownload;
+        assert.match(draftFile.suggestedFilename(), /\.draft\.json$/);
+        const draftText = fs.readFileSync(await draftFile.path(), "utf8");
+        assert.equal(JSON.parse(draftText).template.source.rows[0].bindings.parameter.expr, originalRule + " ");
+        await page.locator("#dtEditorJsonTab").click();
+        await page.evaluate(() => document.querySelector("#dtEditorJsonCode .CodeMirror").CodeMirror.setValue("{"));
+        await page.waitForFunction(() => document.getElementById("dtProcessNotice").textContent.includes("JSON_INVALID"));
+        assert.equal(await page.locator("#dtStartProcessing").isDisabled(), true);
+        await page.evaluate(value => document.querySelector("#dtEditorJsonCode .CodeMirror").CodeMirror.setValue(value), draftText);
+        await page.waitForFunction(() => !document.getElementById("dtStartProcessing").disabled);
+        assert.equal(await page.locator("#dtTemplateInspection").isVisible(), true);
+        await page.locator("#dtCloseTemplateEditor").click();
         await page.locator("#dtInspectionOpenMapping").click();
         assert.equal(await page.locator("#dtMappingInspection").isVisible(), true);
         assert.match(await page.locator("#dtMappingRows").innerText(), /production.volume/);
@@ -221,6 +271,7 @@ const hash = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
         assert.equal(await page.locator("#dtResultRecords").innerText(), "16");
         assert.match(await page.locator("#dtRunList").innerText(), /READER_UNAVAILABLE/);
         assert.equal(await page.locator("#dtPreviewRows tr").count(), 16);
+        page.once("dialog", dialog => dialog.accept());
         await page.locator("#dtTemplateFile").setInputFiles({ name: "other.json", mimeType: "application/json",
             buffer: fs.readFileSync(path.join(output, "core/examples/matrix-xlsx-extraction.json")) });
         const resultDownload = page.waitForEvent("download");

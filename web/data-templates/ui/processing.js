@@ -14,14 +14,17 @@
     return "Обработка в Worker";
   }
   function create(container, loader) {
-    let view, template = null, templateLoading = false, templateTicket = 0, templateAbort = null, run = null,
+    let view, template = null, draft = null, draftDirty = false, draftGeneration = 0, rulePending = false,
+      templateLoading = false, templateTicket = 0, templateAbort = null, validationTimer = null, run = null,
       queue = [], selectedId = null, lastActivity = null, templateNotice = "", runNotice = "", disposed = false;
     const count = status => queue.filter(item => item.status === status).length;
     function snapshot() {
       const sources = loader.selectedSources(), active = run && queue.find(item => item.status === "running");
       const completed = count("completed"), failed = count("failed"), cancelled = count("cancelled");
       return Object.freeze({ templateName: template && template.name, templateInspection: template && template.inspection,
-        templateLoading: templateLoading,
+        draftName: draft && draft.name, draftText: draft && draft.input, draftDirty: draftDirty,
+        draftGeneration: draftGeneration,
+        rulePending: rulePending, templateLoading: templateLoading,
         selectedCount: sources.length, selectedXlsx: sources.filter(source => source.format === "xlsx").length,
         sourceBusy: loader.isBusy(), running: !!run, templateNotice: templateNotice, runNotice: runNotice,
         storageMode: root.DataTemplatesResultStaging.mode(),
@@ -50,15 +53,20 @@
     }
     async function chooseTemplate(file) {
       if (run || disposed) return;
+      if ((draftDirty || rulePending) && !root.confirm("Текущий черновик изменён. Заменить его выбранным файлом?")) return;
       const ticket = ++templateTicket;
+      draftGeneration++;
+      clearTimeout(validationTimer);
       if (templateAbort) templateAbort.abort();
       templateAbort = file ? new AbortController() : null;
-      template = null; templateLoading = !!file; templateNotice = ""; render();
+      template = null; draft = null; draftDirty = false; rulePending = false;
+      templateLoading = !!file; templateNotice = ""; render();
       if (!file) return;
       try {
         if (!file.size || file.size > 1000000) throw new Error("Нужен непустой JSON-шаблон до 1 000 000 байт.");
         const input = new TextDecoder("utf-8", { fatal: true }).decode(await file.arrayBuffer());
         if (ticket !== templateTicket || disposed) return;
+        draft = Object.freeze({ name: file.name, input: input }); render();
         const inspection = await root.DataTemplatesTemplateInspection.inspect(input, templateAbort.signal);
         if (ticket !== templateTicket || disposed) return;
         template = Object.freeze({ name: file.name, input: input, inspection: inspection });
@@ -67,9 +75,76 @@
         if (ticket === templateTicket && !disposed) templateNotice = "Шаблон «" + file.name + "» не принят: " + errorText(error);
       } finally { if (ticket === templateTicket) { templateLoading = false; render(); } }
     }
+    function changeDraft(input) {
+      if (!draft || run || disposed) return;
+      draft = Object.freeze({ name: draft.name, input: input }); draftDirty = true; template = null;
+      const ticket = ++templateTicket;
+      clearTimeout(validationTimer); if (templateAbort) templateAbort.abort();
+      templateAbort = new AbortController(); templateLoading = true;
+      templateNotice = "Проверяем изменённый JSON…"; render();
+      if (!input || input.length > 1000000) {
+        templateLoading = false; templateNotice = "INPUT_LIMIT: JSON-черновик должен содержать от 1 до 1 000 000 символов.";
+        render(); return;
+      }
+      const validationAbort = templateAbort;
+      validationTimer = setTimeout(async () => {
+        try {
+          const inspection = await root.DataTemplatesTemplateInspection.inspect(input, validationAbort.signal);
+          if (ticket !== templateTicket || disposed) return;
+          template = Object.freeze({ name: draft.name, input: input, inspection: inspection });
+          templateNotice = "Черновик проверен. Значения источника будут проверены при обработке.";
+        } catch (error) {
+          if (ticket === templateTicket && !disposed) templateNotice = "Черновик требует исправления: " + errorText(error);
+        } finally { if (ticket === templateTicket) { templateLoading = false; render(); } }
+      }, 300);
+    }
+    function ruleDirty(value) { if (rulePending !== value) { rulePending = value; render(); } }
+    async function applyRule(path, expression) {
+      if (!draft || !template || run || disposed) return { ok: false, message: "Сначала исправьте JSON-черновик." };
+      const inspection = template.inspection;
+      const known = [...inspection.contexts, ...inspection.commonRules,
+        ...inspection.rows.flatMap(group => group.rules), ...inspection.columns.flatMap(group => group.rules)]
+        .some(rule => rule.path === path);
+      if (!known) return { ok: false, message: "Правило отсутствует в проверенном шаблоне." };
+      let candidate;
+      try {
+        const document = JSON.parse(draft.input), parts = path.slice(1).split("/").map(part => part.replace(/~1/g, "/").replace(/~0/g, "~"));
+        let target = document;
+        for (const part of parts) target = target[part];
+        if (typeof target !== "string") throw new Error("Путь правила не указывает на выражение.");
+        let parent = document;
+        for (const part of parts.slice(0, -1)) parent = parent[part];
+        parent[parts[parts.length - 1]] = expression;
+        candidate = JSON.stringify(document, null, 2);
+        if (candidate.length > 1000000) throw new Error("JSON-черновик превысит 1 000 000 символов.");
+      } catch (error) { return { ok: false, message: error.message }; }
+      const ticket = ++templateTicket;
+      if (templateAbort) templateAbort.abort();
+      templateAbort = new AbortController(); templateLoading = true;
+      templateNotice = "Проверяем изменённое правило…"; render();
+      try {
+        const nextInspection = await root.DataTemplatesTemplateInspection.inspect(candidate, templateAbort.signal);
+        if (ticket !== templateTicket || disposed) return { ok: false, message: "Проверка прервана." };
+        draft = Object.freeze({ name: draft.name, input: candidate }); draftDirty = true; rulePending = false;
+        template = Object.freeze({ name: draft.name, input: candidate, inspection: nextInspection });
+        templateNotice = "Правило применено; полный черновик проверен.";
+        return { ok: true };
+      } catch (error) {
+        if (ticket === templateTicket && !disposed) templateNotice = "Правка не принята: " + errorText(error);
+        return { ok: false, message: "Правка не принята: " + errorText(error) };
+      } finally { if (ticket === templateTicket) { templateLoading = false; render(); } }
+    }
+    function downloadDraft() {
+      if (!draft || rulePending || disposed) return;
+      const file = new Blob([draft.input], { type: "application/json;charset=utf-8" });
+      const url = URL.createObjectURL(file), link = document.createElement("a");
+      link.href = url;
+      link.download = (draft.name.replace(/\.json$/i, "").replace(/[^\p{L}\p{N}._-]+/gu, "_").slice(0, 80) || "template") + ".draft.json";
+      link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
     function cancel() { if (run) run.abort.abort(); }
     async function start() {
-      if (run || templateLoading || !template || disposed) return;
+      if (run || templateLoading || !template || rulePending || disposed) return;
       const selection = loader.beginProcessing();
       if (!selection) { templateNotice = "Дождитесь окончания подбора источников."; render(); return; }
       if (!selection.length) { loader.endProcessing(); templateNotice = "Выберите хотя бы один источник."; render(); return; }
@@ -182,11 +257,12 @@
     }
     view = root.DataTemplatesProcessingView.create(container, {
       chooseTemplate: chooseTemplate, start: start, cancel: cancel, dismiss: () => { lastActivity = null; render(); },
-      select: id => { selectedId = id; render(); }, download: download
+      select: id => { selectedId = id; render(); }, download: download,
+      changeDraft: changeDraft, ruleDirty: ruleDirty, applyRule: applyRule, downloadDraft: downloadDraft
     });
     render();
     return Object.freeze({ sourcesChanged: render, dispose: () => {
-      disposed = true; templateTicket++; if (run) { run.abort.abort(); clearInterval(run.timer); }
+      disposed = true; templateTicket++; clearTimeout(validationTimer); if (run) { run.abort.abort(); clearInterval(run.timer); }
       if (templateAbort) templateAbort.abort();
       releaseResults().catch(() => {}); if (view) view.dispose(); loader.endProcessing();
     } });
