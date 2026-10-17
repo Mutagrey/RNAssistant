@@ -22,10 +22,52 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("name", Required = Required.Always)] public string Name { get; set; }
     }
 
-    public sealed class SaveTabularProjectSourcesRequest : WorkspaceProjectPathRequest
+    public class WorkspaceSelectedProjectRequest : WorkspaceProjectPathRequest
     {
         [JsonProperty("projectRevision", Required = Required.Always)] public long ProjectRevision { get; set; }
+    }
+
+    public sealed class SaveTabularProjectSourcesRequest : WorkspaceSelectedProjectRequest
+    {
         [JsonProperty("paths", Required = Required.Always)] public IReadOnlyList<string> Paths { get; set; }
+    }
+
+    public sealed class SaveTabularProjectDraftRequest : WorkspaceSelectedProjectRequest
+    {
+        [JsonProperty("file", Required = Required.Always)] public string File { get; set; }
+        [JsonProperty("input", Required = Required.Always)] public string Input { get; set; }
+    }
+
+    public sealed class OpenTabularProjectDraftRequest : WorkspaceSelectedProjectRequest
+    {
+        [JsonProperty("file", Required = Required.Always)] public string File { get; set; }
+    }
+
+    public sealed class TabularProjectDraftDto
+    {
+        [JsonProperty("file")] public string File { get; internal set; }
+        [JsonProperty("savedAt")] public long SavedAt { get; internal set; }
+        [JsonProperty("label")] public string Label { get; internal set; }
+        [JsonProperty("byteLength")] public long ByteLength { get; internal set; }
+    }
+
+    public sealed class TabularProjectDraftListDto
+    {
+        [JsonProperty("state")] public WorkspaceStateDto State { get; internal set; }
+        [JsonProperty("items")] public IReadOnlyList<TabularProjectDraftDto> Items { get; internal set; }
+    }
+
+    public sealed class TabularProjectDraftSaveDto
+    {
+        [JsonProperty("state")] public WorkspaceStateDto State { get; internal set; }
+        [JsonProperty("draft")] public TabularProjectDraftDto Draft { get; internal set; }
+    }
+
+    public sealed class TabularProjectDraftContentDto
+    {
+        [JsonProperty("state")] public WorkspaceStateDto State { get; internal set; }
+        [JsonProperty("draft")] public TabularProjectDraftDto Draft { get; internal set; }
+        [JsonProperty("input")] public string Input { get; internal set; }
     }
 
     public sealed class TabularProjectSourceDto

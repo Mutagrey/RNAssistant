@@ -41,8 +41,9 @@
   }
   function draftName(name) {
     const slug = String(name || "template").replace(/\.json$/i, "").replace(/[^\p{L}\p{N}._-]+/gu, "_")
-      .replace(/^[_\-.]+|[_\-.]+$/g, "").slice(0, 48) || "template";
-    return "draft-" + Date.now() + "-" + root.crypto.randomUUID().replace(/-/g, "") + "-" + slug + ".draft";
+      .replace(/^[_\-.]+|[_\-.]+$/g, "");
+    const bounded = Array.from(slug).slice(0, 48).join("") || "template";
+    return "draft-" + Date.now() + "-" + root.crypto.randomUUID().replace(/-/g, "") + "-" + bounded + ".draft";
   }
   async function draftsDirectory(project, create) {
     try { return await project.directory.getDirectoryHandle("drafts", { create: create }); }

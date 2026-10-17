@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -14,7 +15,7 @@ namespace RNAssistant.Core.Storage
     {
         public string Code { get; private set; }
 
-        public TabularProjectException(string code, string message) : base(message)
+        public TabularProjectException(string code, string message, Exception inner = null) : base(message, inner)
         { Code = code; }
     }
 
@@ -25,6 +26,9 @@ namespace RNAssistant.Core.Storage
         public const string ManifestFileName = "project.json";
         public const int MaximumManifestBytes = 256 * 1024;
         public const int MaximumSources = 500;
+        public const int MaximumDraftBytes = 1000000;
+        private const int MaximumDraftDirectoryEntries = 1000;
+        private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
         private readonly WorkspaceFileService _files;
 
         public TabularProjectStore(WorkspaceFileService files)
@@ -82,6 +86,165 @@ namespace RNAssistant.Core.Storage
                 throw new TabularProjectException("project_changed",
                     "The project manifest changed. Reopen and inspect it before continuing.");
             return Snapshot(workspace, observed);
+        }
+
+        public static string NewDraftFileName(string name)
+        {
+            return "draft-" + DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString(CultureInfo.InvariantCulture) +
+                "-" + Guid.NewGuid().ToString("N") + "-" + DraftLabel(name) + ".draft";
+        }
+
+        public TabularProjectDraft SaveDraft(WorkspaceDescriptor workspace, TabularProjectSnapshot expected,
+            string fileName, string input)
+        {
+            var draft = ParseDraftName(fileName);
+            var length = DraftLength(input);
+            var current = RequireUnchanged(workspace, expected);
+            // The shared file owner guards create-only dispatch and verifies the bytes.
+            var path = DraftDirectory(current.ManifestPath) + "/" + fileName;
+            try { _files.CreateText(workspace, path, input); }
+            catch (WorkspaceFileException ex) when (ex.Code == "effect_unknown")
+            {
+                throw new TabularProjectException("effect_unknown",
+                    "Draft write result is uncertain at " + path + ". Inspect that exact file before retrying.", ex);
+            }
+            return new TabularProjectDraft(fileName, draft.SavedAt, draft.Label, length);
+        }
+
+        public IReadOnlyList<TabularProjectDraft> ListDrafts(WorkspaceDescriptor workspace,
+            TabularProjectSnapshot expected, CancellationToken token = default(CancellationToken))
+        {
+            var current = RequireUnchanged(workspace, expected, token);
+            var directory = DraftDirectory(current.ManifestPath);
+            WorkspaceDirectoryPage first;
+            try { first = _files.ListPage(workspace, directory, null, 500, 0, token); }
+            catch (DirectoryNotFoundException) { return Array.Empty<TabularProjectDraft>(); }
+            if (first.ScannedEntries > MaximumDraftDirectoryEntries || first.ScanLimitReached)
+                throw new TabularProjectException("draft_list_limit", "The drafts directory exceeds 1000 entries.");
+            var items = new List<TabularProjectDraft>();
+            AddDraftEntries(first, items);
+            for (var offset = 500; offset < first.MatchedEntries; offset += 500)
+            {
+                var page = _files.ListPage(workspace, directory, null, 500, offset, token);
+                if (page.ScannedEntries > MaximumDraftDirectoryEntries || page.ScanLimitReached)
+                    throw new TabularProjectException("draft_list_limit", "The drafts directory exceeds 1000 entries.");
+                AddDraftEntries(page, items);
+            }
+            return items.OrderByDescending(item => item.FileName, StringComparer.Ordinal).Take(50).ToArray();
+        }
+
+        public TabularProjectDraft ReadDraft(WorkspaceDescriptor workspace, TabularProjectSnapshot expected,
+            string fileName, CancellationToken token = default(CancellationToken))
+        {
+            var draft = ParseDraftName(fileName);
+            var current = RequireUnchanged(workspace, expected, token);
+            WorkspaceFileObservation observed;
+            try { observed = _files.ReadText(workspace, DraftDirectory(current.ManifestPath) + "/" + fileName, token); }
+            catch (FileNotFoundException)
+            { throw new TabularProjectException("draft_missing", "The selected draft snapshot is missing."); }
+            catch (DirectoryNotFoundException)
+            { throw new TabularProjectException("draft_missing", "The selected draft snapshot is missing."); }
+            var length = DraftLength(observed.Text);
+            return new TabularProjectDraft(fileName, draft.SavedAt, draft.Label, length, observed.Text);
+        }
+
+        private static void AddDraftEntries(WorkspaceDirectoryPage page, List<TabularProjectDraft> drafts)
+        {
+            foreach (var entry in page.Entries)
+            {
+                if (entry.IsDirectory || !TryParseDraftName(entry.Name, out var savedAt, out var label)) continue;
+                drafts.Add(new TabularProjectDraft(entry.Name, savedAt, label, entry.ByteLength.Value));
+            }
+        }
+
+        private static string DraftDirectory(string manifestPath)
+        {
+            var slash = manifestPath.LastIndexOf('/');
+            return slash < 0 ? "drafts" : manifestPath.Substring(0, slash + 1) + "drafts";
+        }
+
+        private static int DraftLength(string input)
+        {
+            if (string.IsNullOrEmpty(input))
+                throw new TabularProjectException("draft_limit", "A draft must contain 1 to 1000000 UTF-8 bytes.");
+            if (input[0] == '\uFEFF')
+                throw new TabularProjectException("draft_encoding", "A draft cannot start with a UTF-8 BOM.");
+            int length;
+            try { length = StrictUtf8.GetByteCount(input); }
+            catch (EncoderFallbackException)
+            { throw new TabularProjectException("draft_encoding", "A draft must contain valid Unicode text."); }
+            if (length > MaximumDraftBytes)
+                throw new TabularProjectException("draft_limit", "A draft must contain 1 to 1000000 UTF-8 bytes.");
+            return length;
+        }
+
+        private static string DraftLabel(string name)
+        {
+            var source = string.IsNullOrEmpty(name) ? "template" : name;
+            if (source.Length > 200)
+                throw new TabularProjectException("draft_invalid", "A draft name must be at most 200 characters.");
+            if (source.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                source = source.Substring(0, source.Length - 5);
+            var label = new StringBuilder();
+            var replaced = false;
+            for (var i = 0; i < source.Length; i++)
+            {
+                var c = source[i];
+                if (IsDraftLabelCharacter(source, i))
+                {
+                    label.Append(c);
+                    if (char.IsHighSurrogate(c)) label.Append(source[++i]);
+                    replaced = false;
+                }
+                else if (!replaced) { label.Append('_'); replaced = true; }
+            }
+            var value = label.ToString().Trim('_', '-', '.');
+            if (value.Length == 0) return "template";
+            var end = 0;
+            for (var count = 0; end < value.Length && count < 48; count++)
+                end += char.IsHighSurrogate(value[end]) ? 2 : 1;
+            return value.Substring(0, end);
+        }
+
+        private static TabularProjectDraft ParseDraftName(string fileName)
+        {
+            if (!TryParseDraftName(fileName, out var savedAt, out var label))
+                throw new TabularProjectException("draft_invalid", "Select a project draft snapshot filename.");
+            return new TabularProjectDraft(fileName, savedAt, label, 0);
+        }
+
+        private static bool TryParseDraftName(string fileName, out long savedAt, out string label)
+        {
+            savedAt = 0; label = null;
+            if (fileName == null || fileName.Length < 60 || fileName.Length > 155 ||
+                !fileName.StartsWith("draft-", StringComparison.Ordinal) ||
+                !fileName.EndsWith(".draft", StringComparison.Ordinal) ||
+                fileName[19] != '-' || fileName[52] != '-' ||
+                !long.TryParse(fileName.Substring(6, 13), NumberStyles.None, CultureInfo.InvariantCulture, out savedAt) ||
+                fileName.Skip(20).Take(32).Any(c => !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f')))
+                return false;
+            label = fileName.Substring(53, fileName.Length - 59);
+            var count = 0;
+            for (var i = 0; i < label.Length; i++)
+            {
+                if (!IsDraftLabelCharacter(label, i)) return false;
+                if (char.IsHighSurrogate(label[i])) i++;
+                if (++count > 48) return false;
+            }
+            return true;
+        }
+
+        private static bool IsDraftLabelCharacter(string value, int index)
+        {
+            var c = value[index];
+            if (c == '.' || c == '_' || c == '-') return true;
+            if (char.IsHighSurrogate(c) && (index + 1 == value.Length || !char.IsLowSurrogate(value[index + 1])))
+                return false;
+            var category = CharUnicodeInfo.GetUnicodeCategory(value, index);
+            return category == UnicodeCategory.UppercaseLetter || category == UnicodeCategory.LowercaseLetter ||
+                category == UnicodeCategory.TitlecaseLetter || category == UnicodeCategory.ModifierLetter ||
+                category == UnicodeCategory.OtherLetter || category == UnicodeCategory.DecimalDigitNumber ||
+                category == UnicodeCategory.LetterNumber || category == UnicodeCategory.OtherNumber;
         }
 
         private static TabularProjectSnapshot Snapshot(WorkspaceDescriptor workspace, WorkspaceFileObservation observed)

@@ -65,4 +65,24 @@ namespace RNAssistant.Core.Models
             ReadOnly = workspace.ReadOnly;
         }
     }
+
+    // Project-local, immutable raw template snapshot. Input is populated only by
+    // an explicit open; listing never reads draft bodies.
+    public sealed class TabularProjectDraft
+    {
+        public string FileName { get; private set; }
+        public long SavedAt { get; private set; }
+        public string Label { get; private set; }
+        public long ByteLength { get; private set; }
+        public string Input { get; private set; }
+
+        public TabularProjectDraft(string fileName, long savedAt, string label, long byteLength, string input = null)
+        {
+            FileName = fileName;
+            SavedAt = savedAt;
+            Label = label;
+            ByteLength = byteLength;
+            Input = input;
+        }
+    }
 }

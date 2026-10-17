@@ -186,6 +186,18 @@ namespace RNAssistant.Office.WebView
                         var sourceSave = Payload<SaveTabularProjectSourcesRequest>(payload);
                         responsePayload = await RunBridgeWorkAsync(() => _workspaces.SaveTabularProjectSources(sourceSave), cancellationToken).ConfigureAwait(false);
                         break;
+                    case BridgeOperationId.SaveTabularProjectDraft:
+                        var draftSave = Payload<SaveTabularProjectDraftRequest>(payload);
+                        responsePayload = await RunBridgeWorkAsync(() => _workspaces.SaveTabularProjectDraft(draftSave), cancellationToken).ConfigureAwait(false);
+                        break;
+                    case BridgeOperationId.ListTabularProjectDrafts:
+                        var draftList = Payload<WorkspaceSelectedProjectRequest>(payload);
+                        responsePayload = await RunBridgeWorkAsync(() => _workspaces.ListTabularProjectDrafts(draftList, cancellationToken), cancellationToken).ConfigureAwait(false);
+                        break;
+                    case BridgeOperationId.OpenTabularProjectDraft:
+                        var draftOpen = Payload<OpenTabularProjectDraftRequest>(payload);
+                        responsePayload = await RunBridgeWorkAsync(() => _workspaces.OpenTabularProjectDraft(draftOpen, cancellationToken), cancellationToken).ConfigureAwait(false);
+                        break;
                     case BridgeOperationId.PrepareWorkspaceSources:
                         var sourcePrepare = Payload<PrepareWorkspaceSourcesRequest>(payload);
                         responsePayload = await RunBridgeWorkAsync(() => _workspaces.PrepareSources(sourcePrepare), cancellationToken).ConfigureAwait(false);

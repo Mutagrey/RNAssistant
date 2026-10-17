@@ -220,6 +220,64 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void TabularProjectDraftSnapshots()
+        {
+            WithTempPaths(paths =>
+            {
+                var workspaces = new WorkspaceStore(paths);
+                var workspace = workspaces.Open(Path.Combine(paths.Root, "workspace"));
+                var files = new WorkspaceFileService(paths);
+                var store = new TabularProjectStore(files);
+                var project = store.Create(workspace, "reports/project.json", "Drafts");
+                AssertEqual(0, store.ListDrafts(workspace, project).Count, "missing drafts directory is empty");
+                var saved = store.SaveDraft(workspace, project, TabularProjectStore.NewDraftFileName("Отчёт.json"), "{unfinished");
+                AssertTrue(saved.FileName.StartsWith("draft-", StringComparison.Ordinal) &&
+                    saved.FileName.EndsWith("-Отчёт.draft", StringComparison.Ordinal), "portable snapshot name");
+                AssertEqual("{unfinished", File.ReadAllText(Path.Combine(workspace.RootPath, "reports", "drafts", saved.FileName)),
+                    "raw invalid JSON survives verified create");
+                AssertEqual("{unfinished", store.ReadDraft(workspace, project, saved.FileName).Input,
+                    "draft can be reopened without JSON compilation");
+                AssertEqual(saved.FileName, store.ListDrafts(workspace, project).Single().FileName,
+                    "metadata listing finds the snapshot");
+                var supplementary = store.SaveDraft(workspace, project,
+                    TabularProjectStore.NewDraftFileName("\U00010400.json"), "{}");
+                AssertEqual("{}", store.ReadDraft(workspace, project, supplementary.FileName).Input,
+                    "supplementary Unicode label remains portable");
+                var readOnly = workspaces.Open(workspace.RootPath, false, false);
+                AssertEqual(2, store.ListDrafts(readOnly, project).Count,
+                    "read-only selection can list drafts");
+                ExpectTabularFailure(() => store.SaveDraft(readOnly, project,
+                    TabularProjectStore.NewDraftFileName("another"), "{}"), "read_only_mount");
+                ExpectTabularFailure(() => store.ReadDraft(workspace, project, "../project.json"), "draft_invalid");
+                ExpectTabularFailure(() => store.SaveDraft(workspace, project, "../project.json", "{}"), "draft_invalid");
+                ExpectTabularFailure(() => store.ReadDraft(workspace, project,
+                    "draft-1700000000000-0123456789abcdef0123456789abcdef-missing.draft"), "draft_missing");
+                ExpectTabularFailure(() => store.SaveDraft(workspace, project,
+                    TabularProjectStore.NewDraftFileName("large"), new string('x', 1000001)), "draft_limit");
+                ExpectTabularFailure(() => store.SaveDraft(workspace, project,
+                    TabularProjectStore.NewDraftFileName("invalid"), "\ud800"), "draft_encoding");
+                AssertEqual(2, store.ListDrafts(workspace, project).Count, "refused drafts create no files");
+                files.ReplaceText(workspace, project.ManifestPath, project.ManifestReference,
+                    File.ReadAllText(Path.Combine(workspace.RootPath, "reports", "project.json")).Replace("Drafts", "Changed"));
+                ExpectTabularFailure(() => store.SaveDraft(workspace, project,
+                    TabularProjectStore.NewDraftFileName("stale"), "{}"), "project_changed");
+                var refreshed = store.Open(workspace, project.ManifestPath);
+                AssertEqual(2, store.ListDrafts(workspace, refreshed).Count,
+                    "manifest drift cannot create a new draft");
+                var draftsPath = Path.Combine(workspace.RootPath, "reports", "drafts");
+                for (var index = 0; index < 55; index++)
+                    File.WriteAllText(Path.Combine(draftsPath, "draft-1700000000" + index.ToString("D3") +
+                        "-0123456789abcdef0123456789abcdef-item" + index + ".draft"), "{}");
+                var latest = store.ListDrafts(workspace, refreshed);
+                AssertEqual(50, latest.Count, "listing remains bounded to 50 snapshots");
+                AssertTrue(latest.Select(item => item.FileName).SequenceEqual(latest.Select(item => item.FileName)
+                    .OrderByDescending(name => name, StringComparer.Ordinal)), "newest snapshots lead the list");
+                AssertTrue(latest.Any(item => item.FileName.EndsWith("-item54.draft", StringComparison.Ordinal)) &&
+                    !latest.Any(item => item.FileName.EndsWith("-item0.draft", StringComparison.Ordinal)),
+                    "oldest matching files fall outside the bounded list");
+            });
+        }
+
         private static void ExpectTabularFailure(Action action, string code)
         {
             try { action(); }

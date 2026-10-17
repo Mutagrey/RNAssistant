@@ -49,12 +49,16 @@ namespace RNAssistant.Cli
                 options = Parse(args.Skip(2).ToArray());
             else if (args[0] == "project")
             {
-                if (args.Length < 2 || args[1] != "create" && args[1] != "open" && args[1] != "prepare" && args[1] != "sources")
-                    throw new ArgumentException("Expected project create, open, sources or prepare.");
-                options = Parse(args.Skip(2).ToArray());
+                var draftAction = args.Length >= 3 && args[1] == "draft" ? args[2] : null;
+                if (args.Length < 2 || args[1] != "create" && args[1] != "open" && args[1] != "prepare" &&
+                    args[1] != "sources" && (draftAction != "save" && draftAction != "list" && draftAction != "open"))
+                    throw new ArgumentException("Expected project create, open, sources, prepare or draft save/list/open.");
+                options = Parse(args.Skip(draftAction == null ? 2 : 3).ToArray());
                 Required(options, "path");
                 if (args[1] == "create") Required(options, "name");
                 if (args[1] == "sources") Required(options, "sources-json");
+                if (draftAction == "save") { Required(options, "name"); Required(options, "input"); }
+                if (draftAction == "open") Required(options, "file");
             }
             else options = Parse(args.Skip(1).ToArray());
             if (options.ContainsKey("mutation-policy") && args[0] != "run" && args[0] != "answer" && args[0] != "env")
@@ -79,6 +83,22 @@ namespace RNAssistant.Cli
                         : projects.OpenTabularProject(new WorkspaceProjectPathRequest {
                             BindingId = selection.Workspace.BindingId, ManifestPath = Required(options, "path") });
                     if (args[1] == "prepare") return PrepareProjectSources(projects, project, options, jsonl);
+                    if (args[1] == "draft")
+                    {
+                        var selected = new WorkspaceSelectedProjectRequest { BindingId = project.Workspace.BindingId,
+                            ManifestPath = project.Project.ManifestPath, ProjectRevision = project.Revision };
+                        if (args[2] == "list") Output(jsonl, "project.drafts", projects.ListTabularProjectDrafts(selected));
+                        else if (args[2] == "open") Output(jsonl, "project.draft.opened",
+                            projects.OpenTabularProjectDraft(new OpenTabularProjectDraftRequest {
+                                BindingId = selected.BindingId, ManifestPath = selected.ManifestPath,
+                                ProjectRevision = selected.ProjectRevision, File = Required(options, "file") }));
+                        else Output(jsonl, "project.draft.saved", projects.SaveTabularProjectDraft(
+                            new SaveTabularProjectDraftRequest { BindingId = selected.BindingId,
+                                ManifestPath = selected.ManifestPath, ProjectRevision = selected.ProjectRevision,
+                                File = TabularProjectStore.NewDraftFileName(Required(options, "name")),
+                                Input = ProjectDraftInput(options) }));
+                        return 0;
+                    }
                     if (args[1] == "sources")
                     {
                         var saved = projects.SaveTabularProjectSources(new SaveTabularProjectSourcesRequest {
@@ -870,6 +890,17 @@ namespace RNAssistant.Cli
                 throw new ArgumentException("--sources-json must contain only path strings.");
             return paths.Select(path => (string)path).ToArray();
         }
+        private static string ProjectDraftInput(Dictionary<string, string> options)
+        {
+            var path = Required(options, "input");
+            if (new FileInfo(path).Length > TabularProjectStore.MaximumDraftBytes)
+                throw new ArgumentException("--input exceeds the 1000000-byte draft limit.");
+            var bytes = File.ReadAllBytes(path);
+            if (bytes.Length > TabularProjectStore.MaximumDraftBytes)
+                throw new ArgumentException("--input exceeds the 1000000-byte draft limit.");
+            try { return new UTF8Encoding(false, true).GetString(bytes); }
+            catch (DecoderFallbackException) { throw new ArgumentException("--input must be valid UTF-8."); }
+        }
         private static int PrepareProjectSources(WorkspaceApplicationService projects, WorkspaceStateDto project,
             Dictionary<string, string> options, bool jsonl)
         {
@@ -920,6 +951,9 @@ namespace RNAssistant.Cli
             Console.WriteLine("rna project open --workspace <path> --path <relative-project.json> [--read-only] [--jsonl]  (observe current manifest; no source execution)");
             Console.WriteLine("rna project sources --workspace <path> --path <relative-project.json> --sources-json '[\"file.xlsx\",\"file.csv\"]' [--jsonl]  (save source declarations; [] clears the selection)");
             Console.WriteLine("rna project prepare --workspace <path> --path <relative-project.json> [--sources-json '[\"file.xlsx\",\"file.csv\"]'] [--file-mib 96] [--batch-mib 1024] [--read-only] [--jsonl]  (explicit preparation of saved or supplied paths; no parsing, Ctrl+C cancels)");
+            Console.WriteLine("rna project draft save --workspace <path> --path <relative-project.json> --name <text> --input <UTF-8-file> [--jsonl]  (create a raw snapshot in drafts/)");
+            Console.WriteLine("rna project draft list --workspace <path> --path <relative-project.json> [--read-only] [--jsonl]  (50 newest snapshots, metadata only)");
+            Console.WriteLine("rna project draft open --workspace <path> --path <relative-project.json> --file <draft-filename> [--read-only] [--jsonl]  (read raw snapshot)");
             Console.WriteLine("rna env --workspace <path> [--mode agent|plan] [--mutation-policy ask|deny]");
             Console.WriteLine("rna sessions --workspace <path> [--jsonl]");
             Console.WriteLine("rna session create --workspace <path> [--title <text>] [--jsonl]");

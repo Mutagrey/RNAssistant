@@ -60,6 +60,66 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void WorkspaceProjectDraftCommandsRoundTrip()
+        {
+            WithTempPaths(paths =>
+            {
+                var files = new WorkspaceFileService(paths);
+                using (var app = new WorkspaceApplicationService(paths, files))
+                using (var bridge = new AssistantWebBridge(new AssistantController(), null, app))
+                {
+                    var token = BridgeToken(bridge);
+                    var project = CreateSourceQueueProject(app, paths);
+                    var selected = new WorkspaceSelectedProjectRequest { BindingId = project.Workspace.BindingId,
+                        ManifestPath = project.Project.ManifestPath, ProjectRevision = project.Revision };
+                    var save = new SaveTabularProjectDraftRequest { BindingId = selected.BindingId,
+                        ManifestPath = selected.ManifestPath, ProjectRevision = selected.ProjectRevision,
+                        File = TabularProjectStore.NewDraftFileName("Mapping.json"), Input = "{invalid" };
+                    var saved = WorkspaceBridgeCall(bridge, token, "saveTabularProjectDraft", save);
+                    AssertTrue((bool)saved["ok"], "draft save has a typed bridge receipt");
+                    var fileName = (string)saved["payload"]["draft"]["file"];
+                    AssertEqual("{invalid", File.ReadAllText(Path.Combine(project.Workspace.RootPath, "drafts", fileName)),
+                        "bridge save preserves raw invalid JSON");
+                    var revision = (long)saved["payload"]["state"]["revision"];
+                    AssertTrue(revision > project.Revision, "saved draft advances the selection guard");
+                    AssertEqual("project_selection_changed", (string)WorkspaceBridgeCall(bridge, token,
+                        "listTabularProjectDrafts", selected)["errorCode"], "stale list guard");
+                    selected.ProjectRevision = revision;
+                    save.ProjectRevision = revision;
+                    var listed = WorkspaceBridgeCall(bridge, token, "listTabularProjectDrafts", selected);
+                    AssertEqual(fileName, (string)listed["payload"]["items"][0]["file"], "metadata list through bridge");
+                    var open = new OpenTabularProjectDraftRequest { BindingId = selected.BindingId,
+                        ManifestPath = selected.ManifestPath, ProjectRevision = selected.ProjectRevision, File = fileName };
+                    AssertEqual("{invalid", (string)WorkspaceBridgeCall(bridge, token,
+                        "openTabularProjectDraft", open)["payload"]["input"], "raw draft read through bridge");
+                    open.File = "../project.json";
+                    AssertEqual("draft_invalid", (string)WorkspaceBridgeCall(bridge, token,
+                        "openTabularProjectDraft", open)["errorCode"], "foreign file cannot be opened as a draft");
+
+                    var dispatches = 0;
+                    files.FaultPoint = stage => { if (stage == "after-dispatch") { dispatches++; throw new IOException("lost draft receipt"); } };
+                    save.File = TabularProjectStore.NewDraftFileName("Unknown");
+                    var unknown = WorkspaceBridgeCall(bridge, token, "saveTabularProjectDraft", save);
+                    AssertEqual("effect_unknown", (string)unknown["errorCode"], "uncertain draft save is not success");
+                    AssertTrue(((string)unknown["error"]).Contains("drafts/" + save.File),
+                        "uncertain result identifies the exact recovery target");
+                    AssertTrue(app.ReadState().Project == null, "uncertain save revokes the project selection");
+                    AssertEqual(1, dispatches, "uncertain snapshot is not replayed");
+                    var unknownFile = save.File;
+                    AssertTrue(File.Exists(Path.Combine(project.Workspace.RootPath, "drafts", unknownFile)),
+                        "unknown target is recoverable from the original request");
+                    files.FaultPoint = null;
+                    app.ReconcileFile(new WorkspaceProjectPathRequest { BindingId = selected.BindingId,
+                        ManifestPath = "drafts/" + unknownFile });
+                    var reopened = app.OpenTabularProject(new WorkspaceProjectPathRequest { BindingId = selected.BindingId,
+                        ManifestPath = selected.ManifestPath });
+                    AssertEqual(2, app.ListTabularProjectDrafts(new WorkspaceSelectedProjectRequest {
+                        BindingId = selected.BindingId, ManifestPath = selected.ManifestPath,
+                        ProjectRevision = reopened.Revision }).Items.Count, "explicit recovery reveals both snapshots");
+                }
+            });
+        }
+
         private static void WorkspaceApplicationPinsSelection()
         {
             WithTempPaths(paths =>

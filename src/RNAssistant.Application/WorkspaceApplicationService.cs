@@ -121,6 +121,66 @@ namespace RNAssistant.Application
             }
         }
 
+        public TabularProjectDraftSaveDto SaveTabularProjectDraft(SaveTabularProjectDraftRequest request)
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            lock (_sync)
+            {
+                var expected = RequireSelectedProject(request);
+                RequireIdleSources();
+                // An unverified create must revoke the selection so the same UI
+                // request cannot be silently retried as a second snapshot.
+                ClearProject();
+                var draft = _projects.SaveDraft(_workspace, expected, request.File, request.Input);
+                _project = expected;
+                return new TabularProjectDraftSaveDto { State = State(), Draft = DraftDto(draft) };
+            }
+        }
+
+        public TabularProjectDraftListDto ListTabularProjectDrafts(WorkspaceSelectedProjectRequest request,
+            CancellationToken token = default(CancellationToken))
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            WorkspaceDescriptor workspace;
+            TabularProjectSnapshot project;
+            lock (_sync) { project = RequireSelectedProject(request); workspace = _workspace; }
+            var drafts = _projects.ListDrafts(workspace, project, token);
+            lock (_sync)
+            {
+                RequireSelectedProject(request);
+                return new TabularProjectDraftListDto { State = State(), Items = drafts.Select(DraftDto).ToArray() };
+            }
+        }
+
+        public TabularProjectDraftContentDto OpenTabularProjectDraft(OpenTabularProjectDraftRequest request,
+            CancellationToken token = default(CancellationToken))
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            WorkspaceDescriptor workspace;
+            TabularProjectSnapshot project;
+            lock (_sync) { project = RequireSelectedProject(request); workspace = _workspace; }
+            var draft = _projects.ReadDraft(workspace, project, request.File, token);
+            lock (_sync)
+            {
+                RequireSelectedProject(request);
+                return new TabularProjectDraftContentDto { State = State(), Draft = DraftDto(draft), Input = draft.Input };
+            }
+        }
+
+        private TabularProjectSnapshot RequireSelectedProject(WorkspaceSelectedProjectRequest request)
+        {
+            RequireBinding(request.BindingId);
+            if (_project == null || request.ProjectRevision != _revision || request.ManifestPath != _project.ManifestPath)
+                throw new WorkspaceApplicationException("project_selection_changed", "Проект изменился. Обновите его состояние.");
+            return _project;
+        }
+
+        private static TabularProjectDraftDto DraftDto(TabularProjectDraft draft)
+        {
+            return new TabularProjectDraftDto { File = draft.FileName, SavedAt = draft.SavedAt,
+                Label = draft.Label, ByteLength = draft.ByteLength };
+        }
+
         private void RequireBinding(string bindingId)
         {
             if (_disposed) throw new ObjectDisposedException(nameof(WorkspaceApplicationService));

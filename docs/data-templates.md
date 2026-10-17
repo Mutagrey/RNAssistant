@@ -945,11 +945,15 @@ rna workspace open /absolute/workspace
 rna project create --workspace /absolute/workspace --path reports/project.json --name "Quarterly reports"
 rna project open --workspace /absolute/workspace --path reports/project.json --read-only
 rna project sources --workspace /absolute/workspace --path reports/project.json --sources-json '["input/report.xlsb","input/data.json"]'
+rna project draft save --workspace /absolute/workspace --path reports/project.json --name "Mapping" --input /absolute/mapping-draft.json
+rna project draft list --workspace /absolute/workspace --path reports/project.json
+rna project draft open --workspace /absolute/workspace --path reports/project.json --file draft-1760000000000-0123456789abcdef0123456789abcdef-Mapping.draft
 ```
 
 These commands need no chat, model, workbook or browser. Files are discoverable
-through the existing `resources`/`open` operations. This native single-file
-foundation does not yet implement draft/test/publish or multi-file activation.
+through the existing `resources`/`open` operations. Draft commands create,
+list and read raw snapshots; template validation, test, publication and
+multi-file activation remain open.
 
 The standalone browser keeps raw template draft snapshots as separate UTF-8 files
 under the chosen project's `drafts/` directory. Each explicit save creates a new
@@ -962,8 +966,19 @@ when the folder was selected. A changed manifest requires explicit reopen. These
 snapshots are project-local files, not entries in format-2 `project.json`, validated
 templates or published datasets. Browser File System Access has no native
 revision-guarded replace; unique snapshot files avoid overwriting other edits.
-RNAssistant can read these ordinary workspace files through `WorkspaceFileService`;
-a typed native draft command and project-indexed template lifecycle remain open.
+RNAssistant's typed `saveTabularProjectDraft`, `listTabularProjectDrafts` and
+`openTabularProjectDraft` operations use the selected binding, manifest path and
+application revision. `TabularProjectStore` checks manifest drift and delegates
+all file effects to `WorkspaceFileService`; there is no second draft registry.
+Save is create-only, checks strict UTF-8 and the same 1,000,000-byte limit,
+and returns success only after read-back. The request names its unique target
+before dispatch, so an unknown result can be inspected at that exact path;
+the selected project is revoked until explicit reconciliation. List reads
+metadata only, caps the directory at 1,000 entries
+and returns the 50 newest matching names. Read accepts only a snapshot filename
+and returns raw text, including invalid JSON. A changed manifest requires
+explicit project reopen. Native draft UI controls and project-indexed template
+lifecycle remain open.
 
 ### Shared application and UI
 
@@ -979,7 +994,7 @@ tab does not attach workspace files to model context or bind an Excel source.
 `src/RNAssistant.Application` is one shared application source module, compiled via
 one `.projitems` import in Office Framework 4.8 and the existing CLI Runtime build.
 It references Core only. The previous Runtime-only project facade was removed;
-CLI `project create/open/sources/prepare` and the bridge now consume `WorkspaceApplicationService`
+CLI `project create/open/sources/prepare/draft` and the bridge now consume `WorkspaceApplicationService`
 and its typed contracts directly. No file logic or conversation runtime is copied.
 The packaging seam and removal gate are in [MIGRATION_MAP](stabilization/MIGRATION_MAP.md#workspace-first-adapters--2026-10-04).
 
@@ -994,7 +1009,8 @@ Panel reload reads this state; application restart requires explicit root select
 No extra selected-root/project registry is persisted.
 
 The bridge's `getWorkspaceState`, `openWorkspace`, `createTabularProject`,
-`openTabularProject`, `saveTabularProjectSources` and `reconcileWorkspaceFile` use the existing token/operation
+`openTabularProject`, `saveTabularProjectSources`, the three project-draft
+operations and `reconcileWorkspaceFile` use the existing token/operation
 catalog and worker boundary. UI serializes commands, retains the exact uncertain
 path for inspection and does not upgrade an opened read-only binding when a
 checkbox is edited. Closing the panel drains accepted work through the existing
@@ -1216,8 +1232,8 @@ options from the same validated dictionaries and do not own a second draft.
 Pure `core/template-draft.js` applies structured changes to the validated JSON;
 the queue/controller owns draft state and the existing Worker/compiler decides
 whether the candidate is usable. Explicit project-local draft snapshots are
-available in the standalone browser; native draft commands and indexed template
-activation remain open.
+available in the standalone browser and through typed native commands; native
+draft UI and indexed template activation remain open.
 CodeMirror 5 is already pinned in RNAssistant, works with the static no-bundler
 package and adds about 207 KiB of local, lazy-loaded assets;
 an editor-major upgrade is a separate decision. This preflight cannot prove
@@ -1415,7 +1431,7 @@ versioned schema and fixtures used by the engine.
 | M1 source selection (implemented) | Responsive modular viewer, paged file/folder intake, cancellable enumeration progress, persisted workspace source declarations and guarded save/recovery. Typed extraction commands remain open. |
 | M2 matrix-language foundation (implemented) | JSON template → typed plan → normalized snapshot → batched canonical observations with lineage, in the separate portable probe. Native integration and full readers remain open. |
 | M2 bounded XLSX adapter (implemented) | Explicit file + template → selective ZIP/XML reading in a Worker → exact typed cells → the same canonical batches. Single-file probe only; queue parser dispatch and 80 MB qualification remain open. |
-| M1–M3 (standalone queue/preview slice implemented) | XLSX File + JSON template now run through a bounded sequential Worker queue with per-file outcomes, progress, cancellation, 20-record preview and full per-file extraction export. Browser disk staging raises the output budget to 256 MiB per file/1 GiB per run; memory mode stays at 8 MiB. Parameter/mapping inspection and JSON/`expr`/scoped mapping edits work; the browser can keep exact raw draft snapshots in a selected project folder. Mapping deletion/suggestions, native draft commands, indexed templates, test/publish, durable results and native parser dispatch remain open. Add other Excel families (including XLSB), CSV/JSON behind the same workflow and their own fixtures. |
+| M1–M3 (standalone queue/preview slice implemented) | XLSX File + JSON template now run through a bounded sequential Worker queue with per-file outcomes, progress, cancellation, 20-record preview and full per-file extraction export. Browser disk staging raises the output budget to 256 MiB per file/1 GiB per run; memory mode stays at 8 MiB. Parameter/mapping inspection and JSON/`expr`/scoped mapping edits work; the browser and typed native commands can keep exact raw draft snapshots in a selected project folder. Mapping deletion/suggestions, native draft UI, indexed templates, test/publish, durable results and native parser dispatch remain open. Add other Excel families (including XLSB), CSV/JSON behind the same workflow and their own fixtures. |
 | Early M0/M4 (foundation implemented) | One portable source project, shared loader, folder export, exported semantic tests and XLSX Worker probe. Complete standalone mapping/validation, persistent data projects and large-result quota/performance qualification before native parser dispatch. Single-HTML/ZIP packaging is still open. |
 | M5 | Extend the existing queue with advanced batch execution, scoped dictionary/mapping edits, comparison/consolidation, multiple blocks and output workbook templates. |
 

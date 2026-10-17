@@ -79,9 +79,13 @@ create/reopen/read-only and workspace relocation, closed metadata/path refusal,
 external drift/foreign workspace, exact retained bytes and unknown write recovery.
 Source declaration checks cover stable IDs across restart/reordering, empty selections,
 closed schemas and count/byte bounds, missing paths and unknown-save recovery without replay.
+Raw draft checks cover browser-compatible snapshot naming, invalid JSON preservation,
+strict UTF-8/size bounds, manifest drift, read-only access and typed bridge recovery
+of an uncertain create without replay.
 The owner is the existing `WorkspaceFileService`; these tests do not qualify the
 future Office UI, capture or template publication. The existing CLI exposes
-`project create/open/sources/prepare` for process-level smoke checks without a model or Office.
+`project create/open/sources/prepare` and `project draft save/list/open` for
+process-level smoke checks without a model or Office.
 
 `workspace application:` checks selection/permission binding, refusal projections,
 controller-independent lifetime, file dispatch off the UI callback and typed
