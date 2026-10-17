@@ -58,6 +58,8 @@
 .dt-run-heading h4 { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
 .dt-run-heading .dt-eyebrow { margin-bottom: 4px; }
 .dt-run-heading > span { color: var(--dt-text-muted); font-size: var(--dt-font-caption); white-space: nowrap; }
+.dt-result-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+.dt-result-actions button { font-size: var(--dt-font-small); }
 .dt-run-filters { display: flex; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--dt-border); }
 .dt-run-filters input, .dt-run-filters select { min-width: 0; min-height: 34px; padding: 6px 8px; border: 1px solid var(--control-border); border-radius: var(--dt-control-radius); color: var(--text); background: var(--bg); font-size: var(--dt-font-small); }
 .dt-run-filters input { flex: 1; width: 0; } .dt-run-filters select { max-width: 41%; }

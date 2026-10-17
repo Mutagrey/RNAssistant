@@ -29,7 +29,7 @@
       <div class="dt-operation dt-card" id="dtProcessOperation" role="region" aria-label="Обработка файлов" hidden><div class="dt-operation-head"><div><span class="dt-operation-stage" data-operation-part="stage"></span><h4 data-operation-part="title"></h4></div><div class="dt-operation-actions"><span data-operation-part="elapsed"></span><button type="button" data-operation-part="cancel">Отменить</button><button type="button" class="dt-text-button" data-operation-part="dismiss" hidden>Скрыть</button></div></div><div class="dt-operation-meter" data-operation-part="meter"><progress data-operation-part="progress" aria-label="Файлов завершено"></progress><span data-operation-part="percent"></span></div><p class="dt-operation-current" data-operation-part="current"></p><div class="dt-operation-metrics"><span data-operation-part="count"></span><span data-operation-part="detail"></span></div><p class="dt-operation-note" data-operation-part="note"></p></div>
       <p class="dt-process-note" id="dtResultNotice" role="status" aria-live="polite"></p>
       <div class="dt-results-layout"><section class="dt-card dt-run-queue" aria-label="Очередь обработки"><div class="dt-run-heading"><div><p class="dt-eyebrow">ФАЙЛЫ</p><h4>Очередь обработки</h4></div><span id="dtRunRange"></span></div><div class="dt-run-filters"><input type="search" id="dtRunSearch" placeholder="Найти файл…" aria-label="Поиск в очереди"><select id="dtRunFilter" aria-label="Состояние файла"><option value="">Все</option><option value="queued">В очереди</option><option value="running">Выполняется</option><option value="completed">Готово</option><option value="failed">Ошибка</option><option value="cancelled">Отменено</option></select></div><ul id="dtRunList" class="dt-run-list"></ul><p id="dtRunEmpty" class="dt-process-empty">Очередь пуста. Выберите шаблон и запустите обработку.</p><div class="dt-run-paging" id="dtRunPaging" hidden><button type="button" id="dtRunPrevious">← Назад</button><span id="dtRunPage"></span><button type="button" id="dtRunNext">Далее →</button></div></section>
-      <section class="dt-card dt-result-detail" aria-label="Просмотр результата"><div class="dt-run-heading"><div><p class="dt-eyebrow">ПРОСМОТР</p><h4 id="dtResultTitle">Выберите файл</h4></div><button type="button" class="dt-primary" id="dtDownloadResult" hidden>Скачать полный JSON</button></div><p id="dtResultDescription" class="dt-result-description">После обработки выберите файл из очереди. Здесь появятся записи и диагностика.</p><div id="dtResultPreview" hidden><div class="dt-result-meta" id="dtResultMeta"></div><p class="dt-footnote">Показаны первые 20 записей. Экспорт успешного файла содержит все его записи и происхождение.</p><div class="dt-preview-scroll"><table class="dt-preview-table"><thead><tr><th>Параметр</th><th>Период</th><th>Значение</th><th>Ячейка</th></tr></thead><tbody id="dtPreviewRows"></tbody></table></div><details class="dt-result-raw"><summary>Диагностика и полный пример записи</summary><pre id="dtResultRaw"></pre></details></div></section></div>`);
+      <section class="dt-card dt-result-detail" aria-label="Просмотр результата"><div class="dt-run-heading"><div><p class="dt-eyebrow">ПРОСМОТР</p><h4 id="dtResultTitle">Выберите файл</h4></div><div class="dt-result-actions"><button type="button" id="dtSaveToProject" hidden>Сохранить в проект</button><button type="button" class="dt-primary" id="dtDownloadResult" hidden>Скачать полный JSON</button></div></div><p id="dtResultDescription" class="dt-result-description">После обработки выберите файл из очереди. Здесь появятся записи и диагностика.</p><div id="dtResultPreview" hidden><div class="dt-result-meta" id="dtResultMeta"></div><p class="dt-footnote">Показаны первые 20 записей. Экспорт успешного файла содержит все его записи и происхождение.</p><div class="dt-preview-scroll"><table class="dt-preview-table"><thead><tr><th>Параметр</th><th>Период</th><th>Значение</th><th>Ячейка</th></tr></thead><tbody id="dtPreviewRows"></tbody></table></div><details class="dt-result-raw"><summary>Диагностика и полный пример записи</summary><pre id="dtResultRaw"></pre></details></div></section></div>`);
     const get = id => container.querySelector("#dt" + id), events = new AbortController();
     const listen = (element, type, handler) => element.addEventListener(type, handler, { signal: events.signal });
     const operation = root.DataTemplatesOperationView.create(get("ProcessOperation"), { cancel: actions.cancel, dismiss: actions.dismiss });
@@ -68,6 +68,15 @@
       const button = get("DownloadResult"); button.disabled = true;
       try { await actions.download(current.selectedId); } finally { button.disabled = false; }
     });
+    listen(get("SaveToProject"), "click", () => {
+      const card = container.querySelector(".dt-project-card");
+      if (!card) return;
+      card.open = true;
+      card.scrollIntoView({ behavior: "smooth", block: "start" });
+      const save = card.querySelector("#dtProjectSaveResult");
+      if (save && !save.disabled) save.click();
+      else card.querySelector("#dtProjectOpen").focus();
+    });
     function renderQueue(snapshot) {
       const list = get("RunList"), focused = list.contains(document.activeElement) ? document.activeElement.dataset.runId : null;
       const matching = snapshot.queue.filter(item => (!filter || item.status === filter) &&
@@ -98,9 +107,10 @@
       const selected = snapshot.selected;
       get("ResultTitle").textContent = selected ? selected.path : "Выберите файл";
       get("DownloadResult").hidden = !selected || selected.status !== "completed";
+      get("SaveToProject").hidden = !selected || selected.status !== "completed" || snapshot.running;
       get("ResultPreview").hidden = !selected || selected.status !== "completed";
       get("ResultDescription").textContent = !selected ? "После обработки выберите файл из очереди. Здесь появятся записи и диагностика."
-        : selected.status === "completed" ? "Извлечение завершено. Результат временный, публикация проекта не выполнялась."
+        : selected.status === "completed" ? "Извлечение завершено. Результат пока временный: сохраните его в проект или скачайте JSON. Dataset не опубликован."
           : selected.error || (selected.status === "running" ? selected.progress : "Файл ожидает обработки.");
       if (!selected || selected.status !== "completed") return;
       get("ResultMeta").replaceChildren(
@@ -124,7 +134,7 @@
       get("ProcessSelection").textContent = snapshot.selectedCount ? "Выбрано " + snapshot.selectedCount + " файлов · XLSX: " + snapshot.selectedXlsx
         : "Источники не выбраны";
       get("ChooseTemplate").disabled = snapshot.running;
-      get("StartProcessing").disabled = snapshot.running || snapshot.sourceBusy || snapshot.templateLoading ||
+      get("StartProcessing").disabled = snapshot.running || snapshot.resultBusy || snapshot.sourceBusy || snapshot.templateLoading ||
         snapshot.rulePending || snapshot.mappingPending || !snapshot.templateName || !snapshot.selectedCount;
       get("ProcessNotice").textContent = snapshot.templateNotice;
       get("StorageNote").textContent = snapshot.storageMode === "disk"

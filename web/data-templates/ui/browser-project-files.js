@@ -87,5 +87,5 @@
     return Object.freeze({ name: pattern.exec(name)[3] + ".json", input: input });
   }
   root.DataTemplatesBrowserProjectFiles = Object.freeze({ open: manifest, create: create,
-    saveDraft: saveDraft, listDrafts: listDrafts, openDraft: openDraft });
+    unchanged: unchanged, saveDraft: saveDraft, listDrafts: listDrafts, openDraft: openDraft });
 }(window));

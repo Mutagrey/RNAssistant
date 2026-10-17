@@ -15,6 +15,8 @@
   }
   function create(container, loader) {
     let view, run = null, queue = [], selectedId = null, lastActivity = null, runNotice = "", disposed = false;
+    let resultObserver = null;
+    const resultLeases = new Set();
     const draftSession = root.DataTemplatesDraftSession.create({
       inspect: root.DataTemplatesTemplateInspection.inspect,
       onChange: render, busy: () => !!run || disposed
@@ -25,7 +27,7 @@
       const completed = count("completed"), failed = count("failed"), cancelled = count("cancelled");
       return Object.freeze({ ...draftSession.snapshot(),
         selectedCount: sources.length, selectedXlsx: sources.filter(source => source.format === "xlsx").length,
-        sourceBusy: loader.isBusy(), running: !!run, runNotice: runNotice,
+        sourceBusy: loader.isBusy(), running: !!run, resultBusy: resultLeases.size > 0, runNotice: runNotice,
         storageMode: root.DataTemplatesResultStaging.mode(),
         queue: Object.freeze(queue.map(item => Object.freeze({ id: item.id, path: item.path, status: item.status,
           error: item.error, recordCount: item.result ? item.result.summary.recordCount : null, progress: progressText(item.progress) }))),
@@ -45,13 +47,29 @@
           detail: active ? progressText(active.progress) : "Ожидание Worker",
           note: "Один Worker и один файл одновременно. Отмена прерывает текущий файл и оставшуюся очередь." }) : lastActivity });
     }
-    function render() { if (view && !disposed) view.render(snapshot()); }
-    function releaseResults() {
+    function selectedResult() {
+      const item = !run && queue.find(value => value.id === selectedId);
+      return item && item.status === "completed" && item.store
+        ? Object.freeze({ id: item.id, path: item.path, recordCount: item.result.summary.recordCount }) : null;
+    }
+    function render() {
+      if (view && !disposed) view.render(snapshot());
+      if (resultObserver && !disposed) resultObserver(selectedResult());
+    }
+    async function releaseResults() {
       const previous = queue; queue = []; selectedId = null;
-      return Promise.all(previous.filter(item => item.store).map(item => item.store.discard()));
+      await Promise.all(Array.from(resultLeases));
+      await Promise.all(previous.filter(item => item.store).map(item => item.store.discard()));
+    }
+    function holdResult() {
+      let done;
+      const lease = new Promise(resolve => { done = resolve; });
+      resultLeases.add(lease); render();
+      return () => { resultLeases.delete(lease); done(); render(); };
     }
     function cancel() { if (run) run.abort.abort(); }
     async function start() {
+      if (resultLeases.size) { runNotice = "Дождитесь завершения сохранения результата в проект."; render(); return; }
       const runningTemplate = draftSession.validTemplate();
       if (!runningTemplate || run || disposed) return;
       const selection = loader.beginProcessing();
@@ -149,6 +167,7 @@
     async function download(id) {
       const item = queue.find(value => value.id === id);
       if (!item || item.status !== "completed" || !item.store) return;
+      const release = holdResult();
       try {
         const file = await item.store.file();
         if (disposed || !queue.includes(item) || item.status !== "completed") return;
@@ -161,7 +180,20 @@
         try { await item.store.discard(); } catch (failure) { item.error = errorText(failure); }
         lastActivity = null;
         runNotice = "Не удалось подготовить полный экспорт. Результат этого файла помечен ошибкой."; render();
-      }
+      } finally { release(); }
+    }
+    async function withSelectedResult(work) {
+      const item = !run && !disposed && queue.find(value => value.id === selectedId);
+      if (!item || item.status !== "completed" || !item.store)
+        throw Object.assign(new Error("Выберите готовый файл после завершения очереди."), { code: "RESULT_UNAVAILABLE" });
+      const release = holdResult();
+      try {
+        const file = await item.store.file();
+        if (disposed || !queue.includes(item) || item.status !== "completed")
+          throw Object.assign(new Error("Результат более недоступен."), { code: "RESULT_UNAVAILABLE" });
+        return await work(Object.freeze({ file, sourcePath: item.path,
+          templateFile: item.templateName, recordCount: item.result.summary.recordCount }));
+      } finally { release(); }
     }
     view = root.DataTemplatesProcessingView.create(container, {
       chooseTemplate: draftSession.chooseFile, start: start, cancel: cancel, dismiss: () => { lastActivity = null; render(); },
@@ -171,7 +203,9 @@
     });
     render();
     return Object.freeze({ sourcesChanged: render, currentDraft: draftSession.current,
-      loadDraft: draftSession.load, markDraftSaved: draftSession.markSaved, dispose: () => {
+      loadDraft: draftSession.load, markDraftSaved: draftSession.markSaved,
+      subscribeSelectedResult: observer => { resultObserver = observer; render(); },
+      withSelectedResult: withSelectedResult, dispose: () => {
       disposed = true; draftSession.dispose(); if (run) { run.abort.abort(); clearInterval(run.timer); }
       releaseResults().catch(() => {}); if (view) view.dispose(); loader.endProcessing();
     } });

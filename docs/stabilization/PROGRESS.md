@@ -40,8 +40,7 @@ Worker/host path. Host-neutral browser smoke covers the native round trip,
 uncertain-write recovery target and narrow layout; Windows/WebView2 remains open.
 Workbook values and mapping keys still require per-file execution. Scoped parameter/unit mappings can now be added or
 changed in that same draft with full Worker validation; an unapplied or rejected
-edit blocks Run. Mapping deletion/suggestions and durable
-result persistence remain open.
+edit blocks Run. Mapping deletion/suggestions and native result persistence remain open.
 CSV/JSON and unsupported/invalid books fail visibly; no dataset is published.
 The queue and bounded result sink are outside DOM
 views. Exported-package browser checks cover a mixed batch, canonical 16-record
@@ -49,12 +48,17 @@ output, cancellation and report download without RNAssistant. A browser storage
 check covers complete JSON beyond 8 MiB, revocation/cleanup and memory mode.
 Native UI/queue regressions and package/resource checks remain focused.
 Windows/Office/WebView2 and real 80 MB processing are still unqualified.
+The standalone browser can now explicitly save a completed extraction in the
+selected project under `results/`: bounded 1-MiB copy and SHA-256 read-back,
+receipt written last, progress/cancel, a bounded saved-results list and verified
+download. Incomplete folders remain visible as recovery evidence; cleanup failure
+reports an exact target. This is project-local extraction persistence, not dataset
+publication or native result persistence. The format-2 manifest remains unchanged.
 Excel reader strategy is an explicit open decision: compare all-SheetJS, the current
 selective XLSX path plus format adapters, and other bounded options on real books
 before final Excel import or any 80 MB support claim.
 
-Next: result persistence, plus real
-large-workbook/quota qualification to finish the standalone workflow, then
+Next: real large-workbook/quota qualification and native project-result access, then
 replace compiled app-code pins with per-run workspace-package capture and a
 qualified isolated viewer/host adapter. The current root UI accepts installed
 shipped code only. Full data-project lifecycle, other format readers and native

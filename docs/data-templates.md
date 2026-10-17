@@ -981,8 +981,24 @@ the selected project is revoked until explicit reconciliation. List reads
 metadata only, caps the directory at 1,000 entries
 and returns the 50 newest matching names. Read accepts only a snapshot filename
 and returns raw text, including invalid JSON. A changed manifest requires
-explicit project reopen. Native draft UI controls and project-indexed template
-lifecycle remain open.
+explicit project reopen. Native raw-draft UI is available; project-indexed template
+lifecycle remains open.
+
+The standalone browser can explicitly copy a completed extraction into the selected
+project's `results/result-<timestamp>-<uuid>-<source>/` directory. `data.json` is the
+unchanged version-1 extraction export; `receipt.json` records the project ID, source
+path, template filename, record count, byte length and SHA-256 digest of each 1 MiB
+chunk. The app copies and reads back in bounded chunks, checking the manifest both
+before and after the copy; it writes and reads back the receipt **last**. Listing
+shows at most 50 complete results among the 100 newest result folders, and reports
+incomplete/damaged folders for manual inspection. Opening a saved result verifies
+every chunk again before offering a download. Copy and verification show progress
+and support cancellation; an interrupted write is removed when possible, while
+failed cleanup reports the exact folder as `effect_unknown`. The selected project's
+folder permission is session-local. The result receipt is separate from format-2
+`project.json`: it does not register a source, validate/publish a dataset, or imply
+RNAssistant/native result persistence. Browser File System Access, local quota and
+real large-file performance remain environment-dependent.
 
 ### Shared application and UI
 
@@ -1257,11 +1273,13 @@ silently switch modes. Error/cancellation revokes the result and awaits staging
 cleanup before the next file; cleanup failure is reported. A successful download is
 version-1 `data-templates-extraction` JSON with `source`, `templateFile`, the
 engine `summary` and every canonical `record` for that file. This is an extraction
-export, not a saved/published dataset or a project file. Results are removed when
+export, not a published dataset. The browser can save that exact export as a separate
+project result with the receipt described above. Temporary results are removed when
 the user starts another run; closing the tab requests cleanup, but a browser crash
 can leave orphaned files. The next disk-stage creation attempts to remove files
 older than 24 hours without touching recent files another tab may own. Project
-persistence, quota/large-batch measurements and reliable crash cleanup remain open.
+persistence beyond browser extraction files, quota/large-batch measurements and
+reliable crash cleanup remain open.
 Neither the 96-MiB input cap nor the staged-output budgets qualify real 80-MB
 workbooks.
 

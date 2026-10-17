@@ -16,10 +16,14 @@
 .dt-project-drafts-head strong { font-size: var(--dt-font-body); font-weight: 650; }
 .dt-project-drafts-head > div:last-child { display: flex; gap: 7px; flex-wrap: wrap; flex: none; }
 #dtProjectNotice { min-height: 18px; margin: 9px 0 0; color: var(--dt-text-muted); font-size: var(--dt-font-small); overflow-wrap: anywhere; }
-#dtProjectDraftList { margin: 8px 0 0; padding: 0; list-style: none; max-height: 180px; overflow: auto; }
-#dtProjectDraftList li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; border-top: 1px solid var(--dt-border); font-size: var(--dt-font-small); }
-#dtProjectDraftList li span { min-width: 0; overflow-wrap: anywhere; }
-#dtProjectDraftList .dt-project-empty { color: var(--dt-text-muted); }
+#dtProjectDraftList, #dtProjectResultList { margin: 8px 0 0; padding: 0; list-style: none; max-height: 180px; overflow: auto; }
+#dtProjectDraftList li, #dtProjectResultList li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; border-top: 1px solid var(--dt-border); font-size: var(--dt-font-small); }
+#dtProjectDraftList li span, #dtProjectResultList li span { min-width: 0; overflow-wrap: anywhere; }
+.dt-project-empty { color: var(--dt-text-muted); }
+.dt-project-selection, #dtProjectResultNotice { min-height: 18px; margin: 9px 0 0; color: var(--dt-text-muted); font-size: var(--dt-font-small); line-height: 1.5; overflow-wrap: anywhere; }
+.dt-project-transfer { display: flex; align-items: center; gap: 10px; margin-top: 9px; color: var(--dt-text-muted); font-size: var(--dt-font-caption); }
+.dt-project-transfer[hidden] { display: none; }
+.dt-project-transfer progress { width: min(220px, 50%); accent-color: var(--dt-accent); }
 @media (max-width: 640px) {
   .dt-project-head { padding: 13px 15px; }
   .dt-project-body { padding: 0 15px 15px; }
