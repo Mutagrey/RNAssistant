@@ -9,7 +9,7 @@
   };
   function createList(panel, prefix, kindSelector, onEdit) {
     panel.innerHTML = `<div class="dt-inspection-heading"><div><p class="dt-eyebrow">${kindSelector ? "СООТВЕТСТВИЯ" : "СПРАВОЧНИК"}</p><h4 id="dt${prefix}Title"></h4></div><span class="dt-inspection-badge">${kindSelector ? "Проверено" : "Просмотр"}</span></div>
-      <p class="dt-inspection-note">${kindSelector ? "Соответствия текущего JSON-черновика. Изменения проверяются до применения; публикация здесь не выполняется." : "Содержимое выбранного JSON-шаблона. Изменения и публикация здесь не выполняются."}</p>
+      <p class="dt-inspection-note">${kindSelector ? "Соответствия текущего JSON-черновика. Изменения проверяются до применения; публикация здесь не выполняется." : "Параметры текущего JSON-черновика. Изменения проверяются до применения; общий справочник проекта пока не подключён."}</p>
       <div class="dt-inspection-list"><div class="dt-inspection-controls">${kindSelector ? `<select id="dt${prefix}Kind" aria-label="Тип соответствий"><option value="parameter">Параметры</option><option value="unit">Единицы</option></select>` : ""}<input type="search" id="dt${prefix}Search" placeholder="Найти код или название…" aria-label="Поиск по списку"></div>
       <p class="dt-inspection-count" id="dt${prefix}Count"></p><div class="dt-inspection-table-wrap"><table class="dt-inspection-table"><thead><tr id="dt${prefix}Columns"></tr></thead><tbody id="dt${prefix}Rows"></tbody></table></div>
       <div class="dt-inspection-paging"><button type="button" id="dt${prefix}Previous">← Назад</button><span id="dt${prefix}Page"></span><button type="button" id="dt${prefix}Next">Далее →</button></div></div>`;
@@ -20,9 +20,10 @@
     get("Previous").addEventListener("click", () => { page--; renderPage(); }, { signal: events.signal });
     get("Next").addEventListener("click", () => { page++; renderPage(); }, { signal: events.signal });
     if (onEdit) get("Rows").addEventListener("click", event => {
-      const button = event.target.closest("button[data-mapping-path]");
+      const button = event.target.closest("button[data-entry-path]");
       if (button && current) {
-        const item = current.mappings.find(entry => entry.path === button.dataset.mappingPath);
+        const item = (kindSelector ? current.mappings : current.parameters)
+          .find(entry => entry.path === button.dataset.entryPath);
         if (item) onEdit(item);
       }
     }, { signal: events.signal });
@@ -34,7 +35,9 @@
       const matching = source.filter(item => [item.id, item.name, item.unitId, item.unitName, item.scope, item.source, item.targetId]
         .some(value => value && value.toLocaleLowerCase().includes(query)));
       page = Math.max(0, Math.min(page, Math.ceil(matching.length / pageSize) - 1));
-      const labels = kindSelector ? ["Область", "Источник", "Канонический код", "Действие"] : ["Код", "Название", "Единица", "Измерения"];
+      const labels = kindSelector ? ["Область", "Источник", "Канонический код"] :
+        ["Код", "Название", "Единица", "Измерения"];
+      if (onEdit) labels.push("Действие");
       get("Columns").replaceChildren(...labels.map(label => node("th", "", label)));
       get("Rows").replaceChildren(...matching.slice(page * pageSize, (page + 1) * pageSize).map(item => {
         const row = node("tr"), values = kindSelector
@@ -44,7 +47,7 @@
         });
         if (onEdit) {
           const cell = node("td"), button = node("button", "dt-text-button", "Править");
-          button.type = "button"; button.dataset.mappingPath = item.path; cell.dataset.label = "Действие";
+          button.type = "button"; button.dataset.entryPath = item.path; cell.dataset.label = "Действие";
           cell.append(button); row.append(cell);
         }
         return row;
@@ -87,7 +90,7 @@
     parameterPanel.hidden = true; mappingPanel.hidden = true;
     parameters.querySelector(".dt-section-heading").insertAdjacentElement("afterend", parameterPanel);
     mapping.querySelector(".dt-section-heading").insertAdjacentElement("afterend", mappingPanel);
-    const parameterList = createList(parameterPanel, "Parameter", false),
+    const parameterList = createList(parameterPanel, "Parameter", false, actions && actions.editParameter),
       mappingList = createList(mappingPanel, "Mapping", true, actions && actions.editMapping);
     const events = new AbortController();
     summary.querySelector("#dtInspectionOpenParameters").addEventListener("click", () => container.querySelector("#dtTabParameters").click(), { signal: events.signal });

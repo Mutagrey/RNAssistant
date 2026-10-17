@@ -18,6 +18,7 @@
     const get = name => panel.querySelector("#dtProject" + name), events = new AbortController();
     const listen = (element, type, handler) => element.addEventListener(type, handler, { signal: events.signal });
     let project = null, busy = false, disposed = false, drafts = [], results = [], incomplete = 0, limited = false;
+    let externalBusy = 0, projectObserver = null;
     let selectedResult = null, transfer = null;
     const supported = typeof root.showDirectoryPicker === "function";
     const files = root.DataTemplatesBrowserProjectFiles;
@@ -27,7 +28,7 @@
     function renderSelected() {
       get("SelectedResult").textContent = selectedResult ? selectedResult.path + " · " + selectedResult.recordCount + " записей" :
         "Выберите готовый файл после завершения очереди на вкладке «Результаты».";
-      get("SaveResult").disabled = busy || !project || !selectedResult;
+      get("SaveResult").disabled = busy || externalBusy > 0 || !project || !selectedResult;
       get("CancelResult").hidden = !transfer;
     }
     function transferProgress(state) {
@@ -39,19 +40,20 @@
     }
     function render() {
       get("Title").textContent = project ? project.info.name : "Без проекта";
-      get("Description").textContent = project ? "project.json · источников: " + project.info.sources + " · черновики в drafts/" :
+      get("Description").textContent = project ? "project.json · источников: " + project.info.sources +
+        " · шаблоны templates/ · черновики drafts/ · результаты results/" :
         supported ? "Откройте папку с project.json или создайте новый проект." :
           "Выбор папки недоступен; черновик можно скачать на вкладке «Шаблоны».";
       panel.title = project ? project.directory.name + "/project.json" : "";
       get("State").textContent = project ? "Открыт" : supported ? "Не выбран" : "Недоступно";
-      for (const id of ["Open", "Create"]) get(id).disabled = busy || !supported;
-      get("Name").disabled = busy || !supported;
-      for (const id of ["Refresh", "Save"]) get(id).disabled = busy || !project;
+      for (const id of ["Open", "Create"]) get(id).disabled = busy || externalBusy > 0 || !supported;
+      get("Name").disabled = busy || externalBusy > 0 || !supported;
+      for (const id of ["Refresh", "Save"]) get(id).disabled = busy || externalBusy > 0 || !project;
       renderSelected();
       get("DraftList").replaceChildren(...drafts.map(item => {
         const row = node("li"), label = node("span", "", item.label + " · " + new Date(item.savedAt).toLocaleString("ru-RU"));
         const button = node("button", "dt-text-button", "Открыть"); button.type = "button";
-        button.dataset.file = item.file; button.disabled = busy;
+        button.dataset.file = item.file; button.disabled = busy || externalBusy > 0;
         row.append(label, button); return row;
       }));
       if (project && !drafts.length) get("DraftList").append(node("li", "dt-project-empty", "В проекте пока нет сохранённых черновиков."));
@@ -59,7 +61,7 @@
         const row = node("li"), label = node("span", "", item.sourcePath + " · " + item.recordCount +
           " записей · " + new Date(item.savedAt).toLocaleString("ru-RU"));
         const button = node("button", "dt-text-button", "Скачать"); button.type = "button";
-        button.dataset.result = item.folder; button.disabled = busy;
+        button.dataset.result = item.folder; button.disabled = busy || externalBusy > 0;
         row.append(label, button); return row;
       }));
       if (project && !results.length) get("ResultList").append(node("li", "dt-project-empty", "Сохранённых результатов пока нет."));
@@ -69,7 +71,7 @@
         "Проверьте results/ вручную перед повторным сохранением."));
     }
     async function perform(work, success) {
-      if (busy || disposed) return;
+      if (busy || externalBusy > 0 || disposed) return;
       busy = true; render();
       try {
         const result = await work();
@@ -79,7 +81,7 @@
       finally { busy = false; if (!disposed) render(); }
     }
     async function select(createNew) {
-      if (busy || disposed) return;
+      if (busy || externalBusy > 0 || disposed) return;
       let name;
       if (createNew) {
         name = get("Name").value.trim();
@@ -94,11 +96,14 @@
       catch (error) { if (error.name !== "AbortError") message((error.code || "PROJECT_ERROR") + ": " + error.message); }
       finally { busy = false; render(); }
       if (!selected) return;
+      let adopted = null;
       await perform(async () => {
         const opened = createNew ? await files.create(selected, name) : await files.open(selected);
         const found = await files.listDrafts(opened), saved = await resultFiles.list(opened);
         project = opened; drafts = found; results = saved.entries; incomplete = saved.incomplete; limited = saved.limited;
+        adopted = opened;
       }, createNew ? "Проект создан в новой подпапке. Можно сохранить текущий черновик." : "Проект открыт.");
+      if (adopted && projectObserver) projectObserver(adopted);
     }
     listen(get("Open"), "click", () => select(false));
     listen(get("Create"), "click", () => select(true));
@@ -121,7 +126,7 @@
     });
     listen(get("DraftList"), "click", event => {
       const button = event.target.closest("button[data-file]");
-      if (!button || busy) return;
+      if (!button || busy || externalBusy > 0) return;
       perform(async () => {
         const draft = await files.openDraft(project, button.dataset.file);
         const accepted = await processing.loadDraft(draft.name, draft.input);
@@ -129,7 +134,7 @@
       }, "Черновик открыт. Проверка шаблона показана на вкладке «Шаблоны».");
     });
     listen(get("SaveResult"), "click", async () => {
-      if (busy || !project || !selectedResult) return;
+      if (busy || externalBusy > 0 || !project || !selectedResult) return;
       const currentProject = project, controller = new AbortController();
       busy = true; transfer = controller; resultMessage("Подготовка результата к сохранению…"); render();
       try {
@@ -151,7 +156,7 @@
     listen(get("CancelResult"), "click", () => { if (transfer) transfer.abort(); });
     listen(get("ResultList"), "click", async event => {
       const button = event.target.closest("button[data-result]");
-      if (!button || busy || !project) return;
+      if (!button || busy || externalBusy > 0 || !project) return;
       const currentProject = project, controller = new AbortController();
       busy = true; transfer = controller; resultMessage("Проверяем сохранённый результат…"); render();
       try {
@@ -171,7 +176,15 @@
       message("Выбор папки проекта недоступен в этом браузере. Черновик можно скачать во вкладке «Шаблоны».");
     } else message("Черновики сохраняются только после явного выбора папки проекта.");
     render();
-    return Object.freeze({ dispose: () => { disposed = true; if (transfer) transfer.abort(); events.abort(); panel.remove(); } });
+    return Object.freeze({ current: () => project, subscribe: observer => { projectObserver = observer; observer(project); },
+      withProject: async work => {
+        if (disposed || busy || externalBusy > 0 || !project)
+          throw Object.assign(new Error("Откройте проект и завершите текущую операцию."), { code: "PROJECT_UNAVAILABLE" });
+        externalBusy++; render();
+        try { return await work(project); }
+        finally { externalBusy--; if (!disposed) render(); }
+      },
+      dispose: () => { disposed = true; if (transfer) transfer.abort(); events.abort(); panel.remove(); } });
   }
   root.DataTemplatesBrowserProjectView = Object.freeze({ create: create });
 }(window));

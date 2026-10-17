@@ -4,9 +4,9 @@ Status: independent application foundation and early folder export, alongside th
 existing M0 proof, M1 manifest/source selection and M2 universal core/XLSX reader
 (2026-10-17). The same loader UI and JS core now belong to `web/data-templates`.
 The exported source project runs without RNAssistant and includes its own entry,
-examples, semantic tests and export tool. A standalone XLSX queue, template editor
-and browser/native project-draft snapshots work; recognition, durable results, dataset
-publication and other file readers remain open.
+examples, semantic tests and export tool. A standalone XLSX queue, template editor,
+browser project template catalog, browser/native raw drafts and browser result saves
+work; recognition, dataset publication and other file readers remain open.
 
 RNAssistant's optional adapter still saves source declarations and controls native
 preparation. Exact byte reads, the pinned resource session, WebView2 executor and
@@ -62,8 +62,9 @@ importer in C# or make an agent run part of normal file processing.
 
 [Open the application](../web/data-templates/index.html).
 It preserves the loader's pick/drop/search/navigation/progress/cancel behavior.
-The standalone Templates view validates and edits JSON rules and runs the XLSX
-queue; the separate core probe remains a development tool. Native chooser/preparation
+The standalone Templates view validates and edits JSON rules, manages a project-local
+template catalog and runs the XLSX queue; the separate core probe remains a
+development tool. Native chooser/preparation
 controls and project draft commands exist only in the RNAssistant adapter. Its
 Templates view can select, edit, save, list and reopen raw JSON drafts through
 the same draft session and editor. The root UI does not validate rules or run a
@@ -152,10 +153,11 @@ define when each is selected and make the outcome visible. Until then, neither p
 is qualified by this document for representative 80 MB workloads.
 
 On `file://`, the loader and explicit cooperative normalized-input probe work.
-XLSX requires a real Worker and static HTTP(S) delivery where file-origin Workers
-are unavailable; there is no server-side application runtime or hidden fallback.
+Template preflight and XLSX require a real Worker and static HTTP(S) delivery where
+file-origin Workers are unavailable; there is no server-side application runtime or
+hidden fallback. The browser UI shows this limitation explicitly.
 Export verification runs the exported Files/XLSX/Worker scenario outside the repository.
-Full data-project import/export, direct browser directory persistence, archive/single-HTML
+Full data-project import/export, source-file persistence, archive/single-HTML
 packaging and Library launch remain separate capabilities to implement.
 
 Folder/ZIP is the target primary distribution; HTML is a derived export. Existing
@@ -970,6 +972,24 @@ when the folder was selected. A changed manifest requires explicit reopen. These
 snapshots are project-local files, not entries in format-2 `project.json`, validated
 templates or published datasets. Browser File System Access has no native
 revision-guarded replace; unique snapshot files avoid overwriting other edits.
+In addition, its `templates/` folder holds a derived catalog of validated templates.
+Each stable template ID has immutable, uniquely named JSON version files; a
+`.removed` event archives it without deleting its history, and restore appends a
+new validated version. The UI can import up to 50 JSON templates at once, open one
+for editing, search/page the catalog and append a version after Worker preflight.
+Files are at most 1,000,000 UTF-8 bytes and the folder is bounded to 1,000 entries.
+The browser adapter checks the observed project manifest and expected template head
+before writing, then reads back the exact new file and checks its visible head.
+An uncertain effect identifies its exact path for manual reconciliation; it is not
+retried automatically. `project.json` stays format 2 and does not mirror this
+derived index. These are project-local validated versions, **not** tested/published
+templates or native project-indexed templates. The editor still has one active JSON
+draft; changing templates asks about unsaved edits.
+Parameters, units and scoped mappings currently live inside each template JSON.
+Structured add/edit/delete uses the same validated draft and Worker preflight;
+deletion refuses referenced parameters/units. A project-wide shared dictionary
+requires a separate versioned contract and migration decision rather than a second
+implicit mutable copy. Source-value suggestions and published bindings remain open.
 RNAssistant's typed `saveTabularProjectDraft`, `listTabularProjectDrafts` and
 `openTabularProjectDraft` operations use the selected binding, manifest path and
 application revision. `TabularProjectStore` checks manifest drift and delegates
@@ -1186,10 +1206,12 @@ modules without a framework, npm or a bundler.
 | `ui/loader.js` | Portable owner factory: browser File handles, selection/context and enumeration lifetime; passes metadata/actions to presentation. |
 | `ui/processing.js`, `ui/browser-core.js` | Standalone queue owner and fixed lazy core loader. One Worker job per selected file; no parser logic or result bodies in the view. |
 | `ui/draft-session.js`, `ui/template-editor.js` | Shared raw JSON draft state and CodeMirror presentation. Browser composition supplies Worker inspection; native root supplies no inspector and labels snapshots unverified. |
+| `ui/browser-template-library.js`, `ui/template-library-view.js` | Browser project catalog from immutable template versions, archive events and read-back checks; view owns only navigation/filter state. |
+| `ui/parameter-editor.js`, `ui/mapping-editor.js`, `core/template-draft.js` | Structured edits to the active template JSON, validated before acceptance; no second dictionary store. |
 | `core/template-inspection-worker.js`, `ui/template-inspection.js` | Interruptible, time-limited standalone preflight using the same fixed language compiler and dictionary validator as extraction; no workbook read or project script execution. |
 | `ui/result-staging.js` | Provisional per-file sink: acknowledged chunks to origin-private browser files, with explicit bounded memory mode when disk storage is unavailable. Completion gates export; failure/cancel discards staging. This is not durable project storage. |
 | `ui/processing-view.js`, `styles/processing.css` | Standalone template picker, status navigation, progress and 20-record preview. Uses shared tokens and operation view. |
-| `ui/template-inspection-view.js` | Read-only template scope, rules, parameters and searchable/paged mapping lists. It receives bounded inspection data and owns only DOM/filter state. |
+| `ui/template-inspection-view.js` | Template scope, rules, parameters and searchable/paged mapping lists; opens dedicated editors. It receives bounded inspection data and owns only DOM/filter state. |
 | `ui/browser.js`, `web/js/app-data-templates.js` | Separate browser/native composition. The native adapter translates context and mounts native controls in named slots; it owns no domain parsing. |
 | `ui/loader-view.js` | Screen navigation, filters, pages, metadata details and DOM events; no bridge, File handles, readers or job ownership. |
 | `app-workspace-sources.js` | Typed native browsing, transient edits to saved relative paths, queue commands/recovery and bounded polling. Saves use the shared workspace controller; no body transfer or durable client store. |
@@ -1236,11 +1258,13 @@ parses the bounded JSON with duplicate-key refusal, compiles the existing langua
 plan and validates dictionary targets, dataset metadata and XLSX formula policy.
 Invalid templates leave Run disabled with a code/path diagnostic. A summary view
 shows the selected sheet and bounds, planned record count and axis groups; the
-Parameters and Mapping tabs show searchable/paged lists. The Mapping tab adds and
-edits exact scoped parameter/unit links in the same JSON draft. The full template
-is checked in the Worker before each mapping edit is applied; a pending or rejected
-edit blocks Run. Deletion, source-value suggestions and indexed template publication
-remain open. Changing the template terminates stale validation. A JSON source editor retains invalid text
+Parameters and Mapping tabs show searchable/paged lists. Parameters, units and exact
+scoped parameter/unit links can be added, changed and deleted in the same JSON draft.
+The full template is checked in the Worker before each structured edit is applied;
+a pending or rejected edit blocks Run. Empty mapping lists are valid drafts, though
+required lookups may then fail when processing a workbook. Source-value suggestions
+and template publication remain open. Changing the template terminates stale
+validation. A JSON source editor retains invalid text
 for correction; a focused expression editor selects an `expr` binding and checks
 the complete candidate in the same Worker before applying it. Pending or invalid
 edits cannot authorize a run. An explicit download exports the in-memory JSON
@@ -1255,7 +1279,8 @@ Pure `core/template-draft.js` applies structured changes to the validated JSON;
 the shared draft session owns raw text and pending edits, while the standalone
 Worker/compiler decides whether a candidate is usable. Explicit project-local
 raw snapshots are available in the standalone browser and native Templates UI;
-indexed template activation remains open. Native save/list/open use selected
+the browser has a project-local versioned template catalog, while native indexed
+template activation remains open. Native save/list/open use selected
 workspace binding and revision, with exact-file recovery for uncertain writes.
 The root UI deliberately labels raw drafts unverified and has no Worker preflight
 or Run action. CodeMirror 5 is pinned in both hosts: standalone assets load on
@@ -1458,7 +1483,7 @@ versioned schema and fixtures used by the engine.
 | M1 source selection (implemented) | Responsive modular viewer, paged file/folder intake, cancellable enumeration progress, persisted workspace source declarations and guarded save/recovery. Typed extraction commands remain open. |
 | M2 matrix-language foundation (implemented) | JSON template → typed plan → normalized snapshot → batched canonical observations with lineage, in the separate portable probe. Native integration and full readers remain open. |
 | M2 bounded XLSX adapter (implemented) | Explicit file + template → selective ZIP/XML reading in a Worker → exact typed cells → the same canonical batches. Single-file probe only; queue parser dispatch and 80 MB qualification remain open. |
-| M1–M3 (standalone queue/preview slice implemented) | XLSX File + JSON template now run through a bounded sequential Worker queue with per-file outcomes, progress, cancellation, 20-record preview and full per-file extraction export. Browser disk staging raises the output budget to 256 MiB per file/1 GiB per run; memory mode stays at 8 MiB. Parameter/mapping inspection and JSON/`expr`/scoped mapping edits work; browser and native Templates UI keep exact raw draft snapshots in a selected project folder. The native root editor does not validate or execute rules. Mapping deletion/suggestions, indexed templates, test/publish, durable results and native parser dispatch remain open. Add other Excel families (including XLSB), CSV/JSON behind the same workflow and their own fixtures. |
+| M1–M3 (standalone queue/preview slice implemented) | XLSX File + JSON template run through a bounded sequential Worker queue with per-file outcomes, progress, cancellation, preview and full export. Browser disk staging raises the output budget to 256 MiB per file/1 GiB per run; memory mode stays at 8 MiB. JSON/`expr`, parameter, unit and scoped mapping edits work in the active template. The browser has a versioned project template catalog and verified result saves; browser and native Templates UI also keep raw draft snapshots. The native root editor does not validate or execute rules. Source-value suggestions, project-wide dictionary decisions, template test/publish, native template catalog/results and parser dispatch remain open. Add other Excel families (including XLSB), CSV/JSON behind the same workflow and fixtures. |
 | Early M0/M4 (foundation implemented) | One portable source project, shared loader, folder export, exported semantic tests and XLSX Worker probe. Complete standalone mapping/validation, persistent data projects and large-result quota/performance qualification before native parser dispatch. Single-HTML/ZIP packaging is still open. |
 | M5 | Extend the existing queue with advanced batch execution, scoped dictionary/mapping edits, comparison/consolidation, multiple blocks and output workbook templates. |
 
@@ -1489,9 +1514,9 @@ manifest implementation:
 Next slices, coordinated with the workspace owners:
 
 1. Extend the integrated **standalone** workflow: the XLSX queue, preview,
-   validated template/mapping edits, project-local raw draft snapshots and complete
-   extraction export with provisional disk staging now work. Add indexed templates,
-   durable results and publication through explicit domain commands. Keep real
+   validated template/parameter/mapping edits, browser template catalog, project-local
+   raw draft snapshots and verified browser result saves now work. Add native catalog,
+   shared dictionary decisions and publication through explicit domain commands. Keep real
    file-format capability reporting;
    XLSB/other Excel families and CSV/JSON require their own readers and fixtures.
 2. Replace the compiled application-module whitelist with immutable per-run package

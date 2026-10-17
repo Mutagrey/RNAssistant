@@ -15,7 +15,7 @@
     form.setAttribute("aria-label", "Редактирование соответствия");
     form.innerHTML = `<div class="dt-mapping-editor-head"><div><p class="dt-eyebrow">ПРАВИЛО МАППИНГА</p><h5 id="dtMappingEditorTitle">Соответствие</h5></div><span id="dtMappingEditorState">Черновик</span></div>
       <div class="dt-mapping-fields"><label>Тип<select id="dtMappingEditKind"><option value="parameter">Параметр</option><option value="unit">Единица</option></select></label><label>Область<input id="dtMappingEditScope" type="text" maxlength="128" autocomplete="off" spellcheck="false" placeholder="production-form"></label><label>Исходное значение<input id="dtMappingEditSource" type="text" maxlength="256" autocomplete="off" spellcheck="false" placeholder="Как в файле"></label><label>Канонический код<select id="dtMappingEditTarget" aria-label="Канонический код"></select></label></div>
-      <div class="dt-mapping-editor-foot"><p id="dtMappingEditNotice" role="status" aria-live="polite">Проверьте область и исходное значение перед применением.</p><div><button type="button" id="dtMappingEditCancel">Отменить</button><button type="button" class="dt-primary" id="dtMappingEditApply">Применить</button></div></div>`;
+      <div class="dt-mapping-editor-foot"><p id="dtMappingEditNotice" role="status" aria-live="polite">Проверьте область и исходное значение перед применением.</p><div><button type="button" id="dtMappingEditDelete" hidden>Удалить</button><button type="button" id="dtMappingEditCancel">Отменить</button><button type="button" class="dt-primary" id="dtMappingEditApply">Применить</button></div></div>`;
     toolbar.insertAdjacentElement("afterend", form);
     const get = id => form.querySelector("#dt" + id), events = new AbortController();
     const listen = (element, type, handler) => element.addEventListener(type, handler, { signal: events.signal });
@@ -38,10 +38,12 @@
       if (!opened) return;
       dirty = !original || ["kind", "scope", "source", "targetId"].some(key => values()[key] !== original[key]);
       if (!applying) actions.mappingDirty(dirty);
-      const blocked = applying || !snapshot || snapshot.running || snapshot.templateLoading || snapshot.rulePending;
+      const blocked = applying || !snapshot || snapshot.running || snapshot.templateLoading || snapshot.rulePending || snapshot.dictionaryPending;
       for (const id of ["MappingEditKind", "MappingEditScope", "MappingEditSource", "MappingEditTarget"])
         get(id).disabled = blocked || id === "MappingEditKind" && !!original;
       get("MappingEditApply").disabled = blocked || !dirty || !values().scope.trim() || !values().source.trim() || !values().targetId;
+      get("MappingEditDelete").hidden = !original;
+      get("MappingEditDelete").disabled = blocked || dirty;
       get("MappingEditCancel").disabled = applying;
       get("MappingEditorState").textContent = applying ? "Проверка…" : dirty ? "Не применено" : "Без изменений";
     }
@@ -51,8 +53,8 @@
     }
     function open(item) {
       if (!snapshot || !snapshot.templateInspection || snapshot.running) return;
-      if (snapshot.rulePending) {
-        toolbar.querySelector("p").textContent = "Сначала примените или отмените правку выражения на вкладке «Шаблоны».";
+      if (snapshot.rulePending || snapshot.dictionaryPending) {
+        toolbar.querySelector("p").textContent = "Сначала завершите правку выражения или параметра.";
         toolbar.scrollIntoView({ block: "nearest", behavior: "smooth" }); return;
       }
       if (opened && dirty) {
@@ -77,9 +79,9 @@
       }
       snapshot = next;
       toolbar.hidden = !next.templateInspection;
-      toolbar.querySelector("#dtMappingAdd").disabled = next.rulePending || next.running;
-      toolbar.querySelector("p").textContent = next.rulePending
-        ? "Сначала примените или отмените правку выражения на вкладке «Шаблоны»."
+      toolbar.querySelector("#dtMappingAdd").disabled = next.rulePending || next.dictionaryPending || next.running;
+      toolbar.querySelector("p").textContent = next.rulePending || next.dictionaryPending
+        ? "Сначала завершите правку выражения или параметра."
         : "Связь задаёт точное совпадение области и исходного значения с каноническим кодом.";
       if (!next.templateInspection && opened) close();
       if (opened) update();
@@ -94,6 +96,16 @@
       if (!opened || applying || get("MappingEditApply").disabled) return;
       applying = true; update();
       const result = await actions.applyMapping(values());
+      if (disposed) return;
+      applying = false;
+      if (result.ok) close();
+      else { get("MappingEditNotice").textContent = result.message; update(); }
+    });
+    listen(get("MappingEditDelete"), "click", async () => {
+      if (!original || applying || dirty || get("MappingEditDelete").disabled ||
+          !root.confirm("Удалить соответствие «" + original.source + "» в области «" + original.scope + "»?")) return;
+      applying = true; update();
+      const result = await actions.removeMapping(original.path);
       if (disposed) return;
       applying = false;
       if (result.ok) close();

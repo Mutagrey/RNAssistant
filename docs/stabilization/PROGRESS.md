@@ -29,7 +29,12 @@ and pending/invalid edits block Run. The in-memory draft can be downloaded expli
 In a browser with a directory picker, a project card can create a new project
 subfolder or open a format-2 `project.json`; explicit saves create read-back-verified
 raw draft snapshots in `drafts/` without overwriting earlier edits. Invalid JSON
-can be saved and reopened for correction. These are not indexed/published templates.
+can be saved and reopened for correction. Separately, the browser now derives a
+project-local catalog from `templates/`: multiple JSON imports, stable IDs,
+immutable checked versions, archive/restore and one active editable template.
+Parameters, units and scoped mappings can be added, changed or deleted in that
+template's JSON after full Worker preflight. This is not template publication or
+a project-wide shared dictionary; native project-indexed templates remain open.
 Native Core/Application, bridge and CLI create, list and open the same raw
 project-local snapshots through `WorkspaceFileService`, with selected-project
 guards and explicit recovery of uncertain writes. The native Templates screen
@@ -38,9 +43,9 @@ edit, save, list and reopen these snapshots. It does not claim template
 validation or execution in the root UI; those still require the isolated app
 Worker/host path. Host-neutral browser smoke covers the native round trip,
 uncertain-write recovery target and narrow layout; Windows/WebView2 remains open.
-Workbook values and mapping keys still require per-file execution. Scoped parameter/unit mappings can now be added or
-changed in that same draft with full Worker validation; an unapplied or rejected
-edit blocks Run. Mapping deletion/suggestions and native result persistence remain open.
+Workbook values and mapping keys still require per-file execution. An unapplied or
+rejected structured edit blocks Run. Mapping suggestions and native result
+persistence remain open.
 CSV/JSON and unsupported/invalid books fail visibly; no dataset is published.
 The queue and bounded result sink are outside DOM
 views. Exported-package browser checks cover a mixed batch, canonical 16-record
@@ -58,7 +63,8 @@ Excel reader strategy is an explicit open decision: compare all-SheetJS, the cur
 selective XLSX path plus format adapters, and other bounded options on real books
 before final Excel import or any 80 MB support claim.
 
-Next: real large-workbook/quota qualification and native project-result access, then
+Next: project-wide dictionary contract and native catalog/result access, real
+large-workbook/quota qualification, then
 replace compiled app-code pins with per-run workspace-package capture and a
 qualified isolated viewer/host adapter. The current root UI accepts installed
 shipped code only. Full data-project lifecycle, other format readers and native

@@ -37,5 +37,53 @@
     else entries.push(value);
     return serialize(document);
   }
-  root.RNTabularTemplateDraft = Object.freeze({ replaceExpression, upsertMapping });
+  function removeMapping(input, inspection, path) {
+    const known = inspection.mappings.find(item => item.path === path);
+    if (!known) fail("Соответствие отсутствует в проверенном шаблоне.");
+    const document = JSON.parse(input);
+    const entries = document.dictionaries[known.kind === "parameter" ? "parameterMappings" : "unitMappings"];
+    entries.splice(Number(path.slice(path.lastIndexOf("/") + 1)), 1);
+    return serialize(document);
+  }
+  function upsertParameter(input, inspection, edit) {
+    const known = edit && edit.path && inspection.parameters.find(item => item.path === edit.path);
+    if (!edit || edit.path && !known || known && edit.id !== known.id) fail("Код параметра нельзя менять при редактировании.");
+    const document = JSON.parse(input);
+    const value = { id: edit.id, name: edit.name, valueType: "decimal", unitId: edit.unitId,
+      dimensions: edit.dimensions, temporalMeaning: edit.temporalMeaning };
+    if (known) document.dictionaries.parameters[Number(known.path.slice(known.path.lastIndexOf("/") + 1))] = value;
+    else document.dictionaries.parameters.push(value);
+    return serialize(document);
+  }
+  function removeParameter(input, inspection, path) {
+    const known = inspection.parameters.find(item => item.path === path);
+    if (!known) fail("Параметр отсутствует в проверенном шаблоне.");
+    const document = JSON.parse(input), dictionary = document.dictionaries;
+    if (dictionary.parameters.length <= 1) fail("Последний параметр нельзя удалить из словаря.");
+    if (dictionary.parameterMappings.some(item => item.targetId === known.id))
+      fail("Сначала удалите соответствия, которые ссылаются на этот параметр.");
+    dictionary.parameters.splice(Number(path.slice(path.lastIndexOf("/") + 1)), 1);
+    return serialize(document);
+  }
+  function upsertUnit(input, inspection, edit) {
+    const known = edit && edit.path && inspection.units.find(item => item.path === edit.path);
+    if (!edit || edit.path && !known || known && edit.id !== known.id) fail("Код единицы нельзя менять при редактировании.");
+    const document = JSON.parse(input), value = { id: edit.id, name: edit.name };
+    if (known) document.dictionaries.units[Number(known.path.slice(known.path.lastIndexOf("/") + 1))] = value;
+    else document.dictionaries.units.push(value);
+    return serialize(document);
+  }
+  function removeUnit(input, inspection, path) {
+    const known = inspection.units.find(item => item.path === path);
+    if (!known) fail("Единица отсутствует в проверенном шаблоне.");
+    const document = JSON.parse(input), dictionary = document.dictionaries;
+    if (dictionary.units.length <= 1) fail("Последнюю единицу нельзя удалить из словаря.");
+    if (dictionary.parameters.some(item => item.unitId === known.id) ||
+        dictionary.unitMappings.some(item => item.targetId === known.id))
+      fail("Сначала измените параметры и удалите соответствия, которые используют эту единицу.");
+    dictionary.units.splice(Number(path.slice(path.lastIndexOf("/") + 1)), 1);
+    return serialize(document);
+  }
+  root.RNTabularTemplateDraft = Object.freeze({ replaceExpression, upsertMapping, removeMapping,
+    upsertParameter, removeParameter, upsertUnit, removeUnit });
 }(globalThis));

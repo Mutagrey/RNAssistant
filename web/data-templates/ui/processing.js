@@ -15,7 +15,7 @@
   }
   function create(container, loader) {
     let view, run = null, queue = [], selectedId = null, lastActivity = null, runNotice = "", disposed = false;
-    let resultObserver = null;
+    let resultObserver = null, draftObserver = null;
     const resultLeases = new Set();
     const draftSession = root.DataTemplatesDraftSession.create({
       inspect: root.DataTemplatesTemplateInspection.inspect,
@@ -55,6 +55,7 @@
     function render() {
       if (view && !disposed) view.render(snapshot());
       if (resultObserver && !disposed) resultObserver(selectedResult());
+      if (draftObserver && !disposed) draftObserver(draftSession.validTemplate(), draftSession.snapshot().draftGeneration);
     }
     async function releaseResults() {
       const previous = queue; queue = []; selectedId = null;
@@ -199,12 +200,18 @@
       chooseTemplate: draftSession.chooseFile, start: start, cancel: cancel, dismiss: () => { lastActivity = null; render(); },
       select: id => { selectedId = id; render(); }, download: download,
       changeDraft: draftSession.changeDraft, ruleDirty: draftSession.ruleDirty, applyRule: draftSession.applyRule,
-      mappingDirty: draftSession.mappingDirty, applyMapping: draftSession.applyMapping, downloadDraft: draftSession.download
+      mappingDirty: draftSession.mappingDirty, applyMapping: draftSession.applyMapping,
+      removeMapping: draftSession.removeMapping, dictionaryDirty: draftSession.dictionaryDirty,
+      upsertParameter: draftSession.upsertParameter, removeParameter: draftSession.removeParameter,
+      upsertUnit: draftSession.upsertUnit, removeUnit: draftSession.removeUnit,
+      downloadDraft: draftSession.download
     });
     render();
     return Object.freeze({ sourcesChanged: render, currentDraft: draftSession.current,
+      currentValidated: draftSession.validTemplate,
       loadDraft: draftSession.load, markDraftSaved: draftSession.markSaved,
       subscribeSelectedResult: observer => { resultObserver = observer; render(); },
+      subscribeValidatedDraft: observer => { draftObserver = observer; render(); },
       withSelectedResult: withSelectedResult, dispose: () => {
       disposed = true; draftSession.dispose(); if (run) { run.abort.abort(); clearInterval(run.timer); }
       releaseResults().catch(() => {}); if (view) view.dispose(); loader.endProcessing();

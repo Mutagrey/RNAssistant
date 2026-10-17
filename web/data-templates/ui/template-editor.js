@@ -67,10 +67,10 @@
       get("EditorRuleTab").disabled = !valid && mode !== "rule";
       get("EditorRuleSelect").disabled = !valid || applying;
       get("EditorApplyRule").disabled = !ruleDirty || !valid || applying ||
-        !!(snapshot && (snapshot.templateLoading || snapshot.running || snapshot.mappingPending));
+        !!(snapshot && (snapshot.templateLoading || snapshot.running || snapshot.mappingPending || snapshot.dictionaryPending));
       get("EditorDiscardRule").hidden = !ruleDirty;
       get("DownloadTemplateDraft").disabled = !hasDraft || !snapshot.draftWithinLimit || ruleDirty || applying ||
-        !!(snapshot && snapshot.mappingPending);
+        !!(snapshot && (snapshot.mappingPending || snapshot.dictionaryPending));
       get("EditorRuleTab").setAttribute("aria-pressed", String(mode === "rule"));
       get("EditorJsonTab").setAttribute("aria-pressed", String(mode === "json"));
       get("EditorRulePane").hidden = mode !== "rule";
@@ -88,6 +88,7 @@
     async function open(path) {
       if (!snapshot || !snapshot.draftName || disposed) return;
       if (snapshot.mappingPending) { container.querySelector("#dtTabMapping").click(); return; }
+      if (snapshot.dictionaryPending) { container.querySelector("#dtTabParameters").click(); return; }
       if (ruleDirty && path && path !== selectedPath) {
         get("EditorRuleNotice").textContent = "Сначала примените или отмените текущую правку.";
         panel.scrollIntoView({ block: "nearest", behavior: "smooth" }); return;
@@ -133,7 +134,7 @@
       snapshot = next;
       openButton.hidden = !next.draftName;
       openButton.textContent = next.templateUnverified ? "Редактировать JSON" : "Редактировать правила";
-      openButton.disabled = next.running || next.mappingPending;
+      openButton.disabled = next.running || next.mappingPending || next.dictionaryPending;
       if (!opened) return;
       get("EditorTitle").textContent = next.draftName || "Редактор";
       get("EditorState").textContent = next.templateLoading ? "Проверка…" : next.templateUnverified ? "Без проверки" : next.templateName
@@ -147,7 +148,7 @@
       if (jsonEditor && jsonEditor.getValue() !== (next.draftText || "")) {
         syncing = true; jsonEditor.setValue(next.draftText || ""); syncing = false;
       }
-      const readOnly = !!(next.running || next.mappingPending);
+      const readOnly = !!(next.running || next.mappingPending || next.dictionaryPending);
       if (jsonEditor && jsonEditor.getOption("readOnly") !== readOnly) jsonEditor.setOption("readOnly", readOnly);
       if (expressionEditor && expressionEditor.getOption("readOnly") !== readOnly)
         expressionEditor.setOption("readOnly", readOnly);

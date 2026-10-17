@@ -1,0 +1,22 @@
+.dt-parameter-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+.dt-parameter-editor[hidden], .dt-parameter-units[hidden], .dt-parameter-only[hidden] { display: none; }
+.dt-parameter-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 15px; }
+.dt-parameter-fields label { display: grid; align-content: start; gap: 6px; min-width: 0; color: var(--dt-text-muted); font-size: var(--dt-font-caption); font-weight: 600; }
+.dt-parameter-fields input, .dt-parameter-fields select, .dt-parameter-unit-controls input { width: 100%; min-width: 0; min-height: 35px; padding: 7px 8px; border: 1px solid var(--control-border); border-radius: var(--dt-control-radius); background: var(--bg); color: var(--text); font-size: var(--dt-font-small); font-weight: 400; }
+.dt-parameter-guidance { color: var(--dt-text-muted); font-size: var(--dt-font-caption); line-height: 1.5; margin: 12px 0 0; }
+.dt-parameter-units { margin: 12px 20px 18px; border-top: 1px solid var(--dt-border); padding-top: 11px; }
+.dt-parameter-units summary { cursor: pointer; font-size: var(--dt-font-small); font-weight: 600; }
+.dt-parameter-unit-controls { display: flex; align-items: center; gap: 12px; margin: 12px 0; color: var(--dt-text-muted); font-size: var(--dt-font-caption); }
+.dt-parameter-unit-controls input { max-width: 330px; }
+.dt-parameter-units ul { list-style: none; margin: 0; padding: 0; }
+.dt-parameter-units li { display: flex; align-items: center; justify-content: space-between; gap: 8px; border-top: 1px solid var(--dt-border); padding: 7px 0; font-size: var(--dt-font-small); }
+.dt-parameter-units li span { min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 780px) { .dt-parameter-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) {
+  .dt-parameter-fields { grid-template-columns: 1fr; }
+  .dt-parameter-units { margin: 12px 17px 17px; }
+  .dt-parameter-actions { width: 100%; }
+  .dt-parameter-actions button { flex: 1; }
+  .dt-parameter-unit-controls { flex-wrap: wrap; }
+  .dt-parameter-unit-controls input { max-width: none; }
+}

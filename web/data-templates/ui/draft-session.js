@@ -18,7 +18,7 @@
   }
   function create(options = {}) {
     let template = null, draft = null, dirty = false, generation = 0, rulePending = false,
-      mappingPending = false, loading = false, ticket = 0, abort = null, timer = null,
+      mappingPending = false, dictionaryPending = false, loading = false, ticket = 0, abort = null, timer = null,
       notice = "", withinLimit = false, disposed = false;
     const changed = () => { if (options.onChange) options.onChange(); };
     const busy = () => disposed || !!(options.busy && options.busy());
@@ -27,16 +27,16 @@
       return Object.freeze({ templateName: template && template.name, templateInspection: template && template.inspection,
         draftName: draft && draft.name, draftText: draft && draft.input, draftDirty: dirty,
         draftWithinLimit: withinLimit,
-        draftGeneration: generation, rulePending, mappingPending, templateLoading: loading,
+        draftGeneration: generation, rulePending, mappingPending, dictionaryPending, templateLoading: loading,
         templateNotice: notice, templateUnverified: !!draft && !inspect });
     }
     function stopInspection() { ticket++; clearTimeout(timer); if (abort) abort.abort(); abort = null; }
     async function replace(name, read) {
       if (busy()) return false;
-      if ((dirty || rulePending || mappingPending) && !root.confirm("Текущий черновик изменён. Заменить его выбранным файлом?")) return false;
+      if ((dirty || rulePending || mappingPending || dictionaryPending) && !root.confirm("Текущий черновик изменён. Заменить его выбранным файлом?")) return false;
       stopInspection(); const current = ticket;
       generation++; template = null; draft = null; dirty = false; withinLimit = false;
-      rulePending = false; mappingPending = false;
+      rulePending = false; mappingPending = false; dictionaryPending = false;
       loading = !!read; notice = ""; changed();
       if (!read) return true;
       abort = new AbortController();
@@ -66,12 +66,12 @@
     }
     function load(name, input) { return replace(name, async () => input); }
     function current() {
-      return draft && withinLimit && !busy() && !rulePending && !mappingPending && !loading
+      return draft && withinLimit && !busy() && !rulePending && !mappingPending && !dictionaryPending && !loading
         ? Object.freeze({ name: draft.name, input: draft.input }) : null;
     }
-    function validTemplate() { return !busy() && !loading && !rulePending && !mappingPending ? template : null; }
+    function validTemplate() { return !busy() && !loading && !rulePending && !mappingPending && !dictionaryPending ? template : null; }
     function changeDraft(input) {
-      if (!draft || busy() || mappingPending) return;
+      if (!draft || busy() || mappingPending || dictionaryPending) return;
       draft = Object.freeze({ name: draft.name, input }); dirty = true; template = null;
       stopInspection(); const current = ticket;
       loading = false; withinLimit = false;
@@ -94,6 +94,7 @@
     }
     function ruleDirty(value) { if (rulePending !== value) { rulePending = value; changed(); } }
     function mappingDirty(value) { if (mappingPending !== value) { mappingPending = value; changed(); } }
+    function dictionaryDirty(value) { if (dictionaryPending !== value) { dictionaryPending = value; changed(); } }
     async function commitCandidate(candidate, success, kind) {
       try { validate(candidate); }
       catch (error) { return { ok: false, message: describe(error) }; }
@@ -103,7 +104,9 @@
         const inspection = await inspect(candidate, abort.signal);
         if (current !== ticket || disposed) return { ok: false, message: "Проверка прервана." };
         draft = Object.freeze({ name: draft.name, input: candidate }); dirty = true; withinLimit = true;
-        if (kind === "rule") rulePending = false; else mappingPending = false;
+        if (kind === "rule") rulePending = false;
+        else if (kind === "mapping") mappingPending = false;
+        else dictionaryPending = false;
         template = Object.freeze({ name: draft.name, input: candidate, inspection }); notice = success;
         return { ok: true };
       } catch (error) {
@@ -112,7 +115,7 @@
       } finally { if (current === ticket && !disposed) { loading = false; changed(); } }
     }
     function applyRule(path, expression) {
-      if (!inspect || !draft || !template || busy() || mappingPending)
+      if (!inspect || !draft || !template || busy() || mappingPending || dictionaryPending)
         return Promise.resolve({ ok: false, message: "Сначала закончите текущую правку JSON или маппинга." });
       let candidate;
       try { candidate = root.RNTabularTemplateDraft.replaceExpression(draft.input, template.inspection, path, expression); }
@@ -120,12 +123,28 @@
       return commitCandidate(candidate, "Правило применено; полный черновик проверен.", "rule");
     }
     function applyMapping(edit) {
-      if (!inspect || !draft || !template || busy() || rulePending)
+      if (!inspect || !draft || !template || busy() || rulePending || dictionaryPending)
         return Promise.resolve({ ok: false, message: "Сначала закончите текущую правку JSON или правила." });
       let candidate;
       try { candidate = root.RNTabularTemplateDraft.upsertMapping(draft.input, template.inspection, edit); }
       catch (error) { return Promise.resolve({ ok: false, message: describe(error) }); }
       return commitCandidate(candidate, "Соответствие применено; полный черновик проверен.", "mapping");
+    }
+    function removeMapping(path) {
+      if (!inspect || !draft || !template || busy() || rulePending || dictionaryPending)
+        return Promise.resolve({ ok: false, message: "Завершите текущую правку перед удалением соответствия." });
+      let candidate;
+      try { candidate = root.RNTabularTemplateDraft.removeMapping(draft.input, template.inspection, path); }
+      catch (error) { return Promise.resolve({ ok: false, message: describe(error) }); }
+      return commitCandidate(candidate, "Соответствие удалено; полный черновик проверен.", "mapping");
+    }
+    function changeDictionary(operation, value) {
+      if (!inspect || !draft || !template || busy() || rulePending || mappingPending)
+        return Promise.resolve({ ok: false, message: "Завершите текущую правку правила или маппинга." });
+      let candidate;
+      try { candidate = root.RNTabularTemplateDraft[operation](draft.input, template.inspection, value); }
+      catch (error) { return Promise.resolve({ ok: false, message: describe(error) }); }
+      return commitCandidate(candidate, "Справочник изменён; полный черновик проверен.", "dictionary");
     }
     function download() {
       if (!current()) return;
@@ -139,7 +158,12 @@
     function markSaved(input) { if (draft && draft.input === input) { dirty = false; changed(); } }
     function dispose() { disposed = true; stopInspection(); draft = null; template = null; }
     return Object.freeze({ snapshot, chooseFile, load, current, validTemplate, changeDraft, ruleDirty,
-      mappingDirty, applyRule, applyMapping, download, setNotice, markSaved, dispose });
+      mappingDirty, dictionaryDirty, applyRule, applyMapping, removeMapping,
+      upsertParameter: edit => changeDictionary("upsertParameter", edit),
+      removeParameter: path => changeDictionary("removeParameter", path),
+      upsertUnit: edit => changeDictionary("upsertUnit", edit),
+      removeUnit: path => changeDictionary("removeUnit", path),
+      download, setNotice, markSaved, dispose });
   }
   root.DataTemplatesDraftSession = Object.freeze({ create, newFileName });
 }(window));

@@ -34,11 +34,13 @@
     const listen = (element, type, handler) => element.addEventListener(type, handler, { signal: events.signal });
     const operation = root.DataTemplatesOperationView.create(get("ProcessOperation"), { cancel: actions.cancel, dismiss: actions.dismiss });
     const editorView = root.DataTemplatesTemplateEditor.create(container, actions);
-    let mappingEditor;
+    let mappingEditor, parameterEditor;
     const templateView = root.DataTemplatesTemplateInspectionView.create(container, {
-      editRule: path => editorView.open(path), editMapping: item => mappingEditor.open(item)
+      editRule: path => editorView.open(path), editMapping: item => mappingEditor.open(item),
+      editParameter: item => parameterEditor.openParameter(item)
     });
     mappingEditor = root.DataTemplatesMappingEditor.create(container, actions);
+    parameterEditor = root.DataTemplatesParameterEditor.create(container, actions);
     let current = null, query = "", filter = "", page = 0;
     listen(get("ChooseTemplate"), "click", () => get("TemplateFile").click());
     listen(get("TemplateFile"), "change", () => { actions.chooseTemplate(get("TemplateFile").files[0] || null); get("TemplateFile").value = ""; });
@@ -131,11 +133,12 @@
       templateView.render(snapshot.templateInspection);
       editorView.render(snapshot);
       mappingEditor.render(snapshot);
+      parameterEditor.render(snapshot);
       get("ProcessSelection").textContent = snapshot.selectedCount ? "Выбрано " + snapshot.selectedCount + " файлов · XLSX: " + snapshot.selectedXlsx
         : "Источники не выбраны";
       get("ChooseTemplate").disabled = snapshot.running;
       get("StartProcessing").disabled = snapshot.running || snapshot.resultBusy || snapshot.sourceBusy || snapshot.templateLoading ||
-        snapshot.rulePending || snapshot.mappingPending || !snapshot.templateName || !snapshot.selectedCount;
+        snapshot.rulePending || snapshot.mappingPending || snapshot.dictionaryPending || !snapshot.templateName || !snapshot.selectedCount;
       get("ProcessNotice").textContent = snapshot.templateNotice;
       get("StorageNote").textContent = snapshot.storageMode === "disk"
         ? "Результаты записываются порциями во временное хранилище браузера: до 256 МиБ на файл и 1 ГиБ за запуск. Квота браузера может быть меньше. Скачайте нужное до закрытия вкладки."
@@ -148,7 +151,7 @@
       renderQueue(snapshot); renderDetail(snapshot);
     }
     return Object.freeze({ render: render, showResults: () => container.querySelector("#dtTabResults").click(),
-      dispose: () => { events.abort(); operation.dispose(); mappingEditor.dispose(); templateView.dispose(); editorView.dispose(); } });
+      dispose: () => { events.abort(); operation.dispose(); parameterEditor.dispose(); mappingEditor.dispose(); templateView.dispose(); editorView.dispose(); } });
   }
   root.DataTemplatesProcessingView = Object.freeze({ create: create });
 }(window));

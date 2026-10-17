@@ -21,6 +21,7 @@
 body { margin: 0; }
 .data-templates { max-width: 1120px; margin: 0 auto; padding: 32px; }
 h2, h3, h4 { margin: 0; }
+.dt-file-protocol-notice { padding: 13px 16px; margin: 0 0 16px; color: var(--dt-text-muted); font-size: var(--dt-font-small); line-height: 1.5; border-color: var(--danger); }
 button, input, select { font: inherit; }
 button { cursor: pointer; border: 1px solid var(--control-border); border-radius: 6px;
   background: var(--panel); color: var(--text); padding: 8px 12px; }

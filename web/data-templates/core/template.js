@@ -55,7 +55,9 @@
             parameters.set(entry.id, freeze({ ...entry, dimensions: freeze(entry.dimensions.slice().sort()) }));
         }
         for (const [name, source, targets] of [["parameters", input.parameterMappings, parameters], ["units", input.unitMappings, units]]) {
-            for (const entry of list(source, "/dictionaries/" + name + "Mappings", limits.mappings)) {
+            if (!Array.isArray(source) || source.length > limits.mappings)
+                fail("SCHEMA_INVALID", "/dictionaries/" + name + "Mappings", "Expected a bounded mapping list.");
+            for (const entry of source) {
                 fields(entry, ["scope", "source", "targetId"], "/dictionaries/mappings");
                 id(entry.scope, "/dictionaries/mappings/scope"); text(entry.source, "/dictionaries/mappings/source", 256);
                 const key = JSON.stringify([entry.scope, entry.source]);
