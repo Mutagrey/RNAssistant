@@ -20,6 +20,11 @@ cancellation, 20-record preview and complete per-file JSON extraction export. Th
 provisional sink now writes acknowledged output chunks to origin-private browser
 files (256 MiB per file, 1 GiB per run); explicit memory mode remains limited to
 8 MiB per file. Disk failures are visible and do not trigger a silent fallback.
+Before Run, a dedicated Worker compiles the selected JSON template and validates
+dictionary targets/dataset metadata. Invalid templates block the queue; the view
+shows source scope and rules; dedicated tabs show parameters and searchable
+mappings. Workbook values and mapping keys still require per-file execution.
+No editable mapping draft exists.
 CSV/JSON and unsupported/invalid books fail visibly; no dataset is published.
 The queue and bounded result sink are outside DOM
 views. Exported-package browser checks cover a mixed batch, canonical 16-record
@@ -31,7 +36,7 @@ Excel reader strategy is an explicit open decision: compare all-SheetJS, the cur
 selective XLSX path plus format adapters, and other bounded options on real books
 before final Excel import or any 80 MB support claim.
 
-Next: template/mapping validation controls, project-owned persistence and real
+Next: project-owned template/mapping drafts and result persistence, plus real
 large-workbook/quota qualification to finish the standalone workflow, then
 replace compiled app-code pins with per-run workspace-package capture and a
 qualified isolated viewer/host adapter. The current root UI accepts installed

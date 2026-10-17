@@ -33,6 +33,7 @@
     const get = id => container.querySelector("#dt" + id), events = new AbortController();
     const listen = (element, type, handler) => element.addEventListener(type, handler, { signal: events.signal });
     const operation = root.DataTemplatesOperationView.create(get("ProcessOperation"), { cancel: actions.cancel, dismiss: actions.dismiss });
+    const templateView = root.DataTemplatesTemplateInspectionView.create(container);
     let current = null, query = "", filter = "", page = 0;
     listen(get("ChooseTemplate"), "click", () => get("TemplateFile").click());
     listen(get("TemplateFile"), "change", () => { actions.chooseTemplate(get("TemplateFile").files[0] || null); get("TemplateFile").value = ""; });
@@ -111,10 +112,11 @@
     }
     function render(snapshot) {
       current = snapshot;
-      get("TemplateName").textContent = snapshot.templateLoading ? "Читаем шаблон…" : snapshot.templateName || "Шаблон не выбран";
+      get("TemplateName").textContent = snapshot.templateLoading ? "Проверяем шаблон…" : snapshot.templateName || "Шаблон не выбран";
+      templateView.render(snapshot.templateInspection);
       get("ProcessSelection").textContent = snapshot.selectedCount ? "Выбрано " + snapshot.selectedCount + " файлов · XLSX: " + snapshot.selectedXlsx
         : "Источники не выбраны";
-      get("ChooseTemplate").disabled = snapshot.running || snapshot.templateLoading;
+      get("ChooseTemplate").disabled = snapshot.running;
       get("StartProcessing").disabled = snapshot.running || snapshot.sourceBusy || snapshot.templateLoading || !snapshot.templateName || !snapshot.selectedCount;
       get("ProcessNotice").textContent = snapshot.templateNotice;
       get("StorageNote").textContent = snapshot.storageMode === "disk"
@@ -128,7 +130,7 @@
       renderQueue(snapshot); renderDetail(snapshot);
     }
     return Object.freeze({ render: render, showResults: () => container.querySelector("#dtTabResults").click(),
-      dispose: () => { events.abort(); operation.dispose(); } });
+      dispose: () => { events.abort(); operation.dispose(); templateView.dispose(); } });
   }
   root.DataTemplatesProcessingView = Object.freeze({ create: create });
 }(window));

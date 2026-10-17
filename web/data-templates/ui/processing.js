@@ -14,13 +14,14 @@
     return "Обработка в Worker";
   }
   function create(container, loader) {
-    let view, template = null, templateLoading = false, templateTicket = 0, run = null,
+    let view, template = null, templateLoading = false, templateTicket = 0, templateAbort = null, run = null,
       queue = [], selectedId = null, lastActivity = null, templateNotice = "", runNotice = "", disposed = false;
     const count = status => queue.filter(item => item.status === status).length;
     function snapshot() {
       const sources = loader.selectedSources(), active = run && queue.find(item => item.status === "running");
       const completed = count("completed"), failed = count("failed"), cancelled = count("cancelled");
-      return Object.freeze({ templateName: template && template.name, templateLoading: templateLoading,
+      return Object.freeze({ templateName: template && template.name, templateInspection: template && template.inspection,
+        templateLoading: templateLoading,
         selectedCount: sources.length, selectedXlsx: sources.filter(source => source.format === "xlsx").length,
         sourceBusy: loader.isBusy(), running: !!run, templateNotice: templateNotice, runNotice: runNotice,
         storageMode: root.DataTemplatesResultStaging.mode(),
@@ -50,19 +51,20 @@
     async function chooseTemplate(file) {
       if (run || disposed) return;
       const ticket = ++templateTicket;
+      if (templateAbort) templateAbort.abort();
+      templateAbort = file ? new AbortController() : null;
       template = null; templateLoading = !!file; templateNotice = ""; render();
       if (!file) return;
       try {
         if (!file.size || file.size > 1000000) throw new Error("Нужен непустой JSON-шаблон до 1 000 000 байт.");
         const input = new TextDecoder("utf-8", { fatal: true }).decode(await file.arrayBuffer());
-        const parsed = JSON.parse(input);
-        if (parsed.version !== 2 || parsed.kind !== "xlsx-extraction")
-          throw new Error("Для текущего чтения нужен шаблон xlsx-extraction версии 2.");
         if (ticket !== templateTicket || disposed) return;
-        template = Object.freeze({ name: file.name, input: input });
-        templateNotice = "Шаблон загружен. Проверка правил выполняется при запуске на каждом файле.";
+        const inspection = await root.DataTemplatesTemplateInspection.inspect(input, templateAbort.signal);
+        if (ticket !== templateTicket || disposed) return;
+        template = Object.freeze({ name: file.name, input: input, inspection: inspection });
+        templateNotice = "Структура шаблона проверена. Данные источника и значения маппинга проверяются при обработке каждого файла.";
       } catch (error) {
-        if (ticket === templateTicket && !disposed) templateNotice = "Шаблон не загружен: " + error.message;
+        if (ticket === templateTicket && !disposed) templateNotice = "Шаблон «" + file.name + "» не принят: " + errorText(error);
       } finally { if (ticket === templateTicket) { templateLoading = false; render(); } }
     }
     function cancel() { if (run) run.abort.abort(); }
@@ -185,6 +187,7 @@
     render();
     return Object.freeze({ sourcesChanged: render, dispose: () => {
       disposed = true; templateTicket++; if (run) { run.abort.abort(); clearInterval(run.timer); }
+      if (templateAbort) templateAbort.abort();
       releaseResults().catch(() => {}); if (view) view.dispose(); loader.endProcessing();
     } });
   }

@@ -152,8 +152,68 @@ const hash = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
         await page.waitForFunction(() => document.getElementById("dtFileCount").textContent === "3");
         await page.locator("#dtTabTemplates").click();
         assert.match(await page.locator("#dtStorageNote").innerText(), /256 МиБ/);
+        const invalidTemplate = JSON.parse(fs.readFileSync(path.join(output, "core/examples/matrix-xlsx-extraction.json"), "utf8"));
+        invalidTemplate.template.source.rows[0].bindings.parameter.expr = "unknown()";
+        await page.locator("#dtTemplateFile").setInputFiles({ name: "invalid.json", mimeType: "application/json",
+            buffer: Buffer.from(JSON.stringify(invalidTemplate)) });
+        await page.waitForFunction(() => document.getElementById("dtProcessNotice").textContent.includes("EXPRESSION_TYPE"));
+        assert.equal(await page.locator("#dtStartProcessing").isDisabled(), true);
+        assert.equal(await page.locator("#dtTemplateInspection").isVisible(), false);
+        invalidTemplate.template.source.rows[0].bindings.parameter.expr = "lookup(\"parameters\", text(cell(\"A\", row)), \"production-form\")";
+        invalidTemplate.dictionaries.parameterMappings[0].targetId = "missing";
+        await page.locator("#dtTemplateFile").setInputFiles({ name: "invalid-mapping.json", mimeType: "application/json",
+            buffer: Buffer.from(JSON.stringify(invalidTemplate)) });
+        await page.waitForFunction(() => document.getElementById("dtProcessNotice").textContent.includes("REFERENCE_MISSING"));
+        assert.equal(await page.locator("#dtStartProcessing").isDisabled(), true);
+        const manyMappings = JSON.parse(fs.readFileSync(path.join(output, "core/examples/matrix-xlsx-extraction.json"), "utf8"));
+        for (let index = 0; index < 30; index++) manyMappings.dictionaries.parameterMappings.push({
+            scope: "production-form", source: "extra-" + index, targetId: "production.volume" });
+        await page.locator("#dtTemplateFile").setInputFiles({ name: "many-mappings.json", mimeType: "application/json",
+            buffer: Buffer.from(JSON.stringify(manyMappings)) });
+        await page.waitForFunction(() => !document.getElementById("dtStartProcessing").disabled);
+        await page.locator("#dtTabMapping").click();
+        assert.equal(await page.locator("#dtMappingRows tr").count(), 25);
+        await page.locator("#dtMappingNext").click();
+        assert.match(await page.locator("#dtMappingRows").innerText(), /extra-29/);
+        await page.locator("#dtTabTemplates").click();
         await page.locator("#dtTemplateFile").setInputFiles(path.join(output, "core/examples/matrix-xlsx-extraction.json"));
         await page.waitForFunction(() => !document.getElementById("dtStartProcessing").disabled);
+        assert.match(await page.locator("#dtInspectionTitle").innerText(), /production-form · ревизия 2/);
+        assert.match(await page.locator("#dtInspectionMetrics").innerText(), /Данные · A1:AG20/);
+        assert.match(await page.locator("#dtInspectionMetrics").innerText(), /16/);
+        await page.locator("#dtTemplateInspection summary").click();
+        assert.match(await page.locator("#dtInspectionRules").innerText(), /lookup\("parameters"/);
+        assert.match(await page.locator("#dtInspectionRules").innerText(), /decimal\(raw/);
+        await page.locator("#dtInspectionOpenMapping").click();
+        assert.equal(await page.locator("#dtMappingInspection").isVisible(), true);
+        assert.match(await page.locator("#dtMappingRows").innerText(), /production.volume/);
+        await page.locator("#dtMappingKind").selectOption("unit");
+        assert.match(await page.locator("#dtMappingRows").innerText(), /т/);
+        await page.locator("#dtTabParameters").click();
+        assert.equal(await page.locator("#dtParameterInspection").isVisible(), true);
+        await page.locator("#dtParameterSearch").fill("loss");
+        assert.match(await page.locator("#dtParameterRows").innerText(), /production.loss/);
+        assert.match(await page.locator("#dtParameterRows").innerText(), /Тонны/);
+        assert.doesNotMatch(await page.locator("#dtParameterRows").innerText(), /production.volume/);
+        await page.locator("#dtTabTemplates").click();
+        for (const width of [1160, 360]) {
+            await page.setViewportSize({ width, height: 940 });
+            assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+            if (process.env.RNA_DATA_SCREENSHOTS)
+                await page.screenshot({ path: path.join(process.env.RNA_DATA_SCREENSHOTS, `template-${width}.png`), fullPage: true, animations: "disabled" });
+            if (width === 360) {
+                if (process.env.RNA_DATA_SCREENSHOTS) {
+                    await page.locator("#dtTemplateInspection").scrollIntoViewIfNeeded();
+                    await page.screenshot({ path: path.join(process.env.RNA_DATA_SCREENSHOTS, "template-360-detail.png"), animations: "disabled" });
+                }
+                await page.locator("#dtViewSelect").selectOption("mapping");
+                assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+                if (process.env.RNA_DATA_SCREENSHOTS)
+                    await page.screenshot({ path: path.join(process.env.RNA_DATA_SCREENSHOTS, "mapping-360.png"), animations: "disabled" });
+                await page.locator("#dtViewSelect").selectOption("templates");
+            }
+        }
+        await page.setViewportSize({ width: 1160, height: 940 });
         await page.locator("#dtStartProcessing").click();
         await page.waitForFunction(() => document.getElementById("dtResultCompleted").textContent === "1" &&
             document.getElementById("dtResultFailed").textContent === "2");

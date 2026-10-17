@@ -1127,8 +1127,10 @@ modules without a framework, npm or a bundler.
 | `ui/source-intake.js` | Browser enumeration, metadata hints, limits and coalesced progress; no DOM or content parsing. |
 | `ui/loader.js` | Portable owner factory: browser File handles, selection/context and enumeration lifetime; passes metadata/actions to presentation. |
 | `ui/processing.js`, `ui/browser-core.js` | Standalone queue owner and fixed lazy core loader. One Worker job per selected file; no parser logic or result bodies in the view. |
+| `core/template-inspection-worker.js`, `ui/template-inspection.js` | Interruptible, time-limited standalone preflight using the same fixed language compiler and dictionary validator as extraction; no workbook read or project script execution. |
 | `ui/result-staging.js` | Provisional per-file sink: acknowledged chunks to origin-private browser files, with explicit bounded memory mode when disk storage is unavailable. Completion gates export; failure/cancel discards staging. This is not durable project storage. |
 | `ui/processing-view.js`, `styles/processing.css` | Standalone template picker, status navigation, progress and 20-record preview. Uses shared tokens and operation view. |
+| `ui/template-inspection-view.js` | Read-only template scope, rules, parameters and searchable/paged mapping lists. It receives bounded inspection data and owns only DOM/filter state. |
 | `ui/browser.js`, `web/js/app-data-templates.js` | Separate browser/native composition. The native adapter translates context and mounts native controls in named slots; it owns no domain parsing. |
 | `ui/loader-view.js` | Screen navigation, filters, pages, metadata details and DOM events; no bridge, File handles, readers or job ownership. |
 | `app-workspace-sources.js` | Typed native browsing, transient edits to saved relative paths, queue commands/recovery and bounded polling. Saves use the shared workspace controller; no body transfer or durable client store. |
@@ -1169,7 +1171,16 @@ CSV/JSON selection is retained, but this queue reports `READER_UNAVAILABLE` for
 them. Unknown Excel extensions are not admitted by source selection.
 
 The `xlsx-extraction` v2 JSON template is selected separately from source files
-and limited to 1,000,000 UTF-8 bytes. Core validation still occurs per file. XLSX
+and limited to 1,000,000 UTF-8 bytes. Before the queue starts, a dedicated Worker
+parses the bounded JSON with duplicate-key refusal, compiles the existing language
+plan and validates dictionary targets, dataset metadata and XLSX formula policy.
+Invalid templates leave Run disabled with a code/path diagnostic. A read-only view
+shows the selected sheet and bounds, planned record count and axis groups; the
+Parameters and Mapping tabs show searchable/paged read-only lists. Changing the
+template terminates stale validation;
+there is no editable or durable mapping copy in the UI. This preflight cannot prove
+that the selected workbook has the sheet, valid values or resolvable mapping keys:
+the same core validation and source-dependent checks still occur per file. XLSX
 inputs are limited to 96 MiB each. The provisional sink writes acknowledged
 batches to origin-private browser files when that API is available, with up to
 256 MiB of serialized records **per file** and 1 GiB retained **per run**. It keeps
