@@ -142,7 +142,55 @@ const hash = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
         }, Array.from(new Uint8Array(xlsb)));
         assert.deepEqual(sheetjsWorker, { version: "0.20.3", firstCode: "0012" });
         await page.setViewportSize({ width: 1160, height: 940 });
+        await page.addInitScript(() => {
+            Object.defineProperty(window, "showDirectoryPicker", { configurable: true, value: async options => {
+                const parent = await (await navigator.storage.getDirectory()).getDirectoryHandle("dt-project-browser-test", { create: true });
+                if (options.id === "data-templates-parent") return parent;
+                for await (const [name, handle] of parent.entries())
+                    if (name.startsWith("data-templates-") && handle.kind === "directory") return handle;
+                throw new DOMException("Project folder missing", "NotFoundError");
+            } });
+        });
         await page.goto(httpPrefix + "index.html");
+        assert.deepEqual(await page.evaluate(() => {
+            const sample = '{"kind":"data-templates","formatVersion":2,"projectId":"tp_' + "a".repeat(32) +
+                '","name":"Test","sources":[]}';
+            return [sample.replace('"name":"Test"', '"name":"Test","name":"Other"'),
+                sample.replace('"formatVersion":2', '"formatVersion":2.0'),
+                sample.replace('"sources":[]', '"sources":[{"sourceId":"src_' + "b".repeat(32) + '","path":"../bad.xlsx"}]')]
+                .map(input => { try { DataTemplatesProjectManifest.parse(input); return "accepted"; }
+                    catch (error) { return error.code; } });
+        }), ["project_invalid", "project_invalid", "project_invalid"]);
+        assert.equal(await page.evaluate(async () => {
+            const text = DataTemplatesProjectManifest.create("Read-back check");
+            const projectHandle = { getFile: async () => new File([text], "project.json") };
+            const draftHandle = { createWritable: async () => ({ write: async () => {}, close: async () => {} }),
+                getFile: async () => new File(["wrong"], "draft") };
+            const drafts = { getFileHandle: async (_, options) => {
+                if (!options?.create) throw new DOMException("Missing", "NotFoundError");
+                return draftHandle;
+            } };
+            const directory = { getFileHandle: async () => projectHandle, getDirectoryHandle: async () => drafts };
+            const project = await DataTemplatesBrowserProjectFiles.open(directory);
+            return DataTemplatesBrowserProjectFiles.saveDraft(project, { name: "template.json", input: "{}" })
+                .then(() => "accepted", error => error.code);
+        }), "effect_unknown");
+        await page.locator("#dtProjectToggle").click();
+        await page.locator("#dtProjectName").fill("Production reports");
+        await page.locator("#dtProjectCreate").click();
+        await page.waitForFunction(() => document.getElementById("dtProjectNotice").textContent.includes("Проект создан"));
+        const createdProject = await page.evaluate(async () => {
+            const parent = await (await navigator.storage.getDirectory()).getDirectoryHandle("dt-project-browser-test");
+            for await (const [, handle] of parent.entries()) if (handle.kind === "directory") {
+                const text = await (await handle.getFileHandle("project.json")).getFile().then(file => file.text());
+                return { folder: handle.name, manifest: JSON.parse(text) };
+            }
+        });
+        assert.equal(createdProject.manifest.name, "Production reports");
+        assert.match(createdProject.manifest.projectId, /^tp_[0-9a-f]{32}$/);
+        assert.deepEqual(createdProject.manifest.sources, []);
+        await page.locator("#dtProjectOpen").click();
+        await page.waitForFunction(() => document.getElementById("dtProjectNotice").textContent === "Проект открыт.");
         await page.locator("#dtFiles").setInputFiles([
             { name: "matrix-source.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 buffer: fs.readFileSync(path.join(output, "core/examples/matrix-source.xlsx")) },
@@ -230,6 +278,15 @@ const hash = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
         await page.evaluate(() => document.querySelector("#dtEditorJsonCode .CodeMirror").CodeMirror.setValue("{"));
         await page.waitForFunction(() => document.getElementById("dtProcessNotice").textContent.includes("JSON_INVALID"));
         assert.equal(await page.locator("#dtStartProcessing").isDisabled(), true);
+        await page.locator("#dtProjectSave").click();
+        await page.waitForFunction(() => document.getElementById("dtProjectNotice").textContent.includes("Черновик сохранён"));
+        assert.equal(await page.locator("#dtProjectDraftList button[data-file]").count(), 1);
+        assert.equal(await page.evaluate(async () => {
+            const parent = await (await navigator.storage.getDirectory()).getDirectoryHandle("dt-project-browser-test");
+            const directory = await parent.getDirectoryHandle(document.querySelector(".dt-project-card").title.split("/")[0]);
+            const name = document.querySelector("#dtProjectDraftList button[data-file]").dataset.file;
+            return (await (await (await directory.getDirectoryHandle("drafts")).getFileHandle(name)).getFile()).text();
+        }), "{");
         await page.evaluate(value => document.querySelector("#dtEditorJsonCode .CodeMirror").CodeMirror.setValue(value), draftText);
         await page.waitForFunction(() => !document.getElementById("dtStartProcessing").disabled);
         assert.equal(await page.locator("#dtTemplateInspection").isVisible(), true);
@@ -276,7 +333,49 @@ const hash = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
             scope: "production-form", source: "unused-synonym", targetId: "production.loss" });
         assert.deepEqual(mappedDraft.dictionaries.unitMappings.at(-1), {
             scope: "production-form", source: "tonnes", targetId: "t" });
-        await page.locator("#dtCloseTemplateEditor").click();
+        await page.locator("#dtProjectSave").click();
+        await page.waitForFunction(() => document.querySelectorAll("#dtProjectDraftList button[data-file]").length === 2);
+        const persisted = await page.evaluate(async () => {
+            const parent = await (await navigator.storage.getDirectory()).getDirectoryHandle("dt-project-browser-test");
+            const directory = await parent.getDirectoryHandle(document.querySelector(".dt-project-card").title.split("/")[0]);
+            const names = [];
+            for await (const [name] of (await directory.getDirectoryHandle("drafts")).entries()) names.push(name);
+            names.sort();
+            const latest = await (await (await directory.getDirectoryHandle("drafts")).getFileHandle(names.at(-1))).getFile();
+            return { count: names.length, text: await latest.text() };
+        });
+        assert.equal(persisted.count, 2);
+        assert.deepEqual(JSON.parse(persisted.text).dictionaries.parameterMappings.at(-1),
+            mappedDraft.dictionaries.parameterMappings.at(-1));
+        if (process.env.RNA_DATA_SCREENSHOTS) {
+            await page.locator(".dt-project-card").screenshot({ path: path.join(process.env.RNA_DATA_SCREENSHOTS, "project-wide.png"), animations: "disabled" });
+            await page.setViewportSize({ width: 360, height: 940 });
+            assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+            await page.locator(".dt-project-card").screenshot({ path: path.join(process.env.RNA_DATA_SCREENSHOTS, "project-narrow.png"), animations: "disabled" });
+            await page.setViewportSize({ width: 1160, height: 940 });
+        }
+        await page.evaluate(async () => {
+            const parent = await (await navigator.storage.getDirectory()).getDirectoryHandle("dt-project-browser-test");
+            const directory = await parent.getDirectoryHandle(document.querySelector(".dt-project-card").title.split("/")[0]);
+            const handle = await directory.getFileHandle("project.json"), file = await handle.getFile();
+            window.__projectManifestText = await file.text();
+            const writer = await handle.createWritable(); await writer.write(window.__projectManifestText + " "); await writer.close();
+        });
+        await page.locator("#dtProjectSave").click();
+        await page.waitForFunction(() => document.getElementById("dtProjectNotice").textContent.includes("project_changed"));
+        assert.equal(await page.locator("#dtProjectDraftList button[data-file]").count(), 2);
+        await page.evaluate(async () => {
+            const parent = await (await navigator.storage.getDirectory()).getDirectoryHandle("dt-project-browser-test");
+            const directory = await parent.getDirectoryHandle(document.querySelector(".dt-project-card").title.split("/")[0]);
+            const writer = await (await directory.getFileHandle("project.json")).createWritable();
+            await writer.write(window.__projectManifestText); await writer.close();
+        });
+        page.once("dialog", dialog => dialog.accept());
+        await page.locator("#dtProjectDraftList button[data-file]").first().click();
+        await page.waitForFunction(() => document.getElementById("dtProjectNotice").textContent.includes("Черновик открыт"));
+        assert.equal(await page.locator("#dtStartProcessing").isDisabled(), false);
+        assert.match(await page.locator("#dtMappingRows").innerText(), /unused-synonym/);
+        await page.locator("#dtProjectToggle").click();
         await page.locator("#dtInspectionOpenMapping").click();
         assert.equal(await page.locator("#dtMappingInspection").isVisible(), true);
         assert.match(await page.locator("#dtMappingRows").innerText(), /production.volume/);

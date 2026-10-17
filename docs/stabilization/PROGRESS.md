@@ -26,10 +26,14 @@ shows source scope and rules; dedicated tabs show parameters and searchable
 mappings. The standalone app now has a lazy local CodeMirror JSON/`expr` editor:
 invalid JSON remains correctable, focused rule changes are checked before applying,
 and pending/invalid edits block Run. The in-memory draft can be downloaded explicitly.
-It is not a project save or publication. Workbook values and mapping keys still
-require per-file execution. Scoped parameter/unit mappings can now be added or
+In a browser with a directory picker, a project card can create a new project
+subfolder or open a format-2 `project.json`; explicit saves create read-back-verified
+raw draft snapshots in `drafts/` without overwriting earlier edits. Invalid JSON
+can be saved and reopened for correction. These are not indexed/published templates.
+Workbook values and mapping keys still require per-file execution. Scoped parameter/unit mappings can now be added or
 changed in that same draft with full Worker validation; an unapplied or rejected
-edit blocks Run. Mapping deletion/suggestions and project-owned persistence remain open.
+edit blocks Run. Mapping deletion/suggestions, native draft commands and durable
+result persistence remain open.
 CSV/JSON and unsupported/invalid books fail visibly; no dataset is published.
 The queue and bounded result sink are outside DOM
 views. Exported-package browser checks cover a mixed batch, canonical 16-record
@@ -41,7 +45,7 @@ Excel reader strategy is an explicit open decision: compare all-SheetJS, the cur
 selective XLSX path plus format adapters, and other bounded options on real books
 before final Excel import or any 80 MB support claim.
 
-Next: project-owned template/mapping drafts and result persistence, plus real
+Next: typed native project-draft commands and result persistence, plus real
 large-workbook/quota qualification to finish the standalone workflow, then
 replace compiled app-code pins with per-run workspace-package capture and a
 qualified isolated viewer/host adapter. The current root UI accepts installed

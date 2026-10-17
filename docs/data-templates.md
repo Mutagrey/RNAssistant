@@ -4,8 +4,9 @@ Status: independent application foundation and early folder export, alongside th
 existing M0 proof, M1 manifest/source selection and M2 universal core/XLSX reader
 (2026-10-16). The same loader UI and JS core now belong to `web/data-templates`.
 The exported source project runs without RNAssistant and includes its own entry,
-examples, semantic tests and export tool. Full processing UI, data-project storage,
-recognition, dataset publication and other file readers remain open.
+examples, semantic tests and export tool. A standalone XLSX queue, template editor
+and browser project-draft snapshots work; recognition, durable results, dataset
+publication and other file readers remain open.
 
 RNAssistant's optional adapter still saves source declarations and controls native
 preparation. Exact byte reads, the pinned resource session, WebView2 executor and
@@ -63,6 +64,12 @@ It preserves the loader's pick/drop/search/navigation/progress/cancel behavior.
 The standalone Templates view validates and edits JSON rules and runs the XLSX
 queue; the separate core probe remains a development tool. Native chooser/preparation
 controls exist only in the RNAssistant adapter.
+
+In browsers with the File System Access directory picker, the project card opens a
+user-selected folder containing a format-2 `project.json` or creates a **new
+subfolder** under a selected parent. The browser adapter never overwrites a project
+manifest. It retains the selected directory handle only for the current page session.
+Other browsers can still download the current draft explicitly.
 
 The application is an ordinary static file project without npm or a bundler.
 Export from the repository with this development-only Node command:
@@ -941,8 +948,22 @@ rna project sources --workspace /absolute/workspace --path reports/project.json 
 ```
 
 These commands need no chat, model, workbook or browser. Files are discoverable
-through the existing `resources`/`open` operations. This single-file foundation
-does not yet implement draft/test/publish or multi-file activation.
+through the existing `resources`/`open` operations. This native single-file
+foundation does not yet implement draft/test/publish or multi-file activation.
+
+The standalone browser keeps raw template draft snapshots as separate UTF-8 files
+under the chosen project's `drafts/` directory. Each explicit save creates a new
+`draft-<timestamp>-<uuid>-<label>.draft` file (at most 1,000,000 bytes), then reads
+it back exactly. An invalid JSON draft can be saved for later correction. The app
+lists the 50 newest matching files without reading all draft bodies; opening a
+snapshot reloads it through the existing template-validation path. Before listing,
+opening or saving, it re-reads and compares the exact `project.json` text observed
+when the folder was selected. A changed manifest requires explicit reopen. These
+snapshots are project-local files, not entries in format-2 `project.json`, validated
+templates or published datasets. Browser File System Access has no native
+revision-guarded replace; unique snapshot files avoid overwriting other edits.
+RNAssistant can read these ordinary workspace files through `WorkspaceFileService`;
+a typed native draft command and project-indexed template lifecycle remain open.
 
 ### Shared application and UI
 
@@ -1180,8 +1201,8 @@ shows the selected sheet and bounds, planned record count and axis groups; the
 Parameters and Mapping tabs show searchable/paged lists. The Mapping tab adds and
 edits exact scoped parameter/unit links in the same JSON draft. The full template
 is checked in the Worker before each mapping edit is applied; a pending or rejected
-edit blocks Run. Deletion, source-value suggestions and project save remain open.
-Changing the template terminates stale validation. A JSON source editor retains invalid text
+edit blocks Run. Deletion, source-value suggestions and indexed template publication
+remain open. Changing the template terminates stale validation. A JSON source editor retains invalid text
 for correction; a focused expression editor selects an `expr` binding and checks
 the complete candidate in the same Worker before applying it. Pending or invalid
 edits cannot authorize a run. An explicit download exports the in-memory JSON
@@ -1194,7 +1215,9 @@ a view of its last validated structure. Mapping controls derive their target
 options from the same validated dictionaries and do not own a second draft.
 Pure `core/template-draft.js` applies structured changes to the validated JSON;
 the queue/controller owns draft state and the existing Worker/compiler decides
-whether the candidate is usable. Project-owned draft persistence remains open.
+whether the candidate is usable. Explicit project-local draft snapshots are
+available in the standalone browser; native draft commands and indexed template
+activation remain open.
 CodeMirror 5 is already pinned in RNAssistant, works with the static no-bundler
 package and adds about 207 KiB of local, lazy-loaded assets;
 an editor-major upgrade is a separate decision. This preflight cannot prove
@@ -1392,7 +1415,7 @@ versioned schema and fixtures used by the engine.
 | M1 source selection (implemented) | Responsive modular viewer, paged file/folder intake, cancellable enumeration progress, persisted workspace source declarations and guarded save/recovery. Typed extraction commands remain open. |
 | M2 matrix-language foundation (implemented) | JSON template → typed plan → normalized snapshot → batched canonical observations with lineage, in the separate portable probe. Native integration and full readers remain open. |
 | M2 bounded XLSX adapter (implemented) | Explicit file + template → selective ZIP/XML reading in a Worker → exact typed cells → the same canonical batches. Single-file probe only; queue parser dispatch and 80 MB qualification remain open. |
-| M1–M3 (standalone queue/preview slice implemented) | XLSX File + JSON template now run through a bounded sequential Worker queue with per-file outcomes, progress, cancellation, 20-record preview and full per-file extraction export. Browser disk staging raises the output budget to 256 MiB per file/1 GiB per run; memory mode stays at 8 MiB. Parameter/mapping inspection and in-memory JSON/`expr`/scoped mapping edits work; mapping deletion/suggestions, draft/test/publish, project persistence and native parser dispatch remain open. Add other Excel families (including XLSB), CSV/JSON behind the same workflow and their own fixtures. |
+| M1–M3 (standalone queue/preview slice implemented) | XLSX File + JSON template now run through a bounded sequential Worker queue with per-file outcomes, progress, cancellation, 20-record preview and full per-file extraction export. Browser disk staging raises the output budget to 256 MiB per file/1 GiB per run; memory mode stays at 8 MiB. Parameter/mapping inspection and JSON/`expr`/scoped mapping edits work; the browser can keep exact raw draft snapshots in a selected project folder. Mapping deletion/suggestions, native draft commands, indexed templates, test/publish, durable results and native parser dispatch remain open. Add other Excel families (including XLSB), CSV/JSON behind the same workflow and their own fixtures. |
 | Early M0/M4 (foundation implemented) | One portable source project, shared loader, folder export, exported semantic tests and XLSX Worker probe. Complete standalone mapping/validation, persistent data projects and large-result quota/performance qualification before native parser dispatch. Single-HTML/ZIP packaging is still open. |
 | M5 | Extend the existing queue with advanced batch execution, scoped dictionary/mapping edits, comparison/consolidation, multiple blocks and output workbook templates. |
 
@@ -1422,10 +1445,11 @@ manifest implementation:
 
 Next slices, coordinated with the workspace owners:
 
-1. Extend the integrated **standalone** workflow: the XLSX queue, preview and
-   complete extraction export with provisional disk staging now work. Add template
-   and mapping validation controls, project persistence and publication
-   through explicit domain commands. Keep real file-format capability reporting;
+1. Extend the integrated **standalone** workflow: the XLSX queue, preview,
+   validated template/mapping edits, project-local raw draft snapshots and complete
+   extraction export with provisional disk staging now work. Add indexed templates,
+   durable results and publication through explicit domain commands. Keep real
+   file-format capability reporting;
    XLSB/other Excel families and CSV/JSON require their own readers and fixtures.
 2. Replace the compiled application-module whitelist with immutable per-run package
    capture and a trusted host adapter outside that package. Add the isolated project
@@ -1452,7 +1476,7 @@ Tracked gates live in [the risk register](stabilization/RISK_REGISTER.md#data-te
 `data-templates-export.test.js` captures the application outside the repository,
 verifies exact hashes and outside-path/symlink/overwrite refusal, then runs exported
 semantic tests, the real file-origin loader and normalized extraction/download.
-A static test origin exercises the XLSX/Worker queue, JSON/`expr`/mapping editing and draft
+A static test origin exercises the XLSX/Worker queue, JSON/`expr`/mapping editing, browser project snapshots and draft
 download without RNAssistant or assets outside the exported package. Narrow/wide
 light/dark views are checked. Native host and 80-MB workbook behavior remain open.
 

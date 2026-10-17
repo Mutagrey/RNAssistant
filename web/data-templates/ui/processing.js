@@ -53,9 +53,9 @@
       return Promise.all(previous.filter(item => item.store).map(item => item.store.discard()));
     }
     async function chooseTemplate(file) {
-      if (run || disposed) return;
+      if (run || disposed) return false;
       if ((draftDirty || rulePending || mappingPending) &&
-        !root.confirm("Текущий черновик изменён. Заменить его выбранным файлом?")) return;
+        !root.confirm("Текущий черновик изменён. Заменить его выбранным файлом?")) return false;
       const ticket = ++templateTicket;
       draftGeneration++;
       clearTimeout(validationTimer);
@@ -63,7 +63,7 @@
       templateAbort = file ? new AbortController() : null;
       template = null; draft = null; draftDirty = false; rulePending = false; mappingPending = false;
       templateLoading = !!file; templateNotice = ""; render();
-      if (!file) return;
+      if (!file) return true;
       try {
         if (!file.size || file.size > 1000000) throw new Error("Нужен непустой JSON-шаблон до 1 000 000 байт.");
         const input = new TextDecoder("utf-8", { fatal: true }).decode(await file.arrayBuffer());
@@ -76,6 +76,14 @@
       } catch (error) {
         if (ticket === templateTicket && !disposed) templateNotice = "Шаблон «" + file.name + "» не принят: " + errorText(error);
       } finally { if (ticket === templateTicket) { templateLoading = false; render(); } }
+      return true;
+    }
+    function currentDraft() {
+      return draft && !run && !rulePending && !mappingPending && !templateLoading && !disposed
+        ? Object.freeze({ name: draft.name, input: draft.input }) : null;
+    }
+    function loadDraft(name, input) {
+      return chooseTemplate(new File([input], name, { type: "application/json" }));
     }
     function changeDraft(input) {
       if (!draft || run || mappingPending || disposed) return;
@@ -266,7 +274,7 @@
       applyMapping: applyMapping, downloadDraft: downloadDraft
     });
     render();
-    return Object.freeze({ sourcesChanged: render, dispose: () => {
+    return Object.freeze({ sourcesChanged: render, currentDraft: currentDraft, loadDraft: loadDraft, dispose: () => {
       disposed = true; templateTicket++; clearTimeout(validationTimer); if (run) { run.abort.abort(); clearInterval(run.timer); }
       if (templateAbort) templateAbort.abort();
       releaseResults().catch(() => {}); if (view) view.dispose(); loader.endProcessing();
