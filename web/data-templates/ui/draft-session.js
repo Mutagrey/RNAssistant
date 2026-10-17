@@ -156,6 +156,35 @@
     }
     function setNotice(value) { notice = value; changed(); }
     function markSaved(input) { if (draft && draft.input === input) { dirty = false; changed(); } }
+    function invalidate(message) {
+      stopInspection(); template = null; loading = false;
+      notice = message; changed();
+    }
+    function adoptValidated(input, inspection, message) {
+      validate(input);
+      if (!draft || disposed) throw Object.assign(new Error("Черновик был заменён во время правки."), { code: "DRAFT_CHANGED" });
+      stopInspection(); draft = Object.freeze({ name: draft.name, input });
+      template = Object.freeze({ name: draft.name, input, inspection });
+      withinLimit = true; loading = false; notice = message; changed();
+    }
+    async function rebaseDictionary(dictionary) {
+      if (!draft || disposed) return;
+      let candidate;
+      try { candidate = root.DataTemplatesProjectTemplate.replaceDictionary(draft.input, dictionary); validate(candidate); }
+      catch (error) { invalidate("Справочник обновлён, но текущий JSON требует ручной проверки: " + describe(error)); return; }
+      stopInspection(); const current = ticket;
+      abort = new AbortController(); loading = true; template = null;
+      notice = "Проверяем шаблон с новой версией общего справочника…"; changed();
+      try {
+        const inspection = await inspect(candidate, abort.signal);
+        if (current !== ticket || disposed) return;
+        draft = Object.freeze({ name: draft.name, input: candidate });
+        template = Object.freeze({ name: draft.name, input: candidate, inspection });
+        withinLimit = true; notice = "Общий справочник обновлён; шаблон проверен заново.";
+      } catch (error) {
+        if (current === ticket && !disposed) notice = "Справочник сохранён, но шаблон требует исправления: " + describe(error);
+      } finally { if (current === ticket && !disposed) { loading = false; changed(); } }
+    }
     function dispose() { disposed = true; stopInspection(); draft = null; template = null; }
     return Object.freeze({ snapshot, chooseFile, load, current, validTemplate, changeDraft, ruleDirty,
       mappingDirty, dictionaryDirty, applyRule, applyMapping, removeMapping,
@@ -163,7 +192,7 @@
       removeParameter: path => changeDictionary("removeParameter", path),
       upsertUnit: edit => changeDictionary("upsertUnit", edit),
       removeUnit: path => changeDictionary("removeUnit", path),
-      download, setNotice, markSaved, dispose });
+      download, setNotice, markSaved, invalidate, adoptValidated, rebaseDictionary, dispose });
   }
   root.DataTemplatesDraftSession = Object.freeze({ create, newFileName });
 }(window));

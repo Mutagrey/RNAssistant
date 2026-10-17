@@ -32,9 +32,14 @@ raw draft snapshots in `drafts/` without overwriting earlier edits. Invalid JSON
 can be saved and reopened for correction. Separately, the browser now derives a
 project-local catalog from `templates/`: multiple JSON imports, stable IDs,
 immutable checked versions, archive/restore and one active editable template.
-Parameters, units and scoped mappings can be added, changed or deleted in that
-template's JSON after full Worker preflight. This is not template publication or
-a project-wide shared dictionary; native project-indexed templates remain open.
+The browser project now has one shared, versioned dictionary under `dictionaries/`.
+Catalog template versions contain rules without an embedded dictionary; opening or
+running one materializes the selected dictionary version into the existing core
+envelope. Import merges compatible parameter/unit IDs and scoped mappings, while
+conflicts fail explicitly. Structured changes are Worker-checked and saved once
+for all project templates. Old embedded versions remain intact and are converted
+only on explicit open/save. This is not template publication; native project-indexed
+templates and shared dictionary access remain open.
 Native Core/Application, bridge and CLI create, list and open the same raw
 project-local snapshots through `WorkspaceFileService`, with selected-project
 guards and explicit recovery of uncertain writes. The native Templates screen
@@ -63,7 +68,7 @@ Excel reader strategy is an explicit open decision: compare all-SheetJS, the cur
 selective XLSX path plus format adapters, and other bounded options on real books
 before final Excel import or any 80 MB support claim.
 
-Next: project-wide dictionary contract and native catalog/result access, real
+Next: native shared-dictionary/catalog/result access, real
 large-workbook/quota qualification, then
 replace compiled app-code pins with per-run workspace-package capture and a
 qualified isolated viewer/host adapter. The current root UI accepts installed

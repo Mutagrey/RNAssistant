@@ -82,7 +82,10 @@
       toolbar.querySelector("#dtMappingAdd").disabled = next.rulePending || next.dictionaryPending || next.running;
       toolbar.querySelector("p").textContent = next.rulePending || next.dictionaryPending
         ? "Сначала завершите правку выражения или параметра."
-        : "Связь задаёт точное совпадение области и исходного значения с каноническим кодом.";
+        : next.sharedDictionaryMode ? "Соответствия общие для проекта" +
+          (next.sharedDictionaryRevision ? " · версия " + next.sharedDictionaryRevision : "") +
+          ". Точная связь сохраняется для всех шаблонов после проверки." :
+          "Связь задаёт точное совпадение области и исходного значения с каноническим кодом.";
       if (!next.templateInspection && opened) close();
       if (opened) update();
     }

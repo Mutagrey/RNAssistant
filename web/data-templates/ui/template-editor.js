@@ -142,7 +142,9 @@
       get("EditorSummary").textContent = loadError || (next.templateName ? "Правила и справочники проверены. Проверка значений файла выполняется при запуске."
         : next.templateUnverified ? "Сохраняется исходный JSON. Проверка правил и запуск доступны в автономном приложении."
           : next.templateLoading ? "Worker проверяет текущий JSON." : "Исправьте ошибку в исходном JSON, затем повторите запуск.");
-      get("EditorJsonGuidance").textContent = next.templateUnverified
+      get("EditorJsonGuidance").textContent = next.sharedDictionaryMode
+        ? "Это рабочий JSON с подставленным общим справочником проекта. Параметры и маппинг меняйте в своих вкладках; правки этого блока в JSON не применяются к проекту."
+        : next.templateUnverified
         ? "Исходный JSON можно править и сохранять даже до проверки. Этот интерфейс не выполняет шаблон."
         : "Полный документ шаблона. Каждая правка проверяется в отдельном Worker; ошибочный JSON можно исправить здесь.";
       if (jsonEditor && jsonEditor.getValue() !== (next.draftText || "")) {

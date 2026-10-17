@@ -41,7 +41,7 @@
     function render() {
       get("Title").textContent = project ? project.info.name : "Без проекта";
       get("Description").textContent = project ? "project.json · источников: " + project.info.sources +
-        " · шаблоны templates/ · черновики drafts/ · результаты results/" :
+        " · общий справочник dictionaries/ · шаблоны templates/ · черновики drafts/ · результаты results/" :
         supported ? "Откройте папку с project.json или создайте новый проект." :
           "Выбор папки недоступен; черновик можно скачать на вкладке «Шаблоны».";
       panel.title = project ? project.directory.name + "/project.json" : "";
@@ -81,7 +81,7 @@
       finally { busy = false; if (!disposed) render(); }
     }
     async function select(createNew) {
-      if (busy || externalBusy > 0 || disposed) return;
+      if (busy || externalBusy > 0 || disposed || processing.isRunning()) return;
       let name;
       if (createNew) {
         name = get("Name").value.trim();
@@ -129,7 +129,7 @@
       if (!button || busy || externalBusy > 0) return;
       perform(async () => {
         const draft = await files.openDraft(project, button.dataset.file);
-        const accepted = await processing.loadDraft(draft.name, draft.input);
+        const accepted = await processing.loadProjectDraft(draft.name, draft.input);
         if (!accepted) throw Object.assign(new Error("Текущий черновик оставлен без изменений."), { code: "CANCELLED" });
       }, "Черновик открыт. Проверка шаблона показана на вкладке «Шаблоны».");
     });

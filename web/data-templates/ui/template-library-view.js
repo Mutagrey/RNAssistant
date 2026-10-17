@@ -7,7 +7,7 @@
     if (value !== undefined) element.textContent = value;
     return element;
   };
-  function create(container, processing, projectView) {
+  function create(container, processing, projectView, dictionaryController) {
     const panel = node("section", "dt-card dt-template-library");
     panel.setAttribute("aria-label", "Библиотека шаблонов проекта");
     panel.innerHTML = `<div class="dt-library-head"><div><p class="dt-eyebrow">БИБЛИОТЕКА ПРОЕКТА</p><h4>Шаблоны</h4><p id="dtLibraryProject">Откройте проект данных, чтобы хранить несколько шаблонов.</p></div><span id="dtLibraryCount">0</span></div>
@@ -23,8 +23,9 @@
     let page = 0, activeId = null, activeHead = null, seenGeneration = null;
     function notice(value) { get("Notice").textContent = value; }
     function render() {
-      get("Project").textContent = project ? project.info.name + " · отдельные версии в templates/" :
-        "Откройте проект данных в верхней карточке, чтобы хранить несколько шаблонов.";
+      get("Project").textContent = project ? project.info.name + " · общий справочник · версии в templates/" :
+        dictionaryController.active() ? "Загружаем общий справочник проекта…" :
+          "Откройте проект данных в верхней карточке, чтобы хранить несколько шаблонов.";
       get("Count").textContent = items.filter(item => !item.archived).length + " активных";
       get("Import").disabled = get("Save").disabled = get("Refresh").disabled = busy || !project;
       get("Save").disabled = busy || !project || !validated;
@@ -56,6 +57,8 @@
     }
     async function perform(work) {
       if (busy || disposed) return;
+      if (processing.isRunning()) { notice("Дождитесь завершения обработки или записи общего справочника."); return; }
+      if (processing.hasPendingEdit()) { notice("Сначала примените или отмените текущую правку."); return; }
       busy = true; render();
       try { await projectView.withProject(work); }
       catch (error) { if (!disposed) notice((error.code || "TEMPLATE_ERROR") + ": " + error.message); }
@@ -63,7 +66,26 @@
     }
     function refresh() {
       if (!project) { items = []; render(); return; }
-      perform(async current => { items = await library.list(current); if (!disposed) notice("Библиотека обновлена."); });
+      perform(async current => { await dictionaryController.assertCurrent(current);
+        items = await library.list(current); if (!disposed) notice("Библиотека обновлена."); });
+    }
+    async function materialized(current, source, signal) {
+      await dictionaryController.assertCurrent(current);
+      let parsed;
+      try { parsed = root.RNTabularJson.parse(source); }
+      catch (error) { throw Object.assign(new Error("Некорректный JSON: " + error.message), { code: "TEMPLATE_INVALID" }); }
+      if (parsed.kind === "data-templates-project-template") {
+        const shared = dictionaryController.current();
+        return root.DataTemplatesProjectTemplate.materialize(source, shared && shared.dictionary, current.info.projectId);
+      }
+      await root.DataTemplatesTemplateInspection.inspect(source, signal || new AbortController().signal);
+      if (!root.confirm("Старый шаблон содержит собственный справочник. Объединить его с общим справочником проекта и продолжить?"))
+        throw Object.assign(new Error("Импорт старого справочника отменён."), { code: "CANCELLED" });
+      const full = root.DataTemplatesProjectTemplate.standalone(source);
+      await dictionaryController.absorb(current, full.dictionaries, signal);
+      const shared = dictionaryController.current();
+      const stored = root.DataTemplatesProjectTemplate.detach(source, current.info.projectId);
+      return root.DataTemplatesProjectTemplate.materialize(stored, shared.dictionary, current.info.projectId);
     }
     async function refreshAfterWrite(current, success) {
       try { items = await library.list(current); notice(success); }
@@ -81,29 +103,45 @@
       if (files.length > 50) { notice("За один раз можно добавить до 50 шаблонов."); return; }
       perform(async current => {
         abort = new AbortController(); render();
-        let added = 0, rejected = 0;
+        let added = 0, rejected = 0, partial = 0; const errors = [];
         const knownIds = new Set((await library.list(current)).map(item => item.id));
         for (let index = 0; index < files.length; index++) {
           if (abort.signal.aborted) break;
           const file = files[index]; notice("Проверяем " + (index + 1) + " из " + files.length + ": " + file.name);
+          let dictionaryChanged = false;
           try {
             if (!file.size || file.size > maximumTemplateBytes) throw Object.assign(new Error("Файл превышает 1 000 000 байт."), { code: "TEMPLATE_LIMIT" });
             const text = new TextDecoder("utf-8", { fatal: true }).decode(await file.arrayBuffer());
-            const parsed = JSON.parse(text), id = parsed.template && parsed.template.id;
+            const parsed = root.DataTemplatesProjectTemplate.standalone(text), id = parsed.template && parsed.template.id;
             if (knownIds.has(id))
               throw Object.assign(new Error("Код уже есть в библиотеке; откройте его и сохраните новую версию."), { code: "TEMPLATE_EXISTS" });
-            await library.save(current, id, text, null, abort.signal); knownIds.add(id); added++;
+            await root.DataTemplatesTemplateInspection.inspect(text, abort.signal);
+            const previous = dictionaryController.current();
+            const absorbed = await dictionaryController.absorb(current, parsed.dictionaries, abort.signal);
+            dictionaryChanged = !previous || previous.head !== absorbed.head;
+            const shared = dictionaryController.current(), stored = root.DataTemplatesProjectTemplate.detach(text, current.info.projectId);
+            const execution = root.DataTemplatesProjectTemplate.materialize(stored, shared.dictionary, current.info.projectId);
+            await library.save(current, id, stored, null, { materialized: execution,
+              dictionaryHead: shared.head, dictionaryText: shared.text, signal: abort.signal });
+            knownIds.add(id); added++;
           } catch (error) {
             if (error.code === "effect_unknown") {
-              error.message = "Уже добавлено: " + added + ". " + error.message;
+              error.message = "Уже добавлено: " + added + ". " +
+                (dictionaryChanged ? "Общий справочник обновлён, шаблон мог не сохраниться. " : "") + error.message;
               throw error;
             }
             if (abort.signal.aborted) break;
-            rejected++; notice(file.name + ": " + (error.code || "TEMPLATE_INVALID") + " · " + error.message);
+            rejected++; if (dictionaryChanged) partial++;
+            const detail = file.name + ": " + (dictionaryChanged ? "общий справочник обновлён; " : "") +
+              (error.code || "TEMPLATE_INVALID") + " · " + error.message;
+            if (errors.length < 3) errors.push(detail);
+            notice(detail);
           }
         }
         await refreshAfterWrite(current, "Добавлено: " + added + ". Не принято: " + rejected +
-          (abort.signal.aborted ? ". Импорт отменён." : "."));
+          (partial ? ". Справочник обновлён без шаблона для " + partial + " файлов." : "") +
+          (abort.signal.aborted ? " Импорт отменён." : ".") +
+          (errors.length ? " Причины: " + errors.join("; ") : ""));
       });
     });
     listen(get("Cancel"), "click", () => { if (abort) abort.abort(); });
@@ -116,9 +154,21 @@
           throw Object.assign(new Error("Версия изменилась с момента открытия. Сохраните черновик отдельно и обновите библиотеку."), { code: "TEMPLATE_CHANGED" });
         if (existing && (existing.archived || activeHead !== existing.head) &&
             !root.confirm("Шаблон «" + id + "» уже есть в проекте. Сохранить текущий JSON как новую версию?")) return;
-        const saved = await library.save(current, id, draft.input, existing ? existing.head : null);
-        processing.markDraftSaved(draft.input);
-        if (processing.currentValidated() && processing.currentValidated().input === draft.input) {
+        const full = root.DataTemplatesProjectTemplate.standalone(draft.input);
+        const previous = dictionaryController.current();
+        const absorbed = await dictionaryController.absorb(current, full.dictionaries);
+        const shared = dictionaryController.current(), stored = root.DataTemplatesProjectTemplate.detach(draft.input, current.info.projectId);
+        const execution = root.DataTemplatesProjectTemplate.materialize(stored, shared.dictionary, current.info.projectId);
+        let saved;
+        try { saved = await library.save(current, id, stored, existing ? existing.head : null,
+          { materialized: execution, dictionaryHead: shared.head, dictionaryText: shared.text }); }
+        catch (error) {
+          if (!previous || previous.head !== absorbed.head)
+            error.message = "Общий справочник сохранён, но версия шаблона не подтверждена. " + error.message;
+          throw error;
+        }
+        processing.markDraftSaved(execution);
+        if (processing.currentValidated() && processing.currentValidated().input === execution) {
           activeId = id; activeHead = saved.head;
         }
         await refreshAfterWrite(current, "Версия шаблона «" + id + "» сохранена и проверена чтением.");
@@ -132,7 +182,8 @@
       if (button.dataset.action === "archive" && !root.confirm("Удалить «" + entry.id + "» из активной библиотеки? Версии останутся в templates/ для восстановления.")) return;
       perform(async current => {
         if (button.dataset.action === "open") {
-          const text = await library.open(current, entry);
+          const raw = await library.open(current, entry);
+          const text = await materialized(current, raw);
           if (await processing.loadDraft(entry.id + ".json", text)) {
             activeId = entry.id; activeHead = entry.head;
             container.querySelector("#dtTabTemplates").click();
@@ -143,13 +194,24 @@
           await library.archive(current, entry);
           await refreshAfterWrite(current, "Шаблон убран из активной библиотеки; версии сохранены для восстановления.");
         } else if (button.dataset.action === "restore") {
-          const text = await library.restore(current, entry);
-          await library.save(current, entry.id, text, entry.head);
+          const raw = await library.restore(current, entry);
+          const previous = dictionaryController.current();
+          const text = await materialized(current, raw);
+          const shared = dictionaryController.current();
+          const stored = root.DataTemplatesProjectTemplate.detach(text, current.info.projectId);
+          try {
+            await library.save(current, entry.id, stored, entry.head,
+              { materialized: text, dictionaryHead: shared.head, dictionaryText: shared.text });
+          } catch (error) {
+            if (!previous || previous.head !== shared.head)
+              error.message = "Общий справочник сохранён, но восстановление шаблона не подтверждено. " + error.message;
+            throw error;
+          }
           await refreshAfterWrite(current, "Шаблон восстановлен как новая проверенная версия.");
         }
       });
     });
-    projectView.subscribe(value => { project = value; activeId = activeHead = null; refresh(); });
+    dictionaryController.subscribe(value => { project = value; activeId = activeHead = null; refresh(); });
     processing.subscribeValidatedDraft((value, generation) => {
       if (seenGeneration !== generation) { seenGeneration = generation; activeId = activeHead = null; }
       validated = value;

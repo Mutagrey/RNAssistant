@@ -1,10 +1,10 @@
 (function (root) {
   "use strict";
-  function inspect(input, signal) {
+  function inspectWith(workerUrl, input, signal) {
     return new Promise((resolve, reject) => {
       if (signal.aborted) { reject(Object.assign(new Error("Проверка отменена."), { code: "EXECUTION_CANCELLED" })); return; }
       let worker;
-      try { worker = new Worker("core/template-inspection-worker.js"); }
+      try { worker = new Worker(workerUrl); }
       catch (error) { reject(Object.assign(new Error("Не удалось запустить Worker для проверки шаблона: " + error.message),
         { code: "TEMPLATE_WORKER_UNAVAILABLE" })); return; }
       let settled = false;
@@ -31,5 +31,8 @@
       if (signal.aborted) cancel(); else worker.postMessage(input);
     });
   }
-  root.DataTemplatesTemplateInspection = Object.freeze({ inspect: inspect });
+  root.DataTemplatesTemplateInspection = Object.freeze({
+    inspect: (input, signal) => inspectWith("core/template-inspection-worker.js", input, signal),
+    inspectDictionary: (input, signal) => inspectWith("core/dictionary-inspection-worker.js", input, signal)
+  });
 }(window));

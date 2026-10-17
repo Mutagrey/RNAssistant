@@ -80,7 +80,7 @@
       get("DictionaryDimensions").value = item && item.dimensions ? item.dimensions.join(", ") : "";
       get("DictionaryTemporal").value = item && item.temporalMeaning || "unspecified";
       form.querySelectorAll(".dt-parameter-only").forEach(element => { element.hidden = kind === "unit"; });
-      get("DictionaryNotice").textContent = item ? "Код остаётся прежним; правка затрагивает текущий JSON-черновик." :
+      get("DictionaryNotice").textContent = item ? "Код остаётся прежним; правка будет проверена перед сохранением." :
         "Новый элемент будет проверен вместе со всем шаблоном.";
       update(); form.scrollIntoView({ block: "nearest", behavior: "smooth" });
       get("DictionaryName").focus({ preventScroll: true });
@@ -107,8 +107,10 @@
       snapshot = next;
       toolbar.hidden = units.hidden = !next.templateInspection;
       toolbar.querySelector("p").textContent = next.rulePending || next.mappingPending ?
-        "Сначала завершите правку выражения или маппинга." :
-        "Параметры и единицы здесь принадлежат текущему JSON-шаблону; изменения проверяются до применения.";
+        "Сначала завершите правку выражения или маппинга." : next.sharedDictionaryMode ?
+          "Общий справочник проекта" + (next.sharedDictionaryRevision ? " · версия " + next.sharedDictionaryRevision : "") +
+          ". Изменения сохраняются для всех шаблонов после проверки." :
+          "Параметры и единицы принадлежат текущему JSON-шаблону; изменения проверяются до применения.";
       toolbar.querySelector("#dtParameterAdd").disabled = toolbar.querySelector("#dtUnitAdd").disabled =
         next.rulePending || next.mappingPending || next.running;
       if (!next.templateInspection && opened) close();
@@ -143,7 +145,8 @@
     });
     listen(get("DictionaryDelete"), "click", async () => {
       if (!original || applying || dirty || get("DictionaryDelete").disabled ||
-          !root.confirm("Удалить «" + original.name + "» из текущего шаблона? Зависимые параметры и соответствия удалите отдельно.")) return;
+          !root.confirm("Удалить «" + original.name + "» " + (snapshot.sharedDictionaryMode ? "из общего справочника проекта" :
+            "из текущего шаблона") + "? Зависимые параметры и соответствия удалите отдельно.")) return;
       applying = true; update();
       const result = await (kind === "unit" ? actions.removeUnit(original.path) : actions.removeParameter(original.path));
       if (disposed) return;

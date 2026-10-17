@@ -55,17 +55,24 @@
       fail("TEMPLATE_CHANGED", "Шаблон изменён. Обновите библиотеку перед открытием.");
     return read(project, current.contentFile, current.id);
   }
-  async function append(project, id, text, expectedHead, archived, signal) {
+  async function append(project, id, text, expectedHead, archived, options) {
     if (!idPattern.test(id)) fail("TEMPLATE_INVALID", "Нужен допустимый устойчивый код шаблона.");
     const bytes = encoder.encode(text);
     if (!bytes.length || bytes.length > limit || decoder.decode(bytes) !== text)
       fail("TEMPLATE_LIMIT", "Нужен UTF-8 файл до 1 000 000 байт.");
     if (!archived) {
-      let value;
-      try { value = JSON.parse(text); } catch (_) { fail("TEMPLATE_INVALID", "Некорректный JSON шаблона."); }
+      const value = root.DataTemplatesProjectTemplate.projectTemplate(text, project.info.projectId);
       if (!value.template || value.template.id !== id)
         fail("TEMPLATE_INVALID", "Код в JSON не совпадает с кодом библиотечного шаблона.");
-      const inspection = await root.DataTemplatesTemplateInspection.inspect(text, signal || new AbortController().signal);
+      const currentDictionary = await root.DataTemplatesBrowserProjectDictionary.current(project);
+      if (!options || !options.materialized || !currentDictionary ||
+          currentDictionary.head !== options.dictionaryHead || currentDictionary.text !== options.dictionaryText)
+        fail("DICTIONARY_CHANGED", "Версия общего справочника изменилась перед сохранением шаблона.");
+      const expected = root.DataTemplatesProjectTemplate.detach(options.materialized, project.info.projectId);
+      if (!root.DataTemplatesProjectTemplate.equal(value, JSON.parse(expected)))
+        fail("TEMPLATE_INVALID", "Правила сохранения не совпадают с проверенным шаблоном.");
+      const inspection = await root.DataTemplatesTemplateInspection.inspect(options.materialized,
+        options.signal || new AbortController().signal);
       if (!inspection || !inspection.template || inspection.template.id !== id)
         fail("TEMPLATE_INVALID", "Проверенный код шаблона не совпадает с файлом.");
     }
@@ -90,12 +97,18 @@
       const head = after.entries.find(item => item.id === id);
       if (!head || head.head !== name)
         fail("effect_unknown", "Конкурирующая версия изменила библиотеку.");
+      if (!archived) {
+        const currentDictionary = await root.DataTemplatesBrowserProjectDictionary.current(project);
+        if (!currentDictionary || currentDictionary.head !== options.dictionaryHead ||
+            currentDictionary.text !== options.dictionaryText)
+          fail("effect_unknown", "Общий справочник изменился после сохранения шаблона.");
+      }
       return head;
     } catch (error) {
       fail("effect_unknown", "Проверьте точный файл templates/" + name + " перед повторением: " + error.message);
     }
   }
-  async function save(project, id, text, expectedHead, signal) { return append(project, id, text, expectedHead, false, signal); }
+  async function save(project, id, text, expectedHead, options) { return append(project, id, text, expectedHead, false, options); }
   async function archive(project, entry) {
     return append(project, entry.id, JSON.stringify({ projectId: project.info.projectId, id: entry.id,
       previous: entry.head, removedAt: Date.now() }) + "\n", entry.head, true);

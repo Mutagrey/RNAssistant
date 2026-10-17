@@ -15,19 +15,38 @@
   }
   function create(container, loader) {
     let view, run = null, queue = [], selectedId = null, lastActivity = null, runNotice = "", disposed = false;
+    let dictionaryController = null, sharedBusy = false;
     let resultObserver = null, draftObserver = null;
     const resultLeases = new Set();
+    async function inspectDraft(input, signal) {
+      if (dictionaryController && dictionaryController.active()) {
+        if (!dictionaryController.ready())
+          throw Object.assign(new Error("Общий справочник проекта пока недоступен."), { code: "DICTIONARY_UNAVAILABLE" });
+        const shared = dictionaryController.current();
+        if (shared) {
+          let value;
+          try { value = JSON.parse(input); } catch (_) { return root.DataTemplatesTemplateInspection.inspect(input, signal); }
+          if (!root.DataTemplatesProjectTemplate.equal(value.dictionaries, shared.dictionary))
+            throw Object.assign(new Error("Справочник внутри JSON отличается от общего справочника проекта. Добавьте файл через библиотеку шаблонов или измените общий справочник на вкладках параметров и маппинга."),
+              { code: "DICTIONARY_MISMATCH" });
+        }
+      }
+      return root.DataTemplatesTemplateInspection.inspect(input, signal);
+    }
     const draftSession = root.DataTemplatesDraftSession.create({
-      inspect: root.DataTemplatesTemplateInspection.inspect,
-      onChange: render, busy: () => !!run || disposed
+      inspect: inspectDraft,
+      onChange: render, busy: () => !!run || sharedBusy || disposed
     });
     const count = status => queue.filter(item => item.status === status).length;
     function snapshot() {
       const sources = loader.selectedSources(), active = run && queue.find(item => item.status === "running");
       const completed = count("completed"), failed = count("failed"), cancelled = count("cancelled");
       return Object.freeze({ ...draftSession.snapshot(),
+        sharedDictionaryMode: !!(dictionaryController && dictionaryController.active()),
+        sharedDictionaryRevision: dictionaryController && dictionaryController.active() && dictionaryController.ready() &&
+          dictionaryController.current() ? dictionaryController.current().dictionary.revision : null,
         selectedCount: sources.length, selectedXlsx: sources.filter(source => source.format === "xlsx").length,
-        sourceBusy: loader.isBusy(), running: !!run, resultBusy: resultLeases.size > 0, runNotice: runNotice,
+        sourceBusy: loader.isBusy(), running: !!run || sharedBusy, resultBusy: resultLeases.size > 0, runNotice: runNotice,
         storageMode: root.DataTemplatesResultStaging.mode(),
         queue: Object.freeze(queue.map(item => Object.freeze({ id: item.id, path: item.path, status: item.status,
           error: item.error, recordCount: item.result ? item.result.summary.recordCount : null, progress: progressText(item.progress) }))),
@@ -70,9 +89,22 @@
     }
     function cancel() { if (run) run.abort.abort(); }
     async function start() {
+      if (sharedBusy) return;
       if (resultLeases.size) { runNotice = "Дождитесь завершения сохранения результата в проект."; render(); return; }
       const runningTemplate = draftSession.validTemplate();
       if (!runningTemplate || run || disposed) return;
+      if (dictionaryController && dictionaryController.active()) {
+        sharedBusy = true; render();
+        try {
+          const shared = await dictionaryController.assertCurrent();
+          if (!shared) throw Object.assign(new Error("Сначала сохраните общий справочник через библиотеку шаблонов."),
+            { code: "DICTIONARY_MISSING" });
+          if (!root.DataTemplatesProjectTemplate.equal(JSON.parse(runningTemplate.input).dictionaries, shared.dictionary))
+            throw Object.assign(new Error("Черновик использует другую версию общего справочника."), { code: "DICTIONARY_MISMATCH" });
+        } catch (error) {
+          draftSession.setNotice(errorText(error)); return;
+        } finally { sharedBusy = false; render(); }
+      }
       const selection = loader.beginProcessing();
       if (!selection) { draftSession.setNotice("Дождитесь окончания подбора источников."); return; }
       if (!selection.length) { loader.endProcessing(); draftSession.setNotice("Выберите хотя бы один источник."); return; }
@@ -196,20 +228,80 @@
           templateFile: item.templateName, recordCount: item.result.summary.recordCount }));
       } finally { release(); }
     }
+    async function sharedEdit(operation, value) {
+      if (!dictionaryController || !dictionaryController.active())
+        return draftSession[operation === "upsertMapping" ? "applyMapping" : operation](value);
+      if (sharedBusy || run || disposed || !dictionaryController.ready())
+        return { ok: false, message: "Общий справочник занят или недоступен." };
+      const observed = draftSession.snapshot();
+      const mappingOperation = operation === "upsertMapping" || operation === "removeMapping";
+      if (!observed.templateInspection || !observed.draftText || observed.templateLoading || observed.rulePending ||
+          mappingOperation && observed.dictionaryPending || !mappingOperation && observed.mappingPending)
+        return { ok: false, message: "Сначала завершите проверку текущего шаблона и правок." };
+      sharedBusy = true; render();
+      let savedDictionary = false;
+      try {
+        const changedText = root.RNTabularTemplateDraft[operation](observed.draftText,
+          observed.templateInspection, value);
+        const changed = JSON.parse(changedText), previous = JSON.parse(observed.draftText).dictionaries;
+        if (root.DataTemplatesProjectTemplate.equal(changed.dictionaries, previous))
+          return { ok: false, message: "Изменений нет." };
+        const current = dictionaryController.current();
+        changed.dictionaries.revision = current ? current.dictionary.revision + 1 : 1;
+        const candidate = JSON.stringify(changed, null, 2) + "\n";
+        const inspection = await root.DataTemplatesTemplateInspection.inspect(candidate, new AbortController().signal);
+        await dictionaryController.saveEdit(changed.dictionaries);
+        savedDictionary = true;
+        if (observed.draftGeneration !== draftSession.snapshot().draftGeneration)
+          throw Object.assign(new Error("Черновик сменился после сохранения справочника."), { code: "DRAFT_CHANGED" });
+        draftSession.adoptValidated(candidate, inspection, "Общий справочник сохранён как новая версия проекта.");
+        return { ok: true };
+      } catch (error) {
+        const message = (savedDictionary ? "Общий справочник сохранён, но текущий черновик не обновился. " : "") +
+          errorText(error); draftSession.setNotice(message);
+        return { ok: false, message };
+      } finally { sharedBusy = false; render(); }
+    }
+    async function loadProjectDraft(name, input) {
+      if (dictionaryController && dictionaryController.active() && dictionaryController.ready()) {
+        const shared = dictionaryController.current();
+        if (shared) {
+          try {
+            const value = root.DataTemplatesProjectTemplate.standalone(input);
+            if (!root.DataTemplatesProjectTemplate.equal(value.dictionaries, shared.dictionary)) {
+              if (!root.confirm("Черновик содержит старую версию справочника. Открыть его правила с текущим общим справочником проекта? Сохранённый снимок не изменится."))
+                return false;
+              input = root.DataTemplatesProjectTemplate.replaceDictionary(input, shared.dictionary);
+            }
+          } catch (error) {
+            if (error.code !== "TEMPLATE_INVALID" && error.code !== "TEMPLATE_FORMAT") throw error;
+          }
+        }
+      }
+      return draftSession.load(name, input);
+    }
     view = root.DataTemplatesProcessingView.create(container, {
       chooseTemplate: draftSession.chooseFile, start: start, cancel: cancel, dismiss: () => { lastActivity = null; render(); },
       select: id => { selectedId = id; render(); }, download: download,
       changeDraft: draftSession.changeDraft, ruleDirty: draftSession.ruleDirty, applyRule: draftSession.applyRule,
-      mappingDirty: draftSession.mappingDirty, applyMapping: draftSession.applyMapping,
-      removeMapping: draftSession.removeMapping, dictionaryDirty: draftSession.dictionaryDirty,
-      upsertParameter: draftSession.upsertParameter, removeParameter: draftSession.removeParameter,
-      upsertUnit: draftSession.upsertUnit, removeUnit: draftSession.removeUnit,
+      mappingDirty: draftSession.mappingDirty, applyMapping: edit => sharedEdit("upsertMapping", edit),
+      removeMapping: path => sharedEdit("removeMapping", path), dictionaryDirty: draftSession.dictionaryDirty,
+      upsertParameter: edit => sharedEdit("upsertParameter", edit),
+      removeParameter: path => sharedEdit("removeParameter", path),
+      upsertUnit: edit => sharedEdit("upsertUnit", edit),
+      removeUnit: path => sharedEdit("removeUnit", path),
       downloadDraft: draftSession.download
     });
     render();
     return Object.freeze({ sourcesChanged: render, currentDraft: draftSession.current,
       currentValidated: draftSession.validTemplate,
-      loadDraft: draftSession.load, markDraftSaved: draftSession.markSaved,
+      loadDraft: draftSession.load, loadProjectDraft, markDraftSaved: draftSession.markSaved,
+      bindProjectDictionary: value => { dictionaryController = value; render(); },
+      setProjectDictionaryBusy: value => { sharedBusy = value; render(); },
+      invalidateDraft: draftSession.invalidate, rebaseDictionary: draftSession.rebaseDictionary,
+      isRunning: () => !!run || sharedBusy,
+      hasPendingEdit: () => { const state = draftSession.snapshot();
+        return state.rulePending || state.mappingPending || state.dictionaryPending; },
       subscribeSelectedResult: observer => { resultObserver = observer; render(); },
       subscribeValidatedDraft: observer => { draftObserver = observer; render(); },
       withSelectedResult: withSelectedResult, dispose: () => {
