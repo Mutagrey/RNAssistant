@@ -38,8 +38,11 @@ running one materializes the selected dictionary version into the existing core
 envelope. Import merges compatible parameter/unit IDs and scoped mappings, while
 conflicts fail explicitly. Structured changes are Worker-checked and saved once
 for all project templates. Old embedded versions remain intact and are converted
-only on explicit open/save. This is not template publication; native project-indexed
-templates and shared dictionary access remain open.
+only on explicit open/save. This is not template publication. Host-neutral RNAssistant
+now reads the same `templates/` and `dictionaries/` heads through typed bridge and
+CLI commands with selected-project and observed-head guards. This is read-only
+envelope inspection; native UI, semantic Worker validation, edits and publication
+remain open.
 Native Core/Application, bridge and CLI create, list and open the same raw
 project-local snapshots through `WorkspaceFileService`, with selected-project
 guards and explicit recovery of uncertain writes. The native Templates screen
@@ -68,7 +71,7 @@ Excel reader strategy is an explicit open decision: compare all-SheetJS, the cur
 selective XLSX path plus format adapters, and other bounded options on real books
 before final Excel import or any 80 MB support claim.
 
-Next: native shared-dictionary/catalog/result access, real
+Next: native shared-dictionary/catalog editing UI and result access, real
 large-workbook/quota qualification, then
 replace compiled app-code pins with per-run workspace-package capture and a
 qualified isolated viewer/host adapter. The current root UI accepts installed

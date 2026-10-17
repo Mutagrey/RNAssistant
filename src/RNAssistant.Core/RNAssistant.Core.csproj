@@ -249,6 +249,7 @@
     <Compile Include="Storage\WorkspaceStore.cs" />
     <Compile Include="Storage\WorkspaceFileService.cs" />
     <Compile Include="Storage\TabularProjectStore.cs" />
+    <Compile Include="Storage\TabularProjectStore.Catalog.cs" />
     <Compile Include="Storage\WorkspaceWebSnapshotStore.cs" />
     <Compile Include="Storage\WorkspaceWebSnapshotStore.Diagnostics.cs" />
     <Compile Include="Storage\AttachmentStore.cs" />

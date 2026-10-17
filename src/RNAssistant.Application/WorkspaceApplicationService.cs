@@ -167,6 +167,58 @@ namespace RNAssistant.Application
             }
         }
 
+        public TabularProjectTemplateListDto ListTabularProjectTemplates(ListTabularProjectTemplatesRequest request,
+            CancellationToken token = default(CancellationToken))
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            if (request.Offset < 0 || request.Offset > 1000)
+                throw new WorkspaceApplicationException("template_offset_invalid", "Укажите смещение шаблонов от 0 до 1000.");
+            WorkspaceDescriptor workspace;
+            TabularProjectSnapshot project;
+            lock (_sync) { project = RequireSelectedProject(request); workspace = _workspace; }
+            var heads = _projects.ListTemplateHeads(workspace, project, token);
+            lock (_sync)
+            {
+                RequireSelectedProject(request);
+                return new TabularProjectTemplateListDto { State = State(), Offset = request.Offset,
+                    Total = heads.Count, Items = heads.Skip(request.Offset).Take(50).Select(item =>
+                        new TabularProjectTemplateHeadDto { Id = item.Id, HeadFile = item.HeadFile,
+                            SavedAt = item.SavedAt, Archived = item.Archived, Versions = item.Versions }).ToArray() };
+            }
+        }
+
+        public TabularProjectTemplateContentDto OpenTabularProjectTemplate(OpenTabularProjectTemplateRequest request,
+            CancellationToken token = default(CancellationToken))
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            WorkspaceDescriptor workspace;
+            TabularProjectSnapshot project;
+            lock (_sync) { project = RequireSelectedProject(request); workspace = _workspace; }
+            var file = _projects.ReadTemplate(workspace, project, request.Id, request.HeadFile, token);
+            lock (_sync)
+            {
+                RequireSelectedProject(request);
+                return new TabularProjectTemplateContentDto { State = State(), Id = request.Id,
+                    HeadFile = request.HeadFile, Template = FileDto(file) };
+            }
+        }
+
+        public TabularProjectDictionaryContentDto ReadTabularProjectDictionary(WorkspaceSelectedProjectRequest request,
+            CancellationToken token = default(CancellationToken))
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            WorkspaceDescriptor workspace;
+            TabularProjectSnapshot project;
+            lock (_sync) { project = RequireSelectedProject(request); workspace = _workspace; }
+            var file = _projects.ReadDictionary(workspace, project, token);
+            lock (_sync)
+            {
+                RequireSelectedProject(request);
+                return new TabularProjectDictionaryContentDto { State = State(),
+                    Dictionary = file == null ? null : FileDto(file) };
+            }
+        }
+
         private TabularProjectSnapshot RequireSelectedProject(WorkspaceSelectedProjectRequest request)
         {
             RequireBinding(request.BindingId);
@@ -179,6 +231,12 @@ namespace RNAssistant.Application
         {
             return new TabularProjectDraftDto { File = draft.FileName, SavedAt = draft.SavedAt,
                 Label = draft.Label, ByteLength = draft.ByteLength };
+        }
+
+        private static TabularProjectFileDto FileDto(TabularProjectStoredText file)
+        {
+            return new TabularProjectFileDto { File = file.FileName, Format = file.Format,
+                Sha256 = file.Sha256, Input = file.Input };
         }
 
         private void RequireBinding(string bindingId)

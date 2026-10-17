@@ -70,6 +70,56 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("input")] public string Input { get; internal set; }
     }
 
+    public sealed class ListTabularProjectTemplatesRequest : WorkspaceSelectedProjectRequest
+    {
+        [JsonProperty("offset", Required = Required.Always)] public int Offset { get; set; }
+    }
+
+    public sealed class OpenTabularProjectTemplateRequest : WorkspaceSelectedProjectRequest
+    {
+        [JsonProperty("id", Required = Required.Always)] public string Id { get; set; }
+        [JsonProperty("headFile", Required = Required.Always)] public string HeadFile { get; set; }
+    }
+
+    public sealed class TabularProjectTemplateHeadDto
+    {
+        [JsonProperty("id")] public string Id { get; internal set; }
+        [JsonProperty("headFile")] public string HeadFile { get; internal set; }
+        [JsonProperty("savedAt")] public long SavedAt { get; internal set; }
+        [JsonProperty("archived")] public bool Archived { get; internal set; }
+        [JsonProperty("versions")] public int Versions { get; internal set; }
+    }
+
+    public sealed class TabularProjectTemplateListDto
+    {
+        [JsonProperty("state")] public WorkspaceStateDto State { get; internal set; }
+        [JsonProperty("offset")] public int Offset { get; internal set; }
+        [JsonProperty("total")] public int Total { get; internal set; }
+        [JsonProperty("items")] public IReadOnlyList<TabularProjectTemplateHeadDto> Items { get; internal set; }
+    }
+
+    public sealed class TabularProjectFileDto
+    {
+        [JsonProperty("file")] public string File { get; internal set; }
+        [JsonProperty("format")] public string Format { get; internal set; }
+        [JsonProperty("sha256")] public string Sha256 { get; internal set; }
+        [JsonProperty("input")] public string Input { get; internal set; }
+    }
+
+    public sealed class TabularProjectTemplateContentDto
+    {
+        [JsonProperty("state")] public WorkspaceStateDto State { get; internal set; }
+        [JsonProperty("id")] public string Id { get; internal set; }
+        [JsonProperty("headFile")] public string HeadFile { get; internal set; }
+        [JsonProperty("template")] public TabularProjectFileDto Template { get; internal set; }
+    }
+
+    public sealed class TabularProjectDictionaryContentDto
+    {
+        [JsonProperty("state")] public WorkspaceStateDto State { get; internal set; }
+        [JsonProperty("dictionary")] public TabularProjectFileDto Dictionary { get; internal set; }
+    }
+
     public sealed class TabularProjectSourceDto
     {
         [JsonProperty("sourceId")] public string SourceId { get; internal set; }

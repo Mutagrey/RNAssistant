@@ -120,6 +120,77 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void WorkspaceProjectCatalogReadCommands()
+        {
+            WithTempPaths(paths =>
+            {
+                using (var app = new WorkspaceApplicationService(paths))
+                using (var bridge = new AssistantWebBridge(new AssistantController(), null, app))
+                {
+                    var token = BridgeToken(bridge);
+                    var selected = CreateSourceQueueProject(app, paths);
+                    var request = new WorkspaceSelectedProjectRequest { BindingId = selected.Workspace.BindingId,
+                        ManifestPath = selected.Project.ManifestPath, ProjectRevision = selected.Revision };
+                    var root = selected.Workspace.RootPath;
+                    var projectId = (string)JObject.Parse(File.ReadAllText(Path.Combine(root, "project.json")))["projectId"];
+                    var dictionary = WorkspaceBridgeCall(bridge, token, "readTabularProjectDictionary", request);
+                    AssertTrue((bool)dictionary["ok"] && dictionary["payload"]["dictionary"].Type == JTokenType.Null,
+                        "missing shared dictionary is explicit, not a fabricated default");
+
+                    Directory.CreateDirectory(Path.Combine(root, "templates"));
+                    Directory.CreateDirectory(Path.Combine(root, "dictionaries"));
+                    const string first = "template-Alpha-1760000000000-0123456789abcdef0123456789abcdef.json";
+                    const string legacyFile = "template-Beta-1760000000000-0123456789abcdef0123456789abcdef.json";
+                    const string archived = "template-Alpha-1760000000001-0123456789abcdef0123456789abcdef.removed";
+                    const string dictionaryHead = "dictionary-1760000000000-0123456789abcdef0123456789abcdef.json";
+                    var template = new JObject { ["kind"] = "data-templates-project-template", ["formatVersion"] = 1,
+                        ["projectId"] = projectId, ["template"] = new JObject { ["id"] = "Alpha" },
+                        ["source"] = new JObject(), ["dataset"] = new JObject() }.ToString();
+                    File.WriteAllText(Path.Combine(root, "templates", first), template);
+                    File.WriteAllText(Path.Combine(root, "templates", legacyFile),
+                        new JObject { ["version"] = 2, ["kind"] = "xlsx-extraction",
+                            ["template"] = new JObject { ["id"] = "Beta" },
+                            ["source"] = new JObject(), ["dictionaries"] = new JObject(),
+                            ["dataset"] = new JObject() }.ToString());
+                    File.WriteAllText(Path.Combine(root, "dictionaries", dictionaryHead),
+                        new JObject { ["version"] = 1, ["revision"] = 1, ["parameters"] = new JArray(),
+                            ["units"] = new JArray(), ["parameterMappings"] = new JArray(),
+                            ["unitMappings"] = new JArray() }.ToString());
+                    var listed = WorkspaceBridgeCall(bridge, token, "listTabularProjectTemplates",
+                        new ListTabularProjectTemplatesRequest { BindingId = request.BindingId,
+                            ManifestPath = request.ManifestPath, ProjectRevision = request.ProjectRevision, Offset = 0 });
+                    AssertTrue((bool)listed["ok"], "catalog listing uses the typed bridge");
+                    AssertEqual(2, (int)listed["payload"]["total"], "both browser catalog formats are listed");
+                    AssertEqual(first, (string)listed["payload"]["items"][0]["headFile"], "browser-compatible head");
+                    var open = new OpenTabularProjectTemplateRequest { BindingId = request.BindingId,
+                        ManifestPath = request.ManifestPath, ProjectRevision = request.ProjectRevision,
+                        Id = "Alpha", HeadFile = first };
+                    var opened = WorkspaceBridgeCall(bridge, token, "openTabularProjectTemplate", open);
+                    AssertEqual("project", (string)opened["payload"]["template"]["format"], "thin format is distinguished from legacy");
+                    AssertEqual(template, (string)opened["payload"]["template"]["input"], "read preserves exact template text");
+                    open.Id = "Beta"; open.HeadFile = legacyFile;
+                    AssertEqual("legacy", (string)WorkspaceBridgeCall(bridge, token,
+                        "openTabularProjectTemplate", open)["payload"]["template"]["format"],
+                        "old embedded versions remain readable without migration");
+                    open.Id = "Alpha"; open.HeadFile = first;
+                    AssertEqual(dictionaryHead, (string)WorkspaceBridgeCall(bridge, token,
+                        "readTabularProjectDictionary", request)["payload"]["dictionary"]["file"],
+                        "shared dictionary head is readable");
+
+                    File.WriteAllText(Path.Combine(root, "templates", archived), "{}\n");
+                    AssertEqual("template_changed", (string)WorkspaceBridgeCall(bridge, token,
+                        "openTabularProjectTemplate", open)["errorCode"], "stale observed head is refused");
+                    open.HeadFile = archived;
+                    AssertEqual(first, (string)WorkspaceBridgeCall(bridge, token,
+                        "openTabularProjectTemplate", open)["payload"]["template"]["file"],
+                        "archived template retains its last content version");
+                    File.WriteAllText(Path.Combine(root, "dictionaries", dictionaryHead), "{bad");
+                    AssertEqual("dictionary_invalid", (string)WorkspaceBridgeCall(bridge, token,
+                        "readTabularProjectDictionary", request)["errorCode"], "malformed shared head is visible as an error");
+                }
+            });
+        }
+
         private static void WorkspaceApplicationPinsSelection()
         {
             WithTempPaths(paths =>

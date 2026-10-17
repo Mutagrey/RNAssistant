@@ -954,12 +954,20 @@ rna project sources --workspace /absolute/workspace --path reports/project.json 
 rna project draft save --workspace /absolute/workspace --path reports/project.json --name "Mapping" --input /absolute/mapping-draft.json
 rna project draft list --workspace /absolute/workspace --path reports/project.json
 rna project draft open --workspace /absolute/workspace --path reports/project.json --file draft-1760000000000-0123456789abcdef0123456789abcdef-Mapping.draft
+rna project template list --workspace /absolute/workspace --path reports/project.json --read-only
+rna project template open --workspace /absolute/workspace --path reports/project.json --id production-form --head template-production-form-1760000000000-0123456789abcdef0123456789abcdef.json --read-only
+rna project dictionary read --workspace /absolute/workspace --path reports/project.json --read-only
 ```
 
 These commands need no chat, model, workbook or browser. Files are discoverable
 through the existing `resources`/`open` operations. Draft commands create,
-list and read raw snapshots; template validation, test, publication and
-multi-file activation remain open.
+list and read raw snapshots. Template commands list 50 observed heads per page
+and read a version only with its exact observed head; the dictionary command
+reads the current shared head or explicitly returns none. These reads use the same
+`WorkspaceFileService` and selected-project guard as drafts. Native reads check
+the file envelope and project identity, **not** the template language or dictionary
+semantics; the standalone Worker remains their validator. Native UI integration,
+edits, test, publication, result access and multi-file activation remain open.
 
 The standalone browser keeps raw template draft snapshots as separate UTF-8 files
 under the chosen project's `drafts/` directory. Each explicit save creates a new
@@ -1043,8 +1051,9 @@ the selected project is revoked until explicit reconciliation. List reads
 metadata only, caps the directory at 1,000 entries
 and returns the 50 newest matching names. Read accepts only a snapshot filename
 and returns raw text, including invalid JSON. A changed manifest requires
-explicit project reopen. Native raw-draft UI is available; project-indexed template
-lifecycle remains open.
+explicit project reopen. Native raw-draft UI is available. Typed bridge and CLI
+read-only access to the browser catalog and shared dictionary is now available;
+project-indexed template editing and publication remain open.
 
 The standalone browser can explicitly copy a completed extraction into the selected
 project's `results/result-<timestamp>-<uuid>-<source>/` directory. `data.json` is the
@@ -1560,7 +1569,7 @@ Next slices, coordinated with the workspace owners:
 1. Extend the integrated **standalone** workflow: the XLSX queue, preview,
    validated template/parameter/mapping edits, browser template catalog and shared
    dictionary, project-local raw draft snapshots and verified browser result saves
-   now work. Add native catalog/dictionary access and publication through explicit
+   now work. Add native catalog/dictionary editing UI and publication through explicit
    domain commands. Keep real
    file-format capability reporting;
    XLSB/other Excel families and CSV/JSON require their own readers and fixtures.

@@ -107,6 +107,7 @@ namespace RNAssistant.Harness
                 Test("tabular project: source persistence identity bounds and guards", TabularProjectSourcesRoundTripAndGuards),
                 Test("tabular project: source schema and unknown save recovery", TabularProjectSourcesRejectMalformedAndUnknown),
                 Test("tabular project: raw draft snapshots and file guards", TabularProjectDraftSnapshots),
+                Test("tabular project: browser catalog and shared dictionary read bridge", WorkspaceProjectCatalogReadCommands),
                 Test("workspace application: exact selection and refusal state", WorkspaceApplicationPinsSelection),
                 Test("workspace application: source declarations save and recovery", WorkspaceProjectSourcesSaveAndRecover),
                 Test("workspace application: typed project drafts and uncertain write", WorkspaceProjectDraftCommandsRoundTrip),

@@ -82,6 +82,10 @@ closed schemas and count/byte bounds, missing paths and unknown-save recovery wi
 Raw draft checks cover browser-compatible snapshot naming, invalid JSON preservation,
 strict UTF-8/size bounds, manifest drift, read-only access and typed bridge recovery
 of an uncertain create without replay.
+The focused `tabular project: browser catalog` filter checks read-only native
+template/dictionary heads against browser filenames, stale-head refusal, archive
+retention and malformed dictionary reporting through the typed bridge. It does not
+validate DSL semantics or qualify Windows/WebView2.
 The owner is the existing `WorkspaceFileService`; these tests do not qualify the
 future Office UI, capture or template publication. The existing CLI exposes
 `project create/open/sources/prepare` and `project draft save/list/open` for

@@ -21,7 +21,7 @@ namespace RNAssistant.Core.Storage
 
     // Domain storage facet over the shared file owner. No direct file I/O, separate
     // CAS, registry, journal, workspace association or Office/session dependency.
-    public sealed class TabularProjectStore
+    public sealed partial class TabularProjectStore
     {
         public const string ManifestFileName = "project.json";
         public const int MaximumManifestBytes = 256 * 1024;

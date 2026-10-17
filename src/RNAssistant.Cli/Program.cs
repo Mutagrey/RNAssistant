@@ -50,15 +50,19 @@ namespace RNAssistant.Cli
             else if (args[0] == "project")
             {
                 var draftAction = args.Length >= 3 && args[1] == "draft" ? args[2] : null;
+                var templateAction = args.Length >= 3 && args[1] == "template" ? args[2] : null;
+                var dictionaryAction = args.Length >= 3 && args[1] == "dictionary" ? args[2] : null;
                 if (args.Length < 2 || args[1] != "create" && args[1] != "open" && args[1] != "prepare" &&
-                    args[1] != "sources" && (draftAction != "save" && draftAction != "list" && draftAction != "open"))
-                    throw new ArgumentException("Expected project create, open, sources, prepare or draft save/list/open.");
-                options = Parse(args.Skip(draftAction == null ? 2 : 3).ToArray());
+                    args[1] != "sources" && (draftAction != "save" && draftAction != "list" && draftAction != "open") &&
+                    (templateAction != "list" && templateAction != "open") && dictionaryAction != "read")
+                    throw new ArgumentException("Expected project create/open/sources/prepare, draft save/list/open, template list/open or dictionary read.");
+                options = Parse(args.Skip(draftAction != null || templateAction != null || dictionaryAction != null ? 3 : 2).ToArray());
                 Required(options, "path");
                 if (args[1] == "create") Required(options, "name");
                 if (args[1] == "sources") Required(options, "sources-json");
                 if (draftAction == "save") { Required(options, "name"); Required(options, "input"); }
                 if (draftAction == "open") Required(options, "file");
+                if (templateAction == "open") { Required(options, "id"); Required(options, "head"); }
             }
             else options = Parse(args.Skip(1).ToArray());
             if (options.ContainsKey("mutation-policy") && args[0] != "run" && args[0] != "answer" && args[0] != "env")
@@ -97,6 +101,35 @@ namespace RNAssistant.Cli
                                 ManifestPath = selected.ManifestPath, ProjectRevision = selected.ProjectRevision,
                                 File = TabularProjectStore.NewDraftFileName(Required(options, "name")),
                                 Input = ProjectDraftInput(options) }));
+                        return 0;
+                    }
+                    if (args[1] == "template")
+                    {
+                        var selected = new WorkspaceSelectedProjectRequest { BindingId = project.Workspace.BindingId,
+                            ManifestPath = project.Project.ManifestPath, ProjectRevision = project.Revision };
+                        if (args[2] == "list")
+                        {
+                            var offset = 0;
+                            if (options.ContainsKey("offset") && !int.TryParse(options["offset"],
+                                System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out offset))
+                                throw new ArgumentException("--offset must be an integer from 0 to 1000.");
+                            if (offset > 1000) throw new ArgumentException("--offset must be an integer from 0 to 1000.");
+                            Output(jsonl, "project.templates", projects.ListTabularProjectTemplates(
+                                new ListTabularProjectTemplatesRequest { BindingId = selected.BindingId,
+                                    ManifestPath = selected.ManifestPath, ProjectRevision = selected.ProjectRevision,
+                                    Offset = offset }));
+                        }
+                        else Output(jsonl, "project.template.opened", projects.OpenTabularProjectTemplate(
+                            new OpenTabularProjectTemplateRequest { BindingId = selected.BindingId,
+                                ManifestPath = selected.ManifestPath, ProjectRevision = selected.ProjectRevision,
+                                Id = Required(options, "id"), HeadFile = Required(options, "head") }));
+                        return 0;
+                    }
+                    if (args[1] == "dictionary")
+                    {
+                        Output(jsonl, "project.dictionary", projects.ReadTabularProjectDictionary(
+                            new WorkspaceSelectedProjectRequest { BindingId = project.Workspace.BindingId,
+                                ManifestPath = project.Project.ManifestPath, ProjectRevision = project.Revision }));
                         return 0;
                     }
                     if (args[1] == "sources")
@@ -954,6 +987,9 @@ namespace RNAssistant.Cli
             Console.WriteLine("rna project draft save --workspace <path> --path <relative-project.json> --name <text> --input <UTF-8-file> [--jsonl]  (create a raw snapshot in drafts/)");
             Console.WriteLine("rna project draft list --workspace <path> --path <relative-project.json> [--read-only] [--jsonl]  (50 newest snapshots, metadata only)");
             Console.WriteLine("rna project draft open --workspace <path> --path <relative-project.json> --file <draft-filename> [--read-only] [--jsonl]  (read raw snapshot)");
+            Console.WriteLine("rna project template list --workspace <path> --path <relative-project.json> [--offset 0] [--read-only] [--jsonl]  (50 catalog heads)");
+            Console.WriteLine("rna project template open --workspace <path> --path <relative-project.json> --id <code> --head <head-filename> [--read-only] [--jsonl]  (read observed version)");
+            Console.WriteLine("rna project dictionary read --workspace <path> --path <relative-project.json> [--read-only] [--jsonl]  (read shared head)");
             Console.WriteLine("rna env --workspace <path> [--mode agent|plan] [--mutation-policy ask|deny]");
             Console.WriteLine("rna sessions --workspace <path> [--jsonl]");
             Console.WriteLine("rna session create --workspace <path> [--title <text>] [--jsonl]");

@@ -85,4 +85,28 @@ namespace RNAssistant.Core.Models
             Input = input;
         }
     }
+
+    // Project file heads are derived from immutable filenames, never mirrored in project.json.
+    public sealed class TabularProjectTemplateHead
+    {
+        public string Id { get; private set; }
+        public string HeadFile { get; private set; }
+        public long SavedAt { get; private set; }
+        public bool Archived { get; private set; }
+        public int Versions { get; private set; }
+
+        public TabularProjectTemplateHead(string id, string headFile, long savedAt, bool archived, int versions)
+        { Id = id; HeadFile = headFile; SavedAt = savedAt; Archived = archived; Versions = versions; }
+    }
+
+    public sealed class TabularProjectStoredText
+    {
+        public string FileName { get; private set; }
+        public string Input { get; private set; }
+        public string Sha256 { get; private set; }
+        public string Format { get; private set; }
+
+        public TabularProjectStoredText(string fileName, string input, string sha256, string format)
+        { FileName = fileName; Input = input; Sha256 = sha256; Format = format; }
+    }
 }
