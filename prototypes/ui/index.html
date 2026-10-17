@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="ru" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>RNAssistant — прототип интерфейса</title>
+  <link rel="stylesheet" href="../../web/css/vendor/codemirror/codemirror.min.css?v=compact-layout-20261018-5">
+  <link rel="stylesheet" href="../../web/css/vendor/viewer.min.css?v=compact-layout-20261018-5">
+  <link rel="stylesheet" href="../../web/css/app-json-viewer.css?v=compact-layout-20261018-5">
+  <link rel="stylesheet" href="../../web/css/app-text-viewer.css?v=compact-layout-20261018-5">
+  <link rel="stylesheet" href="../../web/css/app-resource-viewer.css?v=compact-layout-20261018-5">
+  <link rel="stylesheet" href="../../web/css/app-sequence-viewer.css?v=compact-layout-20261018-5">
+  <link rel="stylesheet" href="tokens.css?v=compact-layout-20261018-5">
+  <link rel="stylesheet" href="ui.css?v=compact-layout-20261018-5">
+  <link rel="stylesheet" href="product-components.css?v=compact-layout-20261018-5">
+  <link rel="stylesheet" href="viewer-ui.css?v=compact-layout-20261018-5">
+  <link rel="stylesheet" href="diff-ui.css?v=compact-layout-20261018-5">
+</head>
+<body>
+  <header class="review-bar" aria-label="Управление прототипом">
+    <a class="prototype-mark" href="#/chat/main"><span class="prototype-dot"></span>RN / DESIGN <span class="version">01</span></a>
+    <nav class="review-nav" aria-label="Материалы дизайна">
+      <button data-review="app" aria-pressed="true">Интерфейс</button>
+      <button data-review="map" aria-pressed="false">Карта экранов</button>
+      <button data-review="system" aria-pressed="false">Компоненты</button>
+      <button data-review="handoff" aria-pressed="false">Внедрение</button>
+    </nav>
+    <div class="review-controls">
+      <label class="sr-only" for="viewport">Ширина прототипа</label>
+      <select id="viewport"><option value="auto">По ширине окна</option><option value="1600">Desktop · 1600</option><option value="900">Окно · 900</option><option value="560">Панель · 560</option><option value="360">Панель · 360</option></select>
+      <button class="icon-btn" id="theme-toggle" aria-label="Включить тёмную тему"></button>
+    </div>
+  </header>
+  <div class="demo-strip"><span>Интерактивный прототип · демонстрационные данные</span><div class="demo-playback" id="chat-demo-controls" aria-label="Демонстрация чата"></div><label>Состояние <select id="scenario" aria-label="Демонстрационное состояние"><option value="ready">Обычное</option><option value="empty">Пустое</option><option value="loading">Загрузка</option><option value="running">Выполнение</option><option value="approval">Подтверждение</option><option value="needs-input">Нужен ответ</option><option value="unknown">Результат неизвестен</option><option value="error">Ошибка</option><option value="offline">Документ недоступен</option><option value="dirty">Несохранённые изменения</option></select></label></div>
+  <div class="preview-stage" id="stage">
+    <div class="app-shell" id="app-shell">
+      <nav class="section-rail" id="section-rail" aria-label="Разделы"></nav>
+      <aside class="global-nav" id="global-nav" aria-label="Дерево раздела"></aside>
+      <main id="main" class="main-region" tabindex="-1"></main>
+    </div>
+    <section id="review-content" class="review-content" hidden tabindex="-1"></section>
+  </div>
+  <dialog id="dialog" aria-labelledby="dialog-title"><div id="dialog-body"></div></dialog>
+  <div class="toast" id="toast" role="status" hidden></div>
+  <div class="sr-only" id="announcer" aria-live="polite"></div>
+  <input id="demo-file" type="file" multiple hidden>
+  <script src="../../web/js/vendor/codemirror/codemirror.min.js"></script>
+  <script src="../../web/js/vendor/codemirror/mode/vb/vb.min.js"></script>
+  <script src="../../web/js/vendor/codemirror/mode/javascript/javascript.min.js"></script>
+  <script src="../../web/js/vendor/codemirror/mode/markdown/markdown.min.js"></script>
+  <script src="../../web/js/vendor/codemirror/addon/edit/matchbrackets.min.js"></script>
+  <script src="../../web/js/vendor/codemirror/addon/edit/closebrackets.min.js"></script>
+  <script src="../../web/js/vendor/codemirror/addon/selection/active-line.min.js"></script>
+  <script src="../../web/js/vendor/marked.min.js"></script>
+  <script src="../../web/js/vendor/purify.min.js"></script>
+  <script src="../../web/js/vendor/viewer.min.js"></script>
+  <script src="../../web/js/app-viewer-registry.js"></script>
+  <script src="../../web/js/app-json-viewer.js"></script>
+  <script src="../../web/js/app-text-viewer.js"></script>
+  <script src="../../web/js/app-sequence-viewer.js"></script>
+  <script src="../../web/js/app-resource-viewer.js"></script>
+  <script src="../../web/js/app-text-diff.js"></script>
+  <script src="../../web/js/app-run-changes.js"></script>
+  <script src="screen-map.js?v=compact-layout-20261018-5"></script>
+  <script src="ui.js?v=compact-layout-20261018-5"></script>
+  <script src="edit-state.js?v=compact-layout-20261018-5"></script>
+  <script src="workspace-tree.js?v=compact-layout-20261018-5"></script>
+  <script src="navigation.js?v=compact-layout-20261018-5"></script>
+  <script src="appearance.js?v=compact-layout-20261018-5"></script>
+  <script src="chat-timeline.js?v=compact-layout-20261018-5"></script>
+  <script src="motion.js?v=compact-layout-20261018-5"></script>
+  <script src="chat-ui.js?v=compact-layout-20261018-5"></script>
+  <script src="materials-ui.js?v=compact-layout-20261018-5"></script>
+  <script src="chat-scroll.js?v=compact-layout-20261018-5"></script>
+  <script src="chat-demo.js?v=compact-layout-20261018-5"></script>
+  <script src="screens.js?v=compact-layout-20261018-5"></script>
+  <script src="split-layout.js?v=compact-layout-20261018-5"></script>
+  <script src="product-tree.js?v=compact-layout-20261018-5"></script>
+  <script src="viewer-ui.js?v=compact-layout-20261018-5"></script>
+  <script src="diff-ui.js?v=compact-layout-20261018-5"></script>
+  <script src="product-components.js?v=compact-layout-20261018-5"></script>
+  <script src="settings-ui.js?v=compact-layout-20261018-5"></script>
+  <script src="integration-map.js?v=compact-layout-20261018-5"></script>
+  <script src="app.js?v=compact-layout-20261018-5"></script>
+</body>
+</html>

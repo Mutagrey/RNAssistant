@@ -1,0 +1,105 @@
+/* Product tokens. This isolated prototype is not loaded by the shipped UI. */
+:root {
+  color-scheme: light;
+  --canvas: #e9ece8;
+  --surface: #ffffff;
+  --surface-subtle: #f7f8f5;
+  --surface-hover: #eef1eb;
+  --surface-selected: #e6eee7;
+  --ink: #202d26;
+  --ink-muted: #68736b;
+  --ink-faint: #788278;
+  --line: #e1e6de;
+  --line-strong: #c7d0c4;
+  --accent: #35684b;
+  --accent-hover: #28563d;
+  --accent-ink: #ffffff;
+  --accent-soft: #e8f1e9;
+  --warning: #86571b;
+  --success: #287348;
+  --success-soft: #eaf5ed;
+  --warning-soft: #fbf2df;
+  --danger: #ad443c;
+  --danger-soft: #f9eeeb;
+  --info: #426683;
+  --info-soft: #ecf2f7;
+  --code-bg: #f6f8f4;
+  --scrim: #17271e55;
+  --shadow: 0 12px 40px #1a30201c;
+  --focus: #4b8160;
+  --font: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+  --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 14px;
+  --text-lg: 16px;
+  --text-title: 24px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --radius-sm: 10px;
+  --radius: 10px;
+  --radius-lg: 16px;
+  --control: 34px;
+  --nav-width: 310px;
+  --page-header-height: 52px;
+  --list-width: 250px;
+  --inspector-width: 292px;
+  --user-bubble-bg: #e3eee6;
+  --user-bubble-text: #264e37;
+  --shimmer: #ffffffb3;
+  --shimmer-peak: #14291e;
+  --shimmer-duration: 2.2s;
+  --motion-fast: 140ms;
+  --motion-duration: 240ms;
+  --motion-ease: cubic-bezier(.2, .8, .2, 1);
+}
+[data-theme="dark"] {
+  color-scheme: dark;
+  --canvas: #151b17;
+  --surface: #202723;
+  --surface-subtle: #1b221e;
+  --surface-hover: #2c352e;
+  --surface-selected: #314336;
+  --ink: #e2e8df;
+  --ink-muted: #a5b0a4;
+  --ink-faint: #9ca698;
+  --line: #354035;
+  --line-strong: #52604e;
+  --accent: #9bc8a5;
+  --accent-hover: #b0d8b8;
+  --accent-ink: #172c1d;
+  --accent-soft: #2a3a2e;
+  --warning: #e5c18b;
+  --success: #8bd4a2;
+  --success-soft: #273c2d;
+  --warning-soft: #3b3222;
+  --danger: #f0aaa1;
+  --danger-soft: #412b29;
+  --info: #adc8df;
+  --info-soft: #2c3540;
+  --code-bg: #1c231e;
+  --scrim: #060b08aa;
+  --shadow: 0 12px 40px #00000055;
+  --shimmer: #d9eedb38;
+  --shimmer-peak: #ffffff;
+  --focus: #9bc8a5;
+  --user-bubble-bg: #314a39;
+  --user-bubble-text: #d2e8d6;
+}
+
+/* Accent only changes emphasis; warning and error keep their semantic colours. */
+[data-accent="blue"] { --accent: #355fba; --accent-hover: #294c99; --accent-soft: #eaf0fc; --surface-selected: #e5ecfa; --user-bubble-bg: #e6edfa; --user-bubble-text: #294778; --focus: #426ed1; }
+[data-accent="violet"] { --accent: #7550ad; --accent-hover: #5c3d8e; --accent-soft: #f1eafa; --surface-selected: #ede6f6; --user-bubble-bg: #ede6f6; --user-bubble-text: #54377c; --focus: #8a62c2; }
+[data-accent="rose"] { --accent: #aa4564; --accent-hover: #8c3450; --accent-soft: #f9eaf0; --surface-selected: #f5e5eb; --user-bubble-bg: #f5e5eb; --user-bubble-text: #793149; --focus: #b85775; }
+[data-accent="amber"] { --accent: #94611b; --accent-hover: #754b13; --accent-soft: #f9efdf; --surface-selected: #f2e8d8; --user-bubble-bg: #f4ead8; --user-bubble-text: #6c4718; --focus: #a97424; }
+[data-theme="dark"][data-accent="blue"] { --accent: #a4bffc; --accent-hover: #c0d1fd; --accent-ink: #142348; --accent-soft: #283652; --surface-selected: #2c3c58; --user-bubble-bg: #2b3d60; --user-bubble-text: #dbe6ff; --focus: #a4bffc; }
+[data-theme="dark"][data-accent="violet"] { --accent: #c7adf2; --accent-hover: #dbc5fc; --accent-ink: #302044; --accent-soft: #392e4a; --surface-selected: #3d3251; --user-bubble-bg: #433258; --user-bubble-text: #eee3fc; --focus: #c7adf2; }
+[data-theme="dark"][data-accent="rose"] { --accent: #f0aec3; --accent-hover: #fac5d5; --accent-ink: #43202e; --accent-soft: #492f39; --surface-selected: #51333e; --user-bubble-bg: #54343f; --user-bubble-text: #ffe1ea; --focus: #f0aec3; }
+[data-theme="dark"][data-accent="amber"] { --accent: #eac38c; --accent-hover: #f5d6a9; --accent-ink: #37270f; --accent-soft: #423728; --surface-selected: #493c2a; --user-bubble-bg: #4d3f2b; --user-bubble-text: #fce9ca; --focus: #eac38c; }
+:root { --chat-text: 14px; --composer-text: 13px; --tree-text: 12px; }
+[data-text-size="large"] { --text-base: 16px; --text-sm: 13px; --text-xs: 12px; --chat-text: 16px; --composer-text: 15px; --tree-text: 14px; }
+[data-density="relaxed"] { --control: 38px; }

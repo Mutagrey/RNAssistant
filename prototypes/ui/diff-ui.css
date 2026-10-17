@@ -1,0 +1,32 @@
+/* The shipped RNAssistantTextDiff / RNAssistantRunChanges renderers use shared UI tokens. */
+.product-diff, .run-change-diff { min-width: 0; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--code-bg); font: 12px/1.65 var(--mono); }
+.product-diff { max-height: 100%; }
+.vba-diff-summary { position: sticky; top: 0; left: 0; z-index: 1; padding: 7px 10px; background: var(--surface-subtle); border-bottom: 1px solid var(--line); color: var(--ink-muted); font: 12px var(--font); }
+.vba-diff-line { display: grid; grid-template-columns: 20px 32px 32px minmax(max-content, 1fr); width: max-content; min-width: 100%; min-height: 22px; }
+.vba-diff-marker, .vba-diff-line-number { color: var(--ink-faint); padding: 2px 5px; text-align: right; user-select: none; font-variant-numeric: tabular-nums; }
+.vba-diff-marker { text-align: center; }
+.vba-diff-line code { padding: 2px 10px; white-space: pre; background: none; font: inherit; }
+.vba-diff-line.add { background: var(--success-soft); }
+.vba-diff-line.remove { background: var(--danger-soft); }
+.vba-diff-line.add :is(code, .vba-diff-marker, .vba-diff-new-line), .run-change-added { color: var(--success); }
+.vba-diff-line.remove :is(code, .vba-diff-marker, .vba-diff-old-line), .run-change-removed { color: var(--danger); }
+.vba-diff-line.note, .text-diff-newline { color: var(--ink-muted); }
+.run-changes-slot { min-width: 0; margin-top: 12px; }
+.run-changes { width: fit-content; max-width: 100%; border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; background: var(--surface-subtle); }
+.run-changes[open] { width: 100%; }
+.run-changes summary { list-style: none; cursor: pointer; }
+.run-changes summary::-webkit-details-marker { display: none; }
+.run-changes-summary, .run-change-file-summary { display: flex; align-items: center; gap: 8px; padding: 7px 10px; min-height: 34px; font: 12px/1.5 var(--font); }
+.run-changes-summary::before, .run-change-file-summary::before { content: ""; width: 5px; height: 5px; border-right: 1px solid var(--ink-muted); border-top: 1px solid var(--ink-muted); transform: rotate(45deg); margin-right: 2px; flex-shrink: 0; }
+.run-changes[open] > summary::before, .run-change-file[open] > summary::before { transform: rotate(135deg); }
+.run-changes summary:hover { background: var(--surface-hover); }
+.run-change-counts { display: inline-flex; gap: 6px; white-space: nowrap; font: 11px var(--mono); margin-left: auto; }
+.run-change-file { border-top: 1px solid var(--line); background: var(--surface); }
+.run-change-labels { display: flex; align-items: baseline; flex-wrap: wrap; gap: 3px 10px; min-width: 0; flex: 1; }
+.run-change-title { overflow-wrap: anywhere; }
+.run-change-scope, .run-changes-caption { color: var(--ink-muted); font-size: 11px; }
+.assistant-message .run-changes-caption, .run-changes-caption { margin: 0; padding: 6px 10px; }
+.run-change-diff { max-height: 330px; border-width: 1px 0 0; border-radius: 0; }
+.run-change-extra { display: none; }
+.run-changes.show-all .run-change-extra { display: block; }
+.run-changes-more { width: 100%; padding: 8px 10px; text-align: left; font-size: 12px; color: var(--ink-muted); border-top: 1px solid var(--line); }
