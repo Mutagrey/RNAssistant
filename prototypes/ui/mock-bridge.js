@@ -2,6 +2,8 @@
   "use strict";
 
   var scenario = new URLSearchParams(location.search).get("scenario") || "ready";
+  var fixtures = window.PrototypeFixtures;
+  if (!fixtures) throw new Error("Preview fixtures are required before the mock bridge.");
   var contract = window.__RNAMockBridgeContract;
   var token = "local-preview-session";
   var listeners = [];
@@ -12,37 +14,45 @@
   var chatSequence = 1;
   var activeChatId = scenario === "empty" ? "" : "preview-chat";
   var messages = scenario === "empty" ? [] : [
-    { id: "preview-user", role: "user", content: "Покажи динамику продаж по месяцам.", createdUtc: "2026-10-18T09:00:00Z" },
-    { id: "preview-answer", role: "assistant", content: "В демонстрационном документе продажи растут с июля по сентябрь. Проверьте данные перед выводом.", createdUtc: "2026-10-18T09:00:05Z" }
+    { id: "preview-user", role: "user", content: fixtures.chat.user, createdUtc: "2026-10-18T09:00:00Z" },
+    { id: "preview-answer", role: "assistant", content: fixtures.chat.assistant, createdUtc: "2026-10-18T09:00:05Z" }
   ];
-  var chats = activeChatId ? [{ Id: activeChatId, Title: "Анализ продаж", Host: "Excel",
-    DocumentKey: "preview-document", DocumentTitle: "Продажи · сентябрь.xlsx", IsCurrentDocument: true,
+  var chats = activeChatId ? [{ Id: activeChatId, Title: fixtures.chat.title, Host: "Excel",
+    DocumentKey: "preview-document", DocumentTitle: fixtures.document, IsCurrentDocument: true,
     LastActivityUtc: "2026-10-18T09:00:05Z", MessageCount: messages.length, Revision: revision }] : [];
   var documentItems = scenario === "empty" ? [] : [{ documentKey: "preview-document",
-    title: "Продажи · сентябрь.xlsx", host: "Excel", isActive: true }];
-  var initialSkillText = "# Анализ продаж\n\nСравнивай период с предыдущим.\n\n1. Проверь колонки и период.\n2. Раздели факты и предположения.\n3. Покажи исключения и пропуски.\n";
+    title: fixtures.document, host: "Excel", isActive: true }];
+  var initialSkillText = fixtures.skill;
   var promptText = "# Агент\n\nОтвечай по данным текущего документа и явно указывай ограничения результата.\n";
   var skills = [], skillTexts = Object.create(null), skillReferences = Object.create(null);
   var messagesByChat = activeChatId ? { [activeChatId]: messages } : {};
+  var previewRuns = Object.create(null);
   var inboxRevision = 1, inputSequence = 0, inputReceipts = Object.create(null);
   var tool = null;
   var toolSourceText = "";
   var settings = {};
   var workspaceRevision = 2;
-  var sourcePaths = ["Москва.xlsx", "Казань.xlsx"];
-  var workspaceFiles = [
-    { name: "Москва.xlsx", path: "Москва.xlsx", isDirectory: false, byteLength: 4194304 },
-    { name: "Казань.xlsx", path: "Казань.xlsx", isDirectory: false, byteLength: 3670016 },
-    { name: "Самара.xlsx", path: "Самара.xlsx", isDirectory: false, byteLength: 3145728 }
-  ];
+  var sourcePaths = fixtures.sources.slice(0, 2).map(function (source) { return source.name; });
+  var workspaceFiles = fixtures.sources.map(function (source) {
+    return { name: source.name, path: source.name, isDirectory: false, byteLength: source.byteLength };
+  });
   var templateHead = "template-sales-1730000000000-" + "a".repeat(32) + ".json";
   var dictionaryText = JSON.stringify({ version: 1, revision: 1,
     parameters: [{ id: "revenue", name: "Выручка", unitId: "rub" }, { id: "orders", name: "Заказы", unitId: "pcs" }],
     units: [{ id: "rub", name: "Рубль" }, { id: "pcs", name: "Штука" }],
     parameterMappings: [{ scope: "sales", source: "Выручка", targetId: "revenue" }], unitMappings: [] }, null, 2);
   var templateText = JSON.stringify({ kind: "data-templates-project-template", template: { id: "sales" } }, null, 2);
-  var artifactUri = "rna://chat/preview-chat/artifact/sales-report/revision/1";
-  var artifactText = "# Итоги сентября\n\nМосква: 7 420 000 ₽. Казань: 5 380 000 ₽.\n\nДанные демонстрационные.\n";
+  var artifactExamples = [
+    { id: "report", title: fixtures.materials[0].name, kind: "markdown",
+      contentType: "text/markdown; charset=utf-8", body: fixtures.report, linked: true },
+    { id: "json", title: fixtures.materials[2].name, kind: "file",
+      contentType: "application/json; charset=utf-8", body: fixtures.materialSources.json, linked: true },
+    { id: "text", title: "Заметки к отчёту.txt", kind: "file",
+      contentType: "text/plain; charset=utf-8", body: fixtures.materialSources.text, linked: false }
+  ];
+  artifactExamples.forEach(function (item) {
+    item.resourceUri = "rna://chat/preview-chat/artifact/" + item.id + "/revision/1";
+  });
   var nativeFetch = window.fetch.bind(window);
 
   function clone(value) { return JSON.parse(JSON.stringify(value)); }
@@ -70,7 +80,7 @@
       sourceQueueId: null,
       workspace: scenario === "empty" ? null : { bindingId: "preview-binding", workspaceId: "preview-workspace",
         rootPath: "C:\\Projects\\Reports", readOnly: false },
-      project: scenario === "empty" ? null : { name: "Управленческая отчётность", manifestPath: "project.json",
+      project: scenario === "empty" ? null : { name: fixtures.project, manifestPath: "project.json",
         formatVersion: 2, sources: sourcePaths.map(function (path, index) {
           return { sourceId: "src_" + (index + 1).toString(16).padStart(32, "0"), path: path };
         }) } };
@@ -88,10 +98,39 @@
       artifacts: [], artifactLibrary: { sessionRevision: revision, heads: [] }, inbox: chatInbox() };
   }
   function chatInbox(receipt) {
+    var run = previewRuns[activeChatId];
     return { chatId: activeChatId, epoch: "preview-inbox", revision: inboxRevision,
-      running: false, paused: false, items: [], receipts: [], acceptedInput: receipt || null };
+      running: !!run, phase: run ? run.phase : "", paused: false,
+      items: [], receipts: [], acceptedInput: receipt || null };
   }
   function emit(response) { listeners.forEach(function (listener) { listener({ data: response }); }); }
+  function emitChatState(chatId) {
+    emit({ type: "chatState", scope: activeChatId === chatId ? "full" : "catalog", payload: chatState() });
+  }
+  function simulateChatRun(chatId, number) {
+    var runId = "preview-run-" + number;
+    var answer = fixtures.chat.assistant + "\n\n_Это смоделированный ответ: модель и Office не запускались._";
+    var split = Math.ceil(answer.length / 2);
+    function progress(phase, message, contentDelta) {
+      if (!previewRuns[chatId]) return;
+      previewRuns[chatId].phase = phase;
+      emit({ type: "progress", id: "inbox:" + chatId,
+        payload: { chatId: chatId, runId: runId, phase: phase, message: message, contentDelta: contentDelta || "" } });
+    }
+    setTimeout(function () { emitChatState(chatId); progress("thinking", "Сверяю периоды и источники…"); }, 0);
+    setTimeout(function () { progress("streaming", null, answer.slice(0, split)); }, 220);
+    setTimeout(function () { progress("streaming", null, answer.slice(split)); }, 520);
+    setTimeout(function () {
+      if (!previewRuns[chatId]) return;
+      var now = new Date().toISOString();
+      messagesByChat[chatId].push({ Id: "preview-reply-" + number, Role: "assistant", Content: answer, CreatedUtc: now });
+      delete previewRuns[chatId];
+      revision++; inboxRevision++;
+      var chat = chats.find(function (item) { return item.Id === chatId; });
+      if (chat) { chat.MessageCount = messagesByChat[chatId].length; chat.Revision = revision; chat.LastActivityUtc = now; }
+      emitChatState(chatId);
+    }, 850);
+  }
   function fail(message, code) {
     var error = new Error(message);
     error.code = code || "preview_unsupported";
@@ -120,7 +159,7 @@
       enabled: true, builtIn: false, revision: "preview-skill-1", references: [],
       body: { sha256: await hash(initialSkillText), byteLength: bytes(initialSkillText).length, characters: initialSkillText.length } });
     skillTexts[skills[0].id] = initialSkillText;
-    var code = "Option Explicit\n\nPublic Sub FormatSalesReport()\n    ThisWorkbook.Worksheets(\"Продажи\").Range(\"A1:F1\").Font.Bold = True\nEnd Sub\n";
+    var code = fixtures.vba;
     toolSourceText = JSON.stringify({ argumentSchemaJson: '{"type":"object","properties":{},"additionalProperties":false}',
       code: code, readme: "# Форматирование отчёта\n\nПрименяет оформление к заголовку таблицы.\n",
       components: [{ name: "FormatSales", type: "StdModule", fileName: "FormatSales.bas", code: code,
@@ -230,7 +269,7 @@
 
   async function dispatch(type, payload) {
     if (type === "init") return { bridgeToken: token, bridgeContract: contract,
-      init: Object.assign({ appVersion: "preview", host: "Excel", title: "Продажи · сентябрь.xlsx",
+      init: Object.assign({ appVersion: "preview", host: "Excel", title: fixtures.document,
         settings: clone(settings), prompts: promptLibrary(), hasApiKey: true, hasHistorySecret: false }, chatState()) };
     if (type === "reportClientTiming" || type === "focusState") return {};
     if (type === "listChats" || type === "getChatState") {
@@ -253,17 +292,18 @@
       var receipt = inputReceipts[payload.operationId];
       if (receipt && receipt.chatId !== activeChatId) fail("ID сообщения принадлежит другому чату.", "preview_input_invalid");
       if (!receipt) {
+        if (previewRuns[activeChatId]) fail("Дождитесь завершения ответа примера.", "preview_run_busy");
         var number = ++inputSequence, now = new Date().toISOString();
         receipt = { chatId: activeChatId, Id: "preview-input-" + number, OperationId: payload.operationId,
           Text: payload.text, Status: "Applied", Delivery: payload.delivery || "Steer",
           Revision: 1, Attachments: [] };
         inputReceipts[payload.operationId] = receipt;
         messages.push({ Id: receipt.Id, Role: "user", Content: payload.text, CreatedUtc: now });
-        messages.push({ Id: "preview-reply-" + number, Role: "assistant",
-          Content: "Это ответ демонстрационного сценария. Модель и Office не запускались.", CreatedUtc: now });
+        previewRuns[activeChatId] = { phase: "thinking" };
         revision++; inboxRevision++;
         var active = chats.find(function (chat) { return chat.Id === activeChatId; });
         active.MessageCount = messages.length; active.Revision = revision; active.LastActivityUtc = now;
+        simulateChatRun(activeChatId, number);
       }
       return chatInbox(receipt);
     }
@@ -332,30 +372,36 @@
     }
     if (type === "listArtifactCatalog") {
       requireChat(payload);
-      var linked = activeChatId === "preview-chat";
-      var artifact = { documentId: "preview-document", documentTitle: "Продажи · сентябрь.xlsx",
-        resourceUri: artifactUri, title: "Итоги сентября.md", kind: "markdown",
-        updatedUtc: "2026-10-18T09:00:00Z", linked: linked, selected: linked, canTransfer: true, canDelete: false };
-      var matches = scenario !== "empty" && (!payload.query || artifact.title.toLowerCase().includes(payload.query.toLowerCase())) &&
-        (!payload.kind || payload.kind === "all" || payload.kind === artifact.kind) &&
-        (payload.scope !== "chat" || linked) && (!payload.documentId || payload.documentId === "preview-document") && !payload.cursor;
+      var items = scenario === "empty" || payload.cursor ? [] : artifactExamples.filter(function (item) {
+        var linked = item.linked && activeChatId === "preview-chat";
+        return (!payload.query || item.title.toLowerCase().includes(String(payload.query).toLowerCase())) &&
+          (!payload.kind || payload.kind === "all" || payload.kind === item.kind) &&
+          (payload.scope !== "chat" || linked) &&
+          (!payload.documentId || payload.documentId === "preview-document");
+      }).map(function (item) {
+        var linked = item.linked && activeChatId === "preview-chat";
+        return { documentId: "preview-document", documentTitle: fixtures.document,
+          resourceUri: item.resourceUri, title: item.title, kind: item.kind,
+          updatedUtc: "2026-10-18T09:00:00Z", linked: linked, selected: linked,
+          canTransfer: true, canDelete: false };
+      });
       return { chatId: activeChatId, sessionRevision: revision, documentId: "preview-document",
-        documents: [{ id: "preview-document", title: "Продажи · сентябрь.xlsx" }],
-        items: matches ? [artifact] : [], nextCursor: null };
+        documents: [{ id: "preview-document", title: fixtures.document }], items: items, nextCursor: null };
     }
     if (type === "exportArtifact") {
       requireChat(payload);
-      if (payload.documentId !== "preview-document" || payload.resourceUri !== artifactUri)
+      var example = artifactExamples.find(function (item) { return item.resourceUri === payload.resourceUri; });
+      if (payload.documentId !== "preview-document" || !example)
         fail("Материал примера изменился.", "preview_revision_changed");
-      var artifactData = download(artifactText, "text/markdown; charset=utf-8");
-      artifactData.payload.sha256 = await hash(artifactText);
-      return { kind: "markdown", contentType: "text/markdown; charset=utf-8",
-        fileName: "Итоги сентября.md", data: artifactData };
+      var artifactData = download(example.body, example.contentType);
+      artifactData.payload.sha256 = await hash(example.body);
+      return { kind: example.kind, contentType: example.contentType,
+        fileName: example.title, data: artifactData };
     }
     if (type === "getVbaProject") return { result: { Success: true, Message: "VBA-проект примера загружен.",
       DataJson: JSON.stringify({ modules: [{ name: "FormatSales", type: "StdModule",
-        code: "Option Explicit\n\nPublic Sub FormatSalesReport()\n    ThisWorkbook.Worksheets(\"Продажи\").Range(\"A1:F1\").Font.Bold = True\nEnd Sub\n",
-        lineCount: 5 }, { name: "ThisWorkbook", type: "Document", code: "Option Explicit\n", lineCount: 1 }] }) }, backups: [] };
+        code: fixtures.vba, lineCount: fixtures.vba.trimEnd().split("\n").length },
+      { name: "ThisWorkbook", type: "Document", code: "Option Explicit\n", lineCount: 1 }] }) }, backups: [] };
     if (type === "selectChat") {
       if (!chats.some(function (chat) { return chat.Id === payload.chatId; })) fail("Чат примера отсутствует.", "preview_chat_changed");
       activeChatId = payload.chatId; messages = messagesByChat[activeChatId];
@@ -365,7 +411,7 @@
       activeChatId = "preview-chat-" + (++chatSequence); messages = [];
       messagesByChat[activeChatId] = messages;
       chats.unshift({ Id: activeChatId, Title: payload.title || "Новый чат", Host: "Excel",
-        DocumentKey: "preview-document", DocumentTitle: "Продажи · сентябрь.xlsx", IsCurrentDocument: true,
+        DocumentKey: "preview-document", DocumentTitle: fixtures.document, IsCurrentDocument: true,
         LastActivityUtc: new Date().toISOString(), MessageCount: 0, Revision: revision + 1 });
       revision++;
       return chatState();

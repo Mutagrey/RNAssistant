@@ -12,14 +12,49 @@
     header strong { font-weight: 600; }
     header span { color: #5e6a61; }
     header select { margin-left: auto; font: inherit; padding: 4px 8px; }
+    header button { padding: 4px 8px; border: 1px solid #b9c8be; border-radius: 5px; background: white; color: inherit; font: inherit; cursor: pointer; }
+    header button[aria-pressed="true"] { border-color: #3d725a; background: #e4f1e8; }
+    header button:disabled { opacity: .5; cursor: default; }
     header a { color: #3d725a; text-decoration: none; }
     header a:hover { text-decoration: underline; }
+    main { display: flex; flex: 1; min-height: 0; }
+    section { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+    section + section { border-left: 1px solid #b9c8be; }
+    section[hidden] { display: none; }
+    section > span { padding: 3px 10px; border-bottom: 1px solid #b9c8be; background: #f3f5f2; }
     iframe { flex: 1; width: 100%; min-height: 0; border: 0; background: white; }
+    @media (max-width: 900px) { main[data-compare="true"] { flex-direction: column; } main[data-compare="true"] section + section { border-left: 0; border-top: 1px solid #b9c8be; } }
   </style>
 </head>
 <body>
-  <header><strong>Рабочий UI</strong><span>Реальные экраны и обработчики с временным mock bridge</span><select id="scenario" aria-label="Состояние примера"><option value="ready">Заполнено</option><option value="empty">Пусто</option><option value="error">Ошибка чтения</option></select><a href="/" target="_blank" rel="noopener">Открыть демо ↗</a></header>
-  <iframe id="product" src="/preview/web/?scenario=ready" title="Рабочий интерфейс RNAssistant"></iframe>
-  <script>document.getElementById("scenario").addEventListener("change", function (event) { document.getElementById("product").src = "/preview/web/?scenario=" + encodeURIComponent(event.target.value); });</script>
+  <header><strong>Рабочий UI</strong><span>Реальные экраны и обработчики с временным mock bridge</span><select id="scenario" aria-label="Состояние примера"><option value="ready">Заполнено</option><option value="empty">Пусто</option><option value="error">Ошибка чтения</option></select><button id="run-example" type="button">Запустить пример чата</button><button id="compare" type="button" aria-pressed="false">Сравнить рядом</button><a href="/" target="_blank" rel="noopener">Открыть демо ↗</a></header>
+  <main id="comparison" data-compare="false">
+    <section id="demo-pane" hidden><span>Демо · образец оформления и поведения</span><iframe id="demo" title="Демонстрационный интерфейс RNAssistant"></iframe></section>
+    <section><span>Продукт · реальные обработчики и mock bridge</span><iframe id="product" src="/preview/web/?scenario=ready" title="Рабочий интерфейс RNAssistant"></iframe></section>
+  </main>
+  <script>
+    document.getElementById("scenario").addEventListener("change", function (event) {
+      document.getElementById("product").src = "/preview/web/?scenario=" + encodeURIComponent(event.target.value);
+      document.getElementById("run-example").disabled = event.target.value === "empty";
+    });
+    document.getElementById("run-example").addEventListener("click", function () {
+      var view = document.getElementById("product").contentWindow;
+      var chat = view.document.querySelector('.section-rail [data-section="chat"]');
+      if (chat) chat.click();
+      var input = view.document.getElementById("chatInput");
+      var send = view.document.getElementById("sendButton");
+      if (!input || !send || !view.PrototypeFixtures) return;
+      input.value = view.PrototypeFixtures.chat.user;
+      input.dispatchEvent(new view.Event("input", { bubbles: true }));
+      if (!send.disabled) send.click();
+    });
+    document.getElementById("compare").addEventListener("click", function (event) {
+      var active = event.currentTarget.getAttribute("aria-pressed") !== "true";
+      event.currentTarget.setAttribute("aria-pressed", String(active));
+      document.getElementById("comparison").dataset.compare = String(active);
+      document.getElementById("demo-pane").hidden = !active;
+      if (active && !document.getElementById("demo").src) document.getElementById("demo").src = "/#/chat/main";
+    });
+  </script>
 </body>
 </html>

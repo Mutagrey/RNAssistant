@@ -37,16 +37,44 @@ async function serve() {
     assert.equal(preview.status(), 200);
     assert.equal(comparison.status(), 200);
     assert.equal((await native.text()).includes("mock-bridge.js"), false);
+    assert.equal((await native.text()).includes("preview/fixtures.js"), false);
     assert.equal((await preview.text()).includes("mock-bridge.js"), true);
+    assert.equal((await preview.text()).includes('src="/preview/fixtures.js"'), true);
     assert.equal((await comparison.text()).includes('src="/preview/web/?scenario=ready"'), true);
 
     await normal.goto(server.address + "preview/web/?scenario=ready");
     await normal.waitForFunction(() => state.activeChatId === "preview-chat" && state.skills.length === 1 && !state.initializePromise);
     assert.equal(await normal.evaluate(() => state.bridgeUnavailable), false);
+    const previewExamples = await normal.evaluate(() => ({
+      skill: PrototypeFixtures.skill,
+      report: PrototypeFixtures.report,
+      chat: PrototypeFixtures.chat
+    }));
+    assert.deepEqual(await normal.evaluate(() => ({
+      title: state.chats[0].Title,
+      question: state.messages[0].content || state.messages[0].Content,
+      answer: state.messages[1].content || state.messages[1].Content
+    })), await normal.evaluate(() => ({
+      title: PrototypeFixtures.chat.title,
+      question: PrototypeFixtures.chat.user,
+      answer: PrototypeFixtures.chat.assistant
+    })));
     assert.equal(await normal.locator("#chatSessionList [data-tree-key='chat:preview-chat']").count(), 1);
+    const progress = [];
+    await normal.evaluate(() => {
+      window.__previewProgress = [];
+      chrome.webview.addEventListener("message", event => {
+        if (event.data.type === "progress" && event.data.id === "inbox:preview-chat")
+          window.__previewProgress.push(event.data.payload);
+      });
+    });
     await normal.locator("#chatInput").fill("Что в отчёте?");
     await normal.locator("#sendButton").click();
-    await normal.waitForFunction(() => state.messages.some(message => message.Content === "Это ответ демонстрационного сценария. Модель и Office не запускались."));
+    await normal.waitForFunction(() => state.messages.some(message =>
+      String(message.Content || message.content || "").includes("Это смоделированный ответ")));
+    progress.push(...await normal.evaluate(() => window.__previewProgress));
+    assert.ok(progress.some(item => item.phase === "thinking"));
+    assert.equal(progress.filter(item => item.phase === "streaming").length, 2);
     assert.equal(await normal.locator("#chatInput").inputValue(), "");
     await normal.locator('.section-rail [data-section="library"]').click();
     await normal.locator('#instructionsList [data-tree-key="skill:0"]').click();
@@ -64,7 +92,7 @@ async function serve() {
     assert.ok(productTabStyle.contentGap >= 31 && productTabStyle.contentGap <= 33);
     await normal.waitForFunction(() => state.skills[0]._sourceLoaded[""] === true);
     const original = await normal.evaluate(() => getCodeEditorValue("skillBodyInput"));
-    assert.match(original, /Анализ продаж/);
+    assert.equal(original, await normal.evaluate(() => PrototypeFixtures.skill));
     await normal.locator("#skillEditorPanel .CodeMirror").click();
     await normal.keyboard.press("ControlOrMeta+End");
     await normal.keyboard.type("\nПроверка mock bridge.");
@@ -111,13 +139,22 @@ async function serve() {
     assert.equal(await normal.locator("#tab-vba .rna-editor-tabs.vba-mode-toggle").count(), 1);
     await normal.locator("#refreshVbaEmptyButton").click();
     await normal.waitForFunction(() => state.vba.modules.length > 0);
+    assert.equal(await normal.evaluate(() => state.vba.modules[0].code),
+      await normal.evaluate(() => PrototypeFixtures.vba));
     await normal.locator('.vba-mode-toggle [data-vba-mode="diff"]').click();
     assert.equal(await normal.locator('.vba-mode-toggle [data-vba-mode="diff"][aria-current="page"]').count(), 1);
     assert.equal(await normal.locator('[data-vba-view="diff"]').isVisible(), true);
     await normal.locator('.section-rail [data-section="artifacts"]').click();
-    await normal.locator("#artifactCatalogOverviewRows .artifact-overview-link").waitFor();
-    await normal.locator("#artifactCatalogOverviewRows .artifact-overview-link").click();
+    await normal.locator("#artifactCatalogOverviewRows .artifact-overview-link").first().waitFor();
+    assert.equal(await normal.locator("#artifactCatalogOverviewRows tr").count(), 3);
+    await normal.locator("#artifactCatalogOverviewRows .artifact-overview-link").first().click();
     await normal.waitForFunction(() => document.querySelector("#artifactCatalogPreviewBody").textContent.includes("Москва"));
+    assert.ok((await normal.locator("#artifactCatalogPreviewBody").textContent()).includes("18,4%"));
+    await normal.locator("#artifactCatalogAll").click();
+    await normal.locator("#artifactCatalogOverviewRows").getByRole("button", { name: "Продажи по регионам.json" }).click();
+    await normal.locator("#artifactCatalogPreviewBody .rn-json-viewer").waitFor();
+    await normal.locator("#artifactCatalogPreviewBody").getByRole("button", { name: "Текст", exact: true }).click();
+    assert.ok((await normal.locator("#artifactCatalogPreviewBody").textContent()).includes("7420000"));
     assert.equal(await normal.locator("#artifactCatalogStatus").textContent(), "");
     await normal.locator('.section-rail [data-section="workspace"]').click();
     await normal.waitForFunction(() => document.querySelector("#wsSelectedList").textContent.includes("Москва.xlsx"));
@@ -139,6 +176,11 @@ async function serve() {
 
     const demo = await browser.newPage();
     await demo.goto(server.address + "#/library/skill");
+    assert.deepEqual(await demo.evaluate(() => ({
+      skill: Prototype.fixtures.skill,
+      report: Prototype.fixtures.report,
+      chat: Prototype.fixtures.chat
+    })), previewExamples);
     await demo.locator("#main .rna-skill-fields").waitFor({ state: "attached" });
     assert.equal(await demo.locator("#main .rna-editor-tabs.tabs").count(), 1);
     assert.equal(await demo.locator("#main .rna-action-menu").count(), 1);
@@ -161,6 +203,20 @@ async function serve() {
       ["ID навыка", "ПриложениеCommonExcelWordPowerPointOutlook", "Описание навыкаСравнение периодов и анализ продаж по регионам", " Доступен агенту"]);
     await demo.close();
 
+    const sideBySide = await browser.newPage();
+    await sideBySide.goto(server.address + "product-preview.html");
+    await sideBySide.locator("#compare").click();
+    assert.equal(await sideBySide.locator("#compare").getAttribute("aria-pressed"), "true");
+    assert.equal(await sideBySide.locator("#demo-pane").isVisible(), true);
+    await sideBySide.frameLocator("#demo").locator("#section-rail").waitFor({ state: "attached" });
+    await sideBySide.waitForFunction(() => {
+      const view = document.getElementById("product").contentWindow;
+      return view.state && view.state.activeChatId === "preview-chat" && !view.state.initializePromise;
+    });
+    await sideBySide.locator("#run-example").click();
+    await sideBySide.waitForFunction(() => document.getElementById("product").contentWindow.state.messages.length >= 4);
+    await sideBySide.close();
+
     const failed = await browser.newPage();
     failed.on("pageerror", error => errors.push(error.message));
     await failed.goto(server.address + "preview/web/?scenario=error");
@@ -176,7 +232,7 @@ async function serve() {
     await empty.waitForFunction(() => !state.initializePromise && !state.bridgeUnavailable);
     assert.deepEqual(await empty.evaluate(() => ({ chats: state.chats.length, skills: state.skills.length })), { chats: 0, skills: 0 });
     await empty.close();
-    console.log("PASS product mock preview: isolated bridge, shared tabs/menus/skill fields, chat, skill/reference writes, material/project reads and empty/error scenarios");
+    console.log("PASS product mock preview: isolated bridge, shared fixtures/components, animated chat, actions, comparison, empty/error scenarios");
   } finally {
     await browser.close();
     server.process.kill("SIGTERM");

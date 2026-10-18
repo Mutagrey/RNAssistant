@@ -35,7 +35,8 @@ class PreviewHandler(SimpleHTTPRequestHandler):
                 return
             bootstrap = "<script>window.__RNAMockBridgeContract=" + json.dumps(
                 {"version": 2, "operations": operations}, separators=(",", ":")) + ";</script>\n  "
-            html = html.replace(marker, bootstrap + '<script src="/preview/mock-bridge.js"></script>\n  ' + marker)
+            html = html.replace(marker, bootstrap + '<script src="/preview/fixtures.js"></script>\n  '
+                                + '<script src="/preview/mock-bridge.js"></script>\n  ' + marker)
             content = html.encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")

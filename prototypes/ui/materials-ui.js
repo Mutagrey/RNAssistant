@@ -1,14 +1,7 @@
 (function () {
   "use strict";
   var P = window.Prototype, E = P.escape, I = P.icon, B = P.button, G = P.go;
-  var sources = {
-    report: P.fixtures.report,
-    html: '<!doctype html>\n<html lang="ru"><meta charset="utf-8">\n<style>body{font:16px system-ui;color:#21392a;padding:32px}h1{font-size:28px}.chart{display:flex;align-items:end;gap:24px;height:180px;margin:40px 0}.bar{flex:1;background:#d7e7dc;text-align:center;border-radius:6px 6px 0 0}p{line-height:1.7}</style>\n<h1>Динамика продаж</h1>\n<p>Выручка выросла на 18,4%. Москва и Казань дали основной прирост.</p>\n<div class="chart"><div class="bar" style="height:60%">Июнь · 9,6</div><div class="bar" style="height:68%">Июль · 10,2</div><div class="bar" style="height:76%">Август · 10,8</div><div class="bar" style="height:94%">Сентябрь · 12,8</div></div>\n<p>Миллионы рублей · демонстрационные данные</p></html>',
-    json: JSON.stringify({ period: "2026-09", regions: [{ name: "Москва", revenue: 7420000 }, { name: "Казань", revenue: 5380000 }, { name: "Самара", revenue: null }] }, null, 2)
-  };
-  sources.plan = "# План подготовки отчёта\n\n1. Сверить источники и периоды.\n2. Объяснить изменения показателей.\n3. Подготовить отчёт и проверить выводы.\n";
-  sources.tasks = JSON.stringify({ goal: "Подготовить отчёт за сентябрь", status: "active", steps: [{ id: "read", text: "Проверить источники", status: "completed" }, { id: "compare", text: "Сравнить периоды", status: "in_progress", note: "Москва и Казань включены; Самара требует уточнения." }, { id: "report", text: "Собрать итоговый отчёт", status: "pending" }] }, null, 2);
-  sources.text = "Заметки к отчёту\n\nСравнить сентябрь с августом.\nУказать состав источников и пропуски.\nНе включать Самару без поля «Выручка».";
+  var sources = P.fixtures.materialSources;
   P.initMaterials = function (state) { state.materialId = "report"; state.materialFile = "index.html"; state.materials = P.fixtures.materials.map(function (item) {
       var versions = sources[item.id] == null ? [] : [{ body: sources[item.id], note: "Исходная версия" }];
       if (item.id === "report") versions.unshift({ body: "# Итоги сентября\n\nПервый вариант отчёта.\n", note: "Первый вариант" });

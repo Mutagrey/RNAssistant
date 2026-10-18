@@ -9,8 +9,8 @@
     }).join(""));
   };
   P.sampleMessages = function () { return [
-    { role: "user", text: "Сравни сентябрь с августом. Что изменилось в продажах и на что стоит обратить внимание?" },
-    { role: "assistant", kind: "report", changes: { complete: true, items: [{ title: "Итоги сентября.md", scope: "Материал чата", availability: "available", beforeExists: true, afterExists: true, before: "# Итоги сентября\n\nПервый вариант отчёта.\n", after: P.fixtures.report }] }, text: "В сентябре выручка выросла на 18,4%. Москва и Казань дали основной прирост. По Самаре есть пропуски в исходных данных." }
+    { role: "user", text: P.fixtures.chat.user },
+    { role: "assistant", kind: "report", changes: { complete: true, items: [{ title: P.fixtures.materials[0].name, scope: "Материал чата", availability: "available", beforeExists: true, afterExists: true, before: "# Итоги сентября\n\nПервый вариант отчёта.\n", after: P.fixtures.report }] }, text: P.fixtures.chat.assistant }
   ]; };
   function report(index) {
     var history = P.renderRunHistory({ id: "sample-" + index, done: true, duration: "8 с", blocks: [

@@ -1,7 +1,7 @@
 (function () {
   "use strict";
   var P = window.Prototype, E = P.escape, I = P.icon, B = P.button, G = P.go;
-  var initial = { title: "Что изменилось за сентябрь", document: P.fixtures.document, subtitle: "Сравнение периодов · 12:42", draft: "", messages: P.sampleMessages(), plan: false, status: "ready", empty: false, usage: { input: 24600, limit: 128000 } };
+  var initial = { title: P.fixtures.chat.title, document: P.fixtures.document, subtitle: "Сравнение периодов · 12:42", draft: "", messages: P.sampleMessages(), plan: false, status: "ready", empty: false, usage: { input: 24600, limit: 128000 } };
   var S = P.state = {
     route: "chat/main", review: "app", theme: "light", scenario: "ready", standalone: false,
     chatId: "sales", chats: { sales: Object.assign({}, initial), summary: { title: "Сводка по регионам", subtitle: "3 региона · 11:18", draft: "", messages: [], plan: false, status: "ready", empty: true } },

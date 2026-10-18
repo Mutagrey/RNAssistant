@@ -76,25 +76,3 @@ window.PrototypeMap = [
     ["CAS audit / GC / clear runtime", "Обслуживание / хранилище", "settings/diagnostics", "casHealthTitle", "Опасные операции в отдельной зоне с подтверждением."]
   ]}
 ];
-
-window.PrototypeFixtures = {
-  document: "Продажи · сентябрь.xlsx",
-  project: "Управленческая отчётность",
-  materials: [
-    { id: "report", name: "Итоги сентября.md", type: "Markdown", icon: "file", owner: "Этот чат", time: "12:42" },
-    { id: "html", name: "Динамика продаж.html", type: "HTML", icon: "chart", owner: "Этот чат", time: "12:40" },
-    { id: "json", name: "Продажи по регионам.json", type: "JSON", icon: "braces", owner: "Этот чат", time: "12:39" },
-    { id: "pdf", name: "Методика расчёта.pdf", type: "PDF", icon: "file", owner: "В документе", time: "Вчера" },
-    { id: "image", name: "Диаграмма.png", type: "Изображение", icon: "image", owner: "В документе", time: "Вчера" },
-    { id: "sequence", name: "Обзор регионов", type: "Коллекция", icon: "layers", owner: "Все документы", time: "14 окт." }
-  ],
-  sources: [
-    { name: "Москва.xlsx", size: "2,4 МБ", rows: 128, status: "Готов" },
-    { name: "Казань.xlsx", size: "1,8 МБ", rows: 96, status: "Готов" },
-    { name: "Самара.xlsx", size: "840 КБ", rows: 0, status: "Нужна проверка" }
-  ],
-  report: "# Итоги сентября\n\nВыручка выросла на 18,4% относительно августа.\n\n## Главное\n\n- Выручка: 12,8 млн ₽\n- Заказы: 1 248\n- Средний чек: 10 256 ₽\n\nРост обеспечили Москва и Казань. По Самаре нужно проверить исходные данные.\n",
-  vba: "Option Explicit\n\nPublic Sub FormatSalesReport()\n    Dim report As Worksheet\n    Set report = ThisWorkbook.Worksheets(\"Продажи\")\n\n    With report.Range(\"A1:F1\")\n        .Font.Bold = True\n        .Interior.Color = RGB(232, 241, 233)\n    End With\n\n    report.Columns(\"A:F\").AutoFit\nEnd Sub\n",
-  skill: "# Анализ продаж\n\nСравнивай период с предыдущим.\n\n1. Проверь наличие нужных колонок.\n2. Укажи период, валюту и источник.\n3. Раздели факты и предположения.\n4. Покажи исключения и пропуски.\n5. Сформируй краткий отчёт с таблицей.\n",
-  template: '{\n  "name": "Ежемесячные продажи",\n  "sheet": "Продажи",\n  "headerRow": 1,\n  "fields": {\n    "region": "Регион",\n    "revenue": "Выручка",\n    "period": "Месяц"\n  }\n}'
-};

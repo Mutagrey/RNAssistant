@@ -2,6 +2,14 @@
 
 ## Product UI cutover — 2026-10-19
 
+Demo and product mock preview now read one preview-only example set for the
+September chat, skill, VBA, report, JSON material and project sources. The mock
+chat exercises the real UI progress/stream/final handlers; the material catalog
+offers Markdown, JSON and text. The comparison page can show demo and product
+side by side. This removes fixture drift, not the remaining separate inner-screen
+renderers or native Data Templates/project-chat gaps. Browser preview remains
+host-neutral and is not Office qualification.
+
 Prototype and product now use one navigation-tree renderer and one set of tree,
 menu and navigation-header styles. All six product sections supply their own
 items/actions to that renderer; the retired resource-list tree and Wunderbaum
