@@ -9,6 +9,37 @@ versions and agreement with downloaded drafts. XLSX processing, result export,
 cancellation and staging cleanup pass. Owner: Data Templates export tests;
 Windows/Office qualification remains separate.
 
+## Plugin foundation — 2026-10-19
+
+[Plugins](../plugins.md) and [ADR-0015](../decisions/ADR-0015-plugins.md) now own the
+source workspace / immutable release / selected data-project boundary. Core
+publishes through existing authority/CAS; shared application services own check,
+apply, scoped file access, prepared confirmation, command cancellation and drain.
+A shared OS file lease prevents runtime clear from deleting live plugin CAS/data
+authority across panels/processes. WorkspaceConversationService is shared by
+Framework/CLI with an optional verifier port. The rail adds plugin creation/connection and a source chat beside preview.
+WebView2 transport binds individual iframe origins and hidden command Workers.
+
+Data Templates now uses `plugin.json` across publication, exporter, inventory,
+vendor gate and export checks; the old source manifest and root-DOM controllers
+are removed. The same UI/core, project format and standalone export remain. Native
+inspection/extraction uses plugin commands; agent `extract-to-file` publishes a
+canonical file with guarded read-back. Shipped/local vendors share exact version/
+hash resolution while HTML, plugin and export admission stay separate.
+
+Focused evidence: six `plugins:` Harness checks; actual Chromium Worker/plugin UI
+and Data Templates extraction/result checks; HTML vendor/gate checks; portable
+project result/template tests; CLI shared conversation/request smoke and source
+inclusion. The full standalone export browser suite passes after correcting stale
+mapping selectors/notices and waiting for project admission before cancellation.
+It checks conflict refusal, immutable dictionary revisions, draft persistence,
+result export and staging cleanup. No Office/VSTO build or native qualification was performed.
+Windows Frame API, picker, controller shutdown, multiple panels and full agent/provider
+workflow remain explicit evidence gates. Retained compiled Tabular pins serve only
+the legacy native/CLI consumers listed in MIGRATION_MAP, with no plugin fallback.
+Private scratch left by a crashed process needs managed orphan cleanup; normal
+discard/instance shutdown releases its data. User data is preserved on disable.
+
 ## Product UI cutover — 2026-10-19
 
 Demo and product mock preview now read one preview-only example set for the

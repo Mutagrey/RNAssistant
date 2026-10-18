@@ -1,0 +1,348 @@
+{
+  "formatVersion": 1,
+  "entry": "index.html",
+  "files": [
+    "README.md",
+    "plugin.json",
+    "core/byte-source.js",
+    "core/decimal.js",
+    "core/engine.js",
+    "core/examples/disjoint-capture.json",
+    "core/examples/json-extraction.json",
+    "core/examples/matrix-extraction.json",
+    "core/examples/matrix-roles.json",
+    "core/examples/matrix-source.xlsx",
+    "core/examples/matrix-transposed.json",
+    "core/examples/matrix-xlsx-extraction.json",
+    "core/examples/observations-source.csv",
+    "core/examples/observations-source.json",
+    "core/examples/records-extraction.json",
+    "core/executor.js",
+    "core/expression.js",
+    "core/index.html",
+    "core/json.js",
+    "core/probe.css",
+    "core/probe.js",
+    "core/project-manifest.js",
+    "core/project-template.js",
+    "core/selectors.js",
+    "core/snapshot.js",
+    "core/sources.js",
+    "core/template-draft.js",
+    "core/template.js",
+    "core/template-inspection-worker.js",
+    "core/dictionary-inspection-worker.js",
+    "core/transform.js",
+    "core/worker.js",
+    "core/xlsx-reader.js",
+    "core/xlsx-zip.js",
+    "index.html",
+    "styles/browser.css",
+    "styles/browser-project.css",
+    "styles/template-library.css",
+    "styles/loader.css",
+    "styles/mapping-editor.css",
+    "styles/parameter-editor.css",
+    "styles/processing.css",
+    "styles/template-editor.css",
+    "styles/tokens.css",
+    "tests/browser-project-results.test.js",
+    "tests/browser-template-library.test.js",
+    "tests/core.test.js",
+    "tests/draft-session.test.js",
+    "tests/dictionary-editor.test.js",
+    "tests/matrix.test.js",
+    "tests/universal.test.js",
+    "tests/vendor-worker.js",
+    "tools/export.js",
+    "tools/vendor-lock.js",
+    "ui/browser-core.js",
+    "ui/browser-project-files.js",
+    "ui/browser-project-dictionary.js",
+    "ui/browser-project-results.js",
+    "ui/browser-template-library.js",
+    "ui/browser-project-view.js",
+    "ui/project-dictionary-controller.js",
+    "ui/template-library-view.js",
+    "ui/browser-vendors.js",
+    "ui/browser.js",
+    "ui/draft-session.js",
+    "ui/loader-view.js",
+    "ui/loader.js",
+    "ui/mapping-editor.js",
+    "ui/parameter-editor.js",
+    "ui/operation-view.js",
+    "ui/processing-view.js",
+    "ui/processing.js",
+    "ui/result-staging.js",
+    "ui/template-inspection.js",
+    "ui/template-inspection-view.js",
+    "ui/template-editor.js",
+    "ui/shell.js",
+    "ui/source-intake.js",
+    "vendor/echarts.min.js",
+    "vendor/codemirror/codemirror.min.js",
+    "vendor/codemirror/codemirror.min.css",
+    "vendor/codemirror/mode/javascript/javascript.min.js",
+    "vendor/codemirror/addon/edit/matchbrackets.min.js",
+    "vendor/codemirror/addon/edit/closebrackets.min.js",
+    "vendor/codemirror/addon/hint/show-hint.min.js",
+    "vendor/codemirror/addon/hint/show-hint.min.css",
+    "vendor/licenses/echarts/LICENSE",
+    "vendor/licenses/echarts/LICENSE-d3",
+    "vendor/licenses/echarts/NOTICE",
+    "vendor/licenses/codemirror/LICENSE",
+    "vendor/licenses/sheetjs/LICENSE",
+    "vendor/licenses/tabulator/LICENSE",
+    "vendor/sax-LICENSE.md",
+    "vendor/sax.js",
+    "vendor/sheetjs.full.min.js",
+    "vendor/tabulator.min.css",
+    "vendor/tabulator.min.js",
+    "vendor-lock.json",
+    "commands.js",
+    "core/template-inspection.js",
+    "ui/plugin-adapter.js"
+  ],
+  "id": "data-templates",
+  "name": "Данные и шаблоны",
+  "version": "1.0.0",
+  "hostProtocol": 1,
+  "icon": "chart",
+  "capabilities": [
+    "project.read",
+    "project.write"
+  ],
+  "commands": [
+    {
+      "id": "inspect-template",
+      "description": "Inspect a Data Templates template using the published compiler.",
+      "entry": "commands.js",
+      "argumentsSchema": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string",
+            "description": "input"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      },
+      "resultSchema": {
+        "type": "object",
+        "properties": {
+          "inspection": {
+            "type": "object",
+            "description": "Compiler inspection"
+          }
+        },
+        "required": [
+          "inspection"
+        ],
+        "additionalProperties": false
+      },
+      "writesData": false
+    },
+    {
+      "id": "inspect-dictionary",
+      "description": "Inspect Data Templates dictionaries.",
+      "entry": "commands.js",
+      "argumentsSchema": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string",
+            "description": "input"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      },
+      "resultSchema": {
+        "type": "object",
+        "properties": {
+          "inspection": {
+            "type": "object",
+            "description": "Compiler inspection"
+          }
+        },
+        "required": [
+          "inspection"
+        ],
+        "additionalProperties": false
+      },
+      "writesData": false
+    },
+    {
+      "id": "extract",
+      "description": "Extract a selected project XLSX to an isolated result snapshot. Does not publish into a user data project.",
+      "entry": "commands.js",
+      "argumentsSchema": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string",
+            "description": "input"
+          },
+          "sourcePath": {
+            "type": "string",
+            "description": "sourcePath"
+          },
+          "templateName": {
+            "type": "string",
+            "description": "templateName"
+          },
+          "maximumBytes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 268435456,
+            "description": "maximumBytes"
+          }
+        },
+        "required": [
+          "input",
+          "sourcePath",
+          "templateName",
+          "maximumBytes"
+        ],
+        "additionalProperties": false
+      },
+      "resultSchema": {
+        "type": "object",
+        "properties": {
+          "bytes": {
+            "type": "integer",
+            "description": "Exact output byte length"
+          },
+          "summary": {
+            "type": "object",
+            "description": "Engine summary"
+          },
+          "preview": {
+            "type": "array",
+            "description": "Bounded preview",
+            "items": {
+              "type": "object"
+            }
+          },
+          "name": {
+            "type": "string",
+            "description": "Relative name of the temporary canonical result"
+          }
+        },
+        "required": [
+          "name",
+          "bytes",
+          "summary",
+          "preview"
+        ],
+        "additionalProperties": false
+      },
+      "writesData": false
+    },
+    {
+      "id": "extract-to-file",
+      "description": "Extract a selected project XLSX into a canonical JSON file in that same data project, with guarded publication and exact read-back.",
+      "entry": "commands.js",
+      "argumentsSchema": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string",
+            "description": "input"
+          },
+          "sourcePath": {
+            "type": "string",
+            "description": "sourcePath"
+          },
+          "templateName": {
+            "type": "string",
+            "description": "templateName"
+          },
+          "maximumBytes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 268435456,
+            "description": "maximumBytes"
+          },
+          "outputPath": {
+            "type": "string",
+            "description": "Relative output JSON path in the selected data project"
+          }
+        },
+        "required": [
+          "input",
+          "sourcePath",
+          "templateName",
+          "maximumBytes",
+          "outputPath"
+        ],
+        "additionalProperties": false
+      },
+      "resultSchema": {
+        "type": "object",
+        "properties": {
+          "bytes": {
+            "type": "integer",
+            "description": "Exact output byte length"
+          },
+          "summary": {
+            "type": "object",
+            "description": "Engine summary"
+          },
+          "preview": {
+            "type": "array",
+            "description": "Bounded preview",
+            "items": {
+              "type": "object"
+            }
+          },
+          "path": {
+            "type": "string",
+            "description": "Relative output JSON path in the selected data project"
+          }
+        },
+        "required": [
+          "path",
+          "bytes",
+          "summary",
+          "preview"
+        ],
+        "additionalProperties": false
+      },
+      "writesData": true
+    }
+  ],
+  "vendors": [
+    {
+      "id": "codemirror",
+      "version": "5.65.16",
+      "mount": "vendor"
+    },
+    {
+      "id": "echarts",
+      "version": "5.6.0",
+      "mount": "vendor"
+    },
+    {
+      "id": "sheetjs",
+      "version": "0.20.3",
+      "mount": "vendor"
+    },
+    {
+      "id": "tabulator",
+      "version": "6.5.0",
+      "mount": "vendor"
+    },
+    {
+      "id": "sax",
+      "version": "1.6.1",
+      "mount": "vendor"
+    }
+  ]
+}

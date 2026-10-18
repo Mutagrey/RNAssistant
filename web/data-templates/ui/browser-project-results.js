@@ -32,10 +32,11 @@
   }
   async function readReceipt(project, folder, name) {
     const handle = await folder.getFileHandle("receipt.json"), file = await handle.getFile();
-    if (file.size > maximumReceiptBytes) fail("RESULT_RECEIPT_INVALID", "Квитанция результата превышает лимит.");
+    if (file.size > maximumReceiptBytes) { if (file.close) await file.close(); fail("RESULT_RECEIPT_INVALID", "Квитанция результата превышает лимит."); }
     let value;
     try { value = JSON.parse(decoder.decode(await file.arrayBuffer())); }
     catch (_) { fail("RESULT_RECEIPT_INVALID", "Квитанция результата повреждена."); }
+    finally { if (file.close) await file.close(); }
     if (!validReceipt(value, project, name)) fail("RESULT_RECEIPT_INVALID", "Квитанция результата не соответствует проекту.");
     return value;
   }
@@ -85,7 +86,8 @@
         projectId: project.info.projectId, folder: name, savedAt: Number(pattern.exec(name)[1]),
         sourcePath: result.sourcePath, templateFile: result.templateFile,
         recordCount: result.recordCount, bytes: result.file.size, chunkBytes, chunkHashes };
-      await verify(await handle.getFile(), receipt, signal, notify);
+      const stored = await handle.getFile();
+      try { await verify(stored, receipt, signal, notify); } finally { if (stored.close) await stored.close(); }
       await root.DataTemplatesBrowserProjectFiles.unchanged(project);
       cancelled(signal);
       const receiptText = JSON.stringify(receipt) + "\n";
@@ -94,8 +96,10 @@
       const receiptHandle = await folder.getFileHandle("receipt.json", { create: true });
       writer = await receiptHandle.createWritable({ keepExistingData: false });
       await writer.write(receiptText); await writer.close(); writer = null;
-      if (decoder.decode(await (await receiptHandle.getFile()).arrayBuffer()) !== receiptText)
-        fail("RESULT_VERIFY_FAILED", "Квитанция результата не прошла проверку чтением.");
+      const storedReceipt = await receiptHandle.getFile();
+      try { if (decoder.decode(await storedReceipt.arrayBuffer()) !== receiptText)
+        fail("RESULT_VERIFY_FAILED", "Квитанция результата не прошла проверку чтением."); }
+      finally { if (storedReceipt.close) await storedReceipt.close(); }
       return Object.freeze({ ...receipt });
     } catch (error) {
       if (writer) try { await writer.abort(); } catch (_) { /* Folder removal decides recovery. */ }
@@ -120,7 +124,8 @@
         const folder = await parent.getDirectoryHandle(name);
         const receipt = await readReceipt(project, folder, name);
         const file = await (await folder.getFileHandle("data.json")).getFile();
-        if (file.size !== receipt.bytes) fail("RESULT_RECEIPT_INVALID", "Размер файла не совпал с квитанцией.");
+        try { if (file.size !== receipt.bytes) fail("RESULT_RECEIPT_INVALID", "Размер файла не совпал с квитанцией."); }
+        finally { if (file.close) await file.close(); }
         if (entries.length < 50) entries.push(Object.freeze({ ...receipt }));
       } catch (error) {
         if (!missing(error) && error.code !== "RESULT_RECEIPT_INVALID") throw error;
@@ -136,7 +141,8 @@
     if (!parent) fail("RESULT_MISSING", "Папка результатов отсутствует.");
     const folder = await parent.getDirectoryHandle(name), receipt = await readReceipt(project, folder, name);
     const file = await (await folder.getFileHandle("data.json")).getFile();
-    await verify(file, receipt, signal, notify);
+    try { await verify(file, receipt, signal, notify); }
+    catch (error) { if (file.close) await file.close(); throw error; }
     return Object.freeze({ file, receipt });
   }
   root.DataTemplatesBrowserProjectResults = Object.freeze({ save, list, open });

@@ -84,8 +84,8 @@
       if (view) return;
       if (!container) return;
       view = root.DataTemplatesLoaderView.create(container, intake.formats, Object.freeze({
-        files: files => add(options => intake.fromFiles(files, options)),
-        drop: transfer => add(options => intake.fromDrop(transfer, options)),
+        files: files => add(async options => intake.fromFiles(root.RNDataTemplatesPlugin ? await root.RNDataTemplatesPlugin.pickFiles() : files, options)),
+        drop: transfer => add(async options => root.RNDataTemplatesPlugin ? intake.fromFiles(await root.RNDataTemplatesPlugin.pickFiles(), options) : intake.fromDrop(transfer, options)),
         cancel: () => { if (job) job.abort.abort(); },
         dismiss: forgetActivity,
         include: (ids, included) => {

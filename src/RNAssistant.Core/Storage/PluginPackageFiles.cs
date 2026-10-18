@@ -1,0 +1,104 @@
+using System;
+using System.IO;
+using System.Linq;
+using System.Text;
+using System.Text.RegularExpressions;
+using Newtonsoft.Json;
+using RNAssistant.Core.Models;
+using RNAssistant.Core.Tools;
+
+namespace RNAssistant.Core.Storage
+{
+    public sealed class PluginException : InvalidOperationException
+    {
+        public string Code { get; private set; }
+        public PluginException(string code, string message) : base(message) { Code = code; }
+    }
+
+    public static class PluginPackageFiles
+    {
+        public const int MaximumFiles = 512, MaximumFileBytes = 8 * 1024 * 1024, MaximumPackageBytes = 32 * 1024 * 1024;
+        public static readonly UTF8Encoding Utf8 = new UTF8Encoding(false, true);
+        public static readonly JsonSerializerSettings Json = new JsonSerializerSettings
+        { MissingMemberHandling = MissingMemberHandling.Error, MaxDepth = 32 };
+
+        public static bool ValidId(string value)
+        { return value != null && Regex.IsMatch(value, "^[a-z][a-z0-9-]{0,63}$", RegexOptions.CultureInvariant); }
+        public static bool ValidVersion(string value)
+        { return value != null && Regex.IsMatch(value, "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[a-zA-Z0-9.-]+)?$", RegexOptions.CultureInvariant); }
+        public static bool ValidPath(string value)
+        { return !string.IsNullOrEmpty(value) && value.Length <= 512 && value.IndexOfAny(new[] { '\\', ':', '?', '#', '%', '\0' }) < 0 &&
+            !value.Any(char.IsControl) && value.Split('/').All(part => part.Length > 0 && part != "." && part != ".." &&
+                !part.EndsWith(".", StringComparison.Ordinal) && !part.EndsWith(" ", StringComparison.Ordinal) &&
+                !new[] { ".rnassistant", ".host", ".data", ".result" }.Contains(part, StringComparer.OrdinalIgnoreCase) &&
+                !Regex.IsMatch(part, @"^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)", RegexOptions.IgnoreCase)); }
+
+        public static string Resolve(string root, string relative, bool existing = true)
+        {
+            if (!ValidPath(relative)) throw new PluginException("package_path_invalid", "Invalid package member: " + relative);
+            root = Path.GetFullPath(root);
+            for (var ancestor = new DirectoryInfo(root); ancestor != null; ancestor = ancestor.Parent)
+                if (ancestor.Exists && StorageFileSystem.IsReparsePoint(ancestor.FullName))
+                    throw new PluginException("package_link", "Package paths cannot contain links.");
+            var current = root;
+            foreach (var part in relative.Split('/'))
+            {
+                current = Path.Combine(current, part);
+                if ((File.Exists(current) || Directory.Exists(current)) && StorageFileSystem.IsReparsePoint(current))
+                    throw new PluginException("package_link", "Package paths cannot contain links.");
+            }
+            if (existing && !File.Exists(current)) throw new PluginException("package_file_missing", "Missing package member: " + relative);
+            return current;
+        }
+
+        public static byte[] Read(string root, string relative, int maximum = MaximumFileBytes)
+        {
+            var path = Resolve(root, relative);
+            using (var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                if (file.Length > maximum) throw new PluginException("package_limit", "Package member exceeds its limit: " + relative);
+                var bytes = new byte[(int)file.Length]; var read = 0;
+                while (read < bytes.Length) { var count = file.Read(bytes, read, bytes.Length - read); if (count == 0) throw new EndOfStreamException(); read += count; }
+                return bytes;
+            }
+        }
+
+        public static PluginManifestV1 ParseManifest(string json)
+        {
+            PluginManifestV1 manifest;
+            try { manifest = JsonConvert.DeserializeObject<PluginManifestV1>(json, Json); }
+            catch (JsonException error) { throw new PluginException("plugin_manifest_invalid", error.Message); }
+            if (manifest == null || manifest.FormatVersion != 1 || manifest.HostProtocol != 1 || !ValidId(manifest.Id) ||
+                !ValidVersion(manifest.Version) || string.IsNullOrWhiteSpace(manifest.Name) || manifest.Name.Length > 120 ||
+                manifest.Files == null || manifest.Files.Length == 0 || manifest.Files.Length > MaximumFiles ||
+                manifest.Files.Any(file => !ValidPath(file)) || manifest.Files.Distinct(StringComparer.OrdinalIgnoreCase).Count() != manifest.Files.Length ||
+                !manifest.Files.Contains("plugin.json") || !manifest.Files.Contains(manifest.Entry) || !manifest.Entry.EndsWith(".html", StringComparison.Ordinal) ||
+                manifest.Capabilities == null || manifest.Capabilities.Any(value => value != "project.read" && value != "project.write") ||
+                manifest.Commands == null || manifest.Commands.Length > 32 || manifest.Vendors == null || manifest.Vendors.Length > 32)
+                throw new PluginException("plugin_manifest_invalid", "Invalid or unsupported plugin manifest/protocol.");
+            if (manifest.Commands.Select(command => command?.Id).Distinct(StringComparer.Ordinal).Count() != manifest.Commands.Length)
+                throw new PluginException("plugin_command_invalid", "Duplicate command IDs.");
+            foreach (var command in manifest.Commands)
+            {
+                Newtonsoft.Json.Linq.JObject schema; string error;
+                if (command == null || !ValidId(command.Id) || string.IsNullOrWhiteSpace(command.Description) || command.Description.Length > 500 ||
+                    !manifest.Files.Contains(command.Entry) || !command.Entry.EndsWith(".js", StringComparison.Ordinal) ||
+                    command.ArgumentsSchema == null || command.ResultSchema == null ||
+                    command.WritesData && !manifest.Capabilities.Contains("project.write"))
+                    throw new PluginException("plugin_command_invalid", "Invalid command contract.");
+                if (!ToolSchemaSupport.TryParse(new ToolCatalogEntry { ArgumentSchemaJson = command.ArgumentsSchema.ToString() }, out schema, out error) ||
+                    !ToolSchemaSupport.TryParse(new ToolCatalogEntry { ArgumentSchemaJson = command.ResultSchema.ToString() }, out schema, out error))
+                    throw new PluginException("plugin_command_invalid", command.Id + ": " + error);
+            }
+            foreach (var vendor in manifest.Vendors)
+                if (vendor == null || !ValidId(vendor.Id) || !ValidVersion(vendor.Version) || !ValidPath(vendor.Mount))
+                    throw new PluginException("plugin_vendor_invalid", "Dependencies require an exact version and package-relative mount.");
+            if (manifest.Vendors.Select(vendor => vendor.Id).Distinct(StringComparer.Ordinal).Count() != manifest.Vendors.Length)
+                throw new PluginException("plugin_vendor_invalid", "Duplicate vendor dependencies.");
+            return manifest;
+        }
+
+        public static string Hash(byte[] value)
+        { using (var hash = System.Security.Cryptography.SHA256.Create()) return BitConverter.ToString(hash.ComputeHash(value)).Replace("-", "").ToLowerInvariant(); }
+    }
+}

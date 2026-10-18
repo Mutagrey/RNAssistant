@@ -384,6 +384,8 @@
     <Compile Include="WebView\AssistantPaneControl.cs" />
     <Compile Include="WebView\TabularWebViewExecutor.cs" />
     <Compile Include="WebView\AssistantWebBridge.cs" />
+    <Compile Include="WebView\AssistantWebBridge.Plugins.cs" />
+    <Compile Include="WebView\PluginWebViewHost.cs" />
     <Compile Include="WebView\BridgeRequestCancellationRegistry.cs" />
     <Compile Include="WebView\WebViewSecurityPolicy.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

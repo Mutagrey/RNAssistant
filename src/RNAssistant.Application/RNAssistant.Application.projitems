@@ -1,5 +1,11 @@
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)PluginResultStore.cs" Link="Application\PluginResultStore.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)PluginTools.cs" Link="Application\PluginTools.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Workspace\Contracts\WorkspaceToolContribution.cs" Link="Application\Workspace\Contracts\WorkspaceToolContribution.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Contracts\PluginContracts.cs" Link="Application\Contracts\PluginContracts.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)PluginApplicationService.cs" Link="Application\PluginApplicationService.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)PluginInstance.cs" Link="Application\PluginInstance.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)WorkspaceApplicationService.cs" Link="Application\WorkspaceApplicationService.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Contracts\WorkspaceProjectContracts.cs" Link="Application\Contracts\WorkspaceProjectContracts.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Contracts\WorkspaceSourceContracts.cs" Link="Application\Contracts\WorkspaceSourceContracts.cs" />
@@ -12,5 +18,19 @@
     <Compile Include="$(MSBuildThisFileDirectory)TabularResponseBodyPool.cs" Link="Application\TabularResponseBodyPool.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Contracts\TabularExecutionContracts.cs" Link="Application\Contracts\TabularExecutionContracts.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Contracts\WorkspaceFileContracts.cs" Link="Application\Contracts\WorkspaceFileContracts.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Workspace\Contracts\WorkspaceApplicationContracts.cs" Link="Application\Workspace\Contracts\WorkspaceApplicationContracts.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Workspace\Contracts\WorkspaceResourceContracts.cs" Link="Application\Workspace\Contracts\WorkspaceResourceContracts.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Workspace\Contracts\WorkspaceRunPresentation.cs" Link="Application\Workspace\Contracts\WorkspaceRunPresentation.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Workspace\WorkspaceConversationService.Application.cs" Link="Application\Workspace\WorkspaceConversationService.Application.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Workspace\WorkspaceConversationService.Control.cs" Link="Application\Workspace\WorkspaceConversationService.Control.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Workspace\WorkspaceConversationService.Presentation.cs" Link="Application\Workspace\WorkspaceConversationService.Presentation.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Workspace\WorkspaceConversationService.Resources.cs" Link="Application\Workspace\WorkspaceConversationService.Resources.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Workspace\WorkspaceConversationService.cs" Link="Application\Workspace\WorkspaceConversationService.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Workspace\WorkspacePlanService.cs" Link="Application\Workspace\WorkspacePlanService.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Workspace\WorkspacePlanningObserver.cs" Link="Application\Workspace\WorkspacePlanningObserver.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Workspace\WorkspaceResourceHandler.cs" Link="Application\Workspace\WorkspaceResourceHandler.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Workspace\WorkspaceRunControl.cs" Link="Application\Workspace\WorkspaceRunControl.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Workspace\WorkspaceTaskListObserver.cs" Link="Application\Workspace\WorkspaceTaskListObserver.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Workspace\Contracts\WorkspaceWebVerificationContracts.cs" Link="Application\Workspace\Contracts\WorkspaceWebVerificationContracts.cs" />
   </ItemGroup>
 </Project>

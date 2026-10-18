@@ -1,6 +1,7 @@
 (function (root) {
   "use strict";
   function inspectWith(workerUrl, input, signal) {
+    if (root.RNDataTemplatesPlugin) return root.RNDataTemplatesPlugin.inspect(workerUrl.indexOf("dictionary") >= 0 ? "inspect-dictionary" : "inspect-template", input, signal);
     return new Promise((resolve, reject) => {
       if (signal.aborted) { reject(Object.assign(new Error("Проверка отменена."), { code: "EXECUTION_CANCELLED" })); return; }
       let worker;

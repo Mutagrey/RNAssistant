@@ -1,0 +1,178 @@
+using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
+using RNAssistant.Core.Models;
+using RNAssistant.Runtime.Contracts;
+
+namespace RNAssistant.Application.Contracts
+{
+    public sealed class PluginCloseRequest { [JsonProperty("instanceId")] public string InstanceId { get; set; } }
+    public sealed class PluginChatControlRequest
+    {
+        [JsonProperty("pluginId")] public string PluginId { get; set; }
+        [JsonProperty("pendingId")] public string PendingId { get; set; }
+        [JsonProperty("approve")] public bool Approve { get; set; }
+        [JsonProperty("runId")] public string RunId { get; set; }
+        [JsonProperty("cursor")] public string Cursor { get; set; }
+    }
+    public sealed class PluginVendorRequest
+    { [JsonProperty("id")] public string Id { get; set; } [JsonProperty("version")] public string Version { get; set; } }
+    public sealed class PluginVendorCatalogDto { [JsonProperty("items")] public IReadOnlyList<VendorManifestV1> Items { get; set; } }
+    public sealed class HtmlVendorSourceDto
+    { [JsonProperty("js")] public string Js { get; set; } [JsonProperty("css")] public string Css { get; set; } }
+    public sealed class PluginIdRequest { [JsonProperty("pluginId")] public string PluginId { get; set; } }
+    public sealed class PluginConnectRequest { [JsonProperty("rootPath")] public string RootPath { get; set; } }
+    public sealed class PluginCreateRequest
+    {
+        [JsonProperty("name")] public string Name { get; set; }
+        [JsonProperty("rootPath")] public string RootPath { get; set; }
+        [JsonProperty("description")] public string Description { get; set; }
+    }
+    public sealed class PluginApplyRequest
+    {
+        [JsonProperty("pluginId")] public string PluginId { get; set; }
+        [JsonProperty("candidateId")] public string CandidateId { get; set; }
+    }
+    public sealed class PluginOpenRequest
+    {
+        [JsonProperty("pluginId")] public string PluginId { get; set; }
+        [JsonProperty("candidateId")] public string CandidateId { get; set; }
+    }
+    public sealed class PluginCatalogDto
+    {
+        [JsonProperty("error")] public string Error { get; set; }
+        [JsonProperty("items")] public IReadOnlyList<PluginItemDto> Items { get; set; }
+    }
+    public sealed class PluginItemDto
+    {
+        [JsonProperty("pluginId")] public string PluginId { get; set; }
+        [JsonProperty("name")] public string Name { get; set; }
+        [JsonProperty("icon")] public string Icon { get; set; }
+        [JsonProperty("sourceWorkspaceId")] public string SourceWorkspaceId { get; set; }
+        [JsonProperty("sourceRoot")] public string SourceRoot { get; set; }
+        [JsonProperty("releaseId")] public string ReleaseId { get; set; }
+        [JsonProperty("enabled")] public bool Enabled { get; set; }
+    }
+    public sealed class PluginCandidateDto
+    {
+        [JsonProperty("pluginId")] public string PluginId { get; set; }
+        [JsonProperty("candidateId")] public string CandidateId { get; set; }
+        [JsonProperty("files")] public int Files { get; set; }
+        [JsonProperty("bytes")] public long Bytes { get; set; }
+        [JsonProperty("checks")] public string[] Checks { get; set; }
+    }
+    public sealed class PluginCheckSummary
+    {
+        [JsonProperty("files")] public int Files { get; set; }
+        [JsonProperty("bytes")] public long Bytes { get; set; }
+        [JsonProperty("checks")] public string[] Checks { get; set; }
+    }
+    public sealed class PluginPublicationSummary
+    {
+        [JsonProperty("name")] public string Name { get; set; }
+        [JsonProperty("enabled")] public bool Enabled { get; set; }
+    }
+    public sealed class PluginViewDto
+    {
+        [JsonProperty("instanceId")] public string InstanceId { get; set; }
+        [JsonProperty("pluginId")] public string PluginId { get; set; }
+        [JsonProperty("releaseId")] public string ReleaseId { get; set; }
+        [JsonProperty("entryUrl")] public string EntryUrl { get; set; }
+        [JsonProperty("preview")] public bool Preview { get; set; }
+    }
+    public sealed class PluginChatRequest
+    {
+        [JsonProperty("pluginId")] public string PluginId { get; set; }
+        [JsonProperty("input")] public WorkspaceSubmitInputRequest Input { get; set; }
+    }
+    public sealed class PluginChatStateDto
+    {
+        [JsonProperty("pluginId")] public string PluginId { get; set; }
+        [JsonProperty("sessionId")] public string SessionId { get; set; }
+        [JsonProperty("state")] public WorkspaceSessionSnapshot State { get; set; }
+        [JsonProperty("pendingId")] public string PendingId { get; set; }
+        [JsonProperty("pendingTool")] public string PendingTool { get; set; }
+        [JsonProperty("pendingArguments")] public string PendingArguments { get; set; }
+        [JsonProperty("messages")] public IReadOnlyList<PluginChatMessageDto> Messages { get; set; }
+    }
+    public sealed class PluginChatMessageDto
+    {
+        [JsonProperty("role")] public string Role { get; set; }
+        [JsonProperty("text")] public string Text { get; set; }
+    }
+    public sealed class PluginDataSelection
+    {
+        public string RootPath { get; set; }
+        public bool Writable { get; set; }
+    }
+    public interface IPluginProjectPicker
+    { Task<PluginDataSelection> PickAsync(CancellationToken token); }
+
+    [JsonConverter(typeof(StringEnumConverter))]
+    public enum PluginMethod { Ready, PickProject, BeginResult, CommitResult, OpenResult, DropResult, List, Stat, OpenFile, CloseFile, BeginWrite, CommitWrite, AbortWrite, MakeDirectory, ReconcileFile, Invoke, Cancel, ReportError }
+    public sealed class PluginFrameRequest
+    {
+        [JsonProperty("version")] public int Version { get; set; }
+        [JsonProperty("requestId")] public string RequestId { get; set; }
+        [JsonProperty("method")] public PluginMethod Method { get; set; }
+        [JsonProperty("projectId")] public string ProjectId { get; set; }
+        [JsonProperty("path")] public string Path { get; set; }
+        [JsonProperty("handle")] public string Handle { get; set; }
+        [JsonProperty("offset")] public int Offset { get; set; }
+        [JsonProperty("command")] public string Command { get; set; }
+        [JsonProperty("argumentsJson")] public string ArgumentsJson { get; set; }
+        [JsonProperty("invocationId")] public string InvocationId { get; set; }
+        [JsonProperty("message")] public string Message { get; set; }
+    }
+    public sealed class PluginFrameResponse
+    {
+        [JsonProperty("version")] public int Version { get; set; } = 1;
+        [JsonProperty("requestId")] public string RequestId { get; set; }
+        [JsonProperty("progress")] public string Progress { get; set; }
+        [JsonProperty("ok")] public bool Ok { get; set; }
+        [JsonProperty("errorCode")] public string ErrorCode { get; set; }
+        [JsonProperty("message")] public string Message { get; set; }
+        [JsonProperty("result")] public PluginFrameResult Result { get; set; }
+    }
+    public sealed class PluginFrameResult
+    {
+        [JsonProperty("name")] public string Name { get; set; }
+        [JsonProperty("kind")] public string Kind { get; set; }
+        [JsonProperty("handle")] public string Handle { get; set; }
+        [JsonProperty("url")] public string Url { get; set; }
+        [JsonProperty("byteLength")] public long? ByteLength { get; set; }
+        [JsonProperty("items")] public IReadOnlyList<WorkspaceFileEntryDto> Items { get; set; }
+        [JsonProperty("nextOffset")] public int? NextOffset { get; set; }
+        [JsonProperty("json")] public string Json { get; set; }
+        [JsonProperty("writable")] public bool Writable { get; set; }
+    }
+    public sealed class PluginCommandResult
+    {
+        public string Json { get; set; }
+        public bool HadVerifiedWrites { get; set; }
+        public bool EffectUnknown { get; set; }
+    }
+    public sealed class PluginWorkerEnvelope
+    {
+        [JsonProperty("type")] public string Type { get; set; }
+        [JsonProperty("request")] public PluginFrameRequest Request { get; set; }
+        [JsonProperty("json")] public string Json { get; set; }
+        [JsonProperty("message")] public string Message { get; set; }
+        [JsonProperty("code")] public string Code { get; set; }
+    }
+    public sealed class PluginWorkerStart
+    {
+        [JsonProperty("type")] public string Type { get; } = "start";
+        [JsonProperty("entry")] public string Entry { get; set; }
+        [JsonProperty("command")] public string Command { get; set; }
+        [JsonProperty("argumentsJson")] public string ArgumentsJson { get; set; }
+    }
+    public interface IPluginCommandExecutor
+    {
+        Task<string> ExecuteAsync(PluginInstance operation, PluginCommandDefinition command,
+            string argumentsJson, CancellationToken token, Action<string> progress);
+    }
+}

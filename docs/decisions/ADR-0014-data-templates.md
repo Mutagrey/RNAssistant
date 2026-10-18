@@ -3,6 +3,10 @@
 Status: accepted for scoped implementation, 2026-10-16. M0 is partial.
 Owner: Data Templates domain. Baseline reviewed: `c33da7df`.
 
+Distribution manifest and root mounting are superseded by
+[ADR-0015](ADR-0015-plugins.md) on 2026-10-19. The historical decision below uses the
+former manifest name; current consumers use only `plugin.json` and the isolated plugin.
+
 ## Decision
 
 Data Templates is an independent web application developed as a workspace project.

@@ -7,13 +7,13 @@ const digest = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
 
 function capture(root = sourceRoot) {
     root = fs.realpathSync(root);
-    const manifestPath = path.join(root, "application.json");
+    const manifestPath = path.join(root, "plugin.json");
     if (fs.lstatSync(manifestPath).isSymbolicLink()) throw Error("Linked manifest is not an application source.");
     const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
-    if (manifest.formatVersion !== 1 || manifest.kind !== "data-templates-application" || manifest.entry !== "index.html" ||
+    if (manifest.formatVersion !== 1 || manifest.id !== "data-templates" || manifest.hostProtocol !== 1 || manifest.entry !== "index.html" ||
         !Array.isArray(manifest.files) || manifest.files.length > 200 ||
         new Set(manifest.files).size !== manifest.files.length ||
-        ![manifest.entry, "application.json", "README.md"].every(file => manifest.files.includes(file)))
+        ![manifest.entry, "plugin.json", "README.md"].every(file => manifest.files.includes(file)))
         throw Error("Invalid application manifest.");
     verifyVendors(root, manifest);
     let total = 0;

@@ -83,7 +83,7 @@ namespace RNAssistant.Core.Storage
 
     // One file owner for retained sources, bounded views and text writes.
     // The locator catalog is not a head store.
-    public sealed class WorkspaceFileService
+    public sealed partial class WorkspaceFileService
     {
         internal const int MaximumTextBytes = 1024 * 1024;
         private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
@@ -809,28 +809,34 @@ namespace RNAssistant.Core.Storage
                 {
                     _journal.Resolve(attempt.AttemptId, published.CommitId);
                     return new WorkspaceFileRecoveryResult
-                    { Outcome = WorkspaceRecoveryOutcome.AlreadyPublished, Exists = File.Exists(path),
-                        Current = File.Exists(path) ? ReadCurrentUnderLease(scope, id, relativePath, path) : null };
+                    { Outcome = WorkspaceRecoveryOutcome.AlreadyPublished, Exists = File.Exists(path) || attempt.Operation == "files.mkdir" && Directory.Exists(path),
+                        Current = File.Exists(path) && attempt.Payload?.ContentType != "application/octet-stream" ? ReadCurrentUnderLease(scope, id, relativePath, path) : null };
                 }
 
                 var before = snapshot.GetHead(Identity(id));
                 WorkspaceFileObservation observed = null;
                 ResourceHeadState after;
-                if (File.Exists(path))
+                if (File.Exists(path) || attempt.Operation == "files.mkdir" && Directory.Exists(path))
                 {
-                    var bytes = ReadBounded(path);
-                    var text = Decode(bytes);
-                    var hash = Hash(bytes);
-                    var exact = before?.Knowledge == HeadKnowledge.Known &&
-                        _authority.GetRevision(scope, before.Revision)?.ContentSha256 == hash
-                            ? before.Revision.Copy() : NewRevision(id);
-                    if (before?.Revision?.Revision != exact.Revision)
+                    var raw = attempt.Payload?.ContentType == "application/octet-stream";
+                    string text = null; PayloadRef body;
+                    if (attempt.Operation == "files.mkdir") body = attempt.Payload;
+                    else if (raw)
                     {
-                        var payload = PayloadRef.FromBlob(_blobs.StoreBytes(bytes, "text/plain; charset=utf-8"));
-                        _authority.RegisterRevision(scope, new ResourceRevisionMetadata(exact, hash, payload, before?.Revision));
-                        _authority.RegisterView(scope, new ResourceRevisionView(exact, "text", hash,
-                            payload, ResourceCoverage.Whole()));
+                        using (var input = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
+                        {
+                            if (input.Length > 256L * 1024 * 1024) throw new WorkspaceFileException("file_too_large", "Recovery exceeds the binary file budget.");
+                            long length; var digest = ChatBlobStore.HashFile(input, out length, CancellationToken.None, null);
+                            body = PayloadRef.FromBlob(_blobs.StoreHashedFile(input, digest, length, "application/octet-stream", CancellationToken.None, null));
+                        }
                     }
+                    else { var bytes = ReadBounded(path); text = Decode(bytes); body = PayloadRef.FromBlob(_blobs.StoreBytes(bytes, "text/plain; charset=utf-8")); }
+                    var hash = body.Sha256;
+                    var exact = before?.Knowledge == HeadKnowledge.Known &&
+                        _authority.GetRevision(scope, before.Revision)?.ContentSha256 == hash ? before.Revision.Copy() : NewRevision(id);
+                    if (before?.Revision?.Revision != exact.Revision)
+                        _authority.RegisterRevision(scope, new ResourceRevisionMetadata(exact, hash, body, before?.Revision));
+                    _authority.RegisterView(scope, new ResourceRevisionView(exact, attempt.Operation == "files.mkdir" ? ResourceRepresentations.Metadata : raw ? ResourceRepresentations.Raw : "text", hash, body, ResourceCoverage.Whole()));
                     after = ResourceHeadState.Known(exact, snapshot.Generation + 1, "reconciled-unknown-effect");
                     observed = new WorkspaceFileObservation
                     { RelativePath = relativePath, Text = text, Reference = exact, ContentSha256 = hash };

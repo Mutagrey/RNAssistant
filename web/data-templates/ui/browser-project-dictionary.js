@@ -23,10 +23,11 @@
     const found = await scan(project, false);
     if (!found.head) return null;
     const body = await (await found.directory.getFileHandle(found.head)).getFile();
-    if (!body.size || body.size > 1000000) fail("DICTIONARY_LIMIT", "Версия справочника превышает 1 000 000 байт.");
+    if (!body.size || body.size > 1000000) { if (body.close) await body.close(); fail("DICTIONARY_LIMIT", "Версия справочника превышает 1 000 000 байт."); }
     let text, dictionary;
     try { text = decoder.decode(await body.arrayBuffer()); dictionary = JSON.parse(text); }
     catch (_) { fail("DICTIONARY_INVALID", "Версия общего справочника повреждена."); }
+    finally { if (body.close) await body.close(); }
     await root.DataTemplatesTemplateInspection.inspectDictionary(text, new AbortController().signal);
     await root.DataTemplatesBrowserProjectFiles.unchanged(project);
     return Object.freeze({ head: found.head, dictionary, text });
@@ -51,8 +52,9 @@
       const writer = await handle.createWritable({ keepExistingData: false });
       await writer.write(text); await writer.close();
       const stored = await handle.getFile();
-      if (stored.size !== bytes.length || decoder.decode(await stored.arrayBuffer()) !== text)
-        fail("effect_unknown", "Байты справочника не прошли проверку чтением.");
+      try { if (stored.size !== bytes.length || decoder.decode(await stored.arrayBuffer()) !== text)
+        fail("effect_unknown", "Байты справочника не прошли проверку чтением."); }
+      finally { if (stored.close) await stored.close(); }
       const after = await current(project);
       if (!after || after.head !== name || after.text !== text)
         fail("effect_unknown", "Конкурирующая версия изменила общий справочник.");

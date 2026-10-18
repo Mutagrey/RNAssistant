@@ -32,19 +32,20 @@ kernel, model protocol, tool runtime, frozen Core `ModelContextCompiler` and can
 uses its document-owned composition until the M6–M9 cutovers; this is an in-flight
 architecture, not a claim that the UI and CLI have identical context preparation.
 
-The initial workspace project UI uses a shared application source module in
-`src/RNAssistant.Application`, imported into Office and the CLI build. It owns
-ephemeral workspace selection and typed project commands over Core storage, with
-no Office/browser dependency. The bridge keeps that context across document
-controller changes. This does not migrate chats or model file tools; see
-[Data Templates](data-templates.md#shared-application-and-ui) and the
+Workspace and plugin services share `src/RNAssistant.Application`, imported into
+Office Framework 4.8 and CLI Runtime. `Workspace/WorkspaceConversationService`
+reuses the same coordinator/kernel, ToolRuntime, file authority and chat stores.
+The plugin source chat is independent of document chat; source, immutable release
+and granted data-project identities never substitute for each other. Core owns
+manifest/catalog/CAS; application owns publication/grants/execution; WebView2 owns
+frame/Worker transport. See [Plugins](plugins.md) and the
 [packaging seam](stabilization/MIGRATION_MAP.md#workspace-first-adapters--2026-10-04).
 
 The optional development Chromium runner uses `RNAssistant.BrowserHost`, a small
 .NET 8 executable referenced by Runtime. It owns only its browser process tree and
 temporary profile, with a private caller pipe and a bounded safety lifetime. It has
-no Core/Runtime dependency, model loop, workspace reader or durable store. Runtime
-retains snapshot serving, CDP checks and verification publication; see
+no Core/Runtime dependency, model loop, workspace reader or durable store. The optional `IWorkspaceWebVerifierFactory` keeps that dependency out of the
+Framework product. Runtime retains snapshot serving, CDP checks and verification publication; see
 [Resource Fabric](resource-fabric.md#application-resource-views-and-development-preview).
 
 ## Dependency direction

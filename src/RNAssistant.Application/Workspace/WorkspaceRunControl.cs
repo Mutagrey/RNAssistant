@@ -31,8 +31,32 @@ namespace RNAssistant.Runtime
         { return "rna-" + TextPatternEngine.Sha256(Path.GetFullPath(scope) + "\n" + sessionId + "\n" + runId).Substring(0, 24); }
 
         private static NamedPipeServerStream Server(string name)
-        { return new NamedPipeServerStream(name, PipeDirection.InOut, 1, PipeTransmissionMode.Byte,
-            PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly); }
+        {
+#if NET8_0_OR_GREATER
+            return new NamedPipeServerStream(name, PipeDirection.InOut, 1, PipeTransmissionMode.Byte,
+                PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+#else
+            // .NET Framework has no CurrentUserOnly flag. Preserve the same
+            // boundary using the Windows pipe ACL; never create a public pipe.
+            var user = System.Security.Principal.WindowsIdentity.GetCurrent().User;
+            var security = new PipeSecurity();
+            security.SetAccessRuleProtection(true, false); security.SetOwner(user);
+            security.AddAccessRule(new PipeAccessRule(user, PipeAccessRights.ReadWrite | PipeAccessRights.CreateNewInstance | PipeAccessRights.ReadPermissions,
+                System.Security.AccessControl.AccessControlType.Allow));
+            return new NamedPipeServerStream(name, PipeDirection.InOut, 1, PipeTransmissionMode.Byte,
+                PipeOptions.Asynchronous, 4096, 4096, security);
+#endif
+        }
+        private static PipeOptions ClientOptions
+        {
+            get {
+#if NET8_0_OR_GREATER
+                return PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly;
+#else
+                return PipeOptions.Asynchronous;
+#endif
+            }
+        }
 
         private async Task ListenAsync(string name, NamedPipeServerStream first, Func<string, bool> matches)
         {
@@ -77,12 +101,18 @@ namespace RNAssistant.Runtime
         {
             using (var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
             using (var pipe = new NamedPipeClientStream(".", Name(scope, request.SessionId, request.RunId), PipeDirection.InOut,
-                PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly))
+                ClientOptions))
             {
                 deadline.CancelAfter(2000);
                 try
                 {
                     await pipe.ConnectAsync(deadline.Token).ConfigureAwait(false);
+#if !NET8_0_OR_GREATER
+                    if (!pipe.GetAccessControl().GetOwner(typeof(System.Security.Principal.SecurityIdentifier)).Equals(
+                        System.Security.Principal.WindowsIdentity.GetCurrent().User))
+                        throw new IOException("Workspace control pipe belongs to another user.");
+#endif
+
                     var bytes = Encoding.ASCII.GetBytes(request.Cursor + "\n");
                     await pipe.WriteAsync(bytes, 0, bytes.Length, deadline.Token).ConfigureAwait(false);
                     var reply = new byte[1];

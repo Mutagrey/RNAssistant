@@ -109,19 +109,21 @@ buffers, exact manifest/source pins, maintenance/selection guards, synchronous
 revocation, slot/read/open cancellation and application close draining in-flight I/O.
 CLI `project prepare` accepts saved declarations or an explicit JSON array of paths and
 file/batch budgets; process smoke covers mixed outcomes and read-only capture without
-manifest changes. Browser
-`node tests/web/workspace-projects.test.js` checks the shipped UI/CSS with controlled
-replies: single flight, readonly/stale binding, inert metadata, pinned-path explicit
-inspection, malformed receipts and narrow light/dark layouts. Use the usual
-Playwright `BROWSER_EXECUTABLE` override. These do not qualify Windows/Office.
+manifest changes. These preparation services remain independently tested; their
+replaced root UI controllers and browser tests were removed during the plugin cutover.
 
-`node tests/web/workspace-sources.test.js` checks the shipped chooser/queue UI with
-controlled bridge replies: paged selection and explicit budgets, independent current
-progress, filtering/paging, pause/cancel/retry, remount, invalid/lost reply recovery,
-late context results and narrow/wide light/dark layouts. `RNA_DATA_SCREENSHOTS` saves
-previews. It also covers persisted composition, bounded selection navigation/removal,
-save/revert/empty selection and lost/mismatched save replies with explicit pinned-path
-inspection. These checks do not qualify native WebView2 access or Excel parsing.
+Plugin foundation: filter `plugins:` covers immutable code across update, failed
+validation preserving active publication, source/data/project substitution refusals,
+preview scratch separation, runtime-clear exclusion/drain, command lifetime/cancel, exact vendor hashes and distinct
+HTML/plugin/export admission, binary/directory unknown-effect recovery, result scopes
+and runtime-owned prepared confirmation. The source-inclusion check verifies old-style
+project registration; no Office/VSTO build is needed.
+`node tests/web/plugins.test.js` checks creation/check/preview/apply/reopen/disable,
+source chat presentation, actual Chromium Worker and native-protocol XLSX extraction
+with complete canonical result read-back. It uses a controlled bridge/file transport,
+not WebView2. `RNA_PLUGIN_SCREENSHOTS` saves desktop/narrow previews; use the usual
+Playwright `BROWSER_EXECUTABLE` override. The complete Data Templates standalone
+export browser suite also passes; it does not qualify native plugin transport.
 
 `node tests/web/data-templates.test.js` checks the loader's real browser file/folder
 selection, drops and directory batches, cancellation, stale-context callbacks,

@@ -31,10 +31,14 @@ namespace RNAssistant.Runtime
         private readonly WorkspaceFileService _files;
         private readonly ChatBlobStore _payloads;
         private readonly WorkspaceWebSnapshotStore _webSnapshots;
+        private readonly IWorkspaceWebVerifierFactory _webHost;
+        private readonly Func<WorkspaceDescriptor, IReadOnlyList<WorkspaceToolContribution>> _extraTools;
 
-        public WorkspaceConversationService(AppDataPaths paths)
+        public WorkspaceConversationService(AppDataPaths paths, IWorkspaceWebVerifierFactory webHost = null,
+            Func<WorkspaceDescriptor, IReadOnlyList<WorkspaceToolContribution>> extraTools = null)
         {
             _paths = paths ?? throw new ArgumentNullException(nameof(paths));
+            _webHost = webHost; _extraTools = extraTools;
             _chats = new ChatStore(paths);
             _workspaces = new WorkspaceStore(paths);
             _files = new WorkspaceFileService(paths);
@@ -79,7 +83,7 @@ namespace RNAssistant.Runtime
         public IReadOnlyList<string> AvailableToolIds(WorkspaceDescriptor workspace, string mode = ChatModes.Agent, MutationPolicy mutationPolicy = MutationPolicy.Ask)
         {
             return new WorkspacePorts(_paths, _chats, _files, _payloads, _webSnapshots, workspace, null, new AppSettings(), null, null,
-                runPolicy: ConversationRunPolicy.For(ChatModes.Require(mode), mutationPolicy))
+                runPolicy: ConversationRunPolicy.For(ChatModes.Require(mode), mutationPolicy), webHost: _webHost, extraTools: _extraTools?.Invoke(workspace))
                 .ToolIds;
         }
 
@@ -95,6 +99,13 @@ namespace RNAssistant.Runtime
             return pending == null ? null : new WorkspaceUserInput { RunId = pending.RunId, QuestionSet = pending.QuestionSet };
         }
 
+        private IWorkspaceWebVerifierFactory RequireWebHost()
+        {
+            if (_webHost == null || !_webHost.IsAvailable)
+                throw new WorkspaceFileException("web_verifier_unavailable", "Browser verification is unavailable in this host.");
+            return _webHost;
+        }
+
         public WorkspaceFileRecoveryResult ReconcileFile(WorkspaceDescriptor workspace, string relativePath)
         {
             return _files.ReconcileUncertain(workspace, relativePath);
@@ -104,7 +115,7 @@ namespace RNAssistant.Runtime
             string entryPath, CancellationToken cancellationToken = default(CancellationToken), string snapshotId = null,
             WebFunctionalChecks checks = null)
         {
-            return new WorkspaceWebVerifier(FileResources(workspace), _webSnapshots, workspace)
+            return RequireWebHost().Create(FileResources(workspace), _webSnapshots, workspace)
                 .VerifyAsync(entryPath, cancellationToken, snapshotId, checks: checks);
         }
 
@@ -179,7 +190,7 @@ namespace RNAssistant.Runtime
                 {
                     var pendingRun = session.LastRun.KernelState;
                     var pendingPorts = new WorkspacePorts(_paths, _chats, _files, _payloads, _webSnapshots, workspace,
-                        session, settings, apiKeyProvider, progress, session.LastRun.WorkspaceAcceptance ?? new WorkspaceRunAcceptance());
+                        session, settings, apiKeyProvider, progress, session.LastRun.WorkspaceAcceptance ?? new WorkspaceRunAcceptance(), webHost: _webHost, extraTools: _extraTools?.Invoke(workspace));
                     await ConversationRunCoordinator.ResumeAsync(session.LastRun.RunId,
                         pendingRun.Summary.PendingConfirmation.PendingId,
                         AgentRunContinuation.Restore(pendingRun.Summary, pendingRun.Limits, 0, RestoreAcceptedHistory(session)),
@@ -212,7 +223,7 @@ namespace RNAssistant.Runtime
 
                 var previous = RestoreAcceptedHistory(session);
                 var ports = new WorkspacePorts(_paths, _chats, _files, _payloads, _webSnapshots, workspace, session, settings, apiKeyProvider,
-                    progress, acceptedContract, runPolicy: policy);
+                    progress, acceptedContract, runPolicy: policy, webHost: _webHost, extraTools: _extraTools?.Invoke(workspace));
                 var runId = Guid.NewGuid().ToString("N");
                 var input = new ConversationInput { Id = Guid.NewGuid().ToString("N"),
                     OperationId = request.RequestId ?? Guid.NewGuid().ToString("N"), Revision = 1, Text = message,
@@ -311,7 +322,7 @@ namespace RNAssistant.Runtime
                 var continuation = AgentRunContinuation.Restore(run.Summary, run.Limits, 0, history);
                 var acceptance = session.LastRun.WorkspaceAcceptance ?? new WorkspaceRunAcceptance();
                 var ports = new WorkspacePorts(_paths, _chats, _files, _payloads, _webSnapshots, workspace, session,
-                    settings ?? new AppSettings(), apiKeyProvider, progress, acceptance, approve);
+                    settings ?? new AppSettings(), apiKeyProvider, progress, acceptance, approve, webHost: _webHost, extraTools: _extraTools?.Invoke(workspace));
                 using (var control = OpenRunControl(session, cancellationToken))
                 {
                     var result = await ConversationRunCoordinator.ResumeAsync(session.LastRun.RunId,
@@ -678,7 +689,7 @@ namespace RNAssistant.Runtime
                 WorkspaceWebSnapshotStore webSnapshots, WorkspaceDescriptor workspace,
                 ChatSession session, AppSettings settings, Func<string> apiKeyProvider,
                 Action<WorkspaceRunEvent> progress, WorkspaceRunAcceptance acceptance = null,
-                bool restorePendingObservation = true, ConversationRunPolicy runPolicy = null)
+                bool restorePendingObservation = true, ConversationRunPolicy runPolicy = null, IWorkspaceWebVerifierFactory webHost = null, IReadOnlyList<WorkspaceToolContribution> extraTools = null)
             {
                 _chats = chats; _files = files; _workspace = workspace; _session = session;
                 _webSnapshots = webSnapshots;
@@ -714,10 +725,10 @@ namespace RNAssistant.Runtime
                 Register(registry, entries, "common.resources_read", _mode.AllowsSkills ? "Read a complete UTF-8 file (default type=file, target is its workspace-relative path) or published skill instructions (type=skill, target is the skill ID). referencePath belongs only to a listed skill reference. For a workspace Plan use type=plan, omit target for the selected plan or supply an exact unique title. Optional version reads history without selecting it; a current read selects its exact revision. Bounds: 16000 characters for files/skills, 32000 for Plans; no partial skill activation." : "Read a complete UTF-8 file using its workspace-relative path as target, up to 16000 characters.",
                     ResourceSchema(false, _mode.AllowsSkills), false,
                     new WorkspaceResourceHandler(_resources.Select("file"), _skillPublications, () => _skills, _observed, false, _plans));
-                if (WorkspaceWebVerifier.FindBrowserExecutable() != null)
+                if (webHost != null && webHost.IsAvailable)
                     Register(registry, entries, "web.verify", "Load an immutable local HTML/CSS/JS snapshot in an isolated browser; check asset/runtime errors and any functional checks fixed by the accepted task contract.",
                         Schema("entryPath", true), false,
-                        new WebVerifierHandler(_resources, webSnapshots, workspace, session?.Id, acceptance?.WebChecks), requiresConfirmation: true, independentRead: false, executesCode: true);
+                        new WebVerifierHandler(webHost.Create(_resources, webSnapshots, workspace), session?.Id, acceptance?.WebChecks), requiresConfirmation: true, independentRead: false, executesCode: true);
                 if (!workspace.ReadOnly)
                 {
                     Register(registry, entries, "files.create", "Create a new real UTF-8 file; never overwrite.",
@@ -746,6 +757,7 @@ namespace RNAssistant.Runtime
                 Register(registry, entries, TaskListToolCatalog.GetTools().Single(), new TaskListToolHandler(TaskListToolCatalog.SetToolId, session));
                 foreach (var entry in PlanDocumentToolCatalog.GetTools())
                     Register(registry, entries, entry, new PlanDocumentToolHandler(entry.Id, session));
+                if (extraTools != null) foreach (var contribution in extraTools) Register(registry, entries, contribution.Entry, contribution.Handler);
                 _catalog = entries;
                 _toolPack = new ToolPackSnapshot("workspace", _mode.Mode, "Workspace", entries.Select(item =>
                     ToolPackSnapshot.Capture(new ToolDescriptor(item.Id, item.Description, item.ArgumentSchemaJson,
@@ -1346,12 +1358,11 @@ namespace RNAssistant.Runtime
 
         private sealed class WebVerifierHandler : IReadOnlyToolHandler
         {
-            private readonly WorkspaceWebVerifier _verifier;
+            private readonly IWorkspaceWebVerifier _verifier;
             private readonly string _sessionId;
             private readonly WebFunctionalChecks _checks;
-            public WebVerifierHandler(ResourceProviderRouter<WorkspaceFileResourceProvider> resources,
-                WorkspaceWebSnapshotStore snapshots, WorkspaceDescriptor workspace, string sessionId, WebFunctionalChecks checks)
-            { _verifier = new WorkspaceWebVerifier(resources, snapshots, workspace); _sessionId = sessionId; _checks = checks; }
+            public WebVerifierHandler(IWorkspaceWebVerifier verifier, string sessionId, WebFunctionalChecks checks)
+            { _verifier = verifier; _sessionId = sessionId; _checks = checks; }
 
             public async Task<ToolHandlerResult> ExecuteAsync(ToolHandlerContext context,
                 CancellationToken cancellationToken)
@@ -1369,7 +1380,7 @@ namespace RNAssistant.Runtime
                         JsonConvert.SerializeObject(new { code = ex.Code })), ToolEffectEvidence.None);
                 }
                 var data = JsonConvert.SerializeObject(new WebVerificationToolData { EntryPath = result.EntryPath,
-                    Status = WorkspaceWebVerifier.StatusCode(result.Status), CheckedFiles = result.CheckedFiles,
+                    Status = WorkspaceWebVerificationStatus.Code(result.Status), CheckedFiles = result.CheckedFiles,
                     Errors = result.Errors, Hints = result.Hints, Checks = result.CheckResults });
                 var toolResult = result.Status == WebVerificationStatus.Passed
                     ? ToolResult.Ok(_checks == null ? "Isolated browser smoke passed for this immutable snapshot." :

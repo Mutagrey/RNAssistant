@@ -1,0 +1,44 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using Newtonsoft.Json.Linq;
+using RNAssistant.Application;
+using RNAssistant.Application.Contracts;
+using RNAssistant.Core.Storage;
+using RNAssistant.Office.Contracts;
+namespace RNAssistant.Office.WebView
+{
+    public sealed partial class AssistantWebBridge
+    {
+        public PluginApplicationService Plugins { get; set; }
+        private Task<object> HandlePluginAsync(BridgeOperationId operation, JToken payload, CancellationToken token)
+        {
+            if(Plugins==null)throw new PluginException("plugins_unavailable","Plugin host is unavailable.");
+            return Task.Run(async ()=> {
+                token.ThrowIfCancellationRequested();
+                var settings=new SettingsService(_controller.StoragePaths);
+                switch(operation)
+                {
+                    case BridgeOperationId.GetPlugins: return (object)Plugins.List();
+                    case BridgeOperationId.CreatePlugin: return Plugins.Create(Payload<PluginCreateRequest>(payload));
+                    case BridgeOperationId.ConnectPlugin: return Plugins.Connect(Payload<PluginConnectRequest>(payload));
+                    case BridgeOperationId.CheckPlugin: return Plugins.Check(Payload<PluginIdRequest>(payload).PluginId);
+                    case BridgeOperationId.ApplyPlugin: return Plugins.Apply(Payload<PluginApplyRequest>(payload));
+                    case BridgeOperationId.OpenPlugin:
+                        if(Plugins.Executor==null)throw new PluginException("plugins_unavailable",Plugins.StartupError ?? "Plugin browser host is unavailable.");
+                        return Plugins.Open(Payload<PluginOpenRequest>(payload));
+                    case BridgeOperationId.ClosePlugin: await Plugins.CloseInstanceAsync(Payload<PluginCloseRequest>(payload).InstanceId); return new PluginFrameResult();
+                    case BridgeOperationId.DisablePlugin: return await Plugins.DisableAsync(Payload<PluginIdRequest>(payload).PluginId);
+                    case BridgeOperationId.GetPluginChat: return Plugins.ChatState(Payload<PluginIdRequest>(payload).PluginId);
+                    case BridgeOperationId.SubmitPluginChat: return await Plugins.SubmitChatAsync(Payload<PluginChatRequest>(payload),settings.Load(),settings.LoadApiKey,token);
+                    case BridgeOperationId.ResolvePluginChat: case BridgeOperationId.CancelPluginChat:
+                        return await Plugins.ControlChatAsync(Payload<PluginChatControlRequest>(payload),operation==BridgeOperationId.CancelPluginChat,settings.Load(),settings.LoadApiKey,token);
+                    case BridgeOperationId.GetPluginVendors: return new PluginVendorCatalogDto {Items=Plugins.Vendors.List()};
+                    case BridgeOperationId.ImportPluginVendor: return Plugins.Vendors.Import(Payload<PluginConnectRequest>(payload).RootPath);
+                    case BridgeOperationId.ResolveHtmlVendor: return Plugins.ResolveHtmlVendor(Payload<PluginVendorRequest>(payload));
+                    default:throw new InvalidOperationException("Unknown plugin bridge operation.");
+                }
+            },token);
+        }
+    }
+}

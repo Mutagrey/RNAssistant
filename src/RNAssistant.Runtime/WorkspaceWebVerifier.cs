@@ -22,29 +22,9 @@ using RNAssistant.BrowserHost;
 
 namespace RNAssistant.Runtime
 {
-    public enum WebVerificationStatus { Passed, Failed, NotRun }
-
-    public sealed class WebVerificationResult
-    {
-        public WebVerificationStatus Status { get; internal set; }
-        public string EntryPath { get; internal set; }
-        public IReadOnlyList<string> CheckedFiles { get; internal set; }
-        public IReadOnlyList<string> Errors { get; internal set; }
-        public IReadOnlyList<string> Hints { get; internal set; }
-        public string SnapshotSha256 { get; internal set; }
-        public string Browser { get; internal set; }
-        public IReadOnlyList<ResourceEvidence> Evidence { get; internal set; }
-        public string SnapshotId { get; internal set; }
-        public string VerificationId { get; internal set; }
-        public ResourceRef VerificationReference { get; internal set; }
-        public bool Historical { get; internal set; }
-        public IReadOnlyList<WebCheckResult> CheckResults { get; internal set; }
-        public IReadOnlyList<WebDiagnosticDescriptor> Diagnostics { get; internal set; }
-    }
-
     // Development-only browser verifier. The browser receives an immutable,
     // bounded snapshot over loopback, never the writable workspace directory.
-    public sealed partial class WorkspaceWebVerifier
+    public sealed partial class WorkspaceWebVerifier : IWorkspaceWebVerifier
     {
         private const int MaximumFiles = WorkspaceWebSnapshotStore.MaximumFiles;
         private const int MaximumSnapshotBytes = WorkspaceWebSnapshotStore.MaximumSnapshotBytes;

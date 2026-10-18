@@ -1,23 +1,19 @@
 # Data Templates
 
-Status: independent application foundation and early folder export, alongside the
-existing M0 proof, M1 manifest/source selection and M2 universal core/XLSX reader
-(2026-10-18). The shared shell and JS core belong to `web/data-templates`.
-The exported source project runs without RNAssistant and includes its own entry,
-examples, semantic tests and export tool. A standalone XLSX queue, template editor,
-browser project template catalog, browser/native raw drafts and browser result saves
-work; recognition, dataset publication and other file readers remain open.
+Status: first ordinary RNAssistant plugin and independent standalone application
+(2026-10-19). Shared UI/core and project formats remain in `web/data-templates`.
+Native code runs through the isolated [Plugins](plugins.md) protocol; source chat,
+publishing and vendor resolution belong to the platform. Export runs without
+RNAssistant. XLSX processing, project templates/dictionaries, drafts and result
+saves are implemented; other production file readers and dataset publication remain open.
 
-RNAssistant's optional adapter still saves source declarations and controls native
-preparation. Exact byte reads, the pinned resource session, WebView2 executor and
-acknowledged native output exist; actual Windows host qualification and parser
-dispatch remain open. Their completion follows the standalone application boundary.
-Owner: Data Templates application; native file authority remains with
-`WorkspaceFileService`, with the existing `TabularProjectStore` integration adapter.
-This is the canonical domain contract; planned scope is marked separately from
-implemented behavior and uses the original proposal's M0–M7 stages.
-Retire it only if the domain is removed or its contract moves to another named
-owner. Architecture decision: [ADR-0014](decisions/ADR-0014-data-templates.md).
+Owner: Data Templates application; native files remain under `WorkspaceFileService`.
+This is the canonical domain contract. Planned domain scope retains M0–M7 labels;
+these are not prerequisites for using the plugin foundation. The full standalone
+export suite passes; real Windows/WebView2/Office qualification remains open.
+Retire this document only if the domain is removed or its contract moves to a named
+owner. Decisions: [ADR-0014](decisions/ADR-0014-data-templates.md),
+[ADR-0015](decisions/ADR-0015-plugins.md).
 
 ## Application project and data projects
 
@@ -30,32 +26,26 @@ is required by the browser application.
 
 | Scope | Authority and responsibility |
 |---|---|
-| Application source project | `web/data-templates/`: HTML/CSS/JS, UI, core, Worker, examples, tests, docs and `application.json`. Agent edits ordinary workspace files. |
+| Application source project | `web/data-templates/`: HTML/CSS/JS, UI, core, Worker, examples, tests, docs and `plugin.json`. Agent edits ordinary workspace files. |
+| Published release | Separate runtime-owned immutable code/vendor snapshot in CAS. Source provenance grants no data access. |
 | User data project | Separate files: `project.json`, sources, templates, dictionaries, mappings and results. Selecting a project does not load executable JS or grant filesystem/native access. |
 | Data Templates application | UI and processing commands, processing queue, recognition, readers, language, validation, canonical results and export. This is the target owner even where a feature is not implemented yet. |
 | Browser adapter | User-selected Files, browser execution/save capabilities and explicit limitations. No RNAssistant globals, path grants or native credentials. |
 | RNAssistant adapter | Agent workflow, generic workspace file/history owners, exact source capabilities, isolated execution and optional Office. The preparation queue supplies immutable inputs; it must not become another parser or business queue. |
 
-There is one application shell and one engine. Browser `ui/browser.js` and native
-`web/js/app-data-templates.js` compose it with their own source adapters: browser
-File intake uses `ui/loader.js`; native project-backed selection and preparation
-occupy the named source/activity slots. The browser-only File chooser is omitted
-from the native screen, so it cannot suggest a second project source list. Both
-hosts show the selected project in the header and open their real project controls
-from its action. Domain markup lives in `ui/shell.js`, visual tokens in `styles/`,
+There is one application shell and one engine. `ui/browser.js` composes the same
+screens in a browser and a plugin iframe. `ui/plugin-adapter.js` selects the native
+scoped file handles/command service when the host is present. Browser file selection
+uses the normal chooser/drop path; native selection lists only the separately
+selected data folder. Domain markup lives in `ui/shell.js`, tokens in `styles/`,
 draft state in `ui/draft-session.js`, and parsing in `core/`.
-Changing the UI does not require a second UI implementation or C# recompilation.
-Future functional screens use this same boundary; workspace M7 must reuse it.
 
-The native root currently loads **installed shipped UI only**. Editable application
-code must run in a dedicated isolated viewer/executor after scoped package admission;
-neither a Worker nor a manifest hash alone grants native authority. Trusted transport
-(`web/tabular/native-*`, native DTO/channel/resource owner) stays outside the app
-project. The current compiled `TabularRuntimePin` is transitional: preserve its
-checks until immutable per-run project-package capture, host protocol checks,
-capability admission, isolation and revocation replace it. That replacement must
-allow app/template/operator updates without rebuilding RNAssistant while its host
-protocol stays compatible. See [migration gates](stabilization/MIGRATION_MAP.md#data-templates-application-adapters--2026-10-16).
+The RNAssistant root no longer loads Data Templates scripts or markup. Each release
+uses a separate iframe origin; commands run in managed Workers independently of the
+screen. Trusted `web/plugin-host` transport stays outside editable app code.
+The legacy compiled `TabularRuntimePin` remains only for its listed native/CLI
+consumers pending Windows qualification; it is not a plugin fallback. See
+[migration gates](stabilization/MIGRATION_MAP.md#data-templates-application-adapters--2026-10-16).
 
 Skills are development/use instructions for the agent. Tools operate on project
 files, tests and the application's typed commands; they do not duplicate the JS
@@ -67,11 +57,11 @@ importer in C# or make an agent run part of normal file processing.
 It preserves the loader's pick/drop/search/navigation/progress/cancel behavior.
 The standalone Templates view validates and edits JSON rules, manages a project-local
 template catalog and runs the XLSX queue; the separate core probe remains a
-development tool. Native chooser/preparation
-controls and project draft commands exist only in the RNAssistant adapter. Its
-Templates view can select, edit, save, list and reopen raw JSON drafts through
-the same draft session and editor. The root UI does not validate rules or run a
-template; those capabilities belong to the isolated application Worker/host path.
+development tool. Native inspection and extraction call `commands.js` through the
+same plugin command service used by the workspace agent. `extract` stages a named
+canonical result; `extract-to-file` publishes an explicit data-project path through
+guards/journal/read-back. UI result saving retains the existing project receipt format.
+The root UI owns neither rule validation nor processing.
 
 In browsers with the File System Access directory picker, the project card opens a
 user-selected folder containing a format-2 `project.json` or creates a **new
@@ -86,7 +76,7 @@ Export from the repository with this development-only Node command:
 node web/data-templates/tools/export.js /absolute/path/to/new-folder
 ```
 
-Only the explicit `application.json.files` are captured. The export refuses outside
+Only the explicit `plugin.json.files` are captured. The export refuses outside
 paths, symlinks, duplicate members, an existing destination and an output inside the
 source project. It includes code, examples, tests and the XML-parser license;
 it includes no native bridge, chats, grants, credentials or user data. The generated
@@ -1076,26 +1066,27 @@ and support cancellation; an interrupted write is removed when possible, while
 failed cleanup reports the exact folder as `effect_unknown`. The selected project's
 folder permission is session-local. The result receipt is separate from format-2
 `project.json`: it does not register a source, validate/publish a dataset, or imply
-RNAssistant/native result persistence. Browser File System Access, local quota and
+automatic dataset publication. The plugin adapter preserves this format through
+scoped native file handles. Browser File System Access, local quota and
 real large-file performance remain environment-dependent.
 
 ### Shared application and UI
 
-The **Рабочая папка** tab contains the Data Templates viewer. Its project settings
-start expanded, present folder selection and project opening as two steps, and can
-be collapsed. They accept an absolute path to an existing directory and an explicit
-read-only choice. It creates/opens the domain manifest by a relative path and
-shows its name/location as inert text. Project-manifest operations cover metadata and source declarations;
-the separate preparation commands retain source bytes as described below.
-Office chats and their existing artifacts retain their current ownership; this
-tab does not attach workspace files to model context or bind an Excel source.
+The Data Templates rail item opens an isolated plugin, with the source-workspace
+chat next to its preview in development mode. Data selection is separate from
+source chat and Office target selection. The plugin uses its ordinary browser
+project UI over native directory handles; the former root workspace UI was removed.
 
-`src/RNAssistant.Application` is one shared application source module, compiled via
-one `.projitems` import in Office Framework 4.8 and the existing CLI Runtime build.
-It references Core only. The previous Runtime-only project facade was removed;
-CLI `project create/open/sources/prepare/draft` and the bridge now consume `WorkspaceApplicationService`
-and its typed contracts directly. No file logic or conversation runtime is copied.
-The packaging seam and removal gate are in [MIGRATION_MAP](stabilization/MIGRATION_MAP.md#workspace-first-adapters--2026-10-04).
+`src/RNAssistant.Application` is shared through `.projitems` by Office Framework 4.8
+and CLI Runtime. It now also contains `WorkspaceConversationService` and the plugin
+services. No model loop or file authority is copied; the optional Chromium verifier
+is a platform port. See [Plugins](plugins.md).
+
+The following selection/queue contracts describe the retained `WorkspaceApplicationService`
+used by CLI `project create/open/sources/prepare/draft`, typed native preparation
+endpoints and their existing tests. They are not a second Data Templates plugin UI.
+Their consumers and removal gates are in
+[MIGRATION_MAP](stabilization/MIGRATION_MAP.md#data-templates-application-adapters--2026-10-16).
 
 Each panel/CLI invocation owns one ephemeral workspace selection. Opening a root
 issues a new binding ID, including when reopening the same root with different
@@ -1264,7 +1255,7 @@ modules without a framework, npm or a bundler.
 | `ui/source-intake.js` | Browser enumeration, metadata hints, limits and coalesced progress; no DOM or content parsing. |
 | `ui/loader.js` | Portable owner factory: browser File handles, selection/context and enumeration lifetime; passes metadata/actions to presentation. |
 | `ui/processing.js`, `ui/browser-core.js` | Standalone queue owner and fixed lazy core loader. One Worker job per selected file; no parser logic or result bodies in the view. |
-| `ui/draft-session.js`, `ui/template-editor.js` | Shared raw JSON draft state and CodeMirror presentation. Browser composition supplies Worker inspection; native root supplies no inspector and labels snapshots unverified. |
+| `ui/draft-session.js`, `ui/template-editor.js` | Shared raw JSON draft state and CodeMirror presentation. Browser and plugin composition supply inspection through the same compiler; a raw draft save does not claim validation. |
 | `ui/browser-template-library.js`, `ui/template-library-view.js` | Browser project catalog from immutable template versions, archive events and read-back checks; view owns only navigation/filter state. |
 | `core/project-template.js`, `ui/browser-project-dictionary.js`, `ui/project-dictionary-controller.js` | Separate project-bound rules and shared dictionary versions; merge, read-back, observed-head guards and active-draft rebasing. |
 | `ui/parameter-editor.js`, `ui/mapping-editor.js`, `core/template-draft.js` | Structured edits to the active materialized JSON, checked before the shared dictionary is saved; standalone drafts retain inline edits. |
@@ -1272,16 +1263,12 @@ modules without a framework, npm or a bundler.
 | `ui/result-staging.js` | Provisional per-file sink: acknowledged chunks to origin-private browser files, with explicit bounded memory mode when disk storage is unavailable. Completion gates export; failure/cancel discards staging. This is not durable project storage. |
 | `ui/processing-view.js`, `styles/processing.css` | Standalone template picker, status navigation, progress and 20-record preview. Uses shared tokens and operation view. |
 | `ui/template-inspection-view.js` | Template scope, rules, parameters and searchable/paged mapping lists; opens dedicated editors. It receives bounded inspection data and owns only DOM/filter state. |
-| `ui/browser.js`, `web/js/app-data-templates.js` | Separate browser/native composition. The native adapter translates context and mounts native controls in named slots; it owns no domain parsing. |
+| `ui/browser.js`, `ui/plugin-adapter.js` | One application composition. The optional plugin adapter supplies scoped project handles, selection and command transport; no domain parsing. |
 | `ui/loader-view.js` | Screen navigation, filters, pages, metadata details and DOM events; no bridge, File handles, readers or job ownership. |
-| `app-workspace-sources.js` | Typed native browsing, transient edits to saved relative paths, queue commands/recovery and bounded polling. Saves use the shared workspace controller; no body transfer or durable client store. |
-| `app-workspace-sources-view.js`, `app-workspace-sources.css` | Workspace chooser, queue navigation and progress presentation using the same loader tokens; no bridge or job lifecycle. |
-| `app-workspace-drafts.js`, `app-workspace-drafts-view.js`, `app-workspace-drafts.css` | Native Templates composition for raw project snapshots; the workspace controller owns guarded typed bridge calls and recovery. No second validator, parser or durable client store. |
-| `app-workspace-catalog.js`, `app-workspace-catalog.css` | Read-only native project catalog and shared dictionary view. Typed bridge reads, exact observed-head opening, selected-project response checks and bounded table navigation; no validation, editing or file authority. |
 | `ui/operation-view.js` | Shared progress component; renders supplied stage, counters, duration and terminal state; delegates cancel/dismiss without a timer or inferred success. |
 | `styles/tokens.css` | Loader-wide palette aliases, typography, spacing, radii and card/row density. Inherits the host light/dark theme. |
 | `ui/shell.js`, `styles/loader.css` | Single shared semantic markup and component layout; no business state derived from CSS. |
-| `styles/browser.css`, native `app-workspace-projects.css` | Host palettes/base styles and native workspace controls respectively. |
+| `styles/browser.css` | Shared application palette and base styles inside the browser or isolated plugin iframe. |
 
 View listeners are root-scoped, delegated for dynamic rows and disposed explicitly.
 Unmounting/remounting a view neither cancels accepted work nor drops the selection;
@@ -1340,13 +1327,10 @@ options from the same validated dictionaries and do not own a second draft.
 Pure `core/template-draft.js` applies structured changes to the validated JSON;
 the shared draft session owns raw text and pending edits, while the standalone
 Worker/compiler decides whether a candidate is usable. Explicit project-local
-raw snapshots are available in the standalone browser and native Templates UI;
-the browser has a project-local versioned template catalog, while native indexed
-template activation remains open. Native save/list/open use selected
-workspace binding and revision, with exact-file recovery for uncertain writes.
-The root UI deliberately labels raw drafts unverified and has no Worker preflight
-or Run action. CodeMirror 5 is pinned in both hosts: standalone assets load on
-opening the editor, while RNAssistant reuses its existing local instance. The
+raw snapshots and the versioned project template catalog use the same UI in the
+standalone browser and plugin. Plugin handles supply native guards and read-back;
+inspection runs through the shared Worker command. The isolated screen includes
+Run and its own lazy local CodeMirror assets; root editor globals are not shared. The
 static no-bundler package adds about 207 KiB of local editor assets;
 an editor-major upgrade is a separate decision. This preflight cannot prove
 that the selected workbook has the sheet, valid values or resolvable mapping keys:
@@ -1675,19 +1659,13 @@ amplification bounds, isolated buffers, selection/maintenance retention, project
 off-caller verification, cancellation during a slot wait/read/open and disposal drain.
 Storage seek checks cover raw/compressed/encrypted combinations, backwards/cross-block
 reads, per-pass staging progress and cleanup on success/cancel/failure. CLI smoke covers mixed outcomes
-and read-only preparation without manifest changes. `workspace-projects.test.js`
-uses the shipped UI and CSS with controlled typed replies for duplicate clicks,
-readonly/stale bindings, inert metadata, explicit pinned-path inspection, malformed
-receipts and narrow light/dark layout. These do not qualify real Windows/Office UI.
-
-`workspace-sources.test.js` adds native chooser/queue presentation with controlled
-typed replies: 61-file paging, inert filenames, read-only admission, explicit budgets,
-filter-independent progress, remount, pause/retry/cancel, invalid/lost reply recovery,
-late directory results after a context change and narrow/wide light/dark layouts.
-Saved-source checks cover restored composition, bounded search/removal, explicit
-save/revert, read-only refusal and lost/mismatched save receipts with pinned inspection.
-Harness checks exercise the actual directory owner/bridge without source capture,
-including stable pages, protected entries, cancellation and stale binding refusal.
+and read-only preparation without manifest changes. The retired root workspace
+browser tests were removed with their controllers. `tests/web/plugins.test.js`
+checks the new creation/preview/publication/disable UI, actual Chromium Worker,
+XLSX command and staged result bytes using a mock native transport. Harness `plugins:`
+checks real storage, immutable publications, independent grants, prepared confirmation,
+version changes, cancellation, result scopes and uncertain file/directory writes.
+Neither qualifies Windows/WebView2/Office.
 
 `data-templates.test.js` checks actual browser File and folder pickers, file drops,
 all directory batches, cancellation and late callbacks across project changes,
@@ -1707,15 +1685,15 @@ cancel-before-Worker, a complete disk-staged JSON result above 8 MiB, discard af
 revoke and the memory fallback, plus narrow result layout. Large-book parsing and publication
 remain unqualified.
 
-For JS changes, run only the affected scripts. The draft-session and workspace-draft
-command checks are Node-only; the other browser checks require Playwright:
+For JS changes, run only the affected scripts. The draft-session and portable project
+checks are Node-only; the other browser checks require Playwright:
 
 ```sh
 node web/data-templates/tests/core.test.js
 node web/data-templates/tests/matrix.test.js
 node web/data-templates/tests/universal.test.js
 node web/data-templates/tests/draft-session.test.js
-node tests/web/workspace-draft-commands.test.js
+node tests/web/plugins.test.js
 node tests/web/data-templates-export.test.js
 node tests/web/tabular-xlsx.test.js
 node tests/web/tabular-byte-source.test.js

@@ -25,7 +25,7 @@ const hash = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
         const alias = path.join(temporary, "source-alias");
         fs.symlinkSync(output, alias);
         assert.throws(() => exportedTool.exportApplication(path.join(alias, "nested")), /outside the application source/);
-        const manifestPath = path.join(output, "application.json"), original = fs.readFileSync(manifestPath, "utf8");
+        const manifestPath = path.join(output, "plugin.json"), original = fs.readFileSync(manifestPath, "utf8");
         const manifest = JSON.parse(original);
         manifest.files.push("../private.json"); fs.writeFileSync(manifestPath, JSON.stringify(manifest));
         assert.throws(() => capture(output), /Invalid application member/);

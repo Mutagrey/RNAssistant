@@ -119,7 +119,7 @@
         await cleanup;
         if (operation.abort.signal.aborted) return;
         // Loading the fixed core also respects cancellation before the first Worker starts.
-        if (queue.some(item => item.format === "xlsx" && item.file.size <= sourceLimit)) {
+        if (!root.RNDataTemplatesPlugin && queue.some(item => item.format === "xlsx" && item.file.size <= sourceLimit)) {
           const executorFactory = await root.DataTemplatesBrowserCore.load();
           if (operation.abort.signal.aborted) return;
           if (root.RNTabularEngine.maxSourceBytes !== sourceLimit)
@@ -139,12 +139,18 @@
             const retained = queue.reduce((sum, entry) => sum + (entry.result ? entry.result.bytes : 0), 0);
             const remainingBytes = root.DataTemplatesResultStaging.totalMaximumBytes - retained;
             if (remainingBytes < 1) throw Object.assign(new Error("Общий бюджет результатов 1 ГиБ исчерпан."), { code: "RESULT_STAGING_LIMIT" });
+            let summary;
+            if (root.RNDataTemplatesPlugin) {
+              item.store = await root.RNDataTemplatesPlugin.extract(runningTemplate.input,item.file,item.templateName,remainingBytes,operation.abort.signal,
+                progress => { if (run === operation) { item.progress = progress; render(); } });
+              summary = item.store.snapshot().summary;
+            } else {
             item.store = await root.DataTemplatesResultStaging.create({
               source: { name: item.file.name, path: item.path, size: item.file.size },
               templateName: item.templateName, remainingBytes: remainingBytes, signal: operation.abort.signal
             });
             if (operation.abort.signal.aborted) throw Object.assign(new Error("Обработка отменена."), { code: "EXECUTION_CANCELLED" });
-            const summary = await executor.extractXlsx(runningTemplate.input, item.file, {
+            summary = await executor.extractXlsx(runningTemplate.input, item.file, {
               signal: operation.abort.signal,
               sink: {
                 writeBatch: async batch => {
@@ -159,6 +165,7 @@
               onProgress: progress => { if (run === operation) { item.progress = progress; render(); } }
             });
             if (operation.abort.signal.aborted) throw Object.assign(new Error("Обработка отменена."), { code: "EXECUTION_CANCELLED" });
+            }
             const staged = item.store.snapshot();
             if (staged.summary !== summary) throw new Error("Результат приёмника не совпал с исполнителем.");
             item.progress = { phase: "verifying-result" }; render();
@@ -204,9 +211,9 @@
       try {
         const file = await item.store.file();
         if (disposed || !queue.includes(item) || item.status !== "completed") return;
-        const url = URL.createObjectURL(file), link = document.createElement("a");
+        const url = file.downloadUrl || URL.createObjectURL(file), link = document.createElement("a");
         link.href = url; link.download = (item.file.name.replace(/[^\p{L}\p{N}._-]+/gu, "_").slice(0, 80) || "result") + ".canonical.json";
-        link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+        link.click(); if (!file.downloadUrl) setTimeout(() => URL.revokeObjectURL(url), 1000);
       } catch (error) {
         if (disposed || !queue.includes(item) || item.status !== "completed") return;
         item.result = null; item.status = "failed"; item.error = errorText(error);

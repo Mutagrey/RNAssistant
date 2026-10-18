@@ -45,9 +45,10 @@
     const directory = await folder(project, false);
     if (!directory) fail("TEMPLATE_MISSING", "Папка шаблонов отсутствует.");
     const body = await (await directory.getFileHandle(file)).getFile();
-    if (!body.size || body.size > limit) fail("TEMPLATE_LIMIT", "Шаблон превышает лимит 1 000 000 байт.");
+    if (!body.size || body.size > limit) { if (body.close) await body.close(); fail("TEMPLATE_LIMIT", "Шаблон превышает лимит 1 000 000 байт."); }
     try { return decoder.decode(await body.arrayBuffer()); }
     catch (_) { fail("TEMPLATE_ENCODING", "Шаблон должен быть в UTF-8."); }
+    finally { if (body.close) await body.close(); }
   }
   async function open(project, entry) {
     const current = (await list(project)).find(item => item.id === entry.id);
@@ -91,8 +92,9 @@
       const writer = await handle.createWritable({ keepExistingData: false });
       await writer.write(text); await writer.close();
       const stored = await handle.getFile();
-      if (stored.size !== bytes.length || decoder.decode(await stored.arrayBuffer()) !== text)
-        fail("effect_unknown", "Байты версии не прошли проверку чтением.");
+      try { if (stored.size !== bytes.length || decoder.decode(await stored.arrayBuffer()) !== text)
+        fail("effect_unknown", "Байты версии не прошли проверку чтением."); }
+      finally { if (stored.close) await stored.close(); }
       const after = await scan(project, false);
       const head = after.entries.find(item => item.id === id);
       if (!head || head.head !== name)

@@ -86,7 +86,7 @@ namespace RNAssistant.Runtime
 
         public Task<WorkspacePreviewReport> OpenPreviewAsync(WorkspaceDescriptor workspace, WorkspacePreviewRequest request,
             Action<WorkspacePreviewReport> opened, CancellationToken cancellationToken = default(CancellationToken))
-        { return new WorkspaceWebVerifier(FileResources(workspace), _webSnapshots, workspace)
+        { return RequireWebHost().Create(FileResources(workspace), _webSnapshots, workspace)
                 .PreviewAsync(request, opened, cancellationToken); }
 
         public WorkspaceWebDiagnosticView OpenWebDiagnostic(WorkspaceDescriptor workspace, WorkspaceWebDiagnosticRequest request)

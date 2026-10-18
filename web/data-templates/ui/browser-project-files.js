@@ -7,9 +7,11 @@
   const missing = error => error && error.name === "NotFoundError";
   async function read(handle, maximum) {
     const file = await handle.getFile();
-    if (file.size > maximum) fail("file_too_large", "Файл проекта превышает допустимый размер.");
-    try { return decoder.decode(await file.arrayBuffer()); }
+    try {
+      if (file.size > maximum) fail("file_too_large", "Файл проекта превышает допустимый размер.");
+      return decoder.decode(await file.arrayBuffer()); }
     catch (_) { fail("invalid_utf8", "Файл проекта должен быть в UTF-8."); }
+    finally { if (file.close) await file.close(); }
   }
   async function manifest(directory) {
     const handle = await directory.getFileHandle("project.json");

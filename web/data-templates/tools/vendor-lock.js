@@ -18,6 +18,10 @@ function verifyVendors(root, application) {
     if (lock.formatVersion !== 1 || lock.kind !== "data-templates-vendors" ||
         !Array.isArray(lock.packages) || lock.packages.length === 0)
         throw Error("Invalid Data Templates vendor lock.");
+    if (!Array.isArray(application.vendors) || application.vendors.length !== lock.packages.length ||
+        application.vendors.some(dependency => dependency.mount !== "vendor" ||
+          !lock.packages.some(item => item.id === dependency.id && item.version === dependency.version)))
+        throw Error("Plugin dependencies and portable vendor lock differ.");
     const declared = new Set(), ids = new Set();
     for (const item of lock.packages) {
         if (typeof item.id !== "string" || !/^[a-z0-9-]+$/.test(item.id) || ids.has(item.id) ||

@@ -8,6 +8,27 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## Plugin native qualification and interrupted scratch — 2026-10-19
+
+Owner: application plugin services and WebView transport. Host-neutral checks cover
+independent grants, immutable update, prepared publication, no preview inheritance,
+vendor context refusal, scoped results and uncertain file/directory effects. The
+Chromium test runs the production SDK/Worker with mock native callbacks; it does
+not qualify actual Windows Frame API event ordering, picker, origin interception,
+permission denial, result download streams, renderer failure, multiple panes,
+controller cancellation/drain or Framework pipe ACLs. Complete those checks on
+Windows x64 + WebView2 + Office x64 before claiming native qualification. The
+source-chat model/provider route also needs that live-host evidence; shared CLI
+smoke is not a substitute. The old compiled Tabular pin remains under its listed
+removal gate, not a plugin fallback.
+
+Normal result discard and last-owner shutdown remove private scratch files and
+clear their current file authority; selected data projects are never removed.
+A process crash can leave orphan `plugin-staging` / `plugin-results` files and
+preview scratch. Implement cleanup with an explicit process/session lease before
+removing such folders: other panels/processes may still own them. Do not replay
+writes, delete user-selected projects or describe abandoned results as published.
+
 ## Data Templates browser mapping check — 2026-10-18
 
 Closed 2026-10-19. `tests/web/data-templates-export.test.js` expected the former
@@ -30,17 +51,17 @@ matrix records/provisional batches have no native tools or publication authority
 
 - Architecture boundary: the independent application source project and folder
   export now exist, with shared UI/core and exported-package browser evidence.
-  Full standalone processing UI/data-project lifecycle remains open and precedes
-  further native parser dispatch. The compiled app-code hash pin and shipped-root
-  UI mounting are temporary adapters with [removal gates](MIGRATION_MAP.md#data-templates-application-adapters--2026-10-16).
-  Close them through immutable per-run project-package capture, typed capabilities
-  and isolated viewer/executor evidence; preserve current checks until cutover.
+  The plugin foundation now replaces root UI mounting and provides scoped
+  inspection/extraction/result writes. The compiled app-code hash pin remains only
+  for listed legacy consumers with [removal gates](MIGRATION_MAP.md#data-templates-application-adapters--2026-10-16).
+  Windows qualification of the new isolated path remains open.
   App updates must not require rebuilding C# when the host protocol is unchanged.
 - Shared project commands now serve CLI and a thin Office panel through a
   compatible application source module. Core file checks, fake-controller bridge
   lifetime/worker/unknown-effect checks and browser UI checks pass. Real
-  Windows/Office validation, workspace-owned UI chats, file views and full M7
-  reconnect adoption remain open. Keep Framework 4.8 compatibility and bind the
+  Windows/Office validation, general workspace file views and full M7
+  reconnect adoption remain open. Plugin source chats now reuse the shared
+  WorkspaceConversationService; their live native model/provider evidence is open. Keep Framework 4.8 compatibility and bind the
   Office source independently of workspace/project identity.
 - Normalized fixtures do not prove unsaved live Excel values, a consistent
   disjoint capture or metadata availability. Close with bound provider capture,
@@ -61,15 +82,18 @@ matrix records/provisional batches have no native tools or publication authority
   M2 batch acknowledgement is consumption, not publication: a later failure must
   leave earlier batches unpublished. The native channel revokes output on cancellation
   during write/validation and requires confirmed source cleanup before success. A durable
-  sink still needs staging/cleanup and unknown-write reconciliation through the existing owner.
+  plugin sink now uses existing file/CAS ownership, guarded streaming writes and
+  explicit unknown-write reconciliation. Native qualification and crash-orphan cleanup
+  remain open; this does not close general dataset publication.
 - The loader's enumeration progress and 50-row pages do not prove processing of
   many large files. The shared application's preparation queue now has serialized
   captures, exact project/source pins, budgets, pause/cancel/retry, bounded pages
-  and maintenance exclusion, with host-neutral lifecycle checks. The loader now
-  selects workspace files explicitly and controls preparation, with typed-reply
-  browser checks and independent current-file progress. Source declarations persist
+  and maintenance exclusion, with host-neutral lifecycle checks. The former root preparation UI is removed; the plugin selects files inside
+  its explicit data grant and invokes the shared Worker service. Legacy preparation
+  commands retain their independent CLI/native coverage. Source declarations persist
   through guarded manifest saves with stable domain IDs and explicit recovery;
-  parser dispatch and batch requests/common execution events remain open.
+  plugin parser dispatch is implemented; native qualification, batch requests and
+  common execution events remain open.
   The separate XLSX reader now has streamed selective reads, bounded pull-byte input,
   exact numeric cells, resource budgets and Worker cancellation. The shared native
   reader now pins selection/maintenance until I/O drains and supplies bounded ranges

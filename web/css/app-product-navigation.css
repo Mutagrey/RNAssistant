@@ -1,11 +1,11 @@
 /* Shared section rail for the prototype and the product shell. */
 .app-shell { display: flex; flex-direction: row; width: 100%; height: 100%; min-height: 0; }
 .section-rail { display: flex; flex: 0 0 52px; flex-direction: column; align-items: center; gap: 6px; width: 52px; padding: 12px 5px 10px; background: var(--canvas); border-right: 1px solid var(--line); overflow-x: hidden; overflow-y: auto; }
-.section-rail > .rail-button { display: flex; flex: 0 0 auto; flex-direction: column; align-items: center; justify-content: center; gap: 5px; width: 40px; min-height: 40px; padding: 8px; border: 0; border-radius: 12px; background: transparent; color: var(--ink-muted); }
-.section-rail > .rail-button svg { width: 20px; height: 20px; stroke-width: 1.55; }
-.section-rail > .rail-button span { font-size: 11px; line-height: 1.2; }
-.section-rail > .rail-button:hover { color: var(--ink); background: var(--surface-hover); }
-.section-rail > .rail-button[aria-current="page"] { color: var(--accent); background: var(--surface); box-shadow: 0 1px 4px #16271e0a; }
+.section-rail .rail-button { display: flex; flex: 0 0 auto; flex-direction: column; align-items: center; justify-content: center; gap: 5px; width: 40px; min-height: 40px; padding: 8px; border: 0; border-radius: 12px; background: transparent; color: var(--ink-muted); }
+.section-rail .rail-button svg { width: 20px; height: 20px; stroke-width: 1.55; }
+.section-rail .rail-button span { font-size: 11px; line-height: 1.2; }
+.section-rail .rail-button:hover { color: var(--ink); background: var(--surface-hover); }
+.section-rail .rail-button[aria-current="page"] { color: var(--accent); background: var(--surface); box-shadow: 0 1px 4px #16271e0a; }
 .section-rail > .rail-divider { flex: 0 0 auto; width: 22px; height: 1px; margin: 4px auto; background: var(--line-strong); }
 .section-rail > .rail-settings { margin-top: auto; }
 .shell > .content { min-width: 0; height: 100%; }

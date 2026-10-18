@@ -28,6 +28,8 @@ namespace RNAssistant.Office.WebView
         private readonly System.Threading.CancellationTokenSource _lifetimeCancellation;
         private WebView2 _webView;
         private CoreWebView2Controller _webViewController;
+        private RNAssistant.Application.PluginApplicationService _plugins;
+        private PluginWebViewHost _pluginHost;
         public TabularWebViewExecutor TabularExecutor { get; private set; }
         private Stopwatch _initialNavigationTimer;
         private string _trustedDocumentUri;
@@ -36,7 +38,8 @@ namespace RNAssistant.Office.WebView
         public Task RequestsDrained
         {
             get { return Task.WhenAll(_bridge.RequestsDrained, _resourceRequestsDrained.Task,
-                TabularExecutor == null ? Task.CompletedTask : TabularExecutor.Drained); }
+                TabularExecutor == null ? Task.CompletedTask : TabularExecutor.Drained,
+                _pluginHost == null ? Task.CompletedTask : _pluginHost.Drained); }
         }
         private IntPtr _lastExternalFocusWindow;
         public Action<string, string, bool> MailboxNavigationRequested
@@ -60,6 +63,8 @@ namespace RNAssistant.Office.WebView
             _controller = controller;
             _webRoot = webRoot;
             _bridge = new AssistantWebBridge(controller, PostBridgeMessage);
+            _plugins = new RNAssistant.Application.PluginApplicationService(controller.StoragePaths, webRoot);
+            _bridge.Plugins = _plugins;
             _lifetimeCancellation = new System.Threading.CancellationTokenSource();
             CreateWebViewControl();
             Load += OnLoad;
@@ -210,6 +215,8 @@ namespace RNAssistant.Office.WebView
             var core = _webView.CoreWebView2;
             if (TabularExecutor != null) TabularExecutor.Dispose();
             TabularExecutor = new TabularWebViewExecutor(core.Environment, Handle);
+            try { _pluginHost = new PluginWebViewHost(_plugins, core, Handle, _webRoot); _plugins.EnsureDataTemplates(); }
+            catch (Exception error) { _plugins.StartupError = error.Message; RuntimeLog.Error("Plugin host initialization failed.", error); }
             core.WebMessageReceived += OnWebMessageReceived;
             core.NavigationStarting += OnNavigationStarting;
             core.NavigationCompleted += OnNavigationCompleted;
@@ -253,6 +260,7 @@ namespace RNAssistant.Office.WebView
 
         private async void OnResourceDataRequested(object sender, CoreWebView2WebResourceRequestedEventArgs e)
         {
+            if (!e.Request.Uri.StartsWith("https://rnassistant.local-resource/", StringComparison.Ordinal)) return;
             var deferral = e.GetDeferral();
             AssistantController controller = null;
             try
@@ -357,14 +365,11 @@ namespace RNAssistant.Office.WebView
 
         private void OnFrameNavigationStarting(object sender, CoreWebView2NavigationStartingEventArgs e)
         {
-            if (!WebViewSecurityPolicy.CanNavigateFrame(e.Uri))
+            if (!WebViewSecurityPolicy.CanNavigateFrame(e.Uri) && !(_pluginHost?.CanNavigateFrame(e.Uri) ?? false))
             {
                 e.Cancel = true;
                 RuntimeLog.Info("Blocked WebView frame navigation: " + (e.Uri ?? string.Empty));
-                if (e.IsUserInitiated)
-                {
-                    OpenExternalUri(e.Uri);
-                }
+                // Frame navigation is not a grant to send data to an external browser.
             }
         }
 
@@ -687,6 +692,8 @@ namespace RNAssistant.Office.WebView
                 try { _lifetimeCancellation.Cancel(); } catch (ObjectDisposedException) { }
                 if (TabularExecutor != null) TabularExecutor.Dispose();
                 DetachInitializedWebView();
+                _pluginHost?.Dispose();
+                _plugins.Dispose();
                 _bridge.Dispose();
                 if (_resourceRequestsDrained.Task.IsCompleted)
                     _lifetimeCancellation.Dispose();

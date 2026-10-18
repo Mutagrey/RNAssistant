@@ -67,7 +67,7 @@ function switchTab(name) {
     discardModelCatalogPreview();
   }
   Array.prototype.slice.call(document.querySelectorAll(".section-rail [data-section]")).forEach(function (tab) {
-    var selected = tab.dataset.section === section;
+    var selected = tab.dataset.section === section && (!tab.dataset.pluginId || window.RNAssistantPlugins.selectedId() === tab.dataset.pluginId);
     tab.classList.toggle("active", selected);
     if (selected) tab.setAttribute("aria-current", "page");
     else tab.removeAttribute("aria-current");
@@ -92,8 +92,8 @@ function switchTab(name) {
     renderInstructions();
   } else if (name === "settings") {
     renderSettings();
-  } else if (name === "workspace" && window.RNAssistantWorkspace) {
-    window.RNAssistantWorkspace.show();
+  } else if (name === "plugins" && window.RNAssistantPlugins) {
+    window.RNAssistantPlugins.show();
   } else if (name === "artifacts" && typeof renderHtmlWorkspace === "function") {
     renderHtmlWorkspace();
     if (window.RNAssistantArtifactCatalog) window.RNAssistantArtifactCatalog.show();
@@ -157,8 +157,7 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 
   bindChatActions();
-  if (window.RNAssistantDataTemplates) window.RNAssistantDataTemplates.bind();
-  if (window.RNAssistantWorkspace) window.RNAssistantWorkspace.bind();
+  if (window.RNAssistantPlugins) window.RNAssistantPlugins.bind();
   bindContextActions();
   bindVbaActions();
   bindHtmlWorkspaceActions();
@@ -179,6 +178,6 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   });
 
-  initialize();
+  initialize().then(function () { if (window.RNAssistantPlugins) window.RNAssistantPlugins.refresh().catch(function (error) { document.getElementById("pluginStatus").textContent = error.message; }); });
   state.syncTimer = window.setInterval(synchronizeChatState, 60000);
 });

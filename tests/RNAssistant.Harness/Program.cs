@@ -43,6 +43,12 @@ namespace RNAssistant.Harness
                 return TabularSourceHost(args.Length == 2 ? args[1] : null);
             var tests = new List<HarnessTest>
             {
+                Test("plugins: immutable publications and independent grants", PluginsPublishAndSeparateAuthority),
+                Test("plugins: commands pin releases and cancel", PluginsCommandsPinAndCancel),
+                Test("plugins: vendor resolution is separate from admission", PluginsVendorResolutionAndAdmission),
+                Test("plugins: binary unknown effects require explicit inspection", PluginsBinaryUnknownAndRecovery),
+                Test("plugins: Data Templates ordinary package and shipped vendors", PluginsDataTemplatesPackage),
+                Test("plugins: results and prepared authority stay scoped", PluginsResultsAndPreparedAuthority),
                 Test("harness: native async execution", HarnessRunsNativeAsync),
                 Test("harness: production projects include all source files", ProductionProjectsIncludeAllSourceFiles),
                 Test("build: portable publish replaces owned destination", PortablePublishReplacesOwnedDestination),

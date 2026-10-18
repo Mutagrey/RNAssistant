@@ -17,7 +17,7 @@ using RNAssistant.Office.Diagnostics;
 
 namespace RNAssistant.Office.WebView
 {
-    public sealed class AssistantWebBridge : IDisposable
+    public sealed partial class AssistantWebBridge : IDisposable
     {
         private AssistantController _controller;
         private readonly WorkspaceApplicationService _workspaces;
@@ -163,6 +163,13 @@ namespace RNAssistant.Office.WebView
 
                 switch (type)
                 {
+                    case BridgeOperationId.GetPlugins: case BridgeOperationId.CreatePlugin: case BridgeOperationId.ConnectPlugin:
+                    case BridgeOperationId.CheckPlugin: case BridgeOperationId.ApplyPlugin: case BridgeOperationId.OpenPlugin:
+                    case BridgeOperationId.ClosePlugin: case BridgeOperationId.DisablePlugin: case BridgeOperationId.GetPluginChat:
+                    case BridgeOperationId.SubmitPluginChat: case BridgeOperationId.ResolvePluginChat: case BridgeOperationId.CancelPluginChat:
+                    case BridgeOperationId.GetPluginVendors: case BridgeOperationId.ImportPluginVendor: case BridgeOperationId.ResolveHtmlVendor:
+                        responsePayload = await HandlePluginAsync(type, payload, cancellationToken).ConfigureAwait(false);
+                        break;
                     case BridgeOperationId.GetWorkspaceState:
                         responsePayload = await RunBridgeWorkAsync(_workspaces.ReadState, cancellationToken).ConfigureAwait(false);
                         break;
@@ -523,6 +530,7 @@ namespace RNAssistant.Office.WebView
                         _workspaces.EnsureNoSourceWork();
                         responsePayload = Bootstrap(_controller.ClearRuntimeData());
                         _workspaces.Reset();
+                        Plugins?.ResetAfterRuntimeDataClear();
                         break;
                     case BridgeOperationId.GetTools:
                         responsePayload = _controller.GetTools();
@@ -861,6 +869,8 @@ namespace RNAssistant.Office.WebView
                 return SerializeFailure(id, ex.Message, ex.Message, "bridge_switch_busy", false);
             }
             catch (WorkspaceApplicationException ex)
+            { return SerializeFailure(id, ex.Message, ex.Message, ex.Code, false); }
+            catch (PluginException ex)
             { return SerializeFailure(id, ex.Message, ex.Message, ex.Code, false); }
             catch (WorkspaceFileException ex)
             { return SerializeFailure(id, ex.Message, ex.Message, ex.Code, false); }

@@ -144,7 +144,7 @@ namespace RNAssistant.Cli
                     return 0;
                 }
             }
-            var service = new WorkspaceConversationService(paths);
+            var service = new WorkspaceConversationService(paths, new WorkspaceWebVerifierFactory());
             var workspace = service.OpenWorkspace(root, args[0] == "workspace" && options.ContainsKey("create"),
                 !options.ContainsKey("read-only"));
             if (args[0] == "workspace")

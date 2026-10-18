@@ -15,6 +15,9 @@
   });
   var registered = Object.create(null);
   var pending = Object.create(null);
+  var resolved = Object.create(null);
+  function nativeCatalog() { return !!(window.chrome && window.chrome.webview && typeof send === "function"); }
+  function key(vendor) { return vendor.id + "@" + vendor.version; }
 
   function value(source, camel, pascal, fallback) {
     return source && source[camel] !== undefined ? source[camel] :
@@ -36,6 +39,12 @@
         scripts.push(content);
       }
     });
+    var explicit = [], directive = /rn-vendor:([a-z][a-z0-9-]{0,63})@([0-9]+\.[0-9]+\.[0-9]+(?:-[a-zA-Z0-9.-]+)?)/g;
+    contents.forEach(function (text) { var match; while ((match = directive.exec(text))) {
+      if (!nativeCatalog()) throw new Error("Local vendor directives require RNAssistant resolution before export.");
+      if (!explicit.some(function (item) { return item.id === match[1] && item.version === match[2]; }))
+        explicit.push({id:match[1],version:match[2],file:match[1]+".js",purpose:match[1],requires:[]});
+    } });
     var selected = Object.create(null);
     vendors.forEach(function (vendor) {
       if ((vendor.scriptOnly ? scripts : contents).some(function (content) { return vendor.source.test(content); }))
@@ -45,10 +54,11 @@
     vendors.slice().reverse().forEach(function (vendor) {
       if (selected[vendor.id]) vendor.requires.forEach(function (id) { selected[id] = true; });
     });
-    return vendors.filter(function (vendor) { return selected[vendor.id]; });
+    return vendors.filter(function (vendor) { return selected[vendor.id] && !explicit.some(function(item){return item.id===vendor.id;}); }).concat(explicit);
   }
 
   function ready(vendor) {
+    if (nativeCatalog()) return !!resolved[key(vendor)];
     if (vendor.loader === "echarts-factory") {
       return typeof window.RNAssistantEChartsFactory === "function" &&
         !!window.echarts && window.echarts.version === vendor.version;
@@ -67,6 +77,12 @@
 
   function load(vendor) {
     if (ready(vendor)) return Promise.resolve();
+    if (nativeCatalog()) {
+      var identity = key(vendor);
+      if (!pending[identity]) pending[identity] = send("resolveHtmlVendor", {id:vendor.id,version:vendor.version})
+        .then(function(source){ resolved[identity]=Object.freeze(source); }).catch(function(error){delete pending[identity];throw error;});
+      return pending[identity];
+    }
     if (pending[vendor.id]) return pending[vendor.id];
     if (vendor.loader === "echarts-factory") {
       var echarts = window.RNAssistantEChartsSandboxRuntime;
@@ -115,6 +131,7 @@
   }
 
   function source(vendor) {
+    if (nativeCatalog()) { if (!resolved[key(vendor)]) throw new Error("Resolve this exact vendor version before rendering."); return resolved[key(vendor)]; }
     if (!ready(vendor)) throw new Error("Bundled " + vendor.id + " " + vendor.version + " is unavailable.");
     if (vendor.loader === "echarts-factory") {
       return { js: "/* Licensed to the Apache Software Foundation under the Apache License, Version 2.0. " +

@@ -172,6 +172,7 @@
     listen(el("ViewSelect"), "change", () => show(el("ViewSelect").value, false));
     container.querySelectorAll("[data-dt-go]").forEach(button => listen(button, "click", () => show(button.dataset.dtGo, true)));
     ["Files", "Folder"].forEach(kind => {
+      if (root.RNDataTemplatesPlugin) listen(el(kind), "click", event => { event.preventDefault(); actions.files([]); });
       listen(el("Choose" + kind), "click", () => el(kind).click());
       listen(el(kind), "change", () => { if (el(kind).files.length) actions.files(el(kind).files); el(kind).value = ""; });
     });

@@ -11,6 +11,10 @@ namespace RNAssistant.Office.Contracts
     {
         ReportClientTiming,
         [BridgeOperationPolicy(false, 30)] Init,
+        GetPlugins, CreatePlugin, ConnectPlugin, CheckPlugin, ApplyPlugin, OpenPlugin, ClosePlugin, DisablePlugin,
+        GetPluginChat, [BridgeOperationPolicy(true, 300)] SubmitPluginChat,
+        [BridgeOperationPolicy(true, 300)] ResolvePluginChat, CancelPluginChat,
+        GetPluginVendors, ImportPluginVendor, ResolveHtmlVendor,
         GetWorkspaceState,
         OpenWorkspace,
         CreateTabularProject,

@@ -1,0 +1,213 @@
+using System;
+using System.IO;
+using System.Linq;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using RNAssistant.Application;
+using RNAssistant.Application.Contracts;
+using RNAssistant.Core.Models;
+using RNAssistant.Core.Storage;
+using RNAssistant.Core.Tools;
+using RNAssistant.Core.Agent;
+
+namespace RNAssistant.Harness
+{
+    internal static partial class Program
+    {
+        private static void WithPluginPaths(Action<AppDataPaths> test)
+        {
+            WithTempPaths(paths => test(paths.Root.StartsWith("/var/",StringComparison.Ordinal)
+                ? AppDataPaths.CreateForRoot("/private" + paths.Root) : paths));
+        }
+        private sealed class PluginPicker : IPluginProjectPicker
+        {
+            public string Root;
+            public Task<PluginDataSelection> PickAsync(CancellationToken token){return Task.FromResult(new PluginDataSelection{RootPath=Root,Writable=true});}
+        }
+        private sealed class PluginExecutor : IPluginCommandExecutor
+        {
+            public Func<PluginInstance,CancellationToken,Task<string>> Execute;
+            public Task<string> ExecuteAsync(PluginInstance instance,PluginCommandDefinition command,string input,CancellationToken token,Action<string> progress)
+            {return Execute(instance,token);}
+        }
+        private static PluginItemDto PluginFixture(PluginApplicationService service,AppDataPaths paths,bool data=true)
+        {
+            var item=service.Create(new PluginCreateRequest{Name="Test plugin",RootPath=Path.Combine(paths.Root,"source"),Description="Test"});
+            if(data){var file=Path.Combine(item.SourceRoot,"plugin.json");var json=JObject.Parse(File.ReadAllText(file));json["capabilities"]=new JArray("project.read","project.write");File.WriteAllText(file,json.ToString());}
+            var candidate=service.Check(item.PluginId);return service.Apply(new PluginApplyRequest{PluginId=item.PluginId,CandidateId=candidate.CandidateId});
+        }
+        private static PluginInstance PluginOpen(PluginApplicationService service,string id,string candidate=null)
+        {var view=service.Open(new PluginOpenRequest{PluginId=id,CandidateId=candidate});return service.FindInstance(new Uri(view.EntryUrl).GetLeftPart(UriPartial.Authority));}
+        private static Task<PluginFrameResponse> PluginRequest(PluginApplicationService service,PluginInstance instance,PluginMethod method,string path=null,string project=null,string handle=null)
+        {return service.DispatchAsync(instance,new PluginFrameRequest{Version=1,RequestId=Guid.NewGuid().ToString("N"),Method=method,Path=path,ProjectId=project,Handle=handle},CancellationToken.None);}
+        private static void PluginFailure(Action action,string code)
+        {try{action();throw new Exception("Expected "+code);}catch(PluginException error){AssertEqual(code,error.Code,"plugin refusal");}}
+
+        private static void PluginsPublishAndSeparateAuthority()
+        {
+            WithPluginPaths(paths=>{
+                using(var service=new PluginApplicationService(paths))
+                {
+                    var item=PluginFixture(service,paths);var active=PluginOpen(service,item.PluginId);
+                    PluginFailure(()=>paths.ClearRuntimeData(),"plugins_busy");
+                    AssertEqual("puzzle",item.Icon,"published plugin exposes its manifest icon");
+                    AssertTrue(active.Release.SourceWorkspaceId!=active.Release.ReleaseId,"source and publication identities differ");
+                    AssertEqual("project_required",PluginRequest(service,active,PluginMethod.List).Result.ErrorCode,"manifest grants no data access");
+                    var picker=new PluginPicker{Root=item.SourceRoot};service.ProjectPicker=picker;
+                    AssertEqual("source_is_not_data",PluginRequest(service,active,PluginMethod.PickProject).Result.ErrorCode,"source cannot become data");
+                    picker.Root=Path.Combine(paths.Root,"data");Directory.CreateDirectory(picker.Root);File.WriteAllText(Path.Combine(picker.Root,"input.txt"),"original");
+                    var project=PluginRequest(service,active,PluginMethod.PickProject).Result.Result.Handle;
+                    AssertEqual("project_changed",PluginRequest(service,active,PluginMethod.OpenFile,"input.txt","forged").Result.ErrorCode,"foreign project refused");
+                    var read=PluginRequest(service,active,PluginMethod.OpenFile,"input.txt",project).Result.Result;
+                    var candidate=service.Check(item.PluginId);var preview=PluginOpen(service,item.PluginId,candidate.CandidateId);
+                    AssertEqual("project_required",PluginRequest(service,preview,PluginMethod.List).Result.ErrorCode,"preview inherits no production grant");
+                    var scratch=PluginRequest(service,preview,PluginMethod.PickProject).Result.Result.Handle;
+                    AssertTrue(scratch!=project && preview.Data.DataWorkspaceId!=active.Data.DataWorkspaceId,"preview test project is independent");
+                    AssertEqual("not_found",PluginRequest(service,preview,PluginMethod.OpenFile,"input.txt",scratch).Result.ErrorCode,"production bytes absent from preview");
+                    AssertEqual("original",Encoding.UTF8.GetString(active.ReadRangeAsync(read.Handle,0,8,CancellationToken.None).Result),"pinned bytes available");
+                    var oldCode=service.ReadPackageFile(active,"app.js");File.WriteAllText(Path.Combine(item.SourceRoot,"app.js"),"changed");
+                    candidate=service.Check(item.PluginId);service.Apply(new PluginApplyRequest{PluginId=item.PluginId,CandidateId=candidate.CandidateId});
+                    AssertTrue(oldCode.SequenceEqual(service.ReadPackageFile(active,"app.js")),"active operations retain frozen bytes");
+                    var fresh=PluginOpen(service,item.PluginId);AssertEqual("project_required",PluginRequest(service,fresh,PluginMethod.List).Result.ErrorCode,"new publication receives no old data grant");
+                    File.WriteAllText(Path.Combine(item.SourceRoot,"plugin.json"),"{}");PluginFailure(()=>service.Check(item.PluginId),"plugin_manifest_invalid");
+                    AssertEqual(fresh.Release.ReleaseId,service.List().Items.Single().ReleaseId,"failed validation preserves active release");
+                    service.DisableAsync(item.PluginId).GetAwaiter().GetResult();
+                    AssertTrue(active.Token.IsCancellationRequested && fresh.Token.IsCancellationRequested,"disable revokes instances");
+                    AssertTrue(File.Exists(Path.Combine(picker.Root,"input.txt")),"disable preserves data");
+                    paths.ClearRuntimeData();
+                    new ResourceAuthorityStore(paths).ResetAfterRuntimeDataClear(); service.ResetAfterRuntimeDataClear();
+                    AssertTrue(File.Exists(Path.Combine(picker.Root,"input.txt")) && File.Exists(Path.Combine(item.SourceRoot,"app.js")),"explicit runtime clear preserves source and data folders after plugin drain");
+                    AssertEqual(0,service.List().Items.Count,"runtime clear drops only catalog state; source reconnection is explicit");
+                }
+            });
+        }
+        private static void PluginsCommandsPinAndCancel()
+        {
+            WithPluginPaths(paths=>PluginCommandsPinAndCancelAsync(paths).GetAwaiter().GetResult());
+        }
+        private static async Task PluginCommandsPinAndCancelAsync(AppDataPaths paths)
+        {
+            using(var service=new PluginApplicationService(paths))
+            {
+                var item=PluginFixture(service,paths,false);var context=PluginOpen(service,item.PluginId);
+                var started=new TaskCompletionSource<PluginInstance>();var finish=new TaskCompletionSource<string>();
+                service.Executor=new PluginExecutor{Execute=(operation,token)=>{started.TrySetResult(operation);token.Register(()=>finish.TrySetCanceled());return finish.Task;}};
+                var invocation=service.InvokeAsync(context,"echo","{\"text\":\"a\"}",CancellationToken.None);var running=await started.Task;
+                File.WriteAllText(Path.Combine(item.SourceRoot,"commands.js"),"new code");var candidate=service.Check(item.PluginId);
+                service.Apply(new PluginApplyRequest{PluginId=item.PluginId,CandidateId=candidate.CandidateId});
+                AssertEqual(context.Release.ReleaseId,running.Release.ReleaseId,"invocation pins admitted publication");
+                await service.CloseInstanceAsync(context.Id);
+                AssertTrue(!running.Token.IsCancellationRequested,"closing the UI leaves its command alive");
+                finish.SetResult("{\"text\":\"old release completed\"}");AssertTrue((await invocation).Json.Contains("old release"),"old operation finishes across update");
+                try{await service.InvokeAsync(context,"echo","{\"text\":\"a\"}",CancellationToken.None);throw new Exception("Expected revoked refusal");}catch(OperationCanceledException){}
+                context=PluginOpen(service,item.PluginId);started=new TaskCompletionSource<PluginInstance>();finish=new TaskCompletionSource<string>();
+                invocation=service.InvokeAsync(context,"echo","{\"text\":\"b\"}",CancellationToken.None);await started.Task;
+                await service.DisableAsync(item.PluginId);try{await invocation;throw new Exception("Expected cancellation");}catch(OperationCanceledException){}
+                var source=new WorkspaceStore(paths).Open(item.SourceRoot,false,true);
+                var tools=service.Conversations.AvailableToolIds(source);
+                AssertTrue(tools.Contains("plugins.check") && tools.Contains("plugins.apply"),"development agent shares publication services");
+            }
+        }
+        private static void PluginsVendorResolutionAndAdmission()
+        {
+            WithPluginPaths(paths=>{
+                var folder=Path.Combine(paths.Root,"vendor-input");Directory.CreateDirectory(folder);
+                File.WriteAllText(Path.Combine(folder,"module.js"),"export default 1;");File.WriteAllText(Path.Combine(folder,"LICENSE"),"MIT");
+                var manifest=new VendorManifestV1{FormatVersion=1,Id="test-module",Version="1.0.0",Description="Test module",Source="local",License="MIT",
+                    Licenses=new[]{"LICENSE"},Files=new[]{new VendorFileDefinition{Path="module.js",Sha256=PluginPackageFiles.Hash(File.ReadAllBytes(Path.Combine(folder,"module.js")))},new VendorFileDefinition{Path="LICENSE",Sha256=PluginPackageFiles.Hash(File.ReadAllBytes(Path.Combine(folder,"LICENSE")))}},
+                    EntryPoints=new[]{new VendorEntryPoint{Path="module.js",Kind=VendorEntryKind.Module}}};
+                File.WriteAllText(Path.Combine(folder,"vendor.json"),JsonConvert.SerializeObject(manifest));
+                var vendors=new VendorCatalog(paths,null);vendors.Import(folder);var resolved=vendors.Resolve(manifest.Id,manifest.Version);
+                VendorAdmission.RequirePlugin(resolved.Manifest);VendorAdmission.RequireExport(resolved.Manifest);
+                PluginFailure(()=>VendorAdmission.RequireHtml(resolved.Manifest),"html_vendor_denied");
+                var installed=Path.Combine(paths.Root,"vendors",manifest.Id,manifest.Version);
+                File.WriteAllText(Path.Combine(installed,"module.js"),"export default 2;");PluginFailure(()=>vendors.Resolve(manifest.Id,manifest.Version),"vendor_changed");
+                manifest.Files[0].Sha256=PluginPackageFiles.Hash(File.ReadAllBytes(Path.Combine(installed,"module.js")));File.WriteAllText(Path.Combine(installed,"vendor.json"),JsonConvert.SerializeObject(manifest));
+                PluginFailure(()=>vendors.Resolve(manifest.Id,manifest.Version),"vendor_version_changed");
+                manifest.Licenses=new string[0];PluginFailure(()=>VendorAdmission.RequireExport(manifest),"vendor_invalid");
+            });
+        }
+        private static void PluginsBinaryUnknownAndRecovery()
+        {
+            WithPluginPaths(paths=>{
+                var workspace=new WorkspaceStore(paths).Open(Path.Combine(paths.Root,"data"));var files=new WorkspaceFileService(paths);
+                var staged=Path.Combine(paths.Root,"staged");var bytes=new byte[2*1024*1024];bytes[0]=255;File.WriteAllBytes(staged,bytes);
+                files.FaultPoint=point=>{if(point=="after-dispatch")throw new IOException("lost receipt");};
+                try{files.CommitStagedFile(workspace,"out.bin",staged,null,bytes.Length);throw new Exception("Expected unknown");}catch(WorkspaceFileException e){AssertEqual("effect_unknown",e.Code,"uncertain write");}
+                files=new WorkspaceFileService(paths);
+                try{files.CommitStagedFile(workspace,"out.bin",staged,null,bytes.Length);throw new Exception("Expected unresolved");}catch(WorkspaceFileException e){AssertEqual("unresolved_previous_effect",e.Code,"no automatic retry");}
+                var recovery=files.ReconcileUncertain(workspace,"out.bin");AssertEqual(WorkspaceRecoveryOutcome.UnknownAfterDispatch,recovery.Outcome,"binary inspection preserves uncertain causality");
+                var snapshot=files.CaptureFile(workspace,"out.bin",bytes.Length);AssertEqual(PluginPackageFiles.Hash(bytes),snapshot.ContentSha256,"full binary read-back");
+                files.FaultPoint=point=>{if(point=="after-dispatch")throw new IOException("lost directory receipt");};
+                try{files.CreateDirectory(workspace,"results");throw new Exception("Expected directory unknown");}catch(WorkspaceFileException e){AssertEqual("effect_unknown",e.Code,"directory mutation is journaled");}
+                files.FaultPoint=null;
+                AssertEqual(WorkspaceRecoveryOutcome.UnknownAfterDispatch,files.ReconcileUncertain(workspace,"results").Outcome,"directory inspection does not turn unknown causality into success");
+            });
+        }
+        private static void PluginsResultsAndPreparedAuthority()
+        {
+            WithPluginPaths(paths=>PluginResultsAndPreparedAuthorityAsync(paths).GetAwaiter().GetResult());
+        }
+        private static async Task PluginResultsAndPreparedAuthorityAsync(AppDataPaths paths)
+        {
+            using(var service=new PluginApplicationService(paths))
+            {
+                var item=PluginFixture(service,paths);var ui=PluginOpen(service,item.PluginId);var other=PluginOpen(service,item.PluginId);
+                var picker=new PluginPicker{Root=Path.Combine(paths.Root,"data")};Directory.CreateDirectory(picker.Root);File.WriteAllText(Path.Combine(picker.Root,"in.txt"),"accepted");service.ProjectPicker=picker;
+                var project=(await PluginRequest(service,ui,PluginMethod.PickProject)).Result.Handle;
+                await PluginRequest(service,ui,PluginMethod.OpenFile,"in.txt",project);
+                File.WriteAllText(Path.Combine(picker.Root,"in.txt"),"changed!");
+                service.Executor=new PluginExecutor{Execute=async (operation,token)=>{
+                    var source=(await PluginRequest(service,operation,PluginMethod.OpenFile,"in.txt",project)).Result;
+                    AssertEqual("accepted",Encoding.UTF8.GetString(await operation.ReadRangeAsync(source.Handle,0,8,token)),"command inherits the accepted source snapshot");
+                    AssertEqual("plugin_capability_denied",(await PluginRequest(service,operation,PluginMethod.BeginWrite,"illegal.txt",project)).ErrorCode,"read command cannot write through a writable grant");
+                    var writer=(await PluginRequest(service,operation,PluginMethod.BeginResult,"in.txt.canonical.json")).Result;
+                    await operation.WriteChunkAsync(writer.Handle,0,Encoding.UTF8.GetBytes("{}"),token);
+                    var result=(await PluginRequest(service,operation,PluginMethod.CommitResult,handle:writer.Handle)).Result;
+                    return "{\"text\":"+JsonConvert.SerializeObject(result.Name)+"}";
+                }};
+                await service.InvokeAsync(ui,"echo","{\"text\":\"run\"}",CancellationToken.None);
+                var opened=(await PluginRequest(service,ui,PluginMethod.OpenResult,"in.txt.canonical.json")).Result;
+                AssertEqual("{}",Encoding.UTF8.GetString(service.ReadResult(ui,opened.Handle,0,2)),"parent can read retained command result after worker closes");
+                AssertEqual("plugin_result_denied",(await PluginRequest(service,other,PluginMethod.OpenResult,"in.txt.canonical.json")).ErrorCode,"result cannot cross UI owners");
+                PluginFailure(()=>service.ReadResult(other,opened.Handle,0,2),"plugin_result_denied");
+                await PluginRequest(service,ui,PluginMethod.DropResult,"in.txt.canonical.json");
+                AssertEqual("plugin_result_denied",(await PluginRequest(service,ui,PluginMethod.OpenResult,"in.txt.canonical.json")).ErrorCode,"discard releases result authority");
+                var workspace=new WorkspaceStore(paths).Open(item.SourceRoot,false,true);
+                var registry=new ToolHandlerRegistry();
+                foreach(var tool in service.CaptureTools(workspace))registry.Register(ToolPackSnapshot.Capture(new ToolDescriptor(tool.Entry.Id,tool.Entry.Description,tool.Entry.ArgumentSchemaJson),tool.Entry.Policy,tool.Entry.Binding),tool.Handler);
+                var runtime=new ToolRuntime(registry,"agent",false,true,(context,preparation)=>"approval");
+                var checkCall=new ToolCall("check","plugins.check","{}");
+                var checkedResult=await runtime.ExecuteAsync(new ToolExecutionContext(checkCall,runtime.Describe(checkCall),"run","turn","check",DateTime.UtcNow,false,5),CancellationToken.None);
+                AssertTrue(!checkedResult.Result.DataJson.Contains("candidateId") && !checkedResult.Result.DataJson.Contains("releaseId"),"model sees validation facts without authority handles");
+                var call=new ToolCall("apply","plugins.apply","{}");var policy=runtime.Describe(call);
+                var pending=await runtime.ExecuteAsync(new ToolExecutionContext(call,policy,"run","turn","apply",DateTime.UtcNow,false,5),CancellationToken.None);
+                AssertEqual(ToolExecutionOutcome.AwaitingConfirmation,pending.Outcome,"publication requires confirmation");
+                service.Check(item.PluginId);
+                var refused=await runtime.ExecuteAsync(new ToolExecutionContext(call,policy,"run","turn","apply",DateTime.UtcNow,true,5,pending.PreparedStateJson),CancellationToken.None);
+                AssertTrue(!refused.MayHaveDispatched && refused.Result.Status==RNAssistant.Core.Tools.Contracts.ToolResultStatus.Error,"rechecking invalidates the prepared candidate without publishing another");
+                var before=service.CaptureCommandContext(item.PluginId,project,true);await service.CloseInstanceAsync(before.Id);
+                picker.Root=Path.Combine(paths.Root,"other-data");Directory.CreateDirectory(picker.Root);await PluginRequest(service,ui,PluginMethod.PickProject);
+                PluginFailure(()=>service.CaptureCommandContext(item.PluginId,project,true),"plugin_project_changed");
+                AssertEqual("project_changed",(await PluginRequest(service,ui,PluginMethod.OpenFile,"in.txt",project)).ErrorCode,"stale data handles cannot follow selection");
+            }
+        }
+        private static void PluginsDataTemplatesPackage()
+        {
+            WithPluginPaths(paths=>{
+                var web=Path.Combine(FindHarnessRepositoryRoot(),"web");using(var service=new PluginApplicationService(paths,web))
+                {
+                    service.EnsureDataTemplates();var item=service.List().Items.Single();var instance=PluginOpen(service,item.PluginId);
+                    AssertEqual("data-templates",item.PluginId,"ordinary shipped plugin");
+                    AssertTrue(!instance.Release.Files.Any(file=>file.Path=="application.json"),"one manifest authority");
+                    AssertEqual(5,instance.Manifest.Vendors.Length,"shared vendor resolution");
+                    AssertTrue(service.Conversations.AvailableToolIds(new WorkspaceStore(paths).Open(item.SourceRoot)).Contains("plugins.data-templates.extract"),"chat command descriptor");
+                    foreach(var vendor in service.Vendors.List())service.Vendors.Resolve(vendor.Id,vendor.Version);
+                }
+            });
+        }
+    }
+}

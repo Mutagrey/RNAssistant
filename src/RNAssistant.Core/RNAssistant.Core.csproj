@@ -116,6 +116,7 @@
     <Compile Include="Services\ResourceSchemaValidator.cs" />
     <Compile Include="Models\AgentResponseModels.cs" />
     <Compile Include="Models\ChatModels.cs" />
+    <Compile Include="Models\PluginModels.cs" />
     <Compile Include="Models\WorkspaceModels.cs" />
     <Compile Include="Models\TabularProjectModels.cs" />
     <Compile Include="Models\WebProjectSnapshotModels.cs" />
@@ -246,8 +247,12 @@
     <Compile Include="Services\TrajectoryRunProjection.cs" />
     <Compile Include="Services\TrajectoryExportService.cs" />
     <Compile Include="Storage\AppDataPaths.cs" />
+    <Compile Include="Storage\PluginPackageFiles.cs" />
+    <Compile Include="Storage\PluginStore.cs" />
+    <Compile Include="Storage\VendorCatalog.cs" />
     <Compile Include="Storage\WorkspaceStore.cs" />
     <Compile Include="Storage\WorkspaceFileService.cs" />
+    <Compile Include="Storage\WorkspaceFileService.StreamWrite.cs" />
     <Compile Include="Storage\TabularProjectStore.cs" />
     <Compile Include="Storage\TabularProjectStore.Catalog.cs" />
     <Compile Include="Storage\WorkspaceWebSnapshotStore.cs" />

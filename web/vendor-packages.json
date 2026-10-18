@@ -1,0 +1,1156 @@
+[
+  {
+    "manifest": {
+      "formatVersion": 1,
+      "id": "dompurify",
+      "version": "3.4.14",
+      "description": "dompurify",
+      "source": "https://registry.npmjs.org/dompurify/-/dompurify-3.4.14.tgz",
+      "license": "MPL-2.0 OR Apache-2.0",
+      "licenses": [
+        "licenses/dompurify-3.4.14/Apache-2.0.txt",
+        "licenses/dompurify-3.4.14/MPL-2.0.txt"
+      ],
+      "files": [
+        {
+          "path": "purify.min.js",
+          "sha256": "c2f26ea4fc0d88141c9aa430eb515ac86fce59418ceebd85fa475b87a8d6c3e6"
+        },
+        {
+          "path": "licenses/dompurify-3.4.14/Apache-2.0.txt",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        },
+        {
+          "path": "licenses/dompurify-3.4.14/MPL-2.0.txt",
+          "sha256": "1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5"
+        }
+      ],
+      "entrypoints": [
+        {
+          "path": "purify.min.js",
+          "kind": "Script"
+        }
+      ],
+      "dependencies": []
+    },
+    "sources": [
+      {
+        "path": "purify.min.js",
+        "sourcePath": "js/vendor/purify.min.js",
+        "sourceSha256": "c2f26ea4fc0d88141c9aa430eb515ac86fce59418ceebd85fa475b87a8d6c3e6",
+        "carrierField": null
+      },
+      {
+        "path": "licenses/dompurify-3.4.14/Apache-2.0.txt",
+        "sourcePath": "licenses/dompurify-3.4.14/Apache-2.0.txt",
+        "sourceSha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+        "carrierField": null
+      },
+      {
+        "path": "licenses/dompurify-3.4.14/MPL-2.0.txt",
+        "sourcePath": "licenses/dompurify-3.4.14/MPL-2.0.txt",
+        "sourceSha256": "1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5",
+        "carrierField": null
+      }
+    ]
+  },
+  {
+    "manifest": {
+      "formatVersion": 1,
+      "id": "marked",
+      "version": "12.0.2",
+      "description": "marked",
+      "source": "https://registry.npmjs.org/marked/-/marked-12.0.2.tgz",
+      "license": "MIT",
+      "licenses": [
+        "licenses/marked-12.0.2/LICENSE.md"
+      ],
+      "files": [
+        {
+          "path": "marked.min.js",
+          "sha256": "15fabce5b65898b32b03f5ed25e9f891a729ad4c0d6d877110a7744aa847a894"
+        },
+        {
+          "path": "licenses/marked-12.0.2/LICENSE.md",
+          "sha256": "8e3a3f82f59a60958f56ca08f445647c32a4733dc7ca6c2c46f6eb898471ab9c"
+        }
+      ],
+      "entrypoints": [
+        {
+          "path": "marked.min.js",
+          "kind": "Script"
+        }
+      ],
+      "dependencies": []
+    },
+    "sources": [
+      {
+        "path": "marked.min.js",
+        "sourcePath": "js/vendor/marked.min.js",
+        "sourceSha256": "15fabce5b65898b32b03f5ed25e9f891a729ad4c0d6d877110a7744aa847a894",
+        "carrierField": null
+      },
+      {
+        "path": "licenses/marked-12.0.2/LICENSE.md",
+        "sourcePath": "licenses/marked-12.0.2/LICENSE.md",
+        "sourceSha256": "8e3a3f82f59a60958f56ca08f445647c32a4733dc7ca6c2c46f6eb898471ab9c",
+        "carrierField": null
+      }
+    ]
+  },
+  {
+    "manifest": {
+      "formatVersion": 1,
+      "id": "highlight-js",
+      "version": "11.9.0",
+      "description": "highlight.js",
+      "source": "https://registry.npmjs.org/highlight.js/-/highlight.js-11.9.0.tgz",
+      "license": "BSD-3-Clause",
+      "licenses": [
+        "licenses/highlight.js-11.9.0/LICENSE"
+      ],
+      "files": [
+        {
+          "path": "highlight-github-dark.min.css",
+          "sha256": "9f208d022102b1d0c7aebfecd8e42ca7997d5de636649d2b31ea63093d809019"
+        },
+        {
+          "path": "highlight.min.js",
+          "sha256": "837a6fa5b0c736b52bbde2b2b6190f305da3fc9ed41681db5321507057b5c846"
+        },
+        {
+          "path": "licenses/highlight.js-11.9.0/LICENSE",
+          "sha256": "6c081431591d9df696c82dc598fe1423765b8a299b200ed00b281afd0f64c490"
+        }
+      ],
+      "entrypoints": [
+        {
+          "path": "highlight-github-dark.min.css",
+          "kind": "Style"
+        },
+        {
+          "path": "highlight.min.js",
+          "kind": "Script"
+        }
+      ],
+      "dependencies": []
+    },
+    "sources": [
+      {
+        "path": "highlight-github-dark.min.css",
+        "sourcePath": "css/vendor/highlight-github-dark.min.css",
+        "sourceSha256": "9f208d022102b1d0c7aebfecd8e42ca7997d5de636649d2b31ea63093d809019",
+        "carrierField": null
+      },
+      {
+        "path": "highlight.min.js",
+        "sourcePath": "js/vendor/highlight.min.js",
+        "sourceSha256": "837a6fa5b0c736b52bbde2b2b6190f305da3fc9ed41681db5321507057b5c846",
+        "carrierField": null
+      },
+      {
+        "path": "licenses/highlight.js-11.9.0/LICENSE",
+        "sourcePath": "licenses/highlight.js-11.9.0/LICENSE",
+        "sourceSha256": "6c081431591d9df696c82dc598fe1423765b8a299b200ed00b281afd0f64c490",
+        "carrierField": null
+      }
+    ]
+  },
+  {
+    "manifest": {
+      "formatVersion": 1,
+      "id": "codemirror",
+      "version": "5.65.16",
+      "description": "codemirror",
+      "source": "https://registry.npmjs.org/codemirror/-/codemirror-5.65.16.tgz",
+      "license": "MIT",
+      "licenses": [
+        "licenses/codemirror/LICENSE"
+      ],
+      "files": [
+        {
+          "path": "codemirror/codemirror.min.js",
+          "sha256": "f102bb61fb2ac45c3a611847edd9948faad0ab22a83a2dfa9974be5031079b15"
+        },
+        {
+          "path": "codemirror/mode/javascript/javascript.min.js",
+          "sha256": "99b46f351b4b1ce8a14cdf04fe4235ecb429b5b7b986867034a7dc195a710a58"
+        },
+        {
+          "path": "codemirror/addon/edit/matchbrackets.min.js",
+          "sha256": "f359c5f395a2a08191557d40b61ef8c3893803da9019171cc44b8d9c8c7d4a3a"
+        },
+        {
+          "path": "codemirror/addon/edit/closebrackets.min.js",
+          "sha256": "df4a87dd3b175b509468755b74d06f0e82ff56f213f341f776c26ff0f0d27b37"
+        },
+        {
+          "path": "codemirror/addon/hint/show-hint.min.js",
+          "sha256": "9b8e07b45c581e8fbfb95d1f442b7a2d1946bd40451a8250f7fe332a7d8218e6"
+        },
+        {
+          "path": "codemirror/codemirror.min.css",
+          "sha256": "11077112ab6955d29fe41085c62365c7d4a2f00a570c7475e2aec2a8cbc85fc4"
+        },
+        {
+          "path": "codemirror/addon/hint/show-hint.min.css",
+          "sha256": "f6fbd102ae7fabc501b8e1618bc935d05dae8c8d82a89cf1cc89ac2db0dbcf69"
+        },
+        {
+          "path": "licenses/codemirror/LICENSE",
+          "sha256": "168a4becc968f5001e2ee2e0291b6e4daabafc1894a11ade1e11d56e96096e07"
+        }
+      ],
+      "entrypoints": [
+        {
+          "path": "codemirror/codemirror.min.js",
+          "kind": "Script"
+        },
+        {
+          "path": "codemirror/mode/javascript/javascript.min.js",
+          "kind": "Script"
+        },
+        {
+          "path": "codemirror/addon/edit/matchbrackets.min.js",
+          "kind": "Script"
+        },
+        {
+          "path": "codemirror/addon/edit/closebrackets.min.js",
+          "kind": "Script"
+        },
+        {
+          "path": "codemirror/addon/hint/show-hint.min.js",
+          "kind": "Script"
+        },
+        {
+          "path": "codemirror/codemirror.min.css",
+          "kind": "Style"
+        },
+        {
+          "path": "codemirror/addon/hint/show-hint.min.css",
+          "kind": "Style"
+        }
+      ],
+      "dependencies": []
+    },
+    "sources": [
+      {
+        "path": "codemirror/codemirror.min.js",
+        "sourcePath": "data-templates/vendor/codemirror/codemirror.min.js",
+        "sourceSha256": "f102bb61fb2ac45c3a611847edd9948faad0ab22a83a2dfa9974be5031079b15",
+        "carrierField": null
+      },
+      {
+        "path": "codemirror/mode/javascript/javascript.min.js",
+        "sourcePath": "data-templates/vendor/codemirror/mode/javascript/javascript.min.js",
+        "sourceSha256": "99b46f351b4b1ce8a14cdf04fe4235ecb429b5b7b986867034a7dc195a710a58",
+        "carrierField": null
+      },
+      {
+        "path": "codemirror/addon/edit/matchbrackets.min.js",
+        "sourcePath": "data-templates/vendor/codemirror/addon/edit/matchbrackets.min.js",
+        "sourceSha256": "f359c5f395a2a08191557d40b61ef8c3893803da9019171cc44b8d9c8c7d4a3a",
+        "carrierField": null
+      },
+      {
+        "path": "codemirror/addon/edit/closebrackets.min.js",
+        "sourcePath": "data-templates/vendor/codemirror/addon/edit/closebrackets.min.js",
+        "sourceSha256": "df4a87dd3b175b509468755b74d06f0e82ff56f213f341f776c26ff0f0d27b37",
+        "carrierField": null
+      },
+      {
+        "path": "codemirror/addon/hint/show-hint.min.js",
+        "sourcePath": "data-templates/vendor/codemirror/addon/hint/show-hint.min.js",
+        "sourceSha256": "9b8e07b45c581e8fbfb95d1f442b7a2d1946bd40451a8250f7fe332a7d8218e6",
+        "carrierField": null
+      },
+      {
+        "path": "codemirror/codemirror.min.css",
+        "sourcePath": "data-templates/vendor/codemirror/codemirror.min.css",
+        "sourceSha256": "11077112ab6955d29fe41085c62365c7d4a2f00a570c7475e2aec2a8cbc85fc4",
+        "carrierField": null
+      },
+      {
+        "path": "codemirror/addon/hint/show-hint.min.css",
+        "sourcePath": "data-templates/vendor/codemirror/addon/hint/show-hint.min.css",
+        "sourceSha256": "f6fbd102ae7fabc501b8e1618bc935d05dae8c8d82a89cf1cc89ac2db0dbcf69",
+        "carrierField": null
+      },
+      {
+        "path": "licenses/codemirror/LICENSE",
+        "sourcePath": "data-templates/vendor/licenses/codemirror/LICENSE",
+        "sourceSha256": "168a4becc968f5001e2ee2e0291b6e4daabafc1894a11ade1e11d56e96096e07",
+        "carrierField": null
+      }
+    ]
+  },
+  {
+    "manifest": {
+      "formatVersion": 1,
+      "id": "katex",
+      "version": "0.16.11",
+      "description": "katex",
+      "source": "https://registry.npmjs.org/katex/-/katex-0.16.11.tgz",
+      "license": "MIT",
+      "licenses": [
+        "licenses/katex-0.16.11/LICENSE"
+      ],
+      "files": [
+        {
+          "path": "fonts/KaTeX_AMS-Regular.woff2",
+          "sha256": "0cdd387c9590a1a9f9794560022dbb59654a7d86f187aa0c81495ad42d3a7308"
+        },
+        {
+          "path": "fonts/KaTeX_Caligraphic-Bold.woff2",
+          "sha256": "de7701e42cf1f4cf0b766c03fb27977207eee2f4fd5d76fa82188406da43ea4c"
+        },
+        {
+          "path": "fonts/KaTeX_Caligraphic-Regular.woff2",
+          "sha256": "5d53e70ad607c2352162dec9e0923fb54ecdafaccbf604cd8dcf7d00facb989b"
+        },
+        {
+          "path": "fonts/KaTeX_Fraktur-Bold.woff2",
+          "sha256": "74444efd593c005e3f4573b44524704c0af0a937fe911cca9e94068d0d140d3f"
+        },
+        {
+          "path": "fonts/KaTeX_Fraktur-Regular.woff2",
+          "sha256": "51814d270d06ff0255dba0799994fa4d8c84d11f09951d47595f4abb1f3602dc"
+        },
+        {
+          "path": "fonts/KaTeX_Main-Bold.woff2",
+          "sha256": "0f60d1b897938ec918c8ce073092411baf9438f6739465693ff18b0f9d20b021"
+        },
+        {
+          "path": "fonts/KaTeX_Main-BoldItalic.woff2",
+          "sha256": "99cd42a3c072d918f2f44984a807cf7aa16e13545fd0875fc07c6c65f99e715b"
+        },
+        {
+          "path": "fonts/KaTeX_Main-Italic.woff2",
+          "sha256": "97479ca6cce906abc961ecac96faa5f9ca2e61b8e7670d475826bcdee9a7c267"
+        },
+        {
+          "path": "fonts/KaTeX_Main-Regular.woff2",
+          "sha256": "c2342cd8b869e01752a9321dc17213fc40d4d04c79688c1d43f2cf316abd7866"
+        },
+        {
+          "path": "fonts/KaTeX_Math-BoldItalic.woff2",
+          "sha256": "dc47344dbb6cb5b655c8460d561f4df5f501b90c804ad3c6cec65fe322351ab1"
+        },
+        {
+          "path": "fonts/KaTeX_Math-Italic.woff2",
+          "sha256": "7af58c5ec8f132a2ddde9027c6d7814decce4d3b822a11192a42a20e2e973264"
+        },
+        {
+          "path": "fonts/KaTeX_SansSerif-Bold.woff2",
+          "sha256": "e99ae51144bf1232efcc1bfe5add36262c6866b0faab24fa75740e1b98577a62"
+        },
+        {
+          "path": "fonts/KaTeX_SansSerif-Italic.woff2",
+          "sha256": "00b26ac825e2095056396e0553b8ac26d3f8ad158c3826e28b4c45b385c4714a"
+        },
+        {
+          "path": "fonts/KaTeX_SansSerif-Regular.woff2",
+          "sha256": "68e8c73ef42afd3ccec58bf0fba302cce448938e7fc020a5e31f8a952eee1342"
+        },
+        {
+          "path": "fonts/KaTeX_Script-Regular.woff2",
+          "sha256": "036d4e95149b69ff9bcc0cd55771efeb25ffa3947293e69acd78d5ac328c684b"
+        },
+        {
+          "path": "fonts/KaTeX_Size1-Regular.woff2",
+          "sha256": "6b47c40166b6dbe21a5dfca7718413f2147fd2399be1ba605d8ad39cedf25dfe"
+        },
+        {
+          "path": "fonts/KaTeX_Size2-Regular.woff2",
+          "sha256": "d04c54219f9eaec6d4d4fd42dfb28785975a4794d6b2fc71e566b9cd6db842dd"
+        },
+        {
+          "path": "fonts/KaTeX_Size3-Regular.woff2",
+          "sha256": "73d591271b1604960cb10bb90fee021670af7297017e0e98480b332d11f51995"
+        },
+        {
+          "path": "fonts/KaTeX_Size4-Regular.woff2",
+          "sha256": "a4af7d414440a1c1790825cfb700cf9cf43b0f2c4b04f0ebc523011ad9853ec0"
+        },
+        {
+          "path": "fonts/KaTeX_Typewriter-Regular.woff2",
+          "sha256": "71d517d67827787cfabdf186914cc3358eda539e37931941f2b2fd4a21f68c0b"
+        },
+        {
+          "path": "katex.min.css",
+          "sha256": "f0dbfcc2940b4d788c805c1a1e117e898d2814b0f1a52bf16640543216e0964d"
+        },
+        {
+          "path": "auto-render.min.js",
+          "sha256": "7b57d427ac6270677daf8d8380ded2cc73336f9149a167b8e1fe0d6ef66604ae"
+        },
+        {
+          "path": "katex.min.js",
+          "sha256": "e6bfe5deebd4c7ccd272055bab63bd3ab2c73b907b6e6a22d352740a81381fd4"
+        },
+        {
+          "path": "licenses/katex-0.16.11/LICENSE",
+          "sha256": "766ccc1f306c885aa45542a9846bbd0a505b27a0374f146778171c2254ce18e3"
+        }
+      ],
+      "entrypoints": [
+        {
+          "path": "fonts/KaTeX_AMS-Regular.woff2",
+          "kind": "Asset"
+        },
+        {
+          "path": "fonts/KaTeX_Caligraphic-Bold.woff2",
+          "kind": "Asset"
+        },
+        {
+          "path": "fonts/KaTeX_Caligraphic-Regular.woff2",
+          "kind": "Asset"
+        },
+        {
+          "path": "fonts/KaTeX_Fraktur-Bold.woff2",
+          "kind": "Asset"
+        },
+        {
+          "path": "fonts/KaTeX_Fraktur-Regular.woff2",
+          "kind": "Asset"
+        },
+        {
+          "path": "fonts/KaTeX_Main-Bold.woff2",
+          "kind": "Asset"
+        },
+        {
+          "path": "fonts/KaTeX_Main-BoldItalic.woff2",
+          "kind": "Asset"
+        },
+        {
+          "path": "fonts/KaTeX_Main-Italic.woff2",
+          "kind": "Asset"
+        },
+        {
+          "path": "fonts/KaTeX_Main-Regular.woff2",
+          "kind": "Asset"
+        },
+        {
+          "path": "fonts/KaTeX_Math-BoldItalic.woff2",
+          "kind": "Asset"
+        },
+        {
+          "path": "fonts/KaTeX_Math-Italic.woff2",
+          "kind": "Asset"
+        },
+        {
+          "path": "fonts/KaTeX_SansSerif-Bold.woff2",
+          "kind": "Asset"
+        },
+        {
+          "path": "fonts/KaTeX_SansSerif-Italic.woff2",
+          "kind": "Asset"
+        },
+        {
+          "path": "fonts/KaTeX_SansSerif-Regular.woff2",
+          "kind": "Asset"
+        },
+        {
+          "path": "fonts/KaTeX_Script-Regular.woff2",
+          "kind": "Asset"
+        },
+        {
+          "path": "fonts/KaTeX_Size1-Regular.woff2",
+          "kind": "Asset"
+        },
+        {
+          "path": "fonts/KaTeX_Size2-Regular.woff2",
+          "kind": "Asset"
+        },
+        {
+          "path": "fonts/KaTeX_Size3-Regular.woff2",
+          "kind": "Asset"
+        },
+        {
+          "path": "fonts/KaTeX_Size4-Regular.woff2",
+          "kind": "Asset"
+        },
+        {
+          "path": "fonts/KaTeX_Typewriter-Regular.woff2",
+          "kind": "Asset"
+        },
+        {
+          "path": "katex.min.css",
+          "kind": "Style"
+        },
+        {
+          "path": "auto-render.min.js",
+          "kind": "Script"
+        },
+        {
+          "path": "katex.min.js",
+          "kind": "Script"
+        }
+      ],
+      "dependencies": []
+    },
+    "sources": [
+      {
+        "path": "fonts/KaTeX_AMS-Regular.woff2",
+        "sourcePath": "css/vendor/fonts/KaTeX_AMS-Regular.woff2",
+        "sourceSha256": "0cdd387c9590a1a9f9794560022dbb59654a7d86f187aa0c81495ad42d3a7308",
+        "carrierField": null
+      },
+      {
+        "path": "fonts/KaTeX_Caligraphic-Bold.woff2",
+        "sourcePath": "css/vendor/fonts/KaTeX_Caligraphic-Bold.woff2",
+        "sourceSha256": "de7701e42cf1f4cf0b766c03fb27977207eee2f4fd5d76fa82188406da43ea4c",
+        "carrierField": null
+      },
+      {
+        "path": "fonts/KaTeX_Caligraphic-Regular.woff2",
+        "sourcePath": "css/vendor/fonts/KaTeX_Caligraphic-Regular.woff2",
+        "sourceSha256": "5d53e70ad607c2352162dec9e0923fb54ecdafaccbf604cd8dcf7d00facb989b",
+        "carrierField": null
+      },
+      {
+        "path": "fonts/KaTeX_Fraktur-Bold.woff2",
+        "sourcePath": "css/vendor/fonts/KaTeX_Fraktur-Bold.woff2",
+        "sourceSha256": "74444efd593c005e3f4573b44524704c0af0a937fe911cca9e94068d0d140d3f",
+        "carrierField": null
+      },
+      {
+        "path": "fonts/KaTeX_Fraktur-Regular.woff2",
+        "sourcePath": "css/vendor/fonts/KaTeX_Fraktur-Regular.woff2",
+        "sourceSha256": "51814d270d06ff0255dba0799994fa4d8c84d11f09951d47595f4abb1f3602dc",
+        "carrierField": null
+      },
+      {
+        "path": "fonts/KaTeX_Main-Bold.woff2",
+        "sourcePath": "css/vendor/fonts/KaTeX_Main-Bold.woff2",
+        "sourceSha256": "0f60d1b897938ec918c8ce073092411baf9438f6739465693ff18b0f9d20b021",
+        "carrierField": null
+      },
+      {
+        "path": "fonts/KaTeX_Main-BoldItalic.woff2",
+        "sourcePath": "css/vendor/fonts/KaTeX_Main-BoldItalic.woff2",
+        "sourceSha256": "99cd42a3c072d918f2f44984a807cf7aa16e13545fd0875fc07c6c65f99e715b",
+        "carrierField": null
+      },
+      {
+        "path": "fonts/KaTeX_Main-Italic.woff2",
+        "sourcePath": "css/vendor/fonts/KaTeX_Main-Italic.woff2",
+        "sourceSha256": "97479ca6cce906abc961ecac96faa5f9ca2e61b8e7670d475826bcdee9a7c267",
+        "carrierField": null
+      },
+      {
+        "path": "fonts/KaTeX_Main-Regular.woff2",
+        "sourcePath": "css/vendor/fonts/KaTeX_Main-Regular.woff2",
+        "sourceSha256": "c2342cd8b869e01752a9321dc17213fc40d4d04c79688c1d43f2cf316abd7866",
+        "carrierField": null
+      },
+      {
+        "path": "fonts/KaTeX_Math-BoldItalic.woff2",
+        "sourcePath": "css/vendor/fonts/KaTeX_Math-BoldItalic.woff2",
+        "sourceSha256": "dc47344dbb6cb5b655c8460d561f4df5f501b90c804ad3c6cec65fe322351ab1",
+        "carrierField": null
+      },
+      {
+        "path": "fonts/KaTeX_Math-Italic.woff2",
+        "sourcePath": "css/vendor/fonts/KaTeX_Math-Italic.woff2",
+        "sourceSha256": "7af58c5ec8f132a2ddde9027c6d7814decce4d3b822a11192a42a20e2e973264",
+        "carrierField": null
+      },
+      {
+        "path": "fonts/KaTeX_SansSerif-Bold.woff2",
+        "sourcePath": "css/vendor/fonts/KaTeX_SansSerif-Bold.woff2",
+        "sourceSha256": "e99ae51144bf1232efcc1bfe5add36262c6866b0faab24fa75740e1b98577a62",
+        "carrierField": null
+      },
+      {
+        "path": "fonts/KaTeX_SansSerif-Italic.woff2",
+        "sourcePath": "css/vendor/fonts/KaTeX_SansSerif-Italic.woff2",
+        "sourceSha256": "00b26ac825e2095056396e0553b8ac26d3f8ad158c3826e28b4c45b385c4714a",
+        "carrierField": null
+      },
+      {
+        "path": "fonts/KaTeX_SansSerif-Regular.woff2",
+        "sourcePath": "css/vendor/fonts/KaTeX_SansSerif-Regular.woff2",
+        "sourceSha256": "68e8c73ef42afd3ccec58bf0fba302cce448938e7fc020a5e31f8a952eee1342",
+        "carrierField": null
+      },
+      {
+        "path": "fonts/KaTeX_Script-Regular.woff2",
+        "sourcePath": "css/vendor/fonts/KaTeX_Script-Regular.woff2",
+        "sourceSha256": "036d4e95149b69ff9bcc0cd55771efeb25ffa3947293e69acd78d5ac328c684b",
+        "carrierField": null
+      },
+      {
+        "path": "fonts/KaTeX_Size1-Regular.woff2",
+        "sourcePath": "css/vendor/fonts/KaTeX_Size1-Regular.woff2",
+        "sourceSha256": "6b47c40166b6dbe21a5dfca7718413f2147fd2399be1ba605d8ad39cedf25dfe",
+        "carrierField": null
+      },
+      {
+        "path": "fonts/KaTeX_Size2-Regular.woff2",
+        "sourcePath": "css/vendor/fonts/KaTeX_Size2-Regular.woff2",
+        "sourceSha256": "d04c54219f9eaec6d4d4fd42dfb28785975a4794d6b2fc71e566b9cd6db842dd",
+        "carrierField": null
+      },
+      {
+        "path": "fonts/KaTeX_Size3-Regular.woff2",
+        "sourcePath": "css/vendor/fonts/KaTeX_Size3-Regular.woff2",
+        "sourceSha256": "73d591271b1604960cb10bb90fee021670af7297017e0e98480b332d11f51995",
+        "carrierField": null
+      },
+      {
+        "path": "fonts/KaTeX_Size4-Regular.woff2",
+        "sourcePath": "css/vendor/fonts/KaTeX_Size4-Regular.woff2",
+        "sourceSha256": "a4af7d414440a1c1790825cfb700cf9cf43b0f2c4b04f0ebc523011ad9853ec0",
+        "carrierField": null
+      },
+      {
+        "path": "fonts/KaTeX_Typewriter-Regular.woff2",
+        "sourcePath": "css/vendor/fonts/KaTeX_Typewriter-Regular.woff2",
+        "sourceSha256": "71d517d67827787cfabdf186914cc3358eda539e37931941f2b2fd4a21f68c0b",
+        "carrierField": null
+      },
+      {
+        "path": "katex.min.css",
+        "sourcePath": "css/vendor/katex.min.css",
+        "sourceSha256": "f0dbfcc2940b4d788c805c1a1e117e898d2814b0f1a52bf16640543216e0964d",
+        "carrierField": null
+      },
+      {
+        "path": "auto-render.min.js",
+        "sourcePath": "js/vendor/auto-render.min.js",
+        "sourceSha256": "7b57d427ac6270677daf8d8380ded2cc73336f9149a167b8e1fe0d6ef66604ae",
+        "carrierField": null
+      },
+      {
+        "path": "katex.min.js",
+        "sourcePath": "js/vendor/katex.min.js",
+        "sourceSha256": "e6bfe5deebd4c7ccd272055bab63bd3ab2c73b907b6e6a22d352740a81381fd4",
+        "carrierField": null
+      },
+      {
+        "path": "licenses/katex-0.16.11/LICENSE",
+        "sourcePath": "licenses/katex-0.16.11/LICENSE",
+        "sourceSha256": "766ccc1f306c885aa45542a9846bbd0a505b27a0374f146778171c2254ce18e3",
+        "carrierField": null
+      }
+    ]
+  },
+  {
+    "manifest": {
+      "formatVersion": 1,
+      "id": "echarts",
+      "version": "5.6.0",
+      "description": "Интерактивные диаграммы",
+      "source": "https://registry.npmjs.org/echarts/-/echarts-5.6.0.tgz",
+      "license": "Apache-2.0",
+      "licenses": [
+        "licenses/echarts/LICENSE",
+        "licenses/echarts/NOTICE",
+        "licenses/echarts/LICENSE-d3"
+      ],
+      "files": [
+        {
+          "path": "echarts.min.js",
+          "sha256": "bf4a223524e40b77c304bec67e1222cf551f14880cf42c69dc046558e11c07b1"
+        },
+        {
+          "path": "licenses/echarts/LICENSE",
+          "sha256": "634293835b43a6dd2094fa39182a3d9a6b9ca43b7fdb9ac354e8037af2a3093a"
+        },
+        {
+          "path": "licenses/echarts/NOTICE",
+          "sha256": "fa99ac3af859d0e13166906dc53a73ad34a08898da7e8ae83407275496e9e30c"
+        },
+        {
+          "path": "licenses/echarts/LICENSE-d3",
+          "sha256": "e1211892da0b0e0585b7aebe8f98c1274fba15bafe47fa1f4ee8a7a502c06304"
+        }
+      ],
+      "entrypoints": [
+        {
+          "path": "echarts.min.js",
+          "kind": "Script"
+        }
+      ],
+      "dependencies": []
+    },
+    "sources": [
+      {
+        "path": "echarts.min.js",
+        "sourcePath": "data-templates/vendor/echarts.min.js",
+        "sourceSha256": "bf4a223524e40b77c304bec67e1222cf551f14880cf42c69dc046558e11c07b1",
+        "carrierField": null
+      },
+      {
+        "path": "licenses/echarts/LICENSE",
+        "sourcePath": "data-templates/vendor/licenses/echarts/LICENSE",
+        "sourceSha256": "634293835b43a6dd2094fa39182a3d9a6b9ca43b7fdb9ac354e8037af2a3093a",
+        "carrierField": null
+      },
+      {
+        "path": "licenses/echarts/NOTICE",
+        "sourcePath": "data-templates/vendor/licenses/echarts/NOTICE",
+        "sourceSha256": "fa99ac3af859d0e13166906dc53a73ad34a08898da7e8ae83407275496e9e30c",
+        "carrierField": null
+      },
+      {
+        "path": "licenses/echarts/LICENSE-d3",
+        "sourcePath": "data-templates/vendor/licenses/echarts/LICENSE-d3",
+        "sourceSha256": "e1211892da0b0e0585b7aebe8f98c1274fba15bafe47fa1f4ee8a7a502c06304",
+        "carrierField": null
+      }
+    ]
+  },
+  {
+    "manifest": {
+      "formatVersion": 1,
+      "id": "fuse",
+      "version": "7.1.0",
+      "description": "Поиск с учётом опечаток по локальным данным",
+      "source": "https://registry.npmjs.org/fuse.js/-/fuse.js-7.1.0.tgz",
+      "license": "Apache-2.0",
+      "licenses": [
+        "licenses/fuse.js-7.1.0/LICENSE"
+      ],
+      "files": [
+        {
+          "path": "fuse.min.js",
+          "sha256": "220934f576134b0466d99f786ce21b13f87d319b1e9ae633c55e68f6f41c3c9d"
+        },
+        {
+          "path": "licenses/fuse.js-7.1.0/LICENSE",
+          "sha256": "cc807e3caa26cdee316bab2ff6fdb508a2f619b74959fe59e513ef6e61635ebe"
+        }
+      ],
+      "entrypoints": [
+        {
+          "path": "fuse.min.js",
+          "kind": "Script"
+        }
+      ],
+      "dependencies": []
+    },
+    "sources": [
+      {
+        "path": "fuse.min.js",
+        "sourcePath": "js/vendor/fuse.source.js",
+        "sourceSha256": "00e9526d22de18199e1e849f2a40f545066e3f2b75f079481612922738441914",
+        "carrierField": "js"
+      },
+      {
+        "path": "licenses/fuse.js-7.1.0/LICENSE",
+        "sourcePath": "licenses/fuse.js-7.1.0/LICENSE",
+        "sourceSha256": "cc807e3caa26cdee316bab2ff6fdb508a2f619b74959fe59e513ef6e61635ebe",
+        "carrierField": null
+      }
+    ]
+  },
+  {
+    "manifest": {
+      "formatVersion": 1,
+      "id": "tabulator",
+      "version": "6.5.0",
+      "description": "Интерактивная таблица локальных данных",
+      "source": "https://registry.npmjs.org/tabulator-tables/-/tabulator-tables-6.5.0.tgz",
+      "license": "MIT",
+      "licenses": [
+        "licenses/tabulator/LICENSE"
+      ],
+      "files": [
+        {
+          "path": "tabulator.min.js",
+          "sha256": "2ffd5e83ff622975ba3493c93700625d2710dbf0d416d0ec0e9d5219fabd5002"
+        },
+        {
+          "path": "tabulator.min.css",
+          "sha256": "04db955d165fa3b47f67a9cc45fe1a36e5e30756c6e4d5f9f4b270c32300f15c"
+        },
+        {
+          "path": "licenses/tabulator/LICENSE",
+          "sha256": "191a2ee554684e1064c897b432f0e1bc6dfa714ca045d3f6ea2cf692cbd398b7"
+        }
+      ],
+      "entrypoints": [
+        {
+          "path": "tabulator.min.js",
+          "kind": "Script"
+        },
+        {
+          "path": "tabulator.min.css",
+          "kind": "Style"
+        }
+      ],
+      "dependencies": []
+    },
+    "sources": [
+      {
+        "path": "tabulator.min.js",
+        "sourcePath": "data-templates/vendor/tabulator.min.js",
+        "sourceSha256": "2ffd5e83ff622975ba3493c93700625d2710dbf0d416d0ec0e9d5219fabd5002",
+        "carrierField": null
+      },
+      {
+        "path": "tabulator.min.css",
+        "sourcePath": "data-templates/vendor/tabulator.min.css",
+        "sourceSha256": "04db955d165fa3b47f67a9cc45fe1a36e5e30756c6e4d5f9f4b270c32300f15c",
+        "carrierField": null
+      },
+      {
+        "path": "licenses/tabulator/LICENSE",
+        "sourcePath": "data-templates/vendor/licenses/tabulator/LICENSE",
+        "sourceSha256": "191a2ee554684e1064c897b432f0e1bc6dfa714ca045d3f6ea2cf692cbd398b7",
+        "carrierField": null
+      }
+    ]
+  },
+  {
+    "manifest": {
+      "formatVersion": 1,
+      "id": "sheetjs",
+      "version": "0.20.3",
+      "description": "Локальное чтение файлов таблиц",
+      "source": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
+      "license": "Apache-2.0",
+      "licenses": [
+        "licenses/sheetjs/LICENSE"
+      ],
+      "files": [
+        {
+          "path": "sheetjs.full.min.js",
+          "sha256": "cc015130aa8521e7f088f88898eba949ccdcbfb38df0bd129b44b7273c3a6f41"
+        },
+        {
+          "path": "licenses/sheetjs/LICENSE",
+          "sha256": "4d2a38ac35cda06a555c84074a819d413339cd3691b822cae50f8f322fe01f64"
+        }
+      ],
+      "entrypoints": [
+        {
+          "path": "sheetjs.full.min.js",
+          "kind": "Script"
+        }
+      ],
+      "dependencies": []
+    },
+    "sources": [
+      {
+        "path": "sheetjs.full.min.js",
+        "sourcePath": "data-templates/vendor/sheetjs.full.min.js",
+        "sourceSha256": "cc015130aa8521e7f088f88898eba949ccdcbfb38df0bd129b44b7273c3a6f41",
+        "carrierField": null
+      },
+      {
+        "path": "licenses/sheetjs/LICENSE",
+        "sourcePath": "data-templates/vendor/licenses/sheetjs/LICENSE",
+        "sourceSha256": "4d2a38ac35cda06a555c84074a819d413339cd3691b822cae50f8f322fe01f64",
+        "carrierField": null
+      }
+    ]
+  },
+  {
+    "manifest": {
+      "formatVersion": 1,
+      "id": "vis-network",
+      "version": "10.1.2",
+      "description": "Интерактивные графы связей",
+      "source": "https://registry.npmjs.org/vis-network/-/vis-network-10.1.2.tgz",
+      "license": "Apache-2.0 OR MIT",
+      "licenses": [
+        "licenses/vis-network-10.1.2/LICENSE-MIT",
+        "licenses/vis-network-10.1.2/LICENSE-APACHE-2.0"
+      ],
+      "files": [
+        {
+          "path": "vis-network.min.js",
+          "sha256": "433a41882bdc868fe88ca69c6105d1353d513caa48d99047e19747d27b9d8160"
+        },
+        {
+          "path": "licenses/vis-network-10.1.2/LICENSE-MIT",
+          "sha256": "1f65085e54c036645082257618db2c7b787e68c3b02485e214ecd09e0834ee8f"
+        },
+        {
+          "path": "licenses/vis-network-10.1.2/LICENSE-APACHE-2.0",
+          "sha256": "1509904280a272780fd69c04b858f512cf216f8e3464a0dd98d8f34416feced9"
+        }
+      ],
+      "entrypoints": [
+        {
+          "path": "vis-network.min.js",
+          "kind": "Script"
+        }
+      ],
+      "dependencies": []
+    },
+    "sources": [
+      {
+        "path": "vis-network.min.js",
+        "sourcePath": "js/vendor/vis-network.source.js",
+        "sourceSha256": "349ed3fb2ab159975dd055ec868ea113d0939973ff16d22821887344face2c63",
+        "carrierField": "js"
+      },
+      {
+        "path": "licenses/vis-network-10.1.2/LICENSE-MIT",
+        "sourcePath": "licenses/vis-network-10.1.2/LICENSE-MIT",
+        "sourceSha256": "1f65085e54c036645082257618db2c7b787e68c3b02485e214ecd09e0834ee8f",
+        "carrierField": null
+      },
+      {
+        "path": "licenses/vis-network-10.1.2/LICENSE-APACHE-2.0",
+        "sourcePath": "licenses/vis-network-10.1.2/LICENSE-APACHE-2.0",
+        "sourceSha256": "1509904280a272780fd69c04b858f512cf216f8e3464a0dd98d8f34416feced9",
+        "carrierField": null
+      }
+    ]
+  },
+  {
+    "manifest": {
+      "formatVersion": 1,
+      "id": "pdf-lib",
+      "version": "1.17.1",
+      "description": "Создание и изменение PDF из локальных данных",
+      "source": "https://registry.npmjs.org/pdf-lib/-/pdf-lib-1.17.1.tgz",
+      "license": "MIT",
+      "licenses": [
+        "licenses/pdf-lib-1.17.1/LICENSE.md"
+      ],
+      "files": [
+        {
+          "path": "pdf-lib.min.js",
+          "sha256": "edf01e3eaf21153b0643675006d0045cdbb9670a683afc18c1213a1a7269e04b"
+        },
+        {
+          "path": "licenses/pdf-lib-1.17.1/LICENSE.md",
+          "sha256": "f2c9fc00fdb66eb99ac156ba52d734af66d8d309f65753ae809ad34ee2883bcb"
+        }
+      ],
+      "entrypoints": [
+        {
+          "path": "pdf-lib.min.js",
+          "kind": "Script"
+        }
+      ],
+      "dependencies": []
+    },
+    "sources": [
+      {
+        "path": "pdf-lib.min.js",
+        "sourcePath": "js/vendor/pdf-lib.source.js",
+        "sourceSha256": "c8a5e03d59815a73dc6230d691661524e8c72f18c5e0c7298cbb52a0ee6a863f",
+        "carrierField": "js"
+      },
+      {
+        "path": "licenses/pdf-lib-1.17.1/LICENSE.md",
+        "sourcePath": "licenses/pdf-lib-1.17.1/LICENSE.md",
+        "sourceSha256": "f2c9fc00fdb66eb99ac156ba52d734af66d8d309f65753ae809ad34ee2883bcb",
+        "carrierField": null
+      }
+    ]
+  },
+  {
+    "manifest": {
+      "formatVersion": 1,
+      "id": "pdf-fontkit",
+      "version": "1.1.1",
+      "description": "Локальный шрифт Noto Sans и fontkit для PDF",
+      "source": "https://registry.npmjs.org/@pdf-lib/fontkit/-/fontkit-1.1.1.tgz",
+      "license": "MIT (fontkit) AND OFL-1.1 (Noto Sans)",
+      "licenses": [
+        "licenses/pdf-fontkit-1.1.1/README.md",
+        "licenses/pdf-fontkit-1.1.1/NotoSans-OFL.txt"
+      ],
+      "files": [
+        {
+          "path": "pdf-fontkit.min.js",
+          "sha256": "f0ffe30c7a0d0b690c2b975264641288add984763ac2012bc607ff52a2b1c242"
+        },
+        {
+          "path": "licenses/pdf-fontkit-1.1.1/README.md",
+          "sha256": "7315fcc54511f5ffc906969c39333f93cd47f5217ab014fe45acff14bd5ec4c0"
+        },
+        {
+          "path": "licenses/pdf-fontkit-1.1.1/NotoSans-OFL.txt",
+          "sha256": "cee9892f9f0cc8fe882c9e9537ee6a89621d86ee7ceaf70b02e2b2b1c25c061a"
+        }
+      ],
+      "entrypoints": [
+        {
+          "path": "pdf-fontkit.min.js",
+          "kind": "Script"
+        }
+      ],
+      "dependencies": [
+        {
+          "id": "pdf-lib",
+          "version": "1.17.1"
+        }
+      ]
+    },
+    "sources": [
+      {
+        "path": "pdf-fontkit.min.js",
+        "sourcePath": "js/vendor/pdf-fontkit.source.js",
+        "sourceSha256": "5c507afa505e8da7c2d6bebf47bfc2b2249bce207c723f85806b196e0dfae29d",
+        "carrierField": "js"
+      },
+      {
+        "path": "licenses/pdf-fontkit-1.1.1/README.md",
+        "sourcePath": "licenses/pdf-fontkit-1.1.1/README.md",
+        "sourceSha256": "7315fcc54511f5ffc906969c39333f93cd47f5217ab014fe45acff14bd5ec4c0",
+        "carrierField": null
+      },
+      {
+        "path": "licenses/pdf-fontkit-1.1.1/NotoSans-OFL.txt",
+        "sourcePath": "licenses/pdf-fontkit-1.1.1/NotoSans-OFL.txt",
+        "sourceSha256": "cee9892f9f0cc8fe882c9e9537ee6a89621d86ee7ceaf70b02e2b2b1c25c061a",
+        "carrierField": null
+      }
+    ]
+  },
+  {
+    "manifest": {
+      "formatVersion": 1,
+      "id": "jszip",
+      "version": "3.10.2",
+      "description": "Создание и чтение локальных ZIP-архивов",
+      "source": "https://registry.npmjs.org/jszip/-/jszip-3.10.2.tgz",
+      "license": "MIT OR GPL-3.0-or-later",
+      "licenses": [
+        "licenses/jszip-3.10.2/LICENSE.markdown"
+      ],
+      "files": [
+        {
+          "path": "jszip.min.js",
+          "sha256": "7f839b2d4688b845c105ebf5d2f9803075f91ea0fe72bdaac176c3a04dd3d2c1"
+        },
+        {
+          "path": "licenses/jszip-3.10.2/LICENSE.markdown",
+          "sha256": "566c953c6090b1218ca6217dd7359d45dde46581968586dc607d59a78af6a9c4"
+        }
+      ],
+      "entrypoints": [
+        {
+          "path": "jszip.min.js",
+          "kind": "Script"
+        }
+      ],
+      "dependencies": []
+    },
+    "sources": [
+      {
+        "path": "jszip.min.js",
+        "sourcePath": "js/vendor/jszip.source.js",
+        "sourceSha256": "9150582d5cb49e9d4ea89f5ef133d845f74a36f72ffaaabc0927edc05296ea1c",
+        "carrierField": "js"
+      },
+      {
+        "path": "licenses/jszip-3.10.2/LICENSE.markdown",
+        "sourcePath": "licenses/jszip-3.10.2/LICENSE.markdown",
+        "sourceSha256": "566c953c6090b1218ca6217dd7359d45dde46581968586dc607d59a78af6a9c4",
+        "carrierField": null
+      }
+    ]
+  },
+  {
+    "manifest": {
+      "formatVersion": 1,
+      "id": "viewerjs",
+      "version": "1.12.0",
+      "description": "viewerjs",
+      "source": "https://registry.npmjs.org/viewerjs/-/viewerjs-1.12.0.tgz",
+      "license": "MIT",
+      "licenses": [
+        "licenses/viewerjs-1.12.0/LICENSE"
+      ],
+      "files": [
+        {
+          "path": "viewer.min.js",
+          "sha256": "4f9739e55704ddd1534b0b431c091f7af41f72aa2f144d98b0aa812c552eae40"
+        },
+        {
+          "path": "viewer.min.css",
+          "sha256": "a6588e8c990f85e4f1eb88dea73fee72ed3697943c7226558c84d3ee32ead406"
+        },
+        {
+          "path": "licenses/viewerjs-1.12.0/LICENSE",
+          "sha256": "eb917650781dcf06a60b97cba9b05bf583931ec2d311d8a5548a8dca90a57e0f"
+        }
+      ],
+      "entrypoints": [
+        {
+          "path": "viewer.min.js",
+          "kind": "Script"
+        },
+        {
+          "path": "viewer.min.css",
+          "kind": "Style"
+        }
+      ],
+      "dependencies": []
+    },
+    "sources": [
+      {
+        "path": "viewer.min.js",
+        "sourcePath": "js/vendor/viewer.min.js",
+        "sourceSha256": "4f9739e55704ddd1534b0b431c091f7af41f72aa2f144d98b0aa812c552eae40",
+        "carrierField": null
+      },
+      {
+        "path": "viewer.min.css",
+        "sourcePath": "css/vendor/viewer.min.css",
+        "sourceSha256": "a6588e8c990f85e4f1eb88dea73fee72ed3697943c7226558c84d3ee32ead406",
+        "carrierField": null
+      },
+      {
+        "path": "licenses/viewerjs-1.12.0/LICENSE",
+        "sourcePath": "licenses/viewerjs-1.12.0/LICENSE",
+        "sourceSha256": "eb917650781dcf06a60b97cba9b05bf583931ec2d311d8a5548a8dca90a57e0f",
+        "carrierField": null
+      }
+    ]
+  },
+  {
+    "manifest": {
+      "formatVersion": 1,
+      "id": "sax",
+      "version": "1.6.1",
+      "description": "sax",
+      "source": "https://registry.npmjs.org/sax/-/sax-1.6.1.tgz",
+      "license": "BlueOak-1.0.0",
+      "licenses": [
+        "sax-LICENSE.md"
+      ],
+      "files": [
+        {
+          "path": "sax.js",
+          "sha256": "1cdc1270d987cb0f6ee66dd8efb01c50511aa14d17b6163bbbffb21df8cf1c06"
+        },
+        {
+          "path": "sax-LICENSE.md",
+          "sha256": "8a1af140fdfbf5afd3df27f7e662f989c5b963a300020dfafce42033cae9e004"
+        }
+      ],
+      "entrypoints": [
+        {
+          "path": "sax.js",
+          "kind": "Script"
+        }
+      ],
+      "dependencies": []
+    },
+    "sources": [
+      {
+        "path": "sax.js",
+        "sourcePath": "data-templates/vendor/sax.js",
+        "sourceSha256": "1cdc1270d987cb0f6ee66dd8efb01c50511aa14d17b6163bbbffb21df8cf1c06",
+        "carrierField": null
+      },
+      {
+        "path": "sax-LICENSE.md",
+        "sourcePath": "data-templates/vendor/sax-LICENSE.md",
+        "sourceSha256": "8a1af140fdfbf5afd3df27f7e662f989c5b963a300020dfafce42033cae9e004",
+        "carrierField": null
+      }
+    ]
+  }
+]

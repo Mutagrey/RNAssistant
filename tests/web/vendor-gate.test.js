@@ -70,7 +70,7 @@ assert.equal(feather.sourceOnly, true);
 assert.equal(manifest.files.some(item => item.package === feather.id), false, "source-only icons must not add a runtime package");
 const licenses = new Set(manifest.packages.flatMap(item => item.licenseFiles.map(file => file.path)));
 const appRoot = path.join(web, "data-templates");
-const appManifest = JSON.parse(fs.readFileSync(path.join(appRoot, "application.json"), "utf8"));
+const appManifest = JSON.parse(fs.readFileSync(path.join(appRoot, "plugin.json"), "utf8"));
 const appVendors = require(path.join(appRoot, "tools/vendor-lock.js")).verifyVendors(appRoot, appManifest);
 assert.deepEqual(appVendors.packages.map(item => item.id), ["codemirror", "echarts", "sheetjs", "tabulator", "sax"]);
 assert.equal(appVendors.packages[0].version, packages.get("codemirror").version);
