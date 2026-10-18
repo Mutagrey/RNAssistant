@@ -189,6 +189,21 @@ const hash = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
         assert.equal(createdProject.manifest.name, "Production reports");
         assert.match(createdProject.manifest.projectId, /^tp_[0-9a-f]{32}$/);
         assert.deepEqual(createdProject.manifest.sources, []);
+        const dictionaryVersions = () => page.evaluate(async folder => {
+            const parent = await (await navigator.storage.getDirectory()).getDirectoryHandle("dt-project-browser-test");
+            const project = await parent.getDirectoryHandle(folder);
+            let directory;
+            try { directory = await project.getDirectoryHandle("dictionaries"); }
+            catch (error) { if (error.name === "NotFoundError") return []; throw error; }
+            const names = [];
+            for await (const [name] of directory.entries()) names.push(name);
+            return Promise.all(names.sort().map(async name => ({ name,
+                text: await (await (await directory.getFileHandle(name)).getFile()).text() })));
+        }, createdProject.folder);
+        const waitForSavedMapping = () => page.waitForFunction(() =>
+            document.getElementById("dtMappingEditor").hidden &&
+            !document.getElementById("dtStartProcessing").disabled &&
+            document.getElementById("dtProcessNotice").textContent.includes("Общий справочник сохранён как новая версия проекта"));
         await page.locator("#dtProjectOpen").click();
         await page.waitForFunction(() => document.getElementById("dtProjectNotice").textContent === "Проект открыт.");
         await page.locator("#dtFiles").setInputFiles([
@@ -292,6 +307,11 @@ const hash = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
         assert.equal(await page.locator("#dtTemplateInspection").isVisible(), true);
         await page.locator("#dtCloseTemplateEditor").click();
         await page.locator("#dtTabMapping").click();
+        // File selection only checks the draft. Its first structured edit creates
+        // the shared dictionary; later edits append project-wide versions.
+        const beforeMapping = await dictionaryVersions();
+        const originalDictionary = JSON.parse(draftText).dictionaries;
+        assert.deepEqual(beforeMapping, []);
         await page.locator("#dtMappingAdd").click();
         await page.locator("#dtMappingEditScope").fill("production-form");
         await page.locator("#dtMappingEditSource").fill("0012");
@@ -307,32 +327,47 @@ const hash = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
         await page.locator("#dtMappingEditApply").click();
         await page.waitForFunction(() => document.getElementById("dtMappingEditNotice").textContent.includes("DICTIONARY_CONFLICT"));
         assert.equal(await page.locator("#dtStartProcessing").isDisabled(), true);
+        assert.deepEqual(await dictionaryVersions(), beforeMapping, "a rejected duplicate must not write a dictionary version");
         await page.locator("#dtMappingEditSource").fill("unused-synonym");
         await page.locator("#dtMappingEditApply").click();
-        await page.waitForFunction(() => document.getElementById("dtProcessNotice").textContent.includes("Соответствие применено"));
-        assert.equal(await page.locator("#dtStartProcessing").isDisabled(), false);
-        await page.locator('#dtMappingRows button[data-mapping-path="/dictionaries/parameterMappings/2"]').click();
+        await waitForSavedMapping();
+        const afterAddMapping = await dictionaryVersions();
+        await page.locator("#dtMappingSearch").fill("unused-synonym");
+        const addedMapping = page.locator("#dtMappingRows tr").filter({
+            has: page.getByRole("cell", { name: "unused-synonym", exact: true }) });
+        assert.equal(await addedMapping.count(), 1);
+        assert.match(await addedMapping.innerText(), /production\.volume/);
+        await addedMapping.getByRole("button", { name: "Править", exact: true }).click();
         await page.locator("#dtMappingEditTarget").selectOption("production.loss");
         await page.locator("#dtMappingEditApply").click();
-        await page.waitForFunction(() => document.getElementById("dtProcessNotice").textContent.includes("Соответствие применено") &&
-            document.getElementById("dtMappingEditor").hidden);
+        await waitForSavedMapping();
         await page.locator("#dtMappingAdd").click();
         await page.locator("#dtMappingEditKind").selectOption("unit");
         await page.locator("#dtMappingEditScope").fill("production-form");
         await page.locator("#dtMappingEditSource").fill("tonnes");
         await page.locator("#dtMappingEditTarget").selectOption("t");
         await page.locator("#dtMappingEditApply").click();
-        await page.waitForFunction(() => document.getElementById("dtMappingEditor").hidden &&
-            !document.getElementById("dtStartProcessing").disabled);
+        await waitForSavedMapping();
+        const afterMapping = await dictionaryVersions();
+        assert.equal(afterAddMapping.length, 1);
+        assert.deepEqual(afterMapping.slice(0, afterAddMapping.length), afterAddMapping, "saved dictionary versions stay immutable");
+        const newDictionaries = afterMapping.map(file => JSON.parse(file.text));
+        assert.deepEqual(newDictionaries.map(dictionary => dictionary.revision), [1, 2, 3]);
+        const parameterMapping = { scope: "production-form", source: "unused-synonym", targetId: "production.volume" };
+        const unitMapping = { scope: "production-form", source: "tonnes", targetId: "t" };
+        assert.deepEqual(newDictionaries[0], { ...originalDictionary, revision: 1,
+            parameterMappings: [...originalDictionary.parameterMappings, parameterMapping] });
+        parameterMapping.targetId = "production.loss";
+        assert.deepEqual(newDictionaries[1], { ...originalDictionary, revision: 2,
+            parameterMappings: [...originalDictionary.parameterMappings, parameterMapping] });
+        assert.deepEqual(newDictionaries[2], { ...newDictionaries[1], revision: 3,
+            unitMappings: [...originalDictionary.unitMappings, unitMapping] });
         await page.locator("#dtTabTemplates").click();
         await page.locator("#dtOpenTemplateEditor").click();
         const mappedDownload = page.waitForEvent("download");
         await page.locator("#dtDownloadTemplateDraft").click();
         const mappedDraft = JSON.parse(fs.readFileSync(await (await mappedDownload).path(), "utf8"));
-        assert.deepEqual(mappedDraft.dictionaries.parameterMappings.at(-1), {
-            scope: "production-form", source: "unused-synonym", targetId: "production.loss" });
-        assert.deepEqual(mappedDraft.dictionaries.unitMappings.at(-1), {
-            scope: "production-form", source: "tonnes", targetId: "t" });
+        assert.deepEqual(mappedDraft.dictionaries, newDictionaries[2]);
         await page.locator("#dtProjectSave").click();
         await page.waitForFunction(() => document.querySelectorAll("#dtProjectDraftList button[data-file]").length === 2);
         const persisted = await page.evaluate(async () => {
@@ -374,10 +409,13 @@ const hash = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
         await page.locator("#dtProjectDraftList button[data-file]").first().click();
         await page.waitForFunction(() => document.getElementById("dtProjectNotice").textContent.includes("Черновик открыт"));
         assert.equal(await page.locator("#dtStartProcessing").isDisabled(), false);
-        assert.match(await page.locator("#dtMappingRows").innerText(), /unused-synonym/);
         await page.locator("#dtProjectToggle").click();
         await page.locator("#dtInspectionOpenMapping").click();
         assert.equal(await page.locator("#dtMappingInspection").isVisible(), true);
+        await page.locator("#dtMappingSearch").fill("unused-synonym");
+        assert.equal(await addedMapping.count(), 1);
+        assert.match(await addedMapping.innerText(), /production\.loss/);
+        await page.locator("#dtMappingSearch").fill("");
         assert.match(await page.locator("#dtMappingRows").innerText(), /production.volume/);
         await page.locator("#dtMappingKind").selectOption("unit");
         assert.match(await page.locator("#dtMappingRows").innerText(), /т/);
@@ -416,6 +454,8 @@ const hash = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
         page.once("dialog", dialog => dialog.accept());
         await page.locator("#dtTemplateFile").setInputFiles({ name: "other.json", mimeType: "application/json",
             buffer: fs.readFileSync(path.join(output, "core/examples/matrix-xlsx-extraction.json")) });
+        await page.waitForFunction(() => document.getElementById("dtProcessNotice").textContent.includes("DICTIONARY_MISMATCH"));
+        assert.equal(await page.locator("#dtStartProcessing").isDisabled(), true);
         const resultDownload = page.waitForEvent("download");
         await page.locator("#dtDownloadResult").click();
         const fullResult = JSON.parse(fs.readFileSync(await (await resultDownload).path(), "utf8"));
@@ -435,9 +475,20 @@ const hash = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
         if (process.env.RNA_DATA_SCREENSHOTS)
             await page.locator("#dtResultPreview").screenshot({ path: path.join(process.env.RNA_DATA_SCREENSHOTS, "results-narrow.png"), animations: "disabled" });
+        await page.locator("#dtTemplateFile").setInputFiles({ name: "mapped.json", mimeType: "application/json",
+            buffer: Buffer.from(JSON.stringify(mappedDraft)) });
+        await page.waitForFunction(() => !document.getElementById("dtStartProcessing").disabled);
         await page.evaluate(() => {
+            // Project dictionary admission is asynchronous. Cancel the actual run
+            // as soon as its control is rendered, before this tiny fixture finishes.
+            const operation = document.getElementById("dtProcessOperation");
+            const observer = new MutationObserver(() => {
+                if (operation.dataset.state !== "running") return;
+                observer.disconnect();
+                operation.querySelector("[data-operation-part=cancel]").click();
+            });
+            observer.observe(operation, { attributes: true, attributeFilter: ["data-state"] });
             document.getElementById("dtStartProcessing").click();
-            document.querySelector("#dtProcessOperation [data-operation-part=cancel]").click();
         });
         await page.waitForFunction(() => document.getElementById("dtRunFilter").querySelector('[value="cancelled"]') &&
             document.getElementById("dtRunList").textContent.includes("Отменено") &&

@@ -1,5 +1,14 @@
 # Stabilization progress
 
+## Data Templates standalone export — 2026-10-19
+
+The complete export suite passes in Chromium after fixing stale shared-dictionary
+notices, mapping selectors and cancellation before asynchronous project admission.
+Read-back checks verify conflict refusal without writes, immutable dictionary
+versions and agreement with downloaded drafts. XLSX processing, result export,
+cancellation and staging cleanup pass. Owner: Data Templates export tests;
+Windows/Office qualification remains separate.
+
 ## Product UI cutover — 2026-10-19
 
 Demo and product mock preview now read one preview-only example set for the

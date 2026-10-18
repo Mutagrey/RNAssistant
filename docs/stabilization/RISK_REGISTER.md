@@ -10,12 +10,16 @@ exact-build gate.
 
 ## Data Templates browser mapping check — 2026-10-18
 
-`tests/web/data-templates-export.test.js` times out at line 312 waiting for
-`DICTIONARY_CONFLICT` after adding a scoped mapping. The same timeout reproduces
-on unchanged `HEAD` (`0aacd1af`), before the UI source-selector cutover. Earlier
-export closure, vendor and standalone-file checks pass. Owner: Data Templates
-mapping editor/dictionary controller; inspect the returned notice and update the
-behavior or expectation before using this suite as full export evidence.
+Closed 2026-10-19. `tests/web/data-templates-export.test.js` expected the former
+inline-draft notice and removed `data-mapping-path` attribute. It now waits for
+the shared dictionary save and selects the mapping by its source value. Read-back
+checks cover rejection without writes, successive immutable versions and their
+agreement with the downloaded draft. The later cancellation check now restores
+a dictionary-compatible draft and waits for the run after asynchronous project
+admission. No application behavior changed. The complete suite passes in local
+Chromium with 1160/360-pixel light/dark views, export/download, Worker and result
+staging checks. Owner: Data Templates export tests. Windows/Office qualification
+remains separate.
 
 ## Data Templates integration gates — 2026-10-16
 

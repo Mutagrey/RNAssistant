@@ -1609,8 +1609,12 @@ Tracked gates live in [the risk register](stabilization/RISK_REGISTER.md#data-te
 verifies exact hashes and outside-path/symlink/overwrite refusal, then runs exported
 semantic tests, the real file-origin loader and normalized extraction/download.
 A static test origin exercises the XLSX/Worker queue, JSON/`expr`/mapping editing, browser project snapshots and draft
-download without RNAssistant or assets outside the exported package. Narrow/wide
-light/dark views are checked. Native host and 80-MB workbook behavior remain open.
+download without RNAssistant or assets outside the exported package. Mapping checks
+verify conflict refusal without writes, immutable shared dictionary versions and
+exact agreement with the downloaded draft. Cancellation waits for project admission
+and an active run; mismatched dictionary drafts cannot start a new run or alter an
+existing result. Narrow/wide light/dark views are checked. Native host and 80-MB
+workbook behavior remain open.
 
 
 `web/data-templates/tests/universal.test.js` covers the cross-model/orientation oracle, native
