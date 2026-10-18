@@ -281,11 +281,6 @@
     justify-content: flex-end;
   }
 
-  .library-editor-menu-body {
-    right: 0;
-    left: auto;
-  }
-
   .skill-reference-row {
     flex-wrap: wrap;
   }

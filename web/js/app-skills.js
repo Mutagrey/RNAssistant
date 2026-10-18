@@ -693,7 +693,8 @@ function applyInstructionMode() {
   var referencePath = selectedSkillReferencePath(skill);
   if ($("skillResourceHeading")) $("skillResourceHeading").hidden = mode !== "preview" && !referencePath;
   if ($("skillReturnToEditorButton")) $("skillReturnToEditorButton").hidden = mode !== "preview";
-  if ($("skillPreviewToggleButton")) $("skillPreviewToggleButton").textContent = mode === "preview" ? "Вернуться к редактору" : "Просмотреть Markdown";
+  var previewMenuLabel = $("skillPreviewToggleButton") && $("skillPreviewToggleButton").querySelector(".rna-action-menu-label");
+  if (previewMenuLabel) previewMenuLabel.textContent = mode === "preview" ? "Вернуться к редактору" : "Просмотреть Markdown";
   Array.prototype.slice.call(document.querySelectorAll(".instruction-edit-view")).forEach(function (node) { node.classList.toggle("hidden", mode !== "edit"); });
   Array.prototype.slice.call(document.querySelectorAll(".instruction-preview-view")).forEach(function (node) { node.classList.toggle("hidden", mode !== "preview"); });
   if (typeof setCodeEditorVisible === "function") setCodeEditorVisible("skillBodyInput", mode === "edit");

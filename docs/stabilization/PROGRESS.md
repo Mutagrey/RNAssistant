@@ -10,8 +10,9 @@ with a preview-only typed mock bridge before initialization. Its chat text intak
 skill and reference read/save/clone, material preview, and project catalog fixtures
 exercise the real UI handlers; unsupported actions reject explicitly. The old direct
 fixture injection was removed. Demo and product share the skill fields view and
-its CSS, including ID and host. Library/VBA editor tabs also share one renderer
-and one style rule with the demo; the skill form's top spacing now matches it.
+its CSS, including ID and host. Library/VBA editor tabs and their «⋯» action
+menus also share renderers and styles with the demo; the skill form's top
+spacing now matches it. Existing feature handlers still own the menu actions.
 Most internal screen views remain separate, and
 mock preview is not Office qualification.
 The project catalog now keeps its initial refresh pending while a concurrent

@@ -51,6 +51,7 @@ async function serve() {
     await normal.locator('.section-rail [data-section="library"]').click();
     await normal.locator('#instructionsList [data-tree-key="skill:0"]').click();
     assert.equal(await normal.locator("#skillEditorPanel .rna-editor-tabs.skill-page-tabs").count(), 1);
+    assert.equal(await normal.locator("#skillActionsMenu.rna-action-menu .rna-action-menu-body > button svg").count(), 4);
     assert.equal(await normal.locator('.skill-page-tabs [data-skill-page="instruction"][aria-current="page"]').count(), 1);
     const productTabStyle = await normal.locator(".skill-page-tabs").evaluate(tabs => {
       const style = getComputedStyle(tabs);
@@ -72,6 +73,18 @@ async function serve() {
     await normal.waitForFunction(() => state.skills[0].Revision === "preview-skill-2" && !state.skillLibraryDirty);
     assert.match(await normal.evaluate(() => getCodeEditorValue("skillBodyInput")), /Проверка mock bridge/);
     await normal.locator("#skillActionsMenu summary").click();
+    const productMenuStyle = await normal.locator("#skillActionsMenu .rna-action-menu-body").evaluate(menu => {
+      const style = getComputedStyle(menu);
+      return { background: style.backgroundColor, border: style.borderColor,
+        radius: style.borderRadius, padding: style.padding, shadow: style.boxShadow };
+    });
+    await normal.locator("#skillPreviewToggleButton").click();
+    assert.equal(await normal.locator("#skillActionsMenu[open]").count(), 0);
+    assert.equal(await normal.locator("#skillPreviewToggleButton svg").count(), 1);
+    assert.equal(await normal.locator("#skillPreviewToggleButton .rna-action-menu-label").textContent(), "Вернуться к редактору");
+    await normal.locator("#skillActionsMenu summary").click();
+    await normal.locator("#skillPreviewToggleButton").click();
+    await normal.locator("#skillActionsMenu summary").click();
     await normal.locator("#cloneSkillButton").click();
     await normal.waitForFunction(() => state.skills.length === 2 && state.skillLibraryDirty);
     await normal.locator("#saveSkillsButton").click();
@@ -90,6 +103,7 @@ async function serve() {
     assert.equal(await normal.locator("#skillForm.rna-skill-fields").count(), 1);
     await normal.locator('#instructionsList [data-tree-key="tool:0"]').click();
     assert.equal(await normal.locator("#toolEditorPanel .rna-editor-tabs.tool-page-tabs").count(), 1);
+    assert.equal(await normal.locator("#toolActionsMenu .rna-action-menu-check #toolEnabledInput").count(), 1);
     await normal.locator('.tool-page-tabs [data-tool-page="schema"]').click();
     assert.equal(await normal.locator('.tool-page-tabs [data-tool-page="schema"][aria-current="page"]').count(), 1);
     assert.equal(await normal.locator('[data-tool-page-view="schema"]').isVisible(), true);
@@ -127,6 +141,16 @@ async function serve() {
     await demo.goto(server.address + "#/library/skill");
     await demo.locator("#main .rna-skill-fields").waitFor({ state: "attached" });
     assert.equal(await demo.locator("#main .rna-editor-tabs.tabs").count(), 1);
+    assert.equal(await demo.locator("#main .rna-action-menu").count(), 1);
+    await demo.locator("#main .rna-action-menu summary").click();
+    assert.equal(await demo.locator("#main .rna-action-menu[open]").count(), 1);
+    assert.deepEqual(await demo.locator("#main .rna-action-menu-body").evaluate(menu => {
+      const style = getComputedStyle(menu);
+      return { background: style.backgroundColor, border: style.borderColor,
+        radius: style.borderRadius, padding: style.padding, shadow: style.boxShadow };
+    }), productMenuStyle);
+    await demo.keyboard.press("Escape");
+    assert.equal(await demo.locator("#main .rna-action-menu[open]").count(), 0);
     assert.equal(await demo.locator('#main .tabs [data-go="library/skill"][aria-current="page"]').count(), 1);
     assert.deepEqual(await demo.locator("#main .tabs").evaluate(tabs => {
       const style = getComputedStyle(tabs);
@@ -152,7 +176,7 @@ async function serve() {
     await empty.waitForFunction(() => !state.initializePromise && !state.bridgeUnavailable);
     assert.deepEqual(await empty.evaluate(() => ({ chats: state.chats.length, skills: state.skills.length })), { chats: 0, skills: 0 });
     await empty.close();
-    console.log("PASS product mock preview: isolated bridge, shared editor tabs/skill fields, chat, skill/reference writes, material/project reads and empty/error scenarios");
+    console.log("PASS product mock preview: isolated bridge, shared tabs/menus/skill fields, chat, skill/reference writes, material/project reads and empty/error scenarios");
   } finally {
     await browser.close();
     server.process.kill("SIGTERM");

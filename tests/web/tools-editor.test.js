@@ -6,7 +6,11 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 const page = fs.readFileSync(path.join(__dirname, "../../web/index.html"), "utf8");
-const ids = new Set(Array.from(page.matchAll(/\bid="([^"]+)"/g), match => match[1]));
+const menus = fs.readFileSync(path.join(__dirname, "../../web/js/app-action-menu.js"), "utf8");
+const ids = new Set([
+  ...Array.from(page.matchAll(/\bid="([^"]+)"/g), match => match[1]),
+  ...Array.from(menus.matchAll(/\bid: "([^"]+)"/g), match => match[1])
+]);
 class Element {
   constructor() {
     this.value = ""; this.checked = false; this.style = {}; this.handlers = {}; this.children = []; this.options = [];

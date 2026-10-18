@@ -21,7 +21,10 @@
   P.tabs = function (items, current) { return window.RNAssistantEditorTabs.render(items.map(function (item) {
     return { label: item[0], value: item[1] };
   }), { className: "tabs", selected: current }); };
-  P.menu = function (items, label) { return '<details class="popover"><summary class="icon-btn" aria-label="' + P.escape(label || "Дополнительные действия") + '" title="' + P.escape(label || "Дополнительные действия") + '">' + P.icon("more") + '</summary><div class="popover-menu">' + items.map(function (v) { return v === "-" ? '<hr>' : '<button data-' + (v[1].indexOf("/") >= 0 ? "go" : "action") + '="' + v[1] + '" class="' + (v[3] || "") + '">' + P.icon(v[2] || "right") + P.escape(v[0]) + '</button>'; }).join("") + '</div></details>'; };
+  P.menu = function (items, label) { return window.RNAssistantActionMenu.render(items.map(function (item) {
+    return item === "-" ? item : { label: item[0], action: item[1], route: item[1].indexOf("/") >= 0,
+      icon: item[2], className: item[3] };
+  }), { label: label }); };
   P.empty = function (title, description, actions, icon) { return '<div class="empty">' + P.icon(icon || "files") + '<h2>' + P.escape(title) + '</h2><p>' + P.escape(description) + '</p><div class="actions">' + (actions || "") + '</div></div>'; };
   P.field = function (label, value, key, hint, type) { return '<label class="field">' + P.escape(label) + '<input type="' + (type || "text") + '" value="' + P.escape(value) + '" data-field="' + key + '">' + (hint ? '<small>' + P.escape(hint) + '</small>' : "") + '</label>'; };
   P.code = function (key, initial) { P.edits.rememberCode(key, initial); return '<textarea class="code-editor" spellcheck="false" aria-label="Редактор исходного текста" data-draft="' + key + '">' + P.escape(P.state.drafts[key] == null ? initial : P.state.drafts[key]) + '</textarea>'; };

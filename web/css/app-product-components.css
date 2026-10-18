@@ -39,6 +39,16 @@ select:not([multiple]):not([size]) { appearance: none; padding-inline-end: 34px;
 :where(.popover-menu, .toolbar-menu-body, .html-workspace-menu-items, .shell .product-create-menu .tool-list-actions) > button:hover { background: var(--surface-hover); }
 :where(.popover-menu, .toolbar-menu-body, .html-workspace-menu-items) > button.danger-text { color: var(--danger); }
 .popover-menu hr { border: 0; border-top: 1px solid var(--line); }
+.rna-action-menu { position: relative; flex: 0 0 auto; }
+.rna-action-menu > .rna-action-menu-trigger { display: grid; place-items: center; width: var(--control); height: var(--control); min-height: 0; padding: 0; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--ink-muted); cursor: pointer; list-style: none; }
+.rna-action-menu > .rna-action-menu-trigger::-webkit-details-marker { display: none; }
+.rna-action-menu > .rna-action-menu-trigger:hover, .rna-action-menu[open] > .rna-action-menu-trigger { background: var(--surface-hover); color: var(--ink); }
+.rna-action-menu-trigger svg, .rna-action-menu-body > button svg { flex: 0 0 auto; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.55; stroke-linecap: round; stroke-linejoin: round; }
+.rna-action-menu-body { display: grid; gap: 2px; }
+.rna-action-menu-body > button:disabled { opacity: .5; cursor: default; }
+.rna-action-menu-body > button:disabled:hover { background: transparent; }
+.rna-action-menu-check { display: flex; align-items: center; gap: 8px; margin: 0; padding: 9px 10px; color: var(--ink); font-size: 12px; cursor: pointer; }
+.rna-action-menu-check input { flex: 0 0 auto; width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
 .navigation-tree { flex: 1; min-height: 0; overflow: auto; padding: 0; scrollbar-width: thin; font-size: var(--tree-text); font-weight: 400; }
 .navigation-tree-list { list-style: none; margin: 0; padding: 0; }
 .navigation-tree-item { list-style: none; margin: 0; padding: 0; outline: none; }

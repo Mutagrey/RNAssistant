@@ -4,7 +4,10 @@ const assert = require("node:assert/strict"), fs = require("node:fs"), path = re
 const read = file => fs.readFileSync(path.join(__dirname, "../../web", file), "utf8");
 const keys = ["systemPrompt", "agentToolsPrompt", "agentSkillsPrompt", "chatSystemPrompt", "planSystemPrompt", "contextCompactionPrompt", "chatTitlePrompt", "attachmentAnalysisPrompt"];
 const fields = keys.map(key => key[0].toUpperCase() + key.slice(1)), copy = value => JSON.parse(JSON.stringify(value));
-const ids = new Set(Array.from(read("index.html").matchAll(/\bid="([^"]+)"/g), match => match[1]));
+const ids = new Set([
+  ...Array.from(read("index.html").matchAll(/\bid="([^"]+)"/g), match => match[1]),
+  ...Array.from(read("js/app-action-menu.js").matchAll(/\bid: "([^"]+)"/g), match => match[1])
+]);
 const sha = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
 function metadata(revision = "r1") {
   return { type: "rnassistant.promptLibrary", contractVersion: 1, publication: { uri: "rna://catalog/prompts", revision },
@@ -64,7 +67,7 @@ function fixture(loadPrompts = true) {
   });
   context.window = context;
   vm.runInContext(read("js/app-accent.js"), context, { filename: "app-accent.js" });
-  (loadPrompts ? ["app-settings.js", "app-resource-download.js", "app-resource-upload.js", "app-prompts.js"] : ["app-settings.js"])
+  (loadPrompts ? ["app-settings.js", "app-resource-download.js", "app-resource-upload.js", "app-action-menu.js", "app-prompts.js"] : ["app-settings.js"])
     .forEach(file => vm.runInContext(read("js/" + file), context, { filename: file }));
   context.renderSettings = () => { if (loadPrompts) context.renderPromptSettings(context.state.prompts); };
   if (loadPrompts) { context.renderSettings(); context.bindSettingsActions(); }

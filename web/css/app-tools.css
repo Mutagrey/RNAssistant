@@ -416,49 +416,6 @@
   padding: 0 10px;
 }
 
-.library-editor-menu > summary {
-  width: 30px;
-  height: 30px;
-  min-height: 30px;
-  padding: 0;
-  justify-content: center;
-}
-
-.library-editor-menu > summary svg {
-  width: 14px;
-  height: 14px;
-  fill: currentColor;
-  stroke: none;
-}
-
-.library-editor-menu-body {
-  gap: 5px;
-  min-width: 220px;
-}
-
-.library-editor-menu-body .library-menu-check {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  padding: 8px 10px;
-  color: var(--text);
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.library-editor-menu-section {
-  display: grid;
-  gap: 5px;
-  padding: 5px 0;
-  border-top: 1px solid var(--section-line);
-  border-bottom: 1px solid var(--section-line);
-}
-
-.library-editor-menu-section[hidden] {
-  display: none;
-}
-
 .tool-installation-panel > summary { width: fit-content; padding: 6px 8px; color: var(--muted); cursor: pointer; font-size: 12px; }
 .tool-installation-panel > summary:hover { color: var(--text); }
 .tool-installation-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 0; }
