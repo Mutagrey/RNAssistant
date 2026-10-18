@@ -11,7 +11,10 @@ function switchTab(name) {
     discardModelCatalogPreview();
   }
   Array.prototype.slice.call(document.querySelectorAll(".tab")).forEach(function (tab) {
-    tab.classList.toggle("active", tab.dataset.section === section);
+    var selected = tab.dataset.section === section;
+    tab.classList.toggle("active", selected);
+    if (selected) tab.setAttribute("aria-current", "page");
+    else tab.removeAttribute("aria-current");
   });
   Array.prototype.slice.call(document.querySelectorAll(".panel")).forEach(function (panel) {
     panel.classList.toggle("active", panel.id === "tab-" + name);

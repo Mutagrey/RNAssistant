@@ -1,0 +1,90 @@
+/* The Materials panel opts in to the shared prototype tokens. */
+#tab-artifacts {
+  --panel: var(--surface);
+  --text: var(--ink);
+  --muted: var(--ink-muted);
+  --secondary-bg: var(--surface-subtle);
+  --secondary-bg-hover: var(--surface-hover);
+  --code: var(--code-bg);
+  --code-text: var(--ink);
+  --code-border: var(--line);
+  --control-height: 34px;
+  --control-radius: 10px;
+  --control-border: var(--line);
+  --control-border-hover: var(--line-strong);
+  --button-bg: var(--surface);
+  --button-bg-hover: var(--surface-hover);
+  --button-border: var(--line);
+  --button-border-hover: var(--line-strong);
+  --button-text: var(--ink);
+  --label-font-weight: 500;
+  --title-font-weight: 600;
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font);
+}
+
+html[data-accent] #tab-artifacts {
+  --accent: inherit;
+  --accent-ink: var(--accent-on, #fff);
+  --accent-soft: color-mix(in srgb, var(--accent) 12%, var(--surface));
+}
+
+#tab-artifacts .html-workspace-layout { gap: 0; }
+#tab-artifacts .html-workspace-sidebar {
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  padding: 0 8px 6px;
+  background: var(--surface-subtle);
+  border-right: 1px solid var(--line);
+}
+#tab-artifacts .html-workspace-layout > .splitter {
+  width: 5px;
+  margin-left: -3px;
+  z-index: 1;
+  background: transparent;
+}
+#tab-artifacts .artifact-catalog-toolbar {
+  flex-wrap: nowrap;
+  min-height: 52px;
+  margin: 0 -8px;
+  padding: 0 8px 0 18px;
+  background: var(--surface-subtle);
+}
+#tab-artifacts .artifact-catalog-toolbar strong {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 13px;
+  font-weight: 600;
+}
+#tab-artifacts .artifact-catalog-toolbar label { min-width: 0; }
+#tab-artifacts .artifact-catalog-toolbar select { max-width: 105px; font-size: 11px; }
+#tab-artifacts .artifact-catalog-toolbar button { width: 30px; padding: 0; flex: none; font-size: 20px; }
+#tab-artifacts .artifact-catalog-filters { padding-top: 8px; }
+#tab-artifacts .artifact-catalog-actions {
+  min-height: 52px;
+  padding: 7px 18px;
+  background: var(--surface);
+}
+#tab-artifacts .artifact-catalog-preview { padding: 16px 18px; background: var(--surface); }
+#tab-artifacts .artifact-catalog-preview h3 { font-size: 18px; font-weight: 600; }
+#tab-artifacts #artifactCatalogPreviewBody { min-height: 0; }
+#tab-artifacts #artifactCatalogPreviewBody .rn-json-toolbar { display: flex; }
+#tab-artifacts #artifactCatalogPreviewBody .rn-markdown-viewer { width: 100%; }
+#tab-artifacts #artifactCatalogPreviewBody .rn-text-viewer-toolbar button { min-height: 30px; }
+#tab-artifacts #artifactCatalogPreviewBody .rn-text-viewer-source pre { border: 0; background: transparent; }
+#tab-artifacts .html-workspace-editor { background: var(--surface); }
+#tab-artifacts .resource-editor-head { min-height: 52px; border-bottom-color: var(--line); }
+#tab-artifacts .html-workspace-tree { scrollbar-width: thin; }
+#tab-artifacts .html-workspace-tree button { font-family: var(--font); }
+
+@media (max-width: 560px) {
+  #tab-artifacts .html-workspace-sidebar { padding-inline: 4px; }
+  #tab-artifacts .artifact-catalog-toolbar { margin-inline: -4px; padding-left: 8px; }
+  #tab-artifacts .artifact-catalog-toolbar strong { display: none; }
+  #tab-artifacts .artifact-catalog-toolbar label { flex: 1; }
+  #tab-artifacts .artifact-catalog-toolbar select { max-width: 100%; width: 100%; }
+  #tab-artifacts .artifact-catalog-preview { padding: 12px; }
+}

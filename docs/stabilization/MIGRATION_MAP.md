@@ -18,6 +18,13 @@ gates; active tool compatibility adapter отсутствует. Windows/Office 
 проверкой resource-consumer cleanup (2026-09-07). Порядок задаёт
 [Resource MASTER](resource-cutover/MASTER.md), владельцев — [Resource Fabric](../resource-fabric.md).
 
+## Product UI shell transition — 2026-10-18
+
+| Temporary seam | Owner / current consumers | Removal gate |
+|---|---|---|
+| New section rail around existing panel DOM and `switchTab` | `web` presentation; all current `tab-*` panels and navigation callers. The rail owns only section selection; feature controllers retain data and actions. | Move each section's tree/content into the shared layout, switch every navigation entry, then remove replaced panel shells and CSS. Keep one navigation owner throughout. |
+| Product-styled Materials catalog with old format grouping and HTML editor shell | `web/js/app-artifact-catalog.js` and HTML workspace controller; real catalog projections, viewer registry and guarded actions. | Connect the agreed ownership tree and common material/editor header to these controllers, then delete old catalog/editor shell markup and selectors. |
+
 ## Data Templates application adapters — 2026-10-16
 
 Data Templates is an independent application source workspace in

@@ -60,16 +60,21 @@
   <link rel="stylesheet" href="css/app-agent.css?v=composer-layers-20261015-1">
   <link rel="stylesheet" href="css/app-agent-data.css?v=json-height-20260929-1">
   <link rel="stylesheet" href="css/app-theme.css?v=user-bubble-20261012-2">
+  <link rel="stylesheet" href="css/app-product-tokens.css?v=product-ui-20261018-1">
+  <link rel="stylesheet" href="css/app-product-shell.css?v=product-ui-20261018-1">
+  <link rel="stylesheet" href="css/app-product-viewers.css?v=product-ui-20261018-1">
+  <link rel="stylesheet" href="css/app-product-materials.css?v=product-ui-20261018-1">
 </head>
 <body>
   <div class="shell">
     <nav class="tabs" aria-label="Разделы ассистента">
-      <button class="tab active" data-section="chat" data-tab="chat">Чат</button>
-      <button class="tab" data-section="workspace" data-tab="workspace">Рабочая папка</button>
-      <button class="tab" data-section="artifacts" data-tab="artifacts">Артефакты</button>
-      <button class="tab" data-section="vba" data-tab="vba">VBA</button>
-      <button class="tab" id="libraryRootTab" data-section="library" data-default-tab="instructions">Библиотека</button>
-      <button class="tab" data-section="settings" data-tab="settings">Настройки</button>
+      <button class="tab active" data-section="chat" data-tab="chat" aria-label="Рабочая область" title="Рабочая область" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7M5 8.5V20a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8.5M9 21v-8h6v8"/></svg></button>
+      <button class="tab" data-section="artifacts" data-tab="artifacts" aria-label="Материалы" title="Материалы"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h9l4 4v13H7Z"/><path d="M16 3v5h4M3 7v14h12"/></svg></button>
+      <button class="tab" id="libraryRootTab" data-section="library" data-default-tab="instructions" aria-label="Библиотека" title="Библиотека"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6a3 3 0 0 1 3 3v14a3 3 0 0 0-3-3H4ZM13 7a3 3 0 0 1 3-3h5v14h-5a3 3 0 0 0-3 3"/></svg></button>
+      <button class="tab" data-section="vba" data-tab="vba" aria-label="VBA" title="VBA"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 6-6 6 6 6m8-12 6 6-6 6M14 3l-4 18"/></svg></button>
+      <span class="product-rail-divider" role="separator"></span>
+      <button class="tab" data-section="workspace" data-tab="workspace" aria-label="Данные и шаблоны" title="Данные и шаблоны"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18M7 16v-5M12 16V7M17 16V4"/></svg></button>
+      <button class="tab product-rail-settings" data-section="settings" data-tab="settings" aria-label="Настройки" title="Настройки"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.7 3-.5 2.2-1.4.8-2.2-.7-2.3 4 1.7 1.5v1.6L3.3 14l2.3 4 2.2-.7 1.4.8.5 2.2h4.6l.5-2.2 1.4-.8 2.2.7 2.3-4-1.7-1.6v-1.6l1.7-1.5-2.3-4-2.2.7-1.4-.8-.5-2.2Z"/><circle cx="12" cy="11.7" r="3.2"/></svg></button>
     </nav>
 
     <main class="content">
@@ -698,13 +703,14 @@
       </section>
 
       <section class="panel" id="tab-artifacts">
-        <div class="artifact-catalog-toolbar">
-          <label>Артефакты <select id="artifactCatalogScope"><option value="chat">В чате</option><option value="document">В документе</option><option value="all">Все документы</option></select></label>
-          <button type="button" id="artifactCatalogImport">Импортировать…</button>
-          <input type="file" id="artifactCatalogFile" hidden>
-        </div>
         <div class="tool-layout html-workspace-layout split-layout" id="htmlWorkspaceLayout" data-split-key="html-workspace" data-default-ratio="0.3" data-min-left="180" data-min-ratio="0.18" data-max-ratio="0.5">
           <aside class="tool-list-panel html-workspace-sidebar" id="htmlWorkspaceSidebar">
+            <div class="artifact-catalog-toolbar">
+              <strong>Материалы</strong>
+              <label><select id="artifactCatalogScope" aria-label="Принадлежность материалов"><option value="chat">В чате</option><option value="document">В документе</option><option value="all">Все документы</option></select></label>
+              <button type="button" id="artifactCatalogImport" title="Добавить материал" aria-label="Добавить материал">＋</button>
+              <input type="file" id="artifactCatalogFile" hidden>
+            </div>
             <div class="artifact-catalog-filters">
               <select id="artifactCatalogKind" aria-label="Тип артефакта"><option value="">Все типы</option><option value="html_workspace">HTML-проекты</option><option value="markdown">Markdown</option><option value="file">Файлы и JSON</option><option value="image">Изображения</option><option value="plan_document">Планы</option></select>
               <select id="artifactCatalogDocument" aria-label="Документ" hidden><option value="">Все документы</option></select>
@@ -742,7 +748,7 @@
             <div id="artifactCatalogActions" class="artifact-catalog-actions" hidden></div>
             <section id="artifactCatalogPreview" class="artifact-catalog-preview" hidden aria-label="Просмотр артефакта">
               <h3 id="artifactCatalogPreviewTitle"></h3>
-              <div id="artifactCatalogPreviewBody"></div>
+              <div id="artifactCatalogPreviewBody" class="product-viewer"></div>
             </section>
           <section class="html-workspace-editor surface-panel padded tool-editor" id="htmlWorkspaceEditor">
             <div class="resource-editor-head html-workspace-head">

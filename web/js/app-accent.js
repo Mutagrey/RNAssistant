@@ -4,7 +4,7 @@
   var choices = [
     { id: "blue", label: "Синий", swatch: "#3A63F2", light: "#3A63F2", dark: "#3A63F2" },
     { id: "turquoise", label: "Бирюзовый", swatch: "#03B0FD", light: "#007AAE", dark: "#03B0FD" },
-    { id: "green", label: "Зеленый", swatch: "#05BAA1", light: "#007B6B", dark: "#05BAA1" },
+    { id: "green", label: "Зеленый", swatch: "#35684B", light: "#35684B", dark: "#9BC8A5" },
     { id: "lime", label: "Лаймовый", swatch: "#B6D905", light: "#687A00", dark: "#B6D905" },
     { id: "yellow", label: "Желтый", swatch: "#F9CF37", light: "#916900", dark: "#F9CF37" },
     { id: "orange", label: "Оранжевый", swatch: "#F98367", light: "#B64B35", dark: "#F98367" },

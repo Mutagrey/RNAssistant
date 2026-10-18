@@ -1,5 +1,14 @@
 # Stabilization progress
 
+## New UI integration started — 2026-10-18
+
+The prototype at `403b375d` is the visual reference. The product now has its
+52-px section rail and the first real Materials presentation slice: shared viewer
+styling, existing catalog data and guarded actions. Remaining panels still use
+their current contents; Materials ownership grouping and the common editor header
+are next. Browser checks cover catalog geometry/guards and narrow workspace layout.
+Windows/Office/WebView2 behavior remains unqualified.
+
 ## Independent Data Templates application and early export — 2026-10-16
 
 The target is now explicit: Data Templates is a standalone workspace-project web
