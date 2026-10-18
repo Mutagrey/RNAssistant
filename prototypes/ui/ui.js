@@ -13,7 +13,7 @@
     files: '<path d="M7 3h9l4 4v13H7Z"/><path d="M16 3v5h4M3 7v14h12"/>',
     file: '<path d="M5 3h10l4 4v14H5Z"/><path d="M14 3v5h5M9 12h6M9 16h6"/>',
     office: '<path fill="#d83b01" stroke="none" d="m4 6 10-4 7 3v14l-7 3-10-4V6Zm4 2v8l6 2V6L8 8Z"/><path fill="#f16c28" stroke="none" d="m14 2 7 3v14l-7 3v-4l4-1V7l-4-1V2Z"/>',
-    bulb: '<path d="M9 18h6M10 21h4M8.4 14.7a6 6 0 1 1 7.2 0c-.9.7-1.4 1.6-1.6 2.3h-4c-.2-.7-.7-1.6-1.6-2.3Z"/><path d="M12 1V0m-7.1 4.9-.8-.8m15.8 0-.8.8"/>',
+    bulb: '<path d="M9 18h6M10 21h4M8.4 14.7a6 6 0 1 1 7.2 0c-.9.7-1.4 1.6-1.6 2.3h-4c-.2-.7-.7-1.6-1.6-2.3Z"/><path d="M12 2V1m-7.1 4.9-.8-.8m15.8 0-.8.8"/>',
     book: '<path d="M4 4h6a3 3 0 0 1 3 3v14a3 3 0 0 0-3-3H4ZM13 7a3 3 0 0 1 3-3h5v14h-5a3 3 0 0 0-3 3"/>',
     code: '<path d="m8 6-6 6 6 6m8-12 6 6-6 6M14 3l-4 18"/>',
     settings: '<path d="m9.7 3-.5 2.2-1.4.8-2.2-.7-2.3 4 1.7 1.5v1.6L3.3 14l2.3 4 2.2-.7 1.4.8.5 2.2h4.6l.5-2.2 1.4-.8 2.2.7 2.3-4-1.7-1.6v-1.6l1.7-1.5-2.3-4-2.2.7-1.4-.8-.5-2.2Z"/><circle cx="12" cy="11.7" r="3.2"/>',
@@ -49,6 +49,7 @@
     braces: '<path d="M8 3H6v7l-3 2 3 2v7h2M16 3h2v7l3 2-3 2v7h-2"/>',
     image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8" cy="8" r="1"/><path d="m3 17 6-6 4 4 3-3 5 5"/>',
     layers: '<path d="m12 3 10 5-10 5L2 8Zm-9 10 9 5 9-5M3 18l9 5 9-5"/>',
+    info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v.1"/>',
     warning: '<path d="m12 3 10 18H2Z"/><path d="M12 9v5M12 17v1"/>',
     play: '<path d="m8 4 12 8-12 8Z"/>',
     stop: '<rect x="6" y="6" width="12" height="12" rx="1"/>',
@@ -71,7 +72,7 @@
     return '<details class="popover panel-switcher ' + className + '"><summary aria-label="' + P.escape(label + ": " + title) + '" title="' + P.escape(title + " · сменить раздел") + '" aria-haspopup="menu">' + P.icon(icon) + '<span>' + P.escape(title) + '</span>' + P.icon("down") + '</summary><div class="popover-menu" role="menu" aria-label="' + P.escape(label) + '">' + items + '</div></details>';
   };
   P.badge = function (label, kind) { return '<span class="badge ' + (kind || "") + '"><span class="badge-dot"></span>' + P.escape(label) + '</span>'; };
-  P.notice = function (title, text, kind, actions) { return '<div class="notice ' + (kind || "") + '" role="' + (kind === "danger" ? "alert" : "status") + '">' + P.icon(kind === "success" ? "check" : "warning") + '<div class="row-copy"><strong>' + P.escape(title) + '</strong><p>' + P.escape(text) + '</p>' + (actions ? '<div class="actions">' + actions + '</div>' : "") + '</div></div>'; };
+  P.notice = function (title, text, kind, actions) { return '<div class="notice ' + (kind || "") + '" role="' + (kind === "danger" ? "alert" : "status") + '">' + P.icon(kind === "success" ? "check" : kind === "warning" || kind === "danger" ? "warning" : "info") + '<div class="row-copy"><strong>' + P.escape(title) + '</strong><p>' + P.escape(text) + '</p>' + (actions ? '<div class="actions">' + actions + '</div>' : "") + '</div></div>'; };
   P.search = function (placeholder, name) { return '<label class="search">' + P.icon("search") + '<input type="search" placeholder="' + placeholder + '" aria-label="' + placeholder + '" data-search="' + name + '"></label>'; };
   P.header = function (title, breadcrumb, actions) { return '<header class="page-header">' + (P.state.standalone ? "" : P.iconButton("Открыть навигацию", "navigation", "panelLeft", "menu-btn")) + '<div class="page-heading"><div class="breadcrumb">' + P.escape(breadcrumb) + '</div><h1 title="' + P.escape(title) + '">' + P.escape(title) + '</h1></div><div class="header-actions">' + (actions || "") + '</div></header>'; };
   P.tabs = function (items, current) { return '<nav class="tabs" aria-label="Разделы экрана">' + items.map(function (v) { return '<button data-go="' + v[1] + '"' + (current === v[1] ? ' aria-current="page"' : "") + '>' + P.escape(v[0]) + '</button>'; }).join("") + '</nav>'; };

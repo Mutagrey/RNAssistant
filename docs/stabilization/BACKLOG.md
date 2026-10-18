@@ -18,6 +18,17 @@
 архитектурные slices — D05–D09 ниже; это предложения, а не завершённые изменения.
 Закрытые короткие записи сохраняют anchors исторических ссылок.
 
+## Загрузка UI-прототипа при серии перезагрузок — 2026-10-18
+
+Owner: bootstrap `prototypes/ui/index.html` / `app.js`. При серийном обходе экранов
+через полную навигацию в in-app browser дважды наблюдалась пустая рабочая область:
+`refreshSidebar` не получил `productTree.unmount`, а в другом случае
+`product-components.js` не получил `window.Prototype`. Повторная загрузка восстановила
+экран; обход через hash-навигацию прошёл без новых ошибок. Причина и воспроизведение
+вне автоматизированного browser-сеанса пока не установлены. Проверить загрузку
+зависимостей и ответы локального сервера отдельно от изменений визуального стиля.
+Это наблюдение прототипа, не evidence сбоя production WebView2.
+
 ## CLI smoke fixtures lag current admission contracts — 2026-10-14
 
 Owner: workspace CLI tests. On isolated `3cb0b69f` plus the explicit completion

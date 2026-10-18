@@ -2,7 +2,7 @@
   "use strict";
   var P = window.Prototype, shell = document.getElementById("app-shell");
   var storageKey = "rnassistant.prototype.panel-widths.v3", widths = {}, entries = [], drag, frame, navigationOpen = null;
-  var layoutMode, compactNavigationOpen = false;
+  var layoutMode, compactNavigationOpen = false, navigationTransition;
   var keys = ["navigation", "inspector"];
   function readWidths() {
     try {
@@ -29,6 +29,12 @@
     // A temporary compact pane must never hide the chat after a window resize.
     if (nextMode !== layoutMode) { compactNavigationOpen = false; layoutMode = nextMode; }
     var open = !nav.hidden && (layoutMode === "wide" ? navigationOpen !== false : compactNavigationOpen);
+    // Animate open/close, not every width update while resizing the window.
+    if (shell.classList.contains("layout-ready") && shell.classList.contains("navigation-open") !== open) {
+      clearTimeout(navigationTransition); shell.classList.add("navigation-transition");
+      var duration = parseFloat(getComputedStyle(shell).getPropertyValue("--motion-duration")) || 240;
+      navigationTransition = setTimeout(function () { shell.classList.remove("navigation-transition"); }, duration + 40);
+    }
     shell.classList.toggle("navigation-single", layoutMode === "single");
     shell.classList.toggle("navigation-compact", layoutMode !== "wide");
     shell.classList.toggle("navigation-open", open); shell.classList.toggle("navigation-closed", !open);
