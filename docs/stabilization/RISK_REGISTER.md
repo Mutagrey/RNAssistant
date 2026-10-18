@@ -8,6 +8,15 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## Data Templates browser mapping check — 2026-10-18
+
+`tests/web/data-templates-export.test.js` times out at line 312 waiting for
+`DICTIONARY_CONFLICT` after adding a scoped mapping. The same timeout reproduces
+on unchanged `HEAD` (`0aacd1af`), before the UI source-selector cutover. Earlier
+export closure, vendor and standalone-file checks pass. Owner: Data Templates
+mapping editor/dictionary controller; inspect the returned notice and update the
+behavior or expectation before using this suite as full export evidence.
+
 ## Data Templates integration gates — 2026-10-16
 
 Open feature gates, not newly reproduced baseline failures. Owner: Data Templates

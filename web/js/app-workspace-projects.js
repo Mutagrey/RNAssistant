@@ -1,6 +1,6 @@
 (function () {
   "use strict";
-  var view = null, busy = false, sequence = 0, inspection = null, bound = false;
+  var view = null, busy = false, sequence = 0, inspection = null, bound = false, renderedProjectKey = "";
   function el(id) { return document.getElementById("workspace" + id); }
   function selected() { return view && view.workspace; }
   function invalidResponse() {
@@ -28,6 +28,12 @@
   }
   function render() {
     var workspace = selected(), project = view && view.project;
+    var projectKey = workspace && project ? workspace.bindingId + "|" + project.manifestPath : "";
+    el("Settings").dataset.projectOpen = projectKey ? "true" : "false";
+    if (projectKey !== renderedProjectKey) {
+      el("Settings").open = !projectKey;
+      renderedProjectKey = projectKey;
+    }
     renderAvailability();
     el("Selection").textContent = workspace
       ? "Выбрана папка: " + workspace.rootPath + (workspace.readOnly ? " · Только чтение" : " · Чтение и запись")

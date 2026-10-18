@@ -9,12 +9,16 @@
   function create(container, processing) {
     const slot = container.querySelector('[data-dt-slot="workspace"]');
     const panel = node("details", "dt-project-card dt-card");
+    panel.id = "dtProjectCard";
     panel.setAttribute("aria-label", "Проект данных");
     panel.innerHTML = `<summary class="dt-project-head" id="dtProjectToggle"><div><p class="dt-eyebrow">ПРОЕКТ ДАННЫХ</p><h3 id="dtProjectTitle">Без проекта</h3><p id="dtProjectDescription">Откройте папку с project.json или создайте новый проект.</p></div><span class="dt-inspection-badge" id="dtProjectState">Локально</span></summary><div class="dt-project-body">
       <div class="dt-project-controls"><button type="button" id="dtProjectOpen">Открыть папку проекта</button><label>Новый проект<input id="dtProjectName" maxlength="200" placeholder="Название проекта"></label><button type="button" id="dtProjectCreate">Создать подпапку…</button></div>
-      <div class="dt-project-drafts"><div class="dt-project-drafts-head"><div><strong>Черновики шаблонов</strong><p>Каждое сохранение создаёт отдельный файл в drafts/; исходные файлы не меняются.</p></div><div><button type="button" id="dtProjectRefresh">Обновить</button><button type="button" class="dt-primary" id="dtProjectSave">Сохранить черновик</button></div></div><p id="dtProjectNotice" role="status" aria-live="polite"></p><ul id="dtProjectDraftList" aria-label="Сохранённые черновики"></ul></div>
+      <p id="dtProjectNotice" role="status" aria-live="polite"></p>
+      <div class="dt-project-drafts"><div class="dt-project-drafts-head"><div><strong>Черновики шаблонов</strong><p>Каждое сохранение создаёт отдельный файл в drafts/; исходные файлы не меняются.</p></div><div><button type="button" id="dtProjectRefresh">Обновить</button><button type="button" class="dt-primary" id="dtProjectSave">Сохранить черновик</button></div></div><ul id="dtProjectDraftList" aria-label="Сохранённые черновики"></ul></div>
       <div class="dt-project-drafts"><div class="dt-project-drafts-head"><div><strong>Результаты извлечения</strong><p>Готовый файл сохраняется отдельно в results/ после проверки байтов. Это не публикация dataset.</p></div><div><button type="button" class="dt-primary" id="dtProjectSaveResult">Сохранить выбранный</button><button type="button" id="dtProjectCancelResult" hidden>Отменить</button></div></div><p id="dtProjectSelectedResult" class="dt-project-selection">Выберите готовый файл на вкладке «Результаты».</p><div id="dtProjectResultProgress" class="dt-project-transfer" hidden><progress id="dtProjectResultMeter" max="100" value="0" aria-label="Сохранение или проверка результата"></progress><span id="dtProjectResultStage"></span></div><p id="dtProjectResultNotice" role="status" aria-live="polite"></p><ul id="dtProjectResultList" aria-label="Сохранённые результаты"></ul></div></div>`;
     slot.append(panel);
+    const headerButton = container.querySelector("#dtProjectHeaderButton");
+    headerButton.setAttribute("aria-controls", "dtProjectCard");
     const get = name => panel.querySelector("#dtProject" + name), events = new AbortController();
     const listen = (element, type, handler) => element.addEventListener(type, handler, { signal: events.signal });
     let project = null, busy = false, disposed = false, drafts = [], results = [], incomplete = 0, limited = false;
@@ -39,6 +43,11 @@
         " · " + Math.ceil(state.done / 1048576) + " / " + Math.ceil(state.total / 1048576) + " МиБ";
     }
     function render() {
+      panel.dataset.hasProject = String(!!project);
+      container.querySelector("#dtPageTitle").textContent = project ? project.info.name : "Данные и шаблоны";
+      container.querySelector("#dtPageContext").textContent = project
+        ? project.directory.name + "/project.json" : "Откройте папку проекта или создайте новый";
+      container.querySelector(".dt-header .dt-phase").textContent = project ? "Проект открыт" : "Проект не выбран";
       get("Title").textContent = project ? project.info.name : "Без проекта";
       get("Description").textContent = project ? "project.json · источников: " + project.info.sources +
         " · общий справочник dictionaries/ · шаблоны templates/ · черновики drafts/ · результаты results/" :
@@ -70,6 +79,12 @@
         (limited ? "Показаны последние 100 папок; старые доступны в results/." : "") +
         "Проверьте results/ вручную перед повторным сохранением."));
     }
+    listen(headerButton, "click", () => {
+      panel.open = !panel.open;
+      headerButton.setAttribute("aria-expanded", String(panel.open));
+      if (panel.open) get("Toggle").focus({ preventScroll: true });
+    });
+    listen(panel, "toggle", () => headerButton.setAttribute("aria-expanded", String(panel.open)));
     async function perform(work, success) {
       if (busy || externalBusy > 0 || disposed) return;
       busy = true; render();

@@ -3,8 +3,8 @@
   // Trusted application markup, shared by both entry points. Never accepts project HTML.
   const markup = String.raw`
 <header class="dt-header">
-            <div><p class="dt-eyebrow">DATA TEMPLATES</p><h2>Данные и шаблоны</h2><p class="dt-subtitle">От разных источников к единой структуре.</p></div>
-            <span class="dt-phase">Подбор источников</span>
+            <div class="dt-header-copy"><p class="dt-eyebrow">DATA TEMPLATES</p><h2 id="dtPageTitle">Данные и шаблоны</h2><p class="dt-subtitle" id="dtPageContext">От разных источников к единой структуре.</p></div>
+            <div class="dt-header-actions"><span class="dt-phase">Подбор источников</span><button type="button" id="dtProjectHeaderButton" aria-expanded="false">Проект</button></div>
           </header>
           <div data-dt-slot="workspace"></div>
           <div class="dt-navigation">
@@ -44,7 +44,7 @@
               <aside class="dt-guide" id="dtIntakeGuide" aria-label="Порядок работы">
                 <p class="dt-eyebrow">КАК ЭТО РАБОТАЕТ</p>
                 <ol><li><span>01</span><div><strong>Соберите источники</strong><p>Проверьте состав файлов и выберите нужные.</p></div></li><li><span>02</span><div><strong>Настройте соответствия</strong><p>Шаблон свяжет исходные поля с параметрами.</p></div></li><li><span>03</span><div><strong>Проверьте результат</strong><p>У каждого значения будет связь с источником.</p></div></li></ol>
-                <p class="dt-guide-note">Сейчас доступен первый шаг. Анализ и преобразование будут добавлены далее.</p>
+                <p class="dt-guide-note">Подбор файлов не запускает обработку. На вкладке «Шаблоны» выберите JSON-правила и запустите очередь XLSX.</p>
               </aside>
             </div>
             <div id="dtSourceQueue" class="dt-source-queue dt-card" hidden>
@@ -61,7 +61,7 @@
               <p class="dt-no-matches" id="dtNoMatches" hidden>Таких файлов нет. Измените поиск или формат.</p>
             </div>
             <aside id="dtSourceDetail" class="dt-source-detail dt-card" hidden aria-label="Сведения об источнике"><div class="dt-detail-heading"><h4 id="dtDetailTitle"></h4><button type="button" class="dt-text-button" id="dtCloseDetail">Закрыть</button></div><dl id="dtDetailMetadata"></dl><p id="dtDetailNote"></p></aside>
-            <p id="dtSelectionNote" class="dt-footnote">Подбор файлов не запускает обработку. Список хранится в этой сессии; исходные файлы не изменяются.</p>
+            <p id="dtSelectionNote" class="dt-footnote">Подбор файлов не запускает обработку. На вкладке «Шаблоны» можно запустить очередь; список хранится в этой сессии.</p>
           </div>
 
           <div class="dt-view" id="dtViewTemplates" role="tabpanel" aria-labelledby="dtTabTemplates" tabindex="0" hidden>
@@ -88,9 +88,13 @@
             <details class="dt-format-details"><summary>Что уже доступно</summary><p>Подбор файлов и папок, поиск, страницы списка, прогресс и отмена. Проверка шаблонов доступна в отдельном инструменте ниже.</p><p>Ядро выполняет правила над матрицей, нормализованными записями и JSON, а также читает ограниченный профиль XLSX. Распознавание, редакторы маппинга, другие форматы Excel, чтение исходных CSV/JSON и общая очередь преобразований ещё разрабатываются.</p><p><a data-dt-probe>Открыть проверку шаблона</a></p></details>
           </div>
 `;
-  function mount(container, probeUrl) {
+  function mount(container, probeUrl, options) {
     if (container.querySelector("#dtViewSources")) return;
     container.innerHTML = markup;
+    if (options && options.nativeSources) {
+      ["#dtOperation", ".dt-intake-status", "#dtViewSources .dt-intake-layout", "#dtSourceQueue",
+        "#dtSourceDetail", "#dtSelectionNote"].forEach(selector => container.querySelector(selector).remove());
+    }
     container.querySelectorAll("[data-dt-probe]").forEach(link => {
       link.href = probeUrl; link.target = "_blank"; link.rel = "noopener";
     });

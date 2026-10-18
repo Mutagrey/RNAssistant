@@ -6,14 +6,12 @@
   let queueId = null, queue = null, rows = null, busy = false, uncertain = false;
   let reading = false, readAgain = false, timer = null, queryTicket = 0;
   let filters = { offset: 0, query: "", state: null, sort: "Added" }, notice = "", error = false;
-  let publishedPresence = false;
   const natural = value => Number.isSafeInteger(value) && value >= 0;
   const path = value => typeof value === "string" && value.length > 0 && value.length <= 4096 && !/[\x00-\x1f]/.test(value);
   const states = ["Pending", "Running", "Prepared", "Failed", "Cancelled"];
   const stages = ["Hashing", "Compressing", "Retaining", "Verifying"];
   function invalid() { return new Error("Ответ приложения не удалось проверить. Обновите состояние очереди."); }
   function unfinished() { return busy || uncertain || !!queueId && (!queue || queue.state !== "Finished"); }
-  function hasSources() { return chosen.size > 0 || !!queue; }
   function savedPaths() { return context && context.project ? context.project.sources.map(source => source.path) : []; }
   function dirty() { return JSON.stringify([...chosen.keys()]) !== JSON.stringify(savedPaths()); }
   function render() {
@@ -21,10 +19,6 @@
       files: files, browsing: browsing, queue: queue, rows: rows, filters: filters,
       busy: busy, unfinished: unfinished(), uncertain: uncertain, dirty: dirty(), notice: notice, error: error });
     if (root.RNAssistantWorkspace && root.RNAssistantWorkspace.sourceWorkChanged) root.RNAssistantWorkspace.sourceWorkChanged();
-    if (publishedPresence !== hasSources()) {
-      publishedPresence = hasSources();
-      if (root.RNAssistantDataTemplates) root.RNAssistantDataTemplates.workspaceSourcesChanged();
-    }
   }
   function message(text, failed) { notice = text; error = !!failed; }
   function validItem(item) {
@@ -172,5 +166,5 @@
     render();
   }
   function unbind() { if (view) view.dispose(); view = null; }
-  root.RNAssistantWorkspaceSources = Object.freeze({ bind: bind, unbind: unbind, setContext: setContext, hasUnfinished: unfinished, hasSources: hasSources });
+  root.RNAssistantWorkspaceSources = Object.freeze({ bind: bind, unbind: unbind, setContext: setContext, hasUnfinished: unfinished });
 }(window));

@@ -2,7 +2,7 @@
 
 Status: independent application foundation and early folder export, alongside the
 existing M0 proof, M1 manifest/source selection and M2 universal core/XLSX reader
-(2026-10-17). The same loader UI and JS core now belong to `web/data-templates`.
+(2026-10-18). The shared shell and JS core belong to `web/data-templates`.
 The exported source project runs without RNAssistant and includes its own entry,
 examples, semantic tests and export tool. A standalone XLSX queue, template editor,
 browser project template catalog, browser/native raw drafts and browser result saves
@@ -36,11 +36,14 @@ is required by the browser application.
 | Browser adapter | User-selected Files, browser execution/save capabilities and explicit limitations. No RNAssistant globals, path grants or native credentials. |
 | RNAssistant adapter | Agent workflow, generic workspace file/history owners, exact source capabilities, isolated execution and optional Office. The preparation queue supplies immutable inputs; it must not become another parser or business queue. |
 
-There is one UI and one engine. Browser `ui/browser.js` and native
-`web/js/app-data-templates.js` compose the same owner/view modules; native controls
-occupy named shell slots and the Templates view. Domain markup lives once in
-`ui/shell.js`, visual tokens in `styles/`, source state/File lifetime in
-`ui/loader.js`, draft state in `ui/draft-session.js`, and parsing in `core/`.
+There is one application shell and one engine. Browser `ui/browser.js` and native
+`web/js/app-data-templates.js` compose it with their own source adapters: browser
+File intake uses `ui/loader.js`; native project-backed selection and preparation
+occupy the named source/activity slots. The browser-only File chooser is omitted
+from the native screen, so it cannot suggest a second project source list. Both
+hosts show the selected project in the header and open their real project controls
+from its action. Domain markup lives in `ui/shell.js`, visual tokens in `styles/`,
+draft state in `ui/draft-session.js`, and parsing in `core/`.
 Changing the UI does not require a second UI implementation or C# recompilation.
 Future functional screens use this same boundary; workspace M7 must reuse it.
 

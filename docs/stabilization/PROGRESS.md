@@ -13,6 +13,15 @@ design decision; existing CodeOnly editing remains. Browser checks cover the
 affected layouts, catalog guards, library, composer, settings and 360/1440px
 navigation. Windows/Office/WebView2 behavior remains unqualified.
 
+The Data Templates source screen now has one chooser per host. RNAssistant uses
+its project-backed workspace selector and no longer loads the standalone-only
+File/drop intake; standalone keeps that intake. Both show the selected project
+in the header with a real project-controls action, and standalone uses the shared
+green palette. Targeted browser checks cover both source paths. The populated
+prototype tree and native processing UI are still separate open presentation work.
+The full standalone export test still times out at its mapping-conflict assertion
+on unchanged `0aacd1af`; [the check is tracked separately](RISK_REGISTER.md#data-templates-browser-mapping-check--2026-10-18).
+
 Open product decisions: project chats need an explicit document/project binding;
 the real Data Templates empty/project-connection state differs from the populated
 prototype fixture. These are visible differences, not hidden demo actions or

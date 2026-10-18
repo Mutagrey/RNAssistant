@@ -16,6 +16,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     await page.setContent(`<html lang="ru" data-theme="light"><style>${css}</style><div class="shell"><main class="content">${section}</main></div></html>`);
     await page.addScriptTag({ path: path.join(root, "js/app-accent.js") });
     await page.evaluate(() => {
+      window.RNAssistantWorkspaceDrafts = { bind() {}, unbind() {}, setContext() {}, sourcesChanged() {}, dispose() {} };
       window.calls = [];
       window.nativeState = { type: "rnassistant.workspaceState", contractVersion: 1, revision: 2, sourceQueueId: null,
         workspace: { bindingId: "binding-a", workspaceId: "ws-a", rootPath: "C:\\Reports", readOnly: true },
@@ -106,9 +107,16 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
         throw new Error("Unexpected bridge call: " + type);
       };
     });
-    for (const file of ["data-templates/ui/source-intake.js", "data-templates/ui/operation-view.js", "data-templates/ui/loader-view.js", "data-templates/ui/shell.js", "data-templates/ui/loader.js", "js/app-workspace-sources-view.js", "js/app-workspace-sources.js", "js/app-data-templates.js", "js/app-workspace-projects.js"])
+    for (const file of ["data-templates/ui/shell.js", "js/app-workspace-sources-view.js", "js/app-workspace-sources.js", "js/app-data-templates.js", "js/app-workspace-projects.js"])
       await page.addScriptTag({ path: path.join(root, file) });
     await page.evaluate(() => { RNAssistantDataTemplates.bind(); RNAssistantWorkspace.bind(); return RNAssistantWorkspace.show(); });
+    assert.equal(await page.locator("#dtFiles, #dtDropzone, #dtSourceQueue").count(), 0, "native source screen has one chooser");
+    assert.equal(await page.locator("#dtPageTitle").innerText(), "Отчётность");
+    assert.equal(await page.locator("#workspaceSettings").getAttribute("open"), null, "opened project does not occupy the source screen");
+    assert.equal(await page.locator("#workspaceSettings").isVisible(), false, "project card is not duplicated below the header");
+    await page.locator("#dtProjectHeaderButton").click();
+    assert.equal(await page.locator("#workspaceSettings").getAttribute("open"), "");
+    await page.locator("#dtProjectHeaderButton").click();
     await page.locator("#wsSourceBrowse").click();
     await page.locator("[data-ws-directory]").click();
     assert.equal(await page.locator("#wsBrowseList li").count(), 50);

@@ -23,24 +23,19 @@ const selected = (name, contents = "selection fixture") => ({ name, mimeType: "a
     const page = await browser.newPage({ viewport: { width: 1160, height: 940 } });
     const errors = [];
     page.on("pageerror", error => errors.push(error.message));
-    const index = read("index.html");
-    const css = [...index.matchAll(/<link rel="stylesheet" href="([^"?]+)[^"]*">/g)].map(match => read(match[1])).join("\n");
-    const section = index.match(/<section class="panel" id="tab-workspace">[\s\S]*?<\/section>/)[0].replace('class="panel"', 'class="panel active"');
-    await page.setContent(`<html lang="ru" data-theme="light"><style>${css}</style><div class="shell"><main class="content">${section}</main></div></html>`);
-    await page.addScriptTag({ path: path.join(root, "js/app-accent.js") });
-    await page.evaluate(() => {
-      window.nativeState = { type: "rnassistant.workspaceState", contractVersion: 1, revision: 0, workspace: null, project: null };
-      window.bridgeCalls = [];
-      window.send = async (type, payload) => {
-        bridgeCalls.push({ type, payload });
-        if (type !== "getWorkspaceState") throw new Error("File selection must not dispatch native writes");
-        return structuredClone(nativeState);
-      };
-    });
-    for (const file of ["data-templates/ui/source-intake.js", "data-templates/ui/operation-view.js", "data-templates/ui/loader-view.js", "data-templates/ui/shell.js", "data-templates/ui/loader.js", "js/app-workspace-sources-view.js", "js/app-workspace-sources.js", "js/app-data-templates.js", "js/app-workspace-projects.js"])
+    const index = read("data-templates/index.html");
+    const css = [...index.matchAll(/<link rel="stylesheet" href="([^"?]+)[^"]*">/g)]
+      .map(match => read("data-templates/" + match[1])).join("\n");
+    await page.setContent(`<html lang="ru"><style>${css}</style><main class="data-templates" id="dataTemplates"></main></html>`);
+    for (const file of ["data-templates/ui/source-intake.js", "data-templates/ui/operation-view.js", "data-templates/ui/loader-view.js", "data-templates/ui/shell.js", "data-templates/ui/loader.js"])
       await page.addScriptTag({ path: path.join(root, file) });
-    await page.evaluate(() => { RNAssistantDataTemplates.bind(); RNAssistantWorkspace.bind(); return RNAssistantWorkspace.show(); });
-    assert.equal(await page.locator("#workspaceSettings").getAttribute("open"), "");
+    await page.evaluate(() => {
+      const container = document.getElementById("dataTemplates");
+      DataTemplatesShell.mount(container, "core/index.html");
+      window.loader = DataTemplatesLoader.create();
+      loader.bind(container);
+    });
+    assert.equal(await page.locator("#workspaceSettings").count(), 0);
     assert.equal(await page.locator("#dtFiles").getAttribute("accept"), ".xlsx,.csv,.json");
     await page.locator("#dtTabSources").focus();
     await page.keyboard.press("ArrowRight");
@@ -94,7 +89,7 @@ const selected = (name, contents = "selection fixture") => ({ name, mimeType: "a
       document.getElementById("dtDropzone").dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: transfer }));
     });
     await page.waitForFunction(() => document.getElementById("dtFileCount").textContent === "3");
-    assert.deepEqual(await page.evaluate(() => bridgeCalls.map(call => call.type)), ["getWorkspaceState"], "selection performs no native file effect");
+    assert.equal(await page.evaluate(() => typeof RNAssistantWorkspace), "undefined", "standalone selection has no native bridge");
     console.log("PASS loader: folder picker preserves nested paths; file drop shares the same selection path");
 
     // A directory reader returns multiple batches; a late callback must not refill a cancelled/new context.
@@ -116,10 +111,10 @@ const selected = (name, contents = "selection fixture") => ({ name, mimeType: "a
     assert.equal(await page.locator('[data-operation-part="progress"]').getAttribute("value"), null, "unknown directory total must not invent a percentage");
     await page.locator("#dtTabMapping").click();
     assert.equal(await page.locator("#dtOperation").isVisible(), true, "operation view remains visible across domain sections");
-    await page.evaluate(() => { RNAssistantDataTemplates.unbind(); RNAssistantDataTemplates.bind(); });
+    await page.evaluate(() => { loader.unbind(); loader.bind(document.getElementById("dataTemplates")); });
     assert.equal(await page.locator("#dtOperation").getAttribute("data-state"), "running", "remounting presentation cannot cancel the owner operation");
     assert.equal(await page.locator("#dtFormatLabels span").count(), 3, "remount does not duplicate content");
-    await page.evaluate(() => RNAssistantWorkspace.show());
+    await page.evaluate(() => loader.setContext("", false, false));
     assert.equal(await page.locator("#dtOperation").getAttribute("data-state"), "running", "returning to the workspace tab refreshes its state without cancelling enumeration");
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     if (process.env.RNA_DATA_SCREENSHOTS)
@@ -135,9 +130,8 @@ const selected = (name, contents = "selection fixture") => ({ name, mimeType: "a
       dropEntries({ name: "Switch", isDirectory: true, createReader: () => ({ readEntries: done => { window.finishDirectory = done; } }) });
     });
     await page.waitForFunction(() => typeof window.finishDirectory === "function");
-    await page.evaluate(async () => {
-      nativeState = { ...nativeState, revision: 1, workspace: { bindingId: "binding-new", rootPath: "C:\\Reports", readOnly: true }, project: { name: "Reports", manifestPath: "project.json", formatVersion: 2, sources: [] } };
-      await RNAssistantWorkspace.show();
+    await page.evaluate(() => {
+      loader.setContext("binding-new", false, true);
       finishDirectory([fileEntry("wrong-project.json")]);
     });
     assert.equal(await page.locator("#dtSourceQueue").isVisible(), false);
@@ -234,16 +228,16 @@ const selected = (name, contents = "selection fixture") => ({ name, mimeType: "a
     for (const width of [1160, 740, 360]) {
       await page.setViewportSize({ width, height: 940 });
       for (const theme of ["light", "dark"]) {
-        await page.evaluate(value => document.documentElement.setAttribute("data-theme", value), theme);
+        await page.emulateMedia({ colorScheme: theme });
         for (const view of ["sources", "templates", "parameters", "mapping", "results", "format"]) {
           if (width <= 640) await page.locator("#dtViewSelect").selectOption(view);
           else await page.locator('[data-dt-view="' + view + '"]').click();
-          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth && document.getElementById("tab-workspace").scrollWidth <= innerWidth), true, width + " " + theme + " " + view + " fits");
+          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth && document.getElementById("dataTemplates").scrollWidth <= innerWidth), true, width + " " + theme + " " + view + " fits");
         }
         if (width <= 640) await page.locator("#dtViewSelect").selectOption("sources");
         else await page.locator("#dtTabSources").click();
         if (process.env.RNA_DATA_SCREENSHOTS && width !== 740) {
-          await page.locator("#tab-workspace").evaluate(panel => { panel.scrollTop = 0; });
+          await page.locator("#dataTemplates").evaluate(panel => { panel.scrollTop = 0; });
           await page.screenshot({ path: path.join(process.env.RNA_DATA_SCREENSHOTS, "sources-" + width + "-" + theme + ".png"), animations: "disabled" });
         }
       }

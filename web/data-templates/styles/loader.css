@@ -1,4 +1,8 @@
 .dt-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 22px; }
+.dt-header-copy { min-width: 0; }
+.dt-header-copy h2, .dt-header-copy .dt-subtitle { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dt-header-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex: none; }
+.dt-header-actions button { min-height: 34px; padding: 6px 12px; border-radius: var(--dt-control-radius); }
 .dt-eyebrow { margin: 0 0 8px; color: var(--dt-text-muted); font-size: 10px; letter-spacing: .12em; font-weight: 600; }
 .dt-header h2 { font-size: var(--dt-font-heading); font-weight: 600; letter-spacing: -.6px; line-height: 1.25; }
 .dt-subtitle { margin: 8px 0 0; color: var(--dt-text-muted); font-size: var(--dt-font-body); line-height: 1.5; }
@@ -142,7 +146,7 @@
   .dt-operation-actions { gap: var(--dt-space-sm); flex-direction: column; align-items: flex-end; }
   .dt-header { margin-bottom: 18px; align-items: flex-start; }
   .dt-header h2 { font-size: var(--dt-font-heading-narrow); }
-  .dt-header > .dt-phase { display: none; }
+  .dt-header-actions > .dt-phase { display: none; }
   .dt-tabs { display: none; }
   .dt-navigation { border: 0; margin: 18px 0 22px; }
   .dt-mobile-nav { display: flex; justify-content: space-between; align-items: center; gap: var(--dt-space-md); color: var(--dt-text-muted); font-size: var(--dt-font-small); }

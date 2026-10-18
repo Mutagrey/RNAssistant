@@ -1,18 +1,22 @@
 (function () {
   "use strict";
   // RNAssistant adapter for the shipped application. No project JS is evaluated here.
-  const loader = window.DataTemplatesLoader.create();
-  let context = null, busy = false;
-  function refresh() {
+  let context = null;
+  function renderHeader() {
+    const container = document.querySelector("#tab-workspace .workspace-projects");
+    if (!container || !container.querySelector("#dtPageTitle")) return;
     const workspace = context && context.workspace, project = context && context.project;
-    const key = workspace ? JSON.stringify([workspace.bindingId, project ? project.manifestPath : null]) : "";
-    loader.setContext(key, busy, window.RNAssistantWorkspaceSources.hasSources());
+    container.querySelector("#dtPageTitle").textContent = project ? project.name : "Данные и шаблоны";
+    container.querySelector("#dtPageContext").textContent = workspace
+      ? workspace.rootPath + (workspace.readOnly ? " · Только чтение" : "")
+      : "Откройте рабочую папку и проект";
+    container.querySelector(".dt-header .dt-phase").textContent = project ? "Проект открыт" : "Проект не выбран";
   }
   function setContext(state, pending) {
-    context = state; busy = !!pending;
+    context = state;
     window.RNAssistantWorkspaceSources.setContext(state, pending);
     window.RNAssistantWorkspaceDrafts.setContext(state, pending);
-    refresh();
+    renderHeader();
   }
   function mountProductLayout(container) {
     if (container.querySelector(":scope > .product-dt-main")) return;
@@ -35,20 +39,32 @@
   function bind(container) {
     container = container || document.querySelector("#tab-workspace .workspace-projects");
     if (!container) return;
-    window.DataTemplatesShell.mount(container, "data-templates/core/index.html");
-    container.querySelector(".dt-header .dt-phase").textContent = "Проект данных";
+    window.DataTemplatesShell.mount(container, "data-templates/core/index.html", { nativeSources: true });
+    container.querySelector("#dtSourceHeading").textContent = "Источники";
+    container.querySelector("#dtSourceIntro").textContent = "Выберите файлы в рабочей папке. Сохранение подборки и подготовка запускаются отдельно.";
     for (const name of ["Workspace", "Activity", "Sources"]) {
       const slot = container.querySelector('[data-dt-slot="' + name.toLowerCase() + '"]');
       if (!slot.childNodes.length) slot.append(document.getElementById("dtHost" + name).content.cloneNode(true));
     }
     mountProductLayout(container);
-    loader.bind(container);
+    const projectButton = container.querySelector("#dtProjectHeaderButton");
+    if (!projectButton.dataset.bound) {
+      const settings = container.querySelector("#workspaceSettings");
+      projectButton.dataset.bound = "true";
+      projectButton.setAttribute("aria-controls", "workspaceSettings");
+      projectButton.addEventListener("click", () => {
+        settings.open = !settings.open;
+        projectButton.setAttribute("aria-expanded", String(settings.open));
+        if (settings.open) settings.querySelector("summary").focus({ preventScroll: true });
+      });
+      settings.addEventListener("toggle", () => projectButton.setAttribute("aria-expanded", String(settings.open)));
+      projectButton.setAttribute("aria-expanded", String(settings.open));
+    }
     window.RNAssistantWorkspaceSources.bind(container);
     window.RNAssistantWorkspaceDrafts.bind(container);
-    refresh();
+    renderHeader();
   }
-  function unbind() { loader.unbind(); window.RNAssistantWorkspaceSources.unbind(); window.RNAssistantWorkspaceDrafts.unbind(); }
-  window.addEventListener("pagehide", () => { loader.dispose(); window.RNAssistantWorkspaceDrafts.dispose(); });
-  window.RNAssistantDataTemplates = Object.freeze({ bind: bind, unbind: unbind,
-    setContext: setContext, workspaceSourcesChanged: refresh });
+  function unbind() { window.RNAssistantWorkspaceSources.unbind(); window.RNAssistantWorkspaceDrafts.unbind(); }
+  window.addEventListener("pagehide", () => window.RNAssistantWorkspaceDrafts.dispose());
+  window.RNAssistantDataTemplates = Object.freeze({ bind: bind, unbind: unbind, setContext: setContext });
 }());

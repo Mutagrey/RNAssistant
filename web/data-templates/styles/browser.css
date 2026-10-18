@@ -1,20 +1,20 @@
 /* Standalone host palette and base controls. The domain UI uses the same tokens in RNAssistant. */
 :root {
   color-scheme: light dark;
-  --bg: #f8fafc; --panel: #fff; --secondary-bg: #f1f5f9;
-  --text: #203047; --muted: #64748b; --line: #dce3ec; --line-strong: #bdcbdc;
-  --control-border: #c5d0de; --accent: #407bdd; --accent-strong: #315f9f;
-  --button-accent-bg: #edf3fc; --button-primary-bg: #285887; --button-primary-text: #fff;
-  --button-primary-bg-hover: #234e79; --danger: #b7323d; --success: #26734d;
-  font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --bg: #e9ece8; --panel: #fff; --secondary-bg: #f7f8f5;
+  --text: #202d26; --muted: #68736b; --line: #e1e6de; --line-strong: #c7d0c4;
+  --control-border: #c7d0c4; --accent: #35684b; --accent-strong: #28563d;
+  --button-accent-bg: #e8f1e9; --button-primary-bg: #35684b; --button-primary-text: #fff;
+  --button-primary-bg-hover: #28563d; --danger: #ad443c; --success: #287348;
+  font: 14px/1.5 "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
   background: var(--bg); color: var(--text);
 }
 @media (prefers-color-scheme: dark) {
-  :root { --bg: #141c28; --panel: #1b2636; --secondary-bg: #243246;
-    --text: #e5ecf5; --muted: #a2b2c7; --line: #34445c; --line-strong: #536681;
-    --control-border: #52647e; --accent: #83b1fc; --accent-strong: #97bfff;
-    --button-accent-bg: #263e5e; --button-primary-bg: #386ca6; --button-primary-bg-hover: #447fbd;
-    --danger: #ff939c; --success: #83d6b2; }
+  :root { --bg: #151b17; --panel: #202723; --secondary-bg: #1b221e;
+    --text: #e2e8df; --muted: #a5b0a4; --line: #354035; --line-strong: #52604e;
+    --control-border: #52604e; --accent: #9bc8a5; --accent-strong: #b0d8b8;
+    --button-accent-bg: #2a3a2e; --button-primary-bg: #9bc8a5; --button-primary-text: #172c1d;
+    --button-primary-bg-hover: #b0d8b8; --danger: #f0aaa1; --success: #8bd4a2; }
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }

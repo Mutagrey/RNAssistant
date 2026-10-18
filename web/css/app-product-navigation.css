@@ -31,9 +31,13 @@
 .shell #tab-workspace .dt-tabs button[aria-selected="true"] { background: var(--surface-selected); color: var(--ink); font-weight: 600; }
 .shell #tab-workspace .product-dt-main { min-width: 0; min-height: 0; padding: 0 var(--page-inset) 32px; overflow: auto; }
 .shell #tab-workspace .dt-header { min-height: 52px; margin: 0 calc(-1 * var(--page-inset)) 20px; padding: 5px var(--page-inset); border-bottom: 1px solid var(--line); }
-.shell #tab-workspace .dt-header .dt-eyebrow { margin: 0; font-size: 10px; letter-spacing: 0; }
+.shell #tab-workspace .dt-header .dt-eyebrow { display: none; }
 .shell #tab-workspace .dt-header h2 { font-size: 15px; letter-spacing: -.2px; }
-.shell #tab-workspace .dt-header .dt-subtitle { display: none; }
+.shell #tab-workspace .dt-header .dt-subtitle { display: block; margin-top: 2px; font-size: 10px; }
+.shell #tab-workspace .dt-header-actions .dt-phase { display: none; }
+.shell #tab-workspace .dt-header-actions button { border: 0; background: var(--surface-subtle); color: var(--ink); }
+.shell #tab-workspace .dt-header-actions button:hover { background: var(--surface-hover); }
+.shell #tab-workspace #workspaceSettings[data-project-open="true"]:not([open]) { display: none; }
 @media (min-width: 821px) {
   .shell > .content > .panel { padding: 0; overflow: hidden; }
   .shell #tab-chat .chat-workspace,
