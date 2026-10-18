@@ -121,17 +121,6 @@
 }
 
 @media (max-width: 480px) {
-  .tabs {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .tab {
-    min-width: 0;
-    padding: 8px 4px;
-    font-size: 11.5px;
-  }
-
   .panel {
     padding: 8px;
   }

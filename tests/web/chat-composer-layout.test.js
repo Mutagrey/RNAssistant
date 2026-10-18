@@ -155,7 +155,7 @@ async function assertAboveResources(page, selector) {
     await page.locator("#addSelectionContextButton").click();
     assert.equal(await page.locator("#composerAddPicker").getAttribute("open"), null);
     await page.locator("#composerAddButton").click();
-    await page.locator(".chatbar").click({ position: { x: 10, y: 10 } });
+    await page.locator(".chatbar").click({ position: { x: 55, y: 10 } });
     assert.equal(await page.locator("#composerAddPicker").getAttribute("open"), null);
 
     await page.evaluate(() => { state.sending = true; renderSendControls(); });

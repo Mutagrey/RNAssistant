@@ -20,7 +20,7 @@ window.PrototypeMap = [
   ]},
   { title: "Материалы", icon: "files", owner: "app-artifact-* / viewer registry", nodes: [
     ["Каталог артефактов", "Материалы / каталог", "materials/all", "tab-artifacts", "Чат, документ и все документы — явный фильтр."],
-    ["Импорт / создание Plan, HTML, CSS, JS, JSON", "Каталог / добавить материал", "materials/create", "artifactCatalogImport, addPlanButton", "Одна кнопка создания, форматы внутри меню."],
+    ["Импорт / создание Plan, HTML, CSS, JS, JSON", "Каталог / добавить материал", "materials/create", "artifactCatalogImport, addPlanButton", "Одна кнопка добавления: импорт и форматы внутри меню."],
     ["Markdown / Plan", "Материал / просмотр", "materials/report", "app-text-viewer.js", "Общий каркас просмотрщиков."],
     ["HTML workspace / редактор", "Материал / код", "materials/code", "app-html-workspace-editor.js", "Редактор, предпросмотр и действия рядом."],
     ["Встроенный HTML / ECharts", "Материал / интерактивный отчёт", "materials/html", "app-html-workspace-preview.js", "Контент отделён от chrome просмотрщика."],

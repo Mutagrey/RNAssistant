@@ -16,7 +16,7 @@
 
   function normalize(value) {
     value = String(value || "").toLowerCase();
-    return choices.some(function (choice) { return choice.id === value; }) ? value : "blue";
+    return choices.some(function (choice) { return choice.id === value; }) ? value : "green";
   }
 
   function luminance(hex) {
@@ -58,7 +58,7 @@
   }
 
   window.RNAssistantAccents = { choices: choices, normalize: normalize, apply: apply };
-  var saved = "blue";
+  var saved = "green";
   try { saved = localStorage.getItem("rnassistant.ui.accent") || saved; } catch (error) { /* WebView profile reset. */ }
   apply(saved, false);
 }());

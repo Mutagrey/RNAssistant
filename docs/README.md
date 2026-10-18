@@ -40,7 +40,7 @@ direct cutover объясняют порядок уже выполненной �
 | Data Templates: independent app workspace, export, UI/core and host adapters | [Data Templates](data-templates.md), [ADR-0014](decisions/ADR-0014-data-templates.md) |
 | VBA safety, packages, UserForms | [Mutation journal](vba-mutation-journal.md), [packages](vba-tool-packages.md), [UserForms](vba-userforms.md) |
 | Desktop shell and Office target selection | [Desktop runtime](desktop-runtime.md) |
-| UI design, interactive prototype and migration ownership | [UI design](ui-design.md) — partial production presentation, not runtime contract |
+| UI design, interactive prototype and migration ownership | [UI design](ui-design.md) — product presentation, not runtime contract |
 | Проверка на Windows/Office и evidence | [Проверка](qualification.md), [release](operations/RELEASE_PROCESS.md) |
 | Versioning and release | [Versioning](operations/VERSIONING.md), [release](operations/RELEASE_PROCESS.md), [build evidence](operations/BUILD_EVIDENCE.md) |
 | Targeted checks | [Harness guide](../tests/RNAssistant.Harness/README.md) |

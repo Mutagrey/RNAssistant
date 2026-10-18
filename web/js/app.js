@@ -1,4 +1,15 @@
+function setMobileNavigationOpen(open) {
+  var shell = document.querySelector(".shell");
+  var button = $("productMobileMenuButton");
+  if (!shell || !button) return;
+  shell.classList.toggle("navigation-open", !!open);
+  button.setAttribute("aria-expanded", open ? "true" : "false");
+  button.setAttribute("aria-label", open ? "Закрыть навигацию" : "Открыть навигацию");
+  button.setAttribute("title", open ? "Закрыть навигацию" : "Открыть навигацию");
+}
+
 function switchTab(name) {
+  setMobileNavigationOpen(false);
   if ($("tab-instructions") && $("tab-instructions").classList.contains("active") && name !== "instructions" && typeof syncSelectedLibraryItem === "function") {
     syncSelectedLibraryItem();
   }
@@ -10,7 +21,7 @@ function switchTab(name) {
   if (changed && active && active.id === "tab-settings" && typeof discardModelCatalogPreview === "function") {
     discardModelCatalogPreview();
   }
-  Array.prototype.slice.call(document.querySelectorAll(".tab")).forEach(function (tab) {
+  Array.prototype.slice.call(document.querySelectorAll(".section-rail [data-section]")).forEach(function (tab) {
     var selected = tab.dataset.section === section;
     tab.classList.toggle("active", selected);
     if (selected) tab.setAttribute("aria-current", "page");
@@ -48,6 +59,24 @@ function switchTab(name) {
 }
 
 document.addEventListener("DOMContentLoaded", function () {
+  var mobileMenuButton = document.getElementById("productMobileMenuButton");
+  if (mobileMenuButton) mobileMenuButton.addEventListener("click", function () {
+    setMobileNavigationOpen(!document.querySelector(".shell").classList.contains("navigation-open"));
+  });
+  window.addEventListener("resize", function () {
+    if (window.innerWidth > 620) setMobileNavigationOpen(false);
+  });
+  document.querySelector(".content").addEventListener("click", function (event) {
+    var creationMenu = event.target.closest(".product-create-menu, .product-material-menu");
+    if (creationMenu && event.target.closest("button")) {
+      creationMenu.removeAttribute("open");
+      if (creationMenu.classList.contains("product-create-menu") && window.innerWidth <= 620) setMobileNavigationOpen(false);
+    }
+    if (window.innerWidth <= 620 && document.querySelector(".shell").classList.contains("navigation-open") &&
+        event.target.closest(".global-nav .settings-nav-button, .global-nav .dt-tabs button, .global-nav [role='treeitem']")) {
+      setMobileNavigationOpen(false);
+    }
+  });
   try {
     state.chatSidebarHidden = window.localStorage.getItem("rnassistant.chat.sidebar.hidden") === "1";
     state.htmlWorkspaceSidebarHidden = window.localStorage.getItem("rnassistant.artifacts.sidebar.hidden") === "1";
@@ -68,7 +97,7 @@ document.addEventListener("DOMContentLoaded", function () {
   });
   scheduleFocusStateReport();
 
-  Array.prototype.slice.call(document.querySelectorAll(".tab")).forEach(function (tab) {
+  Array.prototype.slice.call(document.querySelectorAll(".section-rail [data-section]")).forEach(function (tab) {
     tab.addEventListener("click", function () {
       switchTab(tab.dataset.defaultTab || tab.dataset.tab);
     });

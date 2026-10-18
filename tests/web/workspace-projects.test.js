@@ -15,9 +15,9 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     page.on("pageerror", error => errors.push(error.message));
     const index = read("index.html");
     const css = [...index.matchAll(/<link rel="stylesheet" href="([^"?]+)[^"]*">/g)].map(match => read(match[1])).join("\n");
-    const tabs = index.match(/<nav class="tabs"[\s\S]*?<\/nav>/)[0];
+    const tabs = index.match(/<nav class="section-rail"[\s\S]*?<\/nav>/)[0];
     const section = index.match(/<section class="panel" id="tab-workspace">[\s\S]*?<\/section>/)[0].replace('class="panel"', 'class="panel active"');
-    await page.setContent(`<style>${css}</style><div class="shell">${tabs}<main class="content">${section}</main></div>`);
+    await page.setContent(`<style>${css}</style><div class="shell app-shell">${tabs}<main class="content">${section}</main></div>`);
     await page.evaluate(() => {
       document.querySelector(".workspace-projects").append(document.getElementById("dtHostWorkspace").content.cloneNode(true));
       window.calls = [];
@@ -95,7 +95,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     for (const theme of ["light", "dark"]) {
       await page.evaluate(value => document.documentElement.setAttribute("data-theme", value), theme);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, "narrow " + theme + " layout fits");
-      assert.equal(await page.locator(".tabs .tab").evaluateAll(tabs => tabs.every(tab => {
+      assert.equal(await page.locator(".section-rail .rail-button").evaluateAll(tabs => tabs.every(tab => {
         const box = tab.getBoundingClientRect();
         return box.width >= tab.scrollWidth && box.left >= 0 && box.right <= innerWidth;
       })), true, "all section tabs fit at narrow width");

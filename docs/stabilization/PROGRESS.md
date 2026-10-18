@@ -1,17 +1,22 @@
 # Stabilization progress
 
-## New UI integration started — 2026-10-18
+## Product UI cutover — 2026-10-18
 
-The prototype at `403b375d` is the current visual reference; pin the final
-prototype revision after the parallel visual work finishes. The product now has its
-52-px section rail and the first real Materials presentation slice: shared viewer
-styling, existing catalog data and guarded actions. Remaining panels still use
-their current contents; Materials ownership grouping and the common editor header
-remain open for the cutover. Browser checks cover catalog geometry/guards and narrow
-workspace layout.
-Windows/Office/WebView2 behavior remains unqualified. The integration strategy is
-now one coordinated UI cutover, without an old-UI fallback or intermediate hybrid
-releases; screen wiring and checks can still proceed in focused internal passes.
+The prototype at `403b375d` is the visual reference. One coordinated cutover
+connects the new rail, navigation, palette, editors and viewers to existing
+feature owners in all six product sections, without an old-UI switch. The
+previously duplicated shell styles were replaced by shared prototype/product
+CSS. Materials creation/import is one menu and the catalog groups by ownership;
+the native Data Templates host reuses its one shared UI. Settings now separate
+context/attachments. UserForm creation was removed from the UI in line with the
+design decision; existing CodeOnly editing remains. Browser checks cover the
+affected layouts, catalog guards, library, composer, settings and 360/1440px
+navigation. Windows/Office/WebView2 behavior remains unqualified.
+
+Open product decisions: project chats need an explicit document/project binding;
+the real Data Templates empty/project-connection state differs from the populated
+prototype fixture. These are visible differences, not hidden demo actions or
+compatibility paths. The UI contract and owner map live in `docs/ui-design.md`.
 
 ## Independent Data Templates application and early export — 2026-10-16
 

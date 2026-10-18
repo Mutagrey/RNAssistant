@@ -1,0 +1,80 @@
+/* Product-only composition around the shared prototype palette and components. */
+.shell #tab-chat .chat-main { padding: 0; background: var(--surface); }
+.shell #tab-chat .chatbar { flex-basis: 52px; min-height: 52px; margin: 0; padding: 0 18px; border-bottom-color: var(--line); }
+.shell #tab-chat .messages { padding: 28px max(18px, calc((100% - 720px) / 2)) 24px; }
+.shell #tab-chat .chat-utility-dock,
+.shell #tab-chat .agent-approval-dock { width: min(780px, calc(100% - 36px)); margin-inline: auto; }
+.shell #tab-chat .composer {
+  width: min(780px, calc(100% - 36px));
+  min-height: 160px;
+  margin: 0 auto 18px;
+  padding: 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  box-shadow: 0 3px 14px #16271e0b;
+}
+.shell #tab-chat .composer:focus-within { border-color: var(--accent); box-shadow: 0 3px 14px #16271e0b, 0 0 0 2px var(--accent-soft); }
+.shell #tab-chat .chat-session-list { padding: 8px; }
+
+.shell .product-nav-heading strong { flex: 1; font-size: inherit; }
+.shell .product-create-menu { position: relative; margin-left: auto; }
+.shell .product-create-menu > summary,
+.shell .product-nav-action { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--ink-muted); font-size: 20px; cursor: pointer; list-style: none; }
+.shell .product-create-menu > summary::-webkit-details-marker { display: none; }
+.shell .product-create-menu > summary:hover,
+.shell .product-nav-action:hover { background: var(--surface-hover); color: var(--ink); }
+.shell .product-create-menu .tool-list-actions { position: absolute; top: 33px; right: 0; z-index: 30; display: grid; width: 185px; padding: 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); box-shadow: var(--shadow); }
+.shell .product-create-menu .tool-list-actions button { justify-content: flex-start; width: 100%; }
+.shell #tab-instructions .tool-list-controls,
+.shell #tab-vba .tool-list-controls { margin: 8px 0; }
+.shell #tab-instructions .tool-search,
+.shell #tab-vba .tool-search { border-color: var(--line); background: var(--surface); }
+.shell #instructionsList > .resource-tree-group { margin: 2px 0 8px; }
+.shell #instructionsList > .resource-tree-group > .resource-tree-group-title { min-height: 31px; padding: 4px 8px; border: 0; background: transparent; color: var(--ink-muted); font-size: 11px; font-weight: 400; }
+.shell #instructionsList > .resource-tree-group > .resource-tree-group-title .resource-tree-icon,
+.shell #instructionsList > .resource-tree-group > .resource-tree-group-title em { display: none; }
+.shell #instructionsList > .resource-tree-group > .resource-tree-group-children,
+.shell #instructionsList .resource-tree-subgroup > .resource-tree-group-children { margin: 0; padding: 0; border: 0; }
+.shell #instructionsList > .resource-tree-group > .resource-tree-group-children:has(> .resource-tree-subgroup:only-child) > .resource-tree-subgroup > .resource-tree-group-title { display: none; }
+.shell #instructionsList .tool-list-item.is-compact { min-height: 34px; padding: 7px 10px; border-radius: 8px; }
+.shell #instructionsList .tool-list-item.active { background: var(--surface-selected); color: var(--ink); }
+.shell #instructionsList .resource-tree-subgroup { margin: 0; }
+
+.shell #tab-instructions .instruction-editor,
+.shell #tab-instructions #toolEditorPanel,
+.shell #tab-vba .vba-editor { min-width: 0; padding: 0 18px 12px; border: 0; border-radius: 0; background: var(--surface); }
+.shell #tab-instructions .library-editor-head,
+.shell #tab-vba .vba-editor-head { min-height: 52px; margin: 0 -18px; padding: 5px 18px; border-bottom: 1px solid var(--line); background: var(--surface); }
+.shell #tab-instructions .resource-editor-title,
+.shell #tab-vba .resource-editor-title { color: var(--ink); font-size: 15px; font-weight: 600; }
+.shell #tab-instructions .resource-editor-meta,
+.shell #tab-vba .resource-editor-meta { color: var(--ink-muted); font-size: 10px; }
+.shell #tab-instructions .library-editor-mode-row,
+.shell #tab-vba .vba-mode-toggle { min-height: 37px; margin: 0 -18px; padding: 0 18px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: var(--surface); }
+.shell #tab-instructions .library-editor-mode-row .mode-toggle { border: 0; border-radius: 0; background: transparent; }
+.shell #tab-instructions .library-editor-mode-row .mode-button,
+.shell #tab-vba .vba-mode-button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--ink-muted); }
+.shell #tab-instructions .library-editor-mode-row .mode-button.active,
+.shell #tab-vba .vba-mode-button.active { border-bottom-color: var(--accent); color: var(--ink); }
+.shell #tab-instructions .library-editor-stage,
+.shell #tab-vba .vba-code-pane { min-height: 0; }
+.shell #tab-instructions .library-editor-stage > .product-code-editor,
+.shell #tab-vba .vba-code-pane > .product-code-editor { height: 100%; }
+.shell #tab-vba .tool-list-status { margin: 6px 10px 0; }
+.shell #tab-vba .vba-module-list { padding: 0 5px; }
+.shell #tab-vba .vba-editor.is-empty { background: var(--surface); }
+
+.shell #tab-workspace .data-templates { --dt-surface: var(--surface); --dt-surface-muted: var(--surface-subtle); --dt-border: var(--line); --dt-control-radius: 8px; }
+.shell #tab-workspace .dt-primary { background: var(--accent); color: var(--accent-ink); }
+.shell #tab-workspace .dt-primary:hover { background: var(--accent-hover); }
+.shell #tab-workspace .dt-drop-icon { background: var(--accent-soft); color: var(--accent); }
+.shell #tab-workspace .dt-project-card,
+.shell #tab-workspace .dt-card { border-color: var(--line); }
+
+@media (max-width: 620px) {
+  .shell #tab-chat .chatbar { padding-left: 48px; }
+  .shell #tab-chat .composer { width: calc(100% - 16px); min-height: 140px; margin-bottom: 8px; }
+  .shell #tab-chat .messages { padding-inline: 12px; }
+  .shell #tab-instructions .library-editor-head,
+  .shell #tab-vba .vba-editor-head { padding-left: 48px; }
+}

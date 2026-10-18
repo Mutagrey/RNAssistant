@@ -22,8 +22,8 @@ const context = {
 context.window = context;
 vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-accent.js"), "utf8"), context);
 
-assert.equal(properties["--accent"], "#3A63F2");
-assert.equal(attributes["data-accent"], "blue");
+assert.equal(properties["--accent"], "#35684B");
+assert.equal(attributes["data-accent"], "green");
 assert.deepEqual(Array.from(context.RNAssistantAccents.choices, choice => choice.id), [
   "blue", "turquoise", "green", "lime", "yellow", "orange", "pink", "magenta", "violet", "white"
 ]);
@@ -40,5 +40,5 @@ assert.equal(properties["--button-primary-text"], "#101216");
 attributes["data-theme"] = "light";
 context.RNAssistantAccents.apply("white", false);
 assert.equal(properties["--accent"], "#30343B");
-assert.equal(context.RNAssistantAccents.apply("invalid"), "blue");
+assert.equal(context.RNAssistantAccents.apply("invalid"), "green");
 console.log("PASS accent palette persists and follows light/dark theme");

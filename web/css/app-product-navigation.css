@@ -1,0 +1,96 @@
+/* Shared section rail for the prototype and the product shell. */
+.app-shell { display: flex; flex-direction: row; width: 100%; height: 100%; min-height: 0; }
+.section-rail { display: flex; flex: 0 0 52px; flex-direction: column; align-items: center; gap: 6px; width: 52px; padding: 12px 5px 10px; background: var(--canvas); border-right: 1px solid var(--line); overflow-x: hidden; overflow-y: auto; }
+.section-rail > .rail-button { display: flex; flex: 0 0 auto; flex-direction: column; align-items: center; justify-content: center; gap: 5px; width: 40px; min-height: 40px; padding: 8px; border: 0; border-radius: 12px; background: transparent; color: var(--ink-muted); }
+.section-rail > .rail-button svg { width: 20px; height: 20px; stroke-width: 1.55; }
+.section-rail > .rail-button span { font-size: 11px; line-height: 1.2; }
+.section-rail > .rail-button:hover { color: var(--ink); background: var(--surface-hover); }
+.section-rail > .rail-button[aria-current="page"] { color: var(--accent); background: var(--surface); box-shadow: 0 1px 4px #16271e0a; }
+.section-rail > .rail-divider { flex: 0 0 auto; width: 22px; height: 1px; margin: 4px auto; background: var(--line-strong); }
+.section-rail > .rail-settings { margin-top: auto; }
+.shell > .content { min-width: 0; height: 100%; }
+.shell > .content > .panel.active { background: var(--surface); color: var(--ink); font-family: var(--font); }
+.product-mobile-menu-button { display: none; }
+.shell .global-nav { min-width: 0; background: var(--surface-subtle); border-right: 1px solid var(--line); }
+.shell .product-nav-heading { display: flex; align-items: center; min-height: 52px; padding: 0 18px; margin: 0; border-bottom: 1px solid var(--line); color: var(--ink); font-size: 13px; font-weight: 600; }
+.shell .chat-sidebar-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0; min-height: 52px; padding: 0; background: var(--surface-subtle); }
+.shell .chat-sidebar-head .product-nav-heading { flex: 1; min-width: 0; border-bottom: 0; }
+.shell .chat-tree-toolbar { padding-right: 8px; }
+.shell .chat-search-wrap.is-open { flex: 1 0 100%; margin: 0 8px 8px; }
+.shell .instruction-layout .tool-list-panel { grid-template-rows: 52px auto minmax(0, 1fr); padding: 0 8px 6px; }
+.shell .instruction-layout .product-nav-heading { margin: 0 -8px; }
+.shell .vba-layout .tool-list-panel { grid-template-rows: 52px auto auto minmax(0, 1fr); padding: 0 8px 6px; }
+.shell .vba-layout .product-nav-heading { margin: 0 -8px; }
+.shell #tab-settings .settings-nav .product-nav-heading { margin: 0 -8px 4px; }
+.shell #tab-workspace .workspace-projects { display: grid; grid-template-columns: var(--nav-width) minmax(0, 1fr); width: 100%; max-width: none; height: 100%; min-height: 0; margin: 0; padding: 0; }
+.shell #tab-workspace .dt-navigation { display: flex; flex-direction: column; gap: 0; min-width: 0; min-height: 0; margin: 0; padding: 0 8px 8px; overflow-y: auto; border-bottom: 0; }
+.shell #tab-workspace .dt-navigation .product-nav-heading { flex: 0 0 52px; margin: 0 -8px 8px; }
+.shell #tab-workspace .dt-tabs { display: flex; flex-direction: column; gap: 3px; }
+.shell #tab-workspace .dt-tabs button { flex: 0 0 auto; justify-content: flex-start; width: 100%; min-height: 38px; padding: 0 12px; border: 0; border-radius: 9px; color: var(--ink-muted); text-align: left; font-size: 12px; }
+.shell #tab-workspace .dt-tabs button:hover { background: var(--surface-hover); color: var(--ink); }
+.shell #tab-workspace .dt-tabs button[aria-selected="true"] { background: var(--surface-selected); color: var(--ink); font-weight: 600; }
+.shell #tab-workspace .product-dt-main { min-width: 0; min-height: 0; padding: 0 var(--page-inset) 32px; overflow: auto; }
+.shell #tab-workspace .dt-header { min-height: 52px; margin: 0 calc(-1 * var(--page-inset)) 20px; padding: 5px var(--page-inset); border-bottom: 1px solid var(--line); }
+.shell #tab-workspace .dt-header .dt-eyebrow { margin: 0; font-size: 10px; letter-spacing: 0; }
+.shell #tab-workspace .dt-header h2 { font-size: 15px; letter-spacing: -.2px; }
+.shell #tab-workspace .dt-header .dt-subtitle { display: none; }
+@media (min-width: 821px) {
+  .shell > .content > .panel { padding: 0; overflow: hidden; }
+  .shell #tab-chat .chat-workspace,
+  .shell #tab-instructions .instruction-layout,
+  .shell #tab-vba .vba-layout,
+  .shell #tab-artifacts .html-workspace-layout { grid-template-columns: minmax(220px, var(--split-left, var(--nav-width))) 1px minmax(0, 1fr); }
+  .shell #tab-settings .settings-shell { grid-template-columns: var(--nav-width) minmax(0, 1fr); gap: 0; }
+  .shell #tab-settings .settings-nav { padding: 0 8px 8px; }
+  .shell #tab-settings .settings-nav-button { min-height: 39px; border-radius: 10px; padding: 0 12px; box-shadow: none; }
+  .shell #tab-settings .settings-nav-button.active { color: var(--ink); background: var(--surface-selected); font-weight: 600; }
+  .shell #tab-settings .settings-pages { padding: 18px var(--page-inset); }
+  .shell #tab-settings .settings-heading { order: -1; display: flex; flex-direction: column; justify-content: center; gap: 2px; min-height: 52px; margin: -18px calc(-1 * var(--page-inset)) 22px; padding: 4px var(--page-inset); border-bottom: 1px solid var(--line); }
+  .shell #tab-settings .settings-heading h2 { order: 2; color: var(--ink); font-size: 15px; }
+  .shell #tab-settings .settings-heading p { order: 1; color: var(--ink-muted); font-size: 10px; }
+  .shell #tab-settings .settings-page > :not(.settings-heading) { width: min(100%, 720px); margin-inline: auto; }
+  .shell #tab-settings .settings-page[data-settings-page="connection"] .form-grid { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .shell #tab-settings .product-settings-section { padding-top: 10px; }
+  .shell #tab-settings .product-settings-section h3 { margin: 0 0 12px; color: var(--ink); font-size: 16px; }
+  .shell #tab-settings .product-settings-section p { margin: 0 0 18px; color: var(--ink-muted); font-size: 12px; }
+  .shell #tab-settings .product-settings-advanced { margin-top: 12px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .shell #tab-settings .product-settings-advanced > summary { padding: 14px 0; color: var(--ink); font-size: 12px; font-weight: 600; cursor: pointer; }
+  .shell #tab-settings .product-settings-advanced > div { display: grid; gap: 12px; padding: 0 0 18px; }
+}
+@media (max-width: 820px) {
+  .shell #tab-workspace .workspace-projects { display: block; height: auto; }
+  .shell #tab-workspace .dt-navigation { padding: 8px var(--page-inset); border-bottom: 1px solid var(--line); }
+  .shell #tab-workspace .dt-navigation .product-nav-heading { display: none; }
+  .shell #tab-workspace .dt-tabs { flex-direction: row; flex-wrap: wrap; }
+  .shell #tab-workspace .dt-tabs button { width: auto; padding: 0 9px; }
+  .shell #tab-workspace .dt-mobile-nav { display: none; }
+  .shell #tab-workspace .product-dt-main { overflow: visible; }
+}
+@media (max-width: 620px) {
+  .shell { position: relative; min-width: 0; }
+  .shell > .section-rail { display: none; }
+  .shell > .content { width: 100%; }
+  .shell > .content > .panel.active { padding: 0; overflow: hidden; }
+  .shell .global-nav, .shell .split-layout > .splitter { display: none !important; }
+  .shell .chat-workspace, .shell .instruction-layout, .shell .vba-layout, .shell .html-workspace-layout,
+  .shell .settings-shell { display: grid; grid-template-columns: minmax(0, 1fr) !important; grid-template-rows: minmax(0, 1fr) !important; }
+  .shell .chat-main, .shell .instruction-editor, .shell .vba-editor, .shell .html-workspace-editor,
+  .shell .settings-pages { grid-column: 1 !important; grid-row: 1 !important; min-width: 0; }
+  .shell #tab-workspace .dt-navigation { display: none; }
+  .shell #tab-workspace .product-dt-main { padding-inline: var(--page-inset); }
+  .product-mobile-menu-button { position: absolute; top: 8px; left: 8px; z-index: 45; display: grid; place-items: center; width: 36px; height: 36px; min-height: 36px; padding: 0; border: 0; border-radius: 10px; background: var(--surface); color: var(--ink-muted); }
+  .product-mobile-menu-button svg { width: 18px; height: 18px; }
+  .shell #tab-chat .chatbar, .shell .resource-editor-head,
+  .shell #tab-workspace .dt-header, .shell #tab-settings .settings-heading { padding-left: 48px; }
+  .shell #tab-chat .composer-add-menu { width: min(320px, calc(100vw - 40px)); }
+  .shell.navigation-open > .section-rail { position: absolute; inset: 0 auto 0 0; z-index: 39; display: flex; height: 100%; padding-top: 52px; }
+  .shell.navigation-open .product-mobile-menu-button { left: 8px; background: var(--canvas); }
+  .shell.navigation-open > .content > .panel.active { overflow: visible; }
+  .shell.navigation-open .panel.active .global-nav { position: absolute; top: 0; right: 0; bottom: 0; left: 52px; z-index: 38; display: flex !important; width: calc(100% - 52px); height: 100%; max-height: 100%; overflow: auto; }
+  .shell.navigation-open .panel.active .tool-list-panel.global-nav,
+  .shell.navigation-open .panel.active .settings-nav.global-nav { display: grid !important; }
+  .shell.navigation-open .panel.active .chat-main, .shell.navigation-open .panel.active .instruction-editor,
+  .shell.navigation-open .panel.active .vba-editor, .shell.navigation-open .panel.active .html-workspace-editor,
+  .shell.navigation-open .panel.active .settings-pages, .shell.navigation-open #tab-workspace .product-dt-main { display: none !important; }
+  .shell.navigation-open #tab-workspace .dt-navigation.global-nav { display: flex !important; }
+}

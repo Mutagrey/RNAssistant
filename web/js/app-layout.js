@@ -1,4 +1,6 @@
 (function () {
+  var productNavigationKey = "rnassistant.ui.navigation.width";
+
   function numberAttr(node, name, fallback) {
     var value = Number(node.getAttribute(name));
     return isNaN(value) || value <= 0 ? fallback : value;
@@ -17,8 +19,31 @@
     return isNaN(value) || value <= 0 ? fallback : value;
   }
 
+  function isProductNavigation(layout) {
+    return !!(typeof layout.closest === "function" && layout.closest(".shell") && layout.hasAttribute("data-default-left"));
+  }
+
+  function setProductNavigationWidth(layout, width, persist) {
+    var available = layout.getBoundingClientRect().width || Math.max(0, window.innerWidth - 52);
+    var minimum = Math.max(240, numberAttr(layout, "data-min-left", 180));
+    var maximum = Math.min(available * 0.42, available - 280);
+    var next = Math.round(clamp(width, minimum, Math.max(minimum, maximum)));
+    layout.style.setProperty("--split-left", next + "px");
+    document.documentElement.style.setProperty("--nav-width", next + "px");
+    if (persist) {
+      Array.prototype.slice.call(document.querySelectorAll(".shell .split-layout[data-default-left]")).forEach(function (other) {
+        other.style.setProperty("--split-left", next + "px");
+      });
+      try { window.localStorage.setItem(productNavigationKey, String(next)); } catch (error) { /* Storage may be disabled. */ }
+    }
+  }
+
   function setSplitRatio(layout, ratio, persist) {
     var box = layout.getBoundingClientRect();
+    if (isProductNavigation(layout)) {
+      setProductNavigationWidth(layout, ratio * box.width, persist);
+      return;
+    }
     if (box.width <= 0) {
       layout.style.setProperty("--split-left", (ratio * 100).toFixed(3) + "%");
       return;
@@ -42,6 +67,12 @@
   }
 
   function restoreSplitRatio(layout) {
+    if (isProductNavigation(layout)) {
+      var width = numberAttr(layout, "data-default-left", 310);
+      try { width = Number(window.localStorage.getItem(productNavigationKey)) || width; } catch (error) { /* Use default. */ }
+      setProductNavigationWidth(layout, width, false);
+      return;
+    }
     var fallback = ratioAttr(layout, "data-default-ratio", 0.25);
     var saved = fallback;
     try {
@@ -121,8 +152,12 @@
   };
 
   window.addEventListener("resize", function () {
+    if (typeof window.refreshSplitPanes === "function") window.refreshSplitPanes();
     if (typeof refreshCodeEditors === "function") {
       refreshCodeEditors();
     }
+  });
+  window.addEventListener("storage", function (event) {
+    if (event.key === productNavigationKey && typeof window.refreshSplitPanes === "function") window.refreshSplitPanes();
   });
 }());

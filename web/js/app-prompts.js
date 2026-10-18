@@ -241,7 +241,7 @@
   }
 
   function appendPromptGroups(parent, rows, activeKey) {
-    var prompts = resourceGroup("library:prompts", "Промпты", rows.length, false, "prompt");
+    var prompts = resourceGroup("library:prompts", "Инструкции", rows.length, false, "prompt");
     parent.appendChild(prompts);
     ["Основные", "Служебные"].forEach(function (name) {
       var grouped = rows.filter(function (row) { return row.value.group === name; });
@@ -286,13 +286,13 @@
     var prompts = rows.filter(function (row) { return row.kind === "prompt"; });
     var skills = rows.filter(function (row) { return row.kind === "skill"; });
     var tools = rows.filter(function (row) { return row.kind === "tool"; });
-    if (prompts.length) appendPromptGroups(list, prompts, key);
     if (skills.length) appendHostedGroups(list, "skills", "Навыки", skills, key);
     if (tools.length) {
       var toolRoot = resourceGroup("library:tools", "Инструменты", tools.length, false, "tool");
       list.appendChild(toolRoot);
       appendHostGroups(toolRoot.treeChildren, "tools", tools, key);
     }
+    if (prompts.length) appendPromptGroups(list, prompts, key);
     renderInstructionEditor();
   }
 

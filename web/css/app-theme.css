@@ -273,19 +273,6 @@ html[data-theme="dark"] textarea::placeholder {
   color: #7f8998;
 }
 
-html[data-theme="dark"] .tabs {
-  background: rgba(16, 18, 22, .97);
-}
-
-html[data-theme="dark"] .tab,
-html[data-theme="dark"] .tab.active {
-  background: var(--bg);
-}
-
-html[data-theme="dark"] .tab:hover {
-  background: #191d23;
-}
-
 html[data-theme="dark"] .toolbar-menu-body,
 html[data-theme="dark"] .form-grid label > input:not([type="checkbox"]),
 html[data-theme="dark"] .form-grid label > select,

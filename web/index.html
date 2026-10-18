@@ -61,27 +61,31 @@
   <link rel="stylesheet" href="css/app-agent-data.css?v=json-height-20260929-1">
   <link rel="stylesheet" href="css/app-theme.css?v=user-bubble-20261012-2">
   <link rel="stylesheet" href="css/app-product-tokens.css?v=product-ui-20261018-1">
-  <link rel="stylesheet" href="css/app-product-shell.css?v=product-ui-20261018-1">
+  <link rel="stylesheet" href="css/app-product-navigation.css?v=ui-cutover-20261018-1">
+  <link rel="stylesheet" href="css/app-product-components.css?v=ui-cutover-20261018-1">
   <link rel="stylesheet" href="css/app-product-viewers.css?v=product-ui-20261018-1">
   <link rel="stylesheet" href="css/app-product-materials.css?v=product-ui-20261018-1">
+  <link rel="stylesheet" href="css/app-product-screens.css?v=ui-cutover-20261018-1">
 </head>
 <body>
-  <div class="shell">
-    <nav class="tabs" aria-label="Разделы ассистента">
-      <button class="tab active" data-section="chat" data-tab="chat" aria-label="Рабочая область" title="Рабочая область" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7M5 8.5V20a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8.5M9 21v-8h6v8"/></svg></button>
-      <button class="tab" data-section="artifacts" data-tab="artifacts" aria-label="Материалы" title="Материалы"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h9l4 4v13H7Z"/><path d="M16 3v5h4M3 7v14h12"/></svg></button>
-      <button class="tab" id="libraryRootTab" data-section="library" data-default-tab="instructions" aria-label="Библиотека" title="Библиотека"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6a3 3 0 0 1 3 3v14a3 3 0 0 0-3-3H4ZM13 7a3 3 0 0 1 3-3h5v14h-5a3 3 0 0 0-3 3"/></svg></button>
-      <button class="tab" data-section="vba" data-tab="vba" aria-label="VBA" title="VBA"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 6-6 6 6 6m8-12 6 6-6 6M14 3l-4 18"/></svg></button>
-      <span class="product-rail-divider" role="separator"></span>
-      <button class="tab" data-section="workspace" data-tab="workspace" aria-label="Данные и шаблоны" title="Данные и шаблоны"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18M7 16v-5M12 16V7M17 16V4"/></svg></button>
-      <button class="tab product-rail-settings" data-section="settings" data-tab="settings" aria-label="Настройки" title="Настройки"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.7 3-.5 2.2-1.4.8-2.2-.7-2.3 4 1.7 1.5v1.6L3.3 14l2.3 4 2.2-.7 1.4.8.5 2.2h4.6l.5-2.2 1.4-.8 2.2.7 2.3-4-1.7-1.6v-1.6l1.7-1.5-2.3-4-2.2.7-1.4-.8-.5-2.2Z"/><circle cx="12" cy="11.7" r="3.2"/></svg></button>
+  <div class="shell app-shell">
+    <button type="button" class="product-mobile-menu-button" id="productMobileMenuButton" aria-label="Открыть навигацию" aria-expanded="false" title="Открыть навигацию"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+    <nav class="section-rail" aria-label="Разделы ассистента">
+      <button class="rail-button active" data-section="chat" data-tab="chat" aria-label="Рабочая область" title="Рабочая область" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7M5 8.5V20a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8.5M9 21v-8h6v8"/></svg></button>
+      <button class="rail-button" data-section="artifacts" data-tab="artifacts" aria-label="Материалы" title="Материалы"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h9l4 4v13H7Z"/><path d="M16 3v5h4M3 7v14h12"/></svg></button>
+      <button class="rail-button" id="libraryRootTab" data-section="library" data-default-tab="instructions" aria-label="Библиотека" title="Библиотека"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6a3 3 0 0 1 3 3v14a3 3 0 0 0-3-3H4ZM13 7a3 3 0 0 1 3-3h5v14h-5a3 3 0 0 0-3 3"/></svg></button>
+      <button class="rail-button" data-section="vba" data-tab="vba" aria-label="VBA" title="VBA"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 6-6 6 6 6m8-12 6 6-6 6M14 3l-4 18"/></svg></button>
+      <span class="rail-divider" role="separator"></span>
+      <button class="rail-button" data-section="workspace" data-tab="workspace" aria-label="Данные и шаблоны" title="Данные и шаблоны"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18M7 16v-5M12 16V7M17 16V4"/></svg></button>
+      <button class="rail-button rail-settings" data-section="settings" data-tab="settings" aria-label="Настройки" title="Настройки"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.7 3-.5 2.2-1.4.8-2.2-.7-2.3 4 1.7 1.5v1.6L3.3 14l2.3 4 2.2-.7 1.4.8.5 2.2h4.6l.5-2.2 1.4-.8 2.2.7 2.3-4-1.7-1.6v-1.6l1.7-1.5-2.3-4-2.2.7-1.4-.8-.5-2.2Z"/><circle cx="12" cy="11.7" r="3.2"/></svg></button>
     </nav>
 
     <main class="content">
       <section class="panel active" id="tab-chat">
-        <div class="chat-workspace split-layout" id="chatLayout" data-split-key="chat-tree" data-default-ratio="0.27" data-min-left="240" data-min-ratio="0.2" data-max-ratio="0.42">
-          <aside class="chat-sidebar" aria-label="Документы и чаты">
+        <div class="chat-workspace split-layout" id="chatLayout" data-default-left="310" data-min-left="240">
+          <aside class="chat-sidebar global-nav" aria-label="Документы и чаты">
             <div class="chat-sidebar-head">
+              <strong class="product-nav-heading">Документы Office</strong>
               <div class="chat-tree-toolbar">
                 <button type="button" class="icon-button secondary" id="toggleChatSearchButton" title="Поиск по чатам" aria-label="Поиск по чатам" aria-expanded="false" aria-controls="chatSearchWrap"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m16 16 4 4"/></svg></button>
                 <button type="button" class="icon-button secondary" id="newChatButton" title="Новый чат" aria-label="Новый чат"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg></button>
@@ -459,19 +463,15 @@
         </div>
 
       <section class="panel" id="tab-instructions">
-        <div class="tool-layout instruction-layout split-layout" id="instructionsLayout" data-split-key="instructions" data-default-ratio="0.3" data-min-left="180" data-min-ratio="0.2" data-max-ratio="0.48">
-          <div class="tool-list-panel surface-panel">
-            <div class="tool-list-controls">
+        <div class="tool-layout instruction-layout split-layout" id="instructionsLayout" data-default-left="310" data-min-left="240">
+          <div class="tool-list-panel surface-panel global-nav">
+            <div class="product-nav-heading"><strong>Библиотека</strong><details class="product-create-menu"><summary title="Создать в библиотеке" aria-label="Создать в библиотеке">+</summary>
               <div class="tool-list-actions">
-                <button class="primary icon-text-button" id="addSkillButton" type="button" title="Новый навык">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
-                  <span>Навык</span>
-                </button>
-                <button class="secondary icon-text-button" id="addToolButton" type="button" title="Новый инструмент">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
-                  <span>Инструмент</span>
-                </button>
+                <button class="primary icon-text-button" id="addSkillButton" type="button" title="Новый навык"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg><span>Навык</span></button>
+                <button class="secondary icon-text-button" id="addToolButton" type="button" title="Новый инструмент"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg><span>Инструмент</span></button>
               </div>
+            </details></div>
+            <div class="tool-list-controls">
               <input class="tool-search" id="skillSearchInput" placeholder="Поиск в библиотеке..." autocomplete="off">
             </div>
             <aside class="tool-list" id="instructionsList"></aside>
@@ -553,23 +553,12 @@
       </section>
 
       <section class="panel" id="tab-vba">
-        <div class="tool-layout vba-layout split-layout" id="vbaLayout" data-split-key="vba" data-default-ratio="0.28" data-min-left="180" data-min-ratio="0.18" data-max-ratio="0.46">
-          <aside class="tool-list-panel vba-list-panel">
+        <div class="tool-layout vba-layout split-layout" id="vbaLayout" data-default-left="310" data-min-left="240">
+          <aside class="tool-list-panel vba-list-panel global-nav">
+            <div class="product-nav-heading"><strong>VBA</strong><button class="product-nav-action" id="refreshVbaButton" type="button" title="Обновить модули" aria-label="Обновить модули">↻</button></div>
             <div class="tool-list-status" id="vbaStatus">VBA-проект не загружен.</div>
             <div class="tool-list-controls">
               <input class="tool-search" id="vbaModuleSearchInput" placeholder="Поиск модулей..." autocomplete="off">
-              <div class="tool-list-actions">
-                <button class="secondary" id="addVbaUserFormButton" type="button">+ UserForm</button>
-                <button class="secondary" id="refreshVbaButton" type="button">Загрузить VBA</button>
-              </div>
-              <div class="vba-create hidden" id="vbaCreateBox">
-                <input class="tool-search" id="vbaCreateNameInput" maxlength="40" placeholder="UserForm1" autocomplete="off">
-                <div class="tool-list-actions">
-                  <button class="accent-soft" id="confirmVbaCreateButton" type="button">Создать</button>
-                  <button class="secondary" id="cancelVbaCreateButton" type="button">Отмена</button>
-                </div>
-                <small>Создаётся пустая форма; в RNAssistant редактируется её code-behind.</small>
-              </div>
             </div>
             <select class="hidden" id="vbaModuleSelect" aria-hidden="true" tabindex="-1"></select>
             <div class="tool-list vba-module-list" id="vbaModuleList" role="tree" aria-label="VBA модули"></div>
@@ -703,12 +692,22 @@
       </section>
 
       <section class="panel" id="tab-artifacts">
-        <div class="tool-layout html-workspace-layout split-layout" id="htmlWorkspaceLayout" data-split-key="html-workspace" data-default-ratio="0.3" data-min-left="180" data-min-ratio="0.18" data-max-ratio="0.5">
-          <aside class="tool-list-panel html-workspace-sidebar" id="htmlWorkspaceSidebar">
+        <div class="tool-layout html-workspace-layout split-layout" id="htmlWorkspaceLayout" data-default-left="310" data-min-left="240">
+          <aside class="tool-list-panel html-workspace-sidebar global-nav" id="htmlWorkspaceSidebar">
             <div class="artifact-catalog-toolbar">
               <strong>Материалы</strong>
               <label><select id="artifactCatalogScope" aria-label="Принадлежность материалов"><option value="chat">В чате</option><option value="document">В документе</option><option value="all">Все документы</option></select></label>
-              <button type="button" id="artifactCatalogImport" title="Добавить материал" aria-label="Добавить материал">＋</button>
+              <details class="html-workspace-menu html-workspace-create-menu product-material-menu">
+                <summary title="Добавить материал" aria-label="Добавить материал">＋</summary>
+                <div class="html-workspace-menu-items">
+                  <button id="artifactCatalogImport" type="button">Импортировать файл</button>
+                  <button id="addPlanButton" type="button">План</button>
+                  <button id="addHtmlFileButton" type="button">HTML-страницу</button>
+                  <button id="addCssFileButton" type="button">Стили CSS</button>
+                  <button id="addJsFileButton" type="button">Скрипт JS</button>
+                  <button id="addHtmlDataButton" type="button">Данные JSON</button>
+                </div>
+              </details>
               <input type="file" id="artifactCatalogFile" hidden>
             </div>
             <div class="artifact-catalog-filters">
@@ -718,16 +717,6 @@
             </div>
             <div class="tool-list-controls">
               <input class="tool-search" id="htmlWorkspaceSearchInput" type="search" maxlength="200" aria-label="Поиск артефактов" placeholder="Поиск артефактов..." autocomplete="off">
-              <details class="html-workspace-menu html-workspace-create-menu">
-                <summary>＋ Создать</summary>
-                <div class="html-workspace-menu-items">
-                  <button id="addPlanButton" type="button">План</button>
-                  <button id="addHtmlFileButton" type="button">HTML-страницу</button>
-                  <button id="addCssFileButton" type="button">Стили CSS</button>
-                  <button id="addJsFileButton" type="button">Скрипт JS</button>
-                  <button id="addHtmlDataButton" type="button">Данные JSON</button>
-                </div>
-              </details>
               <div class="html-workspace-create hidden" id="htmlWorkspaceCreateBox">
                 <input class="tool-search" id="htmlWorkspaceCreateNameInput" autocomplete="off">
                 <div class="tool-list-actions">
@@ -817,13 +806,15 @@
 
       <section class="panel" id="tab-settings">
         <div class="settings-shell">
-          <nav class="settings-nav" aria-label="Разделы настроек">
+          <nav class="settings-nav global-nav" aria-label="Разделы настроек">
+            <h2 class="product-nav-heading">Настройки</h2>
             <button class="settings-nav-button active" type="button" data-settings-page="connection">Подключение</button>
             <button class="settings-nav-button" type="button" data-settings-page="model">Модель</button>
+            <button class="settings-nav-button" type="button" data-settings-page="context">Контекст и вложения</button>
             <button class="settings-nav-button" type="button" data-settings-page="agent">Агент</button>
             <button class="settings-nav-button" type="button" data-settings-page="interface">Интерфейс</button>
             <button class="settings-nav-button" type="button" data-settings-page="protection">Защита</button>
-            <button class="settings-nav-button" type="button" data-settings-page="service">Диагностика</button>
+            <button class="settings-nav-button" type="button" data-settings-page="service">Помощь и обслуживание</button>
             <span class="settings-nav-version" id="appVersion" aria-label="Версия и commit RNAssistant">—</span>
           </nav>
 
@@ -831,14 +822,17 @@
             <section class="settings-page active" data-settings-page="connection">
               <div class="settings-heading">
                 <h2>Подключение</h2>
-                <p>Адрес API, ключ и дополнительные HTTP-заголовки.</p>
+                <p>Настройки</p>
               </div>
+              <div class="product-settings-section"><h3>Провайдер</h3><p>Адрес API, каталог моделей и ключ подключения.</p></div>
               <div class="form-grid two-columns">
                 <label><span>Адрес API</span><input id="baseUrlInput" autocomplete="off" placeholder="https://host"></label>
                 <label><span>URL каталога моделей</span><input id="modelsConfigUrlInput" autocomplete="off" placeholder="Относительно адреса API, например /v1/models"></label>
                 <label><span>API-ключ</span><input id="apiKeyInput" type="password" autocomplete="off" placeholder="Оставьте пустым, чтобы не менять"><small id="apiKeyStatus"></small></label>
-                <label class="wide"><span>HTTP-заголовки</span><textarea id="headersInput" rows="4" placeholder="Header-Name: value"></textarea></label>
-                <label class="wide"><span>Разрешённые origins HTML workspace</span><textarea id="htmlNetworkOriginsInput" rows="3" placeholder="https://api.example.com"></textarea><small>По одному HTTP(S) origin на строку. Удалите строку, чтобы отозвать доступ.</small></label>
+                <details class="product-settings-advanced wide"><summary>Дополнительные параметры</summary><div>
+                  <label><span>HTTP-заголовки</span><textarea id="headersInput" rows="4" placeholder="Header-Name: value"></textarea></label>
+                  <label><span>Разрешённые origins HTML workspace</span><textarea id="htmlNetworkOriginsInput" rows="3" placeholder="https://api.example.com"></textarea><small>По одному HTTP(S) origin на строку. Удалите строку, чтобы отозвать доступ.</small></label>
+                </div></details>
               </div>
             </section>
 
@@ -867,17 +861,6 @@
                 <div class="status" id="modelStatus"></div>
                 <div class="model-capability-list" id="modelCapabilityList"></div>
               </section>
-              <section class="model-settings-section" aria-labelledby="attachmentModelPriorityTitle">
-                <div class="model-capability-heading">
-                  <h3 id="attachmentModelPriorityTitle">Маршрутизация вложений</h3>
-                  <p>Если модель чата не поддерживает вложение, используется первая подходящая модель из списка. Ей передаются только текущий запрос и файлы.</p>
-                </div>
-                <div class="attachment-model-priority" id="attachmentModelPriorityList"></div>
-                <div class="form-grid two-columns model-attachment-fields">
-                  <label><span>Лимит ответа helper, токены</span><input id="attachmentHelperMaxTokensInput" type="number" min="0" step="1"><small>0 — автоматически, до 1024 токенов на пакет вложений.</small></label>
-                  <label><span>Media-контекст, токены</span><input id="attachmentEvidenceMaxTokensInput" type="number" min="0" step="1"><small>0 — автоматически, до 20% входного бюджета, максимум 2048.</small></label>
-                </div>
-              </section>
               <section class="model-settings-section" aria-labelledby="modelRequestTitle">
                 <div class="model-capability-heading">
                   <h3 id="modelRequestTitle">Параметры запроса</h3>
@@ -887,10 +870,30 @@
                   <label><span>Таймаут запроса, сек</span><input id="requestTimeoutInput" type="number" min="30"></label>
                   <label><span>Temperature</span><input id="temperatureInput" type="number" min="0" max="2" step="0.1"></label>
                   <label><span>Top P</span><input id="topPInput" type="number" min="0" max="1" step="0.01"></label>
+                  <label class="checkline"><input id="streamInput" type="checkbox"><span>Потоковый API (SSE)</span></label>
+                </div>
+              </section>
+            </section>
+
+            <section class="settings-page" data-settings-page="context">
+              <div class="settings-heading"><h2>Контекст и вложения</h2><p>Бюджет запроса и маршрутизация файлов.</p></div>
+              <section class="model-settings-section" aria-labelledby="contextBudgetTitle">
+                <div class="model-capability-heading"><h3 id="contextBudgetTitle">Окно контекста</h3></div>
+                <div class="form-grid two-columns model-request-fields">
                   <label><span>Окно контекста, токены (0 = по модели)</span><input id="contextLimitInput" type="number" min="0"></label>
                   <label><span>Коэффициент без API usage</span><input id="tokenEstimateMultiplierInput" type="number" min="0.25" max="4" step="0.05"><small id="tokenEstimateCalibrationStatus">×1,00 · UTF-8/4</small></label>
                   <label class="checkline"><input id="autoCalibrateTokenEstimateInput" type="checkbox"><span>Автокалибровка по API usage для каждой модели</span></label>
-                  <label class="checkline"><input id="streamInput" type="checkbox"><span>Потоковый API (SSE)</span></label>
+                </div>
+              </section>
+              <section class="model-settings-section" aria-labelledby="attachmentModelPriorityTitle">
+                <div class="model-capability-heading">
+                  <h3 id="attachmentModelPriorityTitle">Маршрутизация вложений</h3>
+                  <p>Если модель чата не поддерживает вложение, используется первая подходящая модель из списка. Ей передаются только текущий запрос и файлы.</p>
+                </div>
+                <div class="attachment-model-priority" id="attachmentModelPriorityList"></div>
+                <div class="form-grid two-columns model-attachment-fields">
+                  <label><span>Лимит ответа helper, токены</span><input id="attachmentHelperMaxTokensInput" type="number" min="0" step="1"><small>0 — автоматически, до 1024 токенов на пакет вложений.</small></label>
+                  <label><span>Media-контекст, токены</span><input id="attachmentEvidenceMaxTokensInput" type="number" min="0" step="1"><small>0 — автоматически, до 20% входного бюджета, максимум 2048.</small></label>
                 </div>
               </section>
             </section>

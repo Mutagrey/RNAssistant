@@ -63,11 +63,8 @@ function renderVbaProject() {
   moduleSelect.disabled = state.bridgeUnavailable || !renderedModules;
   backupSelect.disabled = state.bridgeUnavailable || !state.vba.backups.length;
   $("vbaModuleSearchInput").disabled = state.bridgeUnavailable;
-  $("addVbaUserFormButton").disabled = state.bridgeUnavailable;
   $("refreshVbaButton").disabled = state.bridgeUnavailable;
   $("refreshVbaEmptyButton").disabled = state.bridgeUnavailable;
-  $("vbaCreateNameInput").disabled = state.bridgeUnavailable;
-  $("confirmVbaCreateButton").disabled = state.bridgeUnavailable;
   var editorPanel = document.querySelector(".vba-editor");
   var emptyState = $("vbaEmptyState");
   var isEmpty = state.bridgeUnavailable || !renderedModules;

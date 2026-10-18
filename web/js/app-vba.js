@@ -182,50 +182,6 @@ function refreshVbaProject() {
   return vbaActions.refreshProject();
 }
 
-function nextVbaUserFormName() {
-  var names = {};
-  (state.vba.modules || []).forEach(function (module) {
-    names[vbaModuleName(module).toLowerCase()] = true;
-  });
-  var index = 1;
-  while (names[("UserForm" + index).toLowerCase()]) index += 1;
-  return "UserForm" + index;
-}
-
-function showVbaUserFormCreate() {
-  if (state.bridgeUnavailable) return;
-  if (state.vbaEditorDirty) {
-    window.alert("Сначала сохраните изменения текущего VBA-модуля.");
-    return;
-  }
-  var box = $("vbaCreateBox");
-  var input = $("vbaCreateNameInput");
-  box.classList.remove("hidden");
-  input.value = nextVbaUserFormName();
-  input.focus();
-  input.select();
-}
-
-function hideVbaUserFormCreate() {
-  $("vbaCreateBox").classList.add("hidden");
-}
-
-async function createVbaUserForm() {
-  if (state.bridgeUnavailable || state.vbaEditorDirty) return false;
-  var input = $("vbaCreateNameInput");
-  var moduleName = (input.value || "").trim();
-  if (!/^[A-Za-z][A-Za-z0-9_]{0,39}$/.test(moduleName)) {
-    window.alert("Имя UserForm должно начинаться с латинской буквы и содержать только буквы, цифры или underscore (до 40 символов).");
-    input.focus();
-    return false;
-  }
-  $("vbaModuleSearchInput").value = "";
-  state.vbaEditorMode = "edit";
-  var created = await vbaActions.createModule(moduleName, "MSForm", "Option Explicit\n");
-  if (created) hideVbaUserFormCreate();
-  return created;
-}
-
 async function deleteVbaModule(moduleName) {
   var module = (state.vba.modules || []).filter(function (item) {
     return vbaModuleName(item) === moduleName;
@@ -301,18 +257,6 @@ function toggleVbaSidebar() {
 function bindVbaActions() {
   $("refreshVbaButton").addEventListener("click", refreshVbaProject);
   $("refreshVbaEmptyButton").addEventListener("click", refreshVbaProject);
-  $("addVbaUserFormButton").addEventListener("click", showVbaUserFormCreate);
-  $("confirmVbaCreateButton").addEventListener("click", createVbaUserForm);
-  $("cancelVbaCreateButton").addEventListener("click", hideVbaUserFormCreate);
-  $("vbaCreateNameInput").addEventListener("keydown", function (event) {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      createVbaUserForm();
-    } else if (event.key === "Escape") {
-      event.preventDefault();
-      hideVbaUserFormCreate();
-    }
-  });
   $("vbaModuleSearchInput").addEventListener("input", renderVbaProject);
   $("vbaModuleSelect").addEventListener("change", function () {
     renderSelectedVbaModule();

@@ -17,7 +17,7 @@
 
   function addEditorClass(cm, id, config) {
     var wrapper = cm.getWrapperElement();
-    wrapper.className += " rn-code-editor rn-code-editor-" + id;
+    wrapper.className += " rn-code-editor product-code-editor rn-code-editor-" + id;
     wrapper.style.minHeight = (typeof config.minHeight === "number" ? config.minHeight : 160) + "px";
   }
 

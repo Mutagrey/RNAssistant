@@ -120,7 +120,9 @@ Owner: Web test fixtures. Rechecked 2026-10-15:
 `artifact-library-projection.test.js` passes; its old asset-key and selection
 failures are closed. `html-preview-reuse.test.js` still omits `missingVendors`
 from its stub and fails before its intended checks. The same source omission in
-`html-workspace-layout.test.js` was recorded earlier; that script was not rerun.
+`html-workspace-layout.test.js` was rerun on clean `main` and the UI cutover
+checkout on 2026-10-18; both fail at the same missing `missingVendors` stub
+before layout assertions. Refresh this fixture separately.
 
 The HTML false-success investigation also reached all eight behavioral groups in
 `html-workspace-source.test.js` and `html-workspace-write.test.js` before their

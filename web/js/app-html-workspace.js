@@ -661,7 +661,7 @@
         if (button.getAttribute("data-html-mode") === "preview") workspaceActions.refreshAuto();
       });
     });
-    var artifactsTab = document.querySelector('.tab[data-tab="artifacts"]');
+    var artifactsTab = document.querySelector('.section-rail [data-tab="artifacts"]');
     if (artifactsTab) artifactsTab.addEventListener("click", refreshArtifactsTab);
   }
 

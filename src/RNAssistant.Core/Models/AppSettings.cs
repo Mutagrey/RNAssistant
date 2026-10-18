@@ -95,7 +95,7 @@ namespace RNAssistant.Core.Models
             if (string.Equals(value, Magenta, StringComparison.OrdinalIgnoreCase)) return Magenta;
             if (string.Equals(value, Violet, StringComparison.OrdinalIgnoreCase)) return Violet;
             if (string.Equals(value, White, StringComparison.OrdinalIgnoreCase)) return White;
-            return Blue;
+            return Green;
         }
     }
 
@@ -428,7 +428,7 @@ namespace RNAssistant.Core.Models
             ScreenCaptureProtectionEnabled = true;
             UiFontScale = 1.0;
             UiTheme = UiThemes.Light;
-            UiAccent = UiAccents.Blue;
+            UiAccent = UiAccents.Green;
             DesktopWindowWidth = DefaultDesktopWindowWidth;
             CustomHeaders = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             ModelImageSupportOverrides = new Dictionary<string, bool?>(StringComparer.OrdinalIgnoreCase);

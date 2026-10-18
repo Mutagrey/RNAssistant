@@ -10,7 +10,6 @@
     return result;
   }
   function status(text) { el("Status").textContent = text || ""; }
-  function kindLabel(kind) { return ({ html_workspace: "HTML-проекты", markdown: "Документы", file: "Файлы и JSON", attachment: "Файлы", image: "Изображения", plan_document: "Планы", chart: "Графики" })[kind] || kind; }
   function icon(kind) { return ({ html_workspace: "html", plan_document: "plan", attachment: "file" })[kind] || kind; }
   function current(id, nav) { return id === state.activeChatId && nav === state.chatNavigationVersion; }
   function operationId() { return Array.from(crypto.getRandomValues(new Uint8Array(16)), function (n) { return n.toString(16).padStart(2, "0"); }).join(""); }
@@ -192,19 +191,24 @@
   }
   function tree(nodes, htmlChildren, options) {
     if (!response) return null;
-    var groups = {}, roots = [], byId = {};
-    response.items.forEach(function (item) {
-      var docKey = el("Scope").value === "all" ? item.documentId : "";
-      var groupId = docKey + ":" + item.kind;
-      if (!groups[groupId]) {
-        groups[groupId] = { key: "catalog-group::" + groupId, groupKey: "catalog-group::" + groupId,
-          title: kindLabel(item.kind), iconKind: "folder", expanded: !collapsed["catalog-group::" + groupId], children: [] };
-        if (docKey) {
-          if (!groups[docKey]) { groups[docKey] = { key: "catalog-document::" + docKey, groupKey: "catalog-document::" + docKey,
-            title: item.documentTitle, iconKind: "folder", expanded: !collapsed["catalog-document::" + docKey], children: [] }; roots.push(groups[docKey]); }
-          groups[docKey].children.push(groups[groupId]);
-        } else roots.push(groups[groupId]);
+    var groups = {}, byId = {}, chatGroup = null, documentGroup = null, otherGroup = null;
+    function makeGroup(key, title) {
+      return { key: key, groupKey: key, title: title, iconKind: "folder", expanded: !collapsed[key], children: [] };
+    }
+    function owner(item) {
+      if (item.linked) return chatGroup || (chatGroup = makeGroup("catalog-owner::chat", "Этот чат"));
+      if (item.documentId && item.documentId !== response.documentId) {
+        if (!otherGroup) otherGroup = makeGroup("catalog-owner::all", "Все документы");
+        var documentKey = "catalog-document::" + item.documentId;
+        if (!groups[documentKey]) {
+          groups[documentKey] = makeGroup(documentKey, item.documentTitle || item.documentId);
+          otherGroup.children.push(groups[documentKey]);
+        }
+        return groups[documentKey];
       }
+      return documentGroup || (documentGroup = makeGroup("catalog-owner::document", "В документе"));
+    }
+    response.items.forEach(function (item) {
       var artifact = localArtifact(item), artifactId = artifact && (artifact.Id || artifact.id);
       if (artifactId) byId[artifactId] = item.resourceUri;
       var entry = { key: "catalog::" + item.resourceUri, itemType: "artifact", itemId: item.resourceUri,
@@ -214,19 +218,24 @@
       if (item.kind === "html_workspace" && item.documentId === response.documentId && item.selected) {
         entry.children = htmlChildren; entry.groupKey = "catalog::" + item.resourceUri;
       }
-      groups[groupId].children.push(entry);
+      owner(item).children.push(entry);
     });
     // Preserve chat-only generated/system artifacts and a new, unsaved workspace.
     if (el("Scope").value === "chat") nodes.forEach(function (group) {
       if (group.groupKey === "artifacts:html") {
         if (!response.items.some(function (item) { return item.kind === "html_workspace" && item.selected; })) {
-          group.title = "Новый HTML-проект"; roots.push(group);
+          group.title = "Новый HTML-проект";
+          (chatGroup || (chatGroup = makeGroup("catalog-owner::chat", "Этот чат"))).children.push(group);
         }
       } else {
         var children = (group.children || []).filter(function (child) { return !byId[child.itemId]; });
-        if (children.length) roots.push(Object.assign({}, group, { children: children }));
+        if (children.length) {
+          var target = chatGroup || (chatGroup = makeGroup("catalog-owner::chat", "Этот чат"));
+          target.children.push.apply(target.children, children);
+        }
       }
     });
+    var roots = [chatGroup, documentGroup, otherGroup].filter(Boolean);
     var selection = options.selected || {}, selectedKey = selected ? "catalog::" + selected.resourceUri : null;
     if (el("Preview").hidden && selection.id) {
       selectedKey = byId[selection.id] ? "catalog::" + byId[selection.id] : null;

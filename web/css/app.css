@@ -256,39 +256,6 @@ button.icon-button.is-busy svg {
   button.is-busy::after { animation: none; }
 }
 
-.tabs {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  border-bottom: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.96);
-}
-
-.tab {
-  min-height: 34px;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  border-radius: 0;
-  padding: 0 4px;
-  background: #fff;
-  color: var(--muted);
-  overflow: hidden;
-  font-size: 12.5px;
-  font-weight: var(--title-font-weight);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.tab:hover {
-  background: #f4f7fb;
-  color: var(--text);
-}
-
-.tab.active {
-  color: var(--accent);
-  border-bottom-color: var(--accent);
-  background: #fff;
-}
-
 .content {
   flex: 1;
   min-height: 0;

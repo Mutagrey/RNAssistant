@@ -148,8 +148,8 @@ function fixture(loadPrompts = true) {
     const f = fixture(); f.context.state.skills = [{ Id: "excel.audit", Host: "Excel", BuiltIn: false, Enabled: true }];
     f.context.state.tools = [{ Id: "excel.validate", Host: "Excel", BuiltIn: true, Enabled: true }];
     f.context.libraryVisible = true; f.context.renderInstructions();
-    assert.deepEqual(f.get("instructionsList").childNodes.map(group => group.options.title), ["Промпты", "Навыки", "Инструменты"]);
-    assert.deepEqual(f.groups.filter(group => ["Промпты", "Навыки", "Инструменты"].includes(group.title)).map(group => group.icon), ["prompt", "skill", "tool"]);
+    assert.deepEqual(f.get("instructionsList").childNodes.map(group => group.options.title), ["Навыки", "Инструменты", "Инструкции"]);
+    assert.deepEqual(f.groups.filter(group => ["Инструкции", "Навыки", "Инструменты"].includes(group.title)).map(group => group.icon), ["skill", "tool", "prompt"]);
     assert.ok(f.groups.some(group => group.title === "Excel" && group.icon === "host"));
     assert.ok(f.items.some(item => item.title === "excel.audit" && item.icon === "skill"));
     assert.ok(f.items.some(item => item.title === "excel.validate" && item.icon === "tool"));

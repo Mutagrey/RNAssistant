@@ -62,6 +62,9 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     for (const file of ["vendor/wunderbaum.umd.min.js", "app-tree-adapter.js", "vendor/purify.min.js", "vendor/marked.min.js", "app-markdown.js", "app-viewer-registry.js", "app-text-viewer.js", "app-json-viewer.js", "app-html-workspace-tree.js", "app-artifact-versions.js", "app-artifact-catalog.js", "app-layout.js"])
       await page.addScriptTag({ content: read("js/" + file) });
     await page.evaluate(() => { RNAssistantArtifactCatalog.show("document"); initializeSplitPanes(); });
+    await page.locator("#htmlWorkspaceTree").getByText("В документе", { exact: true }).waitFor();
+    assert.equal(await page.locator("#htmlWorkspaceTree").getByText("HTML-проекты", { exact: true }).count(), 0,
+      "catalog groups by ownership rather than format");
     await page.getByText("Отчёт по продажам", { exact: true }).click();
     await page.locator("#artifactCatalogPreviewBody iframe").waitFor({ state: "visible" });
     assert.equal(await page.evaluate(() => historyRequests.length), 0, "history stays lazy");
