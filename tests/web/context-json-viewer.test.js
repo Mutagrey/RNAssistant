@@ -61,7 +61,6 @@ const rawHost = add("promptContextInspectorRawText", "div", rawDetails);
 const rawButton = add("loadPromptContextRawButton", "button", body);
 const toolHost = add("toolRunOutput", "div", body);
 toolHost.classList.add("tool-run-output", "is-text");
-const vbaHost = add("vbaMetaBox", "div", body);
 
 const copied = [];
 const context = vm.createContext({
@@ -101,13 +100,6 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   assert.equal(contextRequests[0].type, "addTextContext");
   assert.equal(contextRequests[0].payload.role, "SuppliedData");
   assert.equal(contextRequests[1].payload.role, "UserInstruction");
-  context.state.tools = [{ Id: "demo" }];
-  context.state.selectedToolIndex = 0;
-  context.syncSelectedToolFromEditor = () => {};
-  context.selectedToolContext = () => "Draft tool data";
-  await context.addSelectedToolContextToContext();
-  assert.equal(contextRequests[2].payload.role, "SuppliedData", "attaching a draft definition cannot activate instructions");
-  assert.equal(contextRequests[2].payload.kind, "tool_definition");
   context.applyContextResponse = applyContextResponse;
   console.log("PASS context bridge: explicit roles distinguish data from user instructions");
 
@@ -163,14 +155,6 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   assert.ok(toolHost.classList.contains("is-text"));
   console.log("PASS read-only JSON surfaces: tool result uses viewer and status/error stays inert text");
 
-  const vbaModule = { name: "Module1", type: "StdModule", lineCount: 42 };
-  context.renderVbaMetadata(vbaModule);
-  assert.ok(vbaHost.firstElementChild.classList.contains("rn-json-viewer"));
-  assert.match(vbaHost.textContent, /Module1/);
-  context.renderVbaMetadata(null);
-  assert.equal(vbaHost.childNodes.length, 0);
-  console.log("PASS read-only JSON surfaces: VBA metadata uses shared viewer and clears on deselection");
-
   const actionOrder = [];
   const actionState = { tools: [{ Id: "demo" }], selectedToolIndex: 0, selectedToolComponentIndex: 0, activeChatId: "chat" };
   const actions = context.RNAssistantToolActions.create({
@@ -195,9 +179,9 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   const indexSource = fs.readFileSync(path.join(__dirname, "../../web/index.html"), "utf8");
   const contextSource = fs.readFileSync(path.join(__dirname, "../../web/js/app-context.js"), "utf8");
   const inspectorSource = fs.readFileSync(path.join(__dirname, "../../web/js/app-context-inspector.js"), "utf8");
-  assert.equal(/<pre[^>]+(?:contextBox|promptContextInspectorRawText|toolRunOutput|vbaMetaBox)/.test(indexSource), false);
+  assert.equal(/<pre[^>]+(?:contextBox|promptContextInspectorRawText|toolRunOutput)/.test(indexSource), false);
   assert.equal(/contextBox"\)\.textContent/.test(contextSource), false);
   assert.equal(/promptContextInspectorRawText"\)\.textContent/.test(inspectorSource), false);
   console.log("PASS context JSON viewer: replaced plain-pre paths are absent");
-  console.log("OK 7/7");
+  console.log("OK 5/5");
 })().catch(error => { console.error(error); process.exitCode = 1; });

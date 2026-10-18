@@ -30,6 +30,8 @@ const read = file => fs.readFileSync(path.join(root, "web", file), "utf8");
       $("vbaToolEditor").classList.remove("hidden");
       $("toolComponentSelect").add(new Option("RNA_NewTool · StdModule"));
       $("toolComponentNameInput").value = "RNA_NewTool";
+      $("toolNameDisplay").value = "excel.format_sales";
+      $("toolIdInput").value = "excel.format_sales";
       window.codeEditor = CodeMirror.fromTextArea($("toolCodeInput"), { lineNumbers: true });
       codeEditor.getWrapperElement().classList.add("rn-code-editor", "rn-code-editor-toolCodeInput");
       codeEditor.setValue("Option Explicit\n\nPublic Sub Execute()\n    Debug.Print \"hello\"\nEnd Sub");
@@ -49,7 +51,7 @@ const read = file => fs.readFileSync(path.join(root, "web", file), "utf8");
           document.documentElement.dataset.theme = theme;
           Object.assign($("toolEditorPanel").style, { width: pane + "px", height: "800px" });
         }, { pane, theme });
-        for (const tab of ["implementation", "test", "implementation"]) {
+        for (const tab of ["main", "implementation", "test", "implementation"]) {
           await page.evaluate(tab => {
             document.querySelectorAll("[data-tool-page-view]").forEach(node =>
               node.classList.toggle("hidden", node.dataset.toolPageView !== tab));
@@ -68,6 +70,8 @@ const read = file => fs.readFileSync(path.join(root, "web", file), "utf8");
               overflow: controls.filter(node => { const r = rect(node); return r.x < pane.x - 1 || r.right > pane.right + 1; }).map(node => node.id || node.className),
               toolbar: rect(document.querySelector(".component-toolbar")),
               fields: rect($("toolComponentNameInput")),
+              name: rect($("toolNameDisplay")),
+              identifier: rect($("toolIdInput")),
               editor: rect(codeEditor.getWrapperElement()),
               testWidth: rect(active).width,
               inputs: controls.filter(node => node.tagName !== "BUTTON").map(node => rect(node).height),
@@ -75,7 +79,10 @@ const read = file => fs.readFileSync(path.join(root, "web", file), "utf8");
             };
           }, tab);
           assert.deepEqual(geometry.overflow, [], `${viewport}/${pane} ${theme} ${tab}: controls contained`);
-          if (tab === "implementation") {
+          if (tab === "main") {
+            assert.ok(geometry.identifier.y > geometry.name.bottom, "ID follows displayed name as in demo");
+            assert.ok(geometry.name.width >= pane - 60, "name uses the editor width");
+          } else if (tab === "implementation") {
             assert.ok(geometry.fields.y >= geometry.toolbar.bottom, "metadata follows toolbar vertically");
             assert.ok(geometry.editor.width >= pane - 10, "code uses the full pane width");
             assert.ok(geometry.editor.y > geometry.fields.bottom, "code follows metadata");

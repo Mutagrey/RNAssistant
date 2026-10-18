@@ -20,11 +20,9 @@ function cancelVbaModuleRead() {
 
 function renderVbaProject() {
   var moduleSelect = $("vbaModuleSelect");
-  var backupSelect = $("vbaBackupSelect");
   var moduleList = $("vbaModuleList");
   var query = (($("vbaModuleSearchInput") && $("vbaModuleSearchInput").value) || "").trim().toLowerCase();
   moduleSelect.innerHTML = "";
-  backupSelect.innerHTML = "";
   if (moduleList) moduleList.innerHTML = "";
   var renderedModules = 0;
   var filteredModules = [];
@@ -46,22 +44,7 @@ function renderVbaProject() {
     moduleSelect.appendChild(emptyModule);
   }
 
-  state.vba.backups.forEach(function (backup) {
-    var option = document.createElement("option");
-    option.value = backup.BackupId || backup.backupId || "";
-    option.textContent = (backup.ModuleName || backup.moduleName || "module") + " - " + (backup.CreatedUtc || backup.createdUtc || "");
-    backupSelect.appendChild(option);
-  });
-
-  if (!state.vba.backups.length) {
-    var emptyBackup = document.createElement("option");
-    emptyBackup.value = "";
-    emptyBackup.textContent = "Резервных копий нет";
-    backupSelect.appendChild(emptyBackup);
-  }
-
   moduleSelect.disabled = state.bridgeUnavailable || !renderedModules;
-  backupSelect.disabled = state.bridgeUnavailable || !state.vba.backups.length;
   $("vbaModuleSearchInput").disabled = state.bridgeUnavailable;
   $("refreshVbaButton").disabled = state.bridgeUnavailable;
   $("refreshVbaEmptyButton").disabled = state.bridgeUnavailable;
@@ -260,7 +243,8 @@ function renderSelectedVbaModule() {
   }
   $("vbaModuleTitle").textContent = module ? vbaModuleName(module) : "Модуль не выбран";
   $("vbaModuleMeta").textContent = module ? vbaModuleMetaText(module) + (loaded ? "" : (loading ? " - читаю код..." : " - код не загружен")) : "";
-  renderVbaMetadata(module);
+  $("vbaHistoryCurrentText").textContent = loaded ? "Код прочитан из связанного документа Office." : (loading ? "Код загружается из связанного документа Office." : "Код ещё не загружен.");
+  renderVbaBackupChoices(module);
   renderVbaDiff({
     summary: module && loaded ? "Нажмите «Показать diff», чтобы посмотреть изменения." : (module ? "Код модуля еще не загружен." : (state.bridgeUnavailable ? "Office bridge недоступен." : "Модуль не выбран.")),
     lines: []
@@ -271,29 +255,33 @@ function renderSelectedVbaModule() {
   $("previewVbaDiffButton").disabled = !module || !loaded || state.bridgeUnavailable;
   $("saveVbaButton").disabled = !module || !loaded || state.bridgeUnavailable;
   $("restoreVbaButton").disabled = state.bridgeUnavailable || !$("vbaBackupSelect").value || !module || !loaded;
-  $("reviewVbaButton").disabled = !module || !loaded || state.bridgeUnavailable;
   applyVbaMode();
   updateVbaMacroSuggestion();
 }
 
-function renderVbaMetadata(module) {
-  var target = $("vbaMetaBox");
-  if (!target) return;
-  if (window.RNAssistantViewerRegistry) window.RNAssistantViewerRegistry.unmount(target);
-  if (!module) return;
-  if (!window.RNAssistantViewerRegistry || !window.RNAssistantViewerRegistry.has("json")) {
-    throw new Error("JSON viewer is unavailable.");
-  }
-  window.RNAssistantViewerRegistry.mount("json", target, {
-    text: JSON.stringify({
-      name: vbaModuleName(module),
-      type: module.type || module.Type,
-      lineCount: module.lineCount || module.LineCount
-    }, null, 2),
-    completeness: "full",
-    mode: "tree",
-    onCopy: window.copyTextResult
+function renderVbaBackupChoices(module) {
+  var select = $("vbaBackupSelect");
+  var selectedId = select.value;
+  var name = vbaModuleName(module).toLowerCase();
+  var backups = (state.vba.backups || []).filter(function (backup) {
+    return name && String(backup.ModuleName || backup.moduleName || "").toLowerCase() === name;
   });
+  select.innerHTML = "";
+  backups.forEach(function (backup) {
+    var option = document.createElement("option");
+    option.value = backup.BackupId || backup.backupId || "";
+    option.textContent = backup.CreatedUtc || backup.createdUtc || "Резервная копия";
+    select.appendChild(option);
+  });
+  if (!backups.length) {
+    var empty = document.createElement("option");
+    empty.value = "";
+    empty.textContent = "Резервных копий этого модуля нет";
+    select.appendChild(empty);
+  } else if (selectedId && selectHasOption(select, selectedId)) {
+    select.value = selectedId;
+  }
+  select.disabled = state.bridgeUnavailable || !backups.length;
 }
 
 function selectedVbaModule() {

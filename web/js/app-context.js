@@ -270,28 +270,6 @@ async function addTextContext(role, kind, title, reference, text, details) {
   return applied;
 }
 
-async function addSelectedToolContextToContext() {
-  syncSelectedToolFromEditor();
-  var skill = state.tools[state.selectedToolIndex];
-  var context = selectedToolContext();
-  if (!skill || !context) {
-    return false;
-  }
-
-  await addTextContext(
-    "SuppliedData",
-    "tool_definition",
-    "Tool: " + (skill.Id || "tool"),
-    "tool:" + (skill.Id || "tool"),
-    context,
-    {
-      type: "tool_definition",
-      id: skill.Id || ""
-    });
-  log("Контекст инструмента добавлен в чат.");
-  return true;
-}
-
 async function removeContextItem(id) {
   if (!id) {
     return;

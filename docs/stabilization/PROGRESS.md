@@ -10,7 +10,12 @@ source preparation/queue remains in an extra menu, while unsaved-selection rever
 was removed by product decision. Browser checks cover project selection, source
 queue/recovery and catalog navigation. Native template validation/editing,
 dictionary editing, processing/results, project-scoped chats, and internal visual
-parity for the other main tabs remain open. Project chats must not inherit the
+parity for the other main tabs remain open. The Library tool editor now uses the
+demo's sections and displays its ID as the read-only name. Tool enabled state is
+in its menu; real duplication remains. The VBA editor now has module-scoped
+history, with chat handoff and technical metadata removed by product decision.
+These UI changes have browser/host-neutral checks but no Office qualification.
+Project chats must not inherit the
 current Office document's actions. Other old-only project functions require an
 individual product decision before being added to the new screen. No Windows or
 Office qualification is claimed for this slice.

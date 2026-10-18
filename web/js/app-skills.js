@@ -431,7 +431,7 @@ function updateSkillSourceReadOnly() {
   var readOnly = !!state.bridgeUnavailable || !skill || !!skill.BuiltIn || !skill._sourceLoaded[path];
   if ($("skillBodyInput")) $("skillBodyInput").readOnly = readOnly;
   if (typeof setCodeEditorReadOnly === "function") setCodeEditorReadOnly("skillBodyInput", readOnly);
-  ["cloneSkillButton", "copySkillContextButton", "askSkillBuilderButton"].forEach(function (id) {
+  ["cloneSkillButton", "copySkillContextButton"].forEach(function (id) {
     if ($(id)) $(id).disabled = !!state.bridgeUnavailable || !!skillWriteOperation || !skill || !skill._sourceLoaded[""];
   });
 }
@@ -708,28 +708,6 @@ function selectedSkillContext() {
   return sections.join("\n");
 }
 
-async function addSelectedSkillContextToContext() {
-  syncSelectedSkillFromEditor();
-  var skill = state.skills[state.selectedSkillIndex];
-  var context = selectedSkillContext();
-  if (!skill || !context) {
-    return false;
-  }
-
-  await addTextContext(
-    "SuppliedData",
-    "skill_definition",
-    "Skill: " + (skill.Id || "skill"),
-    "skill:" + (skill.Id || "skill"),
-    context,
-    {
-      type: "skill_definition",
-      id: skill.Id || ""
-    });
-  log("Контекст навыка добавлен в чат.");
-  return true;
-}
-
 function closeSkillMutationUpload(operation) {
   if (!operation || operation.closed || !operation.lease || !/^[a-f0-9]{64}$/.test(operation.lease.leaseId)) return Promise.resolve();
   operation.closed = true;
@@ -751,7 +729,7 @@ function updateSkillWriteControls() {
   ["skillIdInput", "skillHostInput"].forEach(function (id) { if ($(id)) $(id).disabled = disabled || !!(skill && skill.References && skill.References.length); });
   if ($("addSkillButton")) $("addSkillButton").disabled = unavailable;
   if ($("deleteSkillReferenceButton")) $("deleteSkillReferenceButton").disabled = disabled || !selectedSkillReferencePath(skill);
-  ["cloneSkillButton", "copySkillContextButton", "askSkillBuilderButton"].forEach(function (id) {
+  ["cloneSkillButton", "copySkillContextButton"].forEach(function (id) {
     if ($(id)) $(id).disabled = unavailable || !skill || !skill._sourceLoaded[""];
   });
 }
@@ -1097,19 +1075,6 @@ function bindSkillActions() {
   $("copySkillContextButton").addEventListener("click", function () {
     copyText(selectedSkillContext());
     log("Контекст навыка скопирован.");
-  });
-
-  $("askSkillBuilderButton").addEventListener("click", function () {
-    addSelectedSkillContextToContext().then(function (added) {
-      if (!added) {
-        return;
-      }
-
-      switchTab("chat");
-      setChatInputText("Отредактируй RNAssistant-навык из добавленного контекста. При необходимости вызови common.skills_upsert только с изменёнными полями после подтверждения.", true);
-    }).catch(function (error) {
-      log(error.detail || error.message, "error");
-    });
   });
 
   ["skillEnabledInput", "skillIdInput", "skillHostInput", "skillDescriptionInput"].forEach(function (id) {

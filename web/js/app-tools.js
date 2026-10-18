@@ -466,7 +466,7 @@ function updateToolWriteControls() {
     if ($(id)) $(id).disabled = unavailable || sourceUnavailable || readOnly || !isVba || !!tool._sourceConflict ||
       id === "uninstallVbaToolButton" && tool.InstallationStatus === "not_installed";
   });
-  ["dryRunToolButton", "runToolButton", "copyToolContextButton", "askToolBuilderButton"].forEach(function (id) {
+  ["dryRunToolButton", "runToolButton"].forEach(function (id) {
     if ($(id)) $(id).disabled = unavailable || sourceUnavailable;
   });
   updateToolSaveButton();
@@ -691,6 +691,7 @@ function renderToolEditor() {
     (skill._sourceConflict ? " · Исходник изменился: черновик сохранён, запись заблокирована" : skill._sourceError ? " · Ошибка чтения: обновите Library" : sourceUnavailable ? " · Загрузка исходника…" : "")) : "";
   $("toolEnabledInput").checked = skill ? skill.Enabled !== false : false;
   $("toolIdInput").value = skill ? (skill.Id || "") : "";
+  $("toolNameDisplay").value = $("toolIdInput").value;
   $("toolHostInput").value = skill ? (skill.Host || "Common") : "Common";
   $("toolExecutorInput").value = skill ? (skill.Executor || (builtIn ? "builtin" : "vba")) : "vba";
   Array.prototype.slice.call($("toolExecutorInput").options).forEach(function (option) {
@@ -781,8 +782,6 @@ function renderToolEditor() {
   $("dryRunToolButton").disabled = disabled;
   $("runToolButton").disabled = disabled;
   $("cloneToolButton").disabled = disabled || builtIn;
-  $("copyToolContextButton").disabled = disabled;
-  $("askToolBuilderButton").disabled = disabled;
   $("addToolButton").disabled = !!state.bridgeUnavailable;
   updateToolSaveButton();
   $("vbaPackageActions").hidden = !isVba || builtIn || documentLocal;
@@ -836,38 +835,6 @@ function validateAllToolDefinitions() {
   }
 }
 
-
-function selectedToolContext() {
-  syncSelectedToolFromEditor();
-  var skill = state.tools[state.selectedToolIndex];
-  if (!skill || !skill._sourceLoaded) {
-    return "";
-  }
-
-  return [
-    "# Tool",
-    "id: " + (skill.Id || ""),
-    "host: " + (skill.Host || "Common"),
-    "executor: " + (skill.Executor || "vba"),
-    "requiresConfirmation: " + (!!skill.RequiresConfirmation),
-    "",
-    "## Description",
-    skill.Description || "",
-    "",
-    "## Argument schema",
-    "```json",
-    skill.ArgumentSchemaJson || "{}",
-    "```",
-    "",
-    "## Code",
-    toolComponents(skill).map(function (component) {
-      return "### " + (component.Name || "Component") + " (" + (component.Type || "StdModule") + ")\n```vba\n" + (component.Code || "") + "\n```";
-    }).join("\n\n") || "```vba\n" + (skill.Code || "") + "\n```",
-    "",
-    "## README",
-    skill.Readme || ""
-  ].join("\n");
-}
 
 function addVbaComponent(type) {
   syncSelectedToolFromEditor();
@@ -1055,30 +1022,18 @@ function bindToolActions() {
   $("runToolButton").addEventListener("click", toolActions.run);
   $("nextToolPageButton").addEventListener("click", toolActions.next);
 
-  $("copyToolContextButton").addEventListener("click", function () {
-    copyText(selectedToolContext());
-    log("Контекст инструмента скопирован.");
-  });
-
-  $("askToolBuilderButton").addEventListener("click", function () {
-    addSelectedToolContextToContext().then(function (added) {
-      if (!added) {
-        return;
-      }
-
-      switchTab("chat");
-      setChatInputText("Отредактируй RNAssistant-инструмент из добавленного контекста. Верни обновленные tool.json и VBA .bas/.cls components; не выполняй действия без подтверждения.", true);
-    }).catch(function (error) {
-      log(error.detail || error.message, "error");
-    });
-  });
-
   [
     "toolEnabledInput", "toolIdInput", "toolHostInput", "toolExecutorInput", "toolConfirmInput",
     "toolDescriptionInput", "toolComponentNameInput", "toolComponentTypeInput"
   ].forEach(function (id) {
     var control = $(id);
     if (!control) return;
-    control.addEventListener(control.type === "checkbox" || control.tagName === "SELECT" ? "change" : "input", markToolLibraryDirty);
+    control.addEventListener(control.type === "checkbox" || control.tagName === "SELECT" ? "change" : "input", function () {
+      if (id === "toolIdInput") {
+        $("toolNameDisplay").value = control.value.trim();
+        $("toolEditorTitle").textContent = $("toolNameDisplay").value || "Инструмент";
+      }
+      markToolLibraryDirty();
+    });
   });
 }

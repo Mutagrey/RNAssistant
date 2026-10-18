@@ -134,7 +134,7 @@ li.CodeMirror-hint-active {
 
 .vba-diff-view {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   gap: 8px;
 }
 
@@ -252,6 +252,14 @@ li.CodeMirror-hint-active {
   gap: 10px;
   overflow: auto;
 }
+
+.vba-info-view h2 { margin: 8px 0 4px; font-size: 17px; }
+.vba-view-heading h2 { margin: 8px 0 4px; font-size: 17px; }
+.vba-view-heading p { margin: 0 0 6px; color: var(--muted); font-size: 12px; }
+.vba-history-current { display: grid; gap: 4px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-subtle); }
+.vba-history-current strong { font-size: 13px; }
+.vba-history-current span { color: var(--muted); font-size: 12px; }
+.vba-history-warning { max-width: 560px; margin: 4px 0; padding: 10px 12px; border: 1px solid var(--warning); border-radius: 8px; font-size: 12px; }
 
 .vba-runbar,
 .vba-backup-row {

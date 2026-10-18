@@ -50,11 +50,14 @@
 .shell #tab-instructions .resource-editor-meta,
 .shell #tab-vba .resource-editor-meta { color: var(--ink-muted); font-size: 10px; }
 .shell #tab-instructions .library-editor-mode-row,
+.shell #tab-instructions .tool-page-tabs,
 .shell #tab-vba .vba-mode-toggle { min-height: 37px; margin: 0 -18px; padding: 0 18px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: var(--surface); }
 .shell #tab-instructions .library-editor-mode-row .mode-toggle { border: 0; border-radius: 0; background: transparent; }
 .shell #tab-instructions .library-editor-mode-row .mode-button,
+.shell #tab-instructions .tool-page-button,
 .shell #tab-vba .vba-mode-button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--ink-muted); }
 .shell #tab-instructions .library-editor-mode-row .mode-button.active,
+.shell #tab-instructions .tool-page-button.active,
 .shell #tab-vba .vba-mode-button.active { border-bottom-color: var(--accent); color: var(--ink); }
 .shell #tab-instructions .library-editor-stage,
 .shell #tab-vba .vba-code-pane { min-height: 0; }

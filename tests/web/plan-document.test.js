@@ -101,10 +101,10 @@ vm.runInContext(source, context, { filename: "app-html-workspace-artifacts.js" }
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
   const vba = fs.readFileSync(path.join(root, "web/js/app-vba.js"), "utf8");
   assert.ok(index.includes("app-vba.js?v=run-diff-20260908-1"),
-    "VBA chat handoff uses the delivered source-upload script");
-  assert.match(vba, /common\.resources_find со scope=vba/);
-  assert.doesNotMatch(vba, /common\.resources_(?:list|resolve|search)|provider=vba|kind=vba-component/);
-  console.log("PASS plan document: VBA review handoff uses semantic resource intent");
+    "VBA editor uses the delivered source-upload script");
+  assert.doesNotMatch(index, /reviewVbaButton/);
+  assert.doesNotMatch(vba, /reviewVbaInChat/);
+  console.log("PASS plan document: removed VBA chat handoff is absent");
 }
 
 (async function () {

@@ -26,7 +26,7 @@ function setVbaMode(mode) {
 
 function normalizeVbaMode(mode) {
   var value = mode || "edit";
-  return value === "diff" || value === "run" || value === "info" ? value : "edit";
+  return value === "diff" || value === "run" || value === "history" ? value : "edit";
 }
 
 function applyVbaMode() {
@@ -69,22 +69,6 @@ function readVbaResult(response) {
   $("vbaStatus").textContent = result.Message || result.message || "VBA-проект загружен.";
   renderVbaProject();
   updateVbaMacroRunState();
-}
-
-function reviewVbaInChat() {
-  var module = selectedVbaModule();
-  if (!module) {
-    return;
-  }
-  var moduleName = vbaModuleName(module);
-  var prompt = "Проверь VBA-модуль " + moduleName +
-    ": найди его через common.resources_find со scope=vba, " +
-    "затем прочитай source по точному возвращённому semantic target через common.resources_read и найди ошибки, риски и места для улучшения.";
-  if (String(state.activeChatMode || "agent").toLowerCase() === "agent") {
-    prompt += " Для небольших правок используй common.vba_apply_patch.";
-  }
-  switchTab("chat");
-  setChatInputText(prompt, true);
 }
 
 function firstVbaProcedureName(code) {
@@ -274,7 +258,6 @@ function bindVbaActions() {
   $("previewVbaDiffButton").addEventListener("click", previewVbaDiff);
   $("saveVbaButton").addEventListener("click", saveVbaModule);
   $("restoreVbaButton").addEventListener("click", restoreVbaBackup);
-  $("reviewVbaButton").addEventListener("click", reviewVbaInChat);
   $("runVbaMacroButton").addEventListener("click", runVbaMacro);
   $("toggleVbaSidebarButton").addEventListener("click", toggleVbaSidebar);
   Array.prototype.slice.call(document.querySelectorAll("#tab-vba details")).forEach(function (details) {
