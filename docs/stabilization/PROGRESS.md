@@ -2,6 +2,13 @@
 
 ## Product UI cutover — 2026-10-18
 
+Prototype and product now use one navigation-tree renderer and one set of tree,
+menu and navigation-header styles. All six product sections supply their own
+items/actions to that renderer; the retired resource-list tree and Wunderbaum
+assets were removed. The static product preview still injects fixture state after
+load, so it does not exercise typed bridge commands or their outcomes. Screen
+presentation and a behavioral mock preview remain open UI work.
+
 Shell parity correction: the prototype palette now wins over old CSS variables,
 and all six product sections use joined 52 px navigation/main headers with a 1 px
 splitter. Data Templates navigation now has the prototype's SVG rows, collapsible

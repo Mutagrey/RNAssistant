@@ -23,25 +23,10 @@
 .shell .product-create-menu > summary::-webkit-details-marker { display: none; }
 .shell .product-create-menu > summary:hover,
 .shell .product-nav-action:hover { background: var(--surface-hover); color: var(--ink); }
-.shell .product-create-menu .tool-list-actions { position: absolute; top: 33px; right: 0; z-index: 30; display: grid; width: 185px; padding: 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); box-shadow: var(--shadow); }
-.shell .product-create-menu .tool-list-actions button { justify-content: flex-start; width: 100%; }
 .shell #tab-instructions .tool-list-controls,
 .shell #tab-vba .tool-list-controls { margin: 8px 0; }
 .shell #tab-instructions .tool-search,
 .shell #tab-vba .tool-search { border-color: var(--line); background: var(--surface); }
-.shell #instructionsList > .resource-tree-group { margin: 2px 0 8px; }
-.shell #instructionsList > .resource-tree-group > .resource-tree-group-title { min-height: 31px; padding: 4px 8px; border: 0; background: transparent; color: var(--ink-muted); font-size: 11px; font-weight: 400; }
-.shell #instructionsList > .resource-tree-group > .resource-tree-group-title .resource-tree-icon,
-.shell #instructionsList > .resource-tree-group > .resource-tree-group-title em { display: none; }
-.shell #instructionsList > .resource-tree-group > .resource-tree-group-children,
-.shell #instructionsList .resource-tree-subgroup > .resource-tree-group-children { margin: 0; padding: 0; border: 0; }
-.shell #instructionsList > .resource-tree-group > .resource-tree-group-children:has(> .resource-tree-subgroup:only-child) > .resource-tree-subgroup > .resource-tree-group-title { display: none; }
-.shell #instructionsList .tool-list-item.is-compact { min-height: 34px; padding: 7px 10px; border-radius: 8px; }
-.shell #instructionsList .tool-list-item.active { background: var(--surface-selected); color: var(--ink); }
-.shell #instructionsList .tool-list-item .tool-list-meta,
-.shell #instructionsList .tool-list-item .tool-list-badge { display: none; }
-.shell #instructionsList .resource-tree-subgroup { margin: 0; }
-
 .shell #tab-instructions .instruction-editor,
 .shell #tab-instructions #toolEditorPanel,
 .shell #tab-vba .vba-editor { min-width: 0; padding: 0 18px 12px; border: 0; border-radius: 0; background: var(--surface); }
@@ -110,18 +95,6 @@
 .shell #tab-instructions .library-editor-stage > .product-code-editor,
 .shell #tab-vba .vba-code-pane > .product-code-editor { height: 100%; }
 .shell #tab-vba .tool-list-status { margin: 6px 10px 0; }
-.shell #tab-vba .vba-module-list { padding: 0 5px; }
-.shell #tab-vba .vba-module-group { margin: 2px 0 8px; }
-.shell #tab-vba .vba-module-group > .resource-tree-group-title { min-height: 31px; padding: 4px 8px; border: 0; background: transparent; color: var(--ink-muted); font-size: 11px; font-weight: 400; }
-.shell #tab-vba .vba-module-group > .resource-tree-group-title .resource-tree-icon,
-.shell #tab-vba .vba-module-group > .resource-tree-group-title em { display: none; }
-.shell #tab-vba .vba-module-group > .resource-tree-group-children { margin: 0; padding: 0; border: 0; }
-.shell #tab-vba .vba-module-list .tool-list-item.is-compact { grid-template-columns: 19px minmax(0, 1fr); min-height: 34px; margin-left: 0; padding: 7px 10px; border: 0; border-radius: 8px; }
-.shell #tab-vba .vba-module-list .tool-list-item.is-compact .resource-tree-icon { grid-column: 1; grid-row: 1; }
-.shell #tab-vba .vba-module-list .tool-list-item.is-compact .tool-list-title { grid-column: 2; grid-row: 1; }
-.shell #tab-vba .vba-module-list .tool-list-meta,
-.shell #tab-vba .vba-module-list .tool-list-badge { display: none; }
-.shell #tab-vba .vba-module-list .tool-list-item.active { background: var(--surface-selected); color: var(--ink); box-shadow: none; }
 .shell #tab-vba .vba-editor.is-empty { background: var(--surface); }
 
 .shell #tab-workspace .data-templates { --dt-surface: var(--surface); --dt-surface-muted: var(--surface-subtle); --dt-border: var(--line); --dt-control-radius: 8px; }

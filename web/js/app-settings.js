@@ -496,13 +496,39 @@ function bindSettingsActions() {
   var navSearch = $("settingsNavSearch");
   var navSearchToggle = $("settingsNavSearchToggle");
   var navHeading = navSearchToggle.closest(".settings-nav-heading");
-  var navButtons = Array.prototype.slice.call(document.querySelectorAll(".settings-nav-button"));
+  var navRoot = $("settingsNavTree");
+  var navItems = [
+    ["connection", "Подключение"], ["model", "Модель"], ["context", "Контекст и вложения"],
+    ["agent", "Агент"], ["interface", "Интерфейс"], ["protection", "Защита"],
+    ["service", "Помощь и обслуживание"]
+  ];
+
+  function renderSettingsNavigation() {
+    var query = navSearch.value.trim().toLocaleLowerCase("ru");
+    var active = document.querySelector(".settings-page.active");
+    var selectedPage = active && active.getAttribute("data-settings-page");
+    var nodes = navItems.filter(function (item) { return !query || item[1].toLocaleLowerCase("ru").includes(query); })
+      .map(function (item) {
+        return {
+          key: "settings:" + item[0], kind: "leaf", title: item[1],
+          iconHtml: window.RNAssistantNavigationTree.icon(item[0]), selected: item[0] === selectedPage,
+          page: item[0]
+        };
+      });
+    window.RNAssistantNavigationTree.render(navRoot, nodes, {
+      label: "Настройки", onSelect: function (node) {
+        Array.prototype.slice.call(document.querySelectorAll(".settings-page")).forEach(function (item) {
+          item.classList.toggle("active", item.getAttribute("data-settings-page") === node.page);
+        });
+        renderSettingsNavigation();
+        updateSettingsSaveButton();
+      }
+    });
+  }
 
   function filterSettingsNavigation() {
     var query = navSearch.value.trim().toLocaleLowerCase("ru");
-    navButtons.forEach(function (button) {
-      button.hidden = !!query && !button.textContent.toLocaleLowerCase("ru").includes(query);
-    });
+    renderSettingsNavigation();
     navSearchToggle.classList.toggle("has-search-query", !!query);
     navSearchToggle.title = query ? "Фильтр: " + navSearch.value + " · изменить поиск" : "Поиск в настройках";
     navSearchToggle.setAttribute("aria-description", query ? "Активен фильтр: " + navSearch.value : "");
@@ -541,20 +567,7 @@ function bindSettingsActions() {
     navSearchToggle.focus();
   });
 
-  Array.prototype.slice.call(document.querySelectorAll(".settings-nav-button")).forEach(function (button) {
-    button.addEventListener("click", function () {
-      var page = button.getAttribute("data-settings-page");
-      Array.prototype.slice.call(document.querySelectorAll(".settings-nav-button")).forEach(function (item) {
-        item.classList.toggle("active", item === button);
-        if (item === button) item.setAttribute("aria-current", "page");
-        else item.removeAttribute("aria-current");
-      });
-      Array.prototype.slice.call(document.querySelectorAll(".settings-page")).forEach(function (item) {
-        item.classList.toggle("active", item.getAttribute("data-settings-page") === page);
-      });
-      updateSettingsSaveButton();
-    });
-  });
+  renderSettingsNavigation();
 
   $("uiFontScaleInput").addEventListener("input", function () {
     applyUiFontScale({ UiFontScale: Number($("uiFontScaleInput").value || 100) / 100 });

@@ -24,7 +24,6 @@ manifest or those URLs.
 | pdf-lib | 1.17.1 | MIT | [`licenses/pdf-lib-1.17.1/LICENSE.md`](licenses/pdf-lib-1.17.1/LICENSE.md) |
 | @pdf-lib/fontkit + Noto Sans Regular | 1.1.1 + 2.015 | MIT + OFL-1.1 | [`licenses/pdf-fontkit-1.1.1`](licenses/pdf-fontkit-1.1.1/) |
 | JSZip | 3.10.2 | MIT OR GPL-3.0-or-later | [`licenses/jszip-3.10.2/LICENSE.markdown`](licenses/jszip-3.10.2/LICENSE.markdown) |
-| Wunderbaum | 0.14.1 | MIT | [`licenses/wunderbaum-0.14.1/LICENSE`](licenses/wunderbaum-0.14.1/LICENSE) |
 | Viewer.js | 1.12.0 | MIT | [`licenses/viewerjs-1.12.0/LICENSE`](licenses/viewerjs-1.12.0/LICENSE) |
 | sax | 1.6.1 | BlueOak-1.0.0 | [`data-templates/vendor/sax-LICENSE.md`](data-templates/vendor/sax-LICENSE.md) |
 
@@ -74,11 +73,6 @@ CodeMirror ships only the pinned core, selected modes/addons and its `show-hint`
 popup. RNAssistant owns the bounded VBA keyword/module/procedure provider; it reads
 only current drafts and already loaded local source and performs no bridge, COM or
 network lookup per keystroke.
-
-Wunderbaum ships its pinned UMD and CSS only. RNAssistant's `TreeAdapter` accepts
-bounded local arrays and does not expose URL/lazy loading, edit, DnD, grid or
-persistence capabilities. Its local icon layer uses CSS masks; no icon font or
-remote asset is loaded.
 
 Viewer.js ships its pinned UMD and CSS only. It receives one already admitted local
 Blob image at a time and owns inline fit, focal wheel/pinch zoom, pan, rotation and

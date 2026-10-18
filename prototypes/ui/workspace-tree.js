@@ -35,7 +35,9 @@
   P.chatContextName = function () { var parent = P.chatParent(); return parent ? parent.name : P.state.workspaceScope === "projects" ? "Папка не выбрана" : "Документ не выбран"; };
   P.isProjectChat = function () { return P.state.chats[P.state.chatId].scope === "projects"; };
   function rowAction(label, action, icon, disabled) {
-    return '<button type="button" class="tree-action" data-action="' + action + '" aria-label="' + E(label) + '" title="' + E(disabled ? "Сначала остановите выполнение" : label) + '"' + (disabled ? ' disabled' : '') + '>' + I(icon) + '</button>';
+    return { title: disabled ? "Сначала остановите выполнение" : label, iconHtml: I(icon),
+      disabled: !!disabled, danger: action.indexOf("delete-") === 0,
+      onClick: function () { P.dispatchAction(action); } };
   }
   P.workspaceNodes = function () {
     var s = P.state, query = s.treeSearch.trim().toLocaleLowerCase("ru"), current = P.chatParent();
@@ -48,13 +50,13 @@
         var c = s.chats[id], running = c.status === "running", waiting = ["approval", "needs-input"].includes(c.status);
         return { key: "chat:" + id, title: c.title, chat: id, selected: id === s.chatId, kind: "chat",
           status: running ? "running" : waiting ? "waiting" : c.unread ? "unread" : "",
-          actions: rowAction("Переименовать чат «" + c.title + "»", "rename-tree-chat:" + id, "edit") + rowAction("Удалить чат «" + c.title + "»", "delete-tree-chat:" + id, "trash", running) };
+          actions: [rowAction("Переименовать чат «" + c.title + "»", "rename-tree-chat:" + id, "edit"), rowAction("Удалить чат «" + c.title + "»", "delete-tree-chat:" + id, "trash", running)] };
       });
       if (query && !ownMatch && !children.length) return null;
       return { key: "parent:" + parent.id, title: parent.name, folder: true, expanded: !!query || !s.collapsedParents[parent.id], kind: "parent", groupKey: parent.id,
         tooltip: parent.name + " · " + (parent.path || (parent.open ? "Открыт" : "Закрыт")),
         iconHtml: parent.scope === "office" ? P.officeIcon(parent.host) : I("folder"), children: children,
-        actions: rowAction("Новый чат в «" + parent.name + "»", "parent-new:" + parent.id, "plus") + rowAction("Открыть «" + parent.name + "»", "parent-open:" + parent.id, "external") + rowAction("Удалить историю «" + parent.name + "»", "parent-delete:" + parent.id, "trash", ids.some(function (id) { return s.chats[id].status === "running"; })) };
+        actions: [rowAction("Новый чат в «" + parent.name + "»", "parent-new:" + parent.id, "plus"), rowAction("Открыть «" + parent.name + "»", "parent-open:" + parent.id, "external"), rowAction("Удалить историю «" + parent.name + "»", "parent-delete:" + parent.id, "trash", ids.some(function (id) { return s.chats[id].status === "running"; }))] };
     }).filter(Boolean);
   };
   P.renderTreeContents = function () { return '<div class="product-tree" data-product-tree="workspace" aria-label="Документы, проекты и чаты"></div>'; };

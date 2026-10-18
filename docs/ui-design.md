@@ -44,7 +44,8 @@ python3 prototypes/serve_ui.py
 представлений, не каталог новых runtime-возможностей.
 
 Просмотрщики JSON, текста/Markdown, изображений, PDF и задач взяты из `web/`,
-редакторы используют штатный CodeMirror, навигация — собственный компактный ARIA tree. PDF получает
+редакторы используют штатный CodeMirror, навигация демо и продукта — общий
+`web/js/app-navigation-tree.js` с единым ARIA tree. PDF получает
 созданные для демо изображения страниц и текст: это не PDF-декодер в браузере.
 Установка пакетов, COM, исполнение инструментов и провайдеры остаются демопримерами. JSON-проверка шаблона проверяет только синтаксис.
 Настоящий API-ключ вводить не нужно; значение ключа не сохраняется. Выбор локального
@@ -168,10 +169,12 @@ production viewer должен получать возможности от со
 ## Общая система представления
 
 Без framework, npm и bundler. Общий `web/css/app-product-tokens.css` владеет обеими темами,
-`ui.css` — общими компонентами и адаптивной компоновкой, `ui.js` — HTML-фабриками,
+`web/css/app-product-components.css` — деревом, меню, заголовком навигации, поиском,
+иконками Office и редактором кода; `ui.css` — компоновкой демо, `ui.js` — HTML-фабриками,
 `edit-state.js` — состоянием изменений редакторов в памяти демо,
-`navigation.js` — полосой разделов и общими деревьями, `workspace-tree.js` —
-деревом документов/проектов, `chat-ui.js` — сообщениями и меню моделей,
+`navigation.js` и `workspace-tree.js` — данными деревьев демо,
+`product-tree.js` — тонким адаптером демо к общему renderer; тематические `app-*.js`
+передают ему реальные данные и действия без второго дерева. `chat-ui.js` — сообщениями и меню моделей,
 `chat-timeline.js` — группировкой и раскрытием действий в переписке,
 `materials-ui.js` — просмотром и действиями по типу материала, `appearance.js` —
 настройками визуальных токенов, `chat-scroll.js` — позицией чтения,
@@ -451,7 +454,7 @@ Windows/Office/WebView2 qualification остаётся открытой.
 
 | Область | Решение | Подключение к рабочим владельцам |
 |---|---|---|
-| Деревья | Собственный небольшой ARIA tree для навигации. Экспериментальная обвязка Wunderbaum снята после проверки: неудовлетворительные стрелки/действия, конфликт selection и activation. Сложность table/grid engine здесь не нужна | `product-tree.js` владеет только DOM, roving focus, раскрытием и scroll position. Передаёт выбранный domain item существующему controller. Production artifact tree остаётся без изменений до переноса; при подключении нового presentation удалить заменённый путь и его неиспользуемые зависимости |
+| Деревья | Один локальный ARIA tree для прототипа и всех рабочих разделов; визуальные правила находятся в `app-product-components.css` | `app-navigation-tree.js` владеет DOM, roving focus, раскрытием и scroll position. Адаптеры передают выбранный domain item существующему controller; материалы дополнительно проверяют лимиты локального массива. Прежние renderer списка ресурсов и Wunderbaum удалены |
 | Редакторы | Штатный CodeMirror 5.65.16. Отдельный Doc и undo по объекту/файлу; detach перед повторным mount | `app-editors.js`, `app-html-workspace-editor.js`, соответствующие Library/VBA controllers. Сохранение в продукте остаётся revision-aware; DOM не пишет в CAS или Office |
 | JSON | `app-json-viewer.js` через `RNAssistantViewerRegistry`: дерево по умолчанию, исходник при ошибке; копирование путей и лимиты | Exact resource read/completeness передаются из текущего resource controller; не заменять parser на JSON.parse. JSON.parse в демо используется только для проверки редактируемого JSON перед сохранением |
 | Текст/Markdown | `app-text-viewer.js`, Marked и DOMPurify. Текст имеет поиск, диапазоны и признак полноты | Сохранить source completeness и bounded pagination. Нельзя представлять сокращённый текст полным. Внешняя оболочка не дублирует вкладку исходника Markdown |

@@ -1036,7 +1036,7 @@
   function openRunJournal(options) {
     options = options || {};
     if (typeof switchTab === "function") switchTab("settings");
-    var diagnosticsNav = document.querySelector('.settings-nav-button[data-settings-page="service"]');
+    var diagnosticsNav = document.querySelector('#settingsNavTree [data-settings-page="service"]');
     if (diagnosticsNav) diagnosticsNav.click();
     if (typeof setDiagnosticsTab === "function") setDiagnosticsTab("trajectory", false);
     invalidateTrajectoryRequest();

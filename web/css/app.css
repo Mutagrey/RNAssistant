@@ -388,27 +388,6 @@ button.icon-button.is-busy svg {
   background: var(--button-bg-hover);
 }
 
-.toolbar-menu-body {
-  position: absolute;
-  right: 0;
-  z-index: 20;
-  display: grid;
-  gap: 6px;
-  min-width: 210px;
-  max-width: min(280px, calc(100vw - 24px));
-  margin-top: 6px;
-  padding: 8px;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  background: #fff;
-  box-shadow: var(--shadow);
-}
-
-.toolbar-menu-body button {
-  width: 100%;
-  justify-content: flex-start;
-}
-
 .inline-field {
   display: inline-flex;
   gap: 6px;

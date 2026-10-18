@@ -4,6 +4,13 @@
   var MAX_COMPLEX_ARGUMENT_CHARS = 1000000;
   var MAX_VALIDATION_DEPTH = 32;
 
+  function createResourceEmptyState(text) {
+    var node = document.createElement("div");
+    node.className = "tool-list-empty";
+    node.textContent = text;
+    return node;
+  }
+
   function create(options) {
     options = options || {};
     var state = options.state;

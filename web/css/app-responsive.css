@@ -308,11 +308,6 @@
     min-height: 240px !important;
   }
 
-  .settings-nav-button {
-    padding: 0 7px;
-    font-size: 12px;
-  }
-
 }
 
 @media (max-width: 360px) {
@@ -340,20 +335,6 @@
 
   .chat-session-list {
     padding: 4px 2px;
-  }
-
-  .chat-document-row {
-    padding-right: 3px;
-    padding-left: 3px;
-  }
-
-  .chat-document-state {
-    display: none;
-  }
-
-  .chat-session-row {
-    display: block;
-    padding-left: 31px;
   }
 
   .chat-main {

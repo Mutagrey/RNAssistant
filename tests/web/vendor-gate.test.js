@@ -78,9 +78,7 @@ const actual = ["js/vendor", "css/vendor"].flatMap(folder => filesBelow(path.joi
   .concat([path.join(appRoot, "vendor/sax.js")])
   .map(webPath).filter(file => !licenses.has(file)).sort();
 assert.deepEqual(Array.from(entries.keys()).sort(), actual, "manifest must include every and only vendored runtime file");
-assert.ok(packages.has("wunderbaum"));
-assert.equal(packages.get("wunderbaum").version, "0.14.1");
-assert.deepEqual(packages.get("wunderbaum").packageDependencies, {});
+assert.equal(packages.has("wunderbaum"), false, "the shared local tree has no vendor runtime");
 assert.ok(packages.has("viewerjs"));
 assert.equal(packages.get("viewerjs").version, "1.12.0");
 assert.deepEqual(packages.get("viewerjs").packageDependencies, {});

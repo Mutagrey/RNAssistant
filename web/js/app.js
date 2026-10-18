@@ -123,9 +123,9 @@ document.addEventListener("DOMContentLoaded", function () {
       state.officeHostLaunchOpen = false;
     }
     var treeItem = event.target.closest(".global-nav [role='treeitem']");
-    var treeControl = event.target.closest(".chat-document-toggle, .chat-document-delete, .chat-edit, .chat-delete");
+    var treeControl = event.target.closest(".navigation-tree-expander, .tree-action");
     if (window.innerWidth <= 620 && document.querySelector(".shell").classList.contains("navigation-open") &&
-        (event.target.closest(".global-nav .settings-nav-button, .global-nav .dt-tabs button") ||
+        (event.target.closest(".global-nav .dt-tabs button") ||
           (treeItem && !treeControl))) {
       setMobileNavigationOpen(false);
     }

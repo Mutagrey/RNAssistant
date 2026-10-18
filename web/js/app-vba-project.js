@@ -80,73 +80,46 @@ function renderVbaProject() {
 function renderVbaModuleList(modules, query) {
   var list = $("vbaModuleList");
   if (!list) return;
-
-  list.innerHTML = "";
-  if (!modules.length) {
-    list.appendChild(createResourceEmptyState(state.bridgeUnavailable ? "Office bridge недоступен." : (query ? "Модули не найдены." : "Модули не загружены.")));
-    return;
-  }
-
   var selectedName = $("vbaModuleSelect").value;
-  groupVbaModules(modules).forEach(function (group) {
-    var section = createResourceGroup({
-      key: "vba:" + group.label,
-      title: group.label,
-      count: group.modules.length
-    });
-    section.className += " vba-module-group";
-    section.setAttribute("role", "group");
-    var body = section.treeChildren || section;
-
-    group.modules.forEach(function (module) {
-      var name = vbaModuleName(module);
-      var type = vbaModuleType(module);
-      var lineCount = module.lineCount || module.LineCount || 0;
-      var row = document.createElement("div");
-      var deletable = isDeletableVbaModule(module);
-      row.className = "resource-tree-item-row" + (deletable ? " has-action" : "");
-      var item = createResourceListItem({
-        title: name,
-        enabled: null,
-        active: name === selectedName,
-        meta: type + (lineCount ? " - " + lineCount + " строк" : ""),
-        description: hasVbaModuleCode(module) ? (firstVbaProcedureName(vbaModuleCode(module)) || "VBA module") : "Код загружается по выбору",
-        compact: true,
-        icon: vbaModuleIcon(type),
-        depth: 1,
-        onClick: function () {
-          if (state.vbaEditorDirty && !window.confirm("Отменить несохранённые изменения текущего VBA-модуля?")) return;
-          state.vbaEditorDirty = false;
-          $("vbaModuleSelect").value = name;
-          state.vba.selectedModule = name;
-          renderVbaModuleList(modules, query);
-          renderSelectedVbaModule();
-          loadSelectedVbaModule();
-        }
-      });
-      item.classList.add("resource-tree-item-main");
-      item.setAttribute("role", "treeitem");
-      item.setAttribute("aria-selected", name === selectedName ? "true" : "false");
-      row.appendChild(item);
-
-      if (deletable) {
-        var deleteButton = document.createElement("button");
-        deleteButton.type = "button";
-        deleteButton.className = "resource-tree-item-action is-danger";
-        deleteButton.title = "Удалить VBA-модуль " + name;
-        deleteButton.setAttribute("aria-label", deleteButton.title);
-        deleteButton.innerHTML = iconSvg("trash");
-        deleteButton.addEventListener("click", function (event) {
-          event.preventDefault();
-          event.stopPropagation();
-          deleteVbaModule(name);
-        });
-        row.appendChild(deleteButton);
-      }
-      body.appendChild(row);
-    });
-
-    list.appendChild(section);
+  var tree = window.RNAssistantNavigationTree;
+  var nodes = groupVbaModules(modules).map(function (group) {
+    var key = "vba:" + group.label;
+    return {
+      key: key, kind: "group", title: group.label,
+      expanded: !(state.collapsedResourceGroups && state.collapsedResourceGroups[key]),
+      children: group.modules.map(function (module) {
+        var name = vbaModuleName(module);
+        var type = vbaModuleType(module);
+        var lineCount = module.lineCount || module.LineCount || 0;
+        return {
+          key: "vba:module:" + name, kind: "leaf", title: name,
+          iconHtml: tree.icon(vbaModuleIcon(type)), selected: name === selectedName,
+          tooltip: [name, type, lineCount ? lineCount + " строк" : ""].filter(Boolean).join(" · "),
+          moduleName: name,
+          actions: isDeletableVbaModule(module) ? [{
+            title: "Удалить VBA-модуль " + name, iconHtml: tree.icon("trash"), danger: true,
+            onClick: function () { deleteVbaModule(name); }
+          }] : []
+        };
+      })
+    };
+  });
+  tree.render(list, nodes, {
+    label: "VBA модули",
+    emptyText: state.bridgeUnavailable ? "Office bridge недоступен." : (query ? "Модули не найдены." : "Модули не загружены."),
+    onToggle: function (node, expanded) {
+      state.collapsedResourceGroups = state.collapsedResourceGroups || {};
+      state.collapsedResourceGroups[node.key] = !expanded;
+    },
+    onSelect: function (node) {
+      if (state.vbaEditorDirty && !window.confirm("Отменить несохранённые изменения текущего VBA-модуля?")) return;
+      state.vbaEditorDirty = false;
+      $("vbaModuleSelect").value = node.moduleName;
+      state.vba.selectedModule = node.moduleName;
+      renderVbaModuleList(modules, query);
+      renderSelectedVbaModule();
+      loadSelectedVbaModule();
+    }
   });
 }
 

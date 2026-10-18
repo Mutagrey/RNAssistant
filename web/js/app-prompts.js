@@ -196,69 +196,27 @@
     } else state.selectedPromptIndex = row.index;
   }
 
-  function hostName(row) {
-    return String((row.value && row.value.Host) || "Common");
-  }
-
-  function orderedHosts(rows) {
-    var preferred = ["Common", "Excel", "Word", "PowerPoint", "Outlook"];
-    var found = {};
-    rows.forEach(function (row) { found[hostName(row)] = true; });
-    return Object.keys(found).sort(function (left, right) {
-      var leftIndex = preferred.indexOf(left);
-      var rightIndex = preferred.indexOf(right);
-      if (leftIndex < 0) leftIndex = preferred.length;
-      if (rightIndex < 0) rightIndex = preferred.length;
-      return leftIndex === rightIndex ? left.localeCompare(right) : leftIndex - rightIndex;
-    });
-  }
-
-  function resourceGroup(key, title, count, nested, icon) {
-    var group = createResourceGroup({ key: key, title: title, count: count, icon: icon || "section" });
-    if (nested) group.className += " resource-tree-subgroup";
-    return group;
-  }
-
-  function appendInstructionItem(parent, row, activeKey) {
+  function instructionTreeNode(row, activeKey) {
     var value = row.value || {};
     var meta = "";
     if (row.kind === "skill") meta = value.BuiltIn ? "Встроенный" : "Пользовательский";
     if (row.kind === "tool") meta = value.BuiltIn ? "Встроенный" : (value.Executor || "vba");
-    parent.appendChild(createResourceListItem({
-      title: row.kind === "prompt" ? value.label : (value.Id || value.Name || (row.kind === "tool" ? "Инструмент" : "Навык")),
-      icon: row.kind,
-      meta: meta,
-      description: row.kind === "prompt" ? value.description : (value.Description || (row.kind === "tool" ? "Office-инструмент" : "Инструкция навыка")),
-      enabled: row.kind === "prompt" ? null : value.Enabled !== false,
-      active: instructionRowKey(row) === activeKey,
-      compact: true,
-      onClick: function () {
-        syncSelectedInstruction();
-        selectInstructionRow(row);
-        renderInstructions();
-      }
-    }));
+    var title = row.kind === "prompt" ? value.label : (value.Id || value.Name || (row.kind === "tool" ? "Инструмент" : "Навык"));
+    return {
+      key: instructionRowKey(row), kind: "leaf", title: title,
+      iconHtml: window.RNAssistantNavigationTree.icon(row.kind),
+      selected: instructionRowKey(row) === activeKey,
+      tooltip: [title, meta, row.kind === "prompt" ? value.description : value.Description].filter(Boolean).join(" · "),
+      row: row
+    };
   }
 
-  function appendPromptGroups(parent, rows, activeKey) {
-    var prompts = resourceGroup("library:prompts", "Инструкции", rows.length, false, "prompt");
-    parent.appendChild(prompts);
-    rows.forEach(function (row) { appendInstructionItem(prompts.treeChildren, row, activeKey); });
-  }
-
-  function appendHostedGroups(parent, key, title, rows, activeKey) {
-    var root = resourceGroup("library:" + key, title, rows.length, false, key === "skills" ? "skill" : "tool");
-    parent.appendChild(root);
-    appendHostGroups(root.treeChildren, key, rows, activeKey);
-  }
-
-  function appendHostGroups(parent, key, rows, activeKey) {
-    orderedHosts(rows).forEach(function (host) {
-      var hosted = rows.filter(function (row) { return hostName(row) === host; });
-      var group = resourceGroup("library:" + key + ":" + host, host, hosted.length, true, "host");
-      parent.appendChild(group);
-      hosted.forEach(function (row) { appendInstructionItem(group.treeChildren, row, activeKey); });
-    });
+  function instructionTreeGroup(key, title, rows, activeKey) {
+    return {
+      key: key, kind: "group", title: title,
+      expanded: !(state.collapsedResourceGroups && state.collapsedResourceGroups[key]),
+      children: rows.map(function (row) { return instructionTreeNode(row, activeKey); })
+    };
   }
 
   function renderInstructions() {
@@ -266,9 +224,8 @@
     var list = $("instructionsList");
     if (!list) return;
     var rows = instructionRows();
-    list.innerHTML = "";
     if (!rows.length) {
-      list.appendChild(createResourceEmptyState("В библиотеке ничего не найдено."));
+      window.RNAssistantNavigationTree.render(list, [], { label: "Библиотека", emptyText: "В библиотеке ничего не найдено." });
       renderInstructionEditor();
       return;
     }
@@ -280,13 +237,22 @@
     var prompts = rows.filter(function (row) { return row.kind === "prompt"; });
     var skills = rows.filter(function (row) { return row.kind === "skill"; });
     var tools = rows.filter(function (row) { return row.kind === "tool"; });
-    if (skills.length) appendHostedGroups(list, "skills", "Навыки", skills, key);
-    if (tools.length) {
-      var toolRoot = resourceGroup("library:tools", "Инструменты", tools.length, false, "tool");
-      list.appendChild(toolRoot);
-      appendHostGroups(toolRoot.treeChildren, "tools", tools, key);
-    }
-    if (prompts.length) appendPromptGroups(list, prompts, key);
+    var nodes = [];
+    if (skills.length) nodes.push(instructionTreeGroup("library:skills", "Навыки", skills, key));
+    if (tools.length) nodes.push(instructionTreeGroup("library:tools", "Инструменты", tools, key));
+    if (prompts.length) nodes.push(instructionTreeGroup("library:prompts", "Инструкции", prompts, key));
+    window.RNAssistantNavigationTree.render(list, nodes, {
+      label: "Библиотека",
+      onToggle: function (node, expanded) {
+        state.collapsedResourceGroups = state.collapsedResourceGroups || {};
+        state.collapsedResourceGroups[node.key] = !expanded;
+      },
+      onSelect: function (node) {
+        syncSelectedInstruction();
+        selectInstructionRow(node.row);
+        renderInstructions();
+      }
+    });
     renderInstructionEditor();
   }
 

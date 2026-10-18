@@ -84,7 +84,7 @@ const { chromium } = require("playwright");
     assert.equal(await page.locator(".dt-nav-leaf .navigation-tree-icon svg").count(), 7,
       "project leaves use demo SVG icons");
     await page.locator("#dtNavProjectToggle").click();
-    assert.equal(await page.locator(".dt-tabs").isVisible(), false);
+    assert.equal(await page.locator('#dtNavTree > ul > li > ul').isVisible(), false);
     await page.locator("#dtNavProjectToggle").click();
     await page.locator("#dtNavSearchToggle").click();
     await page.locator("#dtNavSearch").fill("рез");

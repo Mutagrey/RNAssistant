@@ -14,10 +14,11 @@ class Element {
   constructor() { this.value = ""; this.checked = false; this.style = {}; this.handlers = {}; this.childNodes = []; this.classList = { toggle() {}, add() {}, remove() {} }; }
   addEventListener(name, handler) { this.handlers[name] = handler; }
   appendChild(child) { child.parentNode = this; this.childNodes.push(child); return child; }
+  closest() { return this; }
   setAttribute() {} removeAttribute() {}
 }
 function fixture(loadPrompts = true) {
-  const elements = new Map(), calls = [], errors = [], downloads = new Map(), uploads = new Map(), groups = [], items = []; let next = 1, revision = 1;
+  const elements = new Map(), calls = [], errors = [], downloads = new Map(), uploads = new Map(), trees = []; let next = 1, revision = 1;
   const get = id => { if (!ids.has(id)) return null; if (!elements.has(id)) elements.set(id, new Element()); return elements.get(id); };
   const bodies = Object.fromEntries(keys.map(key => [key, " custom " + key + " "]));
   const context = vm.createContext({ AbortController, TextEncoder, TextDecoder, Uint8Array, Blob, Response, setTimeout, clearTimeout, crypto: crypto.webcrypto,
@@ -25,8 +26,7 @@ function fixture(loadPrompts = true) {
     $: get, document: { querySelectorAll: () => [], querySelector: () => null, addEventListener() {},
       documentElement: { getAttribute: () => "light", setAttribute() {}, style: { setProperty() {} } } },
     isPanelActive: () => !!context.libraryVisible, markdown: text => text,
-    createResourceGroup: options => { const group = new Element(); group.treeChildren = new Element(); group.options = options; groups.push(options); return group; },
-    createResourceListItem: options => { items.push(options); return new Element(); },
+    RNAssistantNavigationTree: { icon: name => `<svg data-icon="${name}"></svg>`, render: (root, nodes) => { trees.push(nodes); root.treeNodes = nodes; } },
     modelImageSupportOverrides: () => ({}), modelAudioSupportOverrides: () => ({}), modelCapabilitiesForSettings: () => ({}), attachmentModelPriorityForSettings: () => [], textToHeaders: () => ({}),
     renderContextMeter() {}, clearRuntimeData() {}, setControlBusy: (id, busy) => { get(id).disabled = busy; },
     log: (message, level) => { if (level === "error") errors.push(message); }, confirm: () => true, cancelBridgeRequest: async () => {},
@@ -68,7 +68,7 @@ function fixture(loadPrompts = true) {
     .forEach(file => vm.runInContext(read("js/" + file), context, { filename: file }));
   context.renderSettings = () => { if (loadPrompts) context.renderPromptSettings(context.state.prompts); };
   if (loadPrompts) { context.renderSettings(); context.bindSettingsActions(); }
-  return { context, get, calls, errors, bodies, downloads, uploads, groups, items, load: async index => { context.state.selectedPromptIndex = index; return context.renderPromptEditor(); }, saves: () => calls.filter(call => call.type === "saveSettings") };
+  return { context, get, calls, errors, bodies, downloads, uploads, trees, load: async index => { context.state.selectedPromptIndex = index; return context.renderPromptEditor(); }, saves: () => calls.filter(call => call.type === "saveSettings") };
 }
 (async () => {
   {
@@ -148,15 +148,16 @@ function fixture(loadPrompts = true) {
     const f = fixture(); f.context.state.skills = [{ Id: "excel.audit", Host: "Excel", BuiltIn: false, Enabled: true }];
     f.context.state.tools = [{ Id: "excel.validate", Host: "Excel", BuiltIn: true, Enabled: true }];
     f.context.libraryVisible = true; f.context.renderInstructions();
-    assert.deepEqual(f.get("instructionsList").childNodes.map(group => group.options.title), ["Навыки", "Инструменты", "Инструкции"]);
-    assert.deepEqual(f.groups.filter(group => ["Инструкции", "Навыки", "Инструменты"].includes(group.title)).map(group => group.icon), ["skill", "tool", "prompt"]);
-    assert.ok(f.groups.some(group => group.title === "Excel" && group.icon === "host"));
-    assert.ok(f.items.some(item => item.title === "excel.audit" && item.icon === "skill"));
-    assert.ok(f.items.some(item => item.title === "excel.validate" && item.icon === "tool"));
-    console.log("PASS library has three icon-marked sections and host groups");
+    const groups = f.trees.at(-1);
+    assert.deepEqual(Array.from(groups, group => group.title), ["Навыки", "Инструменты", "Инструкции"]);
+    assert.match(groups[0].children[0].iconHtml, /skill/);
+    assert.match(groups[1].children[0].iconHtml, /tool/);
+    assert.equal(groups[0].children[0].title, "excel.audit");
+    assert.equal(groups[1].children[0].title, "excel.validate");
+    console.log("PASS library uses the shared navigation tree for all three sections");
   }
   {
-    ["app-prompts.js", "app-settings.js", "app-resource-list.js", "app-tools.css"].forEach(file =>
+    ["app-prompts.js", "app-settings.js", "app-navigation-tree.js", "app-tools.css"].forEach(file =>
       assert.match(read("index.html"), new RegExp(file.replace(/\./g, "\\.") + "\\?v=[^\"'\\s]+")));
     assert.ok(read("js/app-prompts.js").includes("fetch: window.fetch.bind(window)"));
     assert.ok(!read("js/app-settings.js").includes("readPromptSettings")); console.log("PASS direct-cutover delivery keys and retired form reader removal");

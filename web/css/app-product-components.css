@@ -1,4 +1,4 @@
-/* Presentation adapters for the exact components shipped in web/. */
+/* Shared components used by both the prototype and the product shell. */
 :root {
   --text: var(--ink); --muted: var(--ink-muted); --panel: var(--surface);
   --secondary-bg: var(--surface-subtle); --secondary-bg-hover: var(--surface-hover);
@@ -6,7 +6,23 @@
   --control-radius: 7px; --label-font-weight: 500; --meta-font-weight: 400;
   --focus-ring: var(--accent);
 }
-.tree-scroll, .section-tree-scroll { overflow: hidden; display: flex; flex-direction: column; }
+.workspace-heading { display: flex; align-items: center; gap: 6px; flex: 0 0 52px; height: 52px; padding: 0 10px 0 18px; margin: 0 -8px; border-bottom: 1px solid var(--line); }
+.workspace-heading .nav-label { flex: 1; min-width: 0; margin: 0; overflow: hidden; color: var(--ink); font-size: 13px; font-weight: 600; letter-spacing: 0; text-overflow: ellipsis; text-transform: none; white-space: nowrap; }
+.workspace-heading.searching .nav-label, .shell .product-search-heading.searching > strong { display: none; }
+.workspace-heading.searching .tree-toolbar, .shell .product-search-heading.searching .tree-toolbar { flex: 1; }
+.tree-toolbar { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.product-nav-search-toggle { display: grid; place-items: center; flex: 0 0 30px; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 9px; background: transparent; color: var(--ink-muted); }
+.product-nav-search-toggle:hover { background: var(--surface-hover); color: var(--ink); }
+.product-nav-search-toggle.has-search-query { background: var(--accent-soft); color: var(--accent); }
+.tree-toolbar svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.55; stroke-linecap: round; stroke-linejoin: round; }
+.tree-search-input, .shell .product-search-heading .product-nav-search-input { flex: 1; min-width: 0; width: 80px; height: 30px; padding: 4px 8px; border: 1px solid var(--line-strong); border-radius: 9px; background: var(--surface); color: var(--ink); font-size: 12px; }
+.tree-scroll, .section-tree-scroll { display: flex; flex: 1; flex-direction: column; min-height: 0; padding-top: 4px; overflow-y: auto; }
+:where(.popover-menu, .toolbar-menu-body, .html-workspace-menu-items, .shell .product-create-menu .tool-list-actions, .chat-office-launch-menu) { position: absolute; top: calc(100% + 6px); right: 0; z-index: 30; min-width: 220px; max-width: min(290px, calc(100vw - 24px)); padding: 5px; border: 1px solid var(--line-strong); border-radius: 9px; background: var(--surface); box-shadow: var(--shadow); }
+:where(.toolbar-menu-body, .html-workspace-menu-items, .shell .product-create-menu .tool-list-actions) { display: grid; gap: 2px; }
+:where(.popover-menu, .toolbar-menu-body, .html-workspace-menu-items, .shell .product-create-menu .tool-list-actions) > button { display: flex; align-items: center; gap: 9px; justify-content: flex-start; width: 100%; padding: 9px 10px; border: 0; border-radius: 5px; background: transparent; color: var(--ink); font-size: 12px; text-align: left; box-shadow: none; }
+:where(.popover-menu, .toolbar-menu-body, .html-workspace-menu-items, .shell .product-create-menu .tool-list-actions) > button:hover { background: var(--surface-hover); }
+:where(.popover-menu, .toolbar-menu-body, .html-workspace-menu-items) > button.danger-text { color: var(--danger); }
+.popover-menu hr { border: 0; border-top: 1px solid var(--line); }
 .navigation-tree { flex: 1; min-height: 0; overflow: auto; padding: 0; scrollbar-width: thin; font-size: var(--tree-text); font-weight: 400; }
 .navigation-tree-list { list-style: none; margin: 0; padding: 0; }
 .navigation-tree-item { list-style: none; margin: 0; padding: 0; outline: none; }
@@ -19,18 +35,77 @@
 .navigation-tree-expander { display: grid; place-items: center; flex: 0 0 16px; width: 16px; height: 26px; padding: 0; border: 0; background: none; color: var(--ink-muted); }
 .navigation-tree-expander svg { width: 12px; height: 12px; }
 .navigation-tree-icon { display: grid; place-items: center; flex: 0 0 18px; color: var(--ink-muted); }
-.navigation-tree-icon svg { width: 16px; height: 16px; }
+.navigation-tree-icon svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.55; stroke-linecap: round; stroke-linejoin: round; }
+.office-app-mark {
+  position: relative;
+  display: block;
+  width: 18px;
+  height: 18px;
+}
+
+.office-app-page {
+  position: absolute;
+  top: 1px;
+  right: 0;
+  width: 13px;
+  height: 16px;
+  border-radius: 2px;
+  background: var(--office-page);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.18);
+}
+
+.office-app-page::after {
+  position: absolute;
+  top: 5px;
+  right: 2px;
+  width: 6px;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.66);
+  box-shadow: 0 3px 0 rgba(255, 255, 255, 0.52), 0 6px 0 rgba(255, 255, 255, 0.38);
+  content: "";
+}
+
+.office-app-tile {
+  position: absolute;
+  top: 3px;
+  left: 0;
+  display: grid;
+  width: 11px;
+  height: 12px;
+  place-items: center;
+  border-radius: 2px;
+  background: var(--office-tile);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.25);
+  color: #fff;
+  font: 700 8px/1 "Segoe UI", sans-serif;
+}
+
 .navigation-tree-icon .office-app-mark { width: 19px; height: 19px; }
+.office-app-mark.is-excel { --office-page: #217346; --office-tile: #185c37; }
+.office-app-mark.is-word { --office-page: #2b579a; --office-tile: #1b4f91; }
+.office-app-mark.is-powerpoint { --office-page: #d24726; --office-tile: #b7472a; }
+.office-app-mark.is-outlook { --office-page: #0078d4; --office-tile: #0364b8; }
+.navigation-tree-badge { flex: none; color: var(--ink-muted); font-size: 10px; }
+.navigation-tree-badge.is-warning, .navigation-tree-badge.is-critical { color: var(--warning); }
 .navigation-tree-label { flex: 1; min-width: 0; display: block; padding: 4px 0; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border: 0; background: none; font: inherit; color: var(--ink); }
 .navigation-tree-item + .navigation-tree-item > .navigation-tree-row.is-group { margin-top: 3px; }
 .navigation-tree-row.is-group .navigation-tree-label { color: var(--ink-muted); font-size: 11px; }
 .navigation-tree .tree-actions { display: flex; align-items: center; flex-shrink: 0; width: 0; overflow: hidden; gap: 0; opacity: 0; }
 .navigation-tree-row:hover > .tree-actions, .navigation-tree-row.is-focused > .tree-actions { width: auto; overflow: visible; opacity: 1; }
-.navigation-tree .tree-action { display: grid; place-items: center; width: 24px; min-width: 24px; height: 26px; padding: 5px; color: var(--ink-muted); border-radius: 6px; }
+.navigation-tree .tree-action { display: grid; place-items: center; width: 24px; min-width: 24px; height: 26px; padding: 5px; border: 0; border-radius: 6px; background: transparent; color: var(--ink-muted); }
 .navigation-tree .tree-action:hover { color: var(--ink); background: var(--surface-selected); }
+.navigation-tree .tree-action.is-danger:hover { color: var(--danger); }
 .navigation-tree .tree-action:focus-visible { outline-offset: -2px; }
 .navigation-tree .tree-action svg { width: 13px; height: 13px; }
-.navigation-tree .tree-status { position: static; flex-shrink: 0; margin: 0 2px; }
+.tree-status { flex-shrink: 0; width: 7px; height: 7px; margin: 0 10px 0 4px; border-radius: 50%; background: var(--accent); }
+.tree-run { width: 13px; height: 13px; border: 1.5px solid var(--line-strong); border-top-color: var(--accent); border-right-color: var(--accent); background: none; }
+.tree-attention { background: var(--warning); }
+.tree-unread { background: var(--accent); }
+.navigation-tree .tree-status { position: static; margin: 0 2px; }
+.tree-empty { padding: 10px; color: var(--ink-muted); font-size: 11px; }
+.tree-empty.is-error { color: var(--danger); }
+@media (prefers-reduced-motion: no-preference) { .tree-run { animation: tree-spin 1s linear infinite; } }
+@keyframes tree-spin { to { transform: rotate(360deg); } }
 @media (hover: none) { .navigation-tree .tree-actions { width: auto; opacity: 1; } }
 @media (pointer: coarse) {
   .navigation-tree-row, [data-density="compact"] .navigation-tree-row { min-height: 40px; }
