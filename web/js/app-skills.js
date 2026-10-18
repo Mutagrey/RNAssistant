@@ -379,6 +379,69 @@ function skillMatchesSearch(skill, query) {
   return text.indexOf(query) >= 0;
 }
 
+function applySkillEditorPage() {
+  var page = state.skillEditorPage === "files" ? "files" : "instruction";
+  state.skillEditorPage = page;
+  Array.prototype.slice.call(document.querySelectorAll(".skill-page-button")).forEach(function (button) {
+    button.classList.toggle("active", button.getAttribute("data-skill-page") === page);
+  });
+  Array.prototype.slice.call(document.querySelectorAll("[data-skill-page-view]")).forEach(function (view) {
+    view.classList.toggle("hidden", view.getAttribute("data-skill-page-view") !== page);
+  });
+  if (page === "instruction" && typeof refreshCodeEditors === "function") refreshCodeEditors(["skillBodyInput"]);
+}
+
+function renderSkillFileList(skill, disabled, builtIn) {
+  var list = $("skillFileList");
+  if (!list) return;
+  list.innerHTML = "";
+  if (!skill) return;
+  var files = [{ path: "", label: "SKILL.md", note: "Основная инструкция" }];
+  (skill.References || []).forEach(function (reference) {
+    var path = skillReferencePath(reference);
+    if (path) files.push({ path: path, label: path, note: "Дополнительный файл" });
+  });
+  files.forEach(function (file) {
+    var row = document.createElement("div");
+    row.className = "skill-file-row";
+    var info = document.createElement("div");
+    info.className = "skill-file-info";
+    info.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6zM14 3v5h4M9 12h6M9 16h6"/></svg>';
+    var copy = document.createElement("span");
+    var name = document.createElement("strong");
+    name.textContent = file.label;
+    var note = document.createElement("small");
+    note.textContent = file.note;
+    copy.appendChild(name);
+    copy.appendChild(note);
+    info.appendChild(copy);
+    row.appendChild(info);
+    var action = document.createElement("button");
+    action.type = "button";
+    action.className = "skill-file-action";
+    action.textContent = "Открыть";
+    action.addEventListener("click", function () {
+      $("skillResourceSelect").value = file.path;
+      $("skillResourceSelect").dispatchEvent(new Event("change", { bubbles: true }));
+      state.skillEditorPage = "instruction";
+      applySkillEditorPage();
+    });
+    row.appendChild(action);
+    if (file.path) {
+      var remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "skill-file-action is-danger";
+      remove.textContent = "Удалить файл";
+      remove.disabled = disabled || builtIn || !!state.bridgeUnavailable;
+      remove.addEventListener("click", function () {
+        deleteSelectedSkillReference(file.path).catch(function (error) { log(error.detail || error.message, "error"); });
+      });
+      row.appendChild(remove);
+    }
+    list.appendChild(row);
+  });
+}
+
 function renderSkillReferenceControls(skill, disabled, builtIn) {
   var select = $("skillResourceSelect");
   if (!select) return;
@@ -406,6 +469,7 @@ function renderSkillReferenceControls(skill, disabled, builtIn) {
   if ($("skillResourceLabel")) $("skillResourceLabel").textContent = selected || "SKILL.md";
   if ($("addSkillReferenceButton")) $("addSkillReferenceButton").disabled = disabled || builtIn || !!state.bridgeUnavailable;
   if ($("deleteSkillReferenceButton")) $("deleteSkillReferenceButton").disabled = disabled || builtIn || !selected || !!state.bridgeUnavailable;
+  renderSkillFileList(skill, disabled, builtIn);
 }
 
 function closeSkillSourceRead(operation) {
@@ -570,9 +634,7 @@ function renderSkillEditor() {
   var panel = $("skillEditorPanel");
   if (panel) panel.classList.toggle("hidden", disabled);
   if ($("skillTitle")) $("skillTitle").textContent = skill ? (skill.Id || skill.Name || "Навык") : "Навык";
-  if ($("skillMeta")) $("skillMeta").textContent = skill
-    ? ((skill.BuiltIn ? "Встроенный навык" : "Пользовательский навык") + " · " + (skill.Host || "Common") + " · references: " + references.length)
-    : "";
+  if ($("skillMeta")) $("skillMeta").textContent = "Библиотека / Навыки";
   $("skillEnabledInput").checked = skill ? skill.Enabled !== false : false;
   $("skillIdInput").value = skill ? (skill.Id || "") : "";
   $("skillHostInput").value = skill ? (skill.Host || "Common") : "Common";
@@ -582,6 +644,7 @@ function renderSkillEditor() {
   renderSkillReferenceControls(skill, disabled, builtIn);
   renderSkillPreview();
   applyInstructionMode();
+  applySkillEditorPage();
 
   ["skillEnabledInput", "skillDescriptionInput", "skillBodyInput"].forEach(function (id) {
     $(id).disabled = disabled || builtIn;
@@ -624,9 +687,11 @@ function renderSkillPreview() {
 
 function applyInstructionMode() {
   var mode = state.promptEditorMode === "preview" ? "preview" : "edit";
-  Array.prototype.slice.call(document.querySelectorAll(".instruction-mode-button")).forEach(function (button) {
-    button.classList.toggle("active", button.getAttribute("data-instruction-mode") === mode);
-  });
+  var skill = state.skills[state.selectedSkillIndex];
+  var referencePath = selectedSkillReferencePath(skill);
+  if ($("skillResourceHeading")) $("skillResourceHeading").hidden = mode !== "preview" && !referencePath;
+  if ($("skillReturnToEditorButton")) $("skillReturnToEditorButton").hidden = mode !== "preview";
+  if ($("skillPreviewToggleButton")) $("skillPreviewToggleButton").textContent = mode === "preview" ? "Вернуться к редактору" : "Просмотреть Markdown";
   Array.prototype.slice.call(document.querySelectorAll(".instruction-edit-view")).forEach(function (node) { node.classList.toggle("hidden", mode !== "edit"); });
   Array.prototype.slice.call(document.querySelectorAll(".instruction-preview-view")).forEach(function (node) { node.classList.toggle("hidden", mode !== "preview"); });
   if (typeof setCodeEditorVisible === "function") setCodeEditorVisible("skillBodyInput", mode === "edit");
@@ -926,12 +991,12 @@ function addSkillReference() {
   renderSkillEditor();
 }
 
-async function deleteSelectedSkillReference() {
+async function deleteSelectedSkillReference(pathOverride) {
   if (skillWriteOperation) throw new Error("Дождитесь завершения сохранения навыков.");
   cancelSkillSourceRead();
   syncSelectedSkillFromEditor();
   var skill = state.skills[state.selectedSkillIndex];
-  var path = selectedSkillReferencePath(skill);
+  var path = pathOverride || selectedSkillReferencePath(skill);
   if (!skill || skill.BuiltIn || !path) return;
   if (!window.confirm("Удалить reference " + path + "?")) return;
   var reference = (skill.References || []).filter(function (item) {
@@ -969,11 +1034,30 @@ async function deleteSelectedSkillReference() {
 }
 
 function bindSkillActions() {
+  $("skillPreviewToggleButton").addEventListener("click", function () {
+    syncSelectedSkillFromEditor();
+    state.promptEditorMode = state.promptEditorMode === "preview" ? "edit" : "preview";
+    $("skillActionsMenu").removeAttribute("open");
+    applyInstructionMode();
+  });
+  $("skillReturnToEditorButton").addEventListener("click", function () {
+    state.promptEditorMode = "edit";
+    applyInstructionMode();
+  });
+  Array.prototype.slice.call(document.querySelectorAll(".skill-page-button")).forEach(function (button) {
+    button.addEventListener("click", function () {
+      var skill = state.skills[state.selectedSkillIndex];
+      if (skill && button.getAttribute("data-skill-page") === "instruction" && selectedSkillReferencePath(skill)) {
+        captureSelectedSkillResource(skill);
+        skill._selectedReferencePath = "";
+        renderSkillEditor();
+      }
+      state.skillEditorPage = button.getAttribute("data-skill-page") || "instruction";
+      applySkillEditorPage();
+    });
+  });
   window.addEventListener("pagehide", cancelSkillSourceRead);
   window.addEventListener("pagehide", cancelSkillSourceWrite);
-  Array.prototype.slice.call(document.querySelectorAll(".instruction-mode-button")).forEach(function (button) {
-    button.addEventListener("click", function () { syncSelectedSkillFromEditor(); state.promptEditorMode = button.getAttribute("data-instruction-mode"); applyInstructionMode(); });
-  });
 
   $("addSkillButton").addEventListener("click", function () {
     if (typeof syncSelectedLibraryItem === "function") syncSelectedLibraryItem();

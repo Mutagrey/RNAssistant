@@ -83,6 +83,7 @@ var state = {
   bridgeUnavailable: false,
   selectedToolIndex: -1,
   selectedSkillIndex: -1,
+  skillEditorPage: "instruction",
   toolLibraryBaseline: "",
   toolLibraryBaselineItems: [],
   toolLibraryDirty: false,

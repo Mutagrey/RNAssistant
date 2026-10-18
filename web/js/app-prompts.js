@@ -243,13 +243,7 @@
   function appendPromptGroups(parent, rows, activeKey) {
     var prompts = resourceGroup("library:prompts", "Инструкции", rows.length, false, "prompt");
     parent.appendChild(prompts);
-    ["Основные", "Служебные"].forEach(function (name) {
-      var grouped = rows.filter(function (row) { return row.value.group === name; });
-      if (!grouped.length) return;
-      var group = resourceGroup("library:prompts:" + name, name, grouped.length, true, "section");
-      prompts.treeChildren.appendChild(group);
-      grouped.forEach(function (row) { appendInstructionItem(group.treeChildren, row, activeKey); });
-    });
+    rows.forEach(function (row) { appendInstructionItem(prompts.treeChildren, row, activeKey); });
   }
 
   function appendHostedGroups(parent, key, title, rows, activeKey) {
@@ -407,7 +401,7 @@
     if (promptReading && (promptReading.key !== def.key || promptReading.chatId !== state.activeChatId)) cancelPromptSourceRead();
     var stale = loaded && (!metadata || !sameResource(metadata.resource, promptSources[def.key].resource));
     $("promptMeta").textContent = stale ? "Черновик устарел. Скопируйте правки и перезапустите панель перед сохранением." :
-      def.group + " · Markdown · " + def.field + ".md";
+      "Библиотека / Инструкции";
     setPromptEditorValue(promptText(def));
     $("promptEditInput").readOnly = !loaded || !!state.bridgeUnavailable;
     if (typeof setCodeEditorReadOnly === "function") setCodeEditorReadOnly("promptEditInput", !loaded || !!state.bridgeUnavailable);

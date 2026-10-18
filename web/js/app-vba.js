@@ -5,9 +5,9 @@ function vbaEditorCode() {
   return $("vbaCodeInput").value || "";
 }
 
-function setVbaEditorCode(code) {
+function setVbaEditorCode(code, documentKey) {
   if (typeof setCodeEditorValue === "function") {
-    setCodeEditorValue("vbaCodeInput", code || "");
+    setCodeEditorValue("vbaCodeInput", code || "", documentKey);
     return;
   }
   $("vbaCodeInput").value = code || "";
@@ -122,6 +122,8 @@ function updateVbaMacroSuggestion() {
 function markVbaEditorDirty() {
   cancelVbaModuleWrite();
   state.vbaEditorDirty = true;
+  $("saveVbaButton").hidden = false;
+  $("discardVbaChangesButton").disabled = false;
   updateVbaMacroSuggestion();
   $("vbaStatus").textContent = "Есть несохраненные изменения VBA.";
 }
@@ -197,6 +199,40 @@ function saveVbaModule() {
   return vbaActions.saveModule();
 }
 
+function closeVbaActionsMenu() {
+  $("vbaActionsMenu").open = false;
+}
+
+function discardVbaChanges() {
+  closeVbaActionsMenu();
+  var module = selectedVbaModule();
+  if (!module || !hasVbaModuleCode(module) || !state.vbaEditorDirty) return;
+  if (!window.confirm("Отменить изменения? Несохранённый код модуля будет заменён загруженной версией.")) return;
+  cancelVbaModuleWrite();
+  setVbaEditorCode(vbaModuleCode(module), vbaModuleName(module));
+  state.vbaEditorDirty = false;
+  $("saveVbaButton").hidden = true;
+  $("discardVbaChangesButton").disabled = true;
+  $("vbaStatus").textContent = "Изменения отменены.";
+  updateVbaMacroSuggestion();
+  if (state.vbaEditorMode === "diff") previewVbaDiff();
+}
+
+function downloadVbaModule() {
+  closeVbaActionsMenu();
+  var module = selectedVbaModule();
+  if (!module || !hasVbaModuleCode(module)) return;
+  var fileName = (vbaModuleName(module) || "Module").replace(/[^A-Za-z0-9_.-]/g, "_") + ".bas";
+  var url = URL.createObjectURL(new Blob([vbaEditorCode()], { type: "text/plain;charset=utf-8" }));
+  var link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+}
+
 function restoreVbaBackup() {
   var backupId = $("vbaBackupSelect").value;
   if (!backupId) return Promise.resolve(false);
@@ -257,6 +293,8 @@ function bindVbaActions() {
   });
   $("previewVbaDiffButton").addEventListener("click", previewVbaDiff);
   $("saveVbaButton").addEventListener("click", saveVbaModule);
+  $("discardVbaChangesButton").addEventListener("click", discardVbaChanges);
+  $("downloadVbaModuleButton").addEventListener("click", downloadVbaModule);
   $("restoreVbaButton").addEventListener("click", restoreVbaBackup);
   $("runVbaMacroButton").addEventListener("click", runVbaMacro);
   $("toggleVbaSidebarButton").addEventListener("click", toggleVbaSidebar);

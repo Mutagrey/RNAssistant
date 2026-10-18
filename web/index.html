@@ -489,6 +489,7 @@
                   <details class="toolbar-menu library-editor-menu" id="skillActionsMenu">
                     <summary class="icon-button" title="Другие действия с навыком" aria-label="Другие действия с навыком"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></summary>
                     <div class="toolbar-menu-body library-editor-menu-body">
+                      <button class="secondary" id="skillPreviewToggleButton" type="button">Просмотреть Markdown</button>
                       <button class="secondary" id="cloneSkillButton" type="button">Создать копию</button>
                       <button class="secondary" id="copySkillContextButton" type="button">Скопировать текст навыка</button>
                       <button class="secondary danger-soft" id="deleteSkillButton" type="button">Удалить навык</button>
@@ -496,27 +497,32 @@
                   </details>
                 </div>
               </div>
-              <div class="form-grid tool-form skill-editor-fields" id="skillForm">
-                <label>ID навыка<input id="skillIdInput" placeholder="common.review_contract"></label>
-                <label>Приложение<select id="skillHostInput"><option>Common</option><option>Excel</option><option>Word</option><option>PowerPoint</option><option>Outlook</option></select></label>
-                <label class="checkline skill-enabled-field"><input type="checkbox" id="skillEnabledInput"> <span>Включён</span></label>
-                <label class="wide">Описание<textarea id="skillDescriptionInput" rows="3" placeholder="Когда агенту использовать этот навык"></textarea></label>
+              <div class="mode-toggle skill-page-tabs" role="tablist" aria-label="Раздел навыка">
+                <button class="mode-button skill-page-button active" type="button" data-skill-page="instruction">Инструкция</button>
+                <button class="mode-button skill-page-button" type="button" data-skill-page="files">Файлы</button>
               </div>
-              <div class="skill-reference-row">
-                <label><span>Файл инструкции</span><select id="skillResourceSelect" aria-label="Файл навыка"><option value="">SKILL.md</option></select></label>
-                <button class="secondary" id="addSkillReferenceButton" type="button">+ Reference</button>
-                <button class="secondary danger-soft" id="deleteSkillReferenceButton" type="button">Удалить reference</button>
-              </div>
-              <div class="library-editor-mode-row">
-                <span class="library-editor-section-label" id="skillResourceLabel">SKILL.md</span>
-                <div class="mode-toggle instruction-mode-toggle" role="group" aria-label="Режим навыка">
-                  <button class="mode-button instruction-mode-button active" type="button" data-instruction-mode="edit">Редактор</button>
-                  <button class="mode-button instruction-mode-button" type="button" data-instruction-mode="preview">Просмотр</button>
+              <div class="skill-instruction-view" data-skill-page-view="instruction">
+                <div class="form-grid tool-form skill-editor-fields" id="skillForm">
+                  <label>ID навыка<input id="skillIdInput" placeholder="common.review_contract"></label>
+                  <label>Приложение<select id="skillHostInput"><option>Common</option><option>Excel</option><option>Word</option><option>PowerPoint</option><option>Outlook</option></select></label>
+                  <label class="wide">Описание навыка<textarea id="skillDescriptionInput" rows="1" placeholder="Когда агенту использовать этот навык"></textarea></label>
+                  <label class="checkline skill-enabled-field"><input type="checkbox" id="skillEnabledInput"> <span>Доступен агенту</span></label>
                 </div>
+                <div class="library-editor-mode-row" id="skillResourceHeading" hidden>
+                  <span class="library-editor-section-label" id="skillResourceLabel">SKILL.md</span>
+                  <button class="secondary" id="skillReturnToEditorButton" type="button" hidden>К редактору</button>
+                </div>
+                <div class="library-editor-stage skill-editor-stage">
+                  <textarea class="editor-edit-input instruction-edit-view" id="skillBodyInput" rows="18" spellcheck="false" aria-label="SKILL.md"></textarea>
+                  <div class="editor-preview markdown instruction-preview-view hidden" id="skillPreview"></div>
+                </div>
+                <div class="product-editor-status"><span>Markdown</span><span id="skillEditorPosition">Строка 1, столбец 1 · Строк: 1</span></div>
               </div>
-              <div class="library-editor-stage skill-editor-stage">
-                <textarea class="editor-edit-input instruction-edit-view" id="skillBodyInput" rows="18" spellcheck="false" aria-label="SKILL.md"></textarea>
-                <div class="editor-preview markdown instruction-preview-view hidden" id="skillPreview"></div>
+              <div class="skill-files-view hidden" data-skill-page-view="files">
+                <div class="skill-files-heading"><h2>Файлы навыка</h2><button class="secondary" id="addSkillReferenceButton" type="button">Добавить файл</button></div>
+                <select class="hidden" id="skillResourceSelect" aria-label="Файл навыка"><option value="">SKILL.md</option></select>
+                <button class="hidden" id="deleteSkillReferenceButton" type="button">Удалить reference</button>
+                <div class="skill-file-list" id="skillFileList"></div>
               </div>
             </div>
             <div class="instruction-editor-content library-editor-pane prompt-editor-pane hidden" id="promptEditorPanel">
@@ -545,6 +551,7 @@
                 <div class="editor-preview prompt-preview markdown hidden" id="promptPreview"></div>
                 <textarea class="editor-edit-input prompt-edit-input" id="promptEditInput" rows="16" spellcheck="false"></textarea>
               </div>
+              <div class="product-editor-status"><span>Markdown</span><span id="promptEditorPosition">Строка 1, столбец 1 · Строк: 1</span></div>
             </div>
           </section>
         </div>
@@ -570,6 +577,13 @@
               </div>
               <div class="resource-editor-actions">
                 <button class="accent-soft" id="saveVbaButton" type="button">Сохранить</button>
+                <details class="toolbar-menu library-editor-menu" id="vbaActionsMenu">
+                  <summary class="icon-button" title="Другие действия с модулем" aria-label="Другие действия с модулем"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></summary>
+                  <div class="toolbar-menu-body library-editor-menu-body">
+                    <button class="secondary" id="discardVbaChangesButton" type="button">Отменить изменения</button>
+                    <button class="secondary" id="downloadVbaModuleButton" type="button">Скачать копию</button>
+                  </div>
+                </details>
               </div>
             </div>
             <div class="mode-toggle vba-mode-toggle" role="group" aria-label="Раздел VBA">
@@ -610,6 +624,7 @@
               </div>
               <p class="vba-history-warning">Восстановление меняет связанный документ. Перед изменением потребуется подтверждение.</p>
             </div>
+            <div class="product-editor-status vba-editor-status"><span>VBA</span><span id="vbaEditorPosition">Строка 1, столбец 1 · Строк: 1</span></div>
           </section>
         </div>
       </section>

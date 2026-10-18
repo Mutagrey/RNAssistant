@@ -38,6 +38,8 @@
 .shell #instructionsList > .resource-tree-group > .resource-tree-group-children:has(> .resource-tree-subgroup:only-child) > .resource-tree-subgroup > .resource-tree-group-title { display: none; }
 .shell #instructionsList .tool-list-item.is-compact { min-height: 34px; padding: 7px 10px; border-radius: 8px; }
 .shell #instructionsList .tool-list-item.active { background: var(--surface-selected); color: var(--ink); }
+.shell #instructionsList .tool-list-item .tool-list-meta,
+.shell #instructionsList .tool-list-item .tool-list-badge { display: none; }
 .shell #instructionsList .resource-tree-subgroup { margin: 0; }
 
 .shell #tab-instructions .instruction-editor,
@@ -45,26 +47,81 @@
 .shell #tab-vba .vba-editor { min-width: 0; padding: 0 18px 12px; border: 0; border-radius: 0; background: var(--surface); }
 .shell #tab-instructions .library-editor-head,
 .shell #tab-vba .vba-editor-head { min-height: 52px; margin: 0 -18px; padding: 5px 18px; border-bottom: 1px solid var(--line); background: var(--surface); }
+.shell #tab-instructions .library-editor-head .resource-editor-titlebox,
+.shell #tab-vba .vba-editor-head .resource-editor-titlebox { display: flex; flex-direction: column-reverse; justify-content: center; }
 .shell #tab-instructions .resource-editor-title,
 .shell #tab-vba .resource-editor-title { color: var(--ink); font-size: 15px; font-weight: 600; }
 .shell #tab-instructions .resource-editor-meta,
-.shell #tab-vba .resource-editor-meta { color: var(--ink-muted); font-size: 10px; }
+.shell #tab-vba .resource-editor-meta { margin: 0 0 2px; color: var(--ink-muted); font-size: 10px; }
 .shell #tab-instructions .library-editor-mode-row,
 .shell #tab-instructions .tool-page-tabs,
+.shell #tab-instructions .skill-page-tabs,
 .shell #tab-vba .vba-mode-toggle { min-height: 37px; margin: 0 -18px; padding: 0 18px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: var(--surface); }
 .shell #tab-instructions .library-editor-mode-row .mode-toggle { border: 0; border-radius: 0; background: transparent; }
 .shell #tab-instructions .library-editor-mode-row .mode-button,
 .shell #tab-instructions .tool-page-button,
+.shell #tab-instructions .skill-page-button,
 .shell #tab-vba .vba-mode-button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--ink-muted); }
 .shell #tab-instructions .library-editor-mode-row .mode-button.active,
 .shell #tab-instructions .tool-page-button.active,
+.shell #tab-instructions .skill-page-button.active,
 .shell #tab-vba .vba-mode-button.active { border-bottom-color: var(--accent); color: var(--ink); }
+.shell #tab-instructions .skill-editor-pane { grid-template-rows: 52px 37px minmax(0, 1fr); gap: 0; }
+.shell #tab-instructions .prompt-editor-pane { grid-template-rows: 52px 37px minmax(0, 1fr) 25px; gap: 0; }
+.shell #tab-instructions .prompt-editor-stage { padding-top: 16px; }
+.shell #tab-instructions .skill-instruction-view { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 0; min-height: 0; }
+.shell #tab-instructions .skill-instruction-view:has(#skillResourceHeading[hidden]) { grid-template-rows: auto minmax(0, 1fr) 25px; }
+.shell #tab-instructions .skill-editor-fields { grid-template-columns: minmax(0, 1fr) minmax(130px, .45fr); align-content: start; gap: 8px 12px; padding: 16px 0 12px; }
+.shell #tab-instructions .skill-editor-fields label { color: var(--ink); font-size: 12px; }
+.shell #tab-instructions .skill-editor-fields input:not([type="checkbox"]),
+.shell #tab-instructions .skill-editor-fields select,
+.shell #tab-instructions .skill-editor-fields textarea { min-height: 36px; border-color: var(--line-strong); border-radius: 7px; padding: 8px 10px; background: var(--surface); color: var(--ink); font-size: 13px; }
+.shell #tab-instructions .skill-editor-fields textarea { height: 36px; resize: vertical; }
+.shell #tab-instructions .skill-enabled-field { grid-column: 1 / -1; min-height: 26px; }
+.shell #tab-instructions .skill-enabled-field input { accent-color: var(--accent); }
+.shell #tab-instructions .skill-instruction-view > .library-editor-mode-row { justify-content: flex-end; min-height: 31px; margin: 0; padding: 0; border: 0; }
+.shell #tab-instructions .skill-instruction-view .library-editor-section-label { margin-right: auto; }
+.shell #tab-instructions #skillResourceHeading[hidden],
+.shell #tab-instructions #skillReturnToEditorButton[hidden] { display: none !important; }
+.shell #tab-instructions .skill-editor-stage { min-height: 0; }
+.shell #tab-instructions .skill-files-view { min-height: 0; overflow: auto; padding: 18px 0; }
+.shell #tab-instructions .skill-files-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.shell #tab-instructions .skill-files-heading h2 { margin: 0; font-size: 17px; }
+.shell #tab-instructions .skill-files-heading button { min-height: 30px; padding: 4px 10px; }
+.shell #tab-instructions .skill-file-row { display: flex; align-items: center; gap: 10px; min-height: 58px; border-bottom: 1px solid var(--line); }
+.shell #tab-instructions .skill-file-info { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; }
+.shell #tab-instructions .skill-file-info svg { width: 16px; height: 16px; fill: none; stroke: var(--ink-muted); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.shell #tab-instructions .skill-file-info span { display: flex; flex-direction: column; min-width: 0; }
+.shell #tab-instructions .skill-file-info strong { overflow: hidden; font-size: 12px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.shell #tab-instructions .skill-file-info small { color: var(--ink-muted); font-size: 10px; }
+.shell #tab-instructions .skill-file-action { flex: 0 0 auto; padding: 6px 4px; border: 0; background: transparent; color: var(--ink-muted); font-size: 11px; }
+.shell #tab-instructions .skill-file-action:hover { color: var(--accent); }
+.shell #tab-instructions .skill-file-action.is-danger:hover { color: var(--danger); }
+.shell .product-editor-status { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 25px; margin: 0 -18px -12px; padding: 4px 18px; border-top: 1px solid var(--line); color: var(--ink-muted); font-size: 10px; }
+.shell #tab-vba .vba-editor { grid-template-rows: 52px 37px minmax(0, 1fr) 25px; gap: 0; }
+.shell #tab-vba .vba-editor.is-empty { grid-template-rows: 52px minmax(0, 1fr); }
+.shell #tab-vba .vba-editor.is-empty .vba-editor-status { display: none; }
+.shell #tab-vba .vba-code-pane { padding-top: 16px; }
+.shell #tab-instructions .skill-page-tabs.hidden,
+.shell #tab-instructions .skill-instruction-view.hidden,
+.shell #tab-instructions .skill-files-view.hidden { display: none; }
 .shell #tab-instructions .library-editor-stage,
 .shell #tab-vba .vba-code-pane { min-height: 0; }
 .shell #tab-instructions .library-editor-stage > .product-code-editor,
 .shell #tab-vba .vba-code-pane > .product-code-editor { height: 100%; }
 .shell #tab-vba .tool-list-status { margin: 6px 10px 0; }
 .shell #tab-vba .vba-module-list { padding: 0 5px; }
+.shell #tab-vba .vba-module-group { margin: 2px 0 8px; }
+.shell #tab-vba .vba-module-group > .resource-tree-group-title { min-height: 31px; padding: 4px 8px; border: 0; background: transparent; color: var(--ink-muted); font-size: 11px; font-weight: 400; }
+.shell #tab-vba .vba-module-group > .resource-tree-group-title .resource-tree-icon,
+.shell #tab-vba .vba-module-group > .resource-tree-group-title em { display: none; }
+.shell #tab-vba .vba-module-group > .resource-tree-group-children { margin: 0; padding: 0; border: 0; }
+.shell #tab-vba .vba-module-list .tool-list-item.is-compact { grid-template-columns: 19px minmax(0, 1fr); min-height: 34px; margin-left: 0; padding: 7px 10px; border: 0; border-radius: 8px; }
+.shell #tab-vba .vba-module-list .tool-list-item.is-compact .resource-tree-icon { grid-column: 1; grid-row: 1; }
+.shell #tab-vba .vba-module-list .tool-list-item.is-compact .tool-list-title { grid-column: 2; grid-row: 1; }
+.shell #tab-vba .vba-module-list .tool-list-meta,
+.shell #tab-vba .vba-module-list .tool-list-badge { display: none; }
+.shell #tab-vba .vba-module-list .tool-list-item.active { background: var(--surface-selected); color: var(--ink); box-shadow: none; }
 .shell #tab-vba .vba-editor.is-empty { background: var(--surface); }
 
 .shell #tab-workspace .data-templates { --dt-surface: var(--surface); --dt-surface-muted: var(--surface-subtle); --dt-border: var(--line); --dt-control-radius: 8px; }

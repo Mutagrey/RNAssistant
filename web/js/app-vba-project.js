@@ -153,15 +153,15 @@ function renderVbaModuleList(modules, query) {
 function vbaModuleIcon(type) {
   var value = String(type || "module").toLowerCase();
   if (value.indexOf("class") >= 0) {
-    return "CLS";
+    return "class";
   }
   if (value.indexOf("form") >= 0) {
-    return "FRM";
+    return "form";
   }
   if (value.indexOf("document") >= 0 || value.indexOf("worksheet") >= 0 || value.indexOf("workbook") >= 0) {
-    return "OBJ";
+    return "document";
   }
-  return "MOD";
+  return "module";
 }
 
 function groupVbaModules(modules) {
@@ -195,7 +195,11 @@ function isDeletableVbaModule(module) {
 
 function vbaModuleGroupLabel(type) {
   var value = String(type || "module").toLowerCase();
-  if (value.indexOf("document") >= 0 || value.indexOf("worksheet") >= 0 || value.indexOf("workbook") >= 0) return "Объекты документа";
+  if (value.indexOf("document") >= 0 || value.indexOf("worksheet") >= 0 || value.indexOf("workbook") >= 0) {
+    var host = String(state.host || "").toLowerCase();
+    return host === "excel" ? "Объекты Excel" : host === "word" ? "Объекты Word" :
+      host === "powerpoint" ? "Объекты PowerPoint" : "Объекты документа";
+  }
   if (value.indexOf("class") >= 0) return "Классы";
   if (value.indexOf("form") >= 0) return "Формы";
   if (value.indexOf("module") >= 0 || value === "standard") return "Модули";
@@ -239,10 +243,11 @@ function renderSelectedVbaModule() {
   if (!keepDraft) {
     state.vbaEditorDirty = false;
     state.vbaEditorLoadedModule = moduleName;
-    setVbaEditorCode(loaded ? vbaModuleCode(module) : "");
+    setVbaEditorCode(loaded ? vbaModuleCode(module) : "", moduleName);
   }
   $("vbaModuleTitle").textContent = module ? vbaModuleName(module) : "Модуль не выбран";
-  $("vbaModuleMeta").textContent = module ? vbaModuleMetaText(module) + (loaded ? "" : (loading ? " - читаю код..." : " - код не загружен")) : "";
+  $("vbaModuleMeta").textContent = module ? "VBA / " + (state.title || "Связанный документ") +
+    (loaded ? "" : (loading ? " · читаю код..." : " · код не загружен")) : "";
   $("vbaHistoryCurrentText").textContent = loaded ? "Код прочитан из связанного документа Office." : (loading ? "Код загружается из связанного документа Office." : "Код ещё не загружен.");
   renderVbaBackupChoices(module);
   renderVbaDiff({
@@ -254,6 +259,10 @@ function renderSelectedVbaModule() {
   }
   $("previewVbaDiffButton").disabled = !module || !loaded || state.bridgeUnavailable;
   $("saveVbaButton").disabled = !module || !loaded || state.bridgeUnavailable;
+  $("saveVbaButton").hidden = !state.vbaEditorDirty;
+  $("vbaActionsMenu").hidden = !module;
+  $("discardVbaChangesButton").disabled = !module || !loaded || !state.vbaEditorDirty;
+  $("downloadVbaModuleButton").disabled = !module || !loaded;
   $("restoreVbaButton").disabled = state.bridgeUnavailable || !$("vbaBackupSelect").value || !module || !loaded;
   applyVbaMode();
   updateVbaMacroSuggestion();

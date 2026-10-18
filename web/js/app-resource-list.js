@@ -1,8 +1,12 @@
 function createResourceIcon(kind) {
   var paths = {
-    prompt: '<path d="M7 4h8l3 3v13H7z"/><path d="M15 4v3h3M10 11h5M10 15h5"/>',
+    prompt: '<path d="M12 6c-2-1.5-5-2-9-1v14c4-1 7-.5 9 1 2-1.5 5-2 9-1V5c-4-1-7-.5-9 1zM12 6v14"/>',
     skill: '<path d="m12 3 1.8 6.2L20 11l-6.2 1.8L12 19l-1.8-6.2L4 11l6.2-1.8z"/><path d="m19 18 .5 1.5L21 20l-1.5.5L19 22l-.5-1.5L17 20l1.5-.5z"/>',
-    tool: '<path d="M14 5a5 5 0 0 0-6 6L3 16l5 5 5-5a5 5 0 0 0 6-6l-3 3-3-3z"/>',
+    tool: '<path d="m8 8-4 4 4 4M16 8l4 4-4 4M14 5l-4 14"/>',
+    module: '<path d="m8 8-4 4 4 4M16 8l4 4-4 4"/>',
+    document: '<path d="M6 3h8l4 4v14H6zM14 3v5h4M9 12h6M9 16h6"/>',
+    class: '<path d="M5 5h14v14H5zM8 9h8M8 12h8M8 15h5"/>',
+    form: '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 9h16M8 13h8M8 16h5"/>',
     host: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/>',
     section: '<path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10H3z"/>'
   };

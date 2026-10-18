@@ -687,7 +687,7 @@ function renderToolEditor() {
       : "Выберите инструмент слева или создайте новый.";
   }
   if ($("toolEditorTitle")) $("toolEditorTitle").textContent = skill ? (skill.Id || skill.Name || "Инструмент") : "Инструмент";
-  if ($("toolEditorMeta")) $("toolEditorMeta").textContent = skill ? ((builtIn ? "Встроенный" : "Пользовательский") + " · " + (skill.Host || "Common") + " · " + (skill.Executor || "vba") +
+  if ($("toolEditorMeta")) $("toolEditorMeta").textContent = skill ? ("Библиотека / Инструменты" +
     (skill._sourceConflict ? " · Исходник изменился: черновик сохранён, запись заблокирована" : skill._sourceError ? " · Ошибка чтения: обновите Library" : sourceUnavailable ? " · Загрузка исходника…" : "")) : "";
   $("toolEnabledInput").checked = skill ? skill.Enabled !== false : false;
   $("toolIdInput").value = skill ? (skill.Id || "") : "";

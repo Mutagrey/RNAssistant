@@ -10,6 +10,18 @@
     vbaCodeInput: { mode: "vb", minHeight: 440 },
     htmlWorkspaceEditorInput: { mode: "javascript", minHeight: 440, lineWrapping: true }
   };
+  var positions = {
+    skillBodyInput: "skillEditorPosition",
+    promptEditInput: "promptEditorPosition",
+    vbaCodeInput: "vbaEditorPosition"
+  };
+
+  function updatePosition(cm, id) {
+    var target = positions[id] && document.getElementById(positions[id]);
+    if (!target) return;
+    var cursor = cm.getCursor();
+    target.textContent = "Строка " + (cursor.line + 1) + ", столбец " + (cursor.ch + 1) + " · Строк: " + cm.lineCount();
+  }
 
   function textarea(id) {
     return document.getElementById(id);
@@ -72,6 +84,11 @@
 
     cm._rnEditorId = id;
     addEditorClass(cm, id, config);
+    if (positions[id]) {
+      cm.on("cursorActivity", function () { updatePosition(cm, id); });
+      cm.on("change", function () { updatePosition(cm, id); });
+      updatePosition(cm, id);
+    }
     if (config.mode === "vb") {
       cm.getInputField().setAttribute("aria-keyshortcuts", "Control+Space");
       cm.getWrapperElement().title = "VBA подсказки: Ctrl+Space";
