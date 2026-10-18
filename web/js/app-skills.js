@@ -383,7 +383,9 @@ function applySkillEditorPage() {
   var page = state.skillEditorPage === "files" ? "files" : "instruction";
   state.skillEditorPage = page;
   Array.prototype.slice.call(document.querySelectorAll(".skill-page-button")).forEach(function (button) {
-    button.classList.toggle("active", button.getAttribute("data-skill-page") === page);
+    var active = button.getAttribute("data-skill-page") === page;
+    button.classList.toggle("active", active);
+    if (active) button.setAttribute("aria-current", "page"); else button.removeAttribute("aria-current");
   });
   Array.prototype.slice.call(document.querySelectorAll("[data-skill-page-view]")).forEach(function (view) {
     view.classList.toggle("hidden", view.getAttribute("data-skill-page-view") !== page);

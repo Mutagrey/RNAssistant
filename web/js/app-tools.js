@@ -649,7 +649,11 @@ function toolMatchesSearch(skill, query) {
 
 function applyToolEditorPage() {
   var page = state.toolEditorPage || "main";
-  Array.prototype.slice.call(document.querySelectorAll(".tool-page-button")).forEach(function (button) { button.classList.toggle("active", button.getAttribute("data-tool-page") === page); });
+  Array.prototype.slice.call(document.querySelectorAll(".tool-page-button")).forEach(function (button) {
+    var active = button.getAttribute("data-tool-page") === page;
+    button.classList.toggle("active", active);
+    if (active) button.setAttribute("aria-current", "page"); else button.removeAttribute("aria-current");
+  });
   Array.prototype.slice.call(document.querySelectorAll("[data-tool-page-view]")).forEach(function (view) { view.classList.toggle("hidden", view.getAttribute("data-tool-page-view") !== page); });
   var refresh = function () {
     if (typeof refreshCodeEditors === "function") refreshCodeEditors();

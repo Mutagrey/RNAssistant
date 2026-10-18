@@ -33,7 +33,9 @@ function applyVbaMode() {
   var mode = normalizeVbaMode(state.vbaEditorMode);
   state.vbaEditorMode = mode;
   Array.prototype.slice.call(document.querySelectorAll(".vba-mode-button")).forEach(function (button) {
-    button.classList.toggle("active", button.getAttribute("data-vba-mode") === mode);
+    var active = button.getAttribute("data-vba-mode") === mode;
+    button.classList.toggle("active", active);
+    if (active) button.setAttribute("aria-current", "page"); else button.removeAttribute("aria-current");
   });
   Array.prototype.slice.call(document.querySelectorAll(".vba-view")).forEach(function (view) {
     view.classList.toggle("hidden", view.getAttribute("data-vba-view") !== mode);

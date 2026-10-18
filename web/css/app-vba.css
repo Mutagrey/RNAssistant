@@ -59,11 +59,6 @@ li.CodeMirror-hint-active {
   border-bottom: 1px solid rgba(226, 231, 239, 0.72);
 }
 
-.vba-mode-toggle {
-  max-width: 100%;
-  overflow-x: auto;
-}
-
 .vba-editor.is-empty .resource-editor-actions,
 .vba-editor.is-empty .vba-mode-toggle,
 .vba-editor.is-empty .vba-view {

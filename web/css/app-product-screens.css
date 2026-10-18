@@ -38,23 +38,14 @@
 .shell #tab-vba .resource-editor-title { color: var(--ink); font-size: 15px; font-weight: 600; }
 .shell #tab-instructions .resource-editor-meta,
 .shell #tab-vba .resource-editor-meta { margin: 0 0 2px; color: var(--ink-muted); font-size: 10px; }
-.shell #tab-instructions .library-editor-mode-row,
-.shell #tab-instructions .tool-page-tabs,
-.shell #tab-instructions .skill-page-tabs,
-.shell #tab-vba .vba-mode-toggle { min-height: 37px; margin: 0 -18px; padding: 0 18px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: var(--surface); }
+.shell #tab-instructions .library-editor-mode-row { min-height: 37px; margin: 0 -18px; padding: 0 18px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: var(--surface); }
 .shell #tab-instructions .library-editor-mode-row .mode-toggle { border: 0; border-radius: 0; background: transparent; }
-.shell #tab-instructions .library-editor-mode-row .mode-button,
-.shell #tab-instructions .tool-page-button,
-.shell #tab-instructions .skill-page-button,
-.shell #tab-vba .vba-mode-button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--ink-muted); }
-.shell #tab-instructions .library-editor-mode-row .mode-button.active,
-.shell #tab-instructions .tool-page-button.active,
-.shell #tab-instructions .skill-page-button.active,
-.shell #tab-vba .vba-mode-button.active { border-bottom-color: var(--accent); color: var(--ink); }
+.shell #tab-instructions .library-editor-mode-row .mode-button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--ink-muted); }
+.shell #tab-instructions .library-editor-mode-row .mode-button.active { border-bottom-color: var(--accent); color: var(--ink); }
 .shell #tab-instructions .skill-editor-pane { grid-template-rows: 52px 37px minmax(0, 1fr); gap: 0; }
 .shell #tab-instructions .prompt-editor-pane { grid-template-rows: 52px 37px minmax(0, 1fr) 25px; gap: 0; }
 .shell #tab-instructions .prompt-editor-stage { padding-top: 16px; }
-.shell #tab-instructions .skill-instruction-view { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 0; min-height: 0; }
+.shell #tab-instructions .skill-instruction-view { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 0; min-height: 0; padding-top: 16px; }
 .shell #tab-instructions .skill-instruction-view:has(#skillResourceHeading[hidden]) { grid-template-rows: auto minmax(0, 1fr) 25px; }
 .shell #tab-instructions .skill-instruction-view > .library-editor-mode-row { justify-content: flex-end; min-height: 31px; margin: 0; padding: 0; border: 0; }
 .shell #tab-instructions .skill-instruction-view .library-editor-section-label { margin-right: auto; }

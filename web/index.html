@@ -46,8 +46,8 @@
   <link rel="stylesheet" href="css/app-resource-viewer.css?v=agent-planning-20261002-2">
   <link rel="stylesheet" href="css/app-trajectory.css?v=diagnostics-clarity-20260930-1">
   <link rel="stylesheet" href="css/app-run-journal.css?v=json-height-20260929-1">
-  <link rel="stylesheet" href="css/app-tools.css?v=json-height-20260929-1-library-20261002-1">
-  <link rel="stylesheet" href="css/app-vba.css?v=ui-narrow-20261015-1">
+  <link rel="stylesheet" href="css/app-tools.css?v=shared-editor-tabs-20261019-1">
+  <link rel="stylesheet" href="css/app-vba.css?v=shared-editor-tabs-20261019-1">
   <link rel="stylesheet" href="css/app-context-panel.css?v=json-height-20260929-1">
   <link rel="stylesheet" href="css/app-model-context.css?v=model-context-20261002-1">
   <link rel="stylesheet" href="css/app-context-inspector.css?v=composer-menu-20261013-1">
@@ -61,10 +61,10 @@
   <link rel="stylesheet" href="css/app-theme.css?v=chat-tree-20261018-1">
   <link rel="stylesheet" href="css/app-product-tokens.css?v=product-ui-20261018-1">
   <link rel="stylesheet" href="css/app-product-navigation.css?v=project-ui-20261018-1">
-  <link rel="stylesheet" href="css/app-product-components.css?v=shared-skill-fields-20261018-1">
+  <link rel="stylesheet" href="css/app-product-components.css?v=shared-editor-tabs-20261019-1">
   <link rel="stylesheet" href="css/app-product-viewers.css?v=product-ui-20261018-1">
   <link rel="stylesheet" href="css/app-product-materials.css?v=product-ui-20261018-1">
-  <link rel="stylesheet" href="css/app-product-screens.css?v=ui-cutover-20261018-1">
+  <link rel="stylesheet" href="css/app-product-screens.css?v=shared-editor-tabs-20261019-1">
 </head>
 <body>
   <div class="shell app-shell">
@@ -413,13 +413,7 @@
                 </details>
               </div>
             </div>
-            <div class="mode-toggle tool-page-tabs" role="tablist" aria-label="Раздел инструмента">
-              <button class="mode-button tool-page-button active" type="button" data-tool-page="main">Описание</button>
-              <button class="mode-button tool-page-button" type="button" data-tool-page="schema">Параметры</button>
-              <button class="mode-button tool-page-button" type="button" data-tool-page="implementation">Код</button>
-              <button class="mode-button tool-page-button" type="button" data-tool-page="test">Проверка</button>
-              <button class="mode-button tool-page-button" type="button" data-tool-page="docs">Документация</button>
-            </div>
+            <div data-rna-editor-tabs="tool"></div>
             <div class="tool-form library-editor-scroll" id="toolForm">
               <div class="form-grid tool-editor-page" data-tool-page-view="main">
                 <label class="wide">Название<input id="toolNameDisplay" readonly title="Совпадает с идентификатором инструмента"></label>
@@ -495,10 +489,7 @@
                   </details>
                 </div>
               </div>
-              <div class="mode-toggle skill-page-tabs" role="tablist" aria-label="Раздел навыка">
-                <button class="mode-button skill-page-button active" type="button" data-skill-page="instruction">Инструкция</button>
-                <button class="mode-button skill-page-button" type="button" data-skill-page="files">Файлы</button>
-              </div>
+              <div data-rna-editor-tabs="skill"></div>
               <div class="skill-instruction-view" data-skill-page-view="instruction">
                 <div id="skillForm" data-rna-skill-form></div>
                 <div class="library-editor-mode-row" id="skillResourceHeading" hidden>
@@ -579,12 +570,7 @@
                 </details>
               </div>
             </div>
-            <div class="mode-toggle vba-mode-toggle" role="group" aria-label="Раздел VBA">
-              <button class="mode-button vba-mode-button active" type="button" data-vba-mode="edit">Код</button>
-              <button class="mode-button vba-mode-button" type="button" data-vba-mode="diff">Изменения</button>
-              <button class="mode-button vba-mode-button" type="button" data-vba-mode="run">Запуск</button>
-              <button class="mode-button vba-mode-button" type="button" data-vba-mode="history">История</button>
-            </div>
+            <div data-rna-editor-tabs="vba"></div>
             <div class="resource-editor-empty" id="vbaEmptyState">
               <div class="resource-editor-empty-title">VBA не загружен</div>
               <div class="resource-editor-empty-text">Загрузите VBA-проект, чтобы редактировать модули, сравнивать diff и сохранять изменения.</div>
@@ -1203,6 +1189,7 @@
   <script src="js/vendor/codemirror/addon/selection/active-line.min.js"></script>
   <script src="js/vendor/codemirror/addon/hint/show-hint.min.js"></script>
   <script src="js/vendor/viewer.min.js"></script>
+  <script src="js/app-editor-tabs.js?v=shared-editor-tabs-20261019-1"></script>
   <script src="js/app-skill-fields-view.js?v=shared-skill-fields-20261018-1"></script>
   <script src="js/app-core.js?v=bridge-contract-20261015-1"></script>
   <script src="js/app-navigation-tree.js?v=shared-tree-20261018-1"></script>
@@ -1236,12 +1223,12 @@
   <script src="js/app-tools-structured.js?v=library-ux-20260903-1"></script>
   <script src="js/app-tools-actions.js?v=manual-tool-chat-20260908-1"></script>
   <script src="js/app-tools-documentation.js?v=tool-docs-20260906-1"></script>
-  <script src="js/app-tools.js?v=vba-manifest-editor-20261012-1"></script>
-  <script src="js/app-skills.js?v=skill-source-paths-20261013-2"></script>
+  <script src="js/app-tools.js?v=shared-editor-tabs-20261019-1"></script>
+  <script src="js/app-skills.js?v=shared-editor-tabs-20261019-1"></script>
   <script src="js/app-text-diff.js?v=run-diff-20260908-1"></script>
   <script src="js/app-vba-actions.js?v=vba-upload-20260906-1"></script>
   <script src="js/app-vba-project.js?v=vba-upload-20260906-1"></script>
-  <script src="js/app-vba.js?v=run-diff-20260908-1"></script>
+  <script src="js/app-vba.js?v=shared-editor-tabs-20261019-1"></script>
   <script src="js/app-html-resource-export.js?v=binary-chunks-20260906-1"></script>
   <script src="js/app-html-workspace-preview.js?v=binary-chunks-20260906-1-vendors-1"></script>
   <script src="js/app-html-workspace-artifacts.js?v=authored-html-viewer-20261014-1"></script>

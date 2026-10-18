@@ -1,5 +1,5 @@
 /* Shared components used by both the prototype and the product shell. */
-:where(.rna-skill-fields) { display: grid; grid-template-columns: minmax(0, 1fr) minmax(130px, .45fr); align-content: start; gap: 8px 12px; min-height: 0; padding: 16px 0 12px; overflow: visible; }
+.rna-skill-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(130px, .45fr); align-content: start; gap: 8px 12px; min-height: 0; padding: 16px 0 12px; overflow: visible; }
 .rna-skill-fields label { display: grid; gap: 5px; min-width: 0; color: var(--ink); font-size: 12px; font-weight: 500; }
 .rna-skill-fields label.wide { grid-column: 1 / -1; }
 .rna-skill-fields input:not([type="checkbox"]), .rna-skill-fields select, .rna-skill-fields textarea { width: 100%; min-width: 0; min-height: 36px; border: 1px solid var(--line-strong); border-radius: 7px; padding: 8px 10px; background: var(--surface); color: var(--ink); font-size: 13px; font-weight: 400; }
@@ -10,6 +10,11 @@
 @container content (max-width: 420px) { .rna-skill-fields { grid-template-columns: 1fr; } }
 select:not([multiple]):not([size]) { appearance: none; padding-inline-end: 34px; background-image: var(--select-chevron); background-position: right 10px center; background-size: 14px 14px; background-repeat: no-repeat; }
 @media (forced-colors: active) { select:not([multiple]):not([size]) { appearance: auto; background-image: none; padding-inline-end: 10px; } }
+.rna-editor-tabs { display: flex; flex: 0 0 auto; flex-wrap: wrap; align-items: stretch; gap: 18px; width: 100%; max-width: none; min-height: 37px; padding: 0 var(--page-inset); overflow-x: auto; overflow-y: hidden; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: var(--surface); }
+.rna-editor-tabs > button { flex: 0 0 auto; height: auto; min-height: 36px; padding: 8px 0; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--ink-muted); font-size: 12px; font-weight: 500; transition: background-color var(--motion-fast), color var(--motion-fast), border-color var(--motion-fast), box-shadow var(--motion-fast); }
+.rna-editor-tabs > button.active, .rna-editor-tabs > button[aria-current="page"] { border-bottom-color: var(--accent); background: transparent; color: var(--ink); }
+.shell .rna-editor-tabs { width: calc(100% + 36px); max-width: none; margin: 0 -18px; padding: 0 18px; }
+@container content (max-width: 620px) { .rna-editor-tabs { gap: 16px; } .rna-editor-tabs > button { padding: 9px 0; font-size: 11px; } }
 :root {
   --text: var(--ink); --muted: var(--ink-muted); --panel: var(--surface);
   --secondary-bg: var(--surface-subtle); --secondary-bg-hover: var(--surface-hover);

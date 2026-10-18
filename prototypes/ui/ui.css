@@ -205,9 +205,6 @@ body.resizing-panels, body.resizing-panels * { cursor: col-resize !important; us
 .section-head p { color: var(--ink-muted); font-size: 12px; margin-top: 4px; }
 .toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: var(--space-4); }
 .toolbar .search { min-width: 180px; flex: 1; }
-.tabs { display: flex; gap: 18px; padding: 0 var(--page-inset); border-bottom: 1px solid var(--line); flex-shrink: 0; flex-wrap: wrap; }
-.tabs button { padding: 8px 0; font-size: 12px; color: var(--ink-muted); border-bottom: 2px solid transparent; }
-.tabs button[aria-current="page"] { color: var(--ink); border-bottom-color: var(--accent); }
 .table-wrap { overflow-x: auto; max-width: 100%; }
 table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; }
 th { font-size: 10px; color: var(--ink-muted); font-weight: 500; padding: 10px 12px; border-bottom: 1px solid var(--line-strong); white-space: nowrap; }
@@ -375,8 +372,6 @@ dialog::backdrop { background: var(--scrim); backdrop-filter: blur(3px); }
   .composer-toolbar { gap: 3px; }
   .composer textarea { min-height: 67px; }
   .composer-chips { padding: 8px 9px 0; }
-  .tabs { gap: 16px; }
-  .tabs button { font-size: 11px; padding: 9px 0; }
   .grid-2 { grid-template-columns: 1fr; gap: 14px; }
   .paper { padding: 20px; }
   .paper h1 { font-size: 23px; }
@@ -469,7 +464,7 @@ dialog::backdrop { background: var(--scrim); backdrop-filter: blur(3px); }
   .navigation-transition > .global-nav, .navigation-transition > .section-rail { transition: width var(--motion-duration) var(--motion-ease), padding var(--motion-duration) var(--motion-ease), opacity var(--motion-fast), visibility var(--motion-duration); }
   .resizing-panels .navigation-transition > .global-nav, .resizing-panels .navigation-transition > .section-rail { transition: none; }
   .popover[open] > .popover-menu, dialog[open], .toast:not([hidden]) { animation: surface-enter var(--motion-fast) var(--motion-ease); }
-  .rail-button, .navigation-tree-row, .tabs button, .segmented button, .composer, .artifact-link, .chat-scroll-button { transition: background-color var(--motion-fast), color var(--motion-fast), border-color var(--motion-fast), box-shadow var(--motion-fast); }
+  .rail-button, .navigation-tree-row, .segmented button, .composer, .artifact-link, .chat-scroll-button { transition: background-color var(--motion-fast), color var(--motion-fast), border-color var(--motion-fast), box-shadow var(--motion-fast); }
 }
 @keyframes surface-enter { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) {

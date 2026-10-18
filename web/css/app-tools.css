@@ -248,7 +248,6 @@
   display: none;
 }
 
-.tool-page-tabs { width: 100%; min-width: 0; max-width: 100%; overflow-x: auto; overflow-y: hidden; }
 .tool-editor-page { display: grid; align-content: start; gap: 10px; width: 100%; min-width: 0; max-width: 100%; }
 .tool-editor-page > *,
 .tool-editor-page .form-grid > *,

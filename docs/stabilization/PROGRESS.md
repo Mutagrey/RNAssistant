@@ -1,6 +1,6 @@
 # Stabilization progress
 
-## Product UI cutover — 2026-10-18
+## Product UI cutover — 2026-10-19
 
 Prototype and product now use one navigation-tree renderer and one set of tree,
 menu and navigation-header styles. All six product sections supply their own
@@ -10,7 +10,9 @@ with a preview-only typed mock bridge before initialization. Its chat text intak
 skill and reference read/save/clone, material preview, and project catalog fixtures
 exercise the real UI handlers; unsupported actions reject explicitly. The old direct
 fixture injection was removed. Demo and product share the skill fields view and
-its CSS, including ID and host. Most internal screen views remain separate, and
+its CSS, including ID and host. Library/VBA editor tabs also share one renderer
+and one style rule with the demo; the skill form's top spacing now matches it.
+Most internal screen views remain separate, and
 mock preview is not Office qualification.
 The project catalog now keeps its initial refresh pending while a concurrent
 project operation is busy, so templates and dictionary appear without a manual
