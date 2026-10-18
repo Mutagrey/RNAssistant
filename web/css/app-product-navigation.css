@@ -12,38 +12,80 @@
 .shell > .content > .panel.active { background: var(--surface); color: var(--ink); font-family: var(--font); }
 .product-mobile-menu-button { display: none; }
 .shell .global-nav { min-width: 0; background: var(--surface-subtle); border-right: 1px solid var(--line); }
+.shell .split-layout > .global-nav { border-right: 0; }
 .shell .product-nav-heading { display: flex; align-items: center; min-height: 52px; padding: 0 18px; margin: 0; border-bottom: 1px solid var(--line); color: var(--ink); font-size: 13px; font-weight: 600; }
-.shell .chat-sidebar-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0; min-height: 52px; padding: 0; background: var(--surface-subtle); }
-.shell .chat-sidebar-head .product-nav-heading { flex: 1; min-width: 0; border-bottom: 0; }
+.shell .chat-sidebar-head { position: relative; display: flex; flex-wrap: nowrap; align-items: center; gap: 0; height: 52px; min-height: 52px; padding: 0; background: var(--surface-subtle); }
+.shell .chat-sidebar-head .product-nav-heading { flex: 1; min-width: 0; height: 51px; min-height: 51px; border-bottom: 0; }
 .shell .chat-tree-toolbar { padding-right: 8px; }
-.shell .chat-search-wrap.is-open { flex: 1 0 100%; margin: 0 8px 8px; }
-.shell .instruction-layout .tool-list-panel { grid-template-rows: 52px auto minmax(0, 1fr); padding: 0 8px 6px; }
+.shell .chat-sidebar-head.searching .product-nav-heading { display: none; }
+.shell .chat-sidebar-head.searching .chat-tree-toolbar { flex: 1; justify-content: space-between; padding-left: 8px; }
+.shell .chat-search-wrap.is-open { position: absolute; top: 10px; right: 44px; left: 44px; display: block; margin: 0; }
+.shell .chat-search-wrap.is-open > svg { display: none; }
+.shell .chat-search-wrap.is-open input { height: 30px; padding-left: 8px; border-color: var(--line-strong); border-radius: 9px; background: var(--surface); }
+.shell .instruction-layout .tool-list-panel { grid-template-rows: 52px minmax(0, 1fr); padding: 0 8px 6px; }
 .shell .instruction-layout .product-nav-heading { margin: 0 -8px; }
-.shell .vba-layout .tool-list-panel { grid-template-rows: 52px auto auto minmax(0, 1fr); padding: 0 8px 6px; }
+.shell .vba-layout .tool-list-panel { grid-template-rows: 52px auto minmax(0, 1fr); padding: 0 8px 6px; }
 .shell .vba-layout .product-nav-heading { margin: 0 -8px; }
-.shell #tab-settings .settings-nav .product-nav-heading { margin: 0 -8px 4px; }
-.shell #tab-workspace .workspace-projects { display: grid; grid-template-columns: var(--nav-width) minmax(0, 1fr); width: 100%; max-width: none; height: 100%; min-height: 0; margin: 0; padding: 0; }
-.shell #tab-workspace .dt-navigation { display: flex; flex-direction: column; gap: 0; min-width: 0; min-height: 0; margin: 0; padding: 0 8px 8px; overflow-y: auto; border-bottom: 0; }
-.shell #tab-workspace .dt-navigation .product-nav-heading { flex: 0 0 52px; margin: 0 -8px 8px; }
-.shell #tab-workspace .dt-nav-project { display: flex; align-items: center; gap: 8px; min-height: 28px; padding: 3px 12px; color: var(--ink-muted); font-size: 11px; overflow: hidden; }
-.shell #tab-workspace .dt-nav-project::before { content: "⌄"; font-size: 12px; }
-.shell #tab-workspace .dt-nav-project span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.shell #tab-workspace .dt-tabs { display: flex; flex-direction: column; gap: 4px; }
-.shell #tab-workspace .dt-nav-group { display: flex; flex-direction: column; gap: 2px; }
-.shell #tab-workspace .dt-nav-group-label { display: flex; align-items: center; min-height: 27px; padding: 2px 12px 2px 22px; color: var(--ink-muted); font-size: 11px; }
-.shell #tab-workspace .dt-nav-group-label::before { content: "⌄"; margin-right: 8px; font-size: 12px; }
-.shell #tab-workspace .dt-tabs button { flex: 0 0 auto; justify-content: flex-start; width: 100%; min-height: 33px; padding: 0 12px 0 36px; border: 0; border-radius: 9px; color: var(--ink-muted); text-align: left; font-size: 12px; }
-.shell #tab-workspace .dt-nav-group:first-child button { padding-left: 26px; }
-.shell #tab-workspace .dt-tabs button::before { content: "▤"; margin-right: 10px; color: var(--ink-muted); font-size: 14px; }
-.shell #tab-workspace #dtTabSources::before { content: "▣"; }
-.shell #tab-workspace #dtTabTemplates::before { content: "▤"; }
-.shell #tab-workspace .dt-nav-extra::before { content: "◷"; }
-.shell #tab-workspace #dtTabParameters::before { content: "{}"; font-size: 11px; }
-.shell #tab-workspace #dtTabMapping::before { content: "◇"; }
-.shell #tab-workspace #dtTabResults::before { content: "▥"; }
-.shell #tab-workspace #dtTabFormat::before { content: "▤"; }
-.shell #tab-workspace .dt-tabs button:hover { background: var(--surface-hover); color: var(--ink); }
-.shell #tab-workspace .dt-tabs button[aria-selected="true"] { background: var(--surface-selected); color: var(--ink); font-weight: 600; }
+.shell .product-search-heading .tree-toolbar { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.shell .product-search-heading.searching > strong { display: none; }
+.shell .product-search-heading.searching .tree-toolbar { flex: 1; }
+.shell .product-nav-search-toggle { display: grid; place-items: center; flex: 0 0 30px; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 9px; background: transparent; color: var(--ink-muted); }
+.shell .product-nav-search-toggle:hover { background: var(--surface-hover); color: var(--ink); }
+.shell .product-nav-search-toggle.has-search-query { background: var(--accent-soft); color: var(--accent); }
+.shell .product-search-heading .tree-toolbar svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.55; stroke-linecap: round; stroke-linejoin: round; }
+.shell .product-search-heading .product-nav-search-input { flex: 1; min-width: 0; width: 80px; height: 30px; padding: 4px 8px; border-color: var(--line-strong); border-radius: 9px; background: var(--surface); color: var(--ink); font-size: 12px; }
+.shell #tab-settings .settings-nav { display: flex; flex-direction: column; padding: 0; overflow: hidden; border-right: 0; }
+.shell #tab-settings .settings-shell > .splitter { display: none; }
+.shell #tab-settings .settings-navigation-content { display: flex; flex: 1; flex-direction: column; min-height: 0; padding: 0 8px 6px; }
+.shell #tab-settings .settings-nav-heading { display: flex; align-items: center; gap: 6px; flex: 0 0 52px; height: 52px; padding: 0 10px 0 18px; margin: 0 -8px; border-bottom: 1px solid var(--line); }
+.shell #tab-settings .settings-nav-heading h2 { flex: 1; min-width: 0; margin: 0; font-size: 13px; font-weight: 600; }
+.shell #tab-settings .settings-nav-heading.searching h2 { display: none; }
+.shell #tab-settings .settings-nav-tools { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.shell #tab-settings .settings-nav-heading.searching .settings-nav-tools { flex: 1; }
+.shell #tab-settings .settings-nav-list { display: flex; flex: 1; flex-direction: column; min-height: 0; padding-top: 4px; overflow-y: auto; }
+.shell #tab-settings #settingsNavSearchToggle { display: grid; place-items: center; flex: 0 0 30px; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 9px; background: transparent; color: var(--ink-muted); }
+.shell #tab-settings #settingsNavSearchToggle:hover { background: var(--surface-hover); color: var(--ink); }
+.shell #tab-settings #settingsNavSearchToggle.has-search-query { background: var(--accent-soft); color: var(--accent); }
+.shell #tab-settings #settingsNavSearchToggle svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.55; stroke-linecap: round; stroke-linejoin: round; }
+.shell #tab-settings #settingsNavSearch { flex: 1; min-width: 0; width: 80px; height: 30px; padding: 4px 8px; border: 1px solid var(--line-strong); border-radius: 9px; background: var(--surface); color: var(--ink); font-size: 12px; }
+.shell #tab-settings #settingsNavSearch[hidden], .shell #tab-settings .settings-nav-button[hidden] { display: none !important; }
+.shell #tab-settings .settings-nav-button { display: flex; align-items: center; gap: 11px; }
+.shell #tab-settings .settings-nav-button svg { flex: 0 0 16px; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.55; stroke-linecap: round; stroke-linejoin: round; }
+.shell #tab-settings .settings-nav-button span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shell #tab-settings .form-grid label { color: var(--ink); font-size: 12px; font-weight: 500; }
+.shell #tab-settings .form-grid label > input:not([type="checkbox"]),
+.shell #tab-settings .form-grid label > select,
+.shell #tab-settings .form-grid label > textarea { min-height: 36px; border-color: var(--line-strong); border-radius: 7px; padding: 8px 10px; background: var(--surface); color: var(--ink); font-size: 13px; }
+.shell #tab-settings .form-grid label > small { color: var(--ink-muted); font-size: 11px; font-weight: 400; line-height: 1.5; }
+.shell #tab-settings .product-settings-advanced > summary { display: flex; align-items: center; gap: 8px; list-style: none; }
+.shell #tab-settings .product-settings-advanced > summary::-webkit-details-marker { display: none; }
+.shell #tab-settings .product-settings-advanced > summary::before { content: ""; flex: 0 0 6px; width: 6px; height: 6px; margin: 0 3px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg); }
+.shell #tab-settings .product-settings-advanced[open] > summary::before { transform: rotate(45deg); }
+.shell #tab-workspace .workspace-projects { display: grid; grid-template-columns: var(--split-left, var(--nav-width)) 1px minmax(0, 1fr); width: 100%; max-width: none; height: 100%; min-height: 0; margin: 0; padding: 0; }
+.shell #tab-workspace .dt-navigation { display: flex; flex-direction: column; gap: 0; min-width: 0; min-height: 0; margin: 0; padding: 0; overflow: hidden; border-bottom: 0; }
+.shell #tab-workspace .dt-navigation.global-nav { border-right: 0; }
+.shell #tab-workspace .dt-nav-content { display: flex; flex-direction: column; flex: 1; min-height: 0; width: 100%; padding: 0 8px 6px; }
+.shell #tab-workspace .dt-nav-heading { display: flex; align-items: center; gap: 6px; flex: 0 0 52px; height: 52px; padding: 0 10px 0 18px; margin: 0 -8px; border-bottom: 1px solid var(--line); }
+.shell #tab-workspace .dt-nav-heading .nav-label { flex: 1; min-width: 0; margin: 0; color: var(--ink); font-size: 13px; font-weight: 600; letter-spacing: 0; text-transform: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.shell #tab-workspace .dt-nav-heading.searching .nav-label { display: none; }
+.shell #tab-workspace .dt-nav-heading .tree-toolbar { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.shell #tab-workspace .dt-nav-heading.searching .tree-toolbar { flex: 1; }
+.shell #tab-workspace .dt-nav-heading .tree-search-input { flex: 1; min-width: 0; width: 80px; height: 30px; padding: 4px 8px; border: 1px solid var(--line-strong); border-radius: 9px; background: var(--surface); color: var(--ink); font-size: 12px; }
+.shell #tab-workspace .dt-nav-icon-button { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 9px; color: var(--ink-muted); background: transparent; }
+.shell #tab-workspace .dt-nav-icon-button:hover { background: var(--surface-hover); color: var(--ink); }
+.shell #tab-workspace .dt-nav-icon-button.has-search-query { background: var(--accent-soft); color: var(--accent); }
+.shell #tab-workspace .dt-nav-icon-button svg { width: 16px; height: 16px; }
+.shell #tab-workspace .dt-nav-project { flex: 0 0 auto; min-height: 36px; color: var(--ink-muted); font-size: 11px; }
+.shell #tab-workspace .dt-nav-project .navigation-tree-label { color: var(--ink-muted); font-size: 11px; }
+.shell #tab-workspace .dt-tabs { display: flex; flex-direction: column; flex: 1; gap: 0; min-height: 0; margin: 0; padding: 0; overflow-y: auto; }
+.shell #tab-workspace .dt-nav-group, .shell #tab-workspace .dt-nav-group-children { display: flex; flex-direction: column; }
+.shell #tab-workspace .dt-nav-group-label { min-height: 36px; }
+.shell #tab-workspace .dt-nav-leaf { min-height: 32px; }
+.shell #tab-workspace .dt-nav-leaf.selected { background: var(--surface-selected); }
+.shell #tab-workspace .dt-nav-leaf .navigation-tree-label { flex: 1; width: auto; min-height: 0; padding: 4px 0; border: 0; border-radius: 0; background: transparent; color: var(--ink); font: inherit; font-size: var(--tree-text); text-align: left; }
+.shell #tab-workspace .dt-nav-leaf .navigation-tree-label:hover { background: transparent; color: var(--ink); }
+.shell #tab-workspace .dt-nav-leaf .navigation-tree-label[aria-selected="true"] { border: 0; background: transparent; color: var(--ink); font-weight: 500; }
+.shell #tab-workspace .dt-nav-leaf .navigation-tree-icon svg { width: 16px; height: 16px; }
 .shell #tab-workspace .product-dt-main { min-width: 0; min-height: 0; padding: 0 var(--page-inset) 32px; overflow: auto; }
 .shell #tab-workspace .dt-header { min-height: 52px; margin: 0 calc(-1 * var(--page-inset)) 20px; padding: 5px var(--page-inset); border-bottom: 1px solid var(--line); }
 .shell #tab-workspace .dt-header .dt-eyebrow { display: none; }
@@ -59,14 +101,19 @@
   .shell #tab-instructions .instruction-layout,
   .shell #tab-vba .vba-layout,
   .shell #tab-artifacts .html-workspace-layout { grid-template-columns: minmax(220px, var(--split-left, var(--nav-width))) 1px minmax(0, 1fr); }
-  .shell #tab-settings .settings-shell { grid-template-columns: var(--nav-width) minmax(0, 1fr); gap: 0; }
-  .shell #tab-settings .settings-nav { padding: 0 8px 8px; }
-  .shell #tab-settings .settings-nav-button { min-height: 39px; border-radius: 10px; padding: 0 12px; box-shadow: none; }
+  .shell #tab-settings .settings-shell { position: relative; grid-template-columns: var(--split-left, var(--nav-width)) 1px minmax(0, 1fr); gap: 0; }
+  .shell #tab-settings .settings-shell > .splitter { display: block; }
+  .shell #tab-settings .settings-nav { padding: 0; }
+  .shell #tab-settings .settings-nav-button { min-height: 33px; border-radius: 9px; padding: 0 22px; box-shadow: none; }
   .shell #tab-settings .settings-nav-button.active { color: var(--ink); background: var(--surface-selected); font-weight: 600; }
-  .shell #tab-settings .settings-pages { padding: 18px var(--page-inset); }
-  .shell #tab-settings .settings-heading { order: -1; display: flex; flex-direction: column; justify-content: center; gap: 2px; min-height: 52px; margin: -18px calc(-1 * var(--page-inset)) 22px; padding: 4px var(--page-inset); border-bottom: 1px solid var(--line); }
+  .shell #tab-settings .settings-pages { padding: 16px var(--page-inset); }
+  .shell #tab-settings .settings-heading { order: -1; display: flex; flex-direction: column; justify-content: center; gap: 2px; min-height: 52px; margin: -16px calc(-1 * var(--page-inset)) 14px; padding: 4px var(--page-inset); border-bottom: 1px solid var(--line); }
+  .shell #tab-settings .settings-page[data-settings-page="service"].active { overflow: visible; }
+  .shell #tab-settings .settings-heading-with-action { flex-direction: row; align-items: center; justify-content: space-between; padding-right: 118px; }
+  .shell #tab-settings .settings-heading-with-action > div { display: flex; flex-direction: column; }
   .shell #tab-settings .settings-heading h2 { order: 2; color: var(--ink); font-size: 15px; }
   .shell #tab-settings .settings-heading p { order: 1; color: var(--ink-muted); font-size: 10px; }
+  .shell #tab-settings .settings-actions-row { position: absolute; top: 8px; right: var(--page-inset); bottom: auto; z-index: 3; width: auto; margin: 0; padding: 0; border: 0; background: transparent; }
   .shell #tab-settings .settings-page > :not(.settings-heading) { width: min(100%, 720px); margin-inline: auto; }
   .shell #tab-settings .settings-page[data-settings-page="connection"] .form-grid { grid-template-columns: minmax(0, 1fr); gap: 14px; }
   .shell #tab-settings .product-settings-section { padding-top: 10px; }
@@ -75,15 +122,33 @@
   .shell #tab-settings .product-settings-advanced { margin-top: 12px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
   .shell #tab-settings .product-settings-advanced > summary { padding: 14px 0; color: var(--ink); font-size: 12px; font-weight: 600; cursor: pointer; }
   .shell #tab-settings .product-settings-advanced > div { display: grid; gap: 12px; padding: 0 0 18px; }
+  .shell #tab-settings .product-model-primary { padding-top: 10px; border-top: 0; }
+  .shell #tab-settings .product-model-primary h3,
+  .shell #tab-settings .product-model-response h3 { margin: 0 0 12px; color: var(--ink); font-size: 16px; }
+  .shell #tab-settings .product-model-primary > p { margin: 0 0 16px; color: var(--ink-muted); font-size: 12px; }
+  .shell #tab-settings .product-model-primary #loadModelsButton { margin-top: 12px; }
+  .shell #tab-settings .product-model-primary #loadModelsButton svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .shell #tab-settings .product-model-badges { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; }
+  .shell #tab-settings .product-model-badges span { padding: 4px 7px; border-radius: 4px; background: var(--surface-subtle); color: var(--ink); font-size: 11px; }
+  .shell #tab-settings .product-model-badges span.is-muted { color: var(--ink-muted); }
+  .shell #tab-settings .product-model-response { padding-top: 18px; border-top-color: var(--line); }
+  .shell #tab-settings .product-setting-toggle { justify-content: space-between; min-height: 42px; margin-top: 2px; }
+  .shell #tab-settings .product-setting-toggle > span { font-size: 13px; }
+  .shell #tab-settings .product-setting-toggle > input { margin-left: auto; accent-color: var(--accent); }
+  .shell #tab-settings .product-model-disclosure { margin-top: 0; border-top: 0; }
+  .shell #tab-settings .product-model-disclosure > div > p { margin: 0; color: var(--ink-muted); font-size: 12px; }
 }
 @media (max-width: 820px) {
   .shell #tab-workspace .workspace-projects { display: block; height: auto; }
+  .shell #tab-workspace .workspace-projects > .splitter { display: none; }
   .shell #tab-workspace .dt-navigation { padding: 8px var(--page-inset); border-bottom: 1px solid var(--line); }
-  .shell #tab-workspace .dt-navigation .product-nav-heading { display: none; }
+  .shell #tab-workspace .dt-nav-content { padding: 0; }
+  .shell #tab-workspace .dt-nav-heading { display: none; }
   .shell #tab-workspace .dt-nav-project, .shell #tab-workspace .dt-nav-group-label { display: none; }
   .shell #tab-workspace .dt-tabs { flex-direction: row; flex-wrap: wrap; }
-  .shell #tab-workspace .dt-nav-group { flex-direction: row; flex-wrap: wrap; }
-  .shell #tab-workspace .dt-tabs button { width: auto; padding: 0 9px; }
+  .shell #tab-workspace .dt-nav-group, .shell #tab-workspace .dt-nav-group-children { flex-direction: row; flex-wrap: wrap; }
+  .shell #tab-workspace .dt-nav-leaf { padding: 0 9px; }
+  .shell #tab-workspace .dt-nav-leaf .navigation-tree-expander, .shell #tab-workspace .dt-nav-leaf .navigation-tree-icon { display: none; }
   .shell #tab-workspace .dt-mobile-nav { display: none; }
   .shell #tab-workspace .product-dt-main { overflow: visible; }
 }

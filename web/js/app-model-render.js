@@ -24,6 +24,8 @@ function renderModelStatus() {
     return;
   }
 
+  status.hidden = false;
+
   if (state.modelCatalog.loading) {
     status.textContent = "Загрузка каталога...";
     status.title = "";
@@ -41,16 +43,38 @@ function renderModelStatus() {
       (state.modelCatalog.configUrl ? ". Источник: " + state.modelCatalog.configUrl : "");
     return;
   }
-  status.textContent = "Каталог не загружен.";
+  status.textContent = "";
   status.title = "";
+  status.hidden = true;
+}
+
+function renderModelCapabilityBadges() {
+  var root = $("modelCapabilityBadges");
+  if (!root) return;
+  var value = formModel();
+  root.replaceChildren();
+  root.hidden = !value;
+  if (!value) return;
+
+  [["Текст", true], ["Изображения", effectiveModelSupportsImages(value)],
+    ["Рассуждения", effectiveModelSupportsReasoning(value)],
+    ["Аудио", effectiveModelSupportsAudio(value)]].forEach(function (entry, index) {
+    var badge = document.createElement("span");
+    var support = entry[1];
+    badge.textContent = support === true ? entry[0] : entry[0] + (support === null ? " ?" : " нет");
+    badge.className = support === true ? "" : "is-muted";
+    if (index === 0) badge.textContent = "Текст";
+    root.appendChild(badge);
+  });
 }
 
 function renderModelControls() {
   if (typeof isPanelActive === "function" && !isPanelActive("chat") && !isPanelActive("settings")) return;
   if (typeof isPanelActive !== "function" || isPanelActive("settings")) {
-    populateModelSelect($("modelSelect"), formModel());
+    populateModelOptions($("modelOptions"));
     renderModelStatus();
     renderModelCapabilityList();
+    renderModelCapabilityBadges();
     renderAttachmentModelPriority();
     renderActiveModelCapability();
     if ($("loadModelsButton")) $("loadModelsButton").disabled = state.modelCatalog.loading;

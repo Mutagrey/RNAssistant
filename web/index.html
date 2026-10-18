@@ -467,15 +467,12 @@
       <section class="panel" id="tab-instructions">
         <div class="tool-layout instruction-layout split-layout" id="instructionsLayout" data-default-left="310" data-min-left="240">
           <div class="tool-list-panel surface-panel global-nav">
-            <div class="product-nav-heading"><strong>Библиотека</strong><details class="product-create-menu"><summary title="Создать в библиотеке" aria-label="Создать в библиотеке">+</summary>
+            <div class="product-nav-heading product-search-heading"><strong>Библиотека</strong><div class="tree-toolbar"><button class="product-nav-search-toggle" type="button" data-nav-search-toggle="skillSearchInput" aria-label="Поиск в библиотеке" aria-expanded="false" aria-controls="skillSearchInput"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg></button><input class="tool-search product-nav-search-input" id="skillSearchInput" type="search" placeholder="Найти…" aria-label="Поиск в библиотеке" autocomplete="off" hidden><details class="product-create-menu"><summary title="Создать в библиотеке" aria-label="Создать в библиотеке"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></summary>
               <div class="tool-list-actions">
                 <button class="primary icon-text-button" id="addSkillButton" type="button" title="Новый навык"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg><span>Навык</span></button>
                 <button class="secondary icon-text-button" id="addToolButton" type="button" title="Новый инструмент"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg><span>Инструмент</span></button>
               </div>
-            </details></div>
-            <div class="tool-list-controls">
-              <input class="tool-search" id="skillSearchInput" placeholder="Поиск в библиотеке..." autocomplete="off">
-            </div>
+            </details></div></div>
             <aside class="tool-list" id="instructionsList"></aside>
           </div>
           <div class="splitter" role="separator" aria-orientation="vertical" aria-label="Изменить ширину списка инструкций"></div>
@@ -556,11 +553,8 @@
       <section class="panel" id="tab-vba">
         <div class="tool-layout vba-layout split-layout" id="vbaLayout" data-default-left="310" data-min-left="240">
           <aside class="tool-list-panel vba-list-panel global-nav">
-            <div class="product-nav-heading"><strong>VBA</strong><button class="product-nav-action" id="refreshVbaButton" type="button" title="Обновить модули" aria-label="Обновить модули">↻</button></div>
+            <div class="product-nav-heading product-search-heading"><strong>VBA</strong><div class="tree-toolbar"><button class="product-nav-search-toggle" type="button" data-nav-search-toggle="vbaModuleSearchInput" aria-label="Поиск модулей" aria-expanded="false" aria-controls="vbaModuleSearchInput"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg></button><input class="tool-search product-nav-search-input" id="vbaModuleSearchInput" type="search" placeholder="Найти…" aria-label="Поиск модулей" autocomplete="off" hidden><button class="product-nav-action" id="refreshVbaButton" type="button" title="Обновить модули" aria-label="Обновить модули"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7V3m0 4h-4M4 17v4m0-4h4M4 10a8 8 0 0 1 14-5l2 2M4 17l2 2a8 8 0 0 0 14-5"/></svg></button></div></div>
             <div class="tool-list-status" id="vbaStatus">VBA-проект не загружен.</div>
-            <div class="tool-list-controls">
-              <input class="tool-search" id="vbaModuleSearchInput" placeholder="Поиск модулей..." autocomplete="off">
-            </div>
             <select class="hidden" id="vbaModuleSelect" aria-hidden="true" tabindex="-1"></select>
             <div class="tool-list vba-module-list" id="vbaModuleList" role="tree" aria-label="VBA модули"></div>
           </aside>
@@ -684,10 +678,10 @@
       <section class="panel" id="tab-artifacts">
         <div class="tool-layout html-workspace-layout split-layout" id="htmlWorkspaceLayout" data-default-left="310" data-min-left="240">
           <aside class="tool-list-panel html-workspace-sidebar global-nav" id="htmlWorkspaceSidebar">
-            <div class="artifact-catalog-toolbar">
+            <div class="artifact-catalog-toolbar product-search-heading">
               <strong>Материалы</strong>
-              <details class="html-workspace-menu html-workspace-create-menu product-material-menu">
-                <summary title="Добавить материал" aria-label="Добавить материал">＋</summary>
+              <div class="tree-toolbar"><button class="product-nav-search-toggle" type="button" data-nav-search-toggle="artifactNavSearch" aria-label="Поиск материалов" aria-expanded="false" aria-controls="artifactNavSearch"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg></button><input class="tool-search product-nav-search-input" id="artifactNavSearch" data-nav-search-mirror="htmlWorkspaceSearchInput" type="search" placeholder="Найти…" aria-label="Поиск материалов в дереве" autocomplete="off" hidden><details class="html-workspace-menu html-workspace-create-menu product-material-menu">
+                <summary title="Добавить материал" aria-label="Добавить материал"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></summary>
                 <div class="html-workspace-menu-items">
                   <button id="artifactCatalogImport" type="button">Импортировать файл</button>
                   <button id="addPlanButton" type="button">План</button>
@@ -696,7 +690,7 @@
                   <button id="addJsFileButton" type="button">Скрипт JS</button>
                   <button id="addHtmlDataButton" type="button">Данные JSON</button>
                 </div>
-              </details>
+              </details></div>
               <input type="file" id="artifactCatalogFile" hidden>
             </div>
             <div class="artifact-catalog-filters">
@@ -711,7 +705,7 @@
                 </div>
               </div>
             </div>
-            <button type="button" id="artifactCatalogAll" class="artifact-overview-nav" aria-current="page">▧ <span>Все материалы</span></button>
+            <button type="button" id="artifactCatalogAll" class="artifact-overview-nav" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h9l4 4v13H7Z"/><path d="M16 3v5h4M3 7v14h12"/></svg><span>Все материалы</span></button>
             <div class="tool-list html-workspace-tree" id="htmlWorkspaceTree" role="tree" aria-label="Артефакты"></div>
             <div class="artifact-tree-footer">
               <p id="artifactCatalogStatus" role="status" aria-live="polite"></p>
@@ -805,18 +799,22 @@
       </section>
 
       <section class="panel" id="tab-settings">
-        <div class="settings-shell">
+        <div class="settings-shell split-layout" id="settingsLayout" data-default-left="310" data-min-left="240">
           <nav class="settings-nav global-nav" aria-label="Разделы настроек">
-            <h2 class="product-nav-heading">Настройки</h2>
-            <button class="settings-nav-button active" type="button" data-settings-page="connection">Подключение</button>
-            <button class="settings-nav-button" type="button" data-settings-page="model">Модель</button>
-            <button class="settings-nav-button" type="button" data-settings-page="context">Контекст и вложения</button>
-            <button class="settings-nav-button" type="button" data-settings-page="agent">Агент</button>
-            <button class="settings-nav-button" type="button" data-settings-page="interface">Интерфейс</button>
-            <button class="settings-nav-button" type="button" data-settings-page="protection">Защита</button>
-            <button class="settings-nav-button" type="button" data-settings-page="service">Помощь и обслуживание</button>
-            <span class="settings-nav-version" id="appVersion" aria-label="Версия и commit RNAssistant">—</span>
+            <div class="settings-navigation-content">
+              <div class="workspace-heading settings-nav-heading"><h2 class="nav-label">Настройки</h2><div class="tree-toolbar settings-nav-tools"><button id="settingsNavSearchToggle" type="button" aria-label="Поиск в настройках" aria-expanded="false" title="Поиск в настройках"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg></button><input id="settingsNavSearch" type="search" aria-label="Найти раздел настроек" placeholder="Найти…" autocomplete="off" hidden></div></div>
+              <div class="section-tree-scroll settings-nav-list">
+                <button class="settings-nav-button active" type="button" data-settings-page="connection" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.72-1.71"/></svg><span>Подключение</span></button>
+            <button class="settings-nav-button" type="button" data-settings-page="model"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.4 6.6L21 12l-6.6 2.4L12 21l-2.4-6.6L3 12l6.6-2.4Z"/></svg><span>Модель</span></button>
+            <button class="settings-nav-button" type="button" data-settings-page="context"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 11-9 9a6 6 0 0 1-8.5-8.5L13 2a4 4 0 0 1 5.7 5.7L9.2 17.2a2 2 0 0 1-2.8-2.8l9-9"/></svg><span>Контекст и вложения</span></button>
+            <button class="settings-nav-button" type="button" data-settings-page="agent"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5H4l-1 1V11.5a9 9 0 0 1 18 0Z"/><path d="M7 9h10M7 13h7"/></svg><span>Агент</span></button>
+            <button class="settings-nav-button" type="button" data-settings-page="interface"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg><span>Интерфейс</span></button>
+            <button class="settings-nav-button" type="button" data-settings-page="protection"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 3v6c0 5-8 9-8 9S4 17 4 12V6Z"/><path d="m8 12 3 3 5-6"/></svg><span>Защита</span></button>
+            <button class="settings-nav-button" type="button" data-settings-page="service"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.7 3-.5 2.2-1.4.8-2.2-.7-2.3 4 1.7 1.5v1.6L3.3 14l2.3 4 2.2-.7 1.4.8.5 2.2h4.6l.5-2.2 1.4-.8 2.2.7 2.3-4-1.7-1.6v-1.6l1.7-1.5-2.3-4-2.2.7-1.4-.8-.5-2.2Z"/><circle cx="12" cy="11.7" r="3.2"/></svg><span>Помощь и обслуживание</span></button>
+              </div>
+            </div>
           </nav>
+          <div class="splitter" role="separator" aria-orientation="vertical" aria-label="Изменить ширину разделов настроек"></div>
 
           <div class="settings-pages">
             <section class="settings-page active" data-settings-page="connection">
@@ -824,10 +822,10 @@
                 <h2>Подключение</h2>
                 <p>Настройки</p>
               </div>
-              <div class="product-settings-section"><h3>Провайдер</h3><p>Адрес API, каталог моделей и ключ подключения.</p></div>
+              <div class="product-settings-section"><h3>Провайдер</h3><p>Любой совместимый API, включая локальный сервер.</p></div>
               <div class="form-grid two-columns">
                 <label><span>Адрес API</span><input id="baseUrlInput" autocomplete="off" placeholder="https://host"></label>
-                <label><span>URL каталога моделей</span><input id="modelsConfigUrlInput" autocomplete="off" placeholder="Относительно адреса API, например /v1/models"></label>
+                <label><span>Адрес каталога моделей</span><input id="modelsConfigUrlInput" autocomplete="off" placeholder="/v1/models"><small>Относительный путь или полный URL.</small></label>
                 <label><span>API-ключ</span><input id="apiKeyInput" type="password" autocomplete="off" placeholder="Оставьте пустым, чтобы не менять"><small id="apiKeyStatus"></small></label>
                 <details class="product-settings-advanced wide"><summary>Дополнительные параметры</summary><div>
                   <label><span>HTTP-заголовки</span><textarea id="headersInput" rows="4" placeholder="Header-Name: value"></textarea></label>
@@ -840,43 +838,43 @@
               <div class="settings-heading settings-heading-with-action">
                 <div>
                   <h2>Модель</h2>
-                  <p>Выбор модели, её возможности и параметры запроса.</p>
+                  <p>Настройки</p>
                 </div>
                 <button class="secondary" id="resetModelSettingsButton" type="button" title="Вернуть модель, параметры запроса и возможности к исходным значениям">Сбросить параметры</button>
               </div>
-              <div class="form-grid two-columns model-selection-fields">
-                <label><span>Модель по умолчанию</span><select id="modelSelect"></select></label>
-                <label><span>ID модели вручную</span><input id="modelInput" autocomplete="off" placeholder="Если модели нет в каталоге"></label>
-                <label class="wide"><span>Параметр reasoning API</span><select id="reasoningRequestModeInput"><option value="auto">Авто — стандарт OpenAI reasoning_effort</option><option value="reasoning_effort">reasoning_effort: medium / none</option><option value="enable_thinking">enable_thinking: true / false</option><option value="chat_template_kwargs" selected>chat_template_kwargs.enable_thinking</option><option value="reasoning_enabled">reasoning.enabled: true / false</option><option value="custom_json">Кастомный JSON в теле запроса</option></select><small>Если режим не указан в каталоге: QwenCloud — enable_thinking, vLLM — chat_template_kwargs, OpenRouter — reasoning.enabled.</small></label>
-                <label class="wide hidden" id="reasoningCustomJsonField"><span>Кастомный reasoning JSON</span><textarea class="reasoning-json-input" id="reasoningCustomJsonInput" rows="5" spellcheck="false" placeholder='{"reasoning":{"effort":"high"}}'></textarea><small>JSON-объект добавляется на верхний уровень тела запроса только при включённой лампочке reasoning. Системные поля model, messages, tools и response_format переопределять нельзя.</small></label>
-              </div>
-              <section class="model-settings-section" aria-labelledby="modelCapabilityTitle">
-                <div class="model-capability-heading model-capability-heading-with-action">
-                  <div>
-                    <h3 id="modelCapabilityTitle">Возможности моделей</h3>
-                    <p>Если каталог не указал возможности или лимиты, задайте их здесь. Пустой контекст использует резерв 32 768 токенов.</p>
-                  </div>
-                  <button class="secondary" id="loadModelsButton" type="button">Обновить каталог</button>
+              <section class="model-settings-section product-model-primary" aria-labelledby="modelPrimaryTitle">
+                <h3 id="modelPrimaryTitle">Основная модель</h3>
+                <p>Выбор для новых чатов. В отдельном чате модель можно изменить.</p>
+                <div class="form-grid model-selection-fields">
+                  <label><span>Модель</span><input id="modelInput" list="modelOptions" autocomplete="off" placeholder="Выберите или введите ID модели"><small>Выберите из каталога или введите идентификатор модели.</small></label>
                 </div>
+                <datalist id="modelOptions"></datalist>
+                <button class="secondary" id="loadModelsButton" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.4-4.8L3 9m0-6v6h6M4 13a8 8 0 0 0 14.4 4.8L21 15m0 6v-6h-6"/></svg>Обновить каталог</button>
                 <div class="status" id="modelStatus"></div>
-                <div class="model-capability-list" id="modelCapabilityList"></div>
+                <div class="product-model-badges" id="modelCapabilityBadges" aria-label="Возможности выбранной модели"></div>
               </section>
-              <section class="model-settings-section" aria-labelledby="modelRequestTitle">
-                <div class="model-capability-heading">
-                  <h3 id="modelRequestTitle">Параметры запроса</h3>
-                </div>
+              <section class="model-settings-section product-model-response" aria-labelledby="modelRequestTitle">
+                <h3 id="modelRequestTitle">Ответ</h3>
                 <div class="form-grid two-columns model-request-fields">
-                  <label><span>Макс. токены ответа</span><input id="maxTokensInput" type="number" min="1"></label>
-                  <label><span>Таймаут запроса, сек</span><input id="requestTimeoutInput" type="number" min="30"></label>
-                  <label><span>Temperature</span><input id="temperatureInput" type="number" min="0" max="2" step="0.1"></label>
-                  <label><span>Top P</span><input id="topPInput" type="number" min="0" max="1" step="0.01"></label>
-                  <label class="checkline"><input id="streamInput" type="checkbox"><span>Потоковый API (SSE)</span></label>
+                  <label><span>Лимит ответа, токенов</span><input id="maxTokensInput" type="number" min="1"></label>
+                  <label><span>Таймаут запроса, секунд</span><input id="requestTimeoutInput" type="number" min="30"></label>
+                  <label class="checkline product-setting-toggle wide"><span>Показывать ответ по мере поступления</span><input id="streamInput" type="checkbox"></label>
                 </div>
               </section>
+              <details class="product-settings-advanced product-model-disclosure"><summary>Параметры генерации</summary><div class="form-grid two-columns">
+                <label><span>Температура</span><input id="temperatureInput" type="number" min="0" max="2" step="0.1"></label>
+                <label><span>Top P</span><input id="topPInput" type="number" min="0" max="1" step="0.01"></label>
+                <label class="wide"><span>Передача параметров рассуждения</span><select id="reasoningRequestModeInput"><option value="auto">Авто — стандарт OpenAI reasoning_effort</option><option value="reasoning_effort">reasoning_effort: medium / none</option><option value="enable_thinking">enable_thinking: true / false</option><option value="chat_template_kwargs" selected>chat_template_kwargs.enable_thinking</option><option value="reasoning_enabled">reasoning.enabled: true / false</option><option value="custom_json">Кастомный JSON в теле запроса</option></select><small>Зависит от API провайдера.</small></label>
+                <label class="wide hidden" id="reasoningCustomJsonField"><span>Дополнительный JSON</span><textarea class="reasoning-json-input" id="reasoningCustomJsonInput" rows="5" spellcheck="false" placeholder='{"reasoning":{"effort":"high"}}'></textarea><small>Системные поля model, messages, tools и response_format переопределять нельзя.</small></label>
+              </div></details>
+              <details class="product-settings-advanced product-model-disclosure"><summary>Возможности выбранной модели</summary><div>
+                <p>Уточните возможности, если каталог провайдера неполон. Настройки относятся только к выбранной модели.</p>
+                <div class="model-capability-list" id="modelCapabilityList"></div>
+              </div></details>
             </section>
 
             <section class="settings-page" data-settings-page="context">
-              <div class="settings-heading"><h2>Контекст и вложения</h2><p>Бюджет запроса и маршрутизация файлов.</p></div>
+              <div class="settings-heading"><h2>Контекст и вложения</h2><p>Настройки</p></div>
               <section class="model-settings-section" aria-labelledby="contextBudgetTitle">
                 <div class="model-capability-heading"><h3 id="contextBudgetTitle">Окно контекста</h3></div>
                 <div class="form-grid two-columns model-request-fields">
@@ -902,7 +900,7 @@
               <div class="settings-heading settings-heading-with-action">
                 <div>
                   <h2>Агент</h2>
-                  <p>Протокол, выполнение инструментов и поведение при ошибках.</p>
+                  <p>Настройки</p>
                 </div>
                 <button class="secondary" id="resetAgentSettingsButton" type="button" title="Вернуть параметры агента к встроенным значениям">Сбросить параметры</button>
               </div>
@@ -984,7 +982,7 @@
             <section class="settings-page" data-settings-page="interface">
               <div class="settings-heading">
                 <h2>Интерфейс</h2>
-                <p>Оформление, размер элементов и поведение списка чатов.</p>
+                <p>Настройки</p>
               </div>
               <div class="form-grid two-columns">
                 <label><span>Размер шрифта, %</span><input id="uiFontScaleInput" type="number" min="85" max="130" step="5"></label>
@@ -1040,7 +1038,7 @@
             <section class="settings-page" data-settings-page="protection">
               <div class="settings-heading">
                 <h2>Защита</h2>
-                <p>Экранное содержимое и локальная история чатов.</p>
+                <p>Настройки</p>
               </div>
               <section class="model-compatibility-panel" aria-labelledby="screenCaptureProtectionTitle">
                 <div class="model-compatibility-head">
@@ -1071,9 +1069,10 @@
 
             <section class="settings-page" data-settings-page="service">
               <div class="settings-heading">
-                <h2>Диагностика</h2>
-                <p>Причины ошибок, ход работы агента и технические сведения.</p>
+                <h2>Помощь и обслуживание</h2>
+                <p>Настройки</p>
               </div>
+              <p class="settings-app-version" id="appVersion" aria-label="Версия и commit RNAssistant">—</p>
               <input id="debugModelTrafficInput" type="checkbox" hidden>
               <div class="diagnostics-tabs" role="tablist" aria-label="Разделы диагностики">
                 <button class="diagnostics-tab-button active" type="button" role="tab" aria-selected="true" data-diagnostics-tab="runtime-log">Ход работы</button>
@@ -1178,7 +1177,7 @@
               </div>
             </section>
             <div class="settings-actions-row action-bar" hidden>
-              <button class="accent-soft" id="saveSettingsButton" type="button" hidden>Сохранить изменения</button>
+              <button class="primary" id="saveSettingsButton" type="button" hidden>Применить</button>
             </div>
           </div>
         </div>

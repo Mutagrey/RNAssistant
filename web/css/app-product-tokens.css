@@ -1,5 +1,5 @@
 /* One visual palette for the prototype and every product screen. */
-html {
+:root {
   color-scheme: light;
   --canvas: #e9ece8;
   --surface: #ffffff;

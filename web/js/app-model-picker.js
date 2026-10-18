@@ -172,37 +172,16 @@ function renderChatModelPicker(force) {
   });
 }
 
-function populateModelSelect(select, selectedValue) {
-  if (!select) {
-    return;
-  }
-
+function populateModelOptions(options) {
+  if (!options) return;
   var models = state.modelCatalog.models || [];
-  var selected = String(selectedValue || "").trim();
-  select.innerHTML = "";
-
-  if (selected && !findModel(selected)) {
-    var fallback = document.createElement("option");
-    fallback.value = selected;
-    fallback.textContent = selected + " (резерв)";
-    select.appendChild(fallback);
-  }
-
+  if (options._catalogModels === models) return;
+  options._catalogModels = models;
+  options.replaceChildren();
   models.forEach(function (model) {
     var option = document.createElement("option");
     option.value = model.value;
-    option.textContent = modelOptionText(model);
-    option.title = modelOptionTitle(model);
-    select.appendChild(option);
+    option.label = model.title || model.value;
+    options.appendChild(option);
   });
-
-  if (!select.options.length) {
-    var empty = document.createElement("option");
-    empty.value = "";
-    empty.textContent = state.modelCatalog.loading ? "Загрузка моделей..." : "Список моделей пуст";
-    select.appendChild(empty);
-  }
-
-  select.value = selected || state.modelCatalog.defaultModel || "";
-  select.disabled = state.modelCatalog.loading || state.modelSaving || models.length === 0;
 }

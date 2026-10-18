@@ -3,13 +3,6 @@
   grid-template-rows: auto auto auto auto minmax(0, 1fr) auto;
   padding: 0 8px 6px;
   background: var(--surface-subtle);
-  border-right: 1px solid var(--line);
-}
-#tab-artifacts .html-workspace-layout > .splitter {
-  width: 5px;
-  margin-left: -3px;
-  z-index: 1;
-  background: transparent;
 }
 #tab-artifacts .artifact-catalog-toolbar {
   flex-wrap: nowrap;
@@ -28,6 +21,7 @@
   font-weight: 600;
 }
 #tab-artifacts .artifact-catalog-toolbar .product-material-menu > summary { width: 30px; min-height: 30px; padding: 0; border-radius: 8px; background: transparent; color: var(--ink-muted); font-size: 20px; }
+#tab-artifacts .artifact-catalog-toolbar.product-search-heading.searching .tree-toolbar { flex: 1; }
 #tab-artifacts .artifact-catalog-toolbar .product-material-menu > summary:hover { background: var(--surface-hover); color: var(--ink); }
 #tab-artifacts .artifact-catalog-toolbar .product-material-menu .html-workspace-menu-items { position: absolute; top: calc(100% + 4px); right: 0; min-width: 180px; margin: 0; box-shadow: var(--shadow); }
 #tab-artifacts .artifact-catalog-toolbar .product-material-menu .html-workspace-menu-items button { width: 100%; padding: 7px 10px; font-size: 12px; }
@@ -37,6 +31,7 @@
 #tab-artifacts .tool-list-controls { margin: 0; }
 #tab-artifacts .artifact-overview-nav { display: flex; align-items: center; gap: 8px; margin: 5px 0; padding: 9px 12px; border: 0; border-radius: 8px; background: transparent; color: var(--ink); font: 12px var(--font); text-align: left; cursor: pointer; }
 #tab-artifacts .artifact-overview-nav[aria-current="page"] { background: var(--surface-selected); }
+#tab-artifacts .artifact-overview-nav svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.55; stroke-linecap: round; stroke-linejoin: round; }
 #tab-artifacts .artifact-catalog-actions {
   justify-content: space-between;
   flex-wrap: nowrap;

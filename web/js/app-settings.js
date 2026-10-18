@@ -493,11 +493,61 @@ function renderModelCompatibilityResult(result) {
 }
 
 function bindSettingsActions() {
+  var navSearch = $("settingsNavSearch");
+  var navSearchToggle = $("settingsNavSearchToggle");
+  var navHeading = navSearchToggle.closest(".settings-nav-heading");
+  var navButtons = Array.prototype.slice.call(document.querySelectorAll(".settings-nav-button"));
+
+  function filterSettingsNavigation() {
+    var query = navSearch.value.trim().toLocaleLowerCase("ru");
+    navButtons.forEach(function (button) {
+      button.hidden = !!query && !button.textContent.toLocaleLowerCase("ru").includes(query);
+    });
+    navSearchToggle.classList.toggle("has-search-query", !!query);
+    navSearchToggle.title = query ? "Фильтр: " + navSearch.value + " · изменить поиск" : "Поиск в настройках";
+    navSearchToggle.setAttribute("aria-description", query ? "Активен фильтр: " + navSearch.value : "");
+  }
+
+  function closeSettingsSearch(clear) {
+    if (clear) {
+      navSearch.value = "";
+      filterSettingsNavigation();
+    }
+    navSearch.hidden = true;
+    navHeading.classList.remove("searching");
+    navSearchToggle.setAttribute("aria-expanded", "false");
+  }
+
+  navSearchToggle.addEventListener("pointerdown", function (event) {
+    if (document.activeElement === navSearch) event.preventDefault();
+  });
+  navSearchToggle.addEventListener("click", function () {
+    if (!navSearch.hidden) {
+      closeSettingsSearch(true);
+      navSearchToggle.focus();
+      return;
+    }
+    navSearch.hidden = false;
+    navHeading.classList.add("searching");
+    navSearchToggle.setAttribute("aria-expanded", "true");
+    navSearch.focus();
+  });
+  navSearch.addEventListener("input", filterSettingsNavigation);
+  navSearch.addEventListener("blur", function () { closeSettingsSearch(false); });
+  navSearch.addEventListener("keydown", function (event) {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    closeSettingsSearch(true);
+    navSearchToggle.focus();
+  });
+
   Array.prototype.slice.call(document.querySelectorAll(".settings-nav-button")).forEach(function (button) {
     button.addEventListener("click", function () {
       var page = button.getAttribute("data-settings-page");
       Array.prototype.slice.call(document.querySelectorAll(".settings-nav-button")).forEach(function (item) {
         item.classList.toggle("active", item === button);
+        if (item === button) item.setAttribute("aria-current", "page");
+        else item.removeAttribute("aria-current");
       });
       Array.prototype.slice.call(document.querySelectorAll(".settings-page")).forEach(function (item) {
         item.classList.toggle("active", item.getAttribute("data-settings-page") === page);
@@ -545,7 +595,7 @@ function bindSettingsActions() {
 
   Array.prototype.slice.call(document.querySelectorAll("#tab-settings input, #tab-settings textarea, #tab-settings select")).forEach(function (control) {
     control.addEventListener(control.type === "checkbox" || control.tagName === "SELECT" ? "change" : "input", function () {
-      if (control.id === "promptSearchInput") {
+      if (control.id === "promptSearchInput" || control.id === "settingsNavSearch") {
         return;
       }
       settingsDirty = true;

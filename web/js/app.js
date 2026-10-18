@@ -8,6 +8,51 @@ function setMobileNavigationOpen(open) {
   button.setAttribute("title", open ? "Закрыть навигацию" : "Открыть навигацию");
 }
 
+function bindProductNavSearches() {
+  document.querySelectorAll("[data-nav-search-toggle]").forEach(function (button) {
+    var input = document.getElementById(button.dataset.navSearchToggle);
+    var heading = button.closest(".product-search-heading");
+    if (!input || !heading) return;
+    var mirror = input.dataset.navSearchMirror && document.getElementById(input.dataset.navSearchMirror);
+    function close(clear) {
+      if (clear && input.value) {
+        input.value = "";
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+      input.hidden = true;
+      heading.classList.remove("searching");
+      button.setAttribute("aria-expanded", "false");
+      button.classList.toggle("has-search-query", !!input.value.trim());
+    }
+    button.addEventListener("pointerdown", function (event) {
+      if (document.activeElement === input) event.preventDefault();
+    });
+    button.addEventListener("click", function () {
+      if (!input.hidden) { close(true); button.focus(); return; }
+      input.hidden = false;
+      heading.classList.add("searching");
+      button.setAttribute("aria-expanded", "true");
+      input.focus();
+    });
+    input.addEventListener("input", function () {
+      button.classList.toggle("has-search-query", !!input.value.trim());
+      if (mirror && mirror.value !== input.value) {
+        mirror.value = input.value;
+        mirror.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    });
+    if (mirror) mirror.addEventListener("input", function () {
+      input.value = mirror.value;
+      button.classList.toggle("has-search-query", !!input.value.trim());
+    });
+    input.addEventListener("blur", function () { close(false); });
+    input.addEventListener("keydown", function (event) {
+      if (event.key !== "Escape") return;
+      event.preventDefault(); close(true); button.focus();
+    });
+  });
+}
+
 function switchTab(name) {
   setMobileNavigationOpen(false);
   if ($("tab-instructions") && $("tab-instructions").classList.contains("active") && name !== "instructions" && typeof syncSelectedLibraryItem === "function") {
@@ -124,6 +169,7 @@ document.addEventListener("DOMContentLoaded", function () {
   bindTrajectoryActions();
   bindToolActions();
   bindSkillActions();
+  bindProductNavSearches();
   if (typeof initializeSplitPanes === "function") {
     initializeSplitPanes();
   }

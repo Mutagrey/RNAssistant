@@ -128,14 +128,11 @@ async function saveChatReasoningSelection(enabled) {
 }
 
 function bindModelActions() {
-  $("modelSelect").addEventListener("change", function () {
-    if ($("modelSelect").value) {
-      $("modelInput").value = $("modelSelect").value;
-      applyModelDefaultsToForm(findModel($("modelSelect").value));
-      renderModelControls();
-    }
-  });
   $("modelInput").addEventListener("input", renderModelControls);
+  $("modelInput").addEventListener("change", function () {
+    applyModelDefaultsToForm(findModel($("modelInput").value));
+    renderModelControls();
+  });
   $("chatReasoningToggle").addEventListener("click", function () {
     if (effectiveModelSupportsReasoning(activeChatModel() || settingsModel()) === false) return;
     saveChatReasoningSelection(!state.activeChatReasoning);

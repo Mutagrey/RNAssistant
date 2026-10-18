@@ -1026,6 +1026,10 @@ as the artifact/diagnostics layout check below.
 artifact names/metadata, single selection, inline JSON values, left-aligned events
 and split dragging. Use the bundled Playwright through `NODE_PATH`; optionally set
 `BROWSER_EXECUTABLE` and `LAYOUT_SCREENSHOT`. This is not Office/WebView2 qualification.
+`tests/web/product-shell-parity.test.js` compares shipped palette and joined header/
+splitter geometry in all six sections with the prototype, then checks native project
+tree search/collapse. `tests/web/settings-navigation-layout.test.js` checks the
+Settings navigation and selected-model controls.
 
 `resource cutover: two chat mutations` covers three outcomes through separate
 executors/shared document authority, native Excel read/write, persisted read facts

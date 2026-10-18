@@ -2,6 +2,16 @@
 
 ## Product UI cutover — 2026-10-18
 
+Shell parity correction: the prototype palette now wins over old CSS variables,
+and all six product sections use joined 52 px navigation/main headers with a 1 px
+splitter. Data Templates navigation now has the prototype's SVG rows, collapsible
+groups and search; Library/VBA search moved into their navigation headers. Settings
+navigation and the Model page were reshaped around the prototype. A local static
+preview serves the demo at `/` and the product UI at `/web/`; native Office actions
+remain unavailable there. Focused Chromium checks cover geometry, palette, tree
+controls and affected settings/materials/workspace behavior. Internal screen parity,
+native processing/results and project chats remain open; no Office qualification.
+
 Correction: the shell cutover below did not complete the prototype's **internal**
 screens. The current native Data Templates source screen now renders a compact
 project tree, selected-file table and action card backed by its existing typed

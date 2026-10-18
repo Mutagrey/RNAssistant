@@ -69,6 +69,8 @@
   function restoreSplitRatio(layout) {
     if (isProductNavigation(layout)) {
       var width = numberAttr(layout, "data-default-left", 310);
+      // Match the prototype's compact default while preserving a dragged width.
+      if (window.innerWidth - 24 <= 1170) width = Math.min(width, 290);
       try { width = Number(window.localStorage.getItem(productNavigationKey)) || width; } catch (error) { /* Use default. */ }
       setProductNavigationWidth(layout, width, false);
       return;

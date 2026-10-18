@@ -72,101 +72,42 @@
 
 .model-capability-list {
   margin-top: 10px;
-  border-radius: var(--radius);
-  background: var(--secondary-bg-hover);
 }
 
-.model-capability-row {
+.model-capability-fields {
   display: grid;
-  grid-template-columns: minmax(150px, 1fr) 72px 70px 78px 82px 62px 62px 56px;
-  gap: 6px;
-  align-items: center;
-  min-height: 46px;
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--section-line);
-}
-
-.model-capability-row:last-child {
-  border-bottom: 0;
-}
-
-.model-capability-row:hover {
-  background: var(--secondary-bg);
-}
-
-.model-capability-header {
-  min-height: 34px;
-  border-radius: var(--radius) var(--radius) 0 0;
-  border-bottom-color: var(--line);
-  background: var(--secondary-bg);
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: var(--label-font-weight);
-  text-align: center;
-}
-
-.model-capability-header span:first-child {
-  text-align: left;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
 }
 
 .model-capability-flag {
-  display: flex;
-  justify-content: center;
-  align-items: center;
+  display: grid;
+  gap: 5px;
   min-width: 0;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .model-capability-flag input {
   margin: 0;
-  opacity: 1;
-}
-
-.model-capability-select {
-  width: 100%;
 }
 
 .model-capability-select,
-.model-capability-number,
-.model-capability-mode-select {
-  min-width: 0;
-  min-height: 28px;
-  border: 1px solid var(--control-border);
-  border-radius: var(--control-radius);
-  padding: 3px 5px;
-  background: var(--panel);
-  color: var(--text);
-  font-size: 12px;
-}
-
-.model-capability-number,
-.model-capability-mode-select {
+.model-capability-number {
   width: 100%;
-}
-
-.model-capability-text {
   min-width: 0;
-}
-
-.model-capability-title,
-.model-capability-id {
-  overflow-wrap: anywhere;
-}
-
-.model-capability-title {
-  font-size: 12.5px;
-  font-weight: var(--label-font-weight);
-}
-
-.model-capability-id {
-  margin-top: 2px;
-  color: var(--muted);
-  font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
-  font-size: 11px;
+  min-height: 36px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  padding: 7px 10px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13px;
 }
 
 .model-capability-empty {
-  padding: 12px 8px;
-  color: var(--muted);
+  color: var(--ink-muted);
   font-size: 12px;
 }
 
@@ -242,42 +183,8 @@
   color: #7a4b12;
 }
 
-@media (max-width: 900px) {
-  .model-capability-row:not(.model-capability-header) {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px 12px;
-    padding: 10px 12px;
-  }
-
-  .model-capability-header {
-    display: none;
-  }
-
-  .model-capability-row > .model-capability-text {
-    grid-column: 1 / -1;
-  }
-
-  .model-capability-flag {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 4px;
-  }
-
-  .model-capability-flag::before {
-    color: var(--muted);
-    font-size: 11px;
-  }
-
-  .model-capability-row > :nth-child(2)::before { content: "Контекст"; }
-  .model-capability-row > :nth-child(3)::before { content: "Ответ"; }
-  .model-capability-row > :nth-child(4)::before { content: "Reasoning"; }
-  .model-capability-row > :nth-child(5)::before { content: "Reasoning API"; }
-  .model-capability-row > :nth-child(6)::before { content: "Vision"; }
-  .model-capability-row > :nth-child(7)::before { content: "Audio"; }
-  .model-capability-row > :nth-child(8)::before { content: "Изобр."; }
-}
-
 @media (max-width: 420px) {
+  .model-capability-fields { grid-template-columns: minmax(0, 1fr); }
   .attachment-model-priority-row {
     grid-template-columns: 28px minmax(0, 1fr) auto;
   }

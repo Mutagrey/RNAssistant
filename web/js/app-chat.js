@@ -92,6 +92,7 @@ function setChatSearchOpen(open, clearQuery) {
   }
 
   wrap.classList.toggle("is-open", !!open);
+  wrap.closest(".chat-sidebar-head").classList.toggle("searching", !!open);
   wrap.setAttribute("aria-hidden", open ? "false" : "true");
   button.classList.toggle("active", !!open);
   button.setAttribute("aria-expanded", open ? "true" : "false");
