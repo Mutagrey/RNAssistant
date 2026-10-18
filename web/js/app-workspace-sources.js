@@ -149,7 +149,6 @@
     view = root.RNAssistantWorkspaceSourcesView.create(container, {
       browse: browse, prepare: prepare, control: control,
       save: () => { if (!unfinished() && !contextBusy && dirty()) root.RNAssistantWorkspace.saveSources([...chosen.keys()]); },
-      revert: () => { if (!unfinished() && !contextBusy) { chosen = new Map(savedPaths().map(path => [path, true])); render(); } },
       remove: path => { if (!unfinished() && !contextBusy) { chosen.delete(path); render(); } },
       refresh: () => root.RNAssistantWorkspace.show(),
       choose: (paths, include) => {

@@ -2,6 +2,19 @@
 
 ## Product UI cutover — 2026-10-18
 
+Correction: the shell cutover below did not complete the prototype's **internal**
+screens. The current native Data Templates source screen now renders a compact
+project tree, selected-file table and action card backed by its existing typed
+workspace/source owners. Its project control takes one full `project.json` path;
+source preparation/queue remains in an extra menu, while unsaved-selection revert
+was removed by product decision. Browser checks cover project selection, source
+queue/recovery and catalog navigation. Native template validation/editing,
+dictionary editing, processing/results, project-scoped chats, and internal visual
+parity for the other main tabs remain open. Project chats must not inherit the
+current Office document's actions. Other old-only project functions require an
+individual product decision before being added to the new screen. No Windows or
+Office qualification is claimed for this slice.
+
 The prototype at `403b375d` is the visual reference. One coordinated cutover
 connects the new rail, navigation, palette, editors and viewers to existing
 feature owners in all six product sections, without an old-UI switch. The
@@ -35,10 +48,8 @@ project switches, late responses, inert content and narrow navigation. Native
 editing, semantic preflight, execution and results remain open; Windows/WebView2
 behavior is still unqualified.
 
-Open product decisions: project chats need an explicit document/project binding;
-the real Data Templates empty/project-connection state differs from the populated
-prototype fixture. These are visible differences, not hidden demo actions or
-compatibility paths. The UI contract and owner map live in `docs/ui-design.md`.
+The real Data Templates empty/project-connection state differs from the populated
+prototype fixture. The UI contract and owner map live in `docs/ui-design.md`.
 
 ## Independent Data Templates application and early export — 2026-10-16
 

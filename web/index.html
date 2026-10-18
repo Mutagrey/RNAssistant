@@ -624,25 +624,13 @@
           <details class="workspace-settings" id="workspaceSettings" open>
             <summary><span class="workspace-context-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 7V5h6l2 2h10v12H3Z"/></svg></span><span class="workspace-context-copy"><strong id="workspaceContextTitle">Подключить проект</strong><span id="workspaceContextHint">Рабочая папка и параметры проекта</span></span><span class="workspace-chevron" aria-hidden="true">⌄</span></summary>
             <div class="workspace-settings-body">
-              <div class="workspace-settings-grid">
-                <div class="workspace-form workspace-step">
-                  <div class="workspace-step-head"><span class="workspace-step-number" aria-hidden="true">1</span><div><h3>Выберите папку</h3><p>Локальная папка с файлами проекта.</p></div></div>
-                  <label for="workspaceRoot">Полный путь к существующей папке</label>
-                  <input id="workspaceRoot" type="text" placeholder="C:\Projects\Reports" autocomplete="off" spellcheck="false">
-                  <label class="workspace-check"><input id="workspaceReadOnly" type="checkbox"> Только чтение</label>
-                  <div class="workspace-actions"><button type="button" id="workspaceOpen" class="dt-primary">Открыть папку</button><button type="button" class="secondary" id="workspaceRefresh">Обновить состояние</button></div>
-                  <p id="workspaceSelection" class="workspace-hint workspace-selection">Рабочая папка не выбрана.</p>
-                </div>
-                <fieldset id="workspaceProjectFields" class="workspace-form workspace-step" disabled>
-                  <legend class="workspace-sr-only">Проект</legend>
-                  <div class="workspace-step-head"><span class="workspace-step-number" aria-hidden="true">2</span><div><h3>Откройте или создайте проект</h3><p>Описание проекта внутри выбранной папки.</p></div></div>
-                  <label for="workspaceProjectPath">Путь внутри рабочей папки</label>
-                  <input id="workspaceProjectPath" type="text" value="project.json" placeholder="reports/project.json" autocomplete="off" spellcheck="false">
-                  <label for="workspaceProjectName">Имя нового проекта</label>
-                  <input id="workspaceProjectName" type="text" maxlength="200" placeholder="Например, управленческая отчётность" autocomplete="off">
-                  <div class="workspace-actions"><button type="button" id="workspaceProjectOpen" class="dt-primary">Открыть проект</button><button type="button" id="workspaceProjectCreate" class="secondary">Создать проект</button></div>
-                  <p class="workspace-hint">Сейчас сохраняется описание проекта. Подобранные ниже файлы в него ещё не записываются.</p>
-                </fieldset>
+              <div class="workspace-form workspace-project-picker">
+                <label for="workspaceProjectFile">Путь к project.json</label>
+                <input id="workspaceProjectFile" type="text" placeholder="C:\Projects\Reports\project.json" autocomplete="off" spellcheck="false">
+                <label for="workspaceProjectName">Название нового проекта <span class="workspace-optional">· только при создании</span></label>
+                <input id="workspaceProjectName" type="text" maxlength="200" placeholder="Управленческая отчётность" autocomplete="off">
+                <div class="workspace-actions"><button type="button" id="workspaceProjectOpen" class="dt-primary">Открыть проект</button><button type="button" id="workspaceProjectCreate" class="secondary">Создать проект</button><button type="button" id="workspaceRefresh" class="secondary">Обновить состояние</button></div>
+                <p id="workspaceSelection" class="workspace-hint">Проект не выбран.</p>
               </div>
               <div id="workspaceProjectResult" hidden><h3 id="workspaceProjectTitle"></h3><p id="workspaceProjectLocation" class="workspace-selection"></p></div>
             </div>
@@ -663,9 +651,9 @@
           <p id="wsSourceStatus" class="ws-source-status" role="status" aria-live="polite"></p>
         </template>
         <template id="dtHostSources">
-            <div class="ws-source-selection dt-card">
-              <div class="ws-source-heading"><div><h4>Из рабочей папки</h4><p id="wsSourceContext" class="ws-source-muted">Откройте проект, чтобы подготовить его источники.</p></div><button type="button" id="wsSourceBrowse">Выбрать файлы</button></div>
-              <div id="wsSourcePicker" hidden>
+            <div class="ws-source-hero"><div><h3>Источники</h3><p id="wsSourceContext">Откройте проект, чтобы выбрать источники.</p></div><button type="button" id="wsSourceBrowse">＋ Добавить файлы</button></div>
+            <div class="ws-source-picker dt-card" id="wsSourcePicker" hidden>
+                <div class="ws-source-heading"><div><h4>Файлы рабочей папки</h4><p class="ws-source-muted">Выберите файлы для проекта.</p></div><button type="button" id="wsSourcePickerClose" aria-label="Закрыть выбор файлов">Закрыть</button></div>
                 <form id="wsBrowseForm" class="ws-source-path"><button type="button" id="wsBrowseUp" aria-label="В родительскую папку">↑</button><input id="wsBrowseDirectory" aria-label="Путь внутри рабочей папки" placeholder="Корень рабочей папки" autocomplete="off" spellcheck="false"><button type="submit">Открыть</button></form>
                 <input type="search" id="wsBrowseSearch" aria-label="Найти в текущей папке" placeholder="Найти в этой папке…" maxlength="128">
                 <div class="ws-source-list-heading"><label><input type="checkbox" id="wsBrowseSelectPage"> Выбрать файлы на странице</label><span id="wsBrowseLoading" role="status"></span></div>
@@ -673,23 +661,21 @@
                 <p id="wsBrowseEmpty" class="ws-source-muted" hidden>Файлы не найдены.</p>
                 <p id="wsBrowseLimit" class="ws-source-muted" hidden>Показана часть большой папки: проверено до 5000 элементов. Откройте вложенную папку или укажите её относительный путь.</p>
                 <nav class="dt-pagination" id="wsBrowsePages" aria-label="Страницы рабочей папки"><span id="wsBrowseRange"></span><div><button type="button" id="wsBrowsePrevious" aria-label="Предыдущие файлы">←</button><button type="button" id="wsBrowseNext" aria-label="Следующие файлы">→</button></div></nav>
-              </div>
-              <div id="wsSourceSelection" hidden>
-                <div class="ws-source-heading"><p id="wsSourceSelected" class="ws-source-muted"></p><button type="button" id="wsSourceClear" class="dt-text-button">Снять выбор</button></div>
-                <div class="ws-source-save"><p id="wsSourcePersistence" class="ws-source-muted" role="status"></p><div><button type="button" id="wsSourceSave">Сохранить в проекте</button><button type="button" id="wsSourceRevert" class="dt-text-button">Вернуть сохранённое</button></div></div>
-                <details id="wsSelectedDetails" class="ws-source-details"><summary>Состав подборки</summary><input type="search" id="wsSelectedSearch" aria-label="Поиск среди выбранных источников" placeholder="Найти в подборке…" maxlength="128"><ul id="wsSelectedList" class="ws-source-list" aria-label="Выбранные источники проекта"></ul><p id="wsSelectedEmpty" class="ws-source-muted" hidden>Нет выбранных файлов.</p><nav class="dt-pagination" id="wsSelectedPages" aria-label="Страницы подборки"><span id="wsSelectedRange"></span><div><button type="button" id="wsSelectedPrevious" aria-label="Предыдущие источники">←</button><button type="button" id="wsSelectedNext" aria-label="Следующие источники">→</button></div></nav></details>
-                <details class="ws-source-budgets"><summary>Лимиты обработки</summary><div><label>Один файл, МБ<input type="number" id="wsSourceFileBudget" min="1" max="4096" value="96"></label><label>Вся подборка, МБ<input type="number" id="wsSourceBatchBudget" min="1" max="65536" value="1024"></label></div><p class="ws-source-muted">Обрабатывается один файл за раз. Лимит размера не означает расход памяти при разборе.</p></details>
-                <button type="button" id="wsSourcePrepare" class="dt-primary">Подготовить файлы</button>
-              </div>
             </div>
-            <div id="wsQueueListCard" class="ws-source-queue dt-card" hidden>
+            <div class="ws-source-table-wrap"><table class="ws-source-table" aria-label="Источники проекта"><thead><tr><th></th><th>Файл</th><th>Размер</th><th>Состояние</th></tr></thead><tbody id="wsSelectedList"></tbody></table><p id="wsSelectedEmpty" class="ws-source-muted" hidden>Выберите файлы в рабочей папке, чтобы добавить их в проект.</p></div>
+            <nav class="dt-pagination" id="wsSelectedPages" aria-label="Страницы подборки"><span id="wsSelectedRange"></span><div><input type="search" id="wsSelectedSearch" aria-label="Поиск среди выбранных источников" placeholder="Найти файл…" maxlength="128"><button type="button" id="wsSelectedPrevious" aria-label="Предыдущие источники">←</button><button type="button" id="wsSelectedNext" aria-label="Следующие источники">→</button></div></nav>
+            <div id="wsSourceSelection" class="ws-source-selection dt-card" hidden>
+              <div class="ws-source-heading"><div><h4>Шаблон обработки</h4><p class="ws-source-muted">Выберите шаблон в разделе «Шаблоны» перед обработкой.</p></div><button type="button" data-dt-go="templates" class="dt-text-button">Настроить</button></div>
+              <div class="ws-source-main-actions"><button type="button" id="wsSourceSave">Сохранить подборку</button><button type="button" id="wsSourceClear" class="dt-text-button">Снять выбор</button><details class="ws-source-more"><summary aria-label="Дополнительные действия с источниками">⋯</summary><div><button type="button" id="wsSourcePrepare">Подготовить файлы</button><button type="button" id="wsSourceQueueAction">Очередь подготовки</button><details class="ws-source-budgets"><summary>Лимиты подготовки</summary><div><label>Один файл, МБ<input type="number" id="wsSourceFileBudget" min="1" max="4096" value="96"></label><label>Вся подборка, МБ<input type="number" id="wsSourceBatchBudget" min="1" max="65536" value="1024"></label></div></details></div></details></div>
+              <p id="wsSourceSelected" class="ws-source-muted"></p><p id="wsSourcePersistence" class="ws-source-muted" role="status"></p>
+            </div>
+            <details id="wsQueueDetails" class="ws-source-queue-details" hidden><summary>Очередь подготовки</summary><div id="wsQueueListCard" class="ws-source-queue dt-card" hidden>
               <div class="ws-source-heading"><div><h4>Очередь файлов</h4><p class="ws-source-muted">Подготовленные снимки сохраняются при изменении оригиналов.</p></div><button type="button" id="wsQueueRetry" disabled>Повторить выбранные</button></div>
               <div class="ws-source-filters"><input type="search" id="wsQueueSearch" aria-label="Поиск в очереди" placeholder="Найти файл…" maxlength="128"><select id="wsQueueState" aria-label="Состояние файлов"><option value="">Все состояния</option><option value="Pending">Ожидают</option><option value="Running">Обрабатываются</option><option value="Prepared">Подготовлены</option><option value="Failed">Ошибки</option><option value="Cancelled">Отменены</option></select><select id="wsQueueSort" aria-label="Порядок очереди"><option value="Added">По добавлению</option><option value="Path">По пути</option><option value="LargestFirst">Сначала крупные</option></select></div>
               <ul id="wsQueueList" class="ws-source-list" aria-label="Состояния подготовки файлов"></ul>
               <p id="wsQueueEmpty" class="ws-source-muted" hidden>Нет файлов с такими условиями.</p>
               <nav class="dt-pagination" id="wsQueuePages" aria-label="Страницы очереди"><span id="wsQueueRange"></span><div><button type="button" id="wsQueuePrevious" aria-label="Предыдущая страница очереди">←</button><button type="button" id="wsQueueNext" aria-label="Следующая страница очереди">→</button></div></nav>
-            </div>
-            <p class="dt-footnote ws-local-intro">Файлы вне рабочей папки можно предварительно подобрать ниже. Для подготовки поместите их в рабочую папку и выберите через «Из рабочей папки».</p>
+            </div></details>
         </template>
       </section>
 

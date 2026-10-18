@@ -11,6 +11,8 @@
       ? workspace.rootPath + (workspace.readOnly ? " · Только чтение" : "")
       : "Откройте рабочую папку и проект";
     container.querySelector(".dt-header .dt-phase").textContent = project ? "Проект открыт" : "Проект не выбран";
+    const navProject = container.querySelector("#dtNavProjectName");
+    if (navProject) navProject.textContent = project ? project.name : "Проект не выбран";
   }
   function setContext(state, pending) {
     context = state;
@@ -29,6 +31,25 @@
     navigation.classList.add("global-nav");
     navigation.setAttribute("aria-label", "Разделы проекта");
     navigation.prepend(heading);
+    const tabs = navigation.querySelector(".dt-tabs");
+    const project = document.createElement("div"); project.className = "dt-nav-project";
+    const projectName = document.createElement("span"); projectName.id = "dtNavProjectName";
+    projectName.textContent = "Проект не выбран"; project.append(projectName);
+    tabs.before(project);
+    function group(label, ids) {
+      const block = document.createElement("div"); block.className = "dt-nav-group";
+      if (label) { const title = document.createElement("span"); title.className = "dt-nav-group-label"; title.textContent = label; block.append(title); }
+      ids.forEach(id => block.append(navigation.querySelector("#" + id)));
+      tabs.append(block);
+      return block;
+    }
+    group("", ["dtTabSources"]);
+    const templates = group("Шаблоны", ["dtTabTemplates"]);
+    const drafts = document.createElement("button"); drafts.type = "button"; drafts.className = "dt-nav-extra";
+    drafts.dataset.dtGo = "templates"; drafts.dataset.dtTarget = "dtNativeProjectTitle"; drafts.textContent = "Черновики";
+    templates.append(drafts);
+    group("Словарь", ["dtTabParameters", "dtTabMapping"]);
+    group("", ["dtTabResults", "dtTabFormat"]);
     const main = document.createElement("div");
     main.className = "product-dt-main";
     Array.from(container.children).forEach(child => {
@@ -68,7 +89,10 @@
     select.addEventListener("change", () => show(select.value, false), { signal });
     container.addEventListener("click", event => {
       const action = event.target.closest("[data-dt-go]");
-      if (action && container.contains(action)) show(action.dataset.dtGo, true);
+      if (action && container.contains(action)) {
+        show(action.dataset.dtGo, true);
+        if (action.dataset.dtTarget) container.querySelector("#" + action.dataset.dtTarget)?.scrollIntoView({ block: "start" });
+      }
     }, { signal });
     show(tabs.find(tab => tab.getAttribute("aria-selected") === "true")?.dataset.dtView || "sources", false);
   }
@@ -76,8 +100,7 @@
     container = container || document.querySelector("#tab-workspace .workspace-projects");
     if (!container) return;
     window.DataTemplatesShell.mount(container, "data-templates/core/index.html", { nativeSources: true });
-    container.querySelector("#dtSourceHeading").textContent = "Источники";
-    container.querySelector("#dtSourceIntro").textContent = "Выберите файлы в рабочей папке. Сохранение подборки и подготовка запускаются отдельно.";
+    container.querySelector("#dtViewSources > .dt-section-heading")?.remove();
     for (const name of ["Workspace", "Activity", "Sources"]) {
       const slot = container.querySelector('[data-dt-slot="' + name.toLowerCase() + '"]');
       if (!slot.childNodes.length) slot.append(document.getElementById("dtHost" + name).content.cloneNode(true));

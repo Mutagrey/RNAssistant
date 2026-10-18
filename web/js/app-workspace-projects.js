@@ -14,13 +14,10 @@
     el("Status").setAttribute("role", error ? "alert" : "status");
   }
   function renderAvailability() {
-    if (!el("Open")) return;
+    if (!el("ProjectOpen")) return;
     var workspace = selected(), active = busy || window.RNAssistantWorkspaceSources && window.RNAssistantWorkspaceSources.hasUnfinished();
-    el("Root").disabled = el("ReadOnly").disabled = el("Open").disabled = !!active;
+    el("ProjectFile").disabled = el("ProjectName").disabled = el("ProjectOpen").disabled = el("ProjectCreate").disabled = !!active;
     el("Refresh").disabled = busy;
-    el("ProjectFields").disabled = active || !workspace;
-    el("ProjectCreate").disabled = active || !workspace || workspace.readOnly;
-    el("ProjectName").disabled = active || !workspace || workspace.readOnly;
   }
   function sourceWorkChanged() {
     renderAvailability();
@@ -33,17 +30,18 @@
     if (projectKey !== renderedProjectKey) {
       el("Settings").open = !projectKey;
       renderedProjectKey = projectKey;
+      if (project) el("ProjectFile").value = workspace.rootPath.replace(/[\\/]+$/, "") + "\\" + project.manifestPath.replace(/\//g, "\\");
     }
     renderAvailability();
     el("Selection").textContent = workspace
       ? "Выбрана папка: " + workspace.rootPath + (workspace.readOnly ? " · Только чтение" : " · Чтение и запись")
-      : "Рабочая папка не выбрана.";
+      : "Укажите полный путь к project.json.";
     el("ProjectResult").hidden = !project;
     el("ProjectTitle").textContent = project ? project.name : "";
     el("ProjectLocation").textContent = project ? project.manifestPath : "";
     el("ContextTitle").textContent = project ? project.name : workspace ? "Проект не выбран" : "Подключить проект";
     el("ContextHint").textContent = workspace
-      ? workspace.rootPath + (workspace.readOnly ? " · Только чтение" : "") : "Рабочая папка и параметры проекта";
+      ? workspace.rootPath + (workspace.readOnly ? " · Только чтение" : "") : "Откройте или создайте project.json";
     el("Reconcile").hidden = !inspection;
     el("Reconcile").disabled = busy || !workspace || !inspection || inspection.bindingId !== workspace.bindingId;
     if (inspection) el("Settings").open = true;
@@ -67,10 +65,6 @@
     var previous = selected();
     if (!previous || !response.workspace || previous.bindingId !== response.workspace.bindingId) inspection = null;
     view = response;
-    if (response.workspace) {
-      el("Root").value = response.workspace.rootPath;
-      el("ReadOnly").checked = response.workspace.readOnly;
-    }
   }
   var errors = {
     target_exists: "Файл проекта уже существует. Откройте его или выберите другой путь.",
@@ -101,7 +95,8 @@
           response.workspace.bindingId !== payload.bindingId || response.project.manifestPath !== payload.manifestPath ||
           response.revision <= payload.projectRevision || !Array.isArray(response.project.sources) ||
           JSON.stringify(response.project.sources.map(source => source && source.path)) !== JSON.stringify(payload.paths))) throw invalidResponse();
-      if (type === "openWorkspace" && (!response || !response.workspace)) throw invalidResponse();
+      if (type === "openWorkspace" && (!response || !response.workspace ||
+          response.workspace.readOnly !== payload.readOnly)) throw invalidResponse();
       apply(type === "reconcileWorkspaceFile" ? response.state : response);
       if (type === "reconcileWorkspaceFile") {
         inspection = null;
@@ -110,6 +105,7 @@
       } else status(type === "createTabularProject" ? "Проект создан."
         : type === "openTabularProject" ? "Проект открыт." : type === "saveTabularProjectSources" ? "Состав источников сохранён."
         : type === "getWorkspaceState" ? "" : "Рабочая папка открыта.", false);
+      return response;
     } catch (error) {
       if (ticket !== sequence) return;
       if (view && type !== "getWorkspaceState" && type !== "openWorkspace" && error.code !== "source_queue_active") view.project = null;
@@ -121,11 +117,11 @@
       if (ticket === sequence) { busy = false; render(); }
     }
   }
-  function projectRequest(create) {
+  function projectRequest(create, location) {
     var workspace = selected();
-    if (!workspace || busy || create && workspace.readOnly) return;
-    var payload = { bindingId: workspace.bindingId, manifestPath: el("ProjectPath").value.trim() };
-    if (!payload.manifestPath) { status("Укажите путь к project.json внутри папки.", true); return; }
+    if (!workspace || busy) return;
+    if (create && workspace.readOnly) { status("Проект нельзя создать в папке только для чтения.", true); return; }
+    var payload = { bindingId: workspace.bindingId, manifestPath: location.manifestPath };
     if (create) {
       payload.name = el("ProjectName").value.trim();
       if (!payload.name) { status("Укажите имя нового проекта.", true); return; }
@@ -133,17 +129,38 @@
     return request(create ? "createTabularProject" : "openTabularProject", payload,
       create ? "Создаём проект…" : "Открываем проект…");
   }
+  function projectLocation() {
+    var value = el("ProjectFile").value.trim().replace(/\\/g, "/");
+    if (!/^(?:[A-Za-z]:\/|\/\/[^/]+\/[^/]+\/)/.test(value) || !value.endsWith("/project.json")) {
+      status("Укажите полный путь к project.json.", true); return null;
+    }
+    var rootPath = value.slice(0, -"/project.json".length), manifestPath = "project.json";
+    if (/^[A-Za-z]:$/.test(rootPath)) rootPath += "/";
+    var current = selected(), currentRoot = current && current.rootPath.replace(/\\/g, "/").replace(/\/+$/, "");
+    if (currentRoot && value.toLowerCase().startsWith(currentRoot.toLowerCase() + "/")) {
+      rootPath = current.rootPath;
+      manifestPath = value.slice(currentRoot.length + 1);
+    }
+    return { rootPath: rootPath, manifestPath: manifestPath };
+  }
+  async function openSelected(create) {
+    if (busy || window.RNAssistantWorkspaceSources && window.RNAssistantWorkspaceSources.hasUnfinished()) return;
+    var location = projectLocation();
+    if (!location) return;
+    if (create && !el("ProjectName").value.trim()) { status("Укажите название нового проекта.", true); return; }
+    var current = selected();
+    if (!current || current.rootPath.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase() !==
+        location.rootPath.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase() || create && current.readOnly) {
+      if (!await request("openWorkspace", { rootPath: location.rootPath, readOnly: false }, "Открываем папку проекта…")) return;
+    }
+    return projectRequest(create, location);
+  }
   function bind() {
-    if (bound || !el("Open")) return;
+    if (bound || !el("ProjectOpen")) return;
     bound = true;
-    el("Open").addEventListener("click", function () {
-      var root = el("Root").value.trim();
-      if (!root) { status("Укажите полный путь к рабочей папке.", true); return; }
-      request("openWorkspace", { rootPath: root, readOnly: el("ReadOnly").checked }, "Открываем папку…");
-    });
     el("Refresh").addEventListener("click", show);
-    el("ProjectOpen").addEventListener("click", function () { projectRequest(false); });
-    el("ProjectCreate").addEventListener("click", function () { projectRequest(true); });
+    el("ProjectOpen").addEventListener("click", function () { openSelected(false); });
+    el("ProjectCreate").addEventListener("click", function () { openSelected(true); });
     el("Reconcile").addEventListener("click", function () {
       if (inspection) request("reconcileWorkspaceFile", inspection, "Проверяем текущее состояние файла…");
     });

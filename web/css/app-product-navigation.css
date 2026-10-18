@@ -25,8 +25,23 @@
 .shell #tab-workspace .workspace-projects { display: grid; grid-template-columns: var(--nav-width) minmax(0, 1fr); width: 100%; max-width: none; height: 100%; min-height: 0; margin: 0; padding: 0; }
 .shell #tab-workspace .dt-navigation { display: flex; flex-direction: column; gap: 0; min-width: 0; min-height: 0; margin: 0; padding: 0 8px 8px; overflow-y: auto; border-bottom: 0; }
 .shell #tab-workspace .dt-navigation .product-nav-heading { flex: 0 0 52px; margin: 0 -8px 8px; }
-.shell #tab-workspace .dt-tabs { display: flex; flex-direction: column; gap: 3px; }
-.shell #tab-workspace .dt-tabs button { flex: 0 0 auto; justify-content: flex-start; width: 100%; min-height: 38px; padding: 0 12px; border: 0; border-radius: 9px; color: var(--ink-muted); text-align: left; font-size: 12px; }
+.shell #tab-workspace .dt-nav-project { display: flex; align-items: center; gap: 8px; min-height: 28px; padding: 3px 12px; color: var(--ink-muted); font-size: 11px; overflow: hidden; }
+.shell #tab-workspace .dt-nav-project::before { content: "⌄"; font-size: 12px; }
+.shell #tab-workspace .dt-nav-project span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shell #tab-workspace .dt-tabs { display: flex; flex-direction: column; gap: 4px; }
+.shell #tab-workspace .dt-nav-group { display: flex; flex-direction: column; gap: 2px; }
+.shell #tab-workspace .dt-nav-group-label { display: flex; align-items: center; min-height: 27px; padding: 2px 12px 2px 22px; color: var(--ink-muted); font-size: 11px; }
+.shell #tab-workspace .dt-nav-group-label::before { content: "⌄"; margin-right: 8px; font-size: 12px; }
+.shell #tab-workspace .dt-tabs button { flex: 0 0 auto; justify-content: flex-start; width: 100%; min-height: 33px; padding: 0 12px 0 36px; border: 0; border-radius: 9px; color: var(--ink-muted); text-align: left; font-size: 12px; }
+.shell #tab-workspace .dt-nav-group:first-child button { padding-left: 26px; }
+.shell #tab-workspace .dt-tabs button::before { content: "▤"; margin-right: 10px; color: var(--ink-muted); font-size: 14px; }
+.shell #tab-workspace #dtTabSources::before { content: "▣"; }
+.shell #tab-workspace #dtTabTemplates::before { content: "▤"; }
+.shell #tab-workspace .dt-nav-extra::before { content: "◷"; }
+.shell #tab-workspace #dtTabParameters::before { content: "{}"; font-size: 11px; }
+.shell #tab-workspace #dtTabMapping::before { content: "◇"; }
+.shell #tab-workspace #dtTabResults::before { content: "▥"; }
+.shell #tab-workspace #dtTabFormat::before { content: "▤"; }
 .shell #tab-workspace .dt-tabs button:hover { background: var(--surface-hover); color: var(--ink); }
 .shell #tab-workspace .dt-tabs button[aria-selected="true"] { background: var(--surface-selected); color: var(--ink); font-weight: 600; }
 .shell #tab-workspace .product-dt-main { min-width: 0; min-height: 0; padding: 0 var(--page-inset) 32px; overflow: auto; }
@@ -65,7 +80,9 @@
   .shell #tab-workspace .workspace-projects { display: block; height: auto; }
   .shell #tab-workspace .dt-navigation { padding: 8px var(--page-inset); border-bottom: 1px solid var(--line); }
   .shell #tab-workspace .dt-navigation .product-nav-heading { display: none; }
+  .shell #tab-workspace .dt-nav-project, .shell #tab-workspace .dt-nav-group-label { display: none; }
   .shell #tab-workspace .dt-tabs { flex-direction: row; flex-wrap: wrap; }
+  .shell #tab-workspace .dt-nav-group { flex-direction: row; flex-wrap: wrap; }
   .shell #tab-workspace .dt-tabs button { width: auto; padding: 0 9px; }
   .shell #tab-workspace .dt-mobile-nav { display: none; }
   .shell #tab-workspace .product-dt-main { overflow: visible; }

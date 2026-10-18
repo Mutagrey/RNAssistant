@@ -30,57 +30,45 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     });
     await page.addScriptTag({ path: path.join(root, "js/app-workspace-projects.js") });
     await page.evaluate(() => { RNAssistantWorkspace.bind(); return RNAssistantWorkspace.show(); });
-    assert.equal(await page.locator("#workspaceSettings").getAttribute("open"), "", "folder setup is visible initially");
-    assert.equal(await page.locator("#workspaceProjectOpen").isDisabled(), true);
-    await page.locator("#workspaceRoot").fill("C:\\Projects\\Reports");
-    await page.locator("#workspaceOpen").click();
+    assert.equal(await page.locator("#workspaceSettings").getAttribute("open"), "", "project picker is visible initially");
+    await page.locator("#workspaceProjectFile").fill("C:\\Projects\\Reports\\project.json");
+    await page.locator("#workspaceProjectName").fill("Quarterly reports");
+    await page.locator("#workspaceProjectCreate").click();
+    assert.deepEqual(await page.evaluate(() => calls.at(-1)), { type: "openWorkspace",
+      payload: { rootPath: "C:/Projects/Reports", readOnly: false } });
+    assert.equal(await page.locator("#workspaceProjectCreate").isDisabled(), true, "picker is pinned while opening");
     await page.evaluate(() => {
       nativeState = { ...nativeState, revision: 1, workspace: { bindingId: "binding-a", workspaceId: "ws-a", rootPath: "C:\\Projects\\Reports", readOnly: false } };
       succeed(nativeState);
     });
-    await page.waitForFunction(() => !document.getElementById("workspaceProjectFields").disabled);
-    await page.locator("#workspaceProjectPath").fill("reports/project.json");
-    await page.locator("#workspaceProjectName").fill("Quarterly reports");
-    await page.locator("#workspaceProjectCreate").click();
-    assert.equal(await page.locator("#workspaceOpen").isDisabled(), true, "root cannot switch during a write");
+    await page.waitForFunction(() => calls.some(call => call.type === "createTabularProject"));
+    assert.deepEqual(await page.evaluate(() => calls.at(-1).payload),
+      { bindingId: "binding-a", manifestPath: "project.json", name: "Quarterly reports" });
+    assert.equal(await page.locator("#workspaceProjectOpen").isDisabled(), true, "project cannot switch during a write");
     await page.evaluate(() => document.getElementById("workspaceProjectCreate").click());
     assert.equal(await page.evaluate(() => calls.filter(call => call.type === "createTabularProject").length), 1, "double click admits one create");
     await page.evaluate(() => {
-      nativeState = { ...nativeState, revision: 2, project: { name: '<img src=x onerror="window.injected=true">', manifestPath: "reports/project.json", formatVersion: 2, sources: [] } };
+      nativeState = { ...nativeState, revision: 2, project: { name: '<img src=x onerror="window.injected=true">', manifestPath: "project.json", formatVersion: 2, sources: [] } };
       succeed(nativeState);
     });
     await page.waitForFunction(() => !document.getElementById("workspaceProjectResult").hidden);
     assert.equal(await page.locator("#workspaceProjectTitle img").count(), 0, "project metadata stays inert");
     assert.equal(await page.evaluate(() => window.injected), undefined);
-    console.log("PASS workspace UI: shared typed binding, create receipt, single flight and inert metadata");
+    console.log("PASS workspace UI: one project path, typed binding, create receipt, single flight and inert metadata");
 
-    await page.locator("#workspaceReadOnly").check();
-    await page.locator("#workspaceOpen").click();
-    await page.evaluate(() => {
-      nativeState = { ...nativeState, revision: 3, workspace: { ...nativeState.workspace, bindingId: "binding-ro", readOnly: true }, project: null };
-      succeed(nativeState);
-    });
-    await page.waitForFunction(() => !document.getElementById("workspaceOpen").disabled);
-    assert.equal(await page.locator("#workspaceProjectCreate").isDisabled(), true);
-    await page.locator("#workspaceReadOnly").uncheck();
-    assert.equal(await page.locator("#workspaceProjectCreate").isDisabled(), true, "checkbox edit cannot upgrade the current binding");
-    await page.locator("#workspaceProjectOpen").click();
-    await page.evaluate(() => fail(Object.assign(new Error("stale"), { code: "workspace_binding_changed" })));
-    await page.waitForFunction(() => document.getElementById("workspaceStatus").getAttribute("role") === "alert");
-    assert.equal(await page.locator("#workspaceProjectOpen").isDisabled(), true, "foreign binding disables subsequent operations");
-    await page.evaluate(() => { nativeState = { ...nativeState, revision: 4, workspace: { ...nativeState.workspace, bindingId: "binding-b", readOnly: false } }; });
+    await page.evaluate(() => { nativeState = { ...nativeState, revision: 3, project: null }; });
+    await page.evaluate(() => { document.getElementById("workspaceSettings").open = true; });
     await page.locator("#workspaceRefresh").click();
-    await page.waitForFunction(() => !document.getElementById("workspaceProjectCreate").disabled);
-    console.log("PASS workspace UI: read-only and stale selections cannot authorize writes");
-
+    await page.waitForFunction(() => document.getElementById("workspaceProjectResult").hidden);
+    await page.locator("#workspaceProjectFile").fill("C:\\Projects\\Reports\\other\\project.json");
     await page.locator("#workspaceProjectCreate").click();
     await page.evaluate(() => fail(Object.assign(new Error("uncertain"), { code: "effect_unknown" })));
     await page.waitForFunction(() => !document.getElementById("workspaceReconcile").hidden);
     assert.equal(await page.locator("#workspaceProjectResult").isVisible(), false, "unknown write has no success preview");
     const creates = await page.evaluate(() => calls.filter(call => call.type === "createTabularProject").length);
-    await page.locator("#workspaceProjectPath").fill("other/project.json");
+    await page.locator("#workspaceProjectFile").fill("C:\\Projects\\Reports\\unrelated\\project.json");
     await page.locator("#workspaceReconcile").click();
-    assert.deepEqual(await page.evaluate(() => calls.at(-1)), { type: "reconcileWorkspaceFile", payload: { bindingId: "binding-b", manifestPath: "reports/project.json" } }, "inspection pins the uncertain path");
+    assert.deepEqual(await page.evaluate(() => calls.at(-1)), { type: "reconcileWorkspaceFile", payload: { bindingId: "binding-a", manifestPath: "other/project.json" } }, "inspection pins the uncertain path");
     await page.evaluate(() => succeed({ state: nativeState, outcome: "UnknownAfterDispatch" }));
     await page.waitForFunction(() => document.getElementById("workspaceStatus").textContent.startsWith("Не удалось проверить"));
     assert.equal(await page.locator("#workspaceProjectResult").isVisible(), false, "malformed receipt cannot prove file absence or success");
