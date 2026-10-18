@@ -8,14 +8,17 @@
   var token = "local-preview-session";
   var listeners = [];
   var downloads = Object.create(null);
+  var viewerBatches = Object.create(null);
   var uploads = Object.create(null);
   var leaseSequence = 0;
   var revision = 1, skillRevision = 1;
   var chatSequence = 1;
   var activeChatId = scenario === "empty" ? "" : "preview-chat";
   var messages = scenario === "empty" ? [] : [
-    { id: "preview-user", role: "user", content: fixtures.chat.user, createdUtc: "2026-10-18T09:00:00Z" },
-    { id: "preview-answer", role: "assistant", content: fixtures.chat.assistant, createdUtc: "2026-10-18T09:00:05Z" }
+    { Id: "preview-user", Role: "user", Content: fixtures.chat.user, CreatedUtc: "2026-10-18T09:00:00Z" },
+    { Id: "preview-answer", Role: "assistant", Content: fixtures.chat.assistant,
+      RunId: "preview-run-initial", RunViewState: runView("preview-run-initial", "2026-10-18T09:00:00Z"),
+      ArtifactIds: ["report"], CreatedUtc: "2026-10-18T09:00:05Z" }
   ];
   var chats = activeChatId ? [{ Id: activeChatId, Title: fixtures.chat.title, Host: "Excel",
     DocumentKey: "preview-document", DocumentTitle: fixtures.document, IsCurrentDocument: true,
@@ -56,6 +59,13 @@
   var nativeFetch = window.fetch.bind(window);
 
   function clone(value) { return JSON.parse(JSON.stringify(value)); }
+  function runView(runId, startedUtc) {
+    return { RunId: runId, TurnId: runId, Narrative: "Сравнить продажи за сентябрь и август",
+      Lifecycle: "completed", ExecutionHealth: "clean", GoalVerification: "not_assessed",
+      SuccessfulReads: 2, VerifiedWrites: 0, NoChangeWrites: 0, UnverifiedWrites: 0,
+      FailedCalls: 0, UnknownEffects: 0, PendingConfirmation: null, Reason: "", CurrentAction: "",
+      StartedUtc: startedUtc };
+  }
   function bytes(value) { return new TextEncoder().encode(value); }
   async function hash(value) {
     var data = value instanceof Uint8Array ? value : bytes(value);
@@ -91,11 +101,19 @@
       fail("Проект примера изменился.", "preview_project_changed");
   }
   function chatState() {
+    var lastRunMessage = messages.slice().reverse().find(function (item) { return item.RunViewState || item.runViewState; });
     return { sessionRevision: revision, activeChatId: activeChatId, activeChatMode: "agent",
       activeChatModel: "preview-model", activeChatReasoning: false, chats: clone(chats), documents: clone(documentItems),
       messages: clone(messages), messageStartIndex: 0, messageTotalCount: messages.length,
       skills: skillLibrary(), tools: toolLibrary(), context: {}, contextUsage: {},
-      artifacts: [], artifactLibrary: { sessionRevision: revision, heads: [] }, inbox: chatInbox() };
+      runViewState: previewRuns[activeChatId] ? null : lastRunMessage && (lastRunMessage.RunViewState || lastRunMessage.runViewState) || null,
+      artifacts: activeChatId === "preview-chat" ? [{ id: "report", kind: "markdown",
+        title: fixtures.materials[0].name, mimeType: "text/markdown", sourceMessageId: "preview-answer",
+        runId: "preview-run-initial", revision: 1, inlineText: fixtures.report,
+        inlineTruncated: false, metadataJson: "{}", relatedArtifactIds: [],
+        createdUtc: "2026-10-18T09:00:05Z", resourceUri: artifactExamples[0].resourceUri,
+        documentScoped: false }] : [],
+      artifactLibrary: { sessionRevision: revision, heads: [] }, inbox: chatInbox() };
   }
   function chatInbox(receipt) {
     var run = previewRuns[activeChatId];
@@ -123,7 +141,8 @@
     setTimeout(function () {
       if (!previewRuns[chatId]) return;
       var now = new Date().toISOString();
-      messagesByChat[chatId].push({ Id: "preview-reply-" + number, Role: "assistant", Content: answer, CreatedUtc: now });
+      messagesByChat[chatId].push({ Id: "preview-reply-" + number, Role: "assistant", Content: answer,
+        RunId: runId, RunViewState: runView(runId, now), CreatedUtc: now });
       delete previewRuns[chatId];
       revision++; inboxRevision++;
       var chat = chats.find(function (item) { return item.Id === chatId; });
@@ -398,6 +417,31 @@
       return { kind: example.kind, contentType: example.contentType,
         fileName: example.title, data: artifactData };
     }
+    if (type === "readArtifactViewerPage") {
+      requireChat(payload);
+      var viewed = artifactExamples.find(function (item) { return item.resourceUri === payload.resourceUri; });
+      if (!viewed || viewed.id !== "report" || payload.cursor)
+        fail("Версия материала примера недоступна.", "preview_revision_changed");
+      var viewerId = leaseId();
+      var reference = { uri: viewed.resourceUri, revision: "1" };
+      viewerBatches[viewerId] = { resource: reference, view: "text", text: viewed.body,
+        offset: 0, nextOffset: viewed.body.length, done: true };
+      return { resourceUri: viewed.resourceUri, viewerKind: "markdown", title: viewed.title,
+        mimeType: viewed.contentType, contentSha256: await hash(viewed.body),
+        data: { leaseId: viewerId, url: "https://rnassistant.local-resource/v1/" + viewerId,
+          descriptor: { reference: reference }, view: "text",
+          expiresUtc: new Date(Date.now() + 600000).toISOString(),
+          maxBatchItems: 32000, maxBatchBytes: 8 * 1024 * 1024 },
+        offset: 0, returnedCharacters: viewed.body.length, totalCharacters: viewed.body.length,
+        nextCursor: null, complete: true, truncated: false, sourceComplete: true,
+        fullReadAllowed: true, viewerLimitReached: false, maximumDocumentCharacters: 1000000 };
+    }
+    if (type === "getRunChanges") {
+      requireChat(payload);
+      if (!messages.some(function (item) { return item.RunId === payload.runId && item.RunViewState; }))
+        fail("Запуск примера отсутствует.", "preview_run_changed");
+      return { chatId: activeChatId, runId: payload.runId, complete: true, items: [] };
+    }
     if (type === "getVbaProject") return { result: { Success: true, Message: "VBA-проект примера загружен.",
       DataJson: JSON.stringify({ modules: [{ name: "FormatSales", type: "StdModule",
         code: fixtures.vba, lineCount: fixtures.vba.trimEnd().split("\n").length },
@@ -436,7 +480,7 @@
         reference: selectedReference ? clone(selectedReference) : null, totalCharacters: selectedText.length, data: data };
     }
     if (type === "resourceDataClose" || type === "closeArtifactTransfer" || type === "cancelSkillMutationUpload") {
-      delete downloads[payload.leaseId]; delete uploads[payload.leaseId];
+      delete downloads[payload.leaseId]; delete viewerBatches[payload.leaseId]; delete uploads[payload.leaseId];
       return { closed: true };
     }
     if (type === "beginSkillMutationUpload") {
@@ -462,9 +506,15 @@
     var url = typeof input === "string" ? input : input && input.url || "";
     if (!url.startsWith("https://rnassistant.local-resource/v1/")) return nativeFetch(input, options);
     var address = new URL(url), id = address.pathname.split("/").pop();
-    var offset = Number(address.searchParams.get("offset")), count = Number(address.searchParams.get("count"));
+    var offset = Number(address.searchParams.get("offset"));
+    var count = Number(address.searchParams.get(address.searchParams.has("count") ? "count" : "limit"));
     if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(count) || count < 1)
       return Promise.resolve(new Response("", { status: 400 }));
+    if (viewerBatches[id] && address.pathname === "/v1/" + id) {
+      if (offset !== 0 || count !== 32000) return Promise.resolve(new Response("", { status: 404 }));
+      return Promise.resolve(new Response(JSON.stringify(viewerBatches[id]),
+        { headers: { "Content-Type": "application/json" } }));
+    }
     if (address.pathname.includes("/download/")) {
       var item = downloads[id];
       if (!item || offset + count > item.bytes.length) return Promise.resolve(new Response("", { status: 404 }));

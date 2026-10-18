@@ -3,8 +3,10 @@
 ## Product UI cutover — 2026-10-19
 
 Demo and product mock preview now read one preview-only example set for the
-September chat, skill, VBA, report, JSON material and project sources. The mock
-chat exercises the real UI progress/stream/final handlers; the material catalog
+September chat, skill, VBA, report, JSON material and project sources. The sample
+chat uses a typed completed run, Markdown table and linked report card; its exact
+text read follows the real viewer transport. A new mock message exercises the
+real UI progress/stream/final handlers; the material catalog
 offers Markdown, JSON and text. The comparison page can show demo and product
 side by side. This removes fixture drift, not the remaining separate inner-screen
 renderers or native Data Templates/project-chat gaps. Browser preview remains

@@ -59,6 +59,11 @@ async function serve() {
       question: PrototypeFixtures.chat.user,
       answer: PrototypeFixtures.chat.assistant
     })));
+    assert.equal(await normal.evaluate(() => state.activeRunViewState.lifecycle), "completed");
+    assert.equal(await normal.locator("#messages .chat-artifact-card").count(), 1);
+    assert.deepEqual(await normal.evaluate(() => send("getRunChanges", {
+      chatId: "preview-chat", runId: "preview-run-initial"
+    })), { chatId: "preview-chat", runId: "preview-run-initial", complete: true, items: [] });
     assert.equal(await normal.locator("#chatSessionList [data-tree-key='chat:preview-chat']").count(), 1);
     const progress = [];
     await normal.evaluate(() => {
@@ -148,8 +153,8 @@ async function serve() {
     await normal.locator("#artifactCatalogOverviewRows .artifact-overview-link").first().waitFor();
     assert.equal(await normal.locator("#artifactCatalogOverviewRows tr").count(), 3);
     await normal.locator("#artifactCatalogOverviewRows .artifact-overview-link").first().click();
-    await normal.waitForFunction(() => document.querySelector("#artifactCatalogPreviewBody").textContent.includes("Москва"));
-    assert.ok((await normal.locator("#artifactCatalogPreviewBody").textContent()).includes("18,4%"));
+    await normal.waitForFunction(() => document.querySelector("#artifactDetailPreview").textContent.includes("Москва"));
+    assert.ok((await normal.locator("#artifactDetailPreview").textContent()).includes("18,4%"));
     await normal.locator("#artifactCatalogAll").click();
     await normal.locator("#artifactCatalogOverviewRows").getByRole("button", { name: "Продажи по регионам.json" }).click();
     await normal.locator("#artifactCatalogPreviewBody .rn-json-viewer").waitFor();
