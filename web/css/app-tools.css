@@ -512,26 +512,10 @@
   min-height: 0;
 }
 
-.skill-editor-fields {
-  grid-template-columns: minmax(0, 1.35fr) minmax(130px, .7fr) auto;
-  gap: 8px 10px;
-  min-height: 0;
-  padding: 0;
-  overflow: visible;
-}
-
-.skill-enabled-field {
-  align-self: end;
-  min-height: 34px;
-  padding: 0 4px;
-}
-
 @media (max-width: 760px) {
   .schema-property-row { grid-template-columns: minmax(80px,1fr) 88px 24px 30px; }
   .schema-property-row input:nth-of-type(3), .schema-property-row input:nth-of-type(4) { grid-column: 1 / -1; }
   .tool-editor-page.form-grid, .tool-editor-page .form-grid { grid-template-columns: 1fr; }
-  .skill-editor-fields { grid-template-columns: minmax(0, 1fr) minmax(120px, .65fr); }
-  .skill-enabled-field { grid-column: 1 / -1; }
 }
 
 /* Dynamic fields share one control surface in both themes. */

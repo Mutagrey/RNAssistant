@@ -11,14 +11,15 @@
     header { display: flex; align-items: center; gap: 16px; min-height: 40px; padding: 0 14px; }
     header strong { font-weight: 600; }
     header span { color: #5e6a61; }
-    header a { margin-left: auto; color: #3d725a; text-decoration: none; }
+    header select { margin-left: auto; font: inherit; padding: 4px 8px; }
+    header a { color: #3d725a; text-decoration: none; }
     header a:hover { text-decoration: underline; }
     iframe { flex: 1; width: 100%; min-height: 0; border: 0; background: white; }
   </style>
 </head>
 <body>
-  <header><strong>Рабочий UI</strong><span>Данные примера для сравнения; действия не сохраняются</span><a href="/" target="_blank" rel="noopener">Открыть демо ↗</a></header>
-  <iframe id="product" src="/web/" title="Рабочий интерфейс RNAssistant"></iframe>
-  <script src="product-preview.js"></script>
+  <header><strong>Рабочий UI</strong><span>Реальные экраны и обработчики с временным mock bridge</span><select id="scenario" aria-label="Состояние примера"><option value="ready">Заполнено</option><option value="empty">Пусто</option><option value="error">Ошибка чтения</option></select><a href="/" target="_blank" rel="noopener">Открыть демо ↗</a></header>
+  <iframe id="product" src="/preview/web/?scenario=ready" title="Рабочий интерфейс RNAssistant"></iframe>
+  <script>document.getElementById("scenario").addEventListener("change", function (event) { document.getElementById("product").src = "/preview/web/?scenario=" + encodeURIComponent(event.target.value); });</script>
 </body>
 </html>

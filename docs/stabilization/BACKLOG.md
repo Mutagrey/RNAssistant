@@ -29,6 +29,14 @@ Owner: bootstrap `prototypes/ui/index.html` / `app.js`. При серийном 
 зависимостей и ответы локального сервера отдельно от изменений визуального стиля.
 Это наблюдение прототипа, не evidence сбоя production WebView2.
 
+## Устаревшая проверка Skill Library init — 2026-10-19
+
+Owner: `tests/web/skills-contract.test.js`. Выборочный запуск проходит первые три
+проверки, затем требует прямое `state.skills = skillLibraryItemsFromContract(init.skills)`
+в `app-chat-session.js`. Этой строки нет и на неизменённом `HEAD`; текущая загрузка
+проходит через `applyChatState`/`applyLibraryCatalogState`. Сверить assertion с
+действующим путём и сохранить negative controls в отдельной правке теста.
+
 ## CLI smoke fixtures lag current admission contracts — 2026-10-14
 
 Owner: workspace CLI tests. On isolated `3cb0b69f` plus the explicit completion

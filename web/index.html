@@ -61,7 +61,7 @@
   <link rel="stylesheet" href="css/app-theme.css?v=chat-tree-20261018-1">
   <link rel="stylesheet" href="css/app-product-tokens.css?v=product-ui-20261018-1">
   <link rel="stylesheet" href="css/app-product-navigation.css?v=project-ui-20261018-1">
-  <link rel="stylesheet" href="css/app-product-components.css?v=ui-cutover-20261018-1">
+  <link rel="stylesheet" href="css/app-product-components.css?v=shared-skill-fields-20261018-1">
   <link rel="stylesheet" href="css/app-product-viewers.css?v=product-ui-20261018-1">
   <link rel="stylesheet" href="css/app-product-materials.css?v=product-ui-20261018-1">
   <link rel="stylesheet" href="css/app-product-screens.css?v=ui-cutover-20261018-1">
@@ -500,12 +500,7 @@
                 <button class="mode-button skill-page-button" type="button" data-skill-page="files">Файлы</button>
               </div>
               <div class="skill-instruction-view" data-skill-page-view="instruction">
-                <div class="form-grid tool-form skill-editor-fields" id="skillForm">
-                  <label>ID навыка<input id="skillIdInput" placeholder="common.review_contract"></label>
-                  <label>Приложение<select id="skillHostInput"><option>Common</option><option>Excel</option><option>Word</option><option>PowerPoint</option><option>Outlook</option></select></label>
-                  <label class="wide">Описание навыка<textarea id="skillDescriptionInput" rows="1" placeholder="Когда агенту использовать этот навык"></textarea></label>
-                  <label class="checkline skill-enabled-field"><input type="checkbox" id="skillEnabledInput"> <span>Доступен агенту</span></label>
-                </div>
+                <div id="skillForm" data-rna-skill-form></div>
                 <div class="library-editor-mode-row" id="skillResourceHeading" hidden>
                   <span class="library-editor-section-label" id="skillResourceLabel">SKILL.md</span>
                   <button class="secondary" id="skillReturnToEditorButton" type="button" hidden>К редактору</button>
@@ -1208,6 +1203,7 @@
   <script src="js/vendor/codemirror/addon/selection/active-line.min.js"></script>
   <script src="js/vendor/codemirror/addon/hint/show-hint.min.js"></script>
   <script src="js/vendor/viewer.min.js"></script>
+  <script src="js/app-skill-fields-view.js?v=shared-skill-fields-20261018-1"></script>
   <script src="js/app-core.js?v=bridge-contract-20261015-1"></script>
   <script src="js/app-navigation-tree.js?v=shared-tree-20261018-1"></script>
   <script src="js/app-utils.js?v=run-view-state-20260830-1"></script>

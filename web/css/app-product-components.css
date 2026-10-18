@@ -1,4 +1,15 @@
 /* Shared components used by both the prototype and the product shell. */
+:where(.rna-skill-fields) { display: grid; grid-template-columns: minmax(0, 1fr) minmax(130px, .45fr); align-content: start; gap: 8px 12px; min-height: 0; padding: 16px 0 12px; overflow: visible; }
+.rna-skill-fields label { display: grid; gap: 5px; min-width: 0; color: var(--ink); font-size: 12px; font-weight: 500; }
+.rna-skill-fields label.wide { grid-column: 1 / -1; }
+.rna-skill-fields input:not([type="checkbox"]), .rna-skill-fields select, .rna-skill-fields textarea { width: 100%; min-width: 0; min-height: 36px; border: 1px solid var(--line-strong); border-radius: 7px; padding: 8px 10px; background: var(--surface); color: var(--ink); font-size: 13px; font-weight: 400; }
+.rna-skill-fields textarea { height: 36px; resize: vertical; }
+.rna-skill-fields .skill-enabled-field { display: flex; align-items: center; grid-column: 1 / -1; gap: 8px; min-height: 26px; }
+.rna-skill-fields .skill-enabled-field input { flex: 0 0 auto; width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
+@media (max-width: 360px) { .rna-skill-fields { grid-template-columns: 1fr; } }
+@container content (max-width: 420px) { .rna-skill-fields { grid-template-columns: 1fr; } }
+select:not([multiple]):not([size]) { appearance: none; padding-inline-end: 34px; background-image: var(--select-chevron); background-position: right 10px center; background-size: 14px 14px; background-repeat: no-repeat; }
+@media (forced-colors: active) { select:not([multiple]):not([size]) { appearance: auto; background-image: none; padding-inline-end: 10px; } }
 :root {
   --text: var(--ink); --muted: var(--ink-muted); --panel: var(--surface);
   --secondary-bg: var(--surface-subtle); --secondary-bg-hover: var(--surface-hover);

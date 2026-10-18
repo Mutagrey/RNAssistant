@@ -286,10 +286,6 @@
     left: auto;
   }
 
-  .skill-editor-fields {
-    grid-template-columns: minmax(0, 1fr) minmax(120px, .65fr);
-  }
-
   .skill-reference-row {
     flex-wrap: wrap;
   }
@@ -308,12 +304,6 @@
     min-height: 240px !important;
   }
 
-}
-
-@media (max-width: 360px) {
-  .skill-editor-fields {
-    grid-template-columns: 1fr;
-  }
 }
 
 @media (max-width: 700px) {

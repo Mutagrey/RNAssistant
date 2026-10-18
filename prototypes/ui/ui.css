@@ -230,8 +230,6 @@ td small { color: var(--ink-muted); font-size: 11px; }
 .field { display: grid; gap: 6px; font-size: 12px; min-width: 0; }
 .control-input, .field input, .field select, .field textarea, .toolbar select { width: 100%; min-width: 0; background: var(--surface); border: 1px solid var(--line-strong); padding: 7px 10px; border-radius: 7px; font-size: 13px; }
 .toolbar select { width: auto; max-width: 100%; }
-select:not([multiple]):not([size]) { appearance: none; padding-inline-end: 34px; background-image: var(--select-chevron); background-position: right 10px center; background-size: 14px 14px; background-repeat: no-repeat; }
-@media (forced-colors: active) { select:not([multiple]):not([size]) { appearance: auto; background-image: none; padding-inline-end: 10px; } }
 .field textarea { resize: vertical; min-height: 130px; }
 .field small { color: var(--ink-muted); font-size: 11px; }
 .check-row { display: flex; align-items: center; gap: 10px; font-size: 13px; cursor: pointer; }

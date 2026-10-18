@@ -61,7 +61,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
         throw new Error("Unexpected bridge call: " + type);
       };
     });
-    for (const file of ["data-templates/ui/shell.js", "js/app-workspace-catalog.js", "js/app-data-templates.js"])
+    for (const file of ["js/app-navigation-tree.js", "data-templates/ui/shell.js", "js/app-workspace-catalog.js", "js/app-data-templates.js"])
       await page.addScriptTag({ path: path.join(root, file) });
     await page.evaluate(() => { RNAssistantDataTemplates.bind(); RNAssistantDataTemplates.setContext(nativeState("A"), false);
       document.querySelector("#workspaceSettings").dataset.projectOpen = "true";
@@ -69,9 +69,9 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     await page.waitForFunction(() => document.querySelectorAll("#dtNativeCatalogList li").length === 50 &&
       document.querySelectorAll("#dtNativeParametersRows tr").length === 2);
     assert.equal(await page.locator("#dtNativeCatalogRange").innerText(), "1–50 из 55");
-    await page.locator("#dtTabTemplates").click();
-    assert.equal(await page.locator("#dtTabTemplates").getAttribute("aria-selected"), "true");
-    assert.equal(await page.locator("#dtTabSources").getAttribute("aria-selected"), "false");
+    await page.locator('#dtNavTree [data-tree-key="dt:templates"] .navigation-tree-label').click();
+    assert.equal(await page.locator('#dtNavTree [data-tree-key="dt:templates"]').getAttribute("aria-selected"), "true");
+    assert.equal(await page.locator('#dtNavTree [data-tree-key="dt:sources"]').getAttribute("aria-selected"), "false");
     if (process.env.CAPTURE_UI) await page.screenshot({ path: "/tmp/rna-native-catalog-desktop.png", fullPage: true });
     assert.equal(await page.locator("#dtNativeParametersRows img").count(), 0);
     assert.equal(await page.locator("#dtNativeParametersRows").innerText().then(value => value.includes('<img onerror="alert(1)">')), true);
@@ -79,18 +79,21 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     assert.deepEqual(await page.evaluate(() => calls[0].payload),
       { bindingId: "binding-A", manifestPath: "project-A.json", projectRevision: 2, offset: 0 });
 
-    await page.locator("#dtTabParameters").click();
+    await page.locator('#dtNavTree [data-tree-key="dt:parameters"] .navigation-tree-label').click();
     assert.equal(await page.locator("#dtViewParameters").isVisible(), true);
     await page.locator("#dtNativeParametersSearch").fill("рубль");
     assert.equal(await page.locator("#dtNativeParametersRows tr").count(), 1);
-    await page.locator("#dtTabMapping").click();
+    await page.locator('#dtNavTree [data-tree-key="dt:mapping"] .navigation-tree-label').click();
     assert.equal(await page.locator("#dtNativeMappingRows tr").count(), 1);
-    assert.equal(await page.locator("#dtTabMapping").innerText(), "Соответствия");
-    await page.locator("#dtTabMapping").press("Home");
-    assert.equal(await page.locator("#dtTabSources").getAttribute("aria-selected"), "true");
+    assert.equal(await page.locator('#dtNavTree [data-tree-key="dt:mapping"] .navigation-tree-label').innerText(), "Соответствия");
+    await page.locator('#dtNavTree [data-tree-key="dt:mapping"]').press("Home");
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.treeKey), "dt:project");
+    await page.locator('#dtNavTree [data-tree-key="dt:project"]').press("ArrowDown");
+    await page.locator('#dtNavTree [data-tree-key="dt:sources"]').press("Enter");
+    assert.equal(await page.locator("#dtViewSources").isVisible(), true);
     await page.setViewportSize({ width: 360, height: 780 });
     await page.evaluate(() => document.querySelector(".shell").classList.add("navigation-open"));
-    await page.locator("#dtTabTemplates").click();
+    await page.locator('#dtNavTree [data-tree-key="dt:templates"] .navigation-tree-label').dispatchEvent("click");
     await page.evaluate(() => document.querySelector(".shell").classList.remove("navigation-open"));
     assert.equal(await page.locator("#dtViewTemplates").isVisible(), true);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
@@ -119,6 +122,17 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     await page.locator("#dtNativeCatalogRefresh").click();
     await page.waitForFunction(() => document.querySelector("#dtNativeCatalogStatus").dataset.error === "true");
     assert.equal(await page.locator("#dtNativeCatalogList li").count(), 0);
+
+    await page.evaluate(async () => {
+      const next = nativeState("C");
+      RNAssistantDataTemplates.setContext(next, false);
+      RNAssistantDataTemplates.setContext(next, true);
+      await Promise.resolve();
+      RNAssistantDataTemplates.setContext(next, false);
+    });
+    await page.waitForFunction(() => document.querySelector("#dtNativeCatalogList li")?.textContent.includes("CTemplate00"));
+    assert.equal(await page.evaluate(() => calls.some(call => call.type === "listTabularProjectTemplates" &&
+      call.payload.bindingId === "binding-C")), true, "a busy project operation must not consume the initial refresh");
 
     await page.evaluate(() => { RNAssistantDataTemplates.unbind(); RNAssistantDataTemplates.bind(); });
     const before = await page.evaluate(() => calls.length);

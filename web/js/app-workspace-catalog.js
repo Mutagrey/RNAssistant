@@ -5,7 +5,7 @@
   const dictionaryHead = /^dictionary-\d{13}-[0-9a-f]{32}\.json$/;
   const pageSize = 50;
   let container = null, events = null, context = null, key = "", epoch = 0, pending = false,
-    needsRefresh = false, catalog = null, dictionary = null, opened = null,
+    needsRefresh = false, refreshScheduled = false, catalog = null, dictionary = null, opened = null,
     listBusy = false, dictionaryBusy = false, openBusy = false,
     listError = "", dictionaryError = "", openError = "", parameterPage = 0, mappingPage = 0;
 
@@ -178,11 +178,18 @@
     scheduleRefresh();
   }
   function scheduleRefresh() {
-    if (needsRefresh && !pending && container) {
+    if (!needsRefresh || pending || !container || refreshScheduled) return;
+    refreshScheduled = true;
+    const selected = key;
+    Promise.resolve().then(async () => {
+      refreshScheduled = false;
+      if (!needsRefresh || pending || !container || key !== selected) return;
       needsRefresh = false;
-      const selected = key;
-      Promise.resolve().then(async () => { await refreshTemplates(0); if (key === selected) await refreshDictionary(); });
-    }
+      await refreshTemplates(0);
+      if (key !== selected) return;
+      if (pending) needsRefresh = true;
+      else await refreshDictionary();
+    });
   }
   function bind(target) {
     if (container) return;

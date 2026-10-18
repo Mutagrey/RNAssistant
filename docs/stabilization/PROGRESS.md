@@ -5,9 +5,16 @@
 Prototype and product now use one navigation-tree renderer and one set of tree,
 menu and navigation-header styles. All six product sections supply their own
 items/actions to that renderer; the retired resource-list tree and Wunderbaum
-assets were removed. The static product preview still injects fixture state after
-load, so it does not exercise typed bridge commands or their outcomes. Screen
-presentation and a behavioral mock preview remain open UI work.
+assets were removed. The static product preview now loads the real product HTML
+with a preview-only typed mock bridge before initialization. Its chat text intake,
+skill and reference read/save/clone, material preview, and project catalog fixtures
+exercise the real UI handlers; unsupported actions reject explicitly. The old direct
+fixture injection was removed. Demo and product share the skill fields view and
+its CSS, including ID and host. Most internal screen views remain separate, and
+mock preview is not Office qualification.
+The project catalog now keeps its initial refresh pending while a concurrent
+project operation is busy, so templates and dictionary appear without a manual
+refresh. Focused browser checks cover that ordering and the existing catalog guards.
 
 Shell parity correction: the prototype palette now wins over old CSS variables,
 and all six product sections use joined 52 px navigation/main headers with a 1 px

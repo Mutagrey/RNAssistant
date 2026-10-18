@@ -56,14 +56,6 @@
 .shell #tab-instructions .prompt-editor-stage { padding-top: 16px; }
 .shell #tab-instructions .skill-instruction-view { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 0; min-height: 0; }
 .shell #tab-instructions .skill-instruction-view:has(#skillResourceHeading[hidden]) { grid-template-rows: auto minmax(0, 1fr) 25px; }
-.shell #tab-instructions .skill-editor-fields { grid-template-columns: minmax(0, 1fr) minmax(130px, .45fr); align-content: start; gap: 8px 12px; padding: 16px 0 12px; }
-.shell #tab-instructions .skill-editor-fields label { color: var(--ink); font-size: 12px; }
-.shell #tab-instructions .skill-editor-fields input:not([type="checkbox"]),
-.shell #tab-instructions .skill-editor-fields select,
-.shell #tab-instructions .skill-editor-fields textarea { min-height: 36px; border-color: var(--line-strong); border-radius: 7px; padding: 8px 10px; background: var(--surface); color: var(--ink); font-size: 13px; }
-.shell #tab-instructions .skill-editor-fields textarea { height: 36px; resize: vertical; }
-.shell #tab-instructions .skill-enabled-field { grid-column: 1 / -1; min-height: 26px; }
-.shell #tab-instructions .skill-enabled-field input { accent-color: var(--accent); }
 .shell #tab-instructions .skill-instruction-view > .library-editor-mode-row { justify-content: flex-end; min-height: 31px; margin: 0; padding: 0; border: 0; }
 .shell #tab-instructions .skill-instruction-view .library-editor-section-label { margin-right: auto; }
 .shell #tab-instructions #skillResourceHeading[hidden],
