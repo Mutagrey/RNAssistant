@@ -28,7 +28,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       window.workspaceEditor = RNAssistantHtmlWorkspaceEditor.create({ state,
         model: RNAssistantHtmlWorkspaceModel.create(state), artifacts: {},
         source: { current: () => true, ready: () => true, ensure: () => true, message: () => "" },
-        preview: { build: () => '<html><body style="font:16px system-ui;padding:32px;color:#344054"><h1>Отчёт по продажам</h1><p>Текущая версия HTML</p></body></html>' } });
+        preview: { missingVendors: () => [], build: () => '<html><body style="font:16px system-ui;padding:32px;color:#344054"><h1>Отчёт по продажам</h1><p>Текущая версия HTML</p></body></html>' } });
       initializeCodeEditors(["htmlWorkspaceEditorInput"]);
       workspaceEditor.render();
       const cm = document.querySelector(".CodeMirror").CodeMirror;

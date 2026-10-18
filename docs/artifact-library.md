@@ -44,11 +44,14 @@ mismatch hints accompany actual JavaScript exceptions; they remain repair advice
 
 Owner: Artifact Library. `ArtifactCatalogService` coordinates read-only discovery and
 explicit transfers; Core owns `ArtifactTransferPackage` and document publication.
-The **Артефакты** tab uses one tree on the left and a viewer/editor on the right,
-including narrow panes. **В чате / В документе / Все документы**, title search and
-type/document filters change that tree; 50-item pages append to it. The selected
-HTML project expands into files and data. There is no separate card catalog or
-editor screen; **Просмотр / Код** switches the right pane. Shared Markdown/text/JSON
+The **Материалы** tab uses one ownership tree on the left and a catalog table or
+viewer/editor on the right, including narrow panes. The table lists the same typed
+`listArtifactCatalog` projection as the tree; it is not another inventory or store.
+Ownership, title search and type/document filters change both views; 50-item pages
+append to both. The selected HTML project expands into files and data. Selecting a
+table row or tree item opens the same viewer/editor pane, while **Все материалы**
+returns to the table and releases the preview. **Просмотр / Код** switches the right
+pane. Shared Markdown/text/JSON
 viewers render exported exact content. Actions apply to the selected root. The catalog reads registered local document
 authorities, including closed documents; it is not another durable inventory. Bodies
 are loaded on demand. Enumeration still scans retained metadata; response pagination

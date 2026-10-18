@@ -686,7 +686,6 @@
           <aside class="tool-list-panel html-workspace-sidebar global-nav" id="htmlWorkspaceSidebar">
             <div class="artifact-catalog-toolbar">
               <strong>Материалы</strong>
-              <label><select id="artifactCatalogScope" aria-label="Принадлежность материалов"><option value="chat">В чате</option><option value="document">В документе</option><option value="all">Все документы</option></select></label>
               <details class="html-workspace-menu html-workspace-create-menu product-material-menu">
                 <summary title="Добавить материал" aria-label="Добавить материал">＋</summary>
                 <div class="html-workspace-menu-items">
@@ -701,12 +700,9 @@
               <input type="file" id="artifactCatalogFile" hidden>
             </div>
             <div class="artifact-catalog-filters">
-              <select id="artifactCatalogKind" aria-label="Тип артефакта"><option value="">Все типы</option><option value="html_workspace">HTML-проекты</option><option value="markdown">Markdown</option><option value="file">Файлы и JSON</option><option value="image">Изображения</option><option value="plan_document">Планы</option></select>
-              <select id="artifactCatalogDocument" aria-label="Документ" hidden><option value="">Все документы</option></select>
               <button type="button" id="artifactCatalogRefresh" title="Обновить дерево" aria-label="Обновить дерево">↻</button>
             </div>
             <div class="tool-list-controls">
-              <input class="tool-search" id="htmlWorkspaceSearchInput" type="search" maxlength="200" aria-label="Поиск артефактов" placeholder="Поиск артефактов..." autocomplete="off">
               <div class="html-workspace-create hidden" id="htmlWorkspaceCreateBox">
                 <input class="tool-search" id="htmlWorkspaceCreateNameInput" autocomplete="off">
                 <div class="tool-list-actions">
@@ -715,6 +711,7 @@
                 </div>
               </div>
             </div>
+            <button type="button" id="artifactCatalogAll" class="artifact-overview-nav" aria-current="page">▧ <span>Все материалы</span></button>
             <div class="tool-list html-workspace-tree" id="htmlWorkspaceTree" role="tree" aria-label="Артефакты"></div>
             <div class="artifact-tree-footer">
               <p id="artifactCatalogStatus" role="status" aria-live="polite"></p>
@@ -724,6 +721,19 @@
           </aside>
           <div class="splitter" role="separator" aria-orientation="vertical" aria-label="Изменить ширину списка артефактов"></div>
           <div class="artifact-workspace-content" id="artifactCatalog">
+            <section id="artifactCatalogOverview" class="artifact-catalog-overview" hidden aria-label="Каталог материалов">
+              <div class="artifact-overview-heading"><div><p>Результаты работы и файлы</p><h2>Материалы</h2></div><details id="artifactCatalogOverviewCreate" class="html-workspace-menu artifact-overview-create"><summary>＋ Добавить</summary><div class="html-workspace-menu-items"><button type="button" data-artifact-create="artifactCatalogImport">Импортировать файл</button><button type="button" data-artifact-create="addPlanButton">План</button><button type="button" data-artifact-create="addHtmlFileButton">HTML-страницу</button><button type="button" data-artifact-create="addCssFileButton">Стили CSS</button><button type="button" data-artifact-create="addJsFileButton">Скрипт JS</button><button type="button" data-artifact-create="addHtmlDataButton">Данные JSON</button></div></details></div>
+              <div class="artifact-overview-content">
+                <div class="artifact-overview-toolbar">
+                  <input class="tool-search" id="htmlWorkspaceSearchInput" type="search" maxlength="200" aria-label="Найти материал" placeholder="Найти материал" autocomplete="off">
+                  <select id="artifactCatalogScope" aria-label="Принадлежность материалов"><option value="all">Все материалы</option><option value="chat">Этот чат</option><option value="document">В документе</option></select>
+                  <select id="artifactCatalogKind" aria-label="Формат материала"><option value="">Все форматы</option><option value="html_workspace">HTML</option><option value="markdown">Markdown</option><option value="file">Файлы и JSON</option><option value="image">Изображения</option><option value="plan_document">Планы</option></select>
+                  <select id="artifactCatalogDocument" aria-label="Документ" hidden><option value="">Все документы</option></select>
+                </div>
+                <div id="artifactCatalogOverviewTable" class="artifact-overview-table-wrap" hidden><table><thead><tr><th>Название</th><th>Формат</th><th>Принадлежность</th><th>Изменён</th></tr></thead><tbody id="artifactCatalogOverviewRows"></tbody></table></div>
+                <p id="artifactCatalogOverviewEmpty" class="artifact-overview-empty" role="status">Материалов пока нет.</p>
+              </div>
+            </section>
             <div id="artifactCatalogActions" class="artifact-catalog-actions" hidden></div>
             <section id="artifactCatalogPreview" class="artifact-catalog-preview" hidden aria-label="Просмотр артефакта">
               <h3 id="artifactCatalogPreviewTitle"></h3>

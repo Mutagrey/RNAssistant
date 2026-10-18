@@ -14,6 +14,13 @@ parity for the other main tabs remain open. The Library tool editor now uses the
 demo's sections and displays its ID as the read-only name. Tool enabled state is
 in its menu; real duplication remains. The VBA editor now has module-scoped
 history, with chat handoff and technical metadata removed by product decision.
+Materials now open with the demo's main-pane table, using the same typed catalog
+projection as the ownership tree. Search and filters sit above the table; selecting
+an item opens the guarded viewer/editor with a demo-style title and action menu.
+Returning to the table releases the preview and respects dirty drafts. Focused
+browser checks cover both panes at 1100/420 px, versions, deletion and late guards.
+Material creation format semantics and remaining old-only controls still need
+individual product decisions.
 These UI changes have browser/host-neutral checks but no Office qualification.
 Project chats must not inherit the
 current Office document's actions. Other old-only project functions require an
@@ -24,7 +31,8 @@ The prototype at `403b375d` is the visual reference. One coordinated cutover
 connects the new rail, navigation, palette, editors and viewers to existing
 feature owners in all six product sections, without an old-UI switch. The
 previously duplicated shell styles were replaced by shared prototype/product
-CSS. Materials creation/import is one menu and the catalog groups by ownership;
+CSS. Materials creation/import uses the existing action owners from the overview
+Add entry and sidebar plus; the catalog groups by ownership;
 the native Data Templates host reuses its one shared UI. Settings now separate
 context/attachments. UserForm creation was removed from the UI in line with the
 design decision; existing CodeOnly editing remains. Browser checks cover the

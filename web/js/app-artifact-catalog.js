@@ -2,7 +2,8 @@
   "use strict";
   if (!document.getElementById("artifactCatalog")) return;
   var generation = 0, previewGeneration = 0, pending = false, response = null, next = null, chat = null, previewUrl = null;
-  var selected = null, selectedRevision = null, collapsed = {}, searchTimer, loading = false;
+  var selected = null, selectedRevision = null, collapsed = {}, searchTimer, loading = false, overviewRequested = true;
+  var overviewLoading = false, overviewError = "";
   function el(id) { return document.getElementById("artifactCatalog" + id); }
   function node(tag, text, className) {
     var result = document.createElement(tag); result.textContent = text || "";
@@ -13,7 +14,39 @@
   function icon(kind) { return ({ html_workspace: "html", plan_document: "plan", attachment: "file" })[kind] || kind; }
   function current(id, nav) { return id === state.activeChatId && nav === state.chatNavigationVersion; }
   function operationId() { return Array.from(crypto.getRandomValues(new Uint8Array(16)), function (n) { return n.toString(16).padStart(2, "0"); }).join(""); }
-  function render() { if (typeof renderHtmlWorkspace === "function") renderHtmlWorkspace(); }
+  function render() {
+    if (typeof renderHtmlWorkspace === "function") renderHtmlWorkspace();
+    renderOverview();
+  }
+  function renderOverview() {
+    var overview = el("Overview"), rows = el("OverviewRows");
+    if (!overview) return;
+    overview.hidden = !overviewRequested;
+    if (el("All")) {
+      if (overviewRequested) el("All").setAttribute("aria-current", "page");
+      else el("All").removeAttribute("aria-current");
+    }
+    if (!overviewRequested) return;
+    $("htmlWorkspaceEditor").hidden = true;
+    el("Preview").hidden = true;
+    rows.replaceChildren();
+    var items = !overviewLoading && !overviewError && response && response.items || [];
+    var formats = { html_workspace: "HTML", markdown: "Markdown", plan_document: "План",
+      file: "Файл", image: "Изображение", attachment: "Файл" };
+    items.forEach(function (item) {
+      var row = document.createElement("tr"), name = document.createElement("td"), open = node("button", item.title, "artifact-overview-link");
+      open.type = "button"; open.addEventListener("click", function () { select(item.resourceUri); });
+      name.appendChild(open); row.appendChild(name);
+      row.appendChild(node("td", formats[item.kind] || item.kind || "Файл"));
+      row.appendChild(node("td", item.linked ? "Этот чат" : item.documentId === response.documentId ? "В документе" : item.documentTitle || "Другой документ"));
+      var date = new Date(item.updatedUtc), dateText = Number.isNaN(date.getTime()) ? "—" : date.toLocaleString("ru-RU", { dateStyle: "short", timeStyle: "short" });
+      row.appendChild(node("td", dateText)); rows.appendChild(row);
+    });
+    el("OverviewTable").hidden = !items.length;
+    el("OverviewEmpty").hidden = !!items.length;
+    el("OverviewEmpty").textContent = overviewError || (overviewLoading ? "Загрузка материалов…" :
+      state.activeChatId ? "По этим условиям материалов нет." : "Откройте чат документа, чтобы увидеть материалы.");
+  }
   function clearPreview() {
     if (window.RNAssistantViewerRegistry) window.RNAssistantViewerRegistry.unmount(el("PreviewBody"));
     previewGeneration++; el("PreviewBody").replaceChildren(); el("Preview").hidden = true;
@@ -21,10 +54,22 @@
     if (previewUrl) URL.revokeObjectURL(previewUrl); previewUrl = null;
   }
   function show(scope) {
+    if (!canMutate()) return false;
     if (scope) el("Scope").value = scope;
+    if (scope) {
+      selected = null; selectedRevision = null; overviewRequested = true; clearPreview(); actions();
+    }
     load();
+    return true;
   }
-  function editor(artifact) {
+  function backToOverview() {
+    if (!canMutate()) return false;
+    selected = null; selectedRevision = null; overviewRequested = true;
+    clearPreview(); actions(); render();
+    return true;
+  }
+  function editor(artifact, preserveOverview) {
+    if (!preserveOverview) overviewRequested = false;
     selectedRevision = null;
     clearPreview();
     if (response) {
@@ -36,11 +81,12 @@
         return uri ? item.resourceUri === uri : local && (local.Id || local.id) === id;
       }) || null;
     }
-    actions();
+    actions(); renderOverview();
   }
   function sync() {
     if (chat !== state.activeChatId) {
       chat = state.activeChatId; generation++; response = null; selected = null; selectedRevision = null; next = null;
+      overviewRequested = true; overviewError = ""; overviewLoading = false;
       clearPreview(); actions();
       if (typeof isPanelActive === "function" && isPanelActive("artifacts")) load();
     } else if (response && !loading && !pending && state.chatProjectionRevisions &&
@@ -51,8 +97,10 @@
   }
   async function load(cursor) {
     var id = state.activeChatId, nav = state.chatNavigationVersion, version = ++generation;
-    if (!id) { response = null; selected = null; selectedRevision = null; clearPreview(); actions(); status("Откройте или создайте чат документа."); render(); return; }
-    chat = id; loading = true; status("Загрузка…"); el("More").hidden = true;
+    if (!id) { response = null; selected = null; selectedRevision = null; overviewError = ""; overviewLoading = false;
+      clearPreview(); actions(); status("Откройте или создайте чат документа."); render(); return; }
+    chat = id; loading = true; overviewLoading = !cursor; overviewError = "";
+    status("Загрузка…"); el("More").hidden = true; renderOverview();
     el("Document").hidden = el("Scope").value !== "all";
     try {
       var result = await send("listArtifactCatalog", { chatId: id, scope: el("Scope").value, query: $("htmlWorkspaceSearchInput").value,
@@ -69,16 +117,22 @@
         selected = result.items.find(function (item) { return item.resourceUri === selected.resourceUri; }) || null;
         if (!selected) selectedRevision = null;
         if (!selected && !state.htmlWorkspaceDirty) {
-          if (el("Preview").hidden) editor();
-          if (!selected) { clearPreview(); emptyPreview(); }
+          if (el("Preview").hidden) editor(null, true);
+          if (!selected) { clearPreview(); if (!overviewRequested) emptyPreview(); }
         }
       }
       el("More").hidden = !next;
       status(result.items.length ? "" : "Артефакты не найдены.");
-      if (!selected && el("Preview").hidden) editor();
+      if (!selected && el("Preview").hidden) editor(null, true);
       actions(); render();
-    } catch (error) { if (current(id, nav) && version === generation) status(error.detail || error.message); }
-    finally { if (version === generation) loading = false; }
+    } catch (error) {
+      if (current(id, nav) && version === generation) {
+        overviewError = error.detail || error.message || "Не удалось загрузить материалы.";
+        status(overviewError);
+      }
+    } finally {
+      if (version === generation) { loading = false; overviewLoading = false; renderOverview(); }
+    }
   }
   function emptyPreview() {
     $("htmlWorkspaceEditor").hidden = true; el("Preview").hidden = false;
@@ -120,16 +174,25 @@
       resourceUri: item.resourceUri, confirmed: true }, button);
   }
   function actions() {
-    var root = el("Actions"); root.replaceChildren(); root.hidden = !selected;
+    var root = el("Actions"); root.replaceChildren(); root.hidden = !selected || overviewRequested;
     if (!selected || !response) return;
     var item = selected, listed = response, id = state.activeChatId, nav = state.chatNavigationVersion;
     function action(parent, label, fn, disabled, className) {
       var b = node("button", label, className); b.type = "button"; b.disabled = pending || !!disabled;
       b.addEventListener("click", function () { if (!b.disabled && current(id, nav)) fn(b); }); parent.appendChild(b);
     }
+    var heading = node("div", "", "artifact-detail-heading");
+    heading.appendChild(node("span", "Материалы / " + (item.linked ? "Этот чат" :
+      item.documentId === listed.documentId ? "В документе" : item.documentTitle || "Все документы")));
+    heading.appendChild(node("h2", item.title + (selectedRevision ? " · v" + selectedRevision.revision : "")));
+    root.appendChild(heading);
+    var menu = node("details", "", "html-workspace-menu artifact-action-menu");
+    var summary = node("summary", "⋯");
+    summary.setAttribute("aria-label", "Действия с материалом"); menu.appendChild(summary);
+    var options = node("div", "", "html-workspace-menu-items"); menu.appendChild(options);
     var artifact = localArtifact(item);
     var head = artifact && window.RNAssistantArtifactVisuals && window.RNAssistantArtifactVisuals.libraryHead(artifact);
-    if (window.RNAssistantArtifactVersions) window.RNAssistantArtifactVersions.append(root, head, selectedRevision, function (revision) {
+    if (window.RNAssistantArtifactVersions) window.RNAssistantArtifactVersions.append(options, head, selectedRevision, function (revision) {
       if (selected !== item || response !== listed || !current(id, nav) || !canMutate()) return false;
       if (revision.resourceUri === item.resourceUri) { select(item.resourceUri); return true; }
       selectedRevision = revision;
@@ -139,24 +202,22 @@
       return true;
     });
     if (selectedRevision) {
-      root.appendChild(node("span", "Только просмотр", "artifact-version-readonly"));
-      action(root, "К текущей версии", function () { select(item.resourceUri); });
-      if (item.canTransfer) action(root, "Скачать v" + selectedRevision.revision, function () {
+      options.appendChild(node("span", "Только просмотр", "artifact-version-readonly"));
+      action(options, "К текущей версии", function () { select(item.resourceUri); });
+      if (item.canTransfer) action(options, "Скачать v" + selectedRevision.revision, function () {
         download(Object.assign({}, item, { resourceUri: selectedRevision.resourceUri }));
       });
+      root.appendChild(menu);
       return;
     }
     if (item.documentId === listed.documentId) {
-      action(root, item.linked ? "Убрать из чата" : "Подключить к чату", async function (b) {
+      action(options, item.linked ? "Убрать из чата" : "Подключить к чату", async function (b) {
         if (await changeLink(id, listed.sessionRevision, item.resourceUri, item.linked, b)) {
           if (selected && !item.linked) select(selected.resourceUri);
           else if (selected) preview(selected);
         }
       }, !item.linked && item.availabilityIssue);
     }
-    var menu = node("details", "", "html-workspace-menu artifact-action-menu");
-    menu.appendChild(node("summary", "Действия"));
-    var options = node("div", "", "html-workspace-menu-items"); menu.appendChild(options);
     if (item.canTransfer) {
       action(options, "Независимая копия", function (b) { copyItem(item, b, listed); });
       action(options, item.kind === "html_workspace" ? "Экспорт проекта" : "Скачать", function () { download(item); });
@@ -171,6 +232,7 @@
     if (!canMutate() || !response) return false;
     var item = response.items.find(function (value) { return value.resourceUri === uri; });
     if (!item) return false;
+    overviewRequested = false;
     selected = item; selectedRevision = null; clearPreview(); actions();
     if (item.availabilityIssue) {
       $("htmlWorkspaceEditor").hidden = true; el("Preview").hidden = false; el("PreviewTitle").textContent = item.title;
@@ -236,7 +298,7 @@
       }
     });
     var roots = [chatGroup, documentGroup, otherGroup].filter(Boolean);
-    var selection = options.selected || {}, selectedKey = selected ? "catalog::" + selected.resourceUri : null;
+    var selection = options.selected || {}, selectedKey = !overviewRequested && selected ? "catalog::" + selected.resourceUri : null;
     if (el("Preview").hidden && selection.id) {
       selectedKey = byId[selection.id] ? "catalog::" + byId[selection.id] : null;
     }
@@ -374,6 +436,14 @@
   ["Scope", "Kind", "Document"].forEach(function (name) { el(name).addEventListener("change", function () { show(); }); });
   $("htmlWorkspaceSearchInput").addEventListener("input", function () { clearTimeout(searchTimer); searchTimer = setTimeout(function () { show(); }, 200); });
   el("Refresh").addEventListener("click", function () { show(); });
+  el("All").addEventListener("click", backToOverview);
+  el("OverviewCreate").addEventListener("click", function (event) {
+    var target = event.target.closest("[data-artifact-create]");
+    if (!target) return;
+    var original = document.getElementById(target.getAttribute("data-artifact-create"));
+    el("OverviewCreate").open = false;
+    if (original) original.click();
+  });
   el("More").addEventListener("click", function () { load(next); });
   el("Import").addEventListener("click", function () { if (canMutate()) el("File").click(); });
   el("File").addEventListener("change", function () { var file = this.files[0]; this.value = ""; importFile(file); });

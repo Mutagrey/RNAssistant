@@ -13,11 +13,13 @@ class Element {
   replaceChildren(...nodes) { this.children = nodes; this._text = ""; }
   addEventListener(name, handler) { this.handlers[name] = handler; }
   setAttribute(name, value) { this.attributes[name] = value; }
+  removeAttribute(name) { delete this.attributes[name]; }
   set textContent(value) { this.replaceChildren(); this._text = String(value); }
   get textContent() { return (this._text || "") + this.children.map(c => c.textContent).join(""); }
   click() { return this.handlers.click && this.handlers.click(); }
 }
-const ids = ["", "Scope", "Import", "File", "Kind", "Document", "Refresh", "Status", "More", "Preview", "Actions", "PreviewTitle", "PreviewBody"];
+const ids = ["", "Scope", "Import", "File", "Kind", "Document", "Refresh", "Status", "More", "Preview", "Actions", "PreviewTitle", "PreviewBody",
+  "All", "Overview", "OverviewRows", "OverviewTable", "OverviewEmpty", "OverviewCreate"];
 const elements = Object.fromEntries(ids.map(id => ["artifactCatalog" + id, new Element()]));
 elements.htmlWorkspaceLayout = new Element(); elements.htmlWorkspaceEditor = new Element(); elements.htmlWorkspaceSearchInput = new Element();
 elements.artifactCatalogScope.value = "chat"; elements.artifactCatalogPreview.hidden = true;
@@ -47,7 +49,7 @@ async function finishPreview() {
 (async () => {
   context.RNAssistantArtifactCatalog.show("all");
   assert.equal(requests[0].payload.scope, "all"); requests.shift().resolve(answer()); await flush();
-  assert.equal(tree()[0].title, "Book", "all-document tree groups by document");
+  assert.equal(tree()[0].title, "В документе", "current document keeps its ownership group");
   await context.RNAssistantArtifactCatalog.select(itemUri); await finishPreview();
   assert.equal(elements.htmlWorkspaceEditor.hidden, true, "external preview uses the same right pane");
   button("Подключить к чату").click(); button("Подключить к чату").click();
@@ -59,10 +61,10 @@ async function finishPreview() {
   context.RNAssistantArtifactCatalog.show("chat"); const latestList = requests.shift();
   latestList.resolve(answer("b", 8)); await flush(); staleList.resolve({ ...answer("b"), items: [] }); await flush();
   assert.equal(tree()[0].children[0].title, "Dashboard", "late query cannot replace current tree");
+  await context.RNAssistantArtifactCatalog.select(itemUri); await finishPreview();
   context.state.htmlWorkspaceDirty = true; button("Независимая копия").click();
   assert.equal(await context.RNAssistantArtifactCatalog.select(itemUri), false);
   assert.equal(requests.length, 0, "dirty editor blocks mutation and selection"); context.state.htmlWorkspaceDirty = false;
-  await context.RNAssistantArtifactCatalog.select(itemUri); await finishPreview();
   const frame = elements.artifactCatalogPreviewBody.children.find(n => n.tag === "iframe");
   assert.equal(frame.attributes.sandbox, "allow-scripts", "preview has no same-origin permission");
   assert.equal(previews[0].hostBridge, false); assert.equal(applied.length, 0, "preview never attaches or selects the workspace");
