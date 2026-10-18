@@ -27,6 +27,13 @@ launch rows became one menu above the tree; the existing host-chat action and it
 pending/error states remain connected. A changed chat selection reveals its row.
 Targeted browser checks cover keyboard behavior and host-chat retry; Windows host
 behavior remains unqualified.
+Native Data Templates navigation now switches real project tabs. Its Templates tab
+reads the guarded catalog and opens the exact observed head as raw JSON; Parameters
+and Mapping show paged, searchable rows from the shared dictionary. The existing
+raw draft editor remains separate. Focused browser checks cover read guards,
+project switches, late responses, inert content and narrow navigation. Native
+editing, semantic preflight, execution and results remain open; Windows/WebView2
+behavior is still unqualified.
 
 Open product decisions: project chats need an explicit document/project binding;
 the real Data Templates empty/project-connection state differs from the populated
@@ -74,8 +81,8 @@ for all project templates. Old embedded versions remain intact and are converted
 only on explicit open/save. This is not template publication. Host-neutral RNAssistant
 now reads the same `templates/` and `dictionaries/` heads through typed bridge and
 CLI commands with selected-project and observed-head guards. This is read-only
-envelope inspection; native UI, semantic Worker validation, edits and publication
-remain open.
+envelope inspection; native UI displays those reads without semantic Worker
+validation. Editing and publication remain open.
 Native Core/Application, bridge and CLI create, list and open the same raw
 project-local snapshots through `WorkspaceFileService`, with selected-project
 guards and explicit recovery of uncertain writes. The native Templates screen

@@ -1055,8 +1055,13 @@ metadata only, caps the directory at 1,000 entries
 and returns the 50 newest matching names. Read accepts only a snapshot filename
 and returns raw text, including invalid JSON. A changed manifest requires
 explicit project reopen. Native raw-draft UI is available. Typed bridge and CLI
-read-only access to the browser catalog and shared dictionary is now available;
-project-indexed template editing and publication remain open.
+read-only access to the browser catalog and shared dictionary is now available.
+The native Templates tab lists project template heads, opens an exact observed
+head as raw JSON and keeps raw drafts separate. Parameters and Mapping show
+searchable, paged read-only rows from the selected project's shared dictionary.
+The UI checks the typed response and selected binding/revision before display;
+it does not run semantic Worker validation. Project-indexed template/dictionary
+editing, publication and native results remain open.
 
 The standalone browser can explicitly copy a completed extraction into the selected
 project's `results/result-<timestamp>-<uuid>-<source>/` directory. `data.json` is the
@@ -1272,6 +1277,7 @@ modules without a framework, npm or a bundler.
 | `app-workspace-sources.js` | Typed native browsing, transient edits to saved relative paths, queue commands/recovery and bounded polling. Saves use the shared workspace controller; no body transfer or durable client store. |
 | `app-workspace-sources-view.js`, `app-workspace-sources.css` | Workspace chooser, queue navigation and progress presentation using the same loader tokens; no bridge or job lifecycle. |
 | `app-workspace-drafts.js`, `app-workspace-drafts-view.js`, `app-workspace-drafts.css` | Native Templates composition for raw project snapshots; the workspace controller owns guarded typed bridge calls and recovery. No second validator, parser or durable client store. |
+| `app-workspace-catalog.js`, `app-workspace-catalog.css` | Read-only native project catalog and shared dictionary view. Typed bridge reads, exact observed-head opening, selected-project response checks and bounded table navigation; no validation, editing or file authority. |
 | `ui/operation-view.js` | Shared progress component; renders supplied stage, counters, duration and terminal state; delegates cancel/dismiss without a timer or inferred success. |
 | `styles/tokens.css` | Loader-wide palette aliases, typography, spacing, radii and card/row density. Inherits the host light/dark theme. |
 | `ui/shell.js`, `styles/loader.css` | Single shared semantic markup and component layout; no business state derived from CSS. |
@@ -1539,7 +1545,7 @@ versioned schema and fixtures used by the engine.
 | M1 source selection (implemented) | Responsive modular viewer, paged file/folder intake, cancellable enumeration progress, persisted workspace source declarations and guarded save/recovery. Typed extraction commands remain open. |
 | M2 matrix-language foundation (implemented) | JSON template → typed plan → normalized snapshot → batched canonical observations with lineage, in the separate portable probe. Native integration and full readers remain open. |
 | M2 bounded XLSX adapter (implemented) | Explicit file + template → selective ZIP/XML reading in a Worker → exact typed cells → the same canonical batches. Single-file probe only; queue parser dispatch and 80 MB qualification remain open. |
-| M1–M3 (standalone queue/preview slice implemented) | XLSX File + JSON template run through a bounded sequential Worker queue with per-file outcomes, progress, cancellation, preview and full export. Browser disk staging raises the output budget to 256 MiB per file/1 GiB per run; memory mode stays at 8 MiB. JSON/`expr` edits stay in the active template; parameter, unit and scoped mapping edits use the shared project dictionary when selected. The browser has versioned project template/dictionary catalogs and verified result saves; browser and native Templates UI also keep raw draft snapshots. The native root editor does not validate or execute rules. Source-value suggestions, template test/publish, native catalog/dictionary/results and parser dispatch remain open. Add other Excel families (including XLSB), CSV/JSON behind the same workflow and fixtures. |
+| M1–M3 (standalone queue/preview slice implemented) | XLSX File + JSON template run through a bounded sequential Worker queue with per-file outcomes, progress, cancellation, preview and full export. Browser disk staging raises the output budget to 256 MiB per file/1 GiB per run; memory mode stays at 8 MiB. JSON/`expr` edits stay in the active template; parameter, unit and scoped mapping edits use the shared project dictionary when selected. The browser has versioned project template/dictionary catalogs and verified result saves; browser and native Templates UI also keep raw draft snapshots. Native UI reads catalog heads, raw template versions and shared dictionary rows; the root editor does not validate or execute rules. Source-value suggestions, template test/publish, native catalog/dictionary editing and results, and parser dispatch remain open. Add other Excel families (including XLSB), CSV/JSON behind the same workflow and fixtures. |
 | Early M0/M4 (foundation implemented) | One portable source project, shared loader, folder export, exported semantic tests and XLSX Worker probe. Complete standalone mapping/validation, persistent data projects and large-result quota/performance qualification before native parser dispatch. Single-HTML/ZIP packaging is still open. |
 | M5 | Extend the existing queue with advanced batch execution, scoped dictionary/mapping edits, comparison/consolidation, multiple blocks and output workbook templates. |
 
@@ -1572,7 +1578,8 @@ Next slices, coordinated with the workspace owners:
 1. Extend the integrated **standalone** workflow: the XLSX queue, preview,
    validated template/parameter/mapping edits, browser template catalog and shared
    dictionary, project-local raw draft snapshots and verified browser result saves
-   now work. Add native catalog/dictionary editing UI and publication through explicit
+   now work. Native read-only catalog/dictionary views are connected; add native
+   editing UI and publication through explicit
    domain commands. Keep real
    file-format capability reporting;
    XLSB/other Excel families and CSV/JSON require their own readers and fixtures.

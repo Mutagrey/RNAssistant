@@ -1,7 +1,7 @@
 (function () {
   "use strict";
   // RNAssistant adapter for the shipped application. No project JS is evaluated here.
-  let context = null;
+  let context = null, navigationEvents = null;
   function renderHeader() {
     const container = document.querySelector("#tab-workspace .workspace-projects");
     if (!container || !container.querySelector("#dtPageTitle")) return;
@@ -16,6 +16,7 @@
     context = state;
     window.RNAssistantWorkspaceSources.setContext(state, pending);
     window.RNAssistantWorkspaceDrafts.setContext(state, pending);
+    if (window.RNAssistantWorkspaceCatalog) window.RNAssistantWorkspaceCatalog.setContext(state, pending);
     renderHeader();
   }
   function mountProductLayout(container) {
@@ -36,6 +37,41 @@
     container.append(main);
     container.prepend(navigation);
   }
+  function bindNavigation(container) {
+    if (navigationEvents) return;
+    navigationEvents = new AbortController();
+    const signal = navigationEvents.signal;
+    const tabs = Array.from(container.querySelectorAll("[data-dt-view]"));
+    const select = container.querySelector("#dtViewSelect");
+    function show(name, focusPanel) {
+      const active = tabs.find(tab => tab.dataset.dtView === name);
+      if (!active) return;
+      tabs.forEach(tab => {
+        const selected = tab === active;
+        tab.setAttribute("aria-selected", String(selected));
+        tab.tabIndex = selected ? 0 : -1;
+        container.querySelector("#" + tab.getAttribute("aria-controls")).hidden = !selected;
+      });
+      select.value = name;
+      if (focusPanel) container.querySelector("#" + active.getAttribute("aria-controls")).focus({ preventScroll: true });
+    }
+    tabs.forEach((tab, index) => {
+      tab.addEventListener("click", () => show(tab.dataset.dtView, false), { signal });
+      tab.addEventListener("keydown", event => {
+        const next = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1
+          : ["ArrowRight", "ArrowDown"].includes(event.key) ? (index + 1) % tabs.length
+            : ["ArrowLeft", "ArrowUp"].includes(event.key) ? (index + tabs.length - 1) % tabs.length : -1;
+        if (next < 0) return;
+        event.preventDefault(); tabs[next].focus(); show(tabs[next].dataset.dtView, false);
+      }, { signal });
+    });
+    select.addEventListener("change", () => show(select.value, false), { signal });
+    container.addEventListener("click", event => {
+      const action = event.target.closest("[data-dt-go]");
+      if (action && container.contains(action)) show(action.dataset.dtGo, true);
+    }, { signal });
+    show(tabs.find(tab => tab.getAttribute("aria-selected") === "true")?.dataset.dtView || "sources", false);
+  }
   function bind(container) {
     container = container || document.querySelector("#tab-workspace .workspace-projects");
     if (!container) return;
@@ -47,6 +83,7 @@
       if (!slot.childNodes.length) slot.append(document.getElementById("dtHost" + name).content.cloneNode(true));
     }
     mountProductLayout(container);
+    bindNavigation(container);
     const projectButton = container.querySelector("#dtProjectHeaderButton");
     if (!projectButton.dataset.bound) {
       const settings = container.querySelector("#workspaceSettings");
@@ -62,9 +99,15 @@
     }
     window.RNAssistantWorkspaceSources.bind(container);
     window.RNAssistantWorkspaceDrafts.bind(container);
+    if (window.RNAssistantWorkspaceCatalog) window.RNAssistantWorkspaceCatalog.bind(container);
     renderHeader();
   }
-  function unbind() { window.RNAssistantWorkspaceSources.unbind(); window.RNAssistantWorkspaceDrafts.unbind(); }
+  function unbind() {
+    window.RNAssistantWorkspaceSources.unbind();
+    window.RNAssistantWorkspaceDrafts.unbind();
+    if (window.RNAssistantWorkspaceCatalog) window.RNAssistantWorkspaceCatalog.unbind();
+    if (navigationEvents) { navigationEvents.abort(); navigationEvents = null; }
+  }
   window.addEventListener("pagehide", () => window.RNAssistantWorkspaceDrafts.dispose());
   window.RNAssistantDataTemplates = Object.freeze({ bind: bind, unbind: unbind, setContext: setContext });
 }());
