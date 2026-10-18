@@ -409,17 +409,8 @@ html[data-theme="dark"] .chatbar {
 
 html[data-theme="dark"] .chat-tree-toolbar .icon-button:hover,
 html[data-theme="dark"] .chat-tree-toolbar .icon-button.active,
-html[data-theme="dark"] .chat-session-row:hover,
-html[data-theme="dark"] .chat-session-row.active,
-html[data-theme="dark"] .chat-document-row:hover,
-html[data-theme="dark"] .chat-document-row:focus-within,
 html[data-theme="dark"] .chat-row-action:hover {
   background: #232830;
-}
-
-html[data-theme="dark"] .chat-row-actions,
-html[data-theme="dark"] .chat-document-actions {
-  background: linear-gradient(90deg, transparent, #232830 8px);
 }
 
 html[data-theme="dark"] .chat-session-badge {

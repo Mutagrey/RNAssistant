@@ -21,6 +21,12 @@ green palette. Targeted browser checks cover both source paths. The populated
 prototype tree and native processing UI are still separate open presentation work.
 The full standalone export test still times out at its mapping-conflict assertion
 on unchanged `0aacd1af`; [the check is tracked separately](RISK_REGISTER.md#data-templates-browser-mapping-check--2026-10-18).
+The Office document/chat tree now uses the prototype's compact rows and keyboard
+navigation over the existing chat/document projections. The four permanent Office
+launch rows became one menu above the tree; the existing host-chat action and its
+pending/error states remain connected. A changed chat selection reveals its row.
+Targeted browser checks cover keyboard behavior and host-chat retry; Windows host
+behavior remains unqualified.
 
 Open product decisions: project chats need an explicit document/project binding;
 the real Data Templates empty/project-connection state differs from the populated

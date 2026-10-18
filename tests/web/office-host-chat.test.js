@@ -37,8 +37,10 @@ function fixture() {
   return { context, calls, applied };
 }
 
-const status = context => context.list.children[0].children.find(item => /chat-office-launch-status/.test(item.className));
-const buttons = context => context.list.children[0].children.filter(item => /chat-office-launch-row/.test(item.className));
+const status = context => context.list.children.find(item => /chat-office-launch-status/.test(item.className));
+const buttons = context => context.list.children[0].children
+  .find(item => /chat-office-launch-menu/.test(item.className)).children
+  .filter(item => /chat-office-launch-row/.test(item.className));
 
 (async () => {
   for (const host of ["Excel", "Word", "PowerPoint", "Outlook"]) {

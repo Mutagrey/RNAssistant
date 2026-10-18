@@ -31,6 +31,7 @@ async function createOfficeHostChat(host) {
   renderChatSessions();
   try {
     var result = await navigateChat("createOfficeHostChat", { host: host });
+    state.officeHostLaunchOpen = false;
     log("Чат создан: " + host + (result.documentTitle ? " — " + result.documentTitle : "") + ".");
   } catch (error) {
     state.officeHostChatError = "Не удалось открыть чат " + host + ": " +

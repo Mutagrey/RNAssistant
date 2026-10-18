@@ -45,6 +45,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       window.applyInitState = init => { Object.assign(state, init); };
       renderChatSessions();
     });
+    await page.getByText("Новый документ Office").click();
     const powerPoint = page.getByRole("button", { name: /PowerPoint/ });
     await powerPoint.click();
     await page.getByRole("status").waitFor();

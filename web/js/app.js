@@ -72,8 +72,16 @@ document.addEventListener("DOMContentLoaded", function () {
       creationMenu.removeAttribute("open");
       if (creationMenu.classList.contains("product-create-menu") && window.innerWidth <= 620) setMobileNavigationOpen(false);
     }
+    var officeMenu = document.querySelector(".chat-office-launch-list[open]");
+    if (officeMenu && !event.target.closest(".chat-office-launch-list") && !officeMenu.contains(event.target)) {
+      officeMenu.open = false;
+      state.officeHostLaunchOpen = false;
+    }
+    var treeItem = event.target.closest(".global-nav [role='treeitem']");
+    var treeControl = event.target.closest(".chat-document-toggle, .chat-document-delete, .chat-edit, .chat-delete");
     if (window.innerWidth <= 620 && document.querySelector(".shell").classList.contains("navigation-open") &&
-        event.target.closest(".global-nav .settings-nav-button, .global-nav .dt-tabs button, .global-nav [role='treeitem']")) {
+        (event.target.closest(".global-nav .settings-nav-button, .global-nav .dt-tabs button") ||
+          (treeItem && !treeControl))) {
       setMobileNavigationOpen(false);
     }
   });
