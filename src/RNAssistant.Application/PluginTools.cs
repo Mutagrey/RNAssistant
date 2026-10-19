@@ -24,6 +24,7 @@ namespace RNAssistant.Application
                 var registrations=_store.List();
                 foreach(var plugin in registrations)
                 {
+                    if(plugin.Hidden)continue;
                     if(plugin.SourceWorkspaceId==workspace.WorkspaceId)
                     {
                         tools.Add(Tool("plugins.check","Validate and retain this source plugin candidate. Does not activate it or verify business behavior.",

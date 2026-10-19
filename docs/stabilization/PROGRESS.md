@@ -1,5 +1,16 @@
 # Stabilization progress
 
+## Plugin panel and icon editor — 2026-10-19
+
+The plugin creation screen now shows a live name/icon preview above a compact
+left-aligned form. Clicking its icon opens the shared catalog; a model call can
+draw and save a validated SVG immediately. A reusable rail popover labels all
+section icons, removes user plugins from the panel, and restores them through `+`
+without deleting source, chat, data or publication. The shipped Data Templates
+plugin uses the same removal and restoration path. Focused Chromium and
+host-neutral Harness checks cover the UI and persisted visibility. Real model
+output and Windows/WebView2 delivery remain open qualification evidence.
+
 ## Library groups and plugin icons — 2026-10-19
 
 Product and demo Library trees now use the same ID-derived category labels beneath

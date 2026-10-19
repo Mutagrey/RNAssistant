@@ -150,6 +150,7 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 
   bindChatActions();
+  if (window.RNAssistantRailPopovers) window.RNAssistantRailPopovers.bind();
   if (window.RNAssistantPlugins) window.RNAssistantPlugins.bind();
   bindContextActions();
   bindVbaActions();

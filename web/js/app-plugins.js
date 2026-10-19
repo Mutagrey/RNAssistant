@@ -1,7 +1,7 @@
 (function () {
   'use strict';
   var items=[],selected=null,candidate=null,view=null,chat=null,busy=false,chatBusy=false,poll=null,epoch=0;
-  var savedIcons=[],selectedIconId='draw';
+  var savedIcons=[],selectedIconId='puzzle';
   var frameReady=false,pendingNavigation=null;
   var navigation={projectName:'Проект данных',view:'sources',templateId:'',templates:[],expanded:{project:true,templates:true,dictionary:true}};
   function el(id){return document.getElementById('plugin'+id);}
@@ -65,15 +65,16 @@
   });
   async function run(action){if(busy)return;busy=true;controls();try{await action();}catch(error){status(error.message,true);}finally{busy=false;controls();}}
   function controls(){['Check','Preview','Apply','Reopen','Disable'].forEach(function(id){el(id).disabled=busy||!selected||
-    (id==='Apply'||id==='Preview')&&!candidate||(id==='Reopen'||id==='Disable')&&!selected.enabled;});el('Send').disabled=chatBusy||!selected;}
+    (id==='Apply'||id==='Preview')&&!candidate||(id==='Reopen'||id==='Disable')&&!selected.enabled;});el('Send').disabled=chatBusy||!selected;el('CreateSubmit').disabled=busy;}
   function arrangeDevelopment(){
     var actions=['Check','Preview','Apply','Reopen','Disable'];
     if(dataPlugin())actions.forEach(function(id){el('DevelopmentActions').appendChild(el(id));});
     else {var toolbar=el('Workbench').querySelector('.plugin-toolbar'),before=el('Develop').parentElement;
       actions.forEach(function(id){toolbar.insertBefore(el(id),before);});}
   }
-  async function refresh(){var result=await send('getPlugins',{});items=result.items;var rail=el('Rail');rail.replaceChildren();items.forEach(function(item){
-    var node=button('',function(){select(item.pluginId);});node.innerHTML=window.RNAssistantIcons.renderPlugin(item.pluginId==='data-templates'?'dataTemplates':item.icon || 'puzzle',item.iconPaths);node.className='rail-button';node.title=item.iconError?item.name+' · '+item.iconError:item.name;node.setAttribute('aria-label',item.name);node.dataset.pluginId=item.pluginId;node.dataset.section='plugins';rail.appendChild(node);
+  async function refresh(){var result=await send('getPlugins',{});items=result.items;var rail=el('Rail');
+    if(window.RNAssistantRailPopovers)window.RNAssistantRailPopovers.hide();rail.replaceChildren();items.forEach(function(item){
+    var node=button('',function(){select(item.pluginId);});node.innerHTML=window.RNAssistantIcons.renderPlugin(item.pluginId==='data-templates'?'dataTemplates':item.icon || 'puzzle',item.iconPaths);node.className='rail-button';node.setAttribute('aria-label',item.name);node.dataset.railLabel=item.name;node.dataset.railPopover='plugin-item';node.dataset.railError=item.iconError||'';node.dataset.pluginId=item.pluginId;node.dataset.section='plugins';rail.appendChild(node);
   });if(result.error)status(result.error,true);else if(items.some(function(item){return item.iconError;}))status('У одного из плагинов некорректная SVG-иконка. Исправьте исходник и проверьте пакет.',true);return items;}
   async function closeView(){frameReady=false;pendingNavigation=null;if(!view)return;var old=view;view=null;el('PreviewMount').replaceChildren();await send('closePlugin',{instanceId:old.instanceId});}
   async function showView(preview){await closeView();var current=epoch,opened=await send('openPlugin',{pluginId:selected.pluginId,candidateId:preview?candidate.candidateId:null});
@@ -105,8 +106,17 @@
   async function readChat(){if(!selected)return;var id=selected.pluginId,value=await send('getPluginChat',{pluginId:id});if(selected&&id===selected.pluginId){chat=value;renderChat();}}
   async function chatAction(action){if(chatBusy||!selected)return;chatBusy=true;controls();var id=selected.pluginId;poll=setInterval(function(){readChat().catch(function(error){el('ChatStatus').textContent=error.message;});},1200);
     try{var result=await action(id);if(selected&&selected.pluginId===id){chat=result;renderChat();}}catch(error){el('ChatStatus').textContent=error.message;}finally{clearInterval(poll);chatBusy=false;controls();}}
+  function setIconEditor(open){el('IconEditor').hidden=!open;el('IconTrigger').setAttribute('aria-expanded',String(open));
+    if(!open&&el('IconEditor').contains(document.activeElement))el('IconTrigger').focus();}
+  function updateCreatePreview(){var connecting=el('Connect').checked,name=el('Name').value.trim();
+    el('CreateTitle').textContent=connecting?'Подключить плагин':name||'Новый плагин';
+    el('CreateSubtitle').textContent=connecting?'Укажите папку с plugin.json.':'Нажмите на значок, чтобы выбрать или нарисовать иконку.';
+    el('IconTrigger').disabled=connecting;
+    var saved=savedIcons.find(function(item){return item.id===selectedIconId;});
+    el('IconPreview').innerHTML=window.RNAssistantIcons.renderPlugin(selectedIconId==='draw'?'spark':selectedIconId,saved&&saved.paths);
+  }
   function iconOption(id,name,paths){
-    var choice=button('',function(){selectedIconId=id;renderIconChoices();});
+    var choice=button('',function(){selectedIconId=id;renderIconChoices();if(id==='draw')el('IconDescription').focus();else setIconEditor(false);});
     choice.className='plugin-icon-option';choice.dataset.iconId=id;choice.setAttribute('aria-label',name);
     choice.setAttribute('aria-pressed',String(selectedIconId===id));choice.title=name;
     choice.innerHTML=window.RNAssistantIcons.renderPlugin(id==='draw'?'spark':id,paths);
@@ -120,21 +130,55 @@
     savedIcons.forEach(function(item){
       var card=document.createElement('div');card.className='plugin-icon-saved-card';card.appendChild(iconOption(item.id,item.name,item.paths));
       var remove=button('×',function(){run(async function(){var catalog=await send('deletePluginIcon',{id:item.id});savedIcons=catalog.items;
-        if(selectedIconId===item.id)selectedIconId='draw';renderIconChoices();status('Иконка удалена из библиотеки. Плагины и их исходники не изменены.');});});
+        if(selectedIconId===item.id)selectedIconId='puzzle';renderIconChoices();status('Иконка удалена из библиотеки. Плагины и их исходники не изменены.');});});
       remove.className='plugin-icon-remove';remove.title='Удалить '+item.name;remove.setAttribute('aria-label','Удалить '+item.name);card.appendChild(remove);saved.appendChild(card);
     });
     el('IconBriefField').hidden=selectedIconId!=='draw';el('IconDescription').disabled=selectedIconId!=='draw';
+    updateCreatePreview();
   }
   async function refreshIcons(){var catalog=await send('getPluginIcons',{});savedIcons=catalog.items||[];renderIconChoices();}
+  async function drawIcon(){var brief=el('IconDescription').value.trim();
+    if(!brief)throw new Error('Опишите иконку перед рисованием.');
+    var draw=el('IconDrawButton'),note=el('IconDrawStatus');draw.disabled=true;note.textContent='Модель рисует SVG…';
+    try{var item=await send('drawPluginIcon',{name:el('Name').value.trim()||'Новый плагин',description:brief});
+      if(!savedIcons.some(function(saved){return saved.id===item.id;}))savedIcons.push(item);
+      selectedIconId=item.id;renderIconChoices();note.textContent=item.previewSimulated?'Пример: иконка создана в памяти вкладки.':'Иконка готова и сохранена в библиотеке.';status('');return item;
+    }catch(error){note.textContent=error.message;throw error;}finally{draw.disabled=false;}}
+  function registerRailPopovers(){var popovers=window.RNAssistantRailPopovers;if(!popovers)return;
+    popovers.register('plugin-item',function(anchor,body){
+      if(anchor.dataset.railError){var problem=document.createElement('p');problem.className='rail-hover-empty';problem.textContent=anchor.dataset.railError;body.appendChild(problem);}
+      var line=document.createElement('div');line.className='rail-hover-separator';body.appendChild(line);
+      var remove=popovers.action('Удалить с панели',window.RNAssistantIcons.render('trash'),function(){var id=anchor.dataset.pluginId,name=anchor.dataset.railLabel;
+        if(!window.confirm('Убрать «'+name+'» с панели? Исходники, данные и опубликованная версия сохранятся. Плагин можно вернуть через «+».'))return;
+        popovers.hide();run(async function(){await send('removePlugin',{pluginId:id});if(selected&&selected.pluginId===id){epoch++;await closeView();selected=null;candidate=null;chat=null;
+          switchTab('plugins');el('Manager').hidden=false;el('Workbench').hidden=true;}await refresh();status('Плагин убран с панели. Вернуть его можно через «+».');});});
+      remove.className='rail-hover-danger';body.appendChild(remove);
+    });
+    popovers.register('plugin-add',async function(anchor,body,isCurrent){body.textContent='Загружаю…';
+      var catalog=await send('getRemovedPlugins',{});if(!isCurrent())return;body.replaceChildren();
+      if(!(catalog.items||[]).length){var empty=document.createElement('p');empty.className='rail-hover-empty';empty.textContent='Удалённых с панели плагинов нет.';body.appendChild(empty);}
+      (catalog.items||[]).forEach(function(item){var restore=popovers.action(item.name,window.RNAssistantIcons.renderPlugin(item.icon||'puzzle',item.iconPaths),function(){popovers.hide();run(async function(){await send('restorePlugin',{pluginId:item.pluginId});await refresh();status('Плагин возвращён на панель.');});});
+        body.appendChild(restore);});
+      var line=document.createElement('div');line.className='rail-hover-separator';body.appendChild(line);
+      var create=popovers.action('Создать плагин',window.RNAssistantIcons.render('plus'),function(){popovers.hide();el('Add').click();});
+      body.appendChild(create);
+    });
+  }
   function bind(){
+    registerRailPopovers();
     el('Project').onclick=function(){var frame=el('PreviewMount').querySelector('iframe');if(frame&&frame.contentWindow)frame.contentWindow.postMessage({type:'rna.dataTemplates.project'},'*');};
     el('NavigationProject').onclick=function(){el('Project').click();};
     el('NavigationSearch').oninput=renderNavigation;
-    el('Add').onclick=function(){switchTab('plugins');el('Manager').hidden=false;el('Workbench').hidden=true;
-      selectedIconId='draw';renderIconChoices();refreshIcons().catch(function(error){status(error.message,true);});el('Name').focus();};
+    el('Add').onclick=function(){switchTab('plugins');el('Manager').hidden=false;el('Workbench').hidden=true;status('');
+      setIconEditor(false);renderIconChoices();refreshIcons().catch(function(error){status(error.message,true);});el('Name').focus();};
+    el('Name').oninput=updateCreatePreview;
+    el('IconTrigger').onclick=function(){setIconEditor(el('IconEditor').hidden);if(!el('IconEditor').hidden)el('BuiltinIcons').querySelector('button').focus();};
+    el('IconEditor').onkeydown=function(event){if(event.key==='Escape'){event.preventDefault();setIconEditor(false);}};
+    el('IconDrawButton').onclick=function(){run(drawIcon);};
     el('IconImportButton').onclick=function(){run(async function(){var item=await send('savePluginIcon',{name:el('IconImportName').value.trim(),svg:el('IconImportSvg').value.trim()});
       await refreshIcons();selectedIconId=item.id;renderIconChoices();el('IconImportName').value='';el('IconImportSvg').value='';status('SVG-иконка сохранена.');});};
     el('CreateForm').onsubmit=function(event){event.preventDefault();run(async function(){var connecting=el('Connect').checked,task=el('Task').value.trim(),iconBrief=el('IconDescription').value.trim();
+      if(!connecting&&selectedIconId==='draw'){await drawIcon();iconBrief='';}
       if(selectedIconId!=='draw')iconBrief='';
       var created=await send(connecting?'connectPlugin':'createPlugin',{name:el('Name').value,rootPath:el('Root').value,description:task,iconDescription:iconBrief,iconId:selectedIconId});
       await refresh();status(connecting?'Исходники подключены.':'Исходники созданы.');busy=false;await select(created.pluginId);el('Develop').checked=true;el('Develop').onchange();
@@ -143,8 +187,10 @@
         if(iconBrief)message+='Нарисуй SVG-иконку по описанию: '+iconBrief+'. Создай icon.svg, добавь его в files и укажи в plugin.json. ';
         message+='После изменений проверь пакет и предпросмотр; применяй только после подтверждения.';
         el('Message').value=message;el('ChatForm').requestSubmit();}
+      el('CreateForm').reset();el('IconDescription').value='';el('IconImportName').value='';el('IconImportSvg').value='';
+      selectedIconId='puzzle';renderIconChoices();el('Connect').onchange();
     });};
-    el('Connect').onchange=function(){var connecting=this.checked;el('NewFields').hidden=connecting;el('Name').required=!connecting;el('Task').disabled=connecting;el('IconDescription').disabled=connecting||selectedIconId!=='draw';
+    el('Connect').onchange=function(){var connecting=this.checked;el('NewFields').hidden=connecting;el('Name').required=!connecting;el('Task').disabled=connecting;el('IconDescription').disabled=connecting||selectedIconId!=='draw';if(connecting)setIconEditor(false);updateCreatePreview();
       el('CreateSubmit').textContent=connecting?'Подключить папку':'Создать плагин';el('ModeHint').textContent=connecting?
         'Будет подключён существующий plugin.json без изменения исходников.':'Проверка и публикация доступны в разделе «Разработка».';};
     el('Check').onclick=function(){run(async function(){candidate=await send('checkPlugin',{pluginId:selected.pluginId});status(candidate.previewSimulated?

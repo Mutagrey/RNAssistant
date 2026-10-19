@@ -61,7 +61,7 @@ namespace RNAssistant.Core.Storage
             {
                 if (current.SourceWorkspaceId != source.SourceWorkspaceId || current.SourceRoot != source.Workspace.RootPath)
                     throw new PluginException("plugin_already_connected", "This plugin ID is connected to another source workspace.");
-                return current;
+                return current.Hidden ? SetHidden(manifest.Id, false) : current;
             }
             var registration = new PluginRegistration { PluginId = manifest.Id, Name = manifest.Name, Icon = manifest.Icon,
                 SourceWorkspaceId = source.SourceWorkspaceId, SourceRoot = source.Workspace.RootPath, Enabled = false };
@@ -165,6 +165,28 @@ namespace RNAssistant.Core.Storage
             registration.Enabled = false;
             SaveRegistration(registration, registration.ActiveReleaseId);
             return Get(id);
+        }
+
+        public PluginRegistration SetHidden(string id, bool hidden)
+        {
+            var registration = Get(id) ?? throw new PluginException("plugin_missing", "Plugin is not connected.");
+            if (registration.Hidden == hidden) return registration;
+            registration.Hidden = hidden;
+            PluginRegistration observed;
+            try { SaveRegistration(registration, registration.ActiveReleaseId); }
+            catch (Exception error)
+            {
+                try { observed = Get(id); }
+                catch { throw new PluginException("effect_unknown", "Plugin panel change could not be read back. Inspect the catalog before retrying. " + error.Message); }
+                if (observed?.Hidden == hidden && observed.ActiveReleaseId == registration.ActiveReleaseId) return observed;
+                if (observed?.Hidden == !hidden && observed.ActiveReleaseId == registration.ActiveReleaseId) throw;
+                throw new PluginException("effect_unknown", "Plugin panel state changed without a verified receipt. Inspect before retrying. " + error.Message);
+            }
+            try { observed = Get(id); }
+            catch (Exception error) { throw new PluginException("effect_unknown", "Plugin panel read-back failed. Inspect before retrying. " + error.Message); }
+            if (observed?.Hidden != hidden || observed.ActiveReleaseId != registration.ActiveReleaseId)
+                throw new PluginException("effect_unknown", "Plugin panel visibility could not be verified. Refresh the catalog.");
+            return observed;
         }
 
         public PluginReleaseRecord ReadRelease(PluginReleaseIdentity identity)

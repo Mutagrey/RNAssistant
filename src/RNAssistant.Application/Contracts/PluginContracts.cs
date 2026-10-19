@@ -39,8 +39,18 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("name")] public string Name { get; set; }
         [JsonProperty("svg")] public string Svg { get; set; }
     }
+    public sealed class PluginIconDrawRequest
+    {
+        [JsonProperty("name")] public string Name { get; set; }
+        [JsonProperty("description")] public string Description { get; set; }
+    }
     public sealed class PluginIconDeleteRequest { [JsonProperty("id")] public string Id { get; set; } }
     public sealed class PluginIconCatalogDto { [JsonProperty("items")] public IReadOnlyList<PluginIconRecord> Items { get; set; } }
+    public sealed class PluginVisibilityDto
+    {
+        [JsonProperty("pluginId")] public string PluginId { get; set; }
+        [JsonProperty("hidden")] public bool Hidden { get; set; }
+    }
     public sealed class PluginApplyRequest
     {
         [JsonProperty("pluginId")] public string PluginId { get; set; }
@@ -67,6 +77,7 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("sourceRoot")] public string SourceRoot { get; set; }
         [JsonProperty("releaseId")] public string ReleaseId { get; set; }
         [JsonProperty("enabled")] public bool Enabled { get; set; }
+        [JsonProperty("hidden")] public bool Hidden { get; set; }
     }
     public sealed class PluginCandidateDto
     {

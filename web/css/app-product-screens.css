@@ -173,7 +173,7 @@
   .shell #tab-chat .chat-workspace,
   .shell #tab-chat .chat-workspace.with-inspector { position: relative; grid-template-columns: var(--split-left, var(--nav-width)) 1px minmax(0, 1fr) 0px 0px; }
   .shell #tab-chat .chat-workspace.with-inspector .chat-inspector-splitter { display: none !important; }
-  .shell #tab-chat .chat-workspace .chat-inspector { position: absolute; top: 0; right: 0; bottom: 0; z-index: 10; width: min(320px, 92%); border-left: 1px solid var(--line); box-shadow: -12px 0 30px #142a151a; transform: translateX(100%); }
+  .shell #tab-chat .chat-workspace .chat-inspector { position: absolute; grid-column: auto; grid-row: auto; top: 0; right: 0; bottom: 0; z-index: 10; width: min(320px, 92%); border-left: 1px solid var(--line); box-shadow: -12px 0 30px #142a151a; transform: translateX(100%); }
   .shell #tab-chat .chat-workspace.with-inspector .chat-inspector { transform: translateX(0); }
   .shell #tab-chat .chat-inspector-head, .shell #tab-chat .chat-inspector-body { width: 100%; }
   .shell #tab-chat .chat-inspector-back { display: grid; place-items: center; }
@@ -182,4 +182,5 @@
 }
 @media (max-width: 620px) {
   .shell #tab-chat .chat-workspace.with-inspector .chat-inspector { width: 100%; }
+  .shell:has(#tab-chat.active #chatLayout.with-inspector) .product-mobile-menu-button { display: none; }
 }

@@ -51,11 +51,11 @@
   <link rel="stylesheet" href="css/app-agent-data.css?v=json-height-20260929-1">
   <link rel="stylesheet" href="css/app-theme.css?v=chat-tree-20261018-1">
   <link rel="stylesheet" href="css/app-product-tokens.css?v=product-ui-20261018-1">
-  <link rel="stylesheet" href="css/app-product-navigation.css?v=shared-project-navigation-20261019-1">
+  <link rel="stylesheet" href="css/app-product-navigation.css?v=rail-popovers-20261019-2">
   <link rel="stylesheet" href="css/app-product-components.css?v=shared-action-menu-20261019-1">
   <link rel="stylesheet" href="css/app-product-viewers.css?v=product-ui-20261018-1">
   <link rel="stylesheet" href="css/app-product-materials.css?v=product-ui-20261018-1">
-  <link rel="stylesheet" href="css/app-product-screens.css?v=shared-editor-tabs-20261019-1">
+  <link rel="stylesheet" href="css/app-product-screens.css?v=right-panel-20261019-1">
 </head>
 <body>
   <div class="shell app-shell">
@@ -67,7 +67,7 @@
       <button class="rail-button" data-section="vba" data-tab="vba" aria-label="VBA" title="VBA"><svg data-rna-icon="code" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
       <span class="rail-divider" role="separator"></span>
       <span id="pluginRail" class="plugin-rail"></span>
-      <button class="rail-button" id="pluginAdd" title="Добавить плагин" aria-label="Добавить плагин"><svg data-rna-icon="plus" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
+      <button class="rail-button" id="pluginAdd" data-rail-popover="plugin-add" data-rail-label="Добавить плагины" title="Добавить плагин" aria-label="Добавить плагин"><svg data-rna-icon="plus" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
       <button class="rail-button rail-settings" data-section="settings" data-tab="settings" aria-label="Настройки" title="Настройки"><svg data-rna-icon="settings" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
     </nav>
 
@@ -577,27 +577,24 @@
         <div class="plugin-shell">
           <p class="plugin-status" id="pluginStatus" role="status"></p>
           <div class="plugin-manager" id="pluginManager">
-            <div class="plugin-create-heading"><span class="plugin-create-mark" aria-hidden="true"><svg data-rna-icon="puzzle" viewBox="0 0 24 24"></svg></span><div><p class="plugin-create-eyebrow">Разработка</p><h2>Новый плагин</h2><p>Опишите приложение. Чат создаст исходники и нарисует SVG-иконку по вашему тексту.</p></div></div>
+            <div class="plugin-create-heading"><button class="plugin-create-mark" id="pluginIconTrigger" type="button" aria-label="Выбрать иконку плагина" aria-expanded="false" aria-controls="pluginIconEditor" title="Выбрать иконку"><span id="pluginIconPreview" aria-hidden="true"><svg data-rna-icon="puzzle" viewBox="0 0 24 24"></svg></span></button><div><p class="plugin-create-eyebrow">Плагин</p><h2 id="pluginCreateTitle">Новый плагин</h2><p id="pluginCreateSubtitle">Нажмите на значок, чтобы выбрать или нарисовать иконку.</p></div></div>
+            <div class="plugin-icon-editor" id="pluginIconEditor" hidden>
+              <fieldset class="plugin-icon-picker" id="pluginIconPicker"><legend>Иконка плагина</legend>
+                <div class="plugin-icon-choices" id="pluginBuiltinIcons"></div>
+                <div class="plugin-icon-saved-heading"><strong>Сохранённые SVG</strong><span>Доступны для новых плагинов</span></div>
+                <div class="plugin-icon-choices" id="pluginSavedIcons"></div>
+                <div class="plugin-icon-draw" id="pluginIconBriefField" hidden><label>Описание для модели<textarea id="pluginIconDescription" rows="2" maxlength="500" placeholder="Например, таблица с восходящей линией и выделенной ячейкой"></textarea></label><button type="button" id="pluginIconDrawButton">Нарисовать иконку</button><p id="pluginIconDrawStatus" role="status"></p></div>
+                <details class="plugin-icon-import"><summary>Добавить готовый SVG</summary><label>Название<input id="pluginIconImportName" maxlength="120" placeholder="Например, Отчёт"></label><label>SVG-код<textarea id="pluginIconImportSvg" rows="3" maxlength="4096" placeholder="&lt;svg viewBox=&quot;0 0 24 24&quot;&gt;…&lt;/svg&gt;"></textarea></label><button type="button" id="pluginIconImportButton">Сохранить в библиотеку</button></details>
+              </fieldset>
+            </div>
             <form id="pluginCreateForm">
-              <div class="plugin-create-grid">
-                <div class="plugin-create-main" id="pluginNewFields">
-                  <label>Название<input id="pluginName" maxlength="120" required placeholder="Например, Сводка продаж" autocomplete="off"></label>
-                  <label>Задача<textarea id="pluginTask" rows="5" maxlength="8000" placeholder="Какие данные обрабатывать и что показывать пользователю"></textarea></label>
-                  <fieldset class="plugin-icon-picker" id="pluginIconPicker"><legend>Иконка</legend>
-                    <div class="plugin-icon-choices" id="pluginBuiltinIcons"></div>
-                    <div class="plugin-icon-saved-heading"><strong>Сохранённые SVG</strong><span>Пополняются после проверки плагинов</span></div>
-                    <div class="plugin-icon-choices" id="pluginSavedIcons"></div>
-                    <label id="pluginIconBriefField">Иконка по описанию<textarea id="pluginIconDescription" rows="3" maxlength="500" placeholder="Например, таблица с восходящей линией и одной выделенной ячейкой"></textarea><small>Модель нарисует SVG по тексту. Генерация изображений не нужна.</small></label>
-                    <details class="plugin-icon-import"><summary>Добавить готовый SVG</summary><label>Название<input id="pluginIconImportName" maxlength="120" placeholder="Например, Отчёт"></label><label>SVG-код<textarea id="pluginIconImportSvg" rows="3" maxlength="4096" placeholder="&lt;svg viewBox=&quot;0 0 24 24&quot;&gt;…&lt;/svg&gt;"></textarea></label><button type="button" id="pluginIconImportButton">Сохранить в библиотеку</button></details>
-                  </fieldset>
-                </div>
-                <div class="plugin-create-side">
-                  <label>Папка исходников<input id="pluginRoot" required placeholder="C:\Projects\MyPlugin" autocomplete="off"><small>Для нового плагина укажите ещё не существующую папку.</small></label>
-                  <div class="plugin-icon-note"><span aria-hidden="true"><svg data-rna-icon="puzzle" viewBox="0 0 24 24"></svg></span><p><strong>Значок приложения</strong><br>Выбранный значок попадёт в исходники. Новый SVG сохранится в библиотеке после проверки.</p></div>
-                  <label class="plugin-checkbox"><input type="checkbox" id="pluginConnect">Подключить папку с plugin.json</label>
-                  <p class="plugin-mode-hint" id="pluginModeHint">Проверка и публикация доступны в разделе «Разработка».</p>
-                </div>
+              <div class="plugin-create-main" id="pluginNewFields">
+                <label>Название<input id="pluginName" maxlength="120" required placeholder="Например, Сводка продаж" autocomplete="off"></label>
+                <label>Задача<textarea id="pluginTask" rows="4" maxlength="8000" placeholder="Какие данные обрабатывать и что показывать пользователю"></textarea></label>
               </div>
+              <label class="plugin-source-folder">Папка исходников<input id="pluginRoot" required placeholder="C:\Projects\MyPlugin" autocomplete="off"><small>Для нового плагина укажите ещё не существующую папку.</small></label>
+              <label class="plugin-checkbox"><input type="checkbox" id="pluginConnect">Подключить папку с plugin.json</label>
+              <p class="plugin-mode-hint" id="pluginModeHint">Проверка и публикация доступны в разделе «Разработка».</p>
               <div class="plugin-create-actions"><button class="button primary" id="pluginCreateSubmit" type="submit">Создать плагин</button></div>
             </form>
             <details class="plugin-vendors"><summary>Локальные библиотеки</summary><p>Пакеты vendors: %AppData%/RNAssistant/vendors/&lt;id&gt;/&lt;version&gt;/vendor.json</p>
@@ -1141,13 +1138,14 @@
   <script src="js/app-skill-fields-view.js?v=shared-skill-fields-20261018-1"></script>
   <script src="js/app-core.js?v=bridge-contract-20261015-1"></script>
   <script src="js/app-icons.js?v=shared-icons-20261019-1"></script>
+  <script src="js/app-rail-popovers.js"></script>
   <script src="js/app-navigation-tree.js?v=shared-tree-20261018-1"></script>
   <script src="js/app-library-groups.js"></script>
   <script src="js/app-action-menu.js?v=shared-action-menu-20261019-1"></script>
   <script src="js/app-utils.js?v=run-view-state-20260830-1"></script>
   <script src="js/app-run-view-state.js?v=run-view-contract-20261014-1"></script>
   <script src="js/app-layout.js"></script>
-  <script src="js/app-chat-inspector.js?v=product-shell-20261019-1"></script>
+  <script src="js/app-chat-inspector.js?v=right-panel-20261019-1"></script>
   <script src="js/app-vba-completion.js?v=vba-completion-20260903-1"></script>
   <script src="js/app-editors.js?v=html-memory-20261002-1"></script>
   <script src="js/app-markdown.js?v=accent-chat-20261012-1"></script>
@@ -1218,6 +1216,6 @@
   <script src="js/app-chat-edit.js?v=chat-sync-20260903-1-usage-20261002-1"></script>
   <script src="js/app-plugins.js"></script>
   <script src="js/app-project-chats.js"></script>
-  <script src="js/app.js?v=chat-tree-20261018-1"></script>
+  <script src="js/app.js?v=rail-popovers-20261019-1"></script>
 </body>
 </html>

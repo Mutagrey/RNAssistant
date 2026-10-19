@@ -64,15 +64,17 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
     assert.deepEqual(JSON.parse(await execute(fixture('v1'),'echo','{"text":"worker"}')),{text:'worker v1'});
     const page=await context.newPage();page.on('pageerror',error=>errors.push(error.message));
     await page.goto('file://'+path.join(web,'index.html'));assert.equal(await page.title(),'RN Assistant');
-    let active=null,candidate=null,version=1,iconPrompt='',savedIcons=[];
+    let active=null,candidate=null,version=1,iconPrompt='',savedIcons=[],drawCalls=0;
     const item={pluginId:'example',name:'Example',sourceWorkspaceId:'source-1',sourceRoot:'C:\\Plugins\\Example',releaseId:null,enabled:false};
     await page.exposeFunction('testPluginHost',async (type,payload)=>{
       switch(type){
-        case 'getPlugins':return {items:[{...item}]};
+        case 'getPlugins':return {items:item.hidden?[]:[{...item}]};
+        case 'getRemovedPlugins':return {items:item.hidden?[{...item}]:[]};
         case 'getPluginIcons':return {items:savedIcons.slice()};
         case 'savePluginIcon':{const saved={id:'icon-test',name:payload.name,paths:['M4 4h16v16H4Z']};savedIcons=[saved];return saved;}
         case 'deletePluginIcon':assert.equal(payload.id,'icon-test');savedIcons=[];return {items:[]};
-        case 'createPlugin':assert.equal(payload.name,'Example');assert.equal(payload.iconDescription,'Таблица с восходящей линией');return {...item};
+        case 'drawPluginIcon':assert.equal(payload.description,'Таблица с восходящей линией');drawCalls++;{const saved={id:'icon-drawn',name:payload.name,paths:['M3 4h18v16H3z','M3 10h18M9 4v16']};savedIcons=[saved];return saved;}
+        case 'createPlugin':assert.equal(payload.name,'Example');assert.equal(payload.iconId,'icon-drawn');assert.equal(payload.iconDescription,'');return {...item};
         case 'getPluginChat':return {messages:[{role:'assistant',text:'Исходники готовы к изменению.'}],state:{Status:'idle'}};
         case 'submitPluginChat':iconPrompt=payload.input.Message;return {messages:[{role:'assistant',text:'SVG-иконка смоделирована.'}],state:{Status:'completed'}};
         case 'checkPlugin':candidate='candidate-'+version;return {candidateId:candidate,files:3,bytes:100};
@@ -80,15 +82,40 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
         case 'openPlugin':{const origin='https://view-'+(++sequence)+'.rnassistant-plugin.invalid';realms.set(origin,{origin,files:fixture(payload.candidateId?'preview-v'+version:'v'+active)});return {instanceId:origin,entryUrl:origin+'/index.html',releaseId:'release-'+version,preview:!!payload.candidateId};}
         case 'closePlugin':realms.delete(payload.instanceId);return {};
         case 'disablePlugin':item.enabled=false;return {...item};
+        case 'removePlugin':assert.equal(payload.pluginId,'example');item.hidden=true;return {pluginId:'example',hidden:true};
+        case 'restorePlugin':assert.equal(payload.pluginId,'example');item.hidden=false;return {...item};
         default:throw Error('Unexpected host call '+type);
       }
     });
     await page.evaluate(()=>{window.send=window.testPluginHost;return RNAssistantPlugins.refresh();});
+    const railWidths={};
+    for(const [section,label] of [['chat','Рабочая область'],['artifacts','Материалы'],['library','Библиотека'],['vba','VBA'],['settings','Настройки']]){
+      await page.locator('.section-rail [data-section="'+section+'"]').hover();
+      assert.equal(await page.locator('.rail-hover-title').textContent(),label,'one shared rail label for '+section);
+      railWidths[section]=(await page.locator('.rail-hover-card').boundingBox()).width;
+    }
+    assert.ok(railWidths.vba<70&&railWidths.chat>railWidths.vba,'tooltip width follows label length');
+    assert.equal(await page.locator('.rail-hover-card').count(),1,'rail uses one shared popover');
+    assert.equal(await page.locator('.rail-hover-title').evaluate(node=>getComputedStyle(node).fontWeight),'400','menu labels use regular weight');
+    assert.equal(await page.locator('.section-rail [data-section="chat"]').getAttribute('title'),null,'native rail tooltip is replaced');
+    await page.locator('#pluginAdd').hover();
+    await page.locator('.rail-hover-card').getByText('Удалённых с панели плагинов нет.').waitFor();
+    assert.equal(await page.locator('.rail-hover-title').textContent(),'Добавить плагины');
+    assert.equal(await page.locator('.rail-hover-title').evaluate(node=>getComputedStyle(node).fontSize),'10px','add menu heading is muted and small');
+    await page.locator('.rail-hover-card').getByRole('button',{name:'Создать плагин'}).waitFor();
+    await page.locator('#pluginAdd').focus();
+    await page.locator('#pluginAdd').press('Tab');
+    assert.equal(await page.evaluate(()=>document.activeElement.textContent.trim()),'Создать плагин','keyboard reaches hover action');
+    await page.keyboard.press('Shift+Tab');
+    assert.equal(await page.locator('#pluginAdd').evaluate(node=>node===document.activeElement),true,'keyboard returns to rail');
     await page.locator('#pluginAdd').click();
     await page.locator('#pluginCreateForm').waitFor({state:'visible'});
     await page.waitForFunction(()=>!document.querySelector('.shell')?.classList.contains('navigation-transition'));
-    assert.ok((await page.locator('#productMobileMenuButton').boundingBox()).x<110,'shared panel toggle stays at the screen edge');
+    assert.equal(await page.locator('#productMobileMenuButton').isVisible(),false,'creation screen has no redundant wide tree toggle');
     assert.ok((await page.locator('.plugin-create-heading').boundingBox()).x<170,'plugin form aligns to the left');
+    await page.locator('#pluginName').fill('Example');
+    assert.equal(await page.locator('#pluginCreateTitle').textContent(),'Example','plugin heading follows name');
+    await page.locator('#pluginIconTrigger').click();
     assert.equal(await page.locator('#pluginBuiltinIcons [data-icon-id="dataTemplates"] svg path').count(),1,'original Data Templates glyph is available');
     await page.locator('.plugin-icon-import summary').click();
     await page.locator('#pluginIconImportName').fill('Мой знак');
@@ -97,7 +124,13 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
     await page.locator('#pluginSavedIcons [data-icon-id="icon-test"]').waitFor();
     assert.equal(await page.locator('#pluginIconBriefField').isVisible(),false,'ready SVG disables drawing brief');
     await page.locator('#pluginSavedIcons .plugin-icon-remove').click();
-    assert.equal(await page.locator('#pluginIconBriefField').isVisible(),true,'removing selected SVG returns to drawing mode');
+    assert.equal(await page.locator('#pluginIconBriefField').isVisible(),false,'removing selected SVG returns to a base icon');
+    await page.locator('#pluginBuiltinIcons [data-icon-id="draw"]').click();
+    await page.locator('#pluginIconDescription').fill('Таблица с восходящей линией');
+    await page.locator('#pluginIconDrawButton').click();
+    await page.locator('#pluginSavedIcons [data-icon-id="icon-drawn"]').waitFor();
+    assert.equal(drawCalls,1,'drawing saves a reusable icon immediately');
+    await page.locator('#pluginIconTrigger').click();
     await page.screenshot({path:path.join(captures,'plugin-create-desktop.png')});
     await page.setViewportSize({width:390,height:844});
     await page.waitForFunction(()=>!document.querySelector('.shell')?.classList.contains('navigation-transition'));
@@ -111,12 +144,13 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
     assert.equal(await page.locator('#pluginNewFields').isVisible(),false,'connection hides creation-only fields');
     assert.equal(await page.locator('#pluginCreateSubmit').textContent(),'Подключить папку');
     await page.locator('#pluginConnect').uncheck();
-    await page.locator('#pluginName').fill('Example');await page.locator('#pluginRoot').fill('C:\\Plugins\\Example');
-    await page.locator('#pluginIconDescription').fill('Таблица с восходящей линией');
+    await page.locator('#pluginTask').fill('Сводка продаж');await page.locator('#pluginRoot').fill('C:\\Plugins\\Example');
     await page.locator('#pluginCreateForm button[type=submit]').click();
     await page.waitForFunction(()=>document.querySelector('#pluginChatMessages')?.textContent.includes('SVG-иконка смоделирована.'));
     assert.match(iconPrompt,/workspace\.plugin_authoring/);
-    assert.match(iconPrompt,/Таблица с восходящей линией/);
+    assert.match(iconPrompt,/Сводка продаж/);
+    assert.doesNotMatch(iconPrompt,/Таблица с восходящей линией/,'created icon is already in source');
+    assert.equal(drawCalls,1,'creation reuses the drawn icon');
     await page.locator('#pluginCheck').click();await page.locator('#pluginPreview').click();
     await page.frameLocator('#pluginPreviewMount iframe').locator('#run').click();await page.frameLocator('#pluginPreviewMount iframe').locator('#answer').filter({hasText:'hello preview-v1'}).waitFor();
     await page.locator('#pluginApply').click();await page.locator('#pluginReopen').click();
@@ -130,6 +164,31 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'no page overflow at 390px');
     assert.ok(await page.locator('#pluginChatMessages').innerText(),'development chat rendered');
     await page.locator('#pluginDisable').click();await page.waitForFunction(()=>!document.querySelector('#pluginPreviewMount iframe'));
+    await page.setViewportSize({width:1280,height:800});
+    await page.locator('#pluginRail [data-plugin-id="example"]').hover();
+    assert.equal(await page.locator('.rail-hover-title').textContent(),'Example','plugin uses the same rail popover');
+    await page.locator('.rail-hover-card').getByRole('button',{name:'Удалить с панели'}).waitFor();
+    assert.deepEqual(await page.locator('.rail-hover-card[data-kind="plugin-item"]').evaluate(card=>{
+      const title=card.querySelector('.rail-hover-title'),line=card.querySelector('.rail-hover-separator'),remove=card.querySelector('button');
+      return {separator:!!line,ordered:title.getBoundingClientRect().bottom<line.getBoundingClientRect().top&&
+        line.getBoundingClientRect().bottom<remove.getBoundingClientRect().top,
+        fontFamily:getComputedStyle(remove).fontFamily===getComputedStyle(title).fontFamily,
+        fontSize:getComputedStyle(remove).fontSize};
+    }),{separator:true,ordered:true,fontFamily:true,fontSize:'12px'},'plugin removal has a separated action in the shell font');
+    page.once('dialog',dialog=>dialog.accept());
+    await page.locator('.rail-hover-card').getByRole('button',{name:'Удалить с панели'}).click();
+    await page.locator('#pluginRail [data-plugin-id="example"]').waitFor({state:'detached'});
+    assert.equal(item.releaseId,'release-2','removal preserves publication');
+    assert.equal(await page.locator('#pluginCreateTitle').textContent(),'Новый плагин','successful creation clears its form before the next plugin');
+    const restoredName='Плагин сводки продаж и проверки показателей';item.name=restoredName;
+    await page.locator('#pluginAdd').hover();
+    await page.locator('.rail-hover-card').getByRole('button',{name:restoredName}).waitFor();
+    assert.deepEqual(await page.locator('.rail-hover-body button').allTextContents(),[restoredName,'Создать плагин'],'restore choices precede create');
+    assert.ok((await page.locator('.rail-hover-card').boundingBox()).width>240,'menu grows to fit a plugin name');
+    assert.ok((await page.locator('.rail-hover-card').boundingBox()).height<90,'rail menu stays compact');
+    await page.screenshot({path:path.join(captures,'plugin-restore-menu.png')});
+    await page.locator('.rail-hover-card').getByRole('button',{name:restoredName}).click();
+    await page.locator('#pluginRail [data-plugin-id="example"]').waitFor();
     console.log('PASS plugins UI: create/check/preview/apply/update/disable, actual isolated Worker, desktop/narrow screenshots');
     const manifest=JSON.parse(read('data-templates/plugin.json')),members=new Set(manifest.files),files=name=>members.has(name)?read('data-templates/'+name):null;
     const input=read('data-templates/core/examples/matrix-xlsx-extraction.json').toString();

@@ -482,7 +482,8 @@
       return { state: workspaceState(), dictionary: { file: "dictionary-1730000000000-" + "b".repeat(32) + ".json",
         format: "dictionary", sha256: await hash(dictionaryText), input: dictionaryText } };
     }
-    if (type === "getPlugins") return { items: clone([pluginItem].concat(extraPlugins)) };
+    if (type === "getPlugins") return { items: clone([pluginItem].concat(extraPlugins).filter(function (item) { return !item.hidden; })) };
+    if (type === "getRemovedPlugins") return { items: clone([pluginItem].concat(extraPlugins).filter(function (item) { return !!item.hidden; })) };
     if (type === "getPluginIcons") return { items: clone(savedPluginIcons) };
     if (type === "savePluginIcon") {
       if (!payload.name || payload.name.length > 120) fail("Укажите название и SVG-код.", "preview_icon_invalid");
@@ -492,10 +493,30 @@
       var added = { id: "icon-" + (++pluginIconSequence), name: payload.name, paths: paths };
       savedPluginIcons.push(added); return clone(added);
     }
+    if (type === "drawPluginIcon") {
+      if (!payload.description || payload.description.length > 500) fail("Опишите иконку.", "preview_icon_invalid");
+      var drawn = payload.description.toLowerCase().includes("таблиц") ?
+        ["M3 4h18v16H3z", "M3 10h18M9 4v16M15 4v16", "M11 15l2 2 4-4"] :
+        ["M12 3l8 5v8l-8 5-8-5V8z", "M8 12h8M12 8v8"];
+      var existingDrawn = savedPluginIcons.find(function (item) { return item.paths.join("\n") === drawn.join("\n"); });
+      if (existingDrawn) return Object.assign(clone(existingDrawn), { previewSimulated: true });
+      var generated = { id: "icon-" + (++pluginIconSequence), name: payload.name || "Новый плагин", paths: drawn };
+      savedPluginIcons.push(generated); return Object.assign(clone(generated), { previewSimulated: true });
+    }
     if (type === "deletePluginIcon") {
       var index = savedPluginIcons.findIndex(function (item) { return item.id === payload.id; });
       if (index < 0) fail("Базовые иконки нельзя удалять.", "preview_icon_protected");
       savedPluginIcons.splice(index, 1); return { items: clone(savedPluginIcons) };
+    }
+    if (type === "removePlugin" || type === "restorePlugin") {
+      var visiblePlugin = [pluginItem].concat(extraPlugins).find(function (item) { return item.pluginId === payload.pluginId; });
+      if (!visiblePlugin) fail("Плагин не найден.", "preview_plugin_missing");
+      visiblePlugin.hidden = type === "removePlugin";
+      if (visiblePlugin === pluginItem && visiblePlugin.hidden) projectSelected = false;
+      if (visiblePlugin.hidden && pluginCandidateOwner === visiblePlugin.pluginId) {
+        pluginCandidate = null; pluginCandidateOwner = null;
+      }
+      return type === "removePlugin" ? { pluginId: payload.pluginId, hidden: true } : clone(visiblePlugin);
     }
     if (type === "createPlugin" || type === "connectPlugin") {
       if (!payload.rootPath || type === "createPlugin" && !payload.name) fail("Укажите название и папку исходников.", "preview_input_invalid");
@@ -565,7 +586,7 @@
       requireProjectChat(payload); fail("В этом примере нет ожидающего подтверждения.", "preview_run_changed");
     }
     if (type === "checkPlugin") {
-      if (![pluginItem].concat(extraPlugins).some(function (item) { return item.pluginId === payload.pluginId; })) fail("Плагин примера отсутствует.");
+      if (![pluginItem].concat(extraPlugins).some(function (item) { return item.pluginId === payload.pluginId && !item.hidden; })) fail("Плагин примера отсутствует.");
       pluginCandidate = "preview-candidate-" + (++pluginInstanceSequence);
       pluginCandidateOwner = payload.pluginId;
       var checkedIcon = extraPlugins.find(function (item) { return item.pluginId === payload.pluginId; });
@@ -598,7 +619,7 @@
     }
     if (type === "openPlugin") {
       var opening = [pluginItem].concat(extraPlugins).find(function (item) { return item.pluginId === payload.pluginId; });
-      if (!opening || payload.candidateId && (payload.candidateId !== pluginCandidate || payload.pluginId !== pluginCandidateOwner) ||
+      if (!opening || opening.hidden || payload.candidateId && (payload.candidateId !== pluginCandidate || payload.pluginId !== pluginCandidateOwner) ||
           !payload.candidateId && !opening.enabled) fail("Плагин примера недоступен.", "preview_plugin_changed");
       if (opening === pluginItem && !payload.candidateId) projectSelected = !!dataProject;
       return { instanceId: "preview-plugin-instance-" + (++pluginInstanceSequence), pluginId: opening.pluginId,
@@ -616,7 +637,7 @@
       if (!requestId || typeof pluginText !== "string" || !pluginText.trim()) fail("Сообщение примера неверно.", "preview_input_invalid");
       if (createdPlugin) {
         extraPluginMessages[createdPlugin.pluginId].push({ role: "user", text: pluginText },
-          { role: "assistant", text: "Пример: запрос на исходники и SVG-иконку принят. Модель и запись файлов здесь не запускаются." });
+          { role: "assistant", text: "Пример: запрос на исходники принят. Модель и запись файлов здесь не запускаются." });
         return pluginChatState(createdPlugin.pluginId);
       }
       if (pluginRequestIds[requestId] && pluginRequestIds[requestId] !== pluginText) fail("ID сообщения уже занят.", "preview_input_invalid");

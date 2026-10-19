@@ -164,9 +164,12 @@ namespace RNAssistant.Office.WebView
                 switch (type)
                 {
                     case BridgeOperationId.GetPlugins: case BridgeOperationId.GetPluginIcons: case BridgeOperationId.SavePluginIcon:
-                    case BridgeOperationId.DeletePluginIcon: case BridgeOperationId.CreatePlugin: case BridgeOperationId.ConnectPlugin:
+                    case BridgeOperationId.DeletePluginIcon: case BridgeOperationId.DrawPluginIcon:
+                    case BridgeOperationId.CreatePlugin: case BridgeOperationId.ConnectPlugin:
                     case BridgeOperationId.CheckPlugin: case BridgeOperationId.ApplyPlugin: case BridgeOperationId.OpenPlugin:
-                    case BridgeOperationId.ClosePlugin: case BridgeOperationId.DisablePlugin: case BridgeOperationId.GetPluginChat:
+                    case BridgeOperationId.ClosePlugin: case BridgeOperationId.DisablePlugin:
+                    case BridgeOperationId.GetRemovedPlugins: case BridgeOperationId.RemovePlugin: case BridgeOperationId.RestorePlugin:
+                    case BridgeOperationId.GetPluginChat:
                     case BridgeOperationId.SubmitPluginChat: case BridgeOperationId.ResolvePluginChat: case BridgeOperationId.CancelPluginChat:
                     case BridgeOperationId.GetPluginVendors: case BridgeOperationId.ImportPluginVendor: case BridgeOperationId.ResolveHtmlVendor:
                     case BridgeOperationId.GetProjectChats: case BridgeOperationId.CreateProjectChat: case BridgeOperationId.GetProjectChat:

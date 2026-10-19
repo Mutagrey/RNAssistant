@@ -121,6 +121,28 @@ async function serve() {
     assert.match(await normal.locator("#chatInspectorBody").textContent(), /Анализ продаж/);
     await normal.locator("#toggleChatInspectorButton").click();
     await normal.locator("#chatInspector").waitFor({ state: "hidden" });
+    for (const width of [900, 560]) {
+      await normal.setViewportSize({ width, height: 720 });
+      await normal.locator("#toggleChatInspectorButton").click();
+      await normal.waitForFunction(() => {
+        const layout = document.getElementById("chatLayout").getBoundingClientRect();
+        const panel = document.getElementById("chatInspector").getBoundingClientRect();
+        return panel.width > 300 && Math.abs(panel.right - layout.right) < 1 &&
+          panel.left >= layout.left - 1;
+      });
+      assert.equal(await normal.locator("#toggleChatInspectorButton").getAttribute("aria-expanded"), "true",
+        "the overlay inspector opens at " + width + "px");
+      if (width === 900) {
+        await normal.locator("#chatInspectorSwitcher summary").focus();
+        await normal.keyboard.press("Escape");
+      } else {
+        await normal.locator("#closeChatInspectorButton").click();
+      }
+      await normal.locator("#chatInspector").waitFor({ state: "hidden" });
+      assert.equal(await normal.locator("#toggleChatInspectorButton").evaluate(node => node === document.activeElement), true,
+        "closing the overlay returns focus to its toggle");
+    }
+    await normal.setViewportSize({ width: 1280, height: 720 });
     const progress = [];
     await normal.evaluate(() => {
       window.__previewProgress = [];
@@ -276,6 +298,8 @@ async function serve() {
     await normal.locator("#artifactCatalogOverviewRows").getByRole("button", { name: "Диаграмма.png" }).click();
     await normal.locator("#artifactCatalogPreviewBody img").waitFor();
     assert.equal(await normal.locator("#artifactCatalogStatus").textContent(), "");
+    await normal.locator('#pluginRail [data-plugin-id="data-templates"]').hover();
+    await normal.locator('.rail-hover-card').getByRole('button', { name: 'Удалить с панели' }).waitFor();
     await normal.locator('#pluginRail [data-plugin-id="data-templates"]').click();
     await normal.locator('#pluginNavigationTree [data-tree-key="sources"]').waitFor();
     await normal.locator('#pluginNavigationTree [data-tree-key="sources"] > .navigation-tree-row').click();
@@ -365,23 +389,43 @@ async function serve() {
     await normal.locator('#pluginAdd').click();
     await normal.locator('#pluginCreateForm').waitFor({ state: 'visible' });
     await normal.locator('#pluginName').fill('Сводка продаж');
+    await normal.locator('#pluginTask').fill('Собрать сводку продаж');
     await normal.locator('#pluginRoot').fill('C:\\Projects\\SalesPlugin');
+    await normal.locator('#pluginIconTrigger').click();
+    await normal.locator('#pluginBuiltinIcons [data-icon-id="draw"]').click();
     await normal.locator('#pluginIconDescription').fill('Три растущих столбца');
-    await normal.locator('#pluginCreateSubmit').click();
-    await normal.locator('#pluginChatMessages').getByText(/запрос на исходники и SVG-иконку принят/).waitFor();
-    await normal.locator('#pluginCheck').click();
+    await normal.locator('#pluginIconDrawButton').click();
     const drawnIcons = await normal.evaluate(() => send('getPluginIcons', {}));
-    assert.equal(drawnIcons.items.length, 1, 'preview saves a drawing after package checking');
+    assert.equal(drawnIcons.items.length, 1, 'preview saves a simulated drawing immediately');
+    await normal.locator('#pluginCreateSubmit').click();
+    await normal.locator('#pluginChatMessages').getByText(/запрос на исходники принят/).waitFor();
+    await normal.locator('#pluginCheck').click();
     await normal.locator('#pluginPreview').click();
     await normal.frameLocator('#pluginPreviewMount iframe').getByRole('heading', { name: 'Сводка продаж' }).waitFor();
     await normal.locator('#pluginApply').click();
-    assert.equal(await normal.locator('#pluginRail [data-plugin-id="preview-plugin-1"] svg path').count(), 1,
+    assert.equal(await normal.locator('#pluginRail [data-plugin-id="preview-plugin-1"] svg path').count(), drawnIcons.items[0].paths.length,
       'the simulated publication displays its vector icon');
     await normal.evaluate(id => send('deletePluginIcon', { id }), drawnIcons.items[0].id);
-    assert.equal(await normal.locator('#pluginRail [data-plugin-id="preview-plugin-1"] svg path').count(), 1,
+    assert.equal(await normal.locator('#pluginRail [data-plugin-id="preview-plugin-1"] svg path').count(), drawnIcons.items[0].paths.length,
       'removing a saved icon leaves the plugin drawing intact');
     assert.equal(await normal.locator('#pluginRail [data-plugin-id="data-templates"] svg path').first().getAttribute('d'),
       'M3 3v18h18M7 16v-5M12 16V7M17 16V4', 'Data Templates retains its original glyph');
+    await normal.locator('#pluginRail [data-plugin-id="preview-plugin-1"]').hover();
+    normal.once('dialog', dialog => dialog.accept());
+    await normal.locator('.rail-hover-card').getByRole('button', { name: 'Удалить с панели' }).click();
+    await normal.locator('#pluginRail [data-plugin-id="preview-plugin-1"]').waitFor({ state: 'detached' });
+    await normal.locator('#pluginAdd').hover();
+    await normal.locator('.rail-hover-card').getByRole('button', { name: 'Сводка продаж' }).click();
+    await normal.locator('#pluginRail [data-plugin-id="preview-plugin-1"]').waitFor();
+    await normal.locator('#pluginRail [data-plugin-id="data-templates"]').hover();
+    normal.once('dialog', dialog => dialog.accept());
+    await normal.locator('.rail-hover-card').getByRole('button', { name: 'Удалить с панели' }).click();
+    await normal.locator('#pluginRail [data-plugin-id="data-templates"]').waitFor({ state: 'detached' });
+    assert.equal((await normal.evaluate(() => send('getProjectChats', {}))).project, null,
+      'removing the shipped plugin revokes its data selection');
+    await normal.locator('#pluginAdd').hover();
+    await normal.locator('.rail-hover-card').getByRole('button', { name: 'Данные и шаблоны' }).click();
+    await normal.locator('#pluginRail [data-plugin-id="data-templates"]').waitFor();
     assert.deepEqual(errors, []);
     await normal.close();
 

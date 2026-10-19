@@ -121,5 +121,6 @@ namespace RNAssistant.Core.Models
         public string SourceRoot { get; set; }
         public string ActiveReleaseId { get; set; }
         public bool Enabled { get; set; }
+        public bool Hidden { get; set; }
     }
 }

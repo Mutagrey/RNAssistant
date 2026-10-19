@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Application.Contracts;
+using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
@@ -48,7 +49,9 @@ namespace RNAssistant.Application
         }
 
         public PluginCatalogDto List()
-        { using (PluginStore.AcquireRuntimeUse(_paths)) lock (_sync) { RequireOpen(); return new PluginCatalogDto { Error = StartupError, Items = _store.List().Select(Item).ToArray() }; } }
+        { using (PluginStore.AcquireRuntimeUse(_paths)) lock (_sync) { RequireOpen(); return new PluginCatalogDto { Error = StartupError, Items = _store.List().Where(item => !item.Hidden).Select(Item).ToArray() }; } }
+        public PluginCatalogDto ListRemoved()
+        { using (PluginStore.AcquireRuntimeUse(_paths)) lock (_sync) { RequireOpen(); return new PluginCatalogDto { Items = _store.List().Where(item => item.Hidden).Select(Item).ToArray() }; } }
         public PluginIconCatalogDto ListIcons()
         { using (PluginStore.AcquireRuntimeUse(_paths)) lock (_sync) { RequireOpen(); return new PluginIconCatalogDto { Items = _icons.List() }; } }
         public PluginIconRecord SaveIcon(PluginIconSaveRequest request)
@@ -67,6 +70,32 @@ namespace RNAssistant.Application
                 RequireOpen(); _icons.Delete(request?.Id);
                 return new PluginIconCatalogDto { Items = _icons.List() };
             }
+        }
+        public async Task<PluginIconRecord> DrawIconAsync(PluginIconDrawRequest request, AppSettings settings,
+            Func<string> apiKeyProvider, CancellationToken token)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.Name) || request.Name.Trim().Length > 120 ||
+                string.IsNullOrWhiteSpace(request.Description) || request.Description.Trim().Length > 500)
+                throw new PluginException("plugin_icon_invalid", "Provide a plugin name and an icon description of at most 500 characters.");
+            var configuration = (settings ?? new AppSettings()).Clone();
+            configuration.MaxTokens = 700;
+            configuration.RequestTimeoutSeconds = Math.Min(configuration.RequestTimeoutSeconds, 75);
+            configuration.Temperature = 0.35;
+            var completion = await new LlmClient(apiKeyProvider).CompleteAsync(configuration,
+                new[] {
+                    new ChatMessage { Role = "system", Content =
+                        "Draw one clear, balanced outline icon as SVG for a 24x24 viewBox. Return only the SVG document. " +
+                        "Use <svg viewBox=\"0 0 24 24\"> with 1 to 6 <path d=\"...\"/> children. " +
+                        "No other elements, attributes, fills, text, comments, XML declaration or Markdown. " +
+                        "Use only path commands and coordinates; the app applies currentColor stroke, round joins and caps." },
+                    new ChatMessage { Role = "user", Content = "Plugin: " + request.Name.Trim() + "\nIcon brief: " + request.Description.Trim() }
+                }, new LlmRequestOptions { ResponseFormat = LlmResponseFormats.Text, ReasoningEnabled = false },
+                null, token).ConfigureAwait(false);
+            var svg = (completion?.Content ?? string.Empty).Trim();
+            if (svg.Length == 0 || svg.Length > 4096)
+                throw new PluginException("plugin_icon_invalid", "The model did not return a bounded SVG icon. Edit the description and try again.");
+            token.ThrowIfCancellationRequested();
+            return SaveIcon(new PluginIconSaveRequest { Name = request.Name.Trim(), Svg = svg });
         }
         public void ResetAfterRuntimeDataClear()
         {
@@ -87,7 +116,9 @@ namespace RNAssistant.Application
                 RequireOpen();
                 if (request == null) throw new ArgumentNullException(nameof(request));
                 var source = new PluginSourceWorkspace(_workspaces.Open(request.RootPath, false, true));
-                return Item(_store.Connect(source));
+                var connected = _store.Connect(source);
+                _revoked.Remove(connected.PluginId);
+                return Item(connected);
             }
         }
 
@@ -233,6 +264,48 @@ namespace RNAssistant.Application
             foreach (var instance in instances) await CloseInstanceAsync(instance.Id).ConfigureAwait(false);
             await Task.WhenAll(instances.Select(instance => instance.CommandCompleted)).ConfigureAwait(false);
             return Item(registration);
+            }
+        }
+
+        public async Task<PluginVisibilityDto> RemoveAsync(string pluginId)
+        {
+            using (PluginStore.AcquireRuntimeUse(_paths))
+            {
+                PluginInstance[] instances;
+                lock (_sync)
+                {
+                    RequireOpen(); RequireRegistration(pluginId);
+                    _revoked.Add(pluginId);
+                    foreach (var key in _data.Keys.Where(key => key.StartsWith(pluginId + ":", StringComparison.Ordinal)).ToArray())
+                    { _data[key].Dispose(); _data.Remove(key); }
+                    foreach (var key in _candidates.Where(item => item.Value.Package.PluginId == pluginId).Select(item => item.Key).ToArray())
+                        _candidates.Remove(key);
+                    instances = _instances.Values.Where(instance => instance.Manifest.Id == pluginId).ToArray();
+                    foreach (var instance in instances) instance.Dispose();
+                }
+                foreach (var instance in instances) await CloseInstanceAsync(instance.Id).ConfigureAwait(false);
+                await Task.WhenAll(instances.Select(instance => instance.CommandCompleted)).ConfigureAwait(false);
+                lock (_sync)
+                {
+                    try { _store.SetHidden(pluginId, true); }
+                    catch
+                    {
+                        try { if (_store.Get(pluginId)?.Hidden == false) _revoked.Remove(pluginId); }
+                        catch { }
+                        throw;
+                    }
+                }
+                return new PluginVisibilityDto { PluginId = pluginId, Hidden = true };
+            }
+        }
+        public PluginItemDto Restore(string pluginId)
+        {
+            using (PluginStore.AcquireRuntimeUse(_paths)) lock (_sync)
+            {
+                RequireOpen();
+                var restored = _store.SetHidden(pluginId, false);
+                _revoked.Remove(pluginId);
+                return Item(restored);
             }
         }
 
@@ -419,7 +492,7 @@ namespace RNAssistant.Application
             {
                 RequireOpen();
                 var registration = _store.Get("data-templates");
-                if (registration == null || !registration.Enabled || registration.ActiveReleaseId == null) return null;
+                if (registration == null || registration.Hidden || !registration.Enabled || registration.ActiveReleaseId == null) return null;
                 PluginDataGrant grant;
                 _data.TryGetValue("data-templates:" + registration.ActiveReleaseId, out grant);
                 return grant != null && !grant.Lifetime.IsCancellationRequested ? grant : null;
@@ -573,7 +646,11 @@ namespace RNAssistant.Application
         private Candidate RequireCandidate(string pluginId, string id)
         { Candidate value; if (id == null || !_candidates.TryGetValue(id, out value) || value.Package.PluginId != pluginId) throw new PluginException("plugin_candidate_missing", "Check this plugin again before applying or previewing."); return value; }
         private PluginRegistration RequireRegistration(string id)
-        { return _store.Get(id) ?? throw new PluginException("plugin_missing", "Plugin is not connected."); }
+        {
+            var registration = _store.Get(id);
+            if (registration == null || registration.Hidden) throw new PluginException("plugin_missing", "Plugin is not on the panel.");
+            return registration;
+        }
         private PluginSourceWorkspace Source(PluginRegistration registration)
         {
             var workspace = _workspaces.Open(registration.SourceRoot, false, true);
@@ -585,7 +662,7 @@ namespace RNAssistant.Application
         {
             var item = new PluginItemDto { PluginId = value.PluginId, Name = value.Name, Icon = value.Icon,
                 SourceWorkspaceId = value.SourceWorkspaceId, SourceRoot = value.SourceRoot,
-                ReleaseId = value.ActiveReleaseId, Enabled = value.Enabled };
+                ReleaseId = value.ActiveReleaseId, Enabled = value.Enabled, Hidden = value.Hidden };
             if (PluginPackageFiles.IconIsSvgPath(value.Icon))
             {
                 try

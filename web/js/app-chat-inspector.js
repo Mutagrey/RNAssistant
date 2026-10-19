@@ -259,7 +259,25 @@
       button.insertBefore(icon(icons[button.dataset.chatInspectorView]), button.firstChild);
     });
     document.getElementById("toggleChatInspectorButton").addEventListener("click", function () { setOpen(!open); });
-    document.getElementById("closeChatInspectorButton").addEventListener("click", function () { setOpen(false); });
+    var panel = document.getElementById("chatInspector");
+    var toggle = document.getElementById("toggleChatInspectorButton");
+    document.getElementById("closeChatInspectorButton").addEventListener("click", function () {
+      setOpen(false);
+      toggle.focus({ preventScroll: true });
+    });
+    panel.addEventListener("keydown", function (event) {
+      if (event.key !== "Escape" || !open) return;
+      var switcher = document.getElementById("chatInspectorSwitcher");
+      if (switcher.open) {
+        switcher.open = false;
+        switcher.querySelector("summary").focus();
+      } else {
+        setOpen(false);
+        toggle.focus({ preventScroll: true });
+      }
+      event.preventDefault();
+      event.stopPropagation();
+    });
     document.getElementById("chatInspectorSwitcher").addEventListener("click", function (event) {
       var button = event.target.closest("[data-chat-inspector-view]");
       if (!button) return;

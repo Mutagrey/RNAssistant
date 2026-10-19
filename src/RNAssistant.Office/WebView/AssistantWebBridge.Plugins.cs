@@ -20,9 +20,11 @@ namespace RNAssistant.Office.WebView
                 switch(operation)
                 {
                     case BridgeOperationId.GetPlugins: return (object)Plugins.List();
+                    case BridgeOperationId.GetRemovedPlugins: return Plugins.ListRemoved();
                     case BridgeOperationId.GetPluginIcons: return Plugins.ListIcons();
                     case BridgeOperationId.SavePluginIcon: return Plugins.SaveIcon(Payload<PluginIconSaveRequest>(payload));
                     case BridgeOperationId.DeletePluginIcon: return Plugins.DeleteIcon(Payload<PluginIconDeleteRequest>(payload));
+                    case BridgeOperationId.DrawPluginIcon: return await Plugins.DrawIconAsync(Payload<PluginIconDrawRequest>(payload),settings.Load(),settings.LoadApiKey,token);
                     case BridgeOperationId.CreatePlugin: return Plugins.Create(Payload<PluginCreateRequest>(payload));
                     case BridgeOperationId.ConnectPlugin: return Plugins.Connect(Payload<PluginConnectRequest>(payload));
                     case BridgeOperationId.CheckPlugin: return Plugins.Check(Payload<PluginIdRequest>(payload).PluginId);
@@ -32,6 +34,8 @@ namespace RNAssistant.Office.WebView
                         return Plugins.Open(Payload<PluginOpenRequest>(payload));
                     case BridgeOperationId.ClosePlugin: await Plugins.CloseInstanceAsync(Payload<PluginCloseRequest>(payload).InstanceId); return new PluginFrameResult();
                     case BridgeOperationId.DisablePlugin: return await Plugins.DisableAsync(Payload<PluginIdRequest>(payload).PluginId);
+                    case BridgeOperationId.RemovePlugin: return await Plugins.RemoveAsync(Payload<PluginIdRequest>(payload).PluginId);
+                    case BridgeOperationId.RestorePlugin: return Plugins.Restore(Payload<PluginIdRequest>(payload).PluginId);
                     case BridgeOperationId.GetPluginChat: return Plugins.ChatState(Payload<PluginIdRequest>(payload).PluginId);
                     case BridgeOperationId.SubmitPluginChat: return await Plugins.SubmitChatAsync(Payload<PluginChatRequest>(payload),settings.Load(),settings.LoadApiKey,token);
                     case BridgeOperationId.ResolvePluginChat: case BridgeOperationId.CancelPluginChat:

@@ -87,6 +87,36 @@ namespace RNAssistant.Harness
                 }
             });
         }
+        private static void PluginsPanelVisibility()
+        {
+            WithPluginPaths(paths => {
+                PluginItemDto item;
+                PluginInstance open;
+                string sourceChat;
+                using (var service = new PluginApplicationService(paths))
+                {
+                    item = PluginFixture(service, paths, false);
+                    open = PluginOpen(service, item.PluginId);
+                    sourceChat = service.ChatState(item.PluginId).SessionId;
+                    service.RemoveAsync(item.PluginId).GetAwaiter().GetResult();
+                    AssertTrue(open.Token.IsCancellationRequested, "removal revokes visible instance");
+                    AssertEqual(0, service.List().Items.Count, "removed plugin disappears from panel");
+                    AssertEqual(item.PluginId, service.ListRemoved().Items.Single().PluginId, "removed plugin remains selectable for restoration");
+                    PluginFailure(() => service.Open(new PluginOpenRequest { PluginId = item.PluginId }), "plugin_missing");
+                    AssertTrue(File.Exists(Path.Combine(item.SourceRoot, "plugin.json")), "removal keeps source");
+                }
+                using (var service = new PluginApplicationService(paths))
+                {
+                    AssertEqual(item.PluginId, service.ListRemoved().Items.Single().PluginId, "panel removal survives restart");
+                    var restored = service.Restore(item.PluginId);
+                    AssertEqual(item.ReleaseId, restored.ReleaseId, "restoration keeps published version");
+                    AssertEqual(true, restored.Enabled, "restoration keeps activation state");
+                    AssertEqual(item.PluginId, service.List().Items.Single().PluginId, "restored plugin returns to panel");
+                    AssertEqual(sourceChat, service.ChatState(item.PluginId).SessionId, "restoration keeps source chat");
+                    PluginOpen(service, item.PluginId);
+                }
+            });
+        }
         private static void PluginsSvgIcon()
         {
             var authoring = RNAssistant.Core.Services.WorkspaceSkillProvider.GetSkills()
@@ -276,6 +306,11 @@ namespace RNAssistant.Harness
                     service.DeleteProjectChat(new ProjectChatRequest{ProjectId=first,SessionId=created.SessionId});
                     AssertEqual(0,service.ProjectChats().Chats.Count,"project chat deletion removes only its history");
                     AssertTrue(Directory.Exists(firstRoot)&&Directory.Exists(secondRoot),"project chat actions preserve data folders");
+                    service.RemoveAsync(item.PluginId).GetAwaiter().GetResult();
+                    AssertEqual(0,service.List().Items.Count,"shipped plugin can leave the rail");
+                    AssertEqual(item.PluginId,service.ListRemoved().Items.Single().PluginId,"shipped plugin remains restorable");
+                    AssertEqual(null,service.ProjectChats().Project,"hiding the plugin revokes selected data access");
+                    AssertEqual(item.ReleaseId,service.Restore(item.PluginId).ReleaseId,"restoring shipped plugin keeps publication");
                 }
             });
         }
