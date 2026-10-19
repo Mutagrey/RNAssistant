@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Storage;
 using RNAssistant.Runtime.Contracts;
 
 namespace RNAssistant.Application.Contracts
@@ -30,7 +31,16 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("name")] public string Name { get; set; }
         [JsonProperty("rootPath")] public string RootPath { get; set; }
         [JsonProperty("description")] public string Description { get; set; }
+        [JsonProperty("iconDescription")] public string IconDescription { get; set; }
+        [JsonProperty("iconId")] public string IconId { get; set; }
     }
+    public sealed class PluginIconSaveRequest
+    {
+        [JsonProperty("name")] public string Name { get; set; }
+        [JsonProperty("svg")] public string Svg { get; set; }
+    }
+    public sealed class PluginIconDeleteRequest { [JsonProperty("id")] public string Id { get; set; } }
+    public sealed class PluginIconCatalogDto { [JsonProperty("items")] public IReadOnlyList<PluginIconRecord> Items { get; set; } }
     public sealed class PluginApplyRequest
     {
         [JsonProperty("pluginId")] public string PluginId { get; set; }
@@ -51,6 +61,8 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("pluginId")] public string PluginId { get; set; }
         [JsonProperty("name")] public string Name { get; set; }
         [JsonProperty("icon")] public string Icon { get; set; }
+        [JsonProperty("iconPaths", NullValueHandling = NullValueHandling.Ignore)] public string[] IconPaths { get; set; }
+        [JsonProperty("iconError", NullValueHandling = NullValueHandling.Ignore)] public string IconError { get; set; }
         [JsonProperty("sourceWorkspaceId")] public string SourceWorkspaceId { get; set; }
         [JsonProperty("sourceRoot")] public string SourceRoot { get; set; }
         [JsonProperty("releaseId")] public string ReleaseId { get; set; }

@@ -87,6 +87,52 @@ namespace RNAssistant.Harness
                 }
             });
         }
+        private static void PluginsSvgIcon()
+        {
+            var authoring = RNAssistant.Core.Services.WorkspaceSkillProvider.GetSkills()
+                .Single(skill => skill.Id == RNAssistant.Core.Services.WorkspaceSkillProvider.PluginId);
+            AssertTrue(authoring.BodyMarkdown.Contains("icon.svg") && authoring.BodyMarkdown.Contains("plugins.check"),
+                "source workspace guidance owns text-authored SVG and package checking");
+            WithPluginPaths(paths=>{
+                using(var service=new PluginApplicationService(paths))
+                {
+                    var item=service.Create(new PluginCreateRequest { Name="Sales", RootPath=Path.Combine(paths.Root,"svg-source"),
+                        Description="Summarize sales", IconDescription="Three rising columns" });
+                    AssertTrue(File.ReadAllText(Path.Combine(item.SourceRoot,"README.md")).Contains("Three rising columns"),
+                        "the text brief stays in source guidance");
+                    var manifestPath=Path.Combine(item.SourceRoot,"plugin.json");
+                    var manifest=JObject.Parse(File.ReadAllText(manifestPath));
+                    manifest["icon"]="icon.svg";((JArray)manifest["files"]).Add("icon.svg");
+                    File.WriteAllText(manifestPath,manifest.ToString());
+                    var svgPath=Path.Combine(item.SourceRoot,"icon.svg");
+                    File.WriteAllText(svgPath,"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\"><path d=\"M4 18V6h3v12M10 18v-7h3v7M16 18V4h3v14\"/></svg>");
+                    var candidate=service.Check(item.PluginId);
+                    var published=service.Apply(new PluginApplyRequest { PluginId=item.PluginId, CandidateId=candidate.CandidateId });
+                    AssertEqual("icon.svg",published.Icon,"SVG source becomes the published icon");
+                    AssertEqual(1,published.IconPaths.Length,"published icon exposes validated paths only");
+                    var catalog=service.ListIcons().Items;
+                    AssertEqual(1,catalog.Count,"checking a valid icon adds it to the saved library");
+                    AssertEqual(published.IconPaths[0],catalog[0].Paths[0],"library retains the validated drawing");
+                    var reused=service.Create(new PluginCreateRequest { Name="Reused", RootPath=Path.Combine(paths.Root,"reused-source"), IconId=catalog[0].Id });
+                    AssertEqual("icon.svg",reused.Icon,"saved icon is copied into new plugin source");
+                    AssertEqual(catalog[0].Paths[0],reused.IconPaths[0],"new source owns its copy of the drawing");
+                    PluginFailure(()=>service.DeleteIcon(new PluginIconDeleteRequest { Id="dataTemplates" }),"plugin_icon_protected");
+                    service.DeleteIcon(new PluginIconDeleteRequest { Id=catalog[0].Id });
+                    AssertEqual(0,service.ListIcons().Items.Count,"saved drawing is removable");
+                    AssertEqual(catalog[0].Paths[0],service.List().Items.Single(value=>value.PluginId==reused.PluginId).IconPaths[0],
+                        "deleting a saved drawing leaves plugin source intact");
+                    File.WriteAllText(svgPath,"<svg viewBox=\"0 0 24 24\" onload=\"alert(1)\"><path d=\"M4 4L20 20\"/></svg>");
+                    PluginFailure(()=>service.Check(item.PluginId),"plugin_icon_invalid");
+                    AssertEqual(published.IconPaths[0],service.List().Items.Single(value=>value.PluginId==item.PluginId).IconPaths[0],
+                        "invalid draft cannot replace the active icon");
+                    PluginFailure(()=>service.SaveIcon(new PluginIconSaveRequest { Name="Unsafe", Svg="<svg viewBox=\"0 0 24 24\" onload=\"alert(1)\"><path d=\"M4 4L20 20\"/></svg>" }),"plugin_icon_invalid");
+                    var manual=service.SaveIcon(new PluginIconSaveRequest { Name="Manual", Svg="<svg viewBox=\"0 0 24 24\"><path d=\"M3 3h18v18H3Z\"/></svg>" });
+                    paths.ClearRuntimeData();
+                    AssertEqual(manual.Id,new PluginIconLibrary(paths).List().Single().Id,
+                        "saved icons survive explicit runtime-data clearing");
+                }
+            });
+        }
         private static void PluginsCommandsPinAndCancel()
         {
             WithPluginPaths(paths=>PluginCommandsPinAndCancelAsync(paths).GetAwaiter().GetResult());

@@ -44,6 +44,7 @@ function renderChatModePicker() {
 }
 
 function bindComposerPickers() {
+  $("composerOpenMaterialsButton").addEventListener("click", function () { switchTab("artifacts"); });
   $("chatPlanButton").addEventListener("click", function () {
     if (!this.disabled) saveChatMode(state.activeChatMode === "plan" ? "agent" : "plan");
   });
@@ -62,7 +63,7 @@ function bindComposerPickers() {
     var button = event.target.closest("button");
     if (!button || button.disabled) return;
     $("composerAddPicker").open = false;
-    $("composerAddButton").focus();
+    if (button.id !== "composerOpenMaterialsButton") $("composerAddButton").focus();
   });
   document.addEventListener("pointerdown", function (event) {
     pickers.forEach(function (picker) {

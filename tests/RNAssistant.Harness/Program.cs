@@ -44,6 +44,7 @@ namespace RNAssistant.Harness
             var tests = new List<HarnessTest>
             {
                 Test("plugins: immutable publications and independent grants", PluginsPublishAndSeparateAuthority),
+                Test("plugins: text-authored SVG icons stay scoped and safe", PluginsSvgIcon),
                 Test("plugins: commands pin releases and cancel", PluginsCommandsPinAndCancel),
                 Test("plugins: vendor resolution is separate from admission", PluginsVendorResolutionAndAdmission),
                 Test("plugins: binary unknown effects require explicit inspection", PluginsBinaryUnknownAndRecovery),

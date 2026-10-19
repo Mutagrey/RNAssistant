@@ -3,6 +3,8 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Xml;
+using System.Xml.Linq;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
@@ -63,6 +65,41 @@ namespace RNAssistant.Core.Storage
             }
         }
 
+        public static bool IconIsSvgPath(string icon)
+        { return icon != null && icon.EndsWith(".svg", StringComparison.OrdinalIgnoreCase); }
+
+        public static string[] ReadIconPaths(byte[] bytes)
+        {
+            if (bytes == null || bytes.Length == 0 || bytes.Length > 4096)
+                throw new PluginException("plugin_icon_invalid", "The SVG icon must contain 1–4096 UTF-8 bytes.");
+            try
+            {
+                var settings = new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null,
+                    MaxCharactersInDocument = 4096 };
+                using (var reader = XmlReader.Create(new StringReader(Utf8.GetString(bytes)), settings))
+                {
+                    var root = XElement.Load(reader);
+                    if (root.Name.LocalName != "svg" ||
+                        root.Name.NamespaceName != "" && root.Name.NamespaceName != "http://www.w3.org/2000/svg" ||
+                        (string)root.Attribute("viewBox") != "0 0 24 24" ||
+                        root.Attributes().Any(attribute => attribute.Name.LocalName != "viewBox" &&
+                            !(attribute.IsNamespaceDeclaration && attribute.Value == "http://www.w3.org/2000/svg")) ||
+                        root.Nodes().Any(node => !(node is XElement) && !(node is XText && string.IsNullOrWhiteSpace(((XText)node).Value))))
+                        throw new PluginException("plugin_icon_invalid", "Use a 24×24 SVG with path elements only.");
+                    var paths = root.Elements().ToArray();
+                    if (paths.Length == 0 || paths.Length > 6 || paths.Any(path =>
+                        path.Name.LocalName != "path" || path.HasElements || path.Attributes().Count() != 1 ||
+                        path.Attributes().First().Name.LocalName != "d" || path.Attributes().First().Name.NamespaceName != "" ||
+                        string.IsNullOrWhiteSpace((string)path.Attribute("d")) || ((string)path.Attribute("d")).Length > 1024 ||
+                        !Regex.IsMatch((string)path.Attribute("d"), @"^[MmLlHhVvCcSsQqTtAaZz0-9\s,.+\-]+$", RegexOptions.CultureInvariant)))
+                        throw new PluginException("plugin_icon_invalid", "The SVG icon supports 1–6 safe path elements only.");
+                    return paths.Select(path => (string)path.Attribute("d")).ToArray();
+                }
+            }
+            catch (Exception error) when (error is XmlException || error is DecoderFallbackException)
+            { throw new PluginException("plugin_icon_invalid", "The SVG icon is not valid UTF-8 XML."); }
+        }
+
         public static PluginManifestV1 ParseManifest(string json)
         {
             PluginManifestV1 manifest;
@@ -73,6 +110,9 @@ namespace RNAssistant.Core.Storage
                 manifest.Files == null || manifest.Files.Length == 0 || manifest.Files.Length > MaximumFiles ||
                 manifest.Files.Any(file => !ValidPath(file)) || manifest.Files.Distinct(StringComparer.OrdinalIgnoreCase).Count() != manifest.Files.Length ||
                 !manifest.Files.Contains("plugin.json") || !manifest.Files.Contains(manifest.Entry) || !manifest.Entry.EndsWith(".html", StringComparison.Ordinal) ||
+                manifest.Icon != null && !(IconIsSvgPath(manifest.Icon)
+                    ? ValidPath(manifest.Icon) && manifest.Files.Contains(manifest.Icon)
+                    : Regex.IsMatch(manifest.Icon, "^[A-Za-z][A-Za-z0-9_-]{0,63}$", RegexOptions.CultureInvariant)) ||
                 manifest.Capabilities == null || manifest.Capabilities.Any(value => value != "project.read" && value != "project.write") ||
                 manifest.Commands == null || manifest.Commands.Length > 32 || manifest.Vendors == null || manifest.Vendors.Length > 32)
                 throw new PluginException("plugin_manifest_invalid", "Invalid or unsupported plugin manifest/protocol.");

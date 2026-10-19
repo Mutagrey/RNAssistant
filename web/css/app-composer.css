@@ -439,11 +439,11 @@
   box-sizing: border-box;
   max-height: min(380px, 58vh);
   overflow: auto;
-  border: 1px solid #dce1e8;
-  border-radius: 12px;
+  border: 1px solid var(--line-strong, #dce1e8);
+  border-radius: 9px;
   padding: 5px;
-  background: #fff;
-  box-shadow: 0 16px 38px rgba(16, 24, 40, .18);
+  background: var(--surface, #fff);
+  box-shadow: var(--shadow, 0 16px 38px rgba(16, 24, 40, .18));
 }
 
 .composer-add-picker { flex: 0 0 auto; }
@@ -476,15 +476,15 @@
 .composer-add-menu {
   right: auto;
   left: 0;
-  bottom: calc(100% + 10px);
-  width: min(320px, calc(100vw - 40px));
+  bottom: calc(100% + 6px);
+  width: min(260px, calc(100vw - 24px));
   border-color: var(--composer-divider);
-  border-radius: 22px;
-  padding: 8px;
+  border-radius: 9px;
+  padding: 5px;
 }
 
 .composer-model-menu {
-  width: min(390px, calc(100vw - 28px));
+  width: min(300px, calc(100vw - 28px));
 }
 
 .composer-picker-item {
@@ -510,13 +510,13 @@
 
 .composer-menu-action {
   display: flex;
-  gap: 12px;
+  gap: 9px;
   align-items: center;
   justify-content: flex-start;
-  min-height: 52px;
-  border-radius: 14px;
+  min-height: 36px;
+  border-radius: 5px;
   padding: 8px 10px;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: var(--label-font-weight);
   line-height: 1.4;
 }
@@ -527,20 +527,18 @@
 
 .composer-menu-icon {
   display: grid;
-  flex: 0 0 34px;
-  width: 34px;
-  height: 34px;
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
   place-items: center;
-  border-radius: 50%;
-  background: rgba(125, 135, 150, .12);
-  color: var(--composer-text);
+  color: currentColor;
 }
 
 .composer-menu-icon svg,
 .composer-menu-check {
   display: block;
-  width: 19px;
-  height: 19px;
+  width: 16px;
+  height: 16px;
   fill: none;
   stroke: currentColor;
   stroke-width: 1.65;

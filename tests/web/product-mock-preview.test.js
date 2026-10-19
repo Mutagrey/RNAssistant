@@ -72,6 +72,16 @@ async function serve() {
     assert.equal(await normal.locator("#toggleChatInspectorButton svg").count(), 1);
     assert.equal(await normal.locator("#productMobileMenuButton").isVisible(), true,
       "the central heading keeps its navigation button at wide widths");
+    assert.ok(await normal.locator('#chatForm').evaluate(node => node.getBoundingClientRect().height) < 140,
+      'the composer keeps its former two-line height');
+    await normal.locator('#composerAddButton').click();
+    assert.deepEqual(await normal.locator('#composerAddMenu .composer-menu-label').allTextContents(),
+      ['Файл с компьютера', 'Выделение из Office', 'Материал чата', 'Планирование', 'Сжать контекст']);
+    assert.equal(await normal.locator('#composerAddMenu').evaluate(node => getComputedStyle(node).borderRadius), '9px',
+      'composer action menu uses the demo shape');
+    await normal.locator('#composerOpenMaterialsButton').click();
+    assert.equal(await normal.locator('#tab-artifacts').evaluate(node => node.classList.contains('active')), true);
+    await normal.locator('.section-rail [data-section="chat"]').click();
     const chatHeaderInsets = () => normal.evaluate(() => {
       const rect = selector => document.querySelector(selector).getBoundingClientRect();
       const header = rect("#chatDropZone .chatbar"), left = rect("#productMobileMenuButton"),
@@ -128,7 +138,18 @@ async function serve() {
     assert.equal(progress.filter(item => item.phase === "streaming").length, 2);
     assert.equal(await normal.locator("#chatInput").inputValue(), "");
     await normal.locator('.section-rail [data-section="library"]').click();
+    assert.deepEqual(await normal.evaluate(() => ['common.resources_read', 'common.html_workspace_write_file',
+      'common.plan_doc_save', 'excel.inspect'].map(id => RNAssistantLibraryGroups.category(id).title)),
+      ['Ресурсы', 'HTML', 'Планы', 'Excel']);
+    assert.equal(await normal.locator('#instructionsList [data-tree-key="library:skills:excel"]').count(), 1,
+      "skills use the shared Excel namespace group");
+    assert.equal(await normal.locator('#instructionsList [data-tree-key="library:tools:excel"]').count(), 1,
+      "tools use the shared Excel namespace group");
     await normal.locator('#instructionsList [data-tree-key="skill:0"]').click();
+    assert.equal(await normal.evaluate(() => {
+      const box = document.querySelector('#instructionsList [data-tree-key="skill:0"] .navigation-tree-icon svg').getBBox();
+      return box.x >= 0 && box.y >= 0 && box.x + box.width <= 24 && box.y + box.height <= 24;
+    }), true, "skill icon stays inside the shared 24px viewBox");
     assert.match(await normal.locator('#instructionsList [data-tree-key="skill:0"]').textContent(), /Анализ продаж/);
     assert.equal(await normal.locator("#skillTitle").textContent(), "Анализ продаж");
     async function libraryEdges() {
@@ -341,6 +362,26 @@ async function serve() {
     });
     assert.deepEqual(mockProjectCycle, { disabled: null, unpublishedProject: null,
       reopened: "Управленческая отчётность", count: 3 });
+    await normal.locator('#pluginAdd').click();
+    await normal.locator('#pluginCreateForm').waitFor({ state: 'visible' });
+    await normal.locator('#pluginName').fill('Сводка продаж');
+    await normal.locator('#pluginRoot').fill('C:\\Projects\\SalesPlugin');
+    await normal.locator('#pluginIconDescription').fill('Три растущих столбца');
+    await normal.locator('#pluginCreateSubmit').click();
+    await normal.locator('#pluginChatMessages').getByText(/запрос на исходники и SVG-иконку принят/).waitFor();
+    await normal.locator('#pluginCheck').click();
+    const drawnIcons = await normal.evaluate(() => send('getPluginIcons', {}));
+    assert.equal(drawnIcons.items.length, 1, 'preview saves a drawing after package checking');
+    await normal.locator('#pluginPreview').click();
+    await normal.frameLocator('#pluginPreviewMount iframe').getByRole('heading', { name: 'Сводка продаж' }).waitFor();
+    await normal.locator('#pluginApply').click();
+    assert.equal(await normal.locator('#pluginRail [data-plugin-id="preview-plugin-1"] svg path').count(), 1,
+      'the simulated publication displays its vector icon');
+    await normal.evaluate(id => send('deletePluginIcon', { id }), drawnIcons.items[0].id);
+    assert.equal(await normal.locator('#pluginRail [data-plugin-id="preview-plugin-1"] svg path').count(), 1,
+      'removing a saved icon leaves the plugin drawing intact');
+    assert.equal(await normal.locator('#pluginRail [data-plugin-id="data-templates"] svg path').first().getAttribute('d'),
+      'M3 3v18h18M7 16v-5M12 16V7M17 16V4', 'Data Templates retains its original glyph');
     assert.deepEqual(errors, []);
     await normal.close();
 

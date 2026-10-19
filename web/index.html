@@ -198,16 +198,21 @@
                 <div class="composer-picker-menu composer-add-menu" id="composerAddMenu">
                   <button type="button" class="composer-picker-item composer-menu-action" id="attachFileButton">
                     <span class="composer-menu-icon"><svg data-rna-icon="paperclip" viewBox="0 0 24 24" aria-hidden="true"></svg></span>
-                    <span class="composer-menu-label">Прикрепить файлы</span>
+                    <span class="composer-menu-label">Файл с компьютера</span>
                   </button>
                   <button type="button" class="composer-picker-item composer-menu-action" id="addSelectionContextButton" title="Добавить выделение из документа в контекст чата">
-                    <span class="composer-menu-icon"><svg data-rna-icon="selectionAdd" viewBox="0 0 24 24" aria-hidden="true"></svg></span>
-                    <span class="composer-menu-label">Выделение в контекст</span>
+                    <span class="composer-menu-icon"><svg data-rna-icon="selection" viewBox="0 0 24 24" aria-hidden="true"></svg></span>
+                    <span class="composer-menu-label">Выделение из Office</span>
                   </button>
+                  <button type="button" class="composer-picker-item composer-menu-action" id="composerOpenMaterialsButton">
+                    <span class="composer-menu-icon"><svg data-rna-icon="file" viewBox="0 0 24 24" aria-hidden="true"></svg></span>
+                    <span class="composer-menu-label">Материал чата</span>
+                  </button>
+                  <hr>
                   <div id="chatModeMenu" role="group" aria-label="Планирование">
                     <button type="button" class="composer-picker-item composer-menu-action" id="chatPlanButton" data-mode="plan" aria-pressed="false" title="Исследование и план без исполнения. Режим действует до отключения.">
-                      <span class="composer-menu-icon"><svg data-rna-icon="planMode" viewBox="0 0 24 24" aria-hidden="true"></svg></span>
-                      <span class="composer-menu-label">Режим планирования</span>
+                      <span class="composer-menu-icon"><svg data-rna-icon="layers" viewBox="0 0 24 24" aria-hidden="true"></svg></span>
+                      <span class="composer-menu-label">Планирование</span>
                       <svg data-rna-icon="check" class="composer-menu-check" viewBox="0 0 24 24" aria-hidden="true"></svg>
                     </button>
                   </div>
@@ -222,7 +227,6 @@
             <div class="composer-actions">
               <details class="composer-picker composer-model-picker" id="chatModelPicker">
                 <summary class="composer-picker-trigger" id="chatModelButton" title="Модель чата" aria-label="Модель чата">
-                  <span class="composer-picker-trigger-icon model" aria-hidden="true">✦</span>
                   <span class="composer-picker-trigger-label" id="chatModelButtonLabel">Модель</span>
                   <svg data-rna-icon="down" class="composer-picker-trigger-caret" viewBox="0 0 16 16" aria-hidden="true"></svg>
                 </summary>
@@ -381,7 +385,7 @@
           </aside>
           <div class="splitter" role="separator" aria-orientation="vertical" aria-label="Изменить ширину дерева проектов"></div>
           <div class="chat-main project-chat-main">
-            <div class="chatbar"><div class="chat-title-block"><span id="projectChatContext">Проект не выбран</span><strong id="projectChatTitle">Чат проекта</strong></div><button type="button" class="icon-btn" id="projectChatOpenData" title="Открыть Данные и шаблоны" aria-label="Открыть Данные и шаблоны"><svg data-rna-icon="chart" viewBox="0 0 24 24" aria-hidden="true"></svg></button></div>
+            <div class="chatbar"><div class="chat-title-block"><span id="projectChatContext">Проект не выбран</span><strong id="projectChatTitle">Чат проекта</strong></div><button type="button" class="icon-btn" id="projectChatOpenData" title="Открыть Данные и шаблоны" aria-label="Открыть Данные и шаблоны"><svg data-rna-icon="dataTemplates" viewBox="0 0 24 24" aria-hidden="true"></svg></button></div>
             <div class="project-chat-notice" id="projectChatNotice" role="status" aria-live="polite"></div>
             <div class="chat-scroll-region"><div class="messages" id="projectChatMessages" role="region" aria-label="Сообщения чата проекта" tabindex="0"></div></div>
             <div class="project-chat-control" id="projectChatControl" hidden><pre id="projectChatPending"></pre><button type="button" id="projectChatApprove">Разрешить</button><button type="button" id="projectChatReject">Отклонить</button></div>
@@ -582,13 +586,30 @@
         <div class="plugin-shell">
           <p class="plugin-status" id="pluginStatus" role="status"></p>
           <div class="plugin-manager" id="pluginManager">
-            <h2>Новый плагин</h2><p>Опишите задачу и выберите папку исходников. Чат поможет изменить приложение; проверенную версию можно применить без пересборки.</p>
-            <form id="pluginCreateForm"><label class="plugin-checkbox"><input type="checkbox" id="pluginConnect">Подключить существующую папку с plugin.json</label>
-              <label>Название<input id="pluginName" maxlength="120" required placeholder="Мой плагин"></label>
-              <label>Папка исходников<input id="pluginRoot" required placeholder="C:\Projects\MyPlugin"></label>
-              <label>Задача<textarea id="pluginTask" rows="4" maxlength="8000" placeholder="Что должно делать приложение"></textarea></label>
-              <button type="submit">Создать / подключить</button></form>
-            <details><summary>Библиотеки (vendors)</summary><p>Локальные пакеты: %AppData%/RNAssistant/vendors/&lt;id&gt;/&lt;version&gt;/vendor.json</p>
+            <div class="plugin-create-heading"><span class="plugin-create-mark" aria-hidden="true"><svg data-rna-icon="puzzle" viewBox="0 0 24 24"></svg></span><div><p class="plugin-create-eyebrow">Разработка</p><h2>Новый плагин</h2><p>Опишите приложение. Чат создаст исходники и нарисует SVG-иконку по вашему тексту.</p></div></div>
+            <form id="pluginCreateForm">
+              <div class="plugin-create-grid">
+                <div class="plugin-create-main" id="pluginNewFields">
+                  <label>Название<input id="pluginName" maxlength="120" required placeholder="Например, Сводка продаж" autocomplete="off"></label>
+                  <label>Задача<textarea id="pluginTask" rows="5" maxlength="8000" placeholder="Какие данные обрабатывать и что показывать пользователю"></textarea></label>
+                  <fieldset class="plugin-icon-picker" id="pluginIconPicker"><legend>Иконка</legend>
+                    <div class="plugin-icon-choices" id="pluginBuiltinIcons"></div>
+                    <div class="plugin-icon-saved-heading"><strong>Сохранённые SVG</strong><span>Пополняются после проверки плагинов</span></div>
+                    <div class="plugin-icon-choices" id="pluginSavedIcons"></div>
+                    <label id="pluginIconBriefField">Иконка по описанию<textarea id="pluginIconDescription" rows="3" maxlength="500" placeholder="Например, таблица с восходящей линией и одной выделенной ячейкой"></textarea><small>Модель нарисует SVG по тексту. Генерация изображений не нужна.</small></label>
+                    <details class="plugin-icon-import"><summary>Добавить готовый SVG</summary><label>Название<input id="pluginIconImportName" maxlength="120" placeholder="Например, Отчёт"></label><label>SVG-код<textarea id="pluginIconImportSvg" rows="3" maxlength="4096" placeholder="&lt;svg viewBox=&quot;0 0 24 24&quot;&gt;…&lt;/svg&gt;"></textarea></label><button type="button" id="pluginIconImportButton">Сохранить в библиотеку</button></details>
+                  </fieldset>
+                </div>
+                <div class="plugin-create-side">
+                  <label>Папка исходников<input id="pluginRoot" required placeholder="C:\Projects\MyPlugin" autocomplete="off"><small>Для нового плагина укажите ещё не существующую папку.</small></label>
+                  <div class="plugin-icon-note"><span aria-hidden="true"><svg data-rna-icon="puzzle" viewBox="0 0 24 24"></svg></span><p><strong>Значок приложения</strong><br>Выбранный значок попадёт в исходники. Новый SVG сохранится в библиотеке после проверки.</p></div>
+                  <label class="plugin-checkbox"><input type="checkbox" id="pluginConnect">Подключить папку с plugin.json</label>
+                  <p class="plugin-mode-hint" id="pluginModeHint">Проверка и публикация доступны в разделе «Разработка».</p>
+                </div>
+              </div>
+              <div class="plugin-create-actions"><button class="button primary" id="pluginCreateSubmit" type="submit">Создать плагин</button></div>
+            </form>
+            <details class="plugin-vendors"><summary>Локальные библиотеки</summary><p>Пакеты vendors: %AppData%/RNAssistant/vendors/&lt;id&gt;/&lt;version&gt;/vendor.json</p>
               <button id="pluginVendorsRefresh" type="button">Обновить каталог</button><div id="pluginVendors"></div>
               <label>Папка готового пакета<input id="pluginVendorRoot" placeholder="C:\Packages\library"></label><button id="pluginVendorImport" type="button">Добавить пакет</button>
             </details>
@@ -1130,6 +1151,7 @@
   <script src="js/app-core.js?v=bridge-contract-20261015-1"></script>
   <script src="js/app-icons.js?v=shared-icons-20261019-1"></script>
   <script src="js/app-navigation-tree.js?v=shared-tree-20261018-1"></script>
+  <script src="js/app-library-groups.js"></script>
   <script src="js/app-action-menu.js?v=shared-action-menu-20261019-1"></script>
   <script src="js/app-utils.js?v=run-view-state-20260830-1"></script>
   <script src="js/app-run-view-state.js?v=run-view-contract-20261014-1"></script>

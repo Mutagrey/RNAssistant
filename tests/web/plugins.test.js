@@ -64,15 +64,19 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
     assert.deepEqual(JSON.parse(await execute(fixture('v1'),'echo','{"text":"worker"}')),{text:'worker v1'});
     const page=await context.newPage();page.on('pageerror',error=>errors.push(error.message));
     await page.goto('file://'+path.join(web,'index.html'));assert.equal(await page.title(),'RN Assistant');
-    let active=null,candidate=null,version=1;
+    let active=null,candidate=null,version=1,iconPrompt='',savedIcons=[];
     const item={pluginId:'example',name:'Example',sourceWorkspaceId:'source-1',sourceRoot:'C:\\Plugins\\Example',releaseId:null,enabled:false};
     await page.exposeFunction('testPluginHost',async (type,payload)=>{
       switch(type){
         case 'getPlugins':return {items:[{...item}]};
-        case 'createPlugin':assert.equal(payload.name,'Example');return {...item};
+        case 'getPluginIcons':return {items:savedIcons.slice()};
+        case 'savePluginIcon':{const saved={id:'icon-test',name:payload.name,paths:['M4 4h16v16H4Z']};savedIcons=[saved];return saved;}
+        case 'deletePluginIcon':assert.equal(payload.id,'icon-test');savedIcons=[];return {items:[]};
+        case 'createPlugin':assert.equal(payload.name,'Example');assert.equal(payload.iconDescription,'Таблица с восходящей линией');return {...item};
         case 'getPluginChat':return {messages:[{role:'assistant',text:'Исходники готовы к изменению.'}],state:{Status:'idle'}};
+        case 'submitPluginChat':iconPrompt=payload.input.Message;return {messages:[{role:'assistant',text:'SVG-иконка смоделирована.'}],state:{Status:'completed'}};
         case 'checkPlugin':candidate='candidate-'+version;return {candidateId:candidate,files:3,bytes:100};
-        case 'applyPlugin':assert.equal(payload.candidateId,candidate);active=version;item.releaseId='release-'+version;item.enabled=true;return {...item};
+        case 'applyPlugin':assert.equal(payload.candidateId,candidate);active=version;item.releaseId='release-'+version;item.enabled=true;item.icon='icon.svg';item.iconPaths=['M4 18V6h3v12M10 18v-7h3v7M16 18V4h3v14'];return {...item};
         case 'openPlugin':{const origin='https://view-'+(++sequence)+'.rnassistant-plugin.invalid';realms.set(origin,{origin,files:fixture(payload.candidateId?'preview-v'+version:'v'+active)});return {instanceId:origin,entryUrl:origin+'/index.html',releaseId:'release-'+version,preview:!!payload.candidateId};}
         case 'closePlugin':realms.delete(payload.instanceId);return {};
         case 'disablePlugin':item.enabled=false;return {...item};
@@ -80,10 +84,43 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
       }
     });
     await page.evaluate(()=>{window.send=window.testPluginHost;return RNAssistantPlugins.refresh();});
-    await page.locator('#pluginAdd').click();await page.locator('#pluginName').fill('Example');await page.locator('#pluginRoot').fill('C:\\Plugins\\Example');await page.locator('#pluginCreateForm button[type=submit]').click();
+    await page.locator('#pluginAdd').click();
+    await page.locator('#pluginCreateForm').waitFor({state:'visible'});
+    await page.waitForFunction(()=>!document.querySelector('.shell')?.classList.contains('navigation-transition'));
+    assert.ok((await page.locator('#productMobileMenuButton').boundingBox()).x<110,'shared panel toggle stays at the screen edge');
+    assert.ok((await page.locator('.plugin-create-heading').boundingBox()).x<170,'plugin form aligns to the left');
+    assert.equal(await page.locator('#pluginBuiltinIcons [data-icon-id="dataTemplates"] svg path').count(),1,'original Data Templates glyph is available');
+    await page.locator('.plugin-icon-import summary').click();
+    await page.locator('#pluginIconImportName').fill('Мой знак');
+    await page.locator('#pluginIconImportSvg').fill('<svg viewBox="0 0 24 24"><path d="M4 4h16v16H4Z"/></svg>');
+    await page.locator('#pluginIconImportButton').click();
+    await page.locator('#pluginSavedIcons [data-icon-id="icon-test"]').waitFor();
+    assert.equal(await page.locator('#pluginIconBriefField').isVisible(),false,'ready SVG disables drawing brief');
+    await page.locator('#pluginSavedIcons .plugin-icon-remove').click();
+    assert.equal(await page.locator('#pluginIconBriefField').isVisible(),true,'removing selected SVG returns to drawing mode');
+    await page.screenshot({path:path.join(captures,'plugin-create-desktop.png')});
+    await page.setViewportSize({width:390,height:844});
+    await page.waitForFunction(()=>!document.querySelector('.shell')?.classList.contains('navigation-transition'));
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'new plugin form fits narrow view');
+    await page.screenshot({path:path.join(captures,'plugin-create-narrow.png')});
+    await page.locator('#pluginCreateSubmit').scrollIntoViewIfNeeded();
+    assert.equal(await page.locator('#pluginCreateSubmit').isVisible(),true,'submit stays reachable in the narrow form');
+    await page.screenshot({path:path.join(captures,'plugin-create-narrow-bottom.png')});
+    await page.setViewportSize({width:1280,height:800});
+    await page.locator('#pluginConnect').check();
+    assert.equal(await page.locator('#pluginNewFields').isVisible(),false,'connection hides creation-only fields');
+    assert.equal(await page.locator('#pluginCreateSubmit').textContent(),'Подключить папку');
+    await page.locator('#pluginConnect').uncheck();
+    await page.locator('#pluginName').fill('Example');await page.locator('#pluginRoot').fill('C:\\Plugins\\Example');
+    await page.locator('#pluginIconDescription').fill('Таблица с восходящей линией');
+    await page.locator('#pluginCreateForm button[type=submit]').click();
+    await page.waitForFunction(()=>document.querySelector('#pluginChatMessages')?.textContent.includes('SVG-иконка смоделирована.'));
+    assert.match(iconPrompt,/workspace\.plugin_authoring/);
+    assert.match(iconPrompt,/Таблица с восходящей линией/);
     await page.locator('#pluginCheck').click();await page.locator('#pluginPreview').click();
     await page.frameLocator('#pluginPreviewMount iframe').locator('#run').click();await page.frameLocator('#pluginPreviewMount iframe').locator('#answer').filter({hasText:'hello preview-v1'}).waitFor();
     await page.locator('#pluginApply').click();await page.locator('#pluginReopen').click();
+    assert.equal(await page.locator('#pluginRail [data-plugin-id="example"] svg path').count(),1,'published SVG icon appears in the rail');
     await page.frameLocator('#pluginPreviewMount iframe').locator('#run').click();await page.frameLocator('#pluginPreviewMount iframe').locator('#answer').filter({hasText:'hello v1'}).waitFor();
     version=2;await page.locator('#pluginCheck').click();await page.locator('#pluginApply').click();
     assert.equal(await page.frameLocator('#pluginPreviewMount iframe').locator('#answer').textContent(),'hello v1','apply preserves the pinned visible instance');

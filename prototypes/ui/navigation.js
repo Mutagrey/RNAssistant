@@ -6,7 +6,7 @@
     { id: "materials", title: "Материалы", short: "Материалы", icon: "files", route: "materials/all" },
     { id: "library", title: "Библиотека", short: "Библиотека", icon: "book", route: "library/all" },
     { id: "vba", title: "VBA", short: "VBA", icon: "code", route: "vba/code" },
-    { id: "projects", title: "Данные и шаблоны", short: "Данные", icon: "chart", route: "projects/sources" },
+    { id: "projects", title: "Данные и шаблоны", short: "Данные", icon: "dataTemplates", route: "projects/sources" },
     { id: "settings", title: "Настройки", short: "Настройки", icon: "settings", route: "settings/connection" }
   ];
   P.activeSection = function () { var group = P.state.route.split("/")[0]; return group === "chat" ? "workspace" : group; };
@@ -25,9 +25,11 @@
   P.sectionNodes = function (section) {
     var s = P.state, sub = s.route.split("/")[1];
     if (section === "library") return [
-      group("skills", "Навыки", [leaf("Анализ продаж", "library/skill", "Навык · Excel", "spark", ["all", "skill", "references"].includes(sub))]),
-      group("tools", "Инструменты", [leaf("Форматирование таблицы", "library/tool", "Excel · VBA", "code", ["tool", "schema", "implementation", "test", "docs", "manage"].includes(sub))]),
-      group("prompts", "Инструкции", [leaf("Основная инструкция", "library/prompt", "Общая инструкция агента", "book")])
+      group("skills", "Навыки", [group("skills-excel", window.RNAssistantLibraryGroups.category("excel.analysis_reporting").title,
+        [leaf("Анализ продаж", "library/skill", "Навык · Excel", "skill", ["all", "skill", "references"].includes(sub))])]),
+      group("tools", "Инструменты", [group("tools-excel", window.RNAssistantLibraryGroups.category("excel.format_range").title,
+        [leaf("Форматирование таблицы", "library/tool", "Excel · VBA", "tool", ["tool", "schema", "implementation", "test", "docs", "manage"].includes(sub))])]),
+      group("prompts", "Инструкции", [leaf("Основная инструкция", "library/prompt", "Общая инструкция агента", "prompt")])
     ];
     if (section === "vba") return [
       group("modules", "Модули", [leaf("FormatSales", "vba/code", "Стандартный модуль", "code", s.vbaModule === "FormatSales", "FormatSales")]),

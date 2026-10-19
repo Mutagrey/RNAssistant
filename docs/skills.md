@@ -324,9 +324,18 @@ empty built-ins and prevents retired `TOOL_RESULT ok=true` guidance from returni
 - Host filtering uses the selected execution endpoint, not the containing window.
 
 
+Workspace built-ins include `workspace.plugin_authoring`: it guides the source
+chat to create a path-only SVG icon from a text brief, update `plugin.json`,
+check the package and preview behavior before publication. It uses existing
+file tools; an image-generation model is not required. Plugin check/apply remain
+runtime tools with their own authority and confirmation.
+
 ## Target Skill Library UX
 
-Skills remain in Library, grouped by built-in/custom and host. They are not rows in
+Skills remain in Library, grouped first by type and then by the stable ID namespace
+or common feature family (`excel.*`, `common.resources_*`, `common.html_*`, etc.).
+Displayed group names may change without renaming callable IDs or package identities.
+They are not rows in
 the Artifact Library. Each skill row/editor shows:
 
 - stable id, name, description and applicability (`Common` or selected host);

@@ -1,6 +1,7 @@
 (function () {
   'use strict';
   var items=[],selected=null,candidate=null,view=null,chat=null,busy=false,chatBusy=false,poll=null,epoch=0;
+  var savedIcons=[],selectedIconId='draw';
   var frameReady=false,pendingNavigation=null;
   var navigation={projectName:'Проект данных',view:'sources',templateId:'',templates:[],expanded:{project:true,templates:true,dictionary:true}};
   function el(id){return document.getElementById('plugin'+id);}
@@ -72,15 +73,15 @@
       actions.forEach(function(id){toolbar.insertBefore(el(id),before);});}
   }
   async function refresh(){var result=await send('getPlugins',{});items=result.items;var rail=el('Rail');rail.replaceChildren();items.forEach(function(item){
-    var node=button('',function(){select(item.pluginId);});node.innerHTML=window.RNAssistantNavigationTree.icon(item.icon || (item.pluginId==='data-templates'?'chart':'puzzle'));node.className='rail-button';node.title=item.name;node.setAttribute('aria-label',item.name);node.dataset.pluginId=item.pluginId;node.dataset.section='plugins';rail.appendChild(node);
-  });if(result.error)status(result.error,true);return items;}
+    var node=button('',function(){select(item.pluginId);});node.innerHTML=window.RNAssistantIcons.renderPlugin(item.pluginId==='data-templates'?'dataTemplates':item.icon || 'puzzle',item.iconPaths);node.className='rail-button';node.title=item.iconError?item.name+' · '+item.iconError:item.name;node.setAttribute('aria-label',item.name);node.dataset.pluginId=item.pluginId;node.dataset.section='plugins';rail.appendChild(node);
+  });if(result.error)status(result.error,true);else if(items.some(function(item){return item.iconError;}))status('У одного из плагинов некорректная SVG-иконка. Исправьте исходник и проверьте пакет.',true);return items;}
   async function closeView(){frameReady=false;pendingNavigation=null;if(!view)return;var old=view;view=null;el('PreviewMount').replaceChildren();await send('closePlugin',{instanceId:old.instanceId});}
   async function showView(preview){await closeView();var current=epoch,opened=await send('openPlugin',{pluginId:selected.pluginId,candidateId:preview?candidate.candidateId:null});
     if(current!==epoch){await send('closePlugin',{instanceId:opened.instanceId});return;}
     view=opened;frameReady=false;if(dataPlugin())pendingNavigation={view:navigation.view,templateId:navigation.templateId};
     var frame=document.createElement('iframe');frame.title=selected.name+(preview?' — предпросмотр':'');frame.sandbox='allow-scripts allow-same-origin allow-downloads';frame.referrerPolicy='no-referrer';
     frame.src=view.entryUrl;el('PreviewMount').replaceChildren(frame);
-    status(opened.previewSimulated?'Пример: открыт Data Templates; публикация и проверка в приложении не выполнялись.':
+    status(opened.previewSimulated?'Пример: открыт демонстрационный экран; публикация и проверка в приложении не выполнялись.':
       preview?'Предпросмотр проверенного снимка. Данные подключаются к отдельному тестовому проекту.':'Работает опубликованная версия. Папка данных выбирается внутри плагина.');}
   async function select(id){switchTab('plugins');await run(async function(){epoch++;await closeView();selected=items.find(function(item){return item.pluginId===id;});candidate=null;chat=null;
     switchTab('plugins');el('Manager').hidden=true;el('Workbench').hidden=false;el('Title').textContent=dataPlugin()?navigation.projectName:selected.name;el('Source').textContent=selected.sourceRoot;el('ChatMessages').replaceChildren();
@@ -104,13 +105,48 @@
   async function readChat(){if(!selected)return;var id=selected.pluginId,value=await send('getPluginChat',{pluginId:id});if(selected&&id===selected.pluginId){chat=value;renderChat();}}
   async function chatAction(action){if(chatBusy||!selected)return;chatBusy=true;controls();var id=selected.pluginId;poll=setInterval(function(){readChat().catch(function(error){el('ChatStatus').textContent=error.message;});},1200);
     try{var result=await action(id);if(selected&&selected.pluginId===id){chat=result;renderChat();}}catch(error){el('ChatStatus').textContent=error.message;}finally{clearInterval(poll);chatBusy=false;controls();}}
+  function iconOption(id,name,paths){
+    var choice=button('',function(){selectedIconId=id;renderIconChoices();});
+    choice.className='plugin-icon-option';choice.dataset.iconId=id;choice.setAttribute('aria-label',name);
+    choice.setAttribute('aria-pressed',String(selectedIconId===id));choice.title=name;
+    choice.innerHTML=window.RNAssistantIcons.renderPlugin(id==='draw'?'spark':id,paths);
+    var caption=document.createElement('span');caption.textContent=name;choice.appendChild(caption);return choice;
+  }
+  function renderIconChoices(){
+    var builtins=el('BuiltinIcons'),saved=el('SavedIcons');builtins.replaceChildren();saved.replaceChildren();
+    builtins.appendChild(iconOption('draw','Нарисовать'));
+    window.RNAssistantIcons.pluginChoices.forEach(function(choice){builtins.appendChild(iconOption(choice[0],choice[1]));});
+    if(!savedIcons.length){var empty=document.createElement('p');empty.className='plugin-icon-empty';empty.textContent='Пока нет сохранённых иконок.';saved.appendChild(empty);}
+    savedIcons.forEach(function(item){
+      var card=document.createElement('div');card.className='plugin-icon-saved-card';card.appendChild(iconOption(item.id,item.name,item.paths));
+      var remove=button('×',function(){run(async function(){var catalog=await send('deletePluginIcon',{id:item.id});savedIcons=catalog.items;
+        if(selectedIconId===item.id)selectedIconId='draw';renderIconChoices();status('Иконка удалена из библиотеки. Плагины и их исходники не изменены.');});});
+      remove.className='plugin-icon-remove';remove.title='Удалить '+item.name;remove.setAttribute('aria-label','Удалить '+item.name);card.appendChild(remove);saved.appendChild(card);
+    });
+    el('IconBriefField').hidden=selectedIconId!=='draw';el('IconDescription').disabled=selectedIconId!=='draw';
+  }
+  async function refreshIcons(){var catalog=await send('getPluginIcons',{});savedIcons=catalog.items||[];renderIconChoices();}
   function bind(){
     el('Project').onclick=function(){var frame=el('PreviewMount').querySelector('iframe');if(frame&&frame.contentWindow)frame.contentWindow.postMessage({type:'rna.dataTemplates.project'},'*');};
     el('NavigationProject').onclick=function(){el('Project').click();};
     el('NavigationSearch').oninput=renderNavigation;
-    el('Add').onclick=function(){switchTab('plugins');el('Manager').hidden=false;el('Workbench').hidden=true;el('Name').focus();};
-    el('CreateForm').onsubmit=function(event){event.preventDefault();run(async function(){var created=await send(el('Connect').checked?'connectPlugin':'createPlugin',{name:el('Name').value,rootPath:el('Root').value,description:el('Task').value});await refresh();status('Исходники подключены.');busy=false;await select(created.pluginId);el('Develop').checked=true;el('Develop').onchange();if(!el('Connect').checked && el('Task').value.trim()){el('Message').value='Создай плагин по задаче: '+el('Task').value.trim()+'. Начни с README.md и plugin.json. После изменений проверь пакет; применяй только после подтверждения.';el('ChatForm').requestSubmit();}});};
-    el('Connect').onchange=function(){el('Name').required=!this.checked;el('Task').disabled=this.checked;};
+    el('Add').onclick=function(){switchTab('plugins');el('Manager').hidden=false;el('Workbench').hidden=true;
+      selectedIconId='draw';renderIconChoices();refreshIcons().catch(function(error){status(error.message,true);});el('Name').focus();};
+    el('IconImportButton').onclick=function(){run(async function(){var item=await send('savePluginIcon',{name:el('IconImportName').value.trim(),svg:el('IconImportSvg').value.trim()});
+      await refreshIcons();selectedIconId=item.id;renderIconChoices();el('IconImportName').value='';el('IconImportSvg').value='';status('SVG-иконка сохранена.');});};
+    el('CreateForm').onsubmit=function(event){event.preventDefault();run(async function(){var connecting=el('Connect').checked,task=el('Task').value.trim(),iconBrief=el('IconDescription').value.trim();
+      if(selectedIconId!=='draw')iconBrief='';
+      var created=await send(connecting?'connectPlugin':'createPlugin',{name:el('Name').value,rootPath:el('Root').value,description:task,iconDescription:iconBrief,iconId:selectedIconId});
+      await refresh();status(connecting?'Исходники подключены.':'Исходники созданы.');busy=false;await select(created.pluginId);el('Develop').checked=true;el('Develop').onchange();
+      if(!connecting&&(task||iconBrief)){var message='Загрузи навыки workspace.plugin_authoring и workspace.files. Прочитай README.md и plugin.json. ';
+        if(task)message+='Создай плагин по задаче: '+task+'. ';
+        if(iconBrief)message+='Нарисуй SVG-иконку по описанию: '+iconBrief+'. Создай icon.svg, добавь его в files и укажи в plugin.json. ';
+        message+='После изменений проверь пакет и предпросмотр; применяй только после подтверждения.';
+        el('Message').value=message;el('ChatForm').requestSubmit();}
+    });};
+    el('Connect').onchange=function(){var connecting=this.checked;el('NewFields').hidden=connecting;el('Name').required=!connecting;el('Task').disabled=connecting;el('IconDescription').disabled=connecting||selectedIconId!=='draw';
+      el('CreateSubmit').textContent=connecting?'Подключить папку':'Создать плагин';el('ModeHint').textContent=connecting?
+        'Будет подключён существующий plugin.json без изменения исходников.':'Проверка и публикация доступны в разделе «Разработка».';};
     el('Check').onclick=function(){run(async function(){candidate=await send('checkPlugin',{pluginId:selected.pluginId});status(candidate.previewSimulated?
       'Пример: проверка смоделирована. Можно открыть пример и пройти действия интерфейса.':
       'Состав и зависимости проверены: '+candidate.files+' файлов. Можно открыть предпросмотр или применить.');});};

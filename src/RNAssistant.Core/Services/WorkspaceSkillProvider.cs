@@ -7,6 +7,7 @@ namespace RNAssistant.Core.Services
     {
         public const string FilesId = "workspace.files";
         public const string WebId = "workspace.web_verify_repair";
+        public const string PluginId = "workspace.plugin_authoring";
 
         public static IReadOnlyList<SkillDefinition> GetSkills()
         {
@@ -32,7 +33,15 @@ Use for a local HTML/CSS/JS application when web.verify and file mutation tools 
 2. For an existing broken app, run web.verify before editing to obtain the failing checks. For a new app, create its files first, then run web.verify with its entryPath.
 3. Inspect the latest verification result: asset/runtime errors and failed functional checks identify behavior to repair. Read the relevant file, fix the cause, then verify again. Do not repeat an unchanged failing verification or weaken the accepted checks. A historical passing snapshot does not verify later edits.
 4. Once the current snapshot passes the accepted checks, reuse verified current after-state. If RUNTIME_CONTEXT.readAcceptance is supplied, read its required final files; a later repair requires fresh verification and fresh reads of changed files.
-5. Finish only when both behavioral checks and current source-read requirements are satisfied. Report an unavailable browser or an unmet requirement explicitly; do not claim a visual review or broader testing than web.verify actually performed.")
+5. Finish only when both behavioral checks and current source-read requirements are satisfied. Report an unavailable browser or an unmet requirement explicitly; do not claim a visual review or broader testing than web.verify actually performed."),
+                Skill(PluginId, "Plugin authoring and SVG icon",
+                    "Build a local plugin source package and draw its icon from a text brief without an image-generation model.",
+@"# Plugin authoring and SVG icon
+Use only in the source workspace of a plugin with plugin.json. Load workspace.files for exact source reads and mutations. Read README.md, plugin.json and the relevant current files before editing. Preserve existing behavior and declarations while changing the requested feature.
+
+For an icon brief, draw the icon yourself as SVG text. Create icon.svg with viewBox=""0 0 24 24"" and one to six path elements with d attributes. Use clean single-color outlines; the host supplies currentColor, stroke width, caps and joins. Do not add scripts, styles, text, images, references, external URLs, masks, gradients, event handlers or extra attributes. Keep all geometry within 0–24 and check that it remains legible at 16 px. No image-generation model or network call is needed. Set plugin.json icon to icon.svg and include icon.svg in files; update an existing icon through an exact source read and file patch/replace. The default puzzle icon remains until a validated SVG is published.
+
+After source edits, call plugins.check when available. A successful check proves package structure and safe icon syntax, not application behavior. Open the checked preview and verify the requested UI or command behavior. Apply only after the intended publication is confirmed; then read the active state. If the icon validator rejects the file, repair the SVG source and check again. Never replace an existing plugin's source merely to change its icon.")
             };
         }
 

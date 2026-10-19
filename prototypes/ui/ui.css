@@ -142,7 +142,7 @@ body.resizing-panels, body.resizing-panels * { cursor: col-resize !important; us
 .composer-toolbar .reasoning-toggle, .composer-toolbar .context-meter { width: 32px; height: 32px; border-radius: 50%; }
 .composer-model-actions .send-btn { margin-left: 4px; }
 .reasoning-toggle[aria-pressed="true"] { color: var(--warning); background: var(--warning-soft); }
-.context-meter svg { width: 23px; height: 23px; transform: rotate(-90deg); }
+.context-meter svg { width: 23px; height: 23px; stroke-width: 2.5; transform: rotate(-90deg); }
 .context-meter-track { stroke: var(--line-strong); }
 .context-meter-fill { stroke: var(--accent); stroke-dasharray: 100; stroke-dashoffset: var(--context-offset, 100); stroke-linecap: round; }
 .context-meter[data-known="false"] .context-meter-track { stroke-dasharray: 2 3; }

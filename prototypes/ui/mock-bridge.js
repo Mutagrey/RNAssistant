@@ -46,9 +46,26 @@
     { Id: "preview-project-clean", Title: "Проверка источников", RunStatus: "completed" }] : [];
   var projectMessages = { "preview-project-review": [], "preview-project-clean": [] };
   var projectRuns = Object.create(null), projectRequests = Object.create(null);
-  var pluginItem = { pluginId: "data-templates", name: "Данные и шаблоны", icon: "chart",
+  var pluginItem = { pluginId: "data-templates", name: "Данные и шаблоны", icon: "dataTemplates",
     sourceRoot: "Локальный демонстрационный плагин", releaseId: "preview-release-1", enabled: true,
     previewSimulated: true };
+  var extraPlugins = [], extraPluginMessages = Object.create(null), pluginCandidateOwner = null;
+  var savedPluginIcons = [], pluginIconSequence = 0;
+  function validatedPluginIconPaths(svg) {
+    if (typeof svg !== "string" || new TextEncoder().encode(svg).length > 4096) fail("SVG должен быть меньше 4 КБ.", "preview_icon_invalid");
+    var documentXml = new DOMParser().parseFromString(svg, "image/svg+xml"), root = documentXml.documentElement;
+    if (documentXml.doctype || root.localName !== "svg" || root.getAttribute("viewBox") !== "0 0 24 24" ||
+        !["", "http://www.w3.org/2000/svg"].includes(root.namespaceURI || "") ||
+        Array.from(root.attributes).some(function (attribute) { return attribute.name !== "viewBox" && attribute.name !== "xmlns"; }) ||
+        Array.from(root.childNodes).some(function (node) { return node.nodeType !== 1 && !(node.nodeType === 3 && !node.textContent.trim()); }))
+      fail("Нужен SVG 24×24 только с элементами path.", "preview_icon_invalid");
+    var paths = Array.from(root.children);
+    if (!paths.length || paths.length > 6 || paths.some(function (path) { return path.localName !== "path" || path.children.length ||
+        path.attributes.length !== 1 || path.attributes[0].name !== "d" || !path.getAttribute("d") ||
+        path.getAttribute("d").length > 1024 || !/^[MmLlHhVvCcSsQqTtAaZz0-9\s,.+\-]+$/.test(path.getAttribute("d")); }))
+      fail("Поддерживаются только 1–6 безопасных SVG path.", "preview_icon_invalid");
+    return paths.map(function (path) { return path.getAttribute("d"); });
+  }
   var pluginCandidate = null, pluginInstanceSequence = 0;
   var pluginMessages = [], pluginRun = null, pluginRequestIds = Object.create(null);
   var inboxRevision = 1, inputSequence = 0, inputReceipts = Object.create(null);
@@ -181,11 +198,13 @@
       pendingId: null, pendingTool: null, pendingArguments: null,
       messages: clone(projectMessages[chat.Id] || []) };
   }
-  function pluginChatState() {
-    return { pluginId: pluginItem.pluginId, sessionId: "preview-plugin-source-chat",
-      state: { Status: pluginRun ? "running" : "completed", RunId: pluginRun && pluginRun.runId || null,
-        Cursor: pluginRun && pluginRun.cursor || "preview-plugin-cursor", userInput: null },
-      pendingId: null, pendingTool: null, pendingArguments: null, messages: clone(pluginMessages) };
+  function pluginChatState(pluginId) {
+    var data = !pluginId || pluginId === pluginItem.pluginId, run = data ? pluginRun : null;
+    return { pluginId: pluginId || pluginItem.pluginId, sessionId: "preview-plugin-source-chat",
+      state: { Status: run ? "running" : "completed", RunId: run && run.runId || null,
+        Cursor: run && run.cursor || "preview-plugin-cursor", userInput: null },
+      pendingId: null, pendingTool: null, pendingArguments: null,
+      messages: clone(data ? pluginMessages : extraPluginMessages[pluginId] || []) };
   }
   function emit(response) { listeners.forEach(function (listener) { listener({ data: response }); }); }
   function emitChatState(chatId) {
@@ -463,7 +482,36 @@
       return { state: workspaceState(), dictionary: { file: "dictionary-1730000000000-" + "b".repeat(32) + ".json",
         format: "dictionary", sha256: await hash(dictionaryText), input: dictionaryText } };
     }
-    if (type === "getPlugins") return { items: [clone(pluginItem)] };
+    if (type === "getPlugins") return { items: clone([pluginItem].concat(extraPlugins)) };
+    if (type === "getPluginIcons") return { items: clone(savedPluginIcons) };
+    if (type === "savePluginIcon") {
+      if (!payload.name || payload.name.length > 120) fail("Укажите название и SVG-код.", "preview_icon_invalid");
+      var paths = validatedPluginIconPaths(payload.svg);
+      var existing = savedPluginIcons.find(function (item) { return item.paths.join("\n") === paths.join("\n"); });
+      if (existing) return clone(existing);
+      var added = { id: "icon-" + (++pluginIconSequence), name: payload.name, paths: paths };
+      savedPluginIcons.push(added); return clone(added);
+    }
+    if (type === "deletePluginIcon") {
+      var index = savedPluginIcons.findIndex(function (item) { return item.id === payload.id; });
+      if (index < 0) fail("Базовые иконки нельзя удалять.", "preview_icon_protected");
+      savedPluginIcons.splice(index, 1); return { items: clone(savedPluginIcons) };
+    }
+    if (type === "createPlugin" || type === "connectPlugin") {
+      if (!payload.rootPath || type === "createPlugin" && !payload.name) fail("Укажите название и папку исходников.", "preview_input_invalid");
+      var newPlugin = { pluginId: "preview-plugin-" + (extraPlugins.length + 1),
+        name: type === "createPlugin" ? payload.name : "Подключённый плагин",
+        icon: "puzzle", iconDescription: payload.iconDescription || "", sourceRoot: payload.rootPath,
+        releaseId: null, enabled: false, previewSimulated: true };
+      if (type === "createPlugin" && payload.iconId && payload.iconId !== "draw") {
+        var selectedIcon = savedPluginIcons.find(function (item) { return item.id === payload.iconId; });
+        if (payload.iconId.startsWith("icon-") && !selectedIcon) fail("Сохранённая иконка недоступна.", "preview_icon_missing");
+        newPlugin.icon = selectedIcon ? "icon.svg" : payload.iconId;
+        if (selectedIcon) newPlugin.iconPaths = selectedIcon.paths.slice();
+      }
+      extraPlugins.push(newPlugin); extraPluginMessages[newPlugin.pluginId] = [];
+      return clone(newPlugin);
+    }
     if (type === "getProjectChats") return { project: projectSelected && pluginItem.enabled ? clone(dataProject) : null,
       chats: projectSelected && pluginItem.enabled ? clone(projectChats) : [] };
     if (type === "getProjectChat") return projectChatState(payload);
@@ -517,39 +565,60 @@
       requireProjectChat(payload); fail("В этом примере нет ожидающего подтверждения.", "preview_run_changed");
     }
     if (type === "checkPlugin") {
-      if (payload.pluginId !== pluginItem.pluginId) fail("Плагин примера отсутствует.");
+      if (![pluginItem].concat(extraPlugins).some(function (item) { return item.pluginId === payload.pluginId; })) fail("Плагин примера отсутствует.");
       pluginCandidate = "preview-candidate-" + (++pluginInstanceSequence);
-      return { pluginId: pluginItem.pluginId, candidateId: pluginCandidate, files: 1, bytes: 0,
+      pluginCandidateOwner = payload.pluginId;
+      var checkedIcon = extraPlugins.find(function (item) { return item.pluginId === payload.pluginId; });
+      if (checkedIcon && checkedIcon.iconDescription && checkedIcon.icon === "puzzle") {
+        var drawnPaths = ["M4 18V7h4v11M10 18v-7h4v7M16 18V4h4v14"];
+        if (!savedPluginIcons.some(function (item) { return item.paths.join("\n") === drawnPaths.join("\n"); }))
+          savedPluginIcons.push({ id: "icon-" + (++pluginIconSequence), name: checkedIcon.name, paths: drawnPaths });
+      }
+      return { pluginId: payload.pluginId, candidateId: pluginCandidate, files: 1, bytes: 0,
         checks: ["preview-only"], previewSimulated: true };
     }
     if (type === "applyPlugin") {
-      if (payload.pluginId !== pluginItem.pluginId || payload.candidateId !== pluginCandidate)
+      if (payload.pluginId !== pluginCandidateOwner || payload.candidateId !== pluginCandidate)
         fail("Снимок примера изменился.", "preview_candidate_changed");
-      pluginItem.enabled = true; pluginItem.releaseId = "preview-release-" + (++pluginInstanceSequence);
-      projectSelected = false;
-      pluginCandidate = null; return Object.assign(clone(pluginItem), { previewSimulated: true });
+      var applying = [pluginItem].concat(extraPlugins).find(function (item) { return item.pluginId === payload.pluginId; });
+      applying.enabled = true; applying.releaseId = "preview-release-" + (++pluginInstanceSequence);
+      if (applying !== pluginItem && applying.iconDescription) {
+        applying.icon = "icon.svg";
+        applying.iconPaths = ["M4 18V7h4v11M10 18v-7h4v7M16 18V4h4v14"];
+      }
+      if (applying === pluginItem) projectSelected = false;
+      pluginCandidate = null; pluginCandidateOwner = null; return clone(applying);
     }
     if (type === "disablePlugin") {
-      if (payload.pluginId !== pluginItem.pluginId) fail("Плагин примера отсутствует.");
-      pluginItem.enabled = false; pluginCandidate = null; projectSelected = false;
-      return Object.assign(clone(pluginItem), { previewSimulated: true });
+      var disabling = [pluginItem].concat(extraPlugins).find(function (item) { return item.pluginId === payload.pluginId; });
+      if (!disabling) fail("Плагин примера отсутствует.");
+      disabling.enabled = false; pluginCandidate = null; pluginCandidateOwner = null;
+      if (disabling === pluginItem) projectSelected = false;
+      return clone(disabling);
     }
     if (type === "openPlugin") {
-      if (payload.pluginId !== pluginItem.pluginId || payload.candidateId && payload.candidateId !== pluginCandidate ||
-          !payload.candidateId && !pluginItem.enabled) fail("Плагин примера недоступен.", "preview_plugin_changed");
-      if (!payload.candidateId) projectSelected = !!dataProject;
-      return { instanceId: "preview-data-templates-" + (++pluginInstanceSequence), pluginId: pluginItem.pluginId,
-        releaseId: payload.candidateId || pluginItem.releaseId,
+      var opening = [pluginItem].concat(extraPlugins).find(function (item) { return item.pluginId === payload.pluginId; });
+      if (!opening || payload.candidateId && (payload.candidateId !== pluginCandidate || payload.pluginId !== pluginCandidateOwner) ||
+          !payload.candidateId && !opening.enabled) fail("Плагин примера недоступен.", "preview_plugin_changed");
+      if (opening === pluginItem && !payload.candidateId) projectSelected = !!dataProject;
+      return { instanceId: "preview-plugin-instance-" + (++pluginInstanceSequence), pluginId: opening.pluginId,
+        releaseId: payload.candidateId || opening.releaseId,
         preview: !!payload.candidateId, previewSimulated: true,
-        entryUrl: "/preview/web/data-templates/index.html" };
+        entryUrl: opening === pluginItem ? "/preview/web/data-templates/index.html" : "/preview/mock-plugin.html?name=" + encodeURIComponent(opening.name) };
     }
     if (type === "closePlugin") return {};
-    if (type === "getPluginChat") return pluginChatState();
+    if (type === "getPluginChat") return pluginChatState(payload.pluginId);
     if (type === "submitPluginChat") {
-      if (payload.pluginId !== pluginItem.pluginId) fail("Плагин примера отсутствует.");
+      var createdPlugin = extraPlugins.find(function (item) { return item.pluginId === payload.pluginId; });
+      if (payload.pluginId !== pluginItem.pluginId && !createdPlugin) fail("Плагин примера отсутствует.");
       var pluginInput = payload.input || {}, requestId = pluginInput.RequestId || pluginInput.requestId;
       var pluginText = pluginInput.Message || pluginInput.message;
       if (!requestId || typeof pluginText !== "string" || !pluginText.trim()) fail("Сообщение примера неверно.", "preview_input_invalid");
+      if (createdPlugin) {
+        extraPluginMessages[createdPlugin.pluginId].push({ role: "user", text: pluginText },
+          { role: "assistant", text: "Пример: запрос на исходники и SVG-иконку принят. Модель и запись файлов здесь не запускаются." });
+        return pluginChatState(createdPlugin.pluginId);
+      }
       if (pluginRequestIds[requestId] && pluginRequestIds[requestId] !== pluginText) fail("ID сообщения уже занят.", "preview_input_invalid");
       if (!pluginRequestIds[requestId]) {
         if (pluginRun) fail("Дождитесь ответа примера.", "preview_run_busy");
@@ -563,12 +632,12 @@
           pluginRun = null;
         }
       }
-      return pluginChatState();
+      return pluginChatState(payload.pluginId);
     }
     if (type === "cancelPluginChat") {
       if (!pluginRun || payload.runId !== pluginRun.runId || payload.cursor !== pluginRun.cursor)
         fail("Запуск примера изменился.", "preview_run_changed");
-      pluginRun = null; return pluginChatState();
+      pluginRun = null; return pluginChatState(payload.pluginId);
     }
     if (type === "resolvePluginChat") fail("В примере нет ожидающего подтверждения.", "preview_run_changed");
     if (type === "getPluginVendors") return { items: [] };

@@ -213,11 +213,28 @@
   }
 
   function instructionTreeGroup(key, title, rows, activeKey) {
+    var searching = !!($("skillSearchInput") && $("skillSearchInput").value.trim());
     return {
       key: key, kind: "group", title: title,
-      expanded: !(state.collapsedResourceGroups && state.collapsedResourceGroups[key]),
+      expanded: searching || !(state.collapsedResourceGroups && state.collapsedResourceGroups[key]),
       children: rows.map(function (row) { return instructionTreeNode(row, activeKey); })
     };
+  }
+
+  function instructionTreeCategories(kind, rows, activeKey) {
+    var groups = Object.create(null);
+    rows.forEach(function (row) {
+      var item = row.value || {};
+      var category = window.RNAssistantLibraryGroups.category(item.Id, item.Host);
+      if (!groups[category.key]) groups[category.key] = { title: category.title, rows: [] };
+      groups[category.key].rows.push(row);
+    });
+    return Object.keys(groups).sort(function (left, right) {
+      return groups[left].title.localeCompare(groups[right].title, "ru");
+    }).map(function (categoryKey) {
+      return instructionTreeGroup("library:" + kind + ":" + categoryKey,
+        groups[categoryKey].title, groups[categoryKey].rows, activeKey);
+    });
   }
 
   function renderInstructions() {
@@ -238,9 +255,14 @@
     var prompts = rows.filter(function (row) { return row.kind === "prompt"; });
     var skills = rows.filter(function (row) { return row.kind === "skill"; });
     var tools = rows.filter(function (row) { return row.kind === "tool"; });
+    var searching = !!($("skillSearchInput") && $("skillSearchInput").value.trim());
     var nodes = [];
-    if (skills.length) nodes.push(instructionTreeGroup("library:skills", "Навыки", skills, key));
-    if (tools.length) nodes.push(instructionTreeGroup("library:tools", "Инструменты", tools, key));
+    if (skills.length) nodes.push({ key: "library:skills", kind: "group", title: "Навыки",
+      expanded: searching || !(state.collapsedResourceGroups && state.collapsedResourceGroups["library:skills"]),
+      children: instructionTreeCategories("skills", skills, key) });
+    if (tools.length) nodes.push({ key: "library:tools", kind: "group", title: "Инструменты",
+      expanded: searching || !(state.collapsedResourceGroups && state.collapsedResourceGroups["library:tools"]),
+      children: instructionTreeCategories("tools", tools, key) });
     if (prompts.length) nodes.push(instructionTreeGroup("library:prompts", "Инструкции", prompts, key));
     window.RNAssistantNavigationTree.render(list, nodes, {
       label: "Библиотека",

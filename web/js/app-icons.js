@@ -6,6 +6,7 @@
     paperclip: '<path d="m21 11-9 9a6 6 0 0 1-8.5-8.5L13 2a4 4 0 0 1 5.7 5.7L9.2 17.2a2 2 0 0 1-2.8-2.8l9-9"/>',
     selection: '<path d="M8 3H3v5M16 3h5v5M21 16v5h-5M8 21H3v-5M8 8h8v8H8Z"/>',
     compress: '<path d="m4 4 5 5M4 9h5V4m11 16-5-5m0 5v-5h5M4 20l5-5m-5 0h5v5M20 4l-5 5m0-5v5h5"/>',
+    compaction: '<path d="M5 8h14M8 12h8M10 16h4"/>',
     chat: '<path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5H4l-1 1V11.5a9 9 0 0 1 18 0Z"/><path d="M7 9h10M7 13h7"/>',
     folder: '<path d="M3 7V5h6l2 2h10v12H3Z"/>',
     files: '<path d="M7 3h9l4 4v13H7Z"/><path d="M16 3v5h4M3 7v14h12"/>',
@@ -44,6 +45,7 @@
     moon: '<path d="M20 14A8 8 0 0 1 10 4a8.5 8.5 0 1 0 10 10Z"/>',
     shield: '<path d="m12 3 8 3v6c0 5-8 9-8 9S4 17 4 12V6Z"/><path d="m8 12 3 3 5-6"/>',
     chart: '<path d="M3 3v18h18M7 16v-5M12 16V7M17 16V4"/>',
+    table: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M10 4v16M16 4v16"/>',
     puzzle: '<path d="M9 3H3v6h2a2 2 0 1 1 0 4H3v8h7v-2a2 2 0 1 1 4 0v2h7v-7h-2a2 2 0 1 1 0-4h2V3h-8v2a2 2 0 1 1-4 0Z"/>',
     braces: '<path d="M8 3H6v7l-3 2 3 2v7h2M16 3h2v7l3 2-3 2v7h-2"/>',
     image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8" cy="8" r="1"/><path d="m3 17 6-6 4 4 3-3 5 5"/>',
@@ -58,7 +60,7 @@
     spark: '<path d="m12 3 2.4 6.6L21 12l-6.6 2.4L12 21l-2.4-6.6L3 12l6.6-2.4Z"/>',
     pin: '<path d="m9 3-1 6-4 4h7v8m0-8h7l-4-4-1-6Z"/>',
     prompt: '<path d="M12 6c-2-1.5-5-2-9-1v14c4-1 7-.5 9 1 2-1.5 5-2 9-1V5c-4-1-7-.5-9 1zM12 6v14"/>',
-    skill: '<path d="m12 3 1.8 6.2L20 11l-6.2 1.8L12 19l-1.8-6.2L4 11l-6.2-1.8z"/><path d="m19 18 .5 1.5L21 20l-1.5.5L19 22l-.5-1.5L17 20l1.5-.5z"/>',
+    skill: '<path d="m10 3 1.8 5.2L17 10l-5.2 1.8L10 17l-1.8-5.2L3 10l5.2-1.8Z"/><path d="m19 15 .8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8Z"/>',
     tool: '<path d="m8 8-4 4 4 4M16 8l4 4-4 4M14 5l-4 14"/>',
     module: '<path d="m8 8-4 4 4 4M16 8l4 4-4 4"/>',
     document: '<path d="M6 3h8l4 4v14H6zM14 3v5h4M9 12h6M9 16h6"/>',
@@ -86,10 +88,19 @@
     status: '<circle cx="12" cy="12" r="8"/><path d="m8.5 12 2.3 2.3 4.8-5"/>',
     audio: '<path d="M4 9v6h4l5 4V5L8 9H4ZM17 9a4 4 0 0 1 0 6M19 6a8 8 0 0 1 0 12"/>'
   };
-  var iconAliases = { connection: "link", model: "spark", context: "paperclip", agent: "chat", interface: "panel", protection: "shield", service: "settings", system: "settings",
+  var iconAliases = { dataTemplates: "chart", connection: "link", model: "spark", context: "paperclip", agent: "chat", interface: "panel", protection: "shield", service: "settings", system: "settings",
     branch: "fork", retry: "refresh", html_workspace: "html", tool_result: "terminal", compaction: "compress", attachment: "file", script: "js", data: "json", task_list: "check", sequence: "layers" };
 
   function resolve(name) { return iconPaths[iconAliases[name] || name] || iconPaths.file; }
+  function plugin(name, paths) {
+    if (Array.isArray(paths) && paths.length > 0 && paths.length <= 6 &&
+        paths.every(function (path) { return typeof path === 'string' && path.length <= 1024 &&
+          /^[MmLlHhVvCcSsQqTtAaZz0-9\s,.+\-]+$/.test(path); })) {
+      return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        paths.map(function (path) { return '<path d="' + path + '"/>'; }).join('') + '</svg>';
+    }
+    return render(name && iconPaths[iconAliases[name] || name] ? name : 'puzzle');
+  }
   function render(name, className) {
     var cssClass = className && /^[a-z0-9_ -]+$/i.test(className) ? ' class="' + className + '"' : '';
     return '<svg' + cssClass + ' viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + resolve(name) + '</svg>';
@@ -102,6 +113,15 @@
       node.setAttribute('stroke-width', '1.55'); node.setAttribute('stroke-linecap', 'round'); node.setAttribute('stroke-linejoin', 'round');
     });
   }
-  window.RNAssistantIcons = { render: render, hydrate: hydrate, has: function (name) { return !!iconPaths[iconAliases[name] || name]; } };
+  var pluginChoices = [
+    ['dataTemplates', 'Данные и шаблоны'], ['puzzle', 'Плагин'], ['chart', 'График'],
+    ['files', 'Файлы'], ['folder', 'Папка'], ['table', 'Таблица'], ['plan', 'План'],
+    ['code', 'Код'], ['braces', 'Данные'], ['image', 'Изображение'], ['spark', 'Идея'],
+    ['tool', 'Инструмент'], ['book', 'Справочник'], ['layers', 'Слои'], ['search', 'Поиск'],
+    ['settings', 'Настройки'], ['package', 'Пакет'], ['resources', 'Ресурсы']
+  ].filter(function (choice) { return !!iconPaths[iconAliases[choice[0]] || choice[0]]; });
+  window.RNAssistantIcons = { render: render, renderPlugin: plugin, hydrate: hydrate,
+    pluginChoices: pluginChoices,
+    has: function (name) { return !!iconPaths[iconAliases[name] || name]; } };
   if (typeof document !== 'undefined' && typeof document.querySelectorAll === 'function') hydrate(document);
 }());

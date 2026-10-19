@@ -108,7 +108,7 @@
   "name": "Данные и шаблоны",
   "version": "1.0.0",
   "hostProtocol": 1,
-  "icon": "chart",
+  "icon": "dataTemplates",
   "capabilities": [
     "project.read",
     "project.write"

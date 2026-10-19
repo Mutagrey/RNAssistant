@@ -20,6 +20,7 @@ namespace RNAssistant.Application
         private readonly string _webRoot;
         private readonly IWorkspaceWebVerifierFactory _webHost;
         private readonly PluginStore _store;
+        private readonly PluginIconLibrary _icons;
         private readonly WorkspaceStore _workspaces;
         private readonly object _sync = new object();
         private readonly Dictionary<string, Candidate> _candidates = new Dictionary<string, Candidate>();
@@ -41,13 +42,32 @@ namespace RNAssistant.Application
 
         public PluginApplicationService(AppDataPaths paths, string webRoot = null, IWorkspaceWebVerifierFactory webHost = null)
         {
-            _paths = paths; _webRoot = webRoot; _webHost = webHost; _store = new PluginStore(paths); _workspaces = new WorkspaceStore(paths);
+            _paths = paths; _webRoot = webRoot; _webHost = webHost; _store = new PluginStore(paths); _icons = new PluginIconLibrary(paths); _workspaces = new WorkspaceStore(paths);
             Vendors = new VendorCatalog(paths, webRoot); _results = new PluginResultStore(paths);
             Conversations = new WorkspaceConversationService(paths, webHost, CaptureTools);
         }
 
         public PluginCatalogDto List()
         { using (PluginStore.AcquireRuntimeUse(_paths)) lock (_sync) { RequireOpen(); return new PluginCatalogDto { Error = StartupError, Items = _store.List().Select(Item).ToArray() }; } }
+        public PluginIconCatalogDto ListIcons()
+        { using (PluginStore.AcquireRuntimeUse(_paths)) lock (_sync) { RequireOpen(); return new PluginIconCatalogDto { Items = _icons.List() }; } }
+        public PluginIconRecord SaveIcon(PluginIconSaveRequest request)
+        {
+            using (PluginStore.AcquireRuntimeUse(_paths)) lock (_sync)
+            {
+                RequireOpen();
+                if (request == null || request.Svg == null) throw new PluginException("plugin_icon_invalid", "Provide SVG source.");
+                return _icons.Save(request.Name, PluginPackageFiles.Utf8.GetBytes(request.Svg));
+            }
+        }
+        public PluginIconCatalogDto DeleteIcon(PluginIconDeleteRequest request)
+        {
+            using (PluginStore.AcquireRuntimeUse(_paths)) lock (_sync)
+            {
+                RequireOpen(); _icons.Delete(request?.Id);
+                return new PluginIconCatalogDto { Items = _icons.List() };
+            }
+        }
         public void ResetAfterRuntimeDataClear()
         {
             lock (_sync)
@@ -74,17 +94,25 @@ namespace RNAssistant.Application
         public PluginItemDto Create(PluginCreateRequest request)
         {
             if (request == null || string.IsNullOrWhiteSpace(request.Name) || request.Name.Length > 120 ||
-                string.IsNullOrWhiteSpace(request.RootPath) || (request.Description?.Length ?? 0) > 8000)
+                string.IsNullOrWhiteSpace(request.RootPath) || (request.Description?.Length ?? 0) > 8000 ||
+                (request.IconDescription?.Length ?? 0) > 500)
                 throw new PluginException("plugin_create_invalid", "Name, a new source folder and a bounded description are required.");
             using (PluginStore.AcquireRuntimeUse(_paths)) lock (_sync)
             {
                 RequireOpen();
                 if (Directory.Exists(request.RootPath) || File.Exists(request.RootPath)) throw new PluginException("target_exists", "Create requires a new source directory.");
+                var chosenIcon = request.IconId ?? "draw";
+                PluginIconRecord savedIcon = null;
+                if (chosenIcon.StartsWith("icon-", StringComparison.Ordinal)) savedIcon = _icons.Get(chosenIcon);
+                else if (chosenIcon != "draw" &&
+                    !System.Text.RegularExpressions.Regex.IsMatch(chosenIcon, "^[A-Za-z][A-Za-z0-9_-]{0,63}$"))
+                    throw new PluginException("plugin_icon_invalid", "Choose a built-in or saved icon.");
                 var workspace = _workspaces.Open(request.RootPath, true, true);
                 var files = new WorkspaceFileService(_paths);
                 var manifest = new PluginManifestV1 { FormatVersion = 1, HostProtocol = 1, Id = "plugin-" + Guid.NewGuid().ToString("N"),
-                    Name = request.Name, Version = "1.0.0", Entry = "index.html", Icon = "puzzle",
-                    Files = new[] { "plugin.json", "index.html", "app.js", "style.css", "commands.js", "README.md" },
+                    Name = request.Name, Version = "1.0.0", Entry = "index.html", Icon = savedIcon == null ? chosenIcon == "draw" ? "puzzle" : chosenIcon : "icon.svg",
+                    Files = savedIcon == null ? new[] { "plugin.json", "index.html", "app.js", "style.css", "commands.js", "README.md" } :
+                        new[] { "plugin.json", "index.html", "app.js", "style.css", "commands.js", "README.md", "icon.svg" },
                     Commands = new[] { new PluginCommandDefinition { Id = "echo", Description = "Return a greeting.", Entry = "commands.js",
                         ArgumentsSchema = JObject.Parse("{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Greeting text\"}},\"required\":[\"text\"],\"additionalProperties\":false}"),
                         ResultSchema = JObject.Parse("{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Greeting text\"}},\"required\":[\"text\"],\"additionalProperties\":false}") } } };
@@ -93,7 +121,11 @@ namespace RNAssistant.Application
                 files.CreateText(workspace, "app.js", "'use strict';\ndocument.getElementById('title').textContent = " + JsonConvert.SerializeObject(request.Name) + ";\ndocument.getElementById('run').onclick = async function () { try { var value = await RNPlugin.invoke('echo', {text:'Плагин работает'}); document.getElementById('result').textContent = value.text; } catch (error) { document.getElementById('result').textContent = error.message; } };\n");
                 files.CreateText(workspace, "commands.js", "'use strict';\nRNPluginCommands.register('echo', async function (args) { return {text: args.text}; });\n");
                 files.CreateText(workspace, "style.css", "body{margin:0;background:#f5f7f4;color:#25352c;font:14px system-ui}main{padding:24px}button{padding:8px 12px;border:1px solid #c8d5cc;border-radius:6px;background:white}output{display:block;margin-top:16px}\n");
+                if (savedIcon != null) files.CreateText(workspace, "icon.svg", PluginIconLibrary.Svg(savedIcon));
                 files.CreateText(workspace, "README.md", "# " + request.Name + "\n\n" + (request.Description ?? "") +
+                    (chosenIcon == "draw" ? "\n\nIcon brief: " + (request.IconDescription ?? "Use the plugin name and purpose.") +
+                    "\nThe source chat can load workspace.plugin_authoring to draw a 24x24 SVG icon as ordinary text in icon.svg. Set plugin.json icon to icon.svg and add that path to files; checking validates the vector paths. No image-generation model is required.\n" :
+                    "\n\nSelected icon: " + (savedIcon == null ? chosenIcon : savedIcon.Name) + ". Keep this icon unless the user asks to change it.\n") +
                     "\n\nPlugin protocol v1. Edit ordinary source files; include new files in plugin.json. UI uses RNPlugin.invoke(command,args). Worker command modules register handlers with RNPluginCommands.register(id,async(args,context)=>result). context.files is a scoped project filesystem; no DOM/Office/network. Manifest capabilities project.read/project.write request host access, never grant it. Source workspace and user data projects are separate. Use plugins.check and plugins.apply after edits; checking validates package structure/dependencies, not business correctness. The preview gets a separate scratch data folder. Vendor packages use exact versions and mounts. No npm/build step.\n" +
                     "\nSDK reference:\n- UI loads /.host/sdk.js. await RNPlugin.pickProject() returns a scoped directory handle. Selection is explicit; do not substitute the source workspace.\n- RNPlugin.invoke(id,args,onProgress) returns a promise with cancel(). Commands run outside the screen in a managed Worker.\n- Worker context.files.readText(path), writeText(path,text), open(path), createWriter(path) and root() use project-relative paths. open() returns size/name/readRange(offset,count)/close(). Close readers in finally.\n- Writers accept text/bytes through write(), then close() commits or abort() discards staging. Existing target reads are pinned and rechecked; uncertain writes must be inspected with files.reconcile(path), never retried automatically.\n- context.results.create(relativeName) stages a temporary result; context.results.open(relativeName) returns its retained file. Return semantic names in command results, not runtime transport tokens.\n- context.progress(message) reports bounded progress. Maximum command time is five minutes; no Office, parent bridge, network, local native paths or arbitrary filesystem access.\n- Command schemas use type:object, properties, required and additionalProperties:false; describe every top-level field. A writing command also needs writesData:true and both project.read/project.write capabilities.\n- Vendor dependencies declare exact id/version/mount. Include transitive dependencies explicitly. Changing vendor bytes requires a new version. Manifest and locks do not grant rights.\n- plugins.check and plugins.apply take empty arguments. Runtime owns the prepared candidate and confirmation. Verify the UI in preview before applying.\n");
                 return Item(_store.Connect(new PluginSourceWorkspace(workspace)));
@@ -130,6 +162,9 @@ namespace RNAssistant.Application
                 RequireOpen(); var registration = RequireRegistration(pluginId);
                 var package = _store.Capture(Source(registration), Vendors);
                 if (package.PluginId != pluginId) throw new PluginException("plugin_identity_changed", "Changing plugin.json ID requires a new connection.");
+                var manifest = PluginPackageFiles.ParseManifest(package.ManifestJson);
+                if (PluginPackageFiles.IconIsSvgPath(manifest.Icon))
+                    _icons.Save(manifest.Name, _store.ReadFile(package, manifest.Icon));
                 var id = Guid.NewGuid().ToString("N");
                 foreach (var old in _candidates.Where(item => item.Value.Package.PluginId == pluginId).Select(item => item.Key).ToArray()) _candidates.Remove(old);
                 _candidates.Add(id, new Candidate { Package = package, ExpectedRelease = registration.ActiveReleaseId });
@@ -546,9 +581,24 @@ namespace RNAssistant.Application
             return new PluginSourceWorkspace(workspace);
         }
         private void RequireOpen() { if (_disposed) throw new ObjectDisposedException(nameof(PluginApplicationService)); }
-        private static PluginItemDto Item(PluginRegistration value)
-        { return new PluginItemDto { PluginId = value.PluginId, Name = value.Name, Icon = value.Icon, SourceWorkspaceId = value.SourceWorkspaceId,
-            SourceRoot = value.SourceRoot, ReleaseId = value.ActiveReleaseId, Enabled = value.Enabled }; }
+        private PluginItemDto Item(PluginRegistration value)
+        {
+            var item = new PluginItemDto { PluginId = value.PluginId, Name = value.Name, Icon = value.Icon,
+                SourceWorkspaceId = value.SourceWorkspaceId, SourceRoot = value.SourceRoot,
+                ReleaseId = value.ActiveReleaseId, Enabled = value.Enabled };
+            if (PluginPackageFiles.IconIsSvgPath(value.Icon))
+            {
+                try
+                {
+                    var bytes = value.Enabled && value.ActiveReleaseId != null
+                        ? _store.ReadFile(_store.ReadRelease(new PluginReleaseIdentity(value.PluginId, value.ActiveReleaseId)), value.Icon)
+                        : PluginPackageFiles.Read(value.SourceRoot, value.Icon, 4096);
+                    item.IconPaths = PluginPackageFiles.ReadIconPaths(bytes);
+                }
+                catch (PluginException error) { item.IconError = error.Message; }
+            }
+            return item;
+        }
         public Task CloseAsync()
         {
             lock (_sync)

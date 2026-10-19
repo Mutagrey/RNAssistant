@@ -20,6 +20,9 @@ namespace RNAssistant.Office.WebView
                 switch(operation)
                 {
                     case BridgeOperationId.GetPlugins: return (object)Plugins.List();
+                    case BridgeOperationId.GetPluginIcons: return Plugins.ListIcons();
+                    case BridgeOperationId.SavePluginIcon: return Plugins.SaveIcon(Payload<PluginIconSaveRequest>(payload));
+                    case BridgeOperationId.DeletePluginIcon: return Plugins.DeleteIcon(Payload<PluginIconDeleteRequest>(payload));
                     case BridgeOperationId.CreatePlugin: return Plugins.Create(Payload<PluginCreateRequest>(payload));
                     case BridgeOperationId.ConnectPlugin: return Plugins.Connect(Payload<PluginConnectRequest>(payload));
                     case BridgeOperationId.CheckPlugin: return Plugins.Check(Payload<PluginIdRequest>(payload).PluginId);

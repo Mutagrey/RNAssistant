@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Пример плагина</title>
+  <style>
+    body{margin:0;background:#fff;color:#26372d;font:14px/1.5 system-ui,sans-serif}
+    main{max-width:560px;margin:0 auto;padding:clamp(24px,5vw,56px)}
+    .mark{display:grid;place-items:center;width:48px;height:48px;border-radius:14px;background:#eaf4ed;color:#277342;font-size:26px}
+    h1{margin:18px 0 8px;font-size:24px}p{color:#66736c}
+    .note{margin-top:28px;padding:16px;border:1px solid #e2e7e1;border-radius:10px;background:#f8f9f7}
+  </style>
+</head>
+<body><main><div class="mark" aria-hidden="true">P</div><h1 id="name">Плагин</h1>
+  <p>Демонстрационный экран нового плагина.</p>
+  <div class="note">В mock preview создание исходников и работа модели только имитируются.</div>
+</main><script>document.getElementById('name').textContent = new URLSearchParams(location.search).get('name') || 'Плагин';</script></body>
+</html>

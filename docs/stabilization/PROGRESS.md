@@ -1,5 +1,20 @@
 # Stabilization progress
 
+## Library groups and plugin icons — 2026-10-19
+
+Product and demo Library trees now use the same ID-derived category labels beneath
+skills/tools; callable IDs and package identities stay stable. The shared SVG
+registry owns UI glyphs, with the clipped skill path corrected and the catalog
+checked in Chromium for viewBox overflow. Data Templates retains its original bar
+glyph. New plugin creation accepts a text icon brief or a ready icon; workspace
+guidance directs the model to write path-only SVG source, and plugin admission
+validates it before publication. Checked SVGs persist in a user icon library across
+runtime clear; deleting one leaves source copies and publications intact. The
+new-plugin form is left aligned with the shared panel toggle at the edge.
+The chat composer keeps its former two-line height while its action menu follows
+the demo. Mock preview simulates creation and publication. Focused Harness and
+browser checks pass; actual model authoring and Windows/WebView2 remain unqualified.
+
 ## Product project views and chats — 2026-10-19
 
 The Data Templates plugin now sits in the shared project tree/editor composition.
@@ -17,7 +32,8 @@ search/open controls. Early tree selections survive iframe/preview loading, and
 template rows open the real editor while the group returns to the catalog.
 Focused Harness and Chromium checks pass. Windows/Office/WebView2 behavior remains
 an open qualification gate.
-The material Details tab remains in place pending its separate placement decision.
+The material Details tab remains beside Preview by product decision; it keeps
+metadata, exact JSON and version history available.
 
 ## Data Templates standalone export — 2026-10-19
 

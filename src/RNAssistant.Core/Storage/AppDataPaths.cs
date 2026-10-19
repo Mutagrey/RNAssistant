@@ -21,6 +21,7 @@ namespace RNAssistant.Core.Storage
         public string AttachmentDirectory { get; private set; }
         public string ResourceAuthorityDirectory { get; private set; }
         public string WorkspaceDirectory { get; private set; }
+        public string PluginIconDirectory { get; private set; }
 
         public static AppDataPaths CreateDefault()
         {
@@ -50,6 +51,7 @@ namespace RNAssistant.Core.Storage
                 AttachmentDirectory = Path.Combine(root, "attachments"),
                 ResourceAuthorityDirectory = Path.Combine(root, "resource-authority"),
                 WorkspaceDirectory = Path.Combine(root, "workspaces"),
+                PluginIconDirectory = Path.Combine(root, "plugin-icons"),
                 WebViewUserDataDirectory = Path.Combine(root, "webview")
             };
             paths.Ensure();
@@ -67,6 +69,7 @@ namespace RNAssistant.Core.Storage
             EnsureManagedDirectory(AttachmentDirectory);
             EnsureManagedDirectory(ResourceAuthorityDirectory);
             EnsureManagedDirectory(WorkspaceDirectory);
+            EnsureManagedDirectory(PluginIconDirectory);
             EnsureManagedDirectory(WebViewUserDataDirectory);
         }
 

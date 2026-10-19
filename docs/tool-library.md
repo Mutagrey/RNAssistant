@@ -64,6 +64,12 @@ separate owners, stores, version rules and model transports:
 
 ## Current implementation
 
+The Library tree groups tools by stable ID namespace and, for `common.*`, by
+the first feature family in the next segment: `common.resources_read` →
+«Ресурсы», `common.html_workspace_write_file` → «HTML»,
+`common.plan_doc_save` → «Планы». Labels live in `web/js/app-library-groups.js`
+and are shared with the demo; tool IDs, schemas and bindings do not change.
+
 Office publishes `common.resources_find/read/search/outline` as direct, read-only
 semantic resource tools. Search operates inside one discovered target; outline
 pages indexed document text parts. `resources_read.partNumber` is a bounded

@@ -54,6 +54,8 @@ namespace RNAssistant.Core.Storage
         public PluginRegistration Connect(PluginSourceWorkspace source)
         {
             var manifest = PluginPackageFiles.ParseManifest(_files.ReadText(source.Workspace, "plugin.json").Text);
+            if (PluginPackageFiles.IconIsSvgPath(manifest.Icon))
+                PluginPackageFiles.ReadIconPaths(PluginPackageFiles.Read(source.Workspace.RootPath, manifest.Icon, 4096));
             var current = Get(manifest.Id);
             if (current != null)
             {
@@ -83,6 +85,7 @@ namespace RNAssistant.Core.Storage
                 using (var buffer = new MemoryStream()) { stream.CopyTo(buffer); members.Add(path, buffer.ToArray()); }
                 sourcePins.Add(pin);
             }
+            if (PluginPackageFiles.IconIsSvgPath(manifest.Icon)) PluginPackageFiles.ReadIconPaths(members[manifest.Icon]);
             if (!members["plugin.json"].SequenceEqual(PluginPackageFiles.Utf8.GetBytes(observedManifest.Text)))
                 throw new PluginException("plugin_source_changed", "The plugin manifest changed while capturing its files.");
             foreach (var dependency in manifest.Vendors)

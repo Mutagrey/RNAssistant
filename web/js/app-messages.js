@@ -396,10 +396,8 @@ function renderCompactionArticle(message, activity) {
 
   var label = document.createElement("span");
   label.className = "context-compaction-label";
-  var icon = document.createElement("svg");
-  icon.setAttribute("viewBox", "0 0 24 24");
-  icon.setAttribute("aria-hidden", "true");
-  icon.innerHTML = "<path d=\"M5 8h14M8 12h8M10 16h4\"/>";
+  var icon = document.createElement("span");
+  icon.innerHTML = window.RNAssistantIcons.render("compaction");
   var title = document.createElement("span");
   title.className = "context-compaction-title";
   title.textContent = activityTitle(activity) || "Контекст сжат";
@@ -409,7 +407,7 @@ function renderCompactionArticle(message, activity) {
   var caret = document.createElement("span");
   caret.className = "context-compaction-caret";
   caret.setAttribute("aria-hidden", "true");
-  label.appendChild(icon);
+  label.appendChild(icon.firstElementChild);
   label.appendChild(title);
   label.appendChild(subtitle);
   label.appendChild(caret);
