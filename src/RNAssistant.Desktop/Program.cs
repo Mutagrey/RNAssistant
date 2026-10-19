@@ -24,8 +24,8 @@ namespace RNAssistant.Desktop
                     }
                 }
 
-                Application.EnableVisualStyles();
-                Application.SetCompatibleTextRenderingDefault(false);
+                System.Windows.Forms.Application.EnableVisualStyles();
+                System.Windows.Forms.Application.SetCompatibleTextRenderingDefault(false);
 
                 var form = new MainForm();
                 if (instance.IsFirstInstance)
@@ -37,7 +37,7 @@ namespace RNAssistant.Desktop
                     form.ApplyActivation(args);
                 }
 
-                Application.Run(form);
+                System.Windows.Forms.Application.Run(form);
             }
         }
     }

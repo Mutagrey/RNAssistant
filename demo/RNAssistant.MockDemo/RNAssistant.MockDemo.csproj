@@ -120,6 +120,7 @@
       Link="Office\Services\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Office\Tools\*.cs" Link="Office\Tools\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Office\WebView\AssistantWebBridge.cs" Link="Office\WebView\AssistantWebBridge.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\WebView\AssistantWebBridge.Plugins.cs" Link="Office\WebView\AssistantWebBridge.Plugins.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\WebView\BridgeRequestCancellationRegistry.cs" Link="Office\WebView\BridgeRequestCancellationRegistry.cs" />
     <Compile Include="..\..\tests\RNAssistant.Testing\FakeOfficeAdapter.cs" Link="Testing\FakeOfficeAdapter.cs" />
     <Compile Include="..\..\tests\RNAssistant.Testing\ConversationStoreFixture.cs" Link="Testing\ConversationStoreFixture.cs" />
