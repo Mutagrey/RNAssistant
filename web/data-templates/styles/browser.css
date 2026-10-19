@@ -44,7 +44,7 @@ h2, h3, h4 { margin: 0; }
 button, input, select { font: inherit; }
 button { cursor: pointer; border: 1px solid var(--control-border); border-radius: 6px;
   background: var(--panel); color: var(--text); padding: 8px 12px; }
-button:hover { background: var(--secondary-bg); }
+button:hover { background: var(--secondary-bg-hover, var(--secondary-bg)); }
 button:disabled { cursor: default; opacity: .5; }
 button svg { width: 16px; height: 16px; vertical-align: middle; margin-right: 5px;
   fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }

@@ -74,16 +74,16 @@
   align-items: center;
   min-width: 0;
   max-width: 100%;
-  border: 1px solid #e1e7f0;
+  border: 1px solid var(--line);
   border-radius: 999px;
   background: transparent;
-  color: #344054;
+  color: var(--ink);
 }
 
 .context-chip:hover,
 .context-chip:focus-within {
-  border-color: #c9d9f6;
-  background: #f8fbff;
+  border-color: var(--button-accent-border);
+  background: var(--accent-soft);
 }
 
 .context-chip-main {
@@ -96,7 +96,7 @@
 
 .context-chip-badge {
   flex: none;
-  color: #667085;
+  color: var(--ink-muted);
   font-size: 11px;
   font-weight: var(--label-font-weight);
 }
@@ -121,17 +121,12 @@
   border: 0;
   border-radius: 50%;
   background: transparent;
-  color: #667085;
+  color: var(--ink-muted);
 }
 
 .context-chip-remove:hover {
   border-color: transparent;
-  background: var(--button-bg-hover);
-  color: var(--text);
-}
-
-.context-chip-remove:hover {
-  background: #f1f5f9;
+  background: var(--surface-hover);
   color: var(--danger);
 }
 
@@ -145,9 +140,9 @@
   max-height: min(320px, calc(100vh - 24px));
   overflow: auto;
   padding: 10px;
-  border: 1px solid #ccd8e8;
+  border: 1px solid var(--line-strong);
   border-radius: var(--radius);
-  background: #fff;
+  background: var(--surface);
   box-shadow: var(--shadow);
   white-space: normal;
 }

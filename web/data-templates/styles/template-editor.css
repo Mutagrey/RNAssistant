@@ -46,6 +46,12 @@
   .dt-template-code .CodeMirror.cm-s-default .cm-variable-2,
   .dt-template-code .CodeMirror.cm-s-default .cm-atom { color: #d5a9f5; }
 }
+html[data-host-theme="dark"] .dt-template-code .CodeMirror.cm-s-default .cm-number { color: #e8bd75; }
+html[data-host-theme="dark"] .dt-template-code .CodeMirror.cm-s-default .cm-variable-2,
+html[data-host-theme="dark"] .dt-template-code .CodeMirror.cm-s-default .cm-atom { color: #d5a9f5; }
+html[data-host-theme="light"] .dt-template-code .CodeMirror.cm-s-default .cm-number { color: #8c640a; }
+html[data-host-theme="light"] .dt-template-code .CodeMirror.cm-s-default .cm-variable-2,
+html[data-host-theme="light"] .dt-template-code .CodeMirror.cm-s-default .cm-atom { color: #8a4eaa; }
 @media (max-width: 640px) {
   .dt-editor-heading, .dt-editor-rule-footer, .dt-editor-footer { flex-direction: column; align-items: stretch; }
   .dt-editor-heading { padding: 17px; }

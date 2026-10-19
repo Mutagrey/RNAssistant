@@ -143,9 +143,9 @@
   height: 100px;
   min-width: 0;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--line) 82%, #000);
+  border: 1px solid var(--line-strong);
   border-radius: 4px;
-  background: #fff;
+  background: var(--surface);
   box-shadow: 0 2px 7px rgb(0 0 0 / 12%);
   place-items: center;
 }

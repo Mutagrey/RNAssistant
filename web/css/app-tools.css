@@ -39,7 +39,7 @@
   border: 1px solid var(--control-border);
   border-radius: var(--control-radius);
   padding: 0 10px;
-  background: #fff;
+  background: var(--surface);
   color: var(--text);
   font-size: 12px;
 }
@@ -82,9 +82,9 @@
 .tool-list-empty {
   margin-top: 4px;
   padding: 14px 12px;
-  border: 1px solid #e2e8f2;
+  border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fbfcfe;
+  background: var(--surface-subtle);
   color: var(--muted);
   font-size: 12px;
   line-height: 1.35;
@@ -109,9 +109,9 @@
   align-content: center;
   gap: 5px;
   padding: 22px 18px;
-  border: 1px solid #e2e8f2;
+  border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fbfcfe;
+  background: var(--surface-subtle);
   color: var(--muted);
   text-align: center;
 }
@@ -177,7 +177,7 @@
 .tool-form-section::after {
   flex: 1 1 auto;
   height: 1px;
-  background: #edf1f6;
+  background: var(--line);
   content: "";
 }
 
@@ -190,9 +190,9 @@
   height: auto;
   padding: 10px;
   overflow: auto;
-  border: 1px solid rgba(226, 231, 239, 0.86);
+  border: 1px solid var(--line);
   border-radius: var(--control-radius);
-  background: #fbfcfe;
+  background: var(--code-bg);
   color: var(--code-text);
   white-space: pre-wrap;
 }

@@ -323,8 +323,8 @@ html[data-theme="dark"] .rn-code-editor .CodeMirror-gutters {
 
 html[data-theme="dark"] .log-filter-button:hover,
 html[data-theme="dark"] .log-filter-button.active {
-  border-color: #3a4656;
-  background: #242c37;
+  border-color: var(--line-strong);
+  background: var(--surface-selected);
 }
 
 html[data-theme="dark"] .log-entry-error {
@@ -381,11 +381,11 @@ html[data-theme="dark"] .cm-s-default .cm-variable-2 {
 
 html[data-theme="dark"] .chat-workspace,
 html[data-theme="dark"] .chat-main {
-  background: #111318;
+  background: var(--surface);
 }
 
 html[data-theme="dark"] .chat-sidebar {
-  background: #15181d;
+  background: var(--surface-subtle);
 }
 
 html[data-theme="dark"] .chat-search,
@@ -401,26 +401,21 @@ html[data-theme="dark"] .chatbar {
   border-color: var(--line);
 }
 
-html[data-theme="dark"] .document-notice {
-  background: #191d23;
-  color: var(--muted);
-}
-
 html[data-theme="dark"] .message-attachment,
 html[data-theme="dark"] .attachment-draft {
-  border-color: #343d49;
-  background: #1c2128;
+  border-color: var(--line);
+  background: var(--surface-subtle);
 }
 
 html[data-theme="dark"] .attachment-thumb {
-  background: #29313c;
-  color: #a8b4c4;
+  background: var(--surface-hover);
+  color: var(--ink-muted);
 }
 
 html[data-theme="dark"] .chat-scroll-button {
-  border-color: #3b4552;
-  background: rgba(31, 36, 44, .92);
-  color: #b6c0cd;
+  border-color: var(--line-strong);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  color: var(--ink-muted);
   box-shadow: 0 8px 20px rgba(0, 0, 0, .38);
 }
 
@@ -452,7 +447,7 @@ html[data-theme="dark"] .context-manager {
 }
 
 html[data-theme="dark"] .context-chip {
-  border-color: #38414d;
+  border-color: var(--line);
   color: var(--text);
 }
 
@@ -464,8 +459,8 @@ html[data-theme="dark"] .context-chip-remove:hover {
 }
 
 html[data-theme="dark"] .context-popover {
-  border-color: #3a4553;
-  background: #1b2027;
+  border-color: var(--line-strong);
+  background: var(--surface);
 }
 
 html[data-theme="dark"] .context-popover-preview {
@@ -489,7 +484,7 @@ html[data-theme="dark"] .agent-run-empty {
 }
 
 html[data-theme="dark"] .run-change-diff {
-  background: #20252c;
+  background: var(--surface-subtle);
 }
 
 html[data-theme="dark"] .agent-activity-detail-body {
@@ -577,7 +572,7 @@ html[data-theme="dark"] .vba-diff {
 
 html[data-theme="dark"] .vba-diff-summary {
   border-color: var(--line);
-  background: #1d2229;
+  background: var(--surface-subtle);
 }
 
 html[data-theme="dark"] .vba-diff-line,
@@ -604,7 +599,7 @@ html[data-theme="dark"] .vba-diff-line.remove code {
 html[data-theme="dark"] .html-workspace-editor,
 html[data-theme="dark"] .html-workspace-head,
 html[data-theme="dark"] .artifact-detail-preview {
-  background: #14171c;
+  background: var(--surface);
 }
 
 html[data-theme="dark"] .html-workspace-head {
@@ -614,7 +609,7 @@ html[data-theme="dark"] .html-workspace-head {
 html[data-theme="dark"] .chart-artifact,
 html[data-theme="dark"] .html-artifact {
   border-color: var(--line);
-  background: #171b21;
+  background: var(--surface);
 }
 
 html[data-theme="dark"] .chart-artifact-header,
@@ -625,7 +620,7 @@ html[data-theme="dark"] .html-artifact-header {
 }
 
 html[data-theme="dark"] .chart-artifact-toolbar {
-  background: #1d2229;
+  background: var(--surface-subtle);
 }
 
 html[data-theme="dark"] .chart-artifact-title,
@@ -642,8 +637,8 @@ html[data-theme="dark"] .chart-control {
 html[data-theme="dark"] .chart-control select,
 html[data-theme="dark"] .chart-control input[type="color"],
 html[data-theme="dark"] .chart-series-item {
-  border-color: #3a4350;
-  background: #20252c;
+  border-color: var(--line-strong);
+  background: var(--surface-subtle);
   color: var(--text);
 }
 
@@ -660,11 +655,11 @@ html[data-theme="dark"] .markdown .katex-display {
 }
 
 html[data-theme="dark"] .markdown table {
-  background: #171b21;
+  background: var(--surface);
 }
 
 html[data-theme="dark"] .markdown th {
-  background: #20252c;
+  background: var(--surface-subtle);
 }
 
 html[data-theme="dark"] .markdown .hljs-comment,

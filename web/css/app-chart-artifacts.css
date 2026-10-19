@@ -1,8 +1,8 @@
 .chart-artifact {
   margin-top: 8px;
-  border: 1px solid #d8e1ee;
+  border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fbfdff;
+  background: var(--surface);
   overflow: hidden;
 }
 
@@ -11,12 +11,12 @@
   justify-content: space-between;
   gap: 12px;
   padding: 9px 10px 7px;
-  border-bottom: 1px solid #e3e9f2;
+  border-bottom: 1px solid var(--line);
 }
 
 .chart-artifact-title {
   min-width: 0;
-  color: #1f2937;
+  color: var(--ink);
   font-size: 13px;
   font-weight: var(--title-font-weight);
   overflow: hidden;
@@ -26,7 +26,7 @@
 
 .chart-artifact-source {
   min-width: 0;
-  color: #667085;
+  color: var(--ink-muted);
   font-size: 11px;
   overflow: hidden;
   text-align: right;
@@ -40,14 +40,14 @@
   align-items: flex-end;
   gap: 7px;
   padding: 8px 10px;
-  border-bottom: 1px solid #e3e9f2;
-  background: #f8fafc;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-subtle);
 }
 
 .chart-control {
   display: grid;
   gap: 3px;
-  color: #667085;
+  color: var(--ink-muted);
   font-size: 10px;
   font-weight: var(--label-font-weight);
 }
@@ -55,10 +55,10 @@
 .chart-control select,
 .chart-control input[type="color"] {
   height: 26px;
-  border: 1px solid #cdd6e3;
+  border: 1px solid var(--line-strong);
   border-radius: 6px;
-  background: #fff;
-  color: #1f2937;
+  background: var(--surface);
+  color: var(--ink);
   font-size: 12px;
 }
 
@@ -85,10 +85,10 @@
   gap: 4px;
   min-height: 26px;
   padding: 3px 7px;
-  border: 1px solid #d8e1ee;
+  border: 1px solid var(--line);
   border-radius: 999px;
-  background: #fff;
-  color: #344054;
+  background: var(--surface);
+  color: var(--ink);
   font-size: 11px;
   font-weight: var(--label-font-weight);
 }

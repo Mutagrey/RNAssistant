@@ -9,6 +9,7 @@
 .button.ghost:hover { background: var(--surface-hover); color: var(--ink); }
 .button.danger { color: var(--danger); border-color: var(--danger); }
 .button.soft { color: var(--accent); border-color: transparent; background: var(--accent-soft); }
+.button.soft:hover { background: var(--surface-selected); }
 .icon-btn, summary.icon-btn { display: inline-grid; flex: 0 0 var(--control); place-items: center; width: var(--control); height: var(--control); min-height: var(--control); padding: 0; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--ink-muted); }
 summary.icon-btn { list-style: none; cursor: pointer; }
 summary.icon-btn::-webkit-details-marker { display: none; }

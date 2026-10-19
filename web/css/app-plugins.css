@@ -97,3 +97,7 @@
 @media(min-width:821px){.shell:has(#tab-plugins.active .plugin-manager:not([hidden])) .product-mobile-menu-button{display:none}}
 @media(max-width:820px){.plugin-create-heading{padding-left:40px}}
 @media(max-width:620px){.plugin-manager{padding:12px 14px 20px}.plugin-icon-draw{grid-template-columns:1fr}.plugin-icon-draw button{justify-self:start}}
+.plugin-shell .plugin-preview{background:var(--surface)}
+.plugin-shell .plugin-message-user{background:var(--user-bubble-bg);color:var(--user-bubble-text)}
+.plugin-shell button:not(.rail-button):not(.navigation-tree-label):not(.navigation-tree-expander):not(.tree-action):not(.button):not(.plugin-create-mark):not(.primary):not(.dt-primary):not(.danger):not(.accent-soft):not(:disabled):hover{border-color:var(--line-strong);background:var(--surface-hover)}
+#pluginIconPicker .plugin-icon-remove:hover{color:var(--danger)}

@@ -9,6 +9,18 @@
   function button(label,action){var node=document.createElement('button');node.type='button';node.textContent=label;node.onclick=action;return node;}
   function dataPlugin(){return selected&&selected.pluginId==='data-templates';}
   function icon(name){return window.RNAssistantNavigationTree.icon(name);}
+  function syncAppearance(){
+    if(!dataPlugin())return;
+    var frame=el('PreviewMount').querySelector('iframe');
+    if(!frame||!frame.contentWindow)return;
+    var root=document.documentElement,style=getComputedStyle(root);
+    var names={panel:'--surface',secondary:'--surface-subtle',secondaryHover:'--surface-hover',
+      text:'--ink',muted:'--ink-muted',line:'--line',lineStrong:'--line-strong',
+      accent:'--accent',accentHover:'--accent-hover',accentInk:'--accent-ink',
+      accentSoft:'--accent-soft',danger:'--danger',success:'--success'};
+    var colors={};Object.keys(names).forEach(function(key){colors[key]=style.getPropertyValue(names[key]).trim();});
+    frame.contentWindow.postMessage({type:'rna.appearance',theme:root.dataset.theme==='dark'?'dark':'light',colors:colors},'*');
+  }
   function flushNavigation(){
     var frame=el('PreviewMount').querySelector('iframe');
     if(!frameReady||!frame||!frame.contentWindow||!pendingNavigation)return;
@@ -81,6 +93,7 @@
     if(current!==epoch){await send('closePlugin',{instanceId:opened.instanceId});return;}
     view=opened;frameReady=false;if(dataPlugin())pendingNavigation={view:navigation.view,templateId:navigation.templateId};
     var frame=document.createElement('iframe');frame.title=selected.name+(preview?' — предпросмотр':'');frame.sandbox='allow-scripts allow-same-origin allow-downloads';frame.referrerPolicy='no-referrer';
+    if(dataPlugin())frame.addEventListener('load',syncAppearance);
     frame.src=view.entryUrl;el('PreviewMount').replaceChildren(frame);
     status(opened.previewSimulated?'Пример: открыт демонстрационный экран; публикация и проверка в приложении не выполнялись.':
       preview?'Предпросмотр проверенного снимка. Данные подключаются к отдельному тестовому проекту.':'Работает опубликованная версия. Папка данных выбирается внутри плагина.');}
@@ -166,6 +179,7 @@
   }
   function bind(){
     registerRailPopovers();
+    new MutationObserver(syncAppearance).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme','data-accent']});
     el('Project').onclick=function(){var frame=el('PreviewMount').querySelector('iframe');if(frame&&frame.contentWindow)frame.contentWindow.postMessage({type:'rna.dataTemplates.project'},'*');};
     el('NavigationProject').onclick=function(){el('Project').click();};
     el('NavigationSearch').oninput=renderNavigation;

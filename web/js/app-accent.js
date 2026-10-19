@@ -33,14 +33,6 @@
       ? "#FFFFFF" : "#101216";
   }
 
-  function mixedHex(first, second, firstWeight) {
-    return "#" + [1, 3, 5].map(function (offset) {
-      var value = Math.round(parseInt(first.substring(offset, offset + 2), 16) * firstWeight +
-        parseInt(second.substring(offset, offset + 2), 16) * (1 - firstWeight));
-      return ("0" + value.toString(16)).slice(-2);
-    }).join("");
-  }
-
   function apply(value, persist) {
     var id = normalize(value);
     var root = document.documentElement;
@@ -48,9 +40,11 @@
     var choice = choices.filter(function (item) { return item.id === id; })[0];
     root.setAttribute("data-accent", id);
     var accent = choice[theme];
+    var foreground = foregroundFor(accent);
     root.style.setProperty("--accent", accent);
-    root.style.setProperty("--accent-on", foregroundFor(accent));
-    root.style.setProperty("--button-primary-text", foregroundFor(mixedHex(accent, theme === "dark" ? "#10243A" : "#162C44", 0.72)));
+    root.style.setProperty("--accent-on", foreground);
+    root.style.setProperty("--accent-ink", foreground);
+    root.style.setProperty("--button-primary-text", foreground);
     if (persist !== false) {
       try { localStorage.setItem("rnassistant.ui.accent", id); } catch (error) { /* WebView profile reset. */ }
     }

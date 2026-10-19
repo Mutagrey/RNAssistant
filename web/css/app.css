@@ -156,25 +156,25 @@ button.accent-soft:hover {
 button.danger {
   border-color: var(--danger);
   background: var(--danger);
-  color: #fff;
+  color: var(--danger-ink, #fff);
 }
 
 button.danger:hover {
   border-color: var(--button-danger-bg-hover);
   background: var(--button-danger-bg-hover);
-  color: #fff;
+  color: var(--danger-ink, #fff);
 }
 
 button.danger-soft {
-  border-color: #efc4c0;
+  border-color: var(--danger);
   background: var(--button-danger-soft-bg);
   color: var(--danger);
 }
 
 button.danger-soft:hover {
-  border-color: #e7aaa4;
+  border-color: var(--danger);
   background: var(--button-danger-soft-bg-hover);
-  color: #8f1d13;
+  color: var(--danger);
 }
 
 .shell {
@@ -427,7 +427,7 @@ button.icon-btn.is-busy svg {
   border: 1px solid var(--line);
   border-radius: var(--control-radius);
   padding: 8px;
-  background: #fff;
+  background: var(--surface);
   color: var(--text);
   font-size: 14px;
   font-weight: 400;
@@ -470,9 +470,9 @@ button.icon-btn.is-busy svg {
   margin: 0;
   padding: 10px;
   overflow: auto;
-  border: 1px solid rgba(226, 231, 239, 0.86);
+  border: 1px solid var(--line);
   border-radius: var(--control-radius);
-  background: #fbfcfe;
+  background: var(--code-bg);
   color: var(--code-text);
   white-space: pre-wrap;
 }
@@ -907,7 +907,7 @@ button.icon-btn.is-busy svg {
   height: auto;
   border: 1px solid var(--line);
   border-radius: 7px;
-  background: #fbfcfe;
+  background: var(--code-bg);
   color: var(--code-text);
   font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
   font-size: 12.5px;
@@ -919,12 +919,12 @@ button.icon-btn.is-busy svg {
 }
 
 .rn-code-editor .CodeMirror-gutters {
-  border-right: 1px solid #e6ebf2;
-  background: #f4f7fb;
+  border-right: 1px solid var(--line);
+  background: var(--surface-subtle);
 }
 
 .rn-code-editor .CodeMirror-linenumber {
-  color: #98a2b3;
+  color: var(--ink-faint);
 }
 
 .rn-code-editor .CodeMirror-activeline-background {

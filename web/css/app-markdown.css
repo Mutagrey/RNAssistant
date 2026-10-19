@@ -27,9 +27,9 @@
   margin: 8px 0;
   padding: 0;
   overflow: auto;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--line);
   border-radius: 6px;
-  background: #f8fafc;
+  background: var(--code-bg);
   box-shadow: 0 1px 0 rgba(16, 24, 39, 0.04);
 }
 
@@ -46,10 +46,10 @@
 
 .markdown :not(pre) > code {
   padding: 2px 5px;
-  border: 1px solid #dce3ee;
+  border: 1px solid var(--line);
   border-radius: 4px;
-  background: #eef2f7;
-  color: #1f2937;
+  background: var(--code-bg);
+  color: var(--code-text);
   font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
   font-size: 0.92em;
 }
@@ -125,9 +125,9 @@
   position: relative;
   margin: 10px 0;
   padding: 7px;
-  border: 1px solid #d8e1ee;
+  border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: #fbfdff;
+  background: var(--surface-subtle);
 }
 
 .block-tools {
@@ -140,7 +140,7 @@
 
 .code-lang {
   margin-right: auto;
-  color: #607089;
+  color: var(--ink-muted);
   font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
   font-size: 11px;
   font-weight: var(--label-font-weight);
@@ -150,10 +150,10 @@
 .code-preview {
   overflow: hidden;
   padding: 8px 9px;
-  border: 1px dashed #cbd5e1;
+  border: 1px dashed var(--line-strong);
   border-radius: 6px;
-  background: #f8fafc;
-  color: #475569;
+  background: var(--code-bg);
+  color: var(--code-text);
   font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
   font-size: 12px;
   line-height: 1.45;
@@ -228,7 +228,7 @@
 .markdown table {
   width: 100%;
   border-collapse: collapse;
-  background: #fff;
+  background: var(--surface);
 }
 
 .markdown th,
@@ -239,7 +239,7 @@
 }
 
 .markdown th {
-  background: #f1f4f8;
+  background: var(--surface-subtle);
 }
 
 .markdown .katex {
@@ -251,7 +251,7 @@
   overflow-y: hidden;
   margin: 10px 0;
   padding: 8px;
-  border: 1px solid #dde6f2;
+  border: 1px solid var(--line);
   border-radius: 6px;
-  background: #fbfdff;
+  background: var(--surface-subtle);
 }

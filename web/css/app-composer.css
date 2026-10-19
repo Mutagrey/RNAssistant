@@ -1,19 +1,19 @@
 .composer {
-  --composer-surface: #fff;
-  --composer-surface-focus: #fff;
-  --composer-surface-drag: #eef4ff;
-  --composer-surface-disabled: #fbfcfe;
+  --composer-surface: var(--surface);
+  --composer-surface-focus: var(--surface);
+  --composer-surface-drag: var(--accent-soft);
+  --composer-surface-disabled: var(--surface-subtle);
   --composer-shadow: 0 3px 12px rgba(15, 23, 42, 0.1);
   --composer-shadow-focus: 0 4px 16px rgba(15, 23, 42, 0.13);
   --composer-text: var(--text);
   --composer-muted: var(--muted);
-  --composer-control-hover: #eef2f7;
-  --composer-divider: #e7eaf0;
-  --composer-context-track: #e5edf6;
-  --composer-disabled-bg: #e4e9f0;
-  --composer-disabled-text: #98a2b2;
-  --composer-stop-bg: #fbe9e8;
-  --composer-stop-hover: #f7d9d6;
+  --composer-control-hover: var(--surface-hover);
+  --composer-divider: var(--line);
+  --composer-context-track: var(--line-strong);
+  --composer-disabled-bg: var(--surface-hover);
+  --composer-disabled-text: var(--ink-faint);
+  --composer-stop-bg: var(--danger-soft);
+  --composer-stop-hover: color-mix(in srgb, var(--danger) 18%, var(--surface));
   position: relative;
   z-index: 10;
   display: flex;
@@ -38,7 +38,7 @@
 }
 
 .composer.is-message-editing {
-  box-shadow: 0 0 0 1px rgba(37, 99, 235, .18), var(--composer-shadow-focus);
+  box-shadow: 0 0 0 1px var(--focus-ring-tight), var(--composer-shadow-focus);
 }
 
 .composer-reply-prompt {
@@ -164,10 +164,10 @@
   align-items: center;
   min-width: 180px;
   max-width: 280px;
-  border: 1px solid #dbe3ee;
+  border: 1px solid var(--line);
   border-radius: 8px;
   padding: 5px;
-  background: #f8fafc;
+  background: var(--surface-subtle);
 }
 
 .attachment-thumb {
@@ -177,8 +177,8 @@
   place-items: center;
   overflow: hidden;
   border-radius: 6px;
-  background: #e8eef7;
-  color: #52647c;
+  background: var(--surface-hover);
+  color: var(--ink-muted);
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
@@ -218,11 +218,11 @@
   border: 0;
   border-radius: 5px;
   background: transparent;
-  color: #667085;
+  color: var(--ink-muted);
 }
 
 .attachment-remove:hover {
-  background: #e8edf4;
+  background: var(--surface-hover);
 }
 
 .composer-toolbar {
@@ -485,11 +485,11 @@
 .composer-picker-item:focus-visible {
   border: 0;
   outline: 0;
-  background: #f2f4f7;
+  background: var(--surface-hover);
 }
 
 .composer-picker-item.is-selected {
-  background: #f6f8fb;
+  background: var(--surface-selected);
 }
 
 .composer-menu-action {
@@ -547,7 +547,7 @@
 .composer-menu-action[aria-pressed="true"] .composer-menu-check { opacity: 1; }
 
 .composer-model-item-head strong {
-  color: #263244;
+  color: var(--ink);
   font-size: 12px;
   font-weight: var(--title-font-weight);
 }
@@ -578,7 +578,7 @@
 
 .composer-model-item-id {
   overflow: hidden;
-  color: #8a94a3;
+  color: var(--ink-faint);
   font-family: var(--mono);
   font-size: 9.5px;
   text-overflow: ellipsis;
@@ -588,7 +588,7 @@
 .composer-model-item-description {
   display: -webkit-box;
   overflow: hidden;
-  color: #667085;
+  color: var(--ink-muted);
   font-size: 10.5px;
   line-height: 1.35;
   -webkit-box-orient: vertical;
@@ -609,8 +609,8 @@
   min-height: 17px;
   border-radius: 999px;
   padding: 0 6px;
-  background: #edf0f4;
-  color: #667085;
+  background: var(--surface-hover);
+  color: var(--ink-muted);
   font-size: 9px;
   white-space: nowrap;
 }
@@ -871,21 +871,8 @@
 }
 
 :where(html[data-theme="dark"], body[data-theme="dark"]) .composer {
-  --composer-surface: #252c36;
-  --composer-surface-focus: #29313c;
-  --composer-surface-drag: #243650;
-  --composer-surface-disabled: #222831;
   --composer-shadow: 0 4px 14px rgba(0, 0, 0, 0.32);
   --composer-shadow-focus: 0 5px 18px rgba(0, 0, 0, 0.4);
-  --composer-text: #edf1f6;
-  --composer-muted: #9aa5b5;
-  --composer-control-hover: #333c49;
-  --composer-divider: #3a4350;
-  --composer-context-track: #465160;
-  --composer-disabled-bg: #39424f;
-  --composer-disabled-text: #8994a3;
-  --composer-stop-bg: #3d292a;
-  --composer-stop-hover: #4b3031;
 }
 
 :where(html[data-theme="dark"], body[data-theme="dark"]) .composer-reasoning-button.active {
@@ -894,33 +881,36 @@
 }
 
 :where(html[data-theme="dark"], body[data-theme="dark"]) .composer-picker-menu {
-  border-color: #404a57;
-  background: #252c36;
+  border-color: var(--line-strong);
+  background: var(--surface);
   box-shadow: 0 16px 38px rgba(0, 0, 0, .46);
 }
 
 :where(html[data-theme="dark"], body[data-theme="dark"]) .composer-picker-item {
-  color: #edf1f6;
+  color: var(--ink);
+}
+
+:where(html[data-theme="dark"], body[data-theme="dark"]) .composer-picker-item.is-selected {
+  background: var(--surface-selected);
 }
 
 :where(html[data-theme="dark"], body[data-theme="dark"]) .composer-picker-item:hover,
-:where(html[data-theme="dark"], body[data-theme="dark"]) .composer-picker-item:focus-visible,
-:where(html[data-theme="dark"], body[data-theme="dark"]) .composer-picker-item.is-selected {
-  background: #333c49;
+:where(html[data-theme="dark"], body[data-theme="dark"]) .composer-picker-item:focus-visible {
+  background: var(--surface-hover);
 }
 
 :where(html[data-theme="dark"], body[data-theme="dark"]) .composer-model-item-head strong {
-  color: #edf1f6;
+  color: var(--ink);
 }
 
 :where(html[data-theme="dark"], body[data-theme="dark"]) .composer-model-item-description,
 :where(html[data-theme="dark"], body[data-theme="dark"]) .composer-model-item-id {
-  color: #a5afbc;
+  color: var(--ink-muted);
 }
 
 :where(html[data-theme="dark"], body[data-theme="dark"]) .composer-model-badge {
-  background: #39424f;
-  color: #b2bcc9;
+  background: var(--surface-hover);
+  color: var(--ink-muted);
 }
 
 .composer-actions .hidden {

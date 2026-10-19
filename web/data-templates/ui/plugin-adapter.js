@@ -1,5 +1,23 @@
 (function(root){
   'use strict';
+  if(root.parent!==root)root.addEventListener('message',function(event){
+    if(event.source!==root.parent||!event.data||event.data.type!=='rna.appearance')return;
+    var message=event.data,colors=message.colors||{},map={
+      '--bg':'panel','--panel':'panel','--secondary-bg':'secondary',
+      '--secondary-bg-hover':'secondaryHover','--text':'text','--muted':'muted',
+      '--line':'line','--line-strong':'lineStrong','--control-border':'lineStrong',
+      '--accent':'accent','--accent-strong':'accent','--button-accent-bg':'accentSoft',
+      '--button-primary-bg':'accent','--button-primary-bg-hover':'accentHover',
+      '--button-primary-text':'accentInk','--danger':'danger','--success':'success'
+    };
+    var theme=message.theme==='dark'?'dark':'light',element=document.documentElement;
+    element.dataset.hostTheme=theme;element.style.colorScheme=theme;
+    Object.keys(map).forEach(function(property){
+      var color=colors[map[property]];
+      if(typeof color==='string'&&root.CSS&&root.CSS.supports('color',color))
+        element.style.setProperty(property,color);
+    });
+  });
   if (!root.chrome || !root.chrome.webview || !location.hostname.endsWith('.rnassistant-plugin.invalid')) return;
   // Parser-blocking script ensures the trusted SDK is ready before composition.
   var sdk=document.createElement('script');sdk.src='/.host/sdk.js';
