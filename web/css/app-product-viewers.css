@@ -12,7 +12,9 @@
 .product-viewer .rn-text-viewer-lines { display: none; }
 .product-viewer .rn-text-viewer-content { max-width: 780px; }
 .product-viewer .rn-text-viewer-status { padding: 8px 10px; background: var(--warning-soft); color: var(--warning); border-radius: var(--radius-sm); font-size: 12px; }
-.product-viewer .rn-json-toolbar { display: none; }
+.product-viewer .rn-json-toolbar { display: flex; gap: 8px; padding: 0 0 10px; border-bottom: 1px solid var(--line); background: transparent; }
+.product-viewer .rn-json-toolbar .rn-json-modes { flex: 0 1 auto; }
+.product-viewer .rn-json-toolbar .rn-json-actions { align-items: center; }
 .product-viewer.json-clean .rn-json-status.ok { display: none; }
 .product-viewer .rn-json-viewer { max-height: none; height: 100%; border: 0; border-radius: 0; background: transparent; }
 .product-viewer .rn-json-tree { padding: 0; font: 12px/1.65 var(--mono); }
@@ -42,6 +44,7 @@ html[data-theme] .product-viewer :is(.rn-json-boolean, .rn-json-null) { color: v
 .product-viewer .collection-rail .rn-sequence-preview span { font-size: 12px; white-space: nowrap; }
 .collection-page { margin-top: var(--space-4); padding-top: 8px; border-top: 1px solid var(--line); }
 .collection-page .rn-markdown-viewer { max-width: none; }
+.product-viewer[data-product-viewer="collection"] .rn-markdown-viewer-rendered { padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
 .editor-body:has(> .product-viewer:is([data-product-viewer="pdf"], [data-product-viewer="image"], [data-product-viewer="json"], [data-product-viewer="text"])) { display: flex; flex-direction: column; overflow: hidden; }
 .editor-body > .product-viewer:is([data-product-viewer="pdf"], [data-product-viewer="image"], [data-product-viewer="json"], [data-product-viewer="text"]) { flex: 1; overflow: hidden; }
 .product-viewer .rn-pdf-viewer { display: flex; flex-direction: column; gap: 12px; height: 100%; min-height: 0; }

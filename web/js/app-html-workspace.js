@@ -211,8 +211,12 @@
         window.updateArtifactThumbnailViews(uri, thumbnail);
       }
     },
-    render: renderHtmlWorkspace
+    render: function () {
+      renderHtmlWorkspace();
+      if (window.RNAssistantArtifactCatalog) window.RNAssistantArtifactCatalog.refreshViewer();
+    }
   });
+  window.RNAssistantHtmlWorkspaceViewerActions = workspaceActions;
 
   window.addEventListener("message", function (event) {
     var frame = $("htmlWorkspacePreviewFrame");

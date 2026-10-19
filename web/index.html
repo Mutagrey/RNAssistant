@@ -381,7 +381,16 @@
             <div class="chat-scroll-region"><div class="messages" id="projectChatMessages" role="region" aria-label="Сообщения чата проекта" tabindex="0"></div></div>
             <div class="project-chat-control" id="projectChatControl" hidden><pre id="projectChatPending"></pre><button type="button" id="projectChatApprove">Разрешить</button><button type="button" id="projectChatReject">Отклонить</button></div>
             <form class="project-chat-questions" id="projectChatQuestions" hidden></form>
-            <form class="composer project-chat-composer" id="projectChatForm"><div class="composer-input-wrap"><textarea id="projectChatInput" rows="2" placeholder="Спросите о проекте…" aria-label="Сообщение в чат проекта"></textarea></div><div class="composer-footer"><span>Файлы проекта добавляются в контекст только через инструменты агента.</span><button type="button" id="projectChatStop" hidden>Остановить</button><button type="submit" id="projectChatSend">Отправить</button></div></form>
+            <form class="composer project-chat-composer" id="projectChatForm">
+              <div class="composer-input-wrap"><textarea id="projectChatInput" rows="2" placeholder="Спросите о проекте…" aria-label="Сообщение в чат проекта"></textarea></div>
+              <div class="composer-toolbar">
+                <span class="project-chat-context-note" title="Файлы проекта добавляются в контекст только через инструменты агента.">Файлы через инструменты агента</span>
+                <div class="composer-actions">
+                  <button type="button" class="composer-stop-button" id="projectChatStop" title="Остановить" aria-label="Остановить" hidden><svg data-rna-icon="stop" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
+                  <button type="submit" class="composer-send-button" id="projectChatSend" title="Отправить" aria-label="Отправить"><svg data-rna-icon="send" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
+                </div>
+              </div>
+            </form>
           </div>
         </div>
       </section>
@@ -396,7 +405,7 @@
             <div class="resource-editor-head library-editor-head tool-editor-head" id="toolEditorHead">
               <div class="resource-editor-titlebox"><div class="resource-editor-title" id="toolEditorTitle">Инструмент</div><div class="resource-editor-meta" id="toolEditorMeta"></div></div>
               <div class="resource-editor-actions library-editor-actions">
-                <button class="accent-soft icon-text-button library-save-button" id="saveToolsButton" type="button" hidden><svg data-rna-icon="check" viewBox="0 0 24 24" aria-hidden="true"></svg><span>Сохранить</span></button>
+                <button class="button primary icon-text-button library-save-button" id="saveToolsButton" type="button" hidden><svg data-rna-icon="check" viewBox="0 0 24 24" aria-hidden="true"></svg><span>Сохранить</span></button>
                 <div data-rna-action-menu="tool"></div>
               </div>
             </div>
@@ -464,7 +473,7 @@
               <div class="resource-editor-head library-editor-head">
                 <div class="resource-editor-titlebox"><div class="resource-editor-title" id="skillTitle">Навык</div><div class="resource-editor-meta" id="skillMeta"></div></div>
                 <div class="resource-editor-actions library-editor-actions">
-                  <button class="accent-soft icon-text-button library-save-button" id="saveSkillsButton" type="button" hidden><svg data-rna-icon="check" viewBox="0 0 24 24" aria-hidden="true"></svg><span>Сохранить</span></button>
+                  <button class="button primary icon-text-button library-save-button" id="saveSkillsButton" type="button" hidden><svg data-rna-icon="check" viewBox="0 0 24 24" aria-hidden="true"></svg><span>Сохранить</span></button>
                   <div data-rna-action-menu="skill"></div>
                 </div>
               </div>
@@ -494,7 +503,7 @@
                 <div class="resource-editor-actions library-editor-actions">
                   <button class="icon-btn" id="copyPromptButton" type="button" title="Скопировать промпт" aria-label="Скопировать промпт"><svg data-rna-icon="copy" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
                   <button class="icon-btn" id="addPromptToChatButton" type="button" title="Добавить промпт в контекст" aria-label="Добавить промпт в контекст"><svg data-rna-icon="plus" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
-                  <button class="accent-soft icon-text-button library-save-button" id="savePromptButton" type="button" hidden><svg data-rna-icon="check" viewBox="0 0 24 24" aria-hidden="true"></svg><span>Сохранить</span></button>
+                  <button class="button primary icon-text-button library-save-button" id="savePromptButton" type="button" hidden><svg data-rna-icon="check" viewBox="0 0 24 24" aria-hidden="true"></svg><span>Сохранить</span></button>
                   <div data-rna-action-menu="prompt"></div>
                 </div>
               </div>
@@ -531,7 +540,7 @@
                 <div class="resource-editor-meta" id="vbaModuleMeta"></div>
               </div>
               <div class="resource-editor-actions">
-                <button class="accent-soft" id="saveVbaButton" type="button">Сохранить</button>
+                <button class="button primary icon-text-button" id="saveVbaButton" type="button"><svg data-rna-icon="check" viewBox="0 0 24 24" aria-hidden="true"></svg><span>Сохранить</span></button>
                 <div data-rna-action-menu="vba"></div>
               </div>
             </div>
@@ -699,7 +708,7 @@
                   <button class="icon-btn html-workspace-icon" id="exportHtmlWorkspaceButton" type="button" title="Скачать HTML" aria-label="Скачать HTML">
                     <svg data-rna-icon="download" viewBox="0 0 24 24" aria-hidden="true"></svg>
                   </button>
-                  <button class="accent-soft" id="saveHtmlWorkspaceButton" type="button">Сохранить</button>
+                  <button class="button primary icon-text-button" id="saveHtmlWorkspaceButton" type="button"><svg data-rna-icon="check" viewBox="0 0 24 24" aria-hidden="true"></svg><span>Сохранить</span></button>
                   <details class="html-workspace-menu" id="htmlWorkspaceMoreActions">
                     <summary class="html-workspace-icon" title="Другие действия" aria-label="Другие действия">
                       <svg data-rna-icon="more" viewBox="0 0 24 24" aria-hidden="true"></svg>
@@ -727,7 +736,7 @@
             </div>
             <div class="html-workspace-preview html-workspace-view" id="htmlWorkspacePreview" data-html-view="preview">
               <iframe class="html-workspace-frame" id="htmlWorkspacePreviewFrame" title="HTML preview" sandbox="allow-scripts allow-modals" referrerpolicy="no-referrer"></iframe>
-              <div class="artifact-detail-preview hidden" id="artifactDetailPreview"></div>
+              <div class="artifact-detail-preview product-viewer hidden" id="artifactDetailPreview"></div>
             </div>
             <div class="html-workspace-edit html-workspace-view hidden" id="htmlWorkspaceEdit" data-html-view="edit">
               <textarea id="htmlWorkspaceEditorInput" spellcheck="false" placeholder="Выберите HTML файл или JSON источник."></textarea>
@@ -1155,6 +1164,7 @@
   <script src="js/app-viewer-registry.js?v=artifact-preview-20260902-2"></script>
   <script src="js/app-json-viewer.js?v=chat-projection-20260907-1"></script>
   <script src="js/app-text-viewer.js?v=artifact-text-20260831-1"></script>
+  <script src="js/app-viewer-ui.js?v=shared-viewers-20261019-1"></script>
   <script src="js/app-sequence-viewer.js?v=artifact-gallery-20260902-1"></script>
   <script src="js/app-resource-viewer.js?v=agent-planning-20261002-2-image-display-1"></script>
   <script src="js/app-run-journal.js?v=catalog-display-chat-20260908-1"></script>

@@ -141,7 +141,7 @@
     options = options || {};
     var root = element("div", "rn-markdown-viewer");
     var tabs = element("div", "rn-markdown-viewer-tabs");
-    var sourceButton = element("button", "secondary compact", "Показать Markdown");
+    var sourceButton = element("button", "secondary compact", "Исходник");
     sourceButton.type = "button";
     var body = element("div", "rn-markdown-viewer-body");
     var child = null;
@@ -159,7 +159,7 @@
     function showSource() {
       clear();
       showingSource = true;
-      sourceButton.textContent = "Показать документ";
+      sourceButton.textContent = "Просмотр";
       child = createText(options);
       body.appendChild(child.element);
     }
@@ -168,7 +168,7 @@
       if (!canRender) return showSource();
       clear();
       showingSource = false;
-      sourceButton.textContent = "Показать Markdown";
+      sourceButton.textContent = "Исходник";
       var rendered = element("div", "markdown rn-markdown-viewer-rendered");
       rendered.innerHTML = window.markdown(String(options.fullText));
       body.appendChild(rendered);

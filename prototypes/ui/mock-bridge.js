@@ -112,6 +112,7 @@
     if (Object.prototype.hasOwnProperty.call(times, item.id)) date.setMinutes(times[item.id]);
     else if (item.id === "sequence") date.setDate(date.getDate() - 5);
     else date.setDate(date.getDate() - 1);
+  var pdfText = "Методика расчёта\n\nДемонстрационные данные: сентябрь 2026\n\nПоказатели\nВыручка — сумма подтверждённых заказов за месяц.\nСредний чек — выручка, делённая на число заказов.\nИзменение — отношение к предыдущему периоду.\n\nОграничения\nПо Самаре отсутствует поле «Выручка». Файл требует проверки.";
     return date.toISOString();
   }
   artifactExamples.forEach(function (item) {
@@ -296,6 +297,17 @@
     for (var i = 0; i < body.mutations.length; i++) {
       var mutation = body.mutations[i];
       var index = stagedSkills.findIndex(function (item) { return item.id.toLowerCase() === String(mutation.baseId || "").toLowerCase(); });
+  async function viewerBinary(resourceUri, assetUrl, contentType) {
+    var asset = await nativeFetch(assetUrl);
+    if (!asset.ok) fail("Файл демонстрационного материала недоступен.");
+    var body = new Uint8Array(await asset.arrayBuffer()), id = leaseId();
+    downloads[id] = { bytes: body, contentType: contentType };
+    return { leaseId: id, url: "https://rnassistant.local-resource/v1/" + id,
+      descriptor: { reference: { uri: resourceUri, revision: "1" } }, view: "binary",
+      expiresUtc: new Date(Date.now() + 600000).toISOString(),
+      maxBatchItems: 65536, maxBatchBytes: 65536,
+      binary: { payload: { byteLength: body.length, sha256: await hash(body), contentType: contentType } } };
+  }
       var base = index < 0 ? null : stagedSkills[index];
       var previous = base && base.revision || "";
       if (mutation.kind === "delete") {
@@ -701,19 +713,20 @@
     if (type === "readArtifactViewerPage") {
       requireChat(payload);
       var viewed = artifactExamples.find(function (item) { return item.resourceUri === payload.resourceUri; });
-      if (!viewed || viewed.id !== "report" || payload.cursor)
+      if (!viewed || viewed.id !== "report" && viewed.id !== "pdf" || payload.cursor)
         fail("Версия материала примера недоступна.", "preview_revision_changed");
       var viewerId = leaseId();
       var reference = { uri: viewed.resourceUri, revision: "1" };
-      viewerBatches[viewerId] = { resource: reference, view: "text", text: viewed.body,
-        offset: 0, nextOffset: viewed.body.length, done: true };
-      return { resourceUri: viewed.resourceUri, viewerKind: "markdown", title: viewed.title,
-        mimeType: viewed.contentType, contentSha256: await hash(viewed.body),
+      var viewerText = viewed.id === "pdf" ? pdfText : viewed.body;
+      viewerBatches[viewerId] = { resource: reference, view: "text", text: viewerText,
+        offset: 0, nextOffset: viewerText.length, done: true };
+      return { resourceUri: viewed.resourceUri, viewerKind: viewed.id === "pdf" ? "pdf" : "markdown", title: viewed.title,
+        mimeType: viewed.contentType, contentSha256: await hash(viewerText),
         data: { leaseId: viewerId, url: "https://rnassistant.local-resource/v1/" + viewerId,
           descriptor: { reference: reference }, view: "text",
           expiresUtc: new Date(Date.now() + 600000).toISOString(),
           maxBatchItems: 32000, maxBatchBytes: 8 * 1024 * 1024 },
-        offset: 0, returnedCharacters: viewed.body.length, totalCharacters: viewed.body.length,
+        offset: 0, returnedCharacters: viewerText.length, totalCharacters: viewerText.length,
         nextCursor: null, complete: true, truncated: false, sourceComplete: true,
         fullReadAllowed: true, viewerLimitReached: false, maximumDocumentCharacters: 1000000 };
     }
@@ -729,6 +742,36 @@
         return { Id: skill.id, Name: skill.name || skill.id, Description: skill.description || "Анализ данных в связанной книге",
           Status: "selected", Tools: ["excel.read_table"], References: [], Revision: skill.revision };
       });
+    if (type === "readArtifactImage") {
+      requireChat(payload);
+      var imageExample = artifactExamples.find(function (item) { return item.id === "image" && item.resourceUri === payload.resourceUri; });
+      if (!imageExample) fail("Версия изображения примера недоступна.", "preview_revision_changed");
+      var imageData = await viewerBinary(imageExample.resourceUri, imageExample.assetUrl, imageExample.contentType);
+      return { resourceUri: imageExample.resourceUri, viewerKind: "image", title: imageExample.title,
+        mimeType: imageExample.contentType, contentSha256: imageData.binary.payload.sha256,
+        byteLength: imageData.binary.payload.byteLength, data: imageData };
+    }
+    if (type === "readArtifactPdfInfo" || type === "readArtifactPdfPage" || type === "readArtifactPdfThumbnail") {
+      requireChat(payload);
+      var pdfExample = artifactExamples.find(function (item) { return item.id === "pdf" && item.resourceUri === payload.resourceUri; });
+      if (!pdfExample || type !== "readArtifactPdfInfo" && payload.pageIndex !== 0)
+        fail("Версия PDF примера недоступна.", "preview_revision_changed");
+      var pdfAsset = await nativeFetch(pdfExample.assetUrl);
+      if (!pdfAsset.ok) fail("Файл PDF примера недоступен.");
+      var pdfBytes = new Uint8Array(await pdfAsset.arrayBuffer()), pdfHash = await hash(pdfBytes);
+      if (type === "readArtifactPdfInfo") return { resourceUri: pdfExample.resourceUri, viewerKind: "pdf",
+        title: pdfExample.title, mimeType: "application/pdf", contentSha256: pdfHash,
+        byteLength: pdfBytes.length, pageCount: 1, pageTextLengths: [pdfText.length],
+        extractedTextSha256: await hash(pdfText), extractedCharacters: pdfText.length,
+        textTruncated: false, extractionWarning: "" };
+      var thumbnail = type === "readArtifactPdfThumbnail";
+      var pdfImage = await viewerBinary(pdfExample.resourceUri,
+        thumbnail ? "/preview/assets/sales-methodology-thumb.jpg" : "/preview/assets/sales-methodology-page.jpg", "image/jpeg");
+      return { resourceUri: pdfExample.resourceUri, viewerKind: "pdf", contentSha256: pdfHash,
+        pageIndex: 0, pageCount: 1, width: thumbnail ? 213 : 990, height: thumbnail ? 300 : 1400,
+        imageMimeType: "image/jpeg", imageContentSha256: pdfImage.binary.payload.sha256,
+        imageByteLength: pdfImage.binary.payload.byteLength, data: pdfImage };
+    }
       var availableTools = [
         { Id: "common.resources_find", Name: "Поиск ресурсов", Description: "Поиск материалов чата" },
         { Id: "excel.read_table", Name: "Чтение таблицы", Description: "Чтение данных Excel" },
@@ -812,7 +855,7 @@
       return Promise.resolve(new Response(JSON.stringify(viewerBatches[id]),
         { headers: { "Content-Type": "application/json" } }));
     }
-    if (address.pathname.includes("/download/")) {
+    if (address.pathname.includes("/download/") || downloads[id] && address.pathname === "/v1/" + id) {
       var item = downloads[id];
       if (!item || offset + count > item.bytes.length) return Promise.resolve(new Response("", { status: 404 }));
       return Promise.resolve(new Response(item.bytes.slice(offset, offset + count),

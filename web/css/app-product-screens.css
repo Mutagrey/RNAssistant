@@ -27,12 +27,10 @@
 .shell #tab-chat .project-chat-questions fieldset { margin: 0 0 10px; border: 0; }
 .shell #tab-chat .project-chat-questions label { display: block; margin: 6px 0; }
 .shell #tab-chat .project-chat-questions textarea { display: block; width: 100%; }
-.shell #tab-chat .project-chat-composer { display: flex; flex-direction: column; justify-content: space-between; }
-.shell #tab-chat .project-chat-composer .composer-input-wrap { order: 0; width: 100%; }
-.shell #tab-chat .project-chat-composer textarea { min-height: 0; resize: none; }
-.shell #tab-chat .project-chat-composer .composer-footer { display: flex; order: 1; align-items: center; gap: 8px; width: 100%; color: var(--ink-muted); font-size: 11px; }
-.shell #tab-chat .project-chat-composer .composer-footer > span { flex: 1; }
-.shell #tab-chat .project-chat-composer .composer-footer button { min-height: 30px; }
+.shell #tab-chat .project-chat-composer .composer-input-wrap { width: 100%; }
+.shell #tab-chat .project-chat-composer textarea { resize: none; }
+.shell #tab-chat .project-chat-composer .composer-toolbar { min-height: 32px; }
+.shell #tab-chat .project-chat-context-note { flex: 1; min-width: 0; overflow: hidden; color: var(--ink-muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .shell #tab-chat .chat-workspace.with-inspector { grid-template-columns: var(--split-left, var(--nav-width)) 1px minmax(0, 1fr) 1px var(--inspector-width); }
 .shell #tab-chat .chat-inspector { display: flex; grid-column: 5; grid-row: 1; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; visibility: hidden; opacity: 0; background: var(--surface-subtle); }
 .shell #tab-chat .with-inspector .chat-inspector { visibility: visible; opacity: 1; }
@@ -74,7 +72,7 @@
   width: min(780px, calc(100% - 36px));
   min-height: 0;
   margin: 0 auto 18px;
-  padding: 12px;
+  padding: 12px 12px 16px;
   border: 1px solid var(--line-strong);
   border-radius: 14px;
   box-shadow: 0 3px 14px #16271e0b;
@@ -127,6 +125,9 @@
 .shell #tab-instructions .skill-files-view { min-height: 0; overflow: auto; padding: 18px 0; }
 .shell #tab-instructions .skill-files-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .shell #tab-instructions .skill-files-heading h2 { margin: 0; font-size: 17px; }
+.shell #tab-instructions #toolForm { padding-top: 16px; }
+.shell #tab-instructions #toolDescriptionInput { min-height: 130px; }
+.shell #tab-instructions .tool-form-flags .checkline { color: var(--ink); font-weight: 400; }
 .shell #tab-instructions .skill-files-heading button { min-height: 30px; padding: 4px 10px; }
 .shell #tab-instructions .skill-file-row { display: flex; align-items: center; gap: 10px; min-height: 58px; border-bottom: 1px solid var(--line); }
 .shell #tab-instructions .skill-file-info { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; }
@@ -161,6 +162,7 @@
 
 @media (max-width: 620px) {
   .shell #tab-chat .chatbar { padding-left: calc(var(--panel-toggle-inset) + var(--control) + var(--panel-toggle-gap)); }
+.shell #tab-vba #vbaEmptyState { border: 0; border-radius: 0; background: transparent; }
   .shell #tab-chat .composer { width: calc(100% - 16px); margin-bottom: 8px; }
   .shell #tab-chat .messages { padding-inline: 12px; }
   .shell #tab-instructions .library-editor-head,

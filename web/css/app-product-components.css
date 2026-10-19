@@ -22,6 +22,9 @@ summary.icon-btn::-webkit-details-marker { display: none; }
 .mode-button { height: 30px; border: 0; border-right: 1px solid var(--line); border-radius: 0; padding: 0 10px; background: transparent; color: var(--ink-muted); font-size: 12px; font-weight: 500; }
 .mode-button:last-child { border-right: 0; }
 .mode-button.active { background: var(--surface-subtle); color: var(--ink); }
+.view-switch { display: inline-flex; align-items: center; gap: 2px; width: max-content; padding: 3px; border-radius: 10px; background: var(--surface-subtle); }
+.view-switch .button { min-height: 28px; border: 0; background: transparent; }
+.view-switch .button:is([aria-current="page"], [aria-pressed="true"], .active) { color: var(--ink); background: var(--surface); box-shadow: 0 1px 3px #00000012; }
 @media (pointer: coarse) { .icon-btn { min-width: 40px; min-height: 40px; } .button { min-height: 44px; } }
 @media (prefers-reduced-motion: no-preference) { .button, .icon-btn { transition: background-color var(--motion-fast), color var(--motion-fast), border-color var(--motion-fast); } }
 .rna-table-wrap { overflow-x: auto; max-width: 100%; }
@@ -32,6 +35,11 @@ summary.icon-btn::-webkit-details-marker { display: none; }
 .rna-table-link { display: flex; align-items: center; gap: 9px; min-height: 0; padding: 0; border: 0; background: transparent; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
 .rna-table-link:hover { color: var(--accent); }
 .rna-table-link svg { flex: 0 0 18px; width: 18px; height: 18px; color: var(--ink-muted); }
+.shell .form-grid label { color: var(--ink); font-size: 12px; font-weight: 500; }
+.shell .form-grid label > input:not([type="checkbox"]),
+.shell .form-grid label > select,
+.shell .form-grid label > textarea { min-height: 36px; border-color: var(--line-strong); border-radius: 7px; padding: 7px 10px; background: var(--surface); color: var(--ink); font-size: 13px; }
+.shell .form-grid label > small { color: var(--ink-muted); font-size: 11px; font-weight: 400; line-height: 1.5; }
 .rna-skill-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(130px, .45fr); align-content: start; gap: 8px 12px; min-height: 0; padding: 16px 0 12px; overflow: visible; }
 .rna-skill-fields label { display: grid; gap: 5px; min-width: 0; color: var(--ink); font-size: 12px; font-weight: 500; }
 .rna-skill-fields label.wide { grid-column: 1 / -1; }

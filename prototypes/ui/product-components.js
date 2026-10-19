@@ -81,7 +81,6 @@
       var text = "# " + names[item.page - 1] + "\n\n" + ["Выручка — **7,42 млн ₽**. Основной вклад в рост сентября.", "Выручка — **5,38 млн ₽**. Сопоставимый период подтверждён.", "В исходном файле отсутствует колонка «Выручка». Регион исключён из расчёта."][item.page - 1];
       var childOptions = { text: text, fullText: text, complete: true, sourceComplete: true, onCopy: copy };
       var childController = RNAssistantViewerRegistry.mount("markdown", content, childOptions); viewers.push(content);
-      auxiliaries.push(P.viewerUI.mount(target, "markdown", childOptions, childController));
       return;
     }
     if (kind === "json") options = { text: source, completeness: "full", expandedPaths: ["$", "$.regions"], onCopy: copy };
@@ -98,8 +97,7 @@
         textPage: { text: fullText }, fullText: fullText, textComplete: true, sourceComplete: true };
     }
     try {
-      var controller = RNAssistantViewerRegistry.mount(kind, target, options); viewers.push(target);
-      auxiliaries.push(P.viewerUI.mount(target, kind, options, controller));
+      RNAssistantViewerRegistry.mount(kind, target, options); viewers.push(target);
     }
     catch (error) { target.textContent = "Просмотр недоступен: " + error.message; }
   }

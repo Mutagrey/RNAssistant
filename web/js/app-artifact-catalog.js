@@ -2,6 +2,8 @@
   "use strict";
   if (!document.getElementById("artifactCatalog")) return;
   var generation = 0, previewGeneration = 0, pending = false, response = null, next = null, chat = null, previewUrl = null;
+  var typedPreview = null;
+  var sequencePreview = null;
   var selected = null, selectedRevision = null, collapsed = {}, searchTimer, loading = false, overviewRequested = true;
   var overviewLoading = false, overviewError = "";
   function el(id) { return document.getElementById("artifactCatalog" + id); }
@@ -51,7 +53,7 @@
     var items = !overviewLoading && !overviewError && response && response.items || [];
     items.forEach(function (item) {
       var row = document.createElement("tr"), name = document.createElement("td"), open = node("button", "", "rna-table-link artifact-overview-link");
-      open.type = "button"; open.addEventListener("click", function () { select(item.resourceUri); });
+      open.type = "button";
       open.innerHTML = RNAssistantNavigationTree.icon(icon(item));
       open.appendChild(node("span", item.title));
       name.appendChild(open); row.appendChild(name);
@@ -60,7 +62,15 @@
         item.linked ? "Этот чат" : item.documentId === response.documentId ? "В документе" : item.documentTitle || "Другой документ"));
       row.appendChild(ownerCell);
       var dateCell = node("td", ""); dateCell.appendChild(node("small", overviewDate(item.updatedUtc)));
-      row.appendChild(dateCell); rows.appendChild(row);
+      row.appendChild(dateCell);
+      row.tabIndex = 0;
+      row.setAttribute("aria-label", "Открыть материал «" + item.title + "»");
+      row.addEventListener("click", function () { select(item.resourceUri); });
+      row.addEventListener("keydown", function (event) {
+        if (event.target !== row || event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault(); select(item.resourceUri);
+      });
+      rows.appendChild(row);
     });
     el("OverviewTable").hidden = !items.length;
     el("OverviewEmpty").hidden = !!items.length;
@@ -68,10 +78,100 @@
       state.activeChatId ? "По этим условиям материалов нет." : "Откройте чат документа, чтобы увидеть материалы.");
   }
   function clearPreview() {
+    typedPreview = null;
+    if (sequencePreview) sequencePreview.destroy();
+    sequencePreview = null;
+    el("PreviewBody").querySelectorAll(".artifact-viewer-host, .collection-page").forEach(function (target) {
+      if (window.RNAssistantViewerRegistry) window.RNAssistantViewerRegistry.unmount(target);
+    });
     if (window.RNAssistantViewerRegistry) window.RNAssistantViewerRegistry.unmount(el("PreviewBody"));
     previewGeneration++; el("PreviewBody").replaceChildren(); el("Preview").hidden = true;
+    el("Preview").classList.remove("is-media-preview");
+    delete el("PreviewBody").dataset.productViewer;
     $("htmlWorkspaceEditor").hidden = false;
     if (previewUrl) URL.revokeObjectURL(previewUrl); previewUrl = null;
+  }
+  function renderSequence(text) {
+    var source = JSON.parse(text), items = source && source.items;
+    if (!Array.isArray(items) || !items.length || items.length > 10000) throw new Error("Коллекция не содержит доступных элементов.");
+    var body = el("PreviewBody"), page = node("div", "", "collection-page product-viewer");
+    body.dataset.productViewer = "collection";
+    function itemTitle(value, index) { return String(value && (value.region || value.title || value.name) || "Элемент " + (index + 1)); }
+    function amount(value) {
+      return typeof value === "number" && Number.isFinite(value)
+        ? (value / 1000000).toLocaleString("ru-RU", { maximumFractionDigits: 2 }) + " млн ₽" : "";
+    }
+    function select(index) {
+      var value = items[index], title = itemTitle(value, index), lines = ["# " + title];
+      if (value && typeof value === "object") {
+        Object.keys(value).forEach(function (key) {
+          if (key === "region" || key === "title" || key === "name") return;
+          var label = { revenue: "Выручка", changePercent: "Изменение к прошлому периоду", status: "Статус" }[key] || key;
+          var content = key === "revenue" ? amount(value[key]) : key === "changePercent" && typeof value[key] === "number"
+            ? value[key].toLocaleString("ru-RU") + "%" :
+            typeof value[key] === "string" ? value[key] : JSON.stringify(value[key]);
+          lines.push("**" + label.replace(/[\\*_`]/g, "\\$&") + "** — " + String(content).replace(/[\\*_`]/g, "\\$&") + ".");
+        });
+      } else lines.push(String(value));
+      window.RNAssistantViewerRegistry.mount("markdown", page, {
+        text: lines.join("\n\n"), fullText: lines.join("\n\n"), complete: true, sourceComplete: true,
+        onCopy: window.copyTextResult
+      });
+    }
+    var rail = window.RNAssistantSequenceViewer.createRail({
+      title: "Элементы", ariaLabel: "Элементы коллекции", count: items.length,
+      currentIndex: 0, orientation: "horizontal", className: "collection-rail",
+      showJump: false, showNumbers: false, itemExtent: 156,
+      getItem: function (index) { return items[index]; },
+      itemLabel: function (index, value) { return itemTitle(value, index); },
+      onSelect: select,
+      renderItem: function (index, value, preview) {
+        var title = node("strong", itemTitle(value, index));
+        var summary = value && (amount(value.revenue) || value.status) || "";
+        preview.append(title, node("span", String(summary)));
+        return "ready";
+      }
+    });
+    sequencePreview = rail;
+    body.append(rail.element, page);
+    select(0);
+  }
+  function refreshViewer() {
+    if (!typedPreview || el("Preview").hidden || !current(typedPreview.chatId, typedPreview.navigation)) return;
+    var body = el("PreviewBody"), currentPreview = typedPreview;
+    body.querySelectorAll(".artifact-viewer-host").forEach(function (target) {
+      window.RNAssistantViewerRegistry.unmount(target);
+    });
+    body.replaceChildren(); body.dataset.productViewer = currentPreview.kind;
+    var viewer = window.RNAssistantHtmlWorkspaceViewerActions.artifactViewerState(currentPreview.uri);
+    if (viewer && viewer.status === "error") {
+      showRawMedia(currentPreview.title, currentPreview.mime, currentPreview.url,
+        "Просмотр страниц недоступен: " + (viewer.message || "ошибка чтения") + ". Открыт исходный файл.");
+      typedPreview = null;
+      return;
+    }
+    var artifact = { Kind: currentPreview.kind, Title: currentPreview.title,
+      ResourceUri: currentPreview.uri, MimeType: currentPreview.mime };
+    if (!window.RNAssistantHtmlWorkspaceArtifacts.appendTypedViewer(body, artifact,
+      window.RNAssistantHtmlWorkspaceViewerActions)) {
+      status("Просмотр этого формата недоступен.");
+    }
+  }
+  function showRawMedia(title, mime, url, reason) {
+    var body = el("PreviewBody");
+    body.replaceChildren(); body.dataset.productViewer = /^image\//i.test(mime) ? "image" : "pdf";
+    if (reason) body.appendChild(node("p", reason, "artifact-viewer-fallback-note"));
+    if (/^image\/(?:jpeg|png|gif|webp)(?:;|$)/i.test(mime)) {
+      var target = node("div", "", "artifact-viewer-host artifact-typed-viewer product-viewer");
+      body.appendChild(target);
+      window.RNAssistantViewerRegistry.mount("image", target, {
+        title: title, mimeType: mime, data: { objectUrl: url }
+      });
+    } else if (/^image\//i.test(mime)) {
+      var image = document.createElement("img"); image.src = url; image.alt = title; body.appendChild(image);
+    } else {
+      var pdf = document.createElement("iframe"); pdf.src = url; pdf.title = title; body.appendChild(pdf);
+    }
   }
   function show(scope) {
     if (!canMutate()) return false;
@@ -412,18 +512,37 @@
         el("PreviewBody").insertBefore(modes, el("PreviewBody").firstChild);
         el("PreviewBody").appendChild(picker); el("PreviewBody").appendChild(pre);
         mode(showSource);
-      } else if (/^application\/pdf(?:;|$)/i.test(mime)) {
-        previewUrl = URL.createObjectURL(new Blob([result.bytes], { type: "application/pdf" }));
-        var pdf = document.createElement("iframe"); pdf.src = previewUrl; pdf.title = item.title;
-        el("PreviewBody").appendChild(pdf);
-      } else if (/^image\//.test(mime)) {
+      } else if (/^application\/pdf(?:;|$)/i.test(mime) || /^image\//i.test(mime)) {
         previewUrl = URL.createObjectURL(new Blob([result.bytes], { type: mime }));
-        var image = document.createElement("img"); image.src = previewUrl; image.alt = item.title; el("PreviewBody").appendChild(image);
+        el("Preview").classList.add("is-media-preview");
+        if (item.documentId === response.documentId &&
+            (/^application\/pdf(?:;|$)/i.test(mime) || /^image\/(?:jpeg|png|gif|webp)(?:;|$)/i.test(mime))) {
+          typedPreview = { chatId: id, navigation: nav, uri: item.resourceUri, url: previewUrl,
+            title: item.title, mime: mime, kind: /^image\//i.test(mime) ? "image" : "pdf" };
+          refreshViewer();
+        } else showRawMedia(item.title, mime, previewUrl, "");
       } else if (/text|json|javascript|xml/.test(mime)) {
         var text = new TextDecoder("utf-8", { fatal: true }).decode(result.bytes);
+        if (item.kind === "sequence") {
+          try { renderSequence(text); }
+          catch (error) {
+            el("PreviewBody").appendChild(node("p", "Коллекция не открыта: " + error.message + " Исходные данные доступны ниже.", "artifact-viewer-fallback-note"));
+            var rawSequence = node("div", "", "artifact-viewer-host product-viewer");
+            el("PreviewBody").appendChild(rawSequence);
+            window.RNAssistantViewerRegistry.mount("json", rawSequence, {
+              text: text, pageText: text, fullText: text, complete: true,
+              sourceComplete: true, completeness: "full", onCopy: window.copyTextResult
+            });
+          }
+          status(""); return;
+        }
         var kind = item.kind === "task_list" ? "task_list" :
           item.kind === "markdown" || item.kind === "plan_document" || /markdown/.test(mime) ? "markdown" : /json/.test(mime) ? "json" : "text";
-        window.RNAssistantViewerRegistry.mount(kind, el("PreviewBody"), { text: text, pageText: text, fullText: text, complete: true });
+        el("PreviewBody").dataset.productViewer = kind;
+        window.RNAssistantViewerRegistry.mount(kind, el("PreviewBody"), {
+          text: text, pageText: text, fullText: text, complete: true,
+          sourceComplete: true, completeness: "full", onCopy: window.copyTextResult
+        });
       } else el("PreviewBody").appendChild(node("p", "Файл: " + result.transfer.fileName + " · " + result.bytes.length + " байт. Используйте «Скачать» для открытия."));
       status("");
     } catch (error) { if (current(id, nav) && version === previewGeneration) status(error.detail || error.message); }
@@ -461,6 +580,7 @@
   el("Import").addEventListener("click", function () { if (canMutate()) el("File").click(); });
   el("File").addEventListener("change", function () { var file = this.files[0]; this.value = ""; importFile(file); });
   window.RNAssistantArtifactCatalog = { show: show, editor: editor, sync: sync, changeLink: changeLink,
+    refreshViewer: refreshViewer,
     tree: tree, select: select, canSelect: canMutate, remove: function (uri) {
       var item = response && response.items.find(function (item) { return item.resourceUri === uri; });
       if (!item || !item.canDelete) { status("Обновите дерево и выберите актуальную версию артефакта для удаления."); return false; }

@@ -1,16 +1,15 @@
 (function () {
   "use strict";
-  var P = window.Prototype;
   // Presentation only. Parsing, completeness, resource leases and navigation stay in web/.
-  P.viewerUI = {
+  window.RNAssistantViewerUI = {
     mount: function (root, kind, options, controller) {
       var events = new AbortController(), queued = false;
       function icon(control, name, only) {
         if (control.dataset.uiIcon) return;
         control.dataset.uiIcon = name;
         var label = control.getAttribute("aria-label") || control.title || control.textContent;
-        if (only) { control.setAttribute("aria-label", label); control.title = label; control.innerHTML = P.icon(name); }
-        else control.insertAdjacentHTML("afterbegin", P.icon(name));
+        if (only) { control.setAttribute("aria-label", label); control.title = label; control.innerHTML = window.RNAssistantNavigationTree.icon(name); }
+        else control.insertAdjacentHTML("afterbegin", window.RNAssistantNavigationTree.icon(name));
       }
       function decorate() {
         root.querySelectorAll('button.secondary, button.rn-json-more, button.rn-json-copy').forEach(function (button) {
@@ -21,6 +20,13 @@
           tabs.classList.add("view-switch");
           tabs.querySelectorAll("button").forEach(function (button) {
             button.classList.remove("ghost");
+            button.setAttribute("aria-pressed", String(button.classList.contains("active")));
+          });
+        });
+        root.querySelectorAll('.rn-json-modes').forEach(function (tabs) {
+          tabs.classList.add("view-switch");
+          tabs.querySelectorAll("button").forEach(function (button) {
+            button.classList.add("button", "compact");
             button.setAttribute("aria-pressed", String(button.classList.contains("active")));
           });
         });

@@ -406,9 +406,6 @@ dialog::backdrop { background: var(--scrim); backdrop-filter: blur(3px); }
 .model-option[aria-checked="true"] { color: var(--accent); background: var(--accent-soft); }
 .model-option > svg { width: 16px; height: 16px; }
 .editor-bar > .actions:last-child { margin-left: auto; }
-.view-switch { display: inline-flex; align-items: center; gap: 2px; padding: 3px; background: var(--surface-subtle); border-radius: 10px; }
-.view-switch .button { border: 0; background: transparent; }
-.view-switch .button:is([aria-current="page"], .active) { color: var(--ink); background: var(--surface); box-shadow: 0 1px 3px #00000012; }
 .material-file-picker > summary { max-width: 280px; }
 .material-file-picker .popover-menu { left: 0; right: auto; }
 .material-file-picker .popover-menu button > span { flex: 1; }

@@ -279,7 +279,7 @@ async function serve() {
     }), "the standalone button inherits the shared tree navigation geometry and motion");
     assert.equal(await normal.locator("#htmlWorkspaceTree .navigation-tree-row.selected").count(), 0,
       "the overview does not select a second tree row");
-    await normal.locator("#artifactCatalogOverviewRows .artifact-overview-link").first().click();
+    await normal.locator("#artifactCatalogOverviewRows tr").first().locator("td").nth(1).click();
     await normal.waitForFunction(() => document.querySelector("#artifactDetailPreview").textContent.includes("Москва"));
     assert.ok((await normal.locator("#artifactDetailPreview").textContent()).includes("18,4%"));
     assert.equal(await normal.locator("#artifactCatalogAll").getAttribute("aria-current"), null);
@@ -296,7 +296,7 @@ async function serve() {
     assert.ok((await normal.locator("#artifactCatalogPreviewBody").textContent()).includes("7420000"));
     await normal.locator("#artifactCatalogAll").click();
     await normal.locator("#artifactCatalogOverviewRows").getByRole("button", { name: "Диаграмма.png" }).click();
-    await normal.locator("#artifactCatalogPreviewBody img").waitFor();
+    await normal.locator("#artifactCatalogPreviewBody .rn-image-viewer").waitFor();
     assert.equal(await normal.locator("#artifactCatalogStatus").textContent(), "");
     await normal.locator('#pluginRail [data-plugin-id="data-templates"]').hover();
     await normal.locator('.rail-hover-card').getByRole('button', { name: 'Удалить с панели' }).waitFor();
@@ -356,7 +356,8 @@ async function serve() {
     await normal.locator('.section-rail [data-section="artifacts"]').click();
     await normal.locator("#artifactCatalogAll").click();
     await normal.locator("#artifactCatalogOverviewRows").getByRole("button", { name: "Методика расчёта.pdf" }).click();
-    await normal.locator("#artifactCatalogPreviewBody iframe").waitFor();
+    await normal.locator("#artifactCatalogPreviewBody .rn-pdf-viewer").waitFor();
+    await normal.locator("#artifactCatalogPreviewBody .rn-pdf-thumbnail-rail").waitFor();
     assert.equal(await normal.locator("#artifactCatalogStatus").textContent(), "");
     await normal.locator('.section-rail [data-section="chat"]').click();
     await normal.locator("#chatScopeSwitcher summary").click();
@@ -473,7 +474,7 @@ async function serve() {
     await sideBySide.locator("#example").selectOption("library/skill");
     await sideBySide.frameLocator("#product").locator("#skillEditorPanel .rna-skill-fields").waitFor();
     await sideBySide.locator("#example").selectOption("materials/image");
-    await sideBySide.frameLocator("#product").locator("#artifactCatalogPreviewBody img").waitFor();
+    await sideBySide.frameLocator("#product").locator("#artifactCatalogPreviewBody .rn-image-viewer").waitFor();
     await sideBySide.close();
 
     const failed = await browser.newPage();

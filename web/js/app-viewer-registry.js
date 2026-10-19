@@ -4,6 +4,7 @@
   var allowedKinds = { image: true, json: true, markdown: true, pdf: true, task_list: true, text: true };
   var factories = Object.create(null);
   var mounted = typeof WeakMap === "function" ? new WeakMap() : null;
+  var decorations = typeof WeakMap === "function" ? new WeakMap() : null;
 
   function normalizeKind(kind) {
     return String(kind || "").trim().toLowerCase();
@@ -19,6 +20,9 @@
 
   function unmount(target) {
     if (!target) return;
+    var decoration = decorations ? decorations.get(target) : target.__rnViewerDecoration;
+    if (decoration && typeof decoration.destroy === "function") decoration.destroy();
+    if (decorations) decorations.delete(target); else delete target.__rnViewerDecoration;
     var current = mounted ? mounted.get(target) : target.__rnViewerController;
     if (current && typeof current.destroy === "function") current.destroy();
     if (mounted) mounted.delete(target); else delete target.__rnViewerController;
@@ -34,6 +38,10 @@
     if (!controller || !controller.element) throw new Error("Viewer factory returned an invalid controller.");
     target.appendChild(controller.element);
     if (mounted) mounted.set(target, controller); else target.__rnViewerController = controller;
+    if (window.RNAssistantViewerUI && target.closest(".product-viewer")) {
+      var decoration = window.RNAssistantViewerUI.mount(target, kind, options || {}, controller);
+      if (decorations) decorations.set(target, decoration); else target.__rnViewerDecoration = decoration;
+    }
     return controller;
   }
 

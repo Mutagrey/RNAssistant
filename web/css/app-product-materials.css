@@ -54,11 +54,20 @@
 #tab-artifacts .artifact-overview-toolbar select { flex: 0 1 auto; max-width: 170px; min-height: 36px; padding: 7px 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); color: var(--ink); font: 12px var(--font); }
 #tab-artifacts .artifact-overview-table-wrap th:first-child,
 #tab-artifacts .artifact-overview-table-wrap td:first-child { min-width: 180px; }
+#tab-artifacts .artifact-overview-table-wrap tbody tr { cursor: pointer; }
+#tab-artifacts .artifact-overview-table-wrap tbody tr:hover,
+#tab-artifacts .artifact-overview-table-wrap tbody tr:focus-visible { background: var(--surface-hover); outline: none; }
+#tab-artifacts .artifact-overview-table-wrap tbody tr:focus-visible td:first-child { box-shadow: inset 2px 0 var(--accent); }
 #tab-artifacts .artifact-overview-empty { padding: 30px 18px; color: var(--ink-muted); font-size: 13px; text-align: center; }
 #tab-artifacts .artifact-catalog-preview { padding: 16px 18px; background: var(--surface); }
+#tab-artifacts .artifact-catalog-preview.is-media-preview { overflow: hidden; }
 #tab-artifacts #artifactCatalogActions:not([hidden]) + .artifact-catalog-preview > h3 { display: none; }
 #tab-artifacts #artifactCatalogPreviewBody { min-height: 0; }
-#tab-artifacts #artifactCatalogPreviewBody .rn-json-toolbar { display: flex; }
+#tab-artifacts .artifact-catalog-preview.is-media-preview #artifactCatalogPreviewBody { overflow: hidden; }
+#tab-artifacts .artifact-catalog-preview.is-media-preview .artifact-typed-viewer { flex: 1; min-height: 0; height: 100%; }
+#tab-artifacts .artifact-catalog-preview.is-media-preview .rn-pdf-viewer-body { height: 100%; min-height: 0; }
+#tab-artifacts .artifact-viewer-fallback-note { margin: 0; color: var(--ink-muted); font-size: 11px; }
+#tab-artifacts #artifactCatalogPreviewBody > iframe { border: 1px solid var(--line); border-radius: 10px; }
 #tab-artifacts #artifactCatalogPreviewBody .rn-markdown-viewer { width: 100%; }
 #tab-artifacts #artifactCatalogPreviewBody .rn-text-viewer-toolbar button { min-height: 30px; }
 #tab-artifacts #artifactCatalogPreviewBody .rn-text-viewer-source pre { border: 0; background: transparent; }
@@ -67,6 +76,7 @@
 #tab-artifacts #artifactCatalogActions:not([hidden]) ~ #htmlWorkspaceEditor .resource-editor-titlebox { display: none; }
 #tab-artifacts #htmlWorkspaceEditor:has(#artifactDetailPreview:not(.hidden)) .html-workspace-head:has(.html-workspace-mode-button[data-html-mode="edit"].hidden):not(:has(.resource-editor-actions > :not(.hidden))) { display: none; }
 #tab-artifacts .artifact-detail-preview:not(.is-media-preview) { padding: 16px 18px 24px; }
+#tab-artifacts .artifact-detail-preview .rn-markdown-viewer { width: 100%; max-width: none; margin: 0; }
 #tab-artifacts .artifact-detail-preview .rn-markdown-viewer-rendered { padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
 #tab-artifacts .html-workspace-tree { scrollbar-width: thin; }
 #tab-artifacts .html-workspace-tree button { font-family: var(--font); }

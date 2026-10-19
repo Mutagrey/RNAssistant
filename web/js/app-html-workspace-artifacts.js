@@ -64,7 +64,7 @@
     }
     appendContentLabel(root, label);
     var target = document.createElement("div");
-    target.className = "artifact-viewer-host artifact-json-viewer";
+    target.className = "artifact-viewer-host artifact-json-viewer product-viewer";
     root.appendChild(target);
     window.RNAssistantViewerRegistry.mount("json", target, {
       text: String(text),
@@ -134,7 +134,7 @@
     }
     if (typeof draftText === "string") {
       var draftTarget = document.createElement("div");
-      draftTarget.className = "artifact-viewer-host artifact-typed-viewer";
+      draftTarget.className = "artifact-viewer-host artifact-typed-viewer product-viewer";
       root.appendChild(draftTarget);
       window.RNAssistantViewerRegistry.mount("markdown", draftTarget, {
         text: draftText,
@@ -148,7 +148,7 @@
     }
     if (expectedKind === "task_list") {
       var taskTarget = document.createElement("div");
-      taskTarget.className = "artifact-viewer-host artifact-typed-viewer";
+      taskTarget.className = "artifact-viewer-host artifact-typed-viewer product-viewer";
       root.appendChild(taskTarget);
       window.RNAssistantViewerRegistry.mount("task_list", taskTarget, {
         text: artifactInlineText(artifact)
@@ -187,7 +187,7 @@
         return true;
       }
       var imageTarget = document.createElement("div");
-      imageTarget.className = "artifact-viewer-host artifact-typed-viewer";
+      imageTarget.className = "artifact-viewer-host artifact-typed-viewer product-viewer";
       root.appendChild(imageTarget);
       var gallery = typeof actions.imageGalleryContext === "function"
         ? actions.imageGalleryContext(artifact)
@@ -269,7 +269,7 @@
         return true;
       }
       var pdfTarget = document.createElement("div");
-      pdfTarget.className = "artifact-viewer-host artifact-typed-viewer";
+      pdfTarget.className = "artifact-viewer-host artifact-typed-viewer product-viewer";
       root.appendChild(pdfTarget);
       window.RNAssistantViewerRegistry.mount("pdf", pdfTarget, {
         title: viewer.title,
@@ -326,7 +326,7 @@
       return true;
     }
     var target = document.createElement("div");
-    target.className = "artifact-viewer-host artifact-typed-viewer";
+    target.className = "artifact-viewer-host artifact-typed-viewer product-viewer";
     root.appendChild(target);
     window.RNAssistantViewerRegistry.mount(expectedKind, target, {
       text: page.text,
@@ -872,6 +872,7 @@
     planSummary: planSummary,
     isUploadedHtmlArtifact: isUploadedHtmlArtifact,
     renderDetail: renderDetail,
+    appendTypedViewer: appendTypedArtifactViewer,
     typeLabel: typeLabel,
     validatePlanDraft: validatePlanDraft
   };
