@@ -67,6 +67,9 @@ namespace RNAssistant.Harness
                     var scratch=PluginRequest(service,preview,PluginMethod.PickProject).Result.Result.Handle;
                     AssertTrue(scratch!=project && preview.Data.DataWorkspaceId!=active.Data.DataWorkspaceId,"preview test project is independent");
                     AssertEqual("not_found",PluginRequest(service,preview,PluginMethod.OpenFile,"input.txt",scratch).Result.ErrorCode,"production bytes absent from preview");
+                    var oldPreviewGrant=preview.Data;
+                    PluginRequest(service,preview,PluginMethod.PickProject).GetAwaiter().GetResult();
+                    AssertTrue(oldPreviewGrant.Lifetime.IsCancellationRequested,"reselecting preview data revokes its previous grant");
                     AssertEqual("original",Encoding.UTF8.GetString(active.ReadRangeAsync(read.Handle,0,8,CancellationToken.None).Result),"pinned bytes available");
                     var oldCode=service.ReadPackageFile(active,"app.js");File.WriteAllText(Path.Combine(item.SourceRoot,"app.js"),"changed");
                     candidate=service.Check(item.PluginId);service.Apply(new PluginApplyRequest{PluginId=item.PluginId,CandidateId=candidate.CandidateId});
@@ -206,6 +209,27 @@ namespace RNAssistant.Harness
                     AssertEqual(5,instance.Manifest.Vendors.Length,"shared vendor resolution");
                     AssertTrue(service.Conversations.AvailableToolIds(new WorkspaceStore(paths).Open(item.SourceRoot)).Contains("plugins.data-templates.extract"),"chat command descriptor");
                     foreach(var vendor in service.Vendors.List())service.Vendors.Resolve(vendor.Id,vendor.Version);
+                    var firstRoot=Path.Combine(paths.Root,"data-project-one");
+                    var secondRoot=Path.Combine(paths.Root,"data-project-two");
+                    Directory.CreateDirectory(firstRoot);Directory.CreateDirectory(secondRoot);
+                    var picker=new PluginPicker{Root=firstRoot};service.ProjectPicker=picker;
+                    var first=PluginRequest(service,instance,PluginMethod.PickProject).Result.Result.Handle;
+                    var created=service.CreateProjectChat(new ProjectChatRequest{ProjectId=first,Title="Project discussion"});
+                    AssertEqual(created.SessionId,service.ProjectChats().Chats.Single().Id,"project chat appears in its selected workspace");
+                    service.RenameProjectChat(new ProjectChatRequest{ProjectId=first,SessionId=created.SessionId,Title="Renamed discussion"});
+                    AssertEqual("Renamed discussion",service.ProjectChat(new ProjectChatRequest{ProjectId=first,SessionId=created.SessionId}).State.Title,
+                        "project chat title persists in workspace history");
+                    picker.Root=secondRoot;PluginRequest(service,instance,PluginMethod.PickProject).GetAwaiter().GetResult();
+                    AssertEqual(0,service.ProjectChats().Chats.Count,"another data project has separate chats");
+                    PluginFailure(()=>service.ProjectChat(new ProjectChatRequest{ProjectId=first,SessionId=created.SessionId}),"plugin_project_changed");
+                    picker.Root=firstRoot;first=PluginRequest(service,instance,PluginMethod.PickProject).Result.Result.Handle;
+                    AssertEqual(created.SessionId,service.ProjectChats().Chats.Single().Id,"project chat history survives project reselection");
+                    PluginFailure(()=>service.ControlProjectChatAsync(new ProjectChatRequest {ProjectId=first,
+                        SessionId=created.SessionId,RunId="missing",Cursor="events1.missing"},true,
+                        new AppSettings(),()=>"",CancellationToken.None).GetAwaiter().GetResult(),"project_chat_stale");
+                    service.DeleteProjectChat(new ProjectChatRequest{ProjectId=first,SessionId=created.SessionId});
+                    AssertEqual(0,service.ProjectChats().Chats.Count,"project chat deletion removes only its history");
+                    AssertTrue(Directory.Exists(firstRoot)&&Directory.Exists(secondRoot),"project chat actions preserve data folders");
                 }
             });
         }

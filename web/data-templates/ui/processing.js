@@ -113,7 +113,7 @@
         templateName: runningTemplate.name, status: "queued", error: "", progress: null, result: null, store: null }));
       selectedId = queue[0].id;
       const operation = { abort: new AbortController(), started: performance.now(), timer: null };
-      run = operation; operation.timer = setInterval(render, 500); render(); view.showResults();
+      run = operation; operation.timer = setInterval(render, 500); render(); view.showProcessing();
       let executor = null;
       try {
         await cleanup;

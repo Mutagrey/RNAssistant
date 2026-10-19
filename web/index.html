@@ -51,7 +51,7 @@
   <link rel="stylesheet" href="css/app-agent-data.css?v=json-height-20260929-1">
   <link rel="stylesheet" href="css/app-theme.css?v=chat-tree-20261018-1">
   <link rel="stylesheet" href="css/app-product-tokens.css?v=product-ui-20261018-1">
-  <link rel="stylesheet" href="css/app-product-navigation.css?v=project-ui-20261018-1">
+  <link rel="stylesheet" href="css/app-product-navigation.css?v=shared-project-navigation-20261019-1">
   <link rel="stylesheet" href="css/app-product-components.css?v=shared-action-menu-20261019-1">
   <link rel="stylesheet" href="css/app-product-viewers.css?v=product-ui-20261018-1">
   <link rel="stylesheet" href="css/app-product-materials.css?v=product-ui-20261018-1">
@@ -76,7 +76,7 @@
         <div class="chat-workspace split-layout" id="chatLayout" data-default-left="310" data-min-left="240">
           <aside class="chat-sidebar global-nav" aria-label="Документы и чаты">
             <div class="chat-sidebar-head">
-              <strong class="product-nav-heading"><span id="chatScopeIcon" aria-hidden="true"></span>Документы Office</strong>
+              <details class="panel-switcher chat-scope-switcher product-nav-heading" id="chatScopeSwitcher"><summary aria-label="Раздел рабочей области"><span id="chatScopeIcon" aria-hidden="true"></span><span>Документы Office</span><svg data-rna-icon="down" viewBox="0 0 24 24" aria-hidden="true"></svg></summary><div class="popover-menu"><button type="button" data-workspace-scope="office">Документы Office</button><button type="button" data-workspace-scope="projects">Проекты</button></div></details>
               <div class="chat-tree-toolbar">
                 <button type="button" class="icon-btn" id="toggleChatSearchButton" title="Поиск по чатам" aria-label="Поиск по чатам" aria-expanded="false" aria-controls="chatSearchWrap"><svg data-rna-icon="search" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
                 <button type="button" class="icon-btn" id="newChatButton" title="Новый чат" aria-label="Новый чат"><svg data-rna-icon="plus" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
@@ -371,6 +371,24 @@
             <div class="chat-inspector-body" id="chatInspectorBody"></div>
           </aside>
         </div>
+        <div class="project-chat-layout chat-workspace split-layout" id="projectChatLayout" data-default-left="310" data-min-left="240" hidden>
+          <aside class="chat-sidebar global-nav" aria-label="Проекты и чаты">
+            <div class="chat-sidebar-head">
+              <details class="panel-switcher chat-scope-switcher product-nav-heading" id="projectScopeSwitcher"><summary aria-label="Раздел рабочей области"><span data-project-scope-icon aria-hidden="true"></span><span>Проекты</span><svg data-rna-icon="down" viewBox="0 0 24 24" aria-hidden="true"></svg></summary><div class="popover-menu"><button type="button" data-workspace-scope="office">Документы Office</button><button type="button" data-workspace-scope="projects">Проекты</button></div></details>
+              <div class="chat-tree-toolbar"><button type="button" class="icon-btn" id="projectChatRefresh" title="Обновить проекты" aria-label="Обновить проекты"><svg data-rna-icon="refresh" viewBox="0 0 24 24" aria-hidden="true"></svg></button><button type="button" class="icon-btn" id="projectChatNew" title="Новый чат проекта" aria-label="Новый чат проекта"><svg data-rna-icon="plus" viewBox="0 0 24 24" aria-hidden="true"></svg></button></div>
+            </div>
+            <div class="project-chat-tree" id="projectChatTree" aria-label="Чаты проекта"></div>
+          </aside>
+          <div class="splitter" role="separator" aria-orientation="vertical" aria-label="Изменить ширину дерева проектов"></div>
+          <div class="chat-main project-chat-main">
+            <div class="chatbar"><div class="chat-title-block"><span id="projectChatContext">Проект не выбран</span><strong id="projectChatTitle">Чат проекта</strong></div><button type="button" class="icon-btn" id="projectChatOpenData" title="Открыть Данные и шаблоны" aria-label="Открыть Данные и шаблоны"><svg data-rna-icon="chart" viewBox="0 0 24 24" aria-hidden="true"></svg></button></div>
+            <div class="project-chat-notice" id="projectChatNotice" role="status" aria-live="polite"></div>
+            <div class="chat-scroll-region"><div class="messages" id="projectChatMessages" role="region" aria-label="Сообщения чата проекта" tabindex="0"></div></div>
+            <div class="project-chat-control" id="projectChatControl" hidden><pre id="projectChatPending"></pre><button type="button" id="projectChatApprove">Разрешить</button><button type="button" id="projectChatReject">Отклонить</button></div>
+            <form class="project-chat-questions" id="projectChatQuestions" hidden></form>
+            <form class="composer project-chat-composer" id="projectChatForm"><div class="composer-input-wrap"><textarea id="projectChatInput" rows="2" placeholder="Спросите о проекте…" aria-label="Сообщение в чат проекта"></textarea></div><div class="composer-footer"><span>Файлы проекта добавляются в контекст только через инструменты агента.</span><button type="button" id="projectChatStop" hidden>Остановить</button><button type="submit" id="projectChatSend">Отправить</button></div></form>
+          </div>
+        </div>
       </section>
 
       <div class="hidden" id="libraryToolEditorSource">
@@ -575,17 +593,20 @@
               <label>Папка готового пакета<input id="pluginVendorRoot" placeholder="C:\Packages\library"></label><button id="pluginVendorImport" type="button">Добавить пакет</button>
             </details>
           </div>
-          <div class="plugin-workbench" id="pluginWorkbench" hidden>
-            <div class="plugin-toolbar"><div class="plugin-title"><strong id="pluginTitle"></strong><span class="plugin-source" id="pluginSource"></span></div>
-              <button id="pluginCheck" type="button">Проверить</button><button id="pluginPreview" type="button">Предпросмотр</button><button id="pluginApply" type="button">Применить</button><button id="pluginReopen" type="button">Открыть активную</button><button id="pluginDisable" type="button">Отключить</button>
-              <label><input type="checkbox" id="pluginDevelop">Разработка</label>
+          <div class="plugin-workbench split-layout" id="pluginWorkbench" data-default-left="310" data-min-left="240" hidden>
+            <aside class="plugin-navigation global-nav" id="pluginNavigationPane" aria-label="Разделы проекта"><div class="product-nav-heading product-search-heading"><strong>Данные и шаблоны</strong><div class="tree-toolbar"><button class="product-nav-search-toggle icon-btn" type="button" data-nav-search-toggle="pluginNavigationSearch" aria-label="Поиск в проекте" aria-expanded="false" aria-controls="pluginNavigationSearch"><svg data-rna-icon="search" viewBox="0 0 24 24" aria-hidden="true"></svg></button><input class="product-nav-search-input" id="pluginNavigationSearch" type="search" placeholder="Найти…" aria-label="Поиск в дереве проекта" autocomplete="off" hidden><button class="icon-btn" type="button" id="pluginNavigationProject" title="Открыть проект" aria-label="Открыть проект"><svg data-rna-icon="folder" viewBox="0 0 24 24" aria-hidden="true"></svg></button></div></div><div id="pluginNavigationTree" class="plugin-navigation-tree"></div></aside>
+            <div class="splitter" role="separator" aria-label="Ширина дерева проекта" aria-orientation="vertical"></div>
+            <div class="plugin-content"><div class="plugin-toolbar"><div class="plugin-title"><span id="pluginProjectName"></span><strong id="pluginTitle"></strong><span class="plugin-source" id="pluginSource"></span></div>
+              <button id="pluginProject" class="button compact" type="button"><svg data-rna-icon="folder" viewBox="0 0 24 24" aria-hidden="true"></svg>Проект</button>
+              <button id="pluginCheck" class="button compact" type="button">Проверить</button><button id="pluginPreview" class="button compact" type="button">Предпросмотр</button><button id="pluginApply" class="button compact" type="button">Применить</button><button id="pluginReopen" class="button compact" type="button">Открыть активную</button><button id="pluginDisable" class="button compact" type="button">Отключить</button>
+              <label class="button compact plugin-development-toggle" title="Разработка"><input type="checkbox" id="pluginDevelop" aria-label="Разработка"><svg data-rna-icon="code" viewBox="0 0 24 24" aria-hidden="true"></svg><span>Разработка</span></label>
             </div>
             <div class="plugin-body"><div class="plugin-preview" id="pluginPreviewMount"></div><aside class="plugin-chat" id="pluginChat" hidden>
-              <strong>Чат исходников</strong><div class="plugin-chat-messages" id="pluginChatMessages"></div><p id="pluginChatStatus" role="status"></p>
+              <div class="plugin-chat-head"><strong>Чат исходников</strong><div id="pluginDevelopmentActions"></div></div><div class="plugin-chat-messages" id="pluginChatMessages"></div><p id="pluginChatStatus" role="status"></p>
               <div class="plugin-approval" id="pluginApproval" hidden><pre id="pluginApprovalText"></pre><button type="button" id="pluginApprove">Разрешить</button><button type="button" id="pluginReject">Отклонить</button></div>
               <form id="pluginQuestions" class="plugin-questions" hidden></form>
               <form id="pluginChatForm"><textarea id="pluginMessage" rows="3" required placeholder="Опишите изменение плагина"></textarea><div><button id="pluginSend" type="submit">Отправить</button><button id="pluginStop" type="button">Остановить</button></div></form>
-            </aside></div>
+            </aside></div></div>
           </div>
         </div>
       </section>
@@ -1183,6 +1204,7 @@
   <script src="js/app-chat.js?v=chat-tree-20261018-1"></script>
   <script src="js/app-chat-edit.js?v=chat-sync-20260903-1-usage-20261002-1"></script>
   <script src="js/app-plugins.js"></script>
+  <script src="js/app-project-chats.js"></script>
   <script src="js/app.js?v=chat-tree-20261018-1"></script>
 </body>
 </html>

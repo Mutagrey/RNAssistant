@@ -80,6 +80,33 @@ namespace RNAssistant.Runtime
             return _workspaces.ListSessions(_chats, workspace);
         }
 
+        public ChatSession RenameSession(WorkspaceDescriptor workspace, string sessionId, string title)
+        {
+            using (AcquireSessionLease(sessionId))
+            {
+                RequireIdleSession(workspace, sessionId);
+                return _workspaces.RenameSession(_chats, workspace, sessionId, title);
+            }
+        }
+
+        public bool DeleteSession(WorkspaceDescriptor workspace, string sessionId)
+        {
+            using (AcquireSessionLease(sessionId))
+            {
+                RequireIdleSession(workspace, sessionId);
+                return _workspaces.DeleteSession(_chats, workspace, sessionId);
+            }
+        }
+
+        private void RequireIdleSession(WorkspaceDescriptor workspace, string sessionId)
+        {
+            var session = GetSession(workspace, sessionId);
+            if (session == null) throw new InvalidOperationException("Workspace session was not found.");
+            var lifecycle = session.LastRun?.KernelState?.Summary?.Lifecycle;
+            if (lifecycle == RunLifecycle.Running || lifecycle == RunLifecycle.AwaitingConfirmation)
+                throw new InvalidOperationException("Stop or resolve the active run before changing this chat.");
+        }
+
         public IReadOnlyList<string> AvailableToolIds(WorkspaceDescriptor workspace, string mode = ChatModes.Agent, MutationPolicy mutationPolicy = MutationPolicy.Ask)
         {
             return new WorkspacePorts(_paths, _chats, _files, _payloads, _webSnapshots, workspace, null, new AppSettings(), null, null,

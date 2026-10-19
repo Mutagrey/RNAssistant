@@ -36,6 +36,14 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.GetPluginVendors: return new PluginVendorCatalogDto {Items=Plugins.Vendors.List()};
                     case BridgeOperationId.ImportPluginVendor: return Plugins.Vendors.Import(Payload<PluginConnectRequest>(payload).RootPath);
                     case BridgeOperationId.ResolveHtmlVendor: return Plugins.ResolveHtmlVendor(Payload<PluginVendorRequest>(payload));
+                    case BridgeOperationId.GetProjectChats: return Plugins.ProjectChats();
+                    case BridgeOperationId.CreateProjectChat: return Plugins.CreateProjectChat(Payload<ProjectChatRequest>(payload));
+                    case BridgeOperationId.GetProjectChat: return Plugins.ProjectChat(Payload<ProjectChatRequest>(payload));
+                    case BridgeOperationId.RenameProjectChat: return Plugins.RenameProjectChat(Payload<ProjectChatRequest>(payload));
+                    case BridgeOperationId.DeleteProjectChat: return Plugins.DeleteProjectChat(Payload<ProjectChatRequest>(payload));
+                    case BridgeOperationId.SubmitProjectChat: return await Plugins.SubmitProjectChatAsync(Payload<ProjectChatRequest>(payload),settings.Load(),settings.LoadApiKey,token);
+                    case BridgeOperationId.ResolveProjectChat: case BridgeOperationId.CancelProjectChat:
+                        return await Plugins.ControlProjectChatAsync(Payload<ProjectChatRequest>(payload),operation==BridgeOperationId.CancelProjectChat,settings.Load(),settings.LoadApiKey,token);
                     default:throw new InvalidOperationException("Unknown plugin bridge operation.");
                 }
             },token);

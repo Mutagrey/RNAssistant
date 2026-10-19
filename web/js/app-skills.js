@@ -635,7 +635,7 @@ function renderSkillEditor() {
   var references = skill ? (skill.References || []) : [];
   var panel = $("skillEditorPanel");
   if (panel) panel.classList.toggle("hidden", disabled);
-  if ($("skillTitle")) $("skillTitle").textContent = skill ? (skill.Id || skill.Name || "Навык") : "Навык";
+  if ($("skillTitle")) $("skillTitle").textContent = skill ? (skill.Name || skill.Id || "Навык") : "Навык";
   if ($("skillMeta")) $("skillMeta").textContent = "Библиотека / Навыки";
   $("skillEnabledInput").checked = skill ? skill.Enabled !== false : false;
   $("skillIdInput").value = skill ? (skill.Id || "") : "";

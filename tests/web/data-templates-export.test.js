@@ -444,9 +444,11 @@ const hash = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
             }
         }
         await page.setViewportSize({ width: 1160, height: 940 });
+        await page.locator("#dtTabProcessing").click();
         await page.locator("#dtStartProcessing").click();
         await page.waitForFunction(() => document.getElementById("dtResultCompleted").textContent === "1" &&
             document.getElementById("dtResultFailed").textContent === "2");
+        await page.locator("#dtTabResults").click();
         assert.equal(await page.locator("#dtViewResults").isVisible(), true);
         assert.equal(await page.locator("#dtResultRecords").innerText(), "16");
         assert.match(await page.locator("#dtRunList").innerText(), /READER_UNAVAILABLE/);
@@ -478,6 +480,7 @@ const hash = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
         await page.locator("#dtTemplateFile").setInputFiles({ name: "mapped.json", mimeType: "application/json",
             buffer: Buffer.from(JSON.stringify(mappedDraft)) });
         await page.waitForFunction(() => !document.getElementById("dtStartProcessing").disabled);
+        await page.locator("#dtViewSelect").selectOption("processing");
         await page.evaluate(() => {
             // Project dictionary admission is asynchronous. Cancel the actual run
             // as soon as its control is rendered, before this tiny fixture finishes.

@@ -39,10 +39,23 @@
   var messagesByChat = activeChatId ? { "preview-chat": messages, "preview-summary": [],
     "preview-budget": [], "preview-notes": [] } : {};
   var previewRuns = Object.create(null);
+  var dataProject = scenario === "empty" ? null : { projectId: "preview-data-project", workspaceId: "preview-data-workspace", name: fixtures.project };
+  var projectSelected = !!dataProject;
+  var projectChatSequence = 2;
+  var projectChats = dataProject ? [{ Id: "preview-project-review", Title: "Подготовка отчёта", RunStatus: "completed" },
+    { Id: "preview-project-clean", Title: "Проверка источников", RunStatus: "completed" }] : [];
+  var projectMessages = { "preview-project-review": [], "preview-project-clean": [] };
+  var projectRuns = Object.create(null), projectRequests = Object.create(null);
+  var pluginItem = { pluginId: "data-templates", name: "Данные и шаблоны", icon: "chart",
+    sourceRoot: "Локальный демонстрационный плагин", releaseId: "preview-release-1", enabled: true,
+    previewSimulated: true };
+  var pluginCandidate = null, pluginInstanceSequence = 0;
+  var pluginMessages = [], pluginRun = null, pluginRequestIds = Object.create(null);
   var inboxRevision = 1, inputSequence = 0, inputReceipts = Object.create(null);
   var tool = null;
   var toolSourceText = "";
-  var settings = {};
+  var settings = scenario === "empty" ? {} : { Model: "demo-balanced", MaxTokens: 3072,
+    RequestTimeoutSeconds: 1800, StreamResponses: true };
   var workspaceRevision = 2;
   var sourcePaths = fixtures.sources.slice(0, 2).map(function (source) { return source.name; });
   var workspaceFiles = fixtures.sources.map(function (source) {
@@ -152,6 +165,28 @@
       running: !!run, phase: run ? run.phase : "", paused: false,
       items: [], receipts: [], acceptedInput: receipt || null };
   }
+  function requireProjectChat(payload) {
+    if (!projectSelected || !pluginItem.enabled || !dataProject || payload.projectId !== dataProject.projectId)
+      fail("Проект примера изменился.", "preview_project_changed");
+    var chat = projectChats.find(function (item) { return item.Id === payload.sessionId; });
+    if (!chat) fail("Чат проекта отсутствует.", "preview_chat_changed");
+    return chat;
+  }
+  function projectChatState(payload) {
+    var chat = requireProjectChat(payload), run = projectRuns[chat.Id];
+    return { project: clone(dataProject), sessionId: chat.Id,
+      state: { id: chat.Id, workspaceId: dataProject.workspaceId, title: chat.Title,
+        status: run ? "running" : chat.RunStatus, runId: run && run.runId || null,
+        cursor: run && run.cursor || "preview-project-cursor", userInput: null },
+      pendingId: null, pendingTool: null, pendingArguments: null,
+      messages: clone(projectMessages[chat.Id] || []) };
+  }
+  function pluginChatState() {
+    return { pluginId: pluginItem.pluginId, sessionId: "preview-plugin-source-chat",
+      state: { Status: pluginRun ? "running" : "completed", RunId: pluginRun && pluginRun.runId || null,
+        Cursor: pluginRun && pluginRun.cursor || "preview-plugin-cursor", userInput: null },
+      pendingId: null, pendingTool: null, pendingArguments: null, messages: clone(pluginMessages) };
+  }
   function emit(response) { listeners.forEach(function (listener) { listener({ data: response }); }); }
   function emitChatState(chatId) {
     emit({ type: "chatState", scope: activeChatId === chatId ? "full" : "catalog", payload: chatState() });
@@ -204,7 +239,7 @@
   }
   var ready = (async function () {
     if (scenario === "empty") return;
-    skills.push({ id: "excel.sales_analysis", host: "Excel", name: "excel.sales_analysis",
+    skills.push({ id: "excel.sales_analysis", host: "Excel", name: "Анализ продаж",
       description: "Сравнение периодов и анализ продаж по регионам", version: "1.0.0",
       enabled: true, builtIn: false, revision: "preview-skill-1", references: [],
       body: { sha256: await hash(initialSkillText), byteLength: bytes(initialSkillText).length, characters: initialSkillText.length } });
@@ -214,7 +249,7 @@
       code: code, readme: "# Форматирование отчёта\n\nПрименяет оформление к заголовку таблицы.\n",
       components: [{ name: "FormatSales", type: "StdModule", fileName: "FormatSales.bas", code: code,
         codeSha256: await hash(code) }] });
-    tool = { id: "excel.format_sales", host: "Excel", name: "excel.format_sales",
+    tool = { id: "excel.format_sales", host: "Excel", name: "Форматирование таблицы",
       description: "Применяет оформление к заголовку таблицы в связанном документе.",
       revision: "preview-tool-1", source: { sha256: await hash(toolSourceText), byteLength: bytes(toolSourceText).length },
       executor: "vba", requiresConfirmation: true, mutatesDocument: true, mutatesLocalState: false,
@@ -321,6 +356,14 @@
     if (type === "init") return { bridgeToken: token, bridgeContract: contract,
       init: Object.assign({ appVersion: "preview", host: "Excel", title: fixtures.document,
         settings: clone(settings), prompts: promptLibrary(), hasApiKey: true, hasHistorySecret: false }, chatState()) };
+    if (type === "getModelCatalog") {
+      if (scenario === "error") fail("Демонстрационная ошибка чтения каталога моделей.", "preview_read_failed");
+      return { catalog: { default_model: "demo-balanced", models: scenario === "empty" ? [] : [
+        { id: "demo-balanced", display_name: "Модель A", supports_images: true,
+          supports_reasoning: true, supports_audio: false, max_context_tokens: 128000,
+          max_output_tokens: 8192, is_default: true }
+      ] } };
+    }
     if (type === "reportClientTiming" || type === "focusState") return {};
     if (type === "listChats" || type === "getChatState") {
       if (type === "getChatState") requireChat(payload);
@@ -420,14 +463,115 @@
       return { state: workspaceState(), dictionary: { file: "dictionary-1730000000000-" + "b".repeat(32) + ".json",
         format: "dictionary", sha256: await hash(dictionaryText), input: dictionaryText } };
     }
-    if (type === "getPlugins") return { items: [{ pluginId: "data-templates", name: "Данные и шаблоны", icon: "chart",
-      sourceRoot: "Локальный демонстрационный плагин", enabled: true }] };
+    if (type === "getPlugins") return { items: [clone(pluginItem)] };
+    if (type === "getProjectChats") return { project: projectSelected && pluginItem.enabled ? clone(dataProject) : null,
+      chats: projectSelected && pluginItem.enabled ? clone(projectChats) : [] };
+    if (type === "getProjectChat") return projectChatState(payload);
+    if (type === "createProjectChat") {
+      if (!projectSelected || !pluginItem.enabled || !dataProject || payload.projectId !== dataProject.projectId)
+        fail("Проект примера изменился.", "preview_project_changed");
+      var created = { Id: "preview-project-" + (++projectChatSequence), Title: payload.title || "Новый чат", RunStatus: "" };
+      projectChats.unshift(created); projectMessages[created.Id] = [];
+      return projectChatState({ projectId: dataProject.projectId, sessionId: created.Id });
+    }
+    if (type === "renameProjectChat") {
+      var renamed = requireProjectChat(payload);
+      if (!payload.title || !payload.title.trim()) fail("Название чата пусто.", "preview_chat_invalid");
+      renamed.Title = payload.title.trim(); return { project: clone(dataProject), chats: clone(projectChats) };
+    }
+    if (type === "deleteProjectChat") {
+      requireProjectChat(payload);
+      if (projectRuns[payload.sessionId]) fail("Сначала остановите чат.", "preview_run_busy");
+      projectChats = projectChats.filter(function (item) { return item.Id !== payload.sessionId; });
+      delete projectMessages[payload.sessionId]; return { project: clone(dataProject), chats: clone(projectChats) };
+    }
+    if (type === "submitProjectChat") {
+      var submitting = requireProjectChat(payload), input = payload.input || {};
+      if (input.sessionId !== submitting.Id || !input.requestId || typeof input.message !== "string" || !input.message.trim())
+        fail("Сообщение проекта неверно.", "preview_input_invalid");
+      var accepted = projectRequests[input.requestId];
+      if (accepted && (accepted.sessionId !== submitting.Id || accepted.message !== input.message))
+        fail("ID запроса уже занят другим сообщением.", "preview_input_invalid");
+      if (!accepted) {
+        if (projectRuns[submitting.Id]) fail("Дождитесь ответа примера.", "preview_run_busy");
+        projectRequests[input.requestId] = { sessionId: submitting.Id, message: input.message };
+        projectMessages[submitting.Id].push({ role: "user", text: input.message });
+        var run = { runId: "preview-project-run-" + input.requestId, cursor: "preview-project-cursor-" + input.requestId };
+        projectRuns[submitting.Id] = run; submitting.RunStatus = "running";
+        await new Promise(function (resolve) { setTimeout(resolve, 1800); });
+        if (projectRuns[submitting.Id] === run) {
+          projectMessages[submitting.Id].push({ role: "assistant", text: "Проектный пример: план и файлы проекта можно обсудить здесь. Модель в preview не запускалась." });
+          delete projectRuns[submitting.Id]; submitting.RunStatus = "completed";
+        }
+      }
+      return projectChatState(payload);
+    }
+    if (type === "cancelProjectChat") {
+      var stopped = requireProjectChat(payload), currentRun = projectRuns[stopped.Id];
+      if (!currentRun || currentRun.runId !== payload.runId || currentRun.cursor !== payload.cursor)
+        fail("Состояние запуска изменилось.", "preview_run_changed");
+      delete projectRuns[stopped.Id]; stopped.RunStatus = "interrupted";
+      return Object.assign(projectChatState(payload), { cancelStatus: "Requested" });
+    }
+    if (type === "resolveProjectChat") {
+      requireProjectChat(payload); fail("В этом примере нет ожидающего подтверждения.", "preview_run_changed");
+    }
+    if (type === "checkPlugin") {
+      if (payload.pluginId !== pluginItem.pluginId) fail("Плагин примера отсутствует.");
+      pluginCandidate = "preview-candidate-" + (++pluginInstanceSequence);
+      return { pluginId: pluginItem.pluginId, candidateId: pluginCandidate, files: 1, bytes: 0,
+        checks: ["preview-only"], previewSimulated: true };
+    }
+    if (type === "applyPlugin") {
+      if (payload.pluginId !== pluginItem.pluginId || payload.candidateId !== pluginCandidate)
+        fail("Снимок примера изменился.", "preview_candidate_changed");
+      pluginItem.enabled = true; pluginItem.releaseId = "preview-release-" + (++pluginInstanceSequence);
+      projectSelected = false;
+      pluginCandidate = null; return Object.assign(clone(pluginItem), { previewSimulated: true });
+    }
+    if (type === "disablePlugin") {
+      if (payload.pluginId !== pluginItem.pluginId) fail("Плагин примера отсутствует.");
+      pluginItem.enabled = false; pluginCandidate = null; projectSelected = false;
+      return Object.assign(clone(pluginItem), { previewSimulated: true });
+    }
     if (type === "openPlugin") {
-      if (payload.pluginId !== "data-templates") fail("Плагин примера отсутствует.");
-      return { instanceId: "preview-data-templates", entryUrl: "/web/data-templates/index.html" };
+      if (payload.pluginId !== pluginItem.pluginId || payload.candidateId && payload.candidateId !== pluginCandidate ||
+          !payload.candidateId && !pluginItem.enabled) fail("Плагин примера недоступен.", "preview_plugin_changed");
+      if (!payload.candidateId) projectSelected = !!dataProject;
+      return { instanceId: "preview-data-templates-" + (++pluginInstanceSequence), pluginId: pluginItem.pluginId,
+        releaseId: payload.candidateId || pluginItem.releaseId,
+        preview: !!payload.candidateId, previewSimulated: true,
+        entryUrl: "/preview/web/data-templates/index.html" };
     }
     if (type === "closePlugin") return {};
-    if (type === "getPluginChat") return { messages: [], state: { Status: "Готов" }, pendingId: null };
+    if (type === "getPluginChat") return pluginChatState();
+    if (type === "submitPluginChat") {
+      if (payload.pluginId !== pluginItem.pluginId) fail("Плагин примера отсутствует.");
+      var pluginInput = payload.input || {}, requestId = pluginInput.RequestId || pluginInput.requestId;
+      var pluginText = pluginInput.Message || pluginInput.message;
+      if (!requestId || typeof pluginText !== "string" || !pluginText.trim()) fail("Сообщение примера неверно.", "preview_input_invalid");
+      if (pluginRequestIds[requestId] && pluginRequestIds[requestId] !== pluginText) fail("ID сообщения уже занят.", "preview_input_invalid");
+      if (!pluginRequestIds[requestId]) {
+        if (pluginRun) fail("Дождитесь ответа примера.", "preview_run_busy");
+        pluginRequestIds[requestId] = pluginText;
+        pluginMessages.push({ role: "user", text: pluginText });
+        var sourceRun = { runId: "preview-source-" + requestId, cursor: "preview-source-cursor-" + requestId };
+        pluginRun = sourceRun;
+        await new Promise(function (resolve) { setTimeout(resolve, 1600); });
+        if (pluginRun === sourceRun) {
+          pluginMessages.push({ role: "assistant", text: "Изменение исходников смоделировано в preview. Файлы плагина не менялись." });
+          pluginRun = null;
+        }
+      }
+      return pluginChatState();
+    }
+    if (type === "cancelPluginChat") {
+      if (!pluginRun || payload.runId !== pluginRun.runId || payload.cursor !== pluginRun.cursor)
+        fail("Запуск примера изменился.", "preview_run_changed");
+      pluginRun = null; return pluginChatState();
+    }
+    if (type === "resolvePluginChat") fail("В примере нет ожидающего подтверждения.", "preview_run_changed");
+    if (type === "getPluginVendors") return { items: [] };
     if (type === "listArtifactCatalog") {
       requireChat(payload);
       var items = scenario === "empty" || payload.cursor ? [] : artifactExamples.filter(function (item) {

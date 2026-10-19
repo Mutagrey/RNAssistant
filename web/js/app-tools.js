@@ -690,7 +690,7 @@ function renderToolEditor() {
       ? "Откройте RNAssistant внутри Office, чтобы загрузить built-in и пользовательские инструменты."
       : "Выберите инструмент слева или создайте новый.";
   }
-  if ($("toolEditorTitle")) $("toolEditorTitle").textContent = skill ? (skill.Id || skill.Name || "Инструмент") : "Инструмент";
+  if ($("toolEditorTitle")) $("toolEditorTitle").textContent = skill ? (skill.Name || skill.Id || "Инструмент") : "Инструмент";
   if ($("toolEditorMeta")) $("toolEditorMeta").textContent = skill ? ("Библиотека / Инструменты" +
     (skill._sourceConflict ? " · Исходник изменился: черновик сохранён, запись заблокирована" : skill._sourceError ? " · Ошибка чтения: обновите Library" : sourceUnavailable ? " · Загрузка исходника…" : "")) : "";
   $("toolEnabledInput").checked = skill ? skill.Enabled !== false : false;

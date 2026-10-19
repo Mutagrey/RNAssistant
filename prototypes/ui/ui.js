@@ -17,7 +17,7 @@
   P.badge = function (label, kind) { return '<span class="badge ' + (kind || "") + '"><span class="badge-dot"></span>' + P.escape(label) + '</span>'; };
   P.notice = function (title, text, kind, actions) { return '<div class="notice ' + (kind || "") + '" role="' + (kind === "danger" ? "alert" : "status") + '">' + P.icon(kind === "success" ? "check" : kind === "warning" || kind === "danger" ? "warning" : "info") + '<div class="row-copy"><strong>' + P.escape(title) + '</strong><p>' + P.escape(text) + '</p>' + (actions ? '<div class="actions">' + actions + '</div>' : "") + '</div></div>'; };
   P.search = function (placeholder, name) { return '<label class="search">' + P.icon("search") + '<input type="search" placeholder="' + placeholder + '" aria-label="' + placeholder + '" data-search="' + name + '"></label>'; };
-  P.header = function (title, breadcrumb, actions) { return '<header class="page-header">' + (P.state.standalone ? "" : P.iconButton("Открыть навигацию", "navigation", "panelLeft", "menu-btn")) + '<div class="page-heading"><div class="breadcrumb">' + P.escape(breadcrumb) + '</div><h1 title="' + P.escape(title) + '">' + P.escape(title) + '</h1></div><div class="header-actions">' + (actions || "") + '</div></header>'; };
+  P.header = function (title, breadcrumb, actions) { return '<header class="page-header"><div class="page-heading"><div class="breadcrumb">' + P.escape(breadcrumb) + '</div><h1 title="' + P.escape(title) + '">' + P.escape(title) + '</h1></div><div class="header-actions">' + (actions || "") + '</div></header>'; };
   P.tabs = function (items, current) { return window.RNAssistantEditorTabs.render(items.map(function (item) {
     return { label: item[0], value: item[1] };
   }), { className: "tabs", selected: current }); };

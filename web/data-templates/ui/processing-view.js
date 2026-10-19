@@ -16,7 +16,8 @@
     return evidence && evidence[0] && evidence[0].location ? evidence[0].location.address : "—";
   };
   function create(container, actions) {
-    const templates = container.querySelector("#dtViewTemplates"), results = container.querySelector("#dtViewResults");
+    const templates = container.querySelector("#dtViewTemplates"), processing = container.querySelector("#dtViewProcessing"),
+      results = container.querySelector("#dtViewResults");
     templates.querySelector(".dt-empty-state").remove();
     results.querySelector(".dt-empty-state").remove();
     templates.querySelector(".dt-phase").textContent = "Рабочий поток";
@@ -25,11 +26,14 @@
       <div class="dt-process-start dt-card"><div><p class="dt-eyebrow">02 / ИСТОЧНИКИ</p><h4 id="dtProcessSelection">Источники не выбраны</h4><p>Очередь запускается по выбранным файлам на вкладке «Источники». По одному файлу в Worker, без чтения книг в интерфейсе.</p></div><div class="dt-process-actions"><button type="button" id="dtProcessSources">К источникам</button><button type="button" class="dt-primary" id="dtStartProcessing">Запустить обработку</button></div></div>
       <p class="dt-process-note" id="dtProcessNotice" role="status" aria-live="polite"></p>
       <p class="dt-footnote">Пример: <a href="core/examples/matrix-xlsx-extraction.json" download>скачать JSON-шаблон</a> и добавить <a href="core/examples/matrix-source.xlsx" download>пример XLSX</a>.</p><p class="dt-footnote" id="dtStorageNote"></p>`);
+    processing.append(templates.querySelector(".dt-process-start"), templates.querySelector("#dtProcessNotice"));
     results.insertAdjacentHTML("beforeend", `<div class="dt-process-summary"><div class="dt-card"><small>ФАЙЛОВ</small><strong id="dtResultTotal">0</strong></div><div class="dt-card"><small>ГОТОВО</small><strong id="dtResultCompleted">0</strong></div><div class="dt-card"><small>ОШИБКИ</small><strong id="dtResultFailed">0</strong></div><div class="dt-card"><small>ЗАПИСЕЙ</small><strong id="dtResultRecords">0</strong></div></div>
       <div class="dt-operation dt-card" id="dtProcessOperation" role="region" aria-label="Обработка файлов" hidden><div class="dt-operation-head"><div><span class="dt-operation-stage" data-operation-part="stage"></span><h4 data-operation-part="title"></h4></div><div class="dt-operation-actions"><span data-operation-part="elapsed"></span><button type="button" data-operation-part="cancel">Отменить</button><button type="button" class="dt-text-button" data-operation-part="dismiss" hidden>Скрыть</button></div></div><div class="dt-operation-meter" data-operation-part="meter"><progress data-operation-part="progress" aria-label="Файлов завершено"></progress><span data-operation-part="percent"></span></div><p class="dt-operation-current" data-operation-part="current"></p><div class="dt-operation-metrics"><span data-operation-part="count"></span><span data-operation-part="detail"></span></div><p class="dt-operation-note" data-operation-part="note"></p></div>
       <p class="dt-process-note" id="dtResultNotice" role="status" aria-live="polite"></p>
       <div class="dt-results-layout"><section class="dt-card dt-run-queue" aria-label="Очередь обработки"><div class="dt-run-heading"><div><p class="dt-eyebrow">ФАЙЛЫ</p><h4>Очередь обработки</h4></div><span id="dtRunRange"></span></div><div class="dt-run-filters"><input type="search" id="dtRunSearch" placeholder="Найти файл…" aria-label="Поиск в очереди"><select id="dtRunFilter" aria-label="Состояние файла"><option value="">Все</option><option value="queued">В очереди</option><option value="running">Выполняется</option><option value="completed">Готово</option><option value="failed">Ошибка</option><option value="cancelled">Отменено</option></select></div><ul id="dtRunList" class="dt-run-list"></ul><p id="dtRunEmpty" class="dt-process-empty">Очередь пуста. Выберите шаблон и запустите обработку.</p><div class="dt-run-paging" id="dtRunPaging" hidden><button type="button" id="dtRunPrevious">← Назад</button><span id="dtRunPage"></span><button type="button" id="dtRunNext">Далее →</button></div></section>
       <section class="dt-card dt-result-detail" aria-label="Просмотр результата"><div class="dt-run-heading"><div><p class="dt-eyebrow">ПРОСМОТР</p><h4 id="dtResultTitle">Выберите файл</h4></div><div class="dt-result-actions"><button type="button" id="dtSaveToProject" hidden>Сохранить в проект</button><button type="button" class="dt-primary" id="dtDownloadResult" hidden>Скачать полный JSON</button></div></div><p id="dtResultDescription" class="dt-result-description">После обработки выберите файл из очереди. Здесь появятся записи и диагностика.</p><div id="dtResultPreview" hidden><div class="dt-result-meta" id="dtResultMeta"></div><p class="dt-footnote">Показаны первые 20 записей. Экспорт успешного файла содержит все его записи и происхождение.</p><div class="dt-preview-scroll"><table class="dt-preview-table"><thead><tr><th>Параметр</th><th>Период</th><th>Значение</th><th>Ячейка</th></tr></thead><tbody id="dtPreviewRows"></tbody></table></div><details class="dt-result-raw"><summary>Диагностика и полный пример записи</summary><pre id="dtResultRaw"></pre></details></div></section></div>`);
+    processing.append(results.querySelector("#dtProcessOperation"));
+    processing.insertAdjacentHTML("beforeend", `<section class="dt-card dt-processing-queue" aria-label="Состояние очереди"><div class="dt-run-heading"><div><p class="dt-eyebrow">ФАЙЛЫ</p><h4>Очередь обработки</h4></div><span id="dtProcessingCount">0 файлов</span></div><div class="dt-preview-scroll"><table class="dt-preview-table"><thead><tr><th>Файл</th><th>Состояние</th><th>Записей / причина</th></tr></thead><tbody id="dtProcessingRows"></tbody></table></div><p id="dtProcessingEmpty" class="dt-process-empty">Запустите обработку выбранных источников.</p><button type="button" id="dtProcessingResults">Посмотреть результаты</button></section>`);
     const get = id => container.querySelector("#dt" + id), events = new AbortController();
     const listen = (element, type, handler) => element.addEventListener(type, handler, { signal: events.signal });
     const operation = root.DataTemplatesOperationView.create(get("ProcessOperation"), { cancel: actions.cancel, dismiss: actions.dismiss });
@@ -57,6 +61,7 @@
     });
     listen(get("ProcessSources"), "click", () => container.querySelector("#dtTabSources").click());
     listen(get("StartProcessing"), "click", actions.start);
+    listen(get("ProcessingResults"), "click", () => container.querySelector("#dtTabResults").click());
     listen(get("RunSearch"), "input", () => { query = get("RunSearch").value.trim().toLocaleLowerCase(); page = 0; if (current) renderQueue(current); });
     listen(get("RunFilter"), "change", () => { filter = get("RunFilter").value; page = 0; if (current) renderQueue(current); });
     listen(get("RunPrevious"), "click", () => { page--; renderQueue(current); });
@@ -127,6 +132,10 @@
       }));
       get("ResultRaw").textContent = JSON.stringify({ summary: selected.summary, example: selected.preview[0] || null }, null, 2);
     }
+    function fileForm(count) {
+      return count % 10 === 1 && count % 100 !== 11 ? "файл" :
+        count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 12 || count % 100 > 14) ? "файла" : "файлов";
+    }
     function render(snapshot) {
       current = snapshot;
       get("TemplateName").textContent = snapshot.templateLoading ? "Проверяем шаблон…" : snapshot.templateName || "Шаблон не выбран";
@@ -134,7 +143,7 @@
       editorView.render(snapshot);
       mappingEditor.render(snapshot);
       parameterEditor.render(snapshot);
-      get("ProcessSelection").textContent = snapshot.selectedCount ? "Выбрано " + snapshot.selectedCount + " файлов · XLSX: " + snapshot.selectedXlsx
+      get("ProcessSelection").textContent = snapshot.selectedCount ? "Выбрано " + snapshot.selectedCount + " " + fileForm(snapshot.selectedCount) + " · XLSX: " + snapshot.selectedXlsx
         : "Источники не выбраны";
       get("ChooseTemplate").disabled = snapshot.running;
       get("StartProcessing").disabled = snapshot.running || snapshot.resultBusy || snapshot.sourceBusy || snapshot.templateLoading ||
@@ -148,9 +157,19 @@
         get("Result" + part).textContent = String([snapshot.totals.total, snapshot.totals.completed, snapshot.totals.failed, snapshot.totals.records][index]);
       });
       operation.render(snapshot.activity);
+      const fileCount = snapshot.queue.length;
+      get("ProcessingCount").textContent = fileCount + " " + fileForm(fileCount);
+      get("ProcessingRows").replaceChildren(...snapshot.queue.map(item => {
+        const row = node("tr");
+        [item.path, stateLabel[item.status], item.status === "completed" ? item.recordCount + " записей" :
+          item.error || item.progress || "—"].forEach(value => row.append(node("td", "", value)));
+        return row;
+      }));
+      get("ProcessingEmpty").hidden = snapshot.queue.length > 0;
+      get("ProcessingResults").disabled = snapshot.queue.length === 0;
       renderQueue(snapshot); renderDetail(snapshot);
     }
-    return Object.freeze({ render: render, showResults: () => container.querySelector("#dtTabResults").click(),
+    return Object.freeze({ render: render, showProcessing: () => container.querySelector("#dtTabProcessing").click(),
       dispose: () => { events.abort(); operation.dispose(); parameterEditor.dispose(); mappingEditor.dispose(); templateView.dispose(); editorView.dispose(); } });
   }
   root.DataTemplatesProcessingView = Object.freeze({ create: create });

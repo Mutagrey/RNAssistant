@@ -59,18 +59,26 @@ small, .small { font-size: var(--text-sm); }
 .local-note svg { width: 13px; height: 13px; }
 .main-region { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; outline: none; container: content / inline-size; }
 .page-header { height: var(--page-header-height); min-height: var(--page-header-height); display: flex; align-items: center; gap: 10px; padding: 5px var(--page-inset); border-bottom: 1px solid var(--line); flex-shrink: 0; }
+#app-shell { --panel-toggle-inset: 10px; --panel-toggle-gap: 6px; --demo-navigation-width: var(--nav-width); position: relative; }
+#app-shell #demoNavigationToggle { position: absolute; top: calc((var(--page-header-height) - var(--control)) / 2); left: calc(52px + var(--panel-toggle-inset)); z-index: 20; display: inline-grid; }
+#app-shell.navigation-open #demoNavigationToggle { left: calc(52px + var(--demo-navigation-width) + 1px + var(--panel-toggle-inset)); }
+#app-shell .page-header { padding-left: calc(var(--panel-toggle-inset) + var(--control) + var(--panel-toggle-gap)); padding-right: var(--panel-toggle-inset); }
+#app-shell #demoNavigationToggle[hidden] ~ #main .page-header { padding-left: var(--page-inset); }
 .page-heading { min-width: 0; flex: 1; }
 .page-heading h1 { font-size: 15px; line-height: 1.35; letter-spacing: -.2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .page-heading .breadcrumb { color: var(--ink-muted); font-size: 10px; line-height: 1.3; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .header-actions { flex-shrink: 0; }
 .breadcrumb svg { width: 13px; height: 13px; }
 .header-actions, .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.menu-btn, .nav-collapse, .compact-back { display: none; }
+.compact-back { display: none; }
 .app-shell.navigation-closed > .global-nav { width: 0; opacity: 0; visibility: hidden; }
-.navigation-closed .menu-btn, .navigation-compact .menu-btn { display: inline-grid; }
 .navigation-single > #main { flex: 0 0 100%; }
-.navigation-single .nav-collapse { display: inline-grid; }
-.navigation-single.navigation-closed > .section-rail { width: 0; padding-inline: 0; border-right-width: 0; opacity: 0; visibility: hidden; overflow: hidden; }
+#app-shell.navigation-single { --panel-toggle-inset: 8px; }
+#app-shell.navigation-single.navigation-closed #demoNavigationToggle { left: var(--panel-toggle-inset); }
+#app-shell.navigation-single.navigation-open #demoNavigationToggle { left: calc(52px + var(--panel-toggle-inset)); }
+#app-shell.navigation-single.navigation-open #global-nav .workspace-heading { padding-left: calc(var(--panel-toggle-inset) + var(--control) + var(--panel-toggle-gap)); }
+#app-shell.navigation-single .page-header { padding-left: calc(var(--panel-toggle-inset) + var(--control) + var(--panel-toggle-gap)); }
+.navigation-single.navigation-closed > .section-rail { flex-basis: 0; width: 0; padding-inline: 0; border-right-width: 0; opacity: 0; visibility: hidden; overflow: hidden; }
 .body-split { display: flex; flex: 1; min-height: 0; min-width: 0; position: relative; }
 .chat-main { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
 .app-shell > .global-nav.resizable-pane { border-right: 0; }
@@ -144,7 +152,7 @@ body.resizing-panels, body.resizing-panels * { cursor: col-resize !important; us
 .inspector { --pane-default: var(--inspector-width); width: var(--pane-width, var(--pane-default)); border-left: 1px solid var(--line); flex-shrink: 0; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 .inspector-content { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .inspector.is-panel-transition > .inspector-content { width: var(--panel-motion-width); }
-.inspector-head { display: flex; align-items: center; gap: 6px; height: var(--page-header-height); min-height: var(--page-header-height); padding: 5px 10px 5px 14px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
+.inspector-head { display: flex; align-items: center; gap: 6px; height: var(--page-header-height); min-height: var(--page-header-height); padding: 5px 10px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
 .inspector-compact-back { display: none; }
 .inspector-body { padding: 12px 14px 16px; overflow-y: auto; min-height: 0; }
 .inspector h3 { margin: 16px 0 4px; font-size: 12px; font-weight: 600; }
@@ -437,6 +445,7 @@ dialog::backdrop { background: var(--scrim); backdrop-filter: blur(3px); }
 .settings-group .appearance-footnote { margin-top: 16px; margin-bottom: 0; }
 [data-motion="reduced"] *, [data-motion="reduced"] *::before, [data-motion="reduced"] *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 @media (prefers-reduced-motion: no-preference) {
+  #app-shell.navigation-transition #demoNavigationToggle { transition: left var(--motion-duration) var(--motion-ease); }
   .navigation-transition > .global-nav, .navigation-transition > .section-rail { transition: width var(--motion-duration) var(--motion-ease), padding var(--motion-duration) var(--motion-ease), opacity var(--motion-fast), visibility var(--motion-duration); }
   .resizing-panels .navigation-transition > .global-nav, .resizing-panels .navigation-transition > .section-rail { transition: none; }
   .popover[open] > .popover-menu, dialog[open], .toast:not([hidden]) { animation: surface-enter var(--motion-fast) var(--motion-ease); }

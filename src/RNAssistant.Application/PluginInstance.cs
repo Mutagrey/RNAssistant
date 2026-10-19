@@ -82,13 +82,16 @@ namespace RNAssistant.Application
 
         internal async Task BindAsync(PluginDataGrant grant)
         {
+            PluginDataGrant previous = null;
             await _gate.WaitAsync(Token).ConfigureAwait(false);
             try
             {
                 if (_writes.Count > 0) throw new PluginException("plugin_busy", "Finish or abort pending writes before changing the project.");
+                previous = Data;
                 _reads.Clear(); _observed.Clear(); Data = grant;
             }
             finally { _gate.Release(); }
+            if (Preview && !CommandOperation && previous != null && previous != grant) previous.Dispose();
         }
 
         internal async Task InheritSourcesAsync(PluginInstance context)
@@ -245,6 +248,7 @@ namespace RNAssistant.Application
         {
             if (_closed) return;
             _closed = true; _lifetime.Cancel();
+            if (Preview && !CommandOperation) Data?.Dispose();
         }
         public async Task CloseAsync()
         {

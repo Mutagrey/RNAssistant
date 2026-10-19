@@ -30,7 +30,6 @@
     P.productTree.unmount();
     document.getElementById("section-rail").innerHTML = P.renderSectionRail();
     document.getElementById("global-nav").innerHTML = '<div class="navigation-content">' + navigation() + '</div>';
-    document.querySelector("#global-nav .workspace-heading").insertAdjacentHTML("afterbegin", P.iconButton("Свернуть навигацию", "navigation", "panelLeft", "nav-collapse"));
     P.productTree.mount();
   }
   function bindChat(id) {
@@ -78,6 +77,7 @@
       refreshSidebar();
       document.getElementById("global-nav").hidden = S.standalone && S.route.startsWith("projects/");
       document.getElementById("section-rail").hidden = S.standalone && S.route.startsWith("projects/");
+      document.getElementById("demoNavigationToggle").hidden = S.standalone && S.route.startsWith("projects/");
       document.getElementById("main").innerHTML = P.renderScreen();
       P.edits.capture(document.getElementById("main"));
       P.layout.refresh();

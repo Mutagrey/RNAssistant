@@ -230,7 +230,13 @@ namespace RNAssistant.Application
                     var workspace = _workspaces.Open(selection.RootPath, instance.Preview, selection.Writable);
                     var grant = new PluginDataGrant(workspace, source, selection.Writable);
                     await instance.BindAsync(grant).ConfigureAwait(false);
-                    if (!instance.Preview) lock (_sync) { _data[instance.Manifest.Id + ":" + instance.Release.ReleaseId] = grant; }
+                    if (!instance.Preview)
+                    {
+                        var key = instance.Manifest.Id + ":" + instance.Release.ReleaseId;
+                        PluginDataGrant previous;
+                        lock (_sync) { _data.TryGetValue(key, out previous); _data[key] = grant; }
+                        if (previous != null && previous != grant) previous.Dispose();
+                    }
                     response.Result = new PluginFrameResult { Name = workspace.Name, Kind = "directory", Handle = grant.ProjectId, Writable = grant.Writable };
                 }
                 else if (request.Method == PluginMethod.Invoke)
@@ -369,6 +375,138 @@ namespace RNAssistant.Application
             else await Conversations.ResolvePendingAsync(source.Workspace, state.SessionId, request.PendingId, request.Approve, settings, key,
                 cancellationToken: token, modelDigest: Conversations.GetSession(source.Workspace,state.SessionId).LastRun?.ModelConfiguration?.Digest).ConfigureAwait(false);
             return ChatState(request.PluginId);
+            }
+        }
+
+        private PluginDataGrant CurrentDataProject()
+        {
+            lock (_sync)
+            {
+                RequireOpen();
+                var registration = _store.Get("data-templates");
+                if (registration == null || !registration.Enabled || registration.ActiveReleaseId == null) return null;
+                PluginDataGrant grant;
+                _data.TryGetValue("data-templates:" + registration.ActiveReleaseId, out grant);
+                return grant != null && !grant.Lifetime.IsCancellationRequested ? grant : null;
+            }
+        }
+
+        private PluginDataGrant RequireDataProject(string projectId)
+        {
+            var grant = CurrentDataProject();
+            if (grant == null || string.IsNullOrEmpty(projectId) || grant.ProjectId != projectId)
+                throw new PluginException("plugin_project_changed", "The selected data project changed. Open it again before continuing the chat.");
+            return grant;
+        }
+
+        private static ProjectChatProjectDto ProjectChatProject(PluginDataGrant grant)
+        { return new ProjectChatProjectDto { ProjectId = grant.ProjectId, WorkspaceId = grant.DataWorkspaceId, Name = grant.Workspace.Name }; }
+
+        public ProjectChatCatalogDto ProjectChats()
+        {
+            using (PluginStore.AcquireRuntimeUse(_paths))
+            {
+            var grant = CurrentDataProject();
+            if (grant == null) return new ProjectChatCatalogDto { Chats = Array.Empty<ChatSessionHeader>() };
+            var chats = Conversations.ListSessions(grant.Workspace);
+            RequireDataProject(grant.ProjectId);
+            return new ProjectChatCatalogDto { Project = ProjectChatProject(grant), Chats = chats };
+            }
+        }
+
+        public ProjectChatStateDto ProjectChat(ProjectChatRequest request)
+        {
+            using (PluginStore.AcquireRuntimeUse(_paths))
+            {
+            if (request == null || string.IsNullOrWhiteSpace(request.SessionId))
+                throw new PluginException("project_chat_invalid", "A project chat is required.");
+            var grant = RequireDataProject(request.ProjectId);
+            var session = Conversations.GetSession(grant.Workspace, request.SessionId);
+            if (session == null) throw new PluginException("project_chat_missing", "The chat is not in the selected data project.");
+            var snapshot = Conversations.ReadState(grant.Workspace, session.Id);
+            RequireDataProject(request.ProjectId);
+            return new ProjectChatStateDto { Project = ProjectChatProject(grant), SessionId = session.Id,
+                State = snapshot,
+                PendingId = session.LastRun?.KernelState?.Summary?.PendingConfirmation?.PendingId,
+                PendingTool = session.LastRun?.KernelState?.Summary?.PendingConfirmation?.Call?.Name,
+                PendingArguments = session.LastRun?.KernelState?.Summary?.PendingConfirmation?.Call?.ArgumentsJson,
+                Messages = session.Messages.Where(message => message.Role == "user" || message.Role == "assistant")
+                    .Reverse().Take(100).Reverse().Select(message => new PluginChatMessageDto { Role = message.Role, Text = message.Content }).ToArray() };
+            }
+        }
+
+        public ProjectChatStateDto CreateProjectChat(ProjectChatRequest request)
+        {
+            using (PluginStore.AcquireRuntimeUse(_paths))
+            {
+            var grant = RequireDataProject(request?.ProjectId);
+            var title = string.IsNullOrWhiteSpace(request.Title) ? "Новый чат" : request.Title.Trim();
+            if (title.Length > 200) throw new PluginException("project_chat_invalid", "The chat title is too long.");
+            var session = Conversations.CreateSession(grant.Workspace, title);
+            return ProjectChat(new ProjectChatRequest { ProjectId = request.ProjectId, SessionId = session.Id });
+            }
+        }
+
+        public ProjectChatCatalogDto RenameProjectChat(ProjectChatRequest request)
+        {
+            using (PluginStore.AcquireRuntimeUse(_paths))
+            {
+            var grant = RequireDataProject(request?.ProjectId);
+            Conversations.RenameSession(grant.Workspace, request.SessionId, request.Title);
+            return ProjectChats();
+            }
+        }
+
+        public ProjectChatCatalogDto DeleteProjectChat(ProjectChatRequest request)
+        {
+            using (PluginStore.AcquireRuntimeUse(_paths))
+            {
+            var grant = RequireDataProject(request?.ProjectId);
+            Conversations.DeleteSession(grant.Workspace, request.SessionId);
+            return ProjectChats();
+            }
+        }
+
+        public async Task<ProjectChatStateDto> SubmitProjectChatAsync(ProjectChatRequest request, AppSettings settings,
+            Func<string> key, CancellationToken token)
+        {
+            using (PluginStore.AcquireRuntimeUse(_paths))
+            {
+            var grant = RequireDataProject(request?.ProjectId);
+            if (request.Input == null || request.Input.SessionId != request.SessionId)
+                throw new PluginException("project_chat_invalid", "The submitted chat identity changed.");
+            if (Conversations.GetSession(grant.Workspace, request.SessionId) == null)
+                throw new PluginException("project_chat_missing", "The chat is not in the selected data project.");
+            using (var linked = CancellationTokenSource.CreateLinkedTokenSource(token, grant.Lifetime.Token))
+                await Conversations.SubmitInputAsync(grant.Workspace, request.Input, settings, key,
+                    cancellationToken: linked.Token).ConfigureAwait(false);
+            return ProjectChat(request);
+            }
+        }
+
+        public async Task<ProjectChatStateDto> ControlProjectChatAsync(ProjectChatRequest request, bool cancel,
+            AppSettings settings, Func<string> key, CancellationToken token)
+        {
+            using (PluginStore.AcquireRuntimeUse(_paths))
+            {
+            var grant = RequireDataProject(request?.ProjectId);
+            var session = Conversations.GetSession(grant.Workspace, request.SessionId);
+            if (session == null) throw new PluginException("project_chat_missing", "The chat is not in the selected data project.");
+            RNAssistant.Runtime.Contracts.WorkspaceCancellationReceipt cancellation = null;
+            using (var linked = CancellationTokenSource.CreateLinkedTokenSource(token, grant.Lifetime.Token))
+            {
+                if (cancel) cancellation = await Conversations.CancelRunAsync(grant.Workspace, new RNAssistant.Runtime.Contracts.WorkspaceRunControlRequest {
+                    SessionId = session.Id, RunId = request.RunId, Cursor = request.Cursor }, linked.Token).ConfigureAwait(false);
+                else await Conversations.ResolvePendingAsync(grant.Workspace, session.Id, request.PendingId, request.Approve,
+                    settings, key, cancellationToken: linked.Token, modelDigest: session.LastRun?.ModelConfiguration?.Digest).ConfigureAwait(false);
+            }
+            if (cancellation?.Status == RNAssistant.Runtime.Contracts.WorkspaceCancellationStatus.StaleState)
+                throw new PluginException("project_chat_stale", "The run changed. Refresh the chat before requesting cancellation again.");
+            if (cancellation?.Status == RNAssistant.Runtime.Contracts.WorkspaceCancellationStatus.Unconfirmed)
+                throw new PluginException("project_chat_cancel_unknown", "Cancellation could not be confirmed. Inspect the current run state.");
+            var state = ProjectChat(request);
+            if (cancellation != null) state.CancelStatus = cancellation.Status;
+            return state;
             }
         }
         public HtmlVendorSourceDto ResolveHtmlVendor(PluginVendorRequest request)

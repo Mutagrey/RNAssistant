@@ -50,9 +50,12 @@
     });
     var active = shell.querySelector(".panel.active .global-nav");
     if (active) {
+      if (button) button.setAttribute("aria-controls", active.id);
       active.inert = !open;
       active.setAttribute("aria-hidden", String(!open));
     }
+    var main = shell.querySelector(".panel.active :is(.chat-main, .instruction-editor, .vba-editor, .html-workspace-editor, .settings-pages, .product-dt-main, .plugin-content)");
+    if (main) main.inert = mode === "single" && open;
     var rail = shell.querySelector(".section-rail");
     if (rail) {
       rail.inert = mode === "single" && !open;
@@ -337,6 +340,13 @@
     if (event.key === productNavigationOpenKey) {
       productNavigationPreference = event.newValue !== "0";
       syncProductNavigation();
+    }
+  });
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape" && !event.defaultPrevented && navigationMode() !== "wide" && navigationIsOpen() &&
+        document.querySelector(".panel.active .global-nav")?.contains(document.activeElement)) {
+      event.preventDefault();
+      setProductNavigationOpen(false);
     }
   });
 }());

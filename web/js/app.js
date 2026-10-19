@@ -82,6 +82,7 @@ function switchTab(name) {
   }
   if (!changed) return;
   if (name === "chat") {
+    if (window.RNAssistantProjectChats) window.RNAssistantProjectChats.show();
     renderChatSessions();
     renderMessages();
     renderContext();

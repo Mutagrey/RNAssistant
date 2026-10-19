@@ -1,5 +1,6 @@
 /* Shared section rail for the prototype and the product shell. */
 .app-shell { display: flex; flex-direction: row; width: 100%; height: 100%; min-height: 0; }
+.shell { --panel-toggle-inset: 10px; --panel-toggle-gap: 6px; }
 .section-rail { display: flex; flex: 0 0 52px; flex-direction: column; align-items: center; gap: 6px; width: 52px; padding: 12px 5px 10px; background: var(--canvas); border-right: 1px solid var(--line); overflow-x: hidden; overflow-y: auto; }
 .section-rail .rail-button { display: flex; flex: 0 0 auto; flex-direction: column; align-items: center; justify-content: center; gap: 5px; width: 40px; min-height: 40px; padding: 8px; border: 0; border-radius: 12px; background: transparent; color: var(--ink-muted); }
 .section-rail .rail-button svg { width: 20px; height: 20px; stroke-width: 1.55; }
@@ -12,17 +13,17 @@
 .shell > .content > .panel { padding: 0; overflow: hidden; }
 .shell .split-layout > .splitter { touch-action: none; }
 .shell > .content > .panel.active { background: var(--surface); color: var(--ink); font-family: var(--font); }
-.product-mobile-menu-button { position: absolute; top: calc((var(--page-header-height) - var(--control)) / 2); left: calc(52px + var(--page-inset)); z-index: 45; display: none; }
+.product-mobile-menu-button { position: absolute; top: calc((var(--page-header-height) - var(--control)) / 2); left: calc(52px + var(--panel-toggle-inset)); z-index: 45; display: none; }
 .shell.navigation-wide .product-mobile-menu-button,
 .shell.navigation-compact .product-mobile-menu-button { display: grid; }
-.shell:is(.navigation-wide, .navigation-compact).navigation-open .product-mobile-menu-button { left: calc(52px + var(--nav-width) + 1px + var(--page-inset)); }
+.shell:is(.navigation-wide, .navigation-compact).navigation-open .product-mobile-menu-button { left: calc(52px + var(--nav-width) + 1px + var(--panel-toggle-inset)); }
 .shell.navigation-transition .product-mobile-menu-button:hover { background: transparent; color: var(--ink-muted); }
 @media (min-width: 621px) {
   .shell.navigation-open > .content > .panel.active .split-layout[data-default-left]:not(#chatLayout) { grid-template-columns: var(--split-left, var(--nav-width)) 1px minmax(0, 1fr) !important; }
   .shell.navigation-closed > .content > .panel.active .split-layout[data-default-left]:not(#chatLayout) { grid-template-columns: 0px 0px minmax(0, 1fr) !important; }
   .shell.navigation-closed > .content > .panel.active .global-nav { visibility: hidden; opacity: 0; pointer-events: none; overflow: hidden; }
   .shell.navigation-closed > .content > .panel.active .split-layout > .splitter:not(.chat-inspector-splitter) { visibility: hidden; opacity: 0; pointer-events: none; width: 0; min-width: 0; }
-  .shell.navigation-closed > .content > .panel.active :is(.chat-main, .instruction-editor, .vba-editor, .html-workspace-editor, .settings-pages, .product-dt-main) { grid-column: 3 !important; }
+  .shell.navigation-closed > .content > .panel.active :is(.chat-main, .instruction-editor, .vba-editor, .html-workspace-editor, .settings-pages, .product-dt-main, .plugin-content) { grid-column: 3 !important; }
 }
 @media (prefers-reduced-motion: no-preference) {
   .shell.navigation-transition > .content > .panel.active .split-layout[data-default-left] { transition: grid-template-columns var(--motion-duration) var(--motion-ease); }
@@ -31,7 +32,9 @@
   .shell.navigation-transition.navigation-open > .content > .panel.active .global-nav { transition: opacity var(--motion-fast) var(--motion-ease), visibility 0s; }
   .shell .rail-button { transition: background-color var(--motion-fast), color var(--motion-fast); }
 }
-.shell.navigation-wide :is(.chatbar, .resource-editor-head, .dt-header, .settings-heading, .artifact-overview-heading) { padding-left: calc(var(--page-inset) + var(--control) + 10px) !important; }
+.shell.navigation-wide :is(.chatbar, .resource-editor-head, .dt-header, .settings-heading, .artifact-overview-heading, .artifact-catalog-actions) { padding-left: calc(var(--panel-toggle-inset) + var(--control) + var(--panel-toggle-gap)) !important; }
+.shell.navigation-wide .plugin-data-templates .plugin-toolbar,
+.shell.navigation-compact .plugin-data-templates .plugin-toolbar { padding-left: calc(var(--panel-toggle-inset) + var(--control) + var(--panel-toggle-gap)); }
 .shell .global-nav { min-width: 0; background: var(--surface-subtle); border-right: 1px solid var(--line); }
 .shell .split-layout > .global-nav { border-right: 0; }
 .shell .product-nav-heading { display: flex; align-items: center; min-height: 52px; padding: 0 18px; margin: 0; border-bottom: 1px solid var(--line); color: var(--ink); font-size: 13px; font-weight: 600; }
@@ -74,6 +77,9 @@
 .shell #tab-workspace .dt-header-actions button { border: 0; background: var(--surface-subtle); color: var(--ink); }
 .shell #tab-workspace .dt-header-actions button:hover { background: var(--surface-hover); }
 .shell #tab-workspace #workspaceSettings[data-project-open="true"]:not([open]) { display: none; }
+.shell #tab-settings .product-model-badges { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; }
+.shell #tab-settings .product-model-badges span { padding: 4px 7px; border-radius: 4px; background: var(--surface-subtle); color: var(--ink); font-size: 11px; }
+.shell #tab-settings .product-model-badges span.is-muted { color: var(--ink-muted); }
 @media (min-width: 621px) {
   .shell > .content > .panel { padding: 0; overflow: hidden; }
   .shell #tab-chat .chat-workspace,
@@ -105,9 +111,6 @@
   .shell #tab-settings .product-model-primary > p { margin: 0 0 16px; color: var(--ink-muted); font-size: 12px; }
   .shell #tab-settings .product-model-primary #loadModelsButton { margin-top: 12px; }
   .shell #tab-settings .product-model-primary #loadModelsButton svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
-  .shell #tab-settings .product-model-badges { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; }
-  .shell #tab-settings .product-model-badges span { padding: 4px 7px; border-radius: 4px; background: var(--surface-subtle); color: var(--ink); font-size: 11px; }
-  .shell #tab-settings .product-model-badges span.is-muted { color: var(--ink-muted); }
   .shell #tab-settings .product-model-response { padding-top: 18px; border-top-color: var(--line); }
   .shell #tab-settings .product-setting-toggle { justify-content: space-between; min-height: 42px; margin-top: 2px; }
   .shell #tab-settings .product-setting-toggle > span { font-size: 13px; }
@@ -120,7 +123,7 @@
   .shell.navigation-compact.navigation-open #tab-chat .chat-workspace,
   .shell.navigation-compact.navigation-open #tab-chat .chat-workspace.with-inspector { grid-template-columns: var(--split-left, var(--nav-width)) 1px minmax(0, 1fr) 0px 0px; }
   .shell.navigation-compact.navigation-open > .content > .panel.active .split-layout > .splitter { display: block; }
-  .shell.navigation-compact :is(.chatbar, .resource-editor-head, .dt-header, .settings-heading, .artifact-overview-heading) { padding-left: calc(var(--page-inset) + var(--control) + 10px) !important; }
+  .shell.navigation-compact :is(.chatbar, .resource-editor-head, .dt-header, .settings-heading, .artifact-overview-heading, .artifact-catalog-actions) { padding-left: calc(var(--panel-toggle-inset) + var(--control) + var(--panel-toggle-gap)) !important; }
   .shell #tab-workspace .dt-navigation { padding: 0; border-bottom: 0; }
   .shell #tab-workspace .dt-nav-content { padding: 0 8px 6px; }
   .shell #tab-workspace .dt-nav-heading { display: flex; }
@@ -130,8 +133,8 @@
   .shell.navigation-closed > .content > .panel.active .split-layout { grid-template-columns: minmax(0, 1fr) !important; }
   .shell.navigation-closed > .content > .panel.active .global-nav,
   .shell.navigation-closed > .content > .panel.active .split-layout > .splitter { display: none !important; }
-  .shell.navigation-closed > .content > .panel.active :is(.chat-main, .instruction-editor, .vba-editor, .html-workspace-editor, .settings-pages, .product-dt-main) { grid-column: 1 !important; }
-  .shell { position: relative; min-width: 0; }
+  .shell.navigation-closed > .content > .panel.active :is(.chat-main, .instruction-editor, .vba-editor, .html-workspace-editor, .settings-pages, .product-dt-main, .plugin-content) { grid-column: 1 !important; }
+  .shell { --panel-toggle-inset: 8px; position: relative; min-width: 0; }
   .shell > .section-rail { display: none; }
   .shell > .content { width: 100%; }
   .shell > .content > .panel.active { padding: 0; overflow: hidden; }
@@ -142,19 +145,28 @@
   .shell .settings-pages { grid-column: 1 !important; grid-row: 1 !important; min-width: 0; }
   .shell #tab-workspace .dt-navigation { display: none; }
   .shell #tab-workspace .product-dt-main { padding-inline: var(--page-inset); }
-  .product-mobile-menu-button { left: 12px; display: grid; }
-  .shell.navigation-single :is(.chatbar, .resource-editor-head, .dt-header, .settings-heading, .artifact-overview-heading) { padding-left: calc(12px + var(--control) + 10px) !important; }
+  .product-mobile-menu-button { left: var(--panel-toggle-inset); display: grid; }
+  .shell.navigation-single :is(.chatbar, .resource-editor-head, .dt-header, .settings-heading, .artifact-overview-heading, .artifact-catalog-actions) { padding-left: calc(var(--panel-toggle-inset) + var(--control) + var(--panel-toggle-gap)) !important; }
+  .shell.navigation-single .plugin-data-templates .plugin-toolbar { padding-left: calc(var(--panel-toggle-inset) + var(--control) + var(--panel-toggle-gap)); }
+  .shell #tab-settings .settings-pages { padding: 16px 12px 20px; }
+  .shell #tab-settings .settings-heading { order: -1; display: flex; flex-direction: column; justify-content: center; gap: 2px; min-height: 52px; margin: -16px -12px 14px; padding: 4px 12px; border-bottom: 1px solid var(--line); }
+  .shell #tab-settings .settings-heading h2 { order: 2; color: var(--ink); font-size: 15px; }
+  .shell #tab-settings .settings-heading p { order: 1; color: var(--ink-muted); font-size: 10px; }
+  .shell #tab-settings .settings-heading-with-action { flex-direction: row; flex-wrap: nowrap; align-items: center; justify-content: space-between; padding-right: 12px; }
+  .shell #tab-settings .settings-heading-with-action > div { display: flex; flex-direction: column; }
+  .shell #tab-settings .settings-heading-with-action > button { width: auto; min-height: 30px; padding: 4px 8px; white-space: nowrap; }
   .shell #tab-chat .composer-add-menu { width: min(320px, calc(100vw - 40px)); }
   .shell.navigation-open > .section-rail { position: absolute; inset: 0 auto 0 0; z-index: 39; display: flex; height: 100%; padding-top: 52px; }
-  .shell.navigation-open .product-mobile-menu-button { left: calc(52px + var(--page-inset)); background: transparent; }
-  .shell.navigation-single.navigation-open .panel.active .global-nav :is(.product-nav-heading, .workspace-heading, .settings-nav-heading, .dt-nav-heading, .artifact-catalog-toolbar) { padding-left: calc(var(--page-inset) + var(--control) + 10px); }
-  .shell.navigation-single.navigation-open .panel.active .global-nav .chat-sidebar-head .product-nav-heading { gap: 6px; padding-left: calc(var(--page-inset) + var(--control) + 6px); }
+  .shell.navigation-open .product-mobile-menu-button { left: calc(52px + var(--panel-toggle-inset)); background: transparent; }
+  .shell.navigation-single.navigation-open .panel.active .global-nav :is(.product-nav-heading, .workspace-heading, .settings-nav-heading, .dt-nav-heading, .artifact-catalog-toolbar) { padding-left: calc(var(--panel-toggle-inset) + var(--control) + var(--panel-toggle-gap)); }
+  .shell.navigation-single.navigation-open .panel.active .global-nav .chat-sidebar-head .product-nav-heading { gap: 6px; padding-left: calc(var(--panel-toggle-inset) + var(--control) + var(--panel-toggle-gap)); }
   .shell.navigation-open > .content > .panel.active { overflow: visible; }
   .shell.navigation-open .panel.active .global-nav { position: absolute; top: 0; right: 0; bottom: 0; left: 52px; z-index: 38; display: flex !important; width: calc(100% - 52px); height: 100%; max-height: 100%; overflow: auto; }
   .shell.navigation-open .panel.active .tool-list-panel.global-nav,
   .shell.navigation-open .panel.active .settings-nav.global-nav { display: grid !important; }
   .shell.navigation-open .panel.active .chat-main, .shell.navigation-open .panel.active .instruction-editor,
   .shell.navigation-open .panel.active .vba-editor, .shell.navigation-open .panel.active .html-workspace-editor,
-  .shell.navigation-open .panel.active .settings-pages, .shell.navigation-open #tab-workspace .product-dt-main { display: none !important; }
+  .shell.navigation-open .panel.active .settings-pages, .shell.navigation-open #tab-workspace .product-dt-main,
+  .shell.navigation-open #tab-plugins .plugin-data-templates .plugin-content { display: none !important; }
   .shell.navigation-open #tab-workspace .dt-navigation.global-nav { display: flex !important; }
 }

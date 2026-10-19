@@ -13,10 +13,11 @@
               <button type="button" role="tab" id="dtTabTemplates" data-dt-view="templates" aria-controls="dtViewTemplates" aria-selected="false" tabindex="-1">Шаблоны</button>
               <button type="button" role="tab" id="dtTabParameters" data-dt-view="parameters" aria-controls="dtViewParameters" aria-selected="false" tabindex="-1">Параметры</button>
               <button type="button" role="tab" id="dtTabMapping" data-dt-view="mapping" aria-controls="dtViewMapping" aria-selected="false" tabindex="-1">Маппинг</button>
+              <button type="button" role="tab" id="dtTabProcessing" data-dt-view="processing" aria-controls="dtViewProcessing" aria-selected="false" tabindex="-1">Обработка</button>
               <button type="button" role="tab" id="dtTabResults" data-dt-view="results" aria-controls="dtViewResults" aria-selected="false" tabindex="-1">Результаты</button>
               <button type="button" role="tab" id="dtTabFormat" data-dt-view="format" aria-controls="dtViewFormat" aria-selected="false" tabindex="-1">О формате</button>
             </div>
-            <label class="dt-mobile-nav" for="dtViewSelect">Раздел проекта<select id="dtViewSelect"><option value="sources">Источники</option><option value="templates">Шаблоны</option><option value="parameters">Параметры</option><option value="mapping">Маппинг</option><option value="results">Результаты</option><option value="format">О формате</option></select></label>
+            <label class="dt-mobile-nav" for="dtViewSelect">Раздел проекта<select id="dtViewSelect"><option value="sources">Источники</option><option value="templates">Шаблоны</option><option value="parameters">Параметры</option><option value="mapping">Маппинг</option><option value="processing">Обработка</option><option value="results">Результаты</option><option value="format">О формате</option></select></label>
           </div>
 
           <div class="dt-operation dt-card" id="dtOperation" role="region" aria-label="Текущая операция" hidden>
@@ -44,7 +45,7 @@
               <aside class="dt-guide" id="dtIntakeGuide" aria-label="Порядок работы">
                 <p class="dt-eyebrow">КАК ЭТО РАБОТАЕТ</p>
                 <ol><li><span>01</span><div><strong>Соберите источники</strong><p>Проверьте состав файлов и выберите нужные.</p></div></li><li><span>02</span><div><strong>Настройте соответствия</strong><p>Шаблон свяжет исходные поля с параметрами.</p></div></li><li><span>03</span><div><strong>Проверьте результат</strong><p>У каждого значения будет связь с источником.</p></div></li></ol>
-                <p class="dt-guide-note">Подбор файлов не запускает обработку. На вкладке «Шаблоны» выберите JSON-правила и запустите очередь XLSX.</p>
+                <p class="dt-guide-note">Подбор файлов не запускает обработку. На вкладке «Шаблоны» выберите JSON-правила, затем запустите очередь в «Обработке».</p>
               </aside>
             </div>
             <div id="dtSourceQueue" class="dt-source-queue dt-card" hidden>
@@ -76,6 +77,9 @@
             <div class="dt-section-heading"><div><h3>Карта соответствий</h3><p>Связь исходных полей с параметрами проекта.</p></div><span class="dt-phase">Следующий этап</span></div>
             <div class="dt-mapping-guide" aria-label="Принцип маппинга"><div><small>ИСТОЧНИК</small><strong>Поле или ячейка</strong><p>Имя, код, единица</p></div><span aria-hidden="true">→</span><div><small>ПРАВИЛО</small><strong>Соответствие</strong><p>Условия и область действия</p></div><span aria-hidden="true">→</span><div><small>ОБЩАЯ СХЕМА</small><strong>Параметр</strong><p>Смысл, тип, измерения</p></div></div>
             <p class="dt-explanation">Это схема будущего редактора. После распознавания здесь появятся реальные поля, предложения соответствий и конфликты. У каждого правила будет видна область применения.</p>
+          </div>
+          <div class="dt-view" id="dtViewProcessing" role="tabpanel" aria-labelledby="dtTabProcessing" tabindex="0" hidden>
+            <div class="dt-section-heading"><div><h3>Обработка источников</h3><p>Проверьте состав очереди и запустите выбранный шаблон.</p></div></div>
           </div>
           <div class="dt-view" id="dtViewResults" role="tabpanel" aria-labelledby="dtTabResults" tabindex="0" hidden>
             <div class="dt-section-heading"><div><h3>Данные и проверка</h3><p>Результат преобразования, его качество и происхождение.</p></div><span class="dt-phase">Следующий этап</span></div>

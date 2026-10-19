@@ -201,12 +201,13 @@
     var meta = "";
     if (row.kind === "skill") meta = value.BuiltIn ? "Встроенный" : "Пользовательский";
     if (row.kind === "tool") meta = value.BuiltIn ? "Встроенный" : (value.Executor || "vba");
-    var title = row.kind === "prompt" ? value.label : (value.Id || value.Name || (row.kind === "tool" ? "Инструмент" : "Навык"));
+    var title = row.kind === "prompt" ? value.label : (value.Name || value.Id || (row.kind === "tool" ? "Инструмент" : "Навык"));
     return {
       key: instructionRowKey(row), kind: "leaf", title: title,
       iconHtml: window.RNAssistantNavigationTree.icon(row.kind),
       selected: instructionRowKey(row) === activeKey,
-      tooltip: [title, meta, row.kind === "prompt" ? value.description : value.Description].filter(Boolean).join(" · "),
+      tooltip: [title, value.Id && value.Id !== title ? value.Id : "", meta,
+        row.kind === "prompt" ? value.description : value.Description].filter(Boolean).join(" · "),
       row: row
     };
   }

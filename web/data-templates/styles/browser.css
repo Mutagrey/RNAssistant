@@ -1,11 +1,11 @@
 /* Standalone host palette and base controls. The domain UI uses the same tokens in RNAssistant. */
 :root {
   color-scheme: light dark;
-  --bg: #e9ece8; --panel: #fff; --secondary-bg: #f7f8f5;
-  --text: #202d26; --muted: #68736b; --line: #e1e6de; --line-strong: #c7d0c4;
-  --control-border: #c7d0c4; --accent: #35684b; --accent-strong: #28563d;
-  --button-accent-bg: #e8f1e9; --button-primary-bg: #35684b; --button-primary-text: #fff;
-  --button-primary-bg-hover: #28563d; --danger: #ad443c; --success: #287348;
+  --bg: #fff; --panel: #fff; --secondary-bg: #f7f8f6;
+  --text: #27332d; --muted: #66736c; --line: #e2e7e1; --line-strong: #cdd7ce;
+  --control-border: #cbd5cc; --accent: #397352; --accent-strong: #2d6749;
+  --button-accent-bg: #eaf2eb; --button-primary-bg: #397352; --button-primary-text: #fff;
+  --button-primary-bg-hover: #2d6749; --danger: #ad443c; --success: #287348;
   font: 14px/1.5 "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
   background: var(--bg); color: var(--text);
 }
@@ -19,7 +19,26 @@
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 body { margin: 0; }
-.data-templates { max-width: 1120px; margin: 0 auto; padding: 32px; }
+.data-templates { width: 100%; max-width: 1500px; margin: 0 auto; padding: 24px; }
+.dt-embedded .data-templates { max-width: none; min-height: 100vh; padding: 20px; }
+.dt-embedded .dt-header, .dt-embedded .dt-navigation { display: none; }
+.dt-embedded #dtOperation[data-state="completed"] { display: none; }
+.dt-embedded .dt-intake-status:has(#dtIntakeStatus:empty),
+.dt-embedded .dt-intake-status:has(#dtIntakeStatus[data-error="false"]) { display: none; }
+.dt-embedded .dt-project-card:not([open]) { display: none; }
+.dt-embedded .dt-project-card[open] { margin-bottom: 18px; }
+.dt-embedded .dt-section-heading { margin-bottom: 18px; }
+.dt-embedded .dt-section-heading h3 { font-size: 18px; }
+.dt-embedded .dt-view { min-height: calc(100vh - 40px); }
+.dt-embedded #dtViewTemplates:has(#dtTemplateEditor:not([hidden])) { display: flex; flex-direction: column; }
+.dt-embedded #dtViewTemplates:has(#dtTemplateEditor:not([hidden])) > * { order: 10; }
+.dt-embedded #dtViewTemplates:has(#dtTemplateEditor:not([hidden])) > .dt-section-heading { order: 0; }
+.dt-embedded #dtViewTemplates:has(#dtTemplateEditor:not([hidden])) > #dtTemplateEditor { order: 1; }
+.dt-embedded #dtViewTemplates:has(#dtTemplateEditor:not([hidden])) > .dt-template-library { order: 2; }
+.dt-embedded #dtViewTemplates:has(#dtTemplateEditor:not([hidden])) > #dtTemplateDrop { order: 3; }
+.dt-embedded #dtViewTemplates:has(#dtTemplateEditor:not([hidden])) > #dtTemplateInspection { order: 4; }
+.dt-embedded #dtViewTemplates:has(#dtTemplateEditor:not([hidden])) > .dt-process-start { order: 5; }
+.dt-embedded .dt-template-code-json .CodeMirror { min-height: max(360px, calc(100vh - 330px)); }
 h2, h3, h4 { margin: 0; }
 .dt-file-protocol-notice { padding: 13px 16px; margin: 0 0 16px; color: var(--dt-text-muted); font-size: var(--dt-font-small); line-height: 1.5; border-color: var(--danger); }
 button, input, select { font: inherit; }

@@ -122,6 +122,26 @@ namespace RNAssistant.Core.Storage
                 .Where(item => item.WorkspaceId == workspace.WorkspaceId).ToArray();
         }
 
+        public ChatSession RenameSession(ChatStore chats, WorkspaceDescriptor workspace, string sessionId, string title)
+        {
+            if (chats == null) throw new ArgumentNullException(nameof(chats));
+            ValidateDescriptor(workspace);
+            if (string.IsNullOrWhiteSpace(title) || title.Trim().Length > 200)
+                throw new ArgumentException("A title of 1–200 characters is required.", nameof(title));
+            var session = LoadSession(chats, workspace, sessionId);
+            if (session == null) throw new InvalidOperationException("Workspace session was not found.");
+            chats.SetTitle(session, title.Trim());
+            return LoadSession(chats, workspace, sessionId);
+        }
+
+        public bool DeleteSession(ChatStore chats, WorkspaceDescriptor workspace, string sessionId)
+        {
+            if (chats == null) throw new ArgumentNullException(nameof(chats));
+            ValidateDescriptor(workspace);
+            if (LoadSession(chats, workspace, sessionId) == null) return false;
+            return chats.Delete("Workspace", workspace.WorkspaceId, sessionId);
+        }
+
         private static void ValidateDescriptor(WorkspaceDescriptor value)
         {
             if (value == null || !ValidId(value.WorkspaceId) || string.IsNullOrWhiteSpace(value.RootPath))

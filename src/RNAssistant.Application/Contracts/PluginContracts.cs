@@ -103,6 +103,39 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("role")] public string Role { get; set; }
         [JsonProperty("text")] public string Text { get; set; }
     }
+    public sealed class ProjectChatRequest
+    {
+        [JsonProperty("projectId", Required = Required.Always)] public string ProjectId { get; set; }
+        [JsonProperty("sessionId")] public string SessionId { get; set; }
+        [JsonProperty("title")] public string Title { get; set; }
+        [JsonProperty("input")] public WorkspaceSubmitInputRequest Input { get; set; }
+        [JsonProperty("runId")] public string RunId { get; set; }
+        [JsonProperty("cursor")] public string Cursor { get; set; }
+        [JsonProperty("pendingId")] public string PendingId { get; set; }
+        [JsonProperty("approve")] public bool Approve { get; set; }
+    }
+    public sealed class ProjectChatProjectDto
+    {
+        [JsonProperty("projectId")] public string ProjectId { get; set; }
+        [JsonProperty("workspaceId")] public string WorkspaceId { get; set; }
+        [JsonProperty("name")] public string Name { get; set; }
+    }
+    public sealed class ProjectChatCatalogDto
+    {
+        [JsonProperty("project")] public ProjectChatProjectDto Project { get; set; }
+        [JsonProperty("chats")] public IReadOnlyList<ChatSessionHeader> Chats { get; set; }
+    }
+    public sealed class ProjectChatStateDto
+    {
+        [JsonProperty("project")] public ProjectChatProjectDto Project { get; set; }
+        [JsonProperty("sessionId")] public string SessionId { get; set; }
+        [JsonProperty("state")] public WorkspaceSessionSnapshot State { get; set; }
+        [JsonProperty("pendingId")] public string PendingId { get; set; }
+        [JsonProperty("pendingTool")] public string PendingTool { get; set; }
+        [JsonProperty("pendingArguments")] public string PendingArguments { get; set; }
+        [JsonProperty("cancelStatus", NullValueHandling = NullValueHandling.Ignore)] public WorkspaceCancellationStatus? CancelStatus { get; set; }
+        [JsonProperty("messages")] public IReadOnlyList<PluginChatMessageDto> Messages { get; set; }
+    }
     public sealed class PluginDataSelection
     {
         public string RootPath { get; set; }

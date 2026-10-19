@@ -11,7 +11,6 @@
     report: "Итоги сентября.md", html: "Динамика продаж.html", json: "Продажи по регионам.json",
     pdf: "Методика расчёта.pdf", image: "Диаграмма.png", sequence: "Обзор регионов"
   };
-  var projectTabs = { sources: "Sources", templates: "Templates", parameters: "Parameters" };
   var settingPages = { diagnostics: "service" };
 
   function waitFor(view, test, current) {
@@ -37,12 +36,15 @@
     var current = ++sequence;
     var view = product.contentWindow;
     var ready = await waitFor(view, function (target) {
-      return target.state && !target.state.initializePromise && !target.state.bridgeUnavailable;
+      return target.state && typeof target.switchTab === "function" && target.RNAssistantPlugins &&
+        !target.state.initializePromise && !target.state.bridgeUnavailable;
     }, current);
     if (!ready || current !== sequence) return;
     var parts = route.split("/"), section = parts[0], sub = parts[1];
     if (section === "chat") {
       view.switchTab("chat");
+      if (sub === "project") { view.RNAssistantProjectChats.setScope("projects"); return; }
+      view.RNAssistantProjectChats.setScope("office");
       var chatId = sub === "summary" ? "preview-summary" : sub === "offline" ? "preview-budget" : "preview-chat";
       if (scenario.value !== "empty" && view.state.activeChatId !== chatId) await view.selectChat(chatId);
       if (["context", "abilities", "usage", "activity"].includes(sub)) {
@@ -93,17 +95,29 @@
         return target.document.querySelector('#pluginRail [data-plugin-id="data-templates"]');
       }, current);
       if (!plugin) return;
-      await view.RNAssistantPlugins.select("data-templates");
+      if (view.RNAssistantPlugins.selectedId() !== "data-templates" || !view.document.querySelector("#pluginPreviewMount iframe"))
+        await view.RNAssistantPlugins.select("data-templates");
       var frame = await waitFor(view, function (target) {
         var embedded = target.document.querySelector("#pluginPreviewMount iframe");
-        return embedded && embedded.contentDocument && embedded.contentDocument.querySelector("#dtTabSources") && embedded;
+        return embedded && embedded.contentDocument && embedded.contentDocument.documentElement.dataset.previewReady === "true" && embedded;
       }, current);
-      if (frame && projectTabs[sub]) click(frame.contentWindow, "#dtTab" + projectTabs[sub]);
+      if (frame && sub === "templates") {
+        var template = await waitFor(view, function (target) {
+          return target.document.querySelector('#pluginNavigationTree [data-tree-key^="template:"] .navigation-tree-label');
+        }, current);
+        if (template) template.click();
+        return;
+      }
+      if (frame) click(view, '#pluginNavigationTree [data-tree-key="' + sub + '"] .navigation-tree-label');
+      if (frame && sub === "processing" && !frame.contentDocument.querySelector("#dtProcessingRows tr"))
+        click(frame.contentWindow, "#dtStartProcessing");
       return;
     }
     if (section === "settings") {
       view.switchTab("settings");
       click(view, '#settingsNavTree .navigation-tree-label[data-settings-page="' + (settingPages[sub] || sub) + '"]');
+      if (sub === "model" && scenario.value !== "empty" && !view.state.modelCatalog.loaded)
+        click(view, "#loadModelsButton");
     }
   }
 

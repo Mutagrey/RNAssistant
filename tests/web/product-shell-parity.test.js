@@ -19,6 +19,16 @@ const { chromium } = require("playwright");
         line: getComputedStyle(heading).borderBottomColor,
         tokens: ["--line", "--line-strong", "--radius", "--danger"].map(key => css.getPropertyValue(key).trim()) };
     });
+    assert.equal(await demo.locator('#global-nav [data-action="navigation"]').count(), 0,
+      "the demo only keeps the navigation toggle beside the central heading");
+    assert.equal(await demo.locator("#demoNavigationToggle").count(), 1);
+    const demoHeaderSpacing = () => demo.evaluate(() => {
+      const header = document.querySelector("#main .page-header").getBoundingClientRect();
+      const toggle = document.querySelector("#demoNavigationToggle").getBoundingClientRect();
+      const title = document.querySelector("#main .page-heading").getBoundingClientRect();
+      return [Math.round(toggle.left - header.left), Math.round(title.left - toggle.right)];
+    });
+    assert.deepEqual(await demoHeaderSpacing(), [10, 6]);
     const page = await browser.newPage({ viewport: { width: 1074, height: 760 } });
     const errors = [];
     page.on("pageerror", error => errors.push(error.message));
@@ -69,8 +79,8 @@ const { chromium } = require("playwright");
         return { x: box.x, y: box.y, display: getComputedStyle(element).display };
       });
       assert.equal(toggle.display, "grid", name + " keeps the navigation toggle beside the title");
-      assert.equal(toggle.x, geometry.main.x + 18, name + " aligns the toggle with the title inset");
-      assert.equal(geometry.main.paddingLeft, "62px", name + " reserves the shared title gap");
+      assert.equal(toggle.x, geometry.main.x + 10, name + " keeps a narrow gap from the panel edge");
+      assert.equal(geometry.main.paddingLeft, "50px", name + " reserves the shared title gap");
     }
 
     await page.locator('.rail-button[data-tab="artifacts"]').click();
@@ -121,7 +131,7 @@ const { chromium } = require("playwright");
       button.click();
       for (let frame = 0; frame < 16; frame += 1) {
         await new Promise(resolve => requestAnimationFrame(resolve));
-        offsets.push(Math.abs(button.getBoundingClientRect().left - main.getBoundingClientRect().left - 18));
+        offsets.push(Math.abs(button.getBoundingClientRect().left - main.getBoundingClientRect().left - 10));
       }
       return offsets;
     });
@@ -140,8 +150,18 @@ const { chromium } = require("playwright");
           .find(element => element.getBoundingClientRect().height);
         return heading && getComputedStyle(heading).paddingLeft;
       }, main);
-      assert.equal(inset, "56px", button + " keeps the title clear of the toggle in single-pane mode");
+      assert.equal(inset, "48px", button + " keeps the title clear of the toggle in single-pane mode");
     }
+    await demo.setViewportSize({ width: 390, height: 760 });
+    await demo.waitForFunction(() => document.querySelector("#app-shell").classList.contains("navigation-single"));
+    await demo.waitForFunction(() => !document.querySelector("#app-shell").classList.contains("navigation-transition"));
+    assert.deepEqual(await demoHeaderSpacing(), [8, 6], "the demo keeps the same compact button spacing");
+    await demo.locator("#demoNavigationToggle").click();
+    await demo.locator("#global-nav").waitFor({ state: "visible" });
+    assert.equal(await demo.locator("#global-nav").isVisible(), true);
+    assert.equal(await demo.locator('#global-nav [data-action="navigation"]').count(), 0);
+    await demo.locator("#demoNavigationToggle").click();
+    await demo.locator("#global-nav").waitFor({ state: "hidden" });
     assert.deepEqual(errors, []);
     console.log("PASS product shell: demo palette, joined built-in headers and shared navigation collapse");
   } finally { await browser.close(); }

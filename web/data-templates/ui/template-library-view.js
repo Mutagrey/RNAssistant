@@ -218,7 +218,8 @@
       if (!disposed) get("Save").disabled = busy || !project || !validated;
     });
     render();
-    return Object.freeze({ dispose: () => { disposed = true; if (abort) abort.abort(); events.abort(); panel.remove(); } });
+    return Object.freeze({ active: () => activeId,
+      dispose: () => { disposed = true; if (abort) abort.abort(); events.abort(); panel.remove(); } });
   }
   root.DataTemplatesTemplateLibraryView = Object.freeze({ create });
 }(window));

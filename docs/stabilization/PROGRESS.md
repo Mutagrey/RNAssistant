@@ -1,5 +1,24 @@
 # Stabilization progress
 
+## Product project views and chats — 2026-10-19
+
+The Data Templates plugin now sits in the shared project tree/editor composition.
+Its existing browser/native UI handles template and dictionary edits, Worker
+processing, cancellation and result read-back/export; the tree only navigates
+these views. The selected enabled data project owns separate workspace chat
+sessions through typed bridge operations and the shared conversation service.
+The five old plugin lifecycle actions live in Development by product decision.
+Mock preview seeds a valid in-memory project, exercises real browser processing,
+simulates chat/publication explicitly and supplies a model catalog for UI review.
+The demo and product keep one navigation toggle beside the central heading,
+with 10 px outer and 6 px title gaps (8 px outer on narrow screens); the duplicate
+Data Templates tree icon is removed. The shared tree header now supplies project
+search/open controls. Early tree selections survive iframe/preview loading, and
+template rows open the real editor while the group returns to the catalog.
+Focused Harness and Chromium checks pass. Windows/Office/WebView2 behavior remains
+an open qualification gate.
+The material Details tab remains in place pending its separate placement decision.
+
 ## Data Templates standalone export — 2026-10-19
 
 The complete export suite passes in Chromium after fixing stale shared-dictionary

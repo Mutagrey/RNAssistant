@@ -43,13 +43,11 @@
     main.inert = replacesMain; main.setAttribute("aria-hidden", String(replacesMain));
     var rail = document.getElementById("section-rail"), hidesRail = layoutMode === "single" && !open;
     rail.inert = hidesRail; rail.setAttribute("aria-hidden", String(hidesRail));
-    document.querySelectorAll(".menu-btn").forEach(function (button) {
-      var label = open ? "Свернуть навигацию" : "Открыть навигацию";
-      button.setAttribute("aria-expanded", String(open)); button.setAttribute("aria-controls", "global-nav");
-      button.setAttribute("aria-label", label); button.title = label;
-    });
+    var button = document.getElementById("demoNavigationToggle");
+    var label = open ? "Свернуть навигацию" : "Открыть навигацию";
+    button.setAttribute("aria-expanded", String(open)); button.setAttribute("aria-label", label); button.title = label;
     if (!open && (nav.contains(focused) || focused.matches('[data-split="navigation"]'))) {
-      var button = document.querySelector(".menu-btn"); if (button) button.focus({ preventScroll: true });
+      button.focus({ preventScroll: true });
     }
   }
   function visible(element) { return element && getComputedStyle(element).display !== "none"; }
@@ -80,6 +78,7 @@
         // Keep the content at its final width while its outer pane slides closed.
         // Reading the animated width here would feed it back into ResizeObserver.
         entry.pane.style.setProperty("--pane-width", width + "px");
+        shell.style.setProperty("--demo-navigation-width", width + "px");
       } else {
         if (entry.handle.hidden) return;
         width = Math.round(clamp(desired == null ? parseFloat(getComputedStyle(entry.pane).getPropertyValue("--pane-default")) : desired, range));
@@ -180,7 +179,7 @@
     setNavigation: function (open, focus) {
       sync(); setNavigationPreference(open); persist(); sync();
       if (focus) requestAnimationFrame(function () {
-        var target = open ? document.querySelector('#global-nav [role="treeitem"][tabindex="0"]') || document.querySelector('#global-nav button, #global-nav summary') : document.querySelector('.menu-btn');
+        var target = open ? document.querySelector('#global-nav [role="treeitem"][tabindex="0"]') || document.querySelector('#global-nav button, #global-nav summary') : document.getElementById('demoNavigationToggle');
         if (target && target.focus) target.focus({ preventScroll: true });
       });
     },

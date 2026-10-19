@@ -12,6 +12,20 @@ ROOT = Path(__file__).resolve().parents[1]
 class PreviewHandler(SimpleHTTPRequestHandler):
     def do_GET(self):
         path = unquote(urlsplit(self.path).path)
+        if path == "/preview/web/data-templates/index.html":
+            html = (ROOT / "web/data-templates/index.html").read_text(encoding="utf-8")
+            marker = '<script defer src="ui/browser.js"></script>'
+            if html.count(marker) != 1:
+                self.send_error(500, "Data Templates entrypoint changed")
+                return
+            html = html.replace(marker, '<script defer src="/preview/mock-data-project.js"></script>\n  ' + marker)
+            content = html.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(content)))
+            self.end_headers()
+            self.wfile.write(content)
+            return
         if path in ("/preview/web/", "/preview/web/index.html"):
             html = (ROOT / "web/index.html").read_text(encoding="utf-8")
             # Preview-only binary examples are served locally; the native WebView CSP stays unchanged.

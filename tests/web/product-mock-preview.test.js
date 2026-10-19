@@ -72,6 +72,14 @@ async function serve() {
     assert.equal(await normal.locator("#toggleChatInspectorButton svg").count(), 1);
     assert.equal(await normal.locator("#productMobileMenuButton").isVisible(), true,
       "the central heading keeps its navigation button at wide widths");
+    const chatHeaderInsets = () => normal.evaluate(() => {
+      const rect = selector => document.querySelector(selector).getBoundingClientRect();
+      const header = rect("#chatDropZone .chatbar"), left = rect("#productMobileMenuButton"),
+        title = rect("#chatDropZone .chat-title-block"), right = rect("#toggleChatInspectorButton");
+      return [Math.round(left.left - header.left), Math.round(title.left - left.right),
+        Math.round(header.right - right.right)];
+    });
+    assert.deepEqual(await chatHeaderInsets(), [10, 6, 10], "both panel buttons sit close to the header edges");
     assert.equal(await normal.locator("#chatScopeIcon svg").count(), 1);
     const railIcons = await normal.evaluate(() => {
       const center = selector => {
@@ -88,6 +96,7 @@ async function serve() {
     assert.equal(await normal.locator("#chatInspector").isVisible(), true);
     assert.equal(await normal.locator("#productMobileMenuButton").isVisible(), true,
       "the left navigation button remains visible beside the chat title with the inspector open");
+    assert.deepEqual(await chatHeaderInsets(), [10, 6, 10], "the buttons keep their spacing beside an open inspector");
     assert.match(await normal.locator("#chatInspectorBody").textContent(), /Продажи · сентябрь\.xlsx/);
     const inspectorGeometry = await normal.evaluate(() => {
       const main = document.querySelector("#chatDropZone").getBoundingClientRect();
@@ -99,7 +108,7 @@ async function serve() {
     assert.deepEqual(inspectorGeometry, { joined: true, header: 52 });
     await normal.locator("#chatInspectorSwitcher summary").click();
     await normal.locator('[data-chat-inspector-view="abilities"]').click();
-    assert.match(await normal.locator("#chatInspectorBody").textContent(), /excel\.sales_analysis/);
+    assert.match(await normal.locator("#chatInspectorBody").textContent(), /Анализ продаж/);
     await normal.locator("#toggleChatInspectorButton").click();
     await normal.locator("#chatInspector").waitFor({ state: "hidden" });
     const progress = [];
@@ -120,6 +129,8 @@ async function serve() {
     assert.equal(await normal.locator("#chatInput").inputValue(), "");
     await normal.locator('.section-rail [data-section="library"]').click();
     await normal.locator('#instructionsList [data-tree-key="skill:0"]').click();
+    assert.match(await normal.locator('#instructionsList [data-tree-key="skill:0"]').textContent(), /Анализ продаж/);
+    assert.equal(await normal.locator("#skillTitle").textContent(), "Анализ продаж");
     async function libraryEdges() {
       return normal.evaluate(() => {
         const nav = document.querySelector("#instructionsLayout > .global-nav .product-nav-heading").getBoundingClientRect();
@@ -245,14 +256,91 @@ async function serve() {
     await normal.locator("#artifactCatalogPreviewBody img").waitFor();
     assert.equal(await normal.locator("#artifactCatalogStatus").textContent(), "");
     await normal.locator('#pluginRail [data-plugin-id="data-templates"]').click();
-    await normal.frameLocator("#pluginPreviewMount iframe").locator("#dtTabSources").waitFor();
-    await normal.frameLocator("#pluginPreviewMount iframe").locator("#dtTabTemplates").click();
+    await normal.locator('#pluginNavigationTree [data-tree-key="sources"]').waitFor();
+    await normal.locator('#pluginNavigationTree [data-tree-key="sources"] > .navigation-tree-row').click();
+    await normal.waitForFunction(() => document.querySelector("#pluginPreviewMount iframe")?.contentDocument?.documentElement?.dataset.previewReady === "true");
+    await normal.frameLocator("#pluginPreviewMount iframe").locator("#dtViewSources").waitFor({ state: "visible" });
+    await normal.locator('[data-nav-search-toggle="pluginNavigationSearch"]').click();
+    await normal.locator("#pluginNavigationSearch").fill("production-form");
+    assert.equal(await normal.locator('#pluginNavigationTree [data-tree-key="template:production-form"]').count(), 1);
+    assert.equal(await normal.locator('#pluginNavigationTree [data-tree-key="sources"]').count(), 0);
+    await normal.locator("#pluginNavigationSearch").press("Escape");
+    assert.equal(await normal.locator('#pluginNavigationTree [data-tree-key="sources"]').count(), 1);
+    assert.equal(await normal.locator("#pluginNavigationToggle, #pluginNavigationClose").count(), 0,
+      "Data Templates uses the shared panel button");
+    assert.equal(await normal.locator("#productMobileMenuButton").getAttribute("aria-controls"), "pluginNavigationPane");
+    assert.deepEqual(await normal.evaluate(() => {
+      const rect = selector => document.querySelector(selector).getBoundingClientRect();
+      const nav = rect("#pluginNavigationPane .product-nav-heading"), header = rect("#pluginWorkbench .plugin-toolbar"),
+        toggle = rect("#productMobileMenuButton"), title = rect("#pluginWorkbench .plugin-title");
+      return [Math.round(nav.height), Math.round(header.height),
+        Math.round(toggle.left - header.left), Math.round(title.left - toggle.right)];
+    }), [52, 52, 10, 6], "plugin headers and the shared button follow the demo spacing");
+    await normal.locator('#pluginNavigationTree [data-tree-key="template:production-form"] > .navigation-tree-row').click();
+    await normal.frameLocator("#pluginPreviewMount iframe").locator("#dtTemplateEditor").waitFor({ state: "visible" });
+    await normal.waitForFunction(() => document.querySelector("#pluginPreviewMount iframe")?.contentDocument?.querySelector("#dtViewTemplates .dt-section-heading h3")?.textContent === "production-form");
+    assert.equal(await normal.frameLocator("#pluginPreviewMount iframe").locator("#dtViewTemplates .dt-section-heading h3").textContent(), "production-form");
+    await normal.locator('#pluginNavigationTree [data-tree-key="templates"] > .navigation-tree-row > .navigation-tree-label').click();
+    await normal.frameLocator("#pluginPreviewMount iframe").locator("#dtTemplateEditor").waitFor({ state: "hidden" });
+    await normal.waitForFunction(() => document.querySelector("#pluginPreviewMount iframe")?.contentDocument?.querySelector("#dtViewTemplates .dt-section-heading h3")?.textContent === "Шаблоны преобразования");
+    assert.equal(await normal.frameLocator("#pluginPreviewMount iframe").locator("#dtViewTemplates .dt-section-heading h3").textContent(), "Шаблоны преобразования");
+    await normal.setViewportSize({ width: 750, height: 720 });
+    await normal.waitForFunction(() => document.querySelector(".shell").classList.contains("navigation-compact"));
+    await normal.locator("#pluginNavigationPane").waitFor({ state: "hidden" });
+    assert.equal(await normal.locator("#pluginNavigationPane").isVisible(), false);
+    await normal.locator("#productMobileMenuButton").click();
+    await normal.waitForFunction(() => Math.abs(document.querySelector("#pluginNavigationPane").getBoundingClientRect().width - 290) < 0.5);
+    assert.equal(await normal.evaluate(() => {
+      const main = document.querySelector(".plugin-data-templates .plugin-content").getBoundingClientRect();
+      const button = document.querySelector("#productMobileMenuButton").getBoundingClientRect();
+      return Math.round(button.left - main.left);
+    }), 10, "the project tree and shared button expand together");
+    await normal.setViewportSize({ width: 390, height: 720 });
+    await normal.waitForFunction(() => document.querySelector(".shell").classList.contains("navigation-single"));
+    await normal.locator("#productMobileMenuButton").click();
+    await normal.locator("#pluginNavigationPane").waitFor({ state: "visible" });
+    assert.equal(await normal.locator("#pluginNavigationPane [data-plugin-nav-icon]").count(), 0,
+      "the tree heading does not duplicate the panel icon");
+    await normal.locator("#productMobileMenuButton").click();
+    await normal.setViewportSize({ width: 1280, height: 720 });
+    await normal.waitForFunction(() => document.querySelector(".shell").classList.contains("navigation-wide"));
+    await normal.waitForFunction(() => document.querySelector("#pluginPreviewMount iframe")?.contentDocument?.documentElement?.dataset.previewReady === "true");
+    await normal.locator('#pluginNavigationTree [data-tree-key="templates"] > .navigation-tree-row > .navigation-tree-label').click();
+    await normal.frameLocator("#pluginPreviewMount iframe").locator("#dtViewTemplates").waitFor({ state: "visible" });
     assert.equal(await normal.frameLocator("#pluginPreviewMount iframe").locator("#dtViewTemplates").isVisible(), true);
     await normal.locator('.section-rail [data-section="artifacts"]').click();
     await normal.locator("#artifactCatalogAll").click();
     await normal.locator("#artifactCatalogOverviewRows").getByRole("button", { name: "Методика расчёта.pdf" }).click();
     await normal.locator("#artifactCatalogPreviewBody iframe").waitFor();
     assert.equal(await normal.locator("#artifactCatalogStatus").textContent(), "");
+    await normal.locator('.section-rail [data-section="chat"]').click();
+    await normal.locator("#chatScopeSwitcher summary").click();
+    await normal.locator('#chatScopeSwitcher [data-workspace-scope="projects"]').click();
+    await normal.locator("#projectChatTitle").getByText("Подготовка отчёта").waitFor();
+    await normal.locator("#projectChatMessages .project-chat-suggest").click();
+    assert.match(await normal.locator("#projectChatInput").inputValue(), /Сравни сентябрь с августом/);
+    await normal.locator("#projectChatInput").fill("");
+    await normal.locator("#projectChatNew").click();
+    await normal.waitForFunction(() => document.querySelector("#projectChatTree [aria-current='page']")?.textContent.includes("Новый чат"));
+    await normal.locator("#projectChatInput").fill("Проверь источники");
+    await normal.locator("#projectChatSend").click();
+    await normal.locator("#projectChatStop").waitFor({ state: "visible" });
+    await normal.locator("#projectChatStop").click();
+    await normal.waitForFunction(() => document.querySelector("#projectChatNotice").textContent.includes("прервано"));
+    assert.match(await normal.locator("#projectChatMessages").textContent(), /Проверь источники/);
+    const mockProjectCycle = await normal.evaluate(async () => {
+      await send("disablePlugin", { pluginId: "data-templates" });
+      const disabled = await send("getProjectChats", {});
+      const candidate = await send("checkPlugin", { pluginId: "data-templates" });
+      await send("applyPlugin", { pluginId: "data-templates", candidateId: candidate.candidateId });
+      const unpublishedProject = await send("getProjectChats", {});
+      await send("openPlugin", { pluginId: "data-templates" });
+      const reopened = await send("getProjectChats", {});
+      return { disabled: disabled.project, unpublishedProject: unpublishedProject.project,
+        reopened: reopened.project && reopened.project.name, count: reopened.chats.length };
+    });
+    assert.deepEqual(mockProjectCycle, { disabled: null, unpublishedProject: null,
+      reopened: "Управленческая отчётность", count: 3 });
     assert.deepEqual(errors, []);
     await normal.close();
 

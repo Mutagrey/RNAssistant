@@ -65,6 +65,9 @@
 #tab-artifacts .html-workspace-editor { background: var(--surface); }
 #tab-artifacts .resource-editor-head { min-height: 52px; border-bottom-color: var(--line); }
 #tab-artifacts #artifactCatalogActions:not([hidden]) ~ #htmlWorkspaceEditor .resource-editor-titlebox { display: none; }
+#tab-artifacts #htmlWorkspaceEditor:has(#artifactDetailPreview:not(.hidden)) .html-workspace-head:has(.html-workspace-mode-button[data-html-mode="edit"].hidden):not(:has(.resource-editor-actions > :not(.hidden))) { display: none; }
+#tab-artifacts .artifact-detail-preview:not(.is-media-preview) { padding: 16px 18px 24px; }
+#tab-artifacts .artifact-detail-preview .rn-markdown-viewer-rendered { padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
 #tab-artifacts .html-workspace-tree { scrollbar-width: thin; }
 #tab-artifacts .html-workspace-tree button { font-family: var(--font); }
 

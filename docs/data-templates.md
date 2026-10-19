@@ -55,8 +55,8 @@ importer in C# or make an agent run part of normal file processing.
 
 [Open the application](../web/data-templates/index.html).
 It preserves the loader's pick/drop/search/navigation/progress/cancel behavior.
-The standalone Templates view validates and edits JSON rules, manages a project-local
-template catalog and runs the XLSX queue; the separate core probe remains a
+The standalone Templates view validates and edits JSON rules and manages a project-local
+template catalog. Processing runs the XLSX queue; the separate core probe remains a
 development tool. Native inspection and extraction call `commands.js` through the
 same plugin command service used by the workspace agent. `extract` stages a named
 canonical result; `extract-to-file` publishes an explicit data-project path through
@@ -1076,6 +1076,16 @@ The Data Templates rail item opens an isolated plugin, with the source-workspace
 chat next to its preview in development mode. Data selection is separate from
 source chat and Office target selection. The plugin uses its ordinary browser
 project UI over native directory handles; the former root workspace UI was removed.
+The product shell supplies the shared project tree and full-height editor layout.
+Tree selection navigates the existing plugin views for sources, template drafts,
+dictionary parameters and mappings, processing, results and format help. The
+Processing view owns the real Worker queue and cancellation; Results keeps its
+read-back, save and export actions. Check, Preview, Apply, Open active and Disable
+remain in the Development panel with the source chat. A selected data project
+also owns separate workspace chat sessions exposed through the application bridge;
+these chats have no Office document target and are reset when the project grant
+changes. Browser preview uses an in-memory project and labels simulated publication
+and chat responses; it is not native Office qualification.
 
 `src/RNAssistant.Application` is shared through `.projitems` by Office Framework 4.8
 and CLI Runtime. It now also contains `WorkspaceConversationService` and the plugin
