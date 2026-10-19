@@ -108,7 +108,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       });
       assert.ok(layout.assistantLeft < 1 && layout.plainAssistantLeft < 1 && layout.userRight < 1 && layout.metaAfter);
       assert.ok(layout.copyFirst && !layout.overflow);
-      assert.ok(layout.gap >= 0 && layout.gap <= 8 && layout.divider === "1px");
+      assert.ok(layout.gap >= 0 && layout.gap <= 8 && layout.divider === "0px");
     }
     // Exercise the shipped Markdown renderer, not an identity-string mock.
     await page.evaluate(() => {
@@ -150,9 +150,9 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       assert.equal(await page.locator("#failed-no-calls .agent-run-overview").count(), 0);
       assert.equal(await page.locator("#failed-no-calls [data-runtime-health]").count(), 1, "zero actions still explains failure");
       assert.match(await page.locator("#failed-no-calls").innerText(), /Не удалось получить ответ/);
-      assert.equal(await page.locator("#failed-run .agent-step-message:visible").count(), 0,
-        "a failed run folds its comment together with the actions");
-      await page.locator("#failed-run .agent-run-overview").evaluate(node => { node.open = true; });
+      assert.equal(await page.locator("#failed-run .agent-step-message:visible").count(), 1,
+        "a failed run without a final answer retains its commentary");
+      assert.equal(await page.locator("#failed-run .agent-run-overview").count(), 0);
       const visible = await page.locator("#failed-run").innerText();
       assert.ok(!visible.includes("Endpoint:") && !visible.includes("MaxTokens:"), "raw diagnostics stay out of the main transcript");
       assert.equal(await page.locator("#failed-run .kind-tool").count(), 2, "different call ids remain separate even with identical action/target");
@@ -164,14 +164,12 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       assert.equal(await diagnostic.locator(".agent-activity-result").evaluate(node => getComputedStyle(node).whiteSpace), "pre-wrap");
       assert.ok(await diagnostic.evaluate(node => node.scrollWidth <= node.clientWidth + 1), "long diagnostic wraps in the narrow chat");
       await diagnostic.evaluate(node => { node.open = false; });
-      await page.locator("#failed-run .agent-run-overview").evaluate(node => { node.open = false; });
     }
     assert.equal(await page.locator("#body-diagnostic .agent-activity-result").count(), 1, "message-only diagnostic is retained in details");
     assert.deepEqual(await page.evaluate(() => activityDetailTexts({ Kind: "diagnostic", ResultMessage: "Причина" }, { message: { Content: "Пояснение" } })), ["Причина", "Пояснение"]);
     assert.equal(await page.evaluate(() => failedFixtures.items[3].message.Content === failedFixtures.raw && failedFixtures.items[3].activity.ResultMessage === failedFixtures.raw), true, "display never rewrites retained diagnostics");
     assert.match(await page.evaluate(() => RNAssistantRunViewState.failureReasonLabel("PromptBudgetExceeded")), /Контекст/);
     assert.ok(!(await page.evaluate(() => RNAssistantRunViewState.failureReasonLabel("Endpoint: private detail"))).includes("Endpoint:"));
-    await page.locator("#failed-run .agent-run-overview").evaluate(node => { node.open = false; });
     await page.setViewportSize({ width: 740, height: 920 });
     await page.locator("#full-run").hover();
     if (process.env.LAYOUT_SCREENSHOT) await page.screenshot({ path: process.env.LAYOUT_SCREENSHOT, fullPage: true });
@@ -265,7 +263,8 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       assert.equal(await run.locator(".agent-run-final:visible").count(), 1);
       assert.equal(await run.locator(".kind-tool:visible").count(), 0);
       await run.locator(".agent-run-overview > summary").click();
-      await run.locator(".kind-tool").first().waitFor({ state: "visible" });
+      await run.locator(".agent-run-history-content").waitFor({ state: "visible" });
+      await run.locator(".agent-completed-actions").evaluateAll(nodes => nodes.forEach(node => { node.open = true; }));
       assert.equal(await run.locator(".kind-tool:visible").count(), 6);
       assert.equal(await run.locator(".agent-step-message:visible").count(), 2,
         "expanded history retains each original comment with its own step");
@@ -277,6 +276,29 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       });
       assert.equal(await run.locator(".agent-step-message:visible").count(), 0, "reload keeps progress and actions folded together");
     }
+    // Real DOM reconciliation must retain nested expansions and keyboard focus.
+    await page.evaluate(() => {
+      const host = document.createElement("div"); host.id = "disclosure-refresh";
+      document.querySelector("main").appendChild(host);
+      savedCommentRun.items[0].activity.ArgumentsJson = '{"target":"sales"}';
+      window.refreshDisclosureFixture = signature => reconcileMessageUnits(host, [{ key: "focus-run", signature,
+        render: () => renderAgentRunArticle(savedCommentRun) }], false);
+      renderedMessageUnits = {};
+      refreshDisclosureFixture("before");
+    });
+    const refreshed = page.locator("#disclosure-refresh");
+    await refreshed.locator(".agent-run-overview > summary").click();
+    await refreshed.locator(".agent-run-history-content").waitFor({ state: "visible" });
+    await refreshed.locator(".agent-completed-actions > summary").first().click();
+    const actionSummary = refreshed.locator(".agent-activity-toggle > summary").first();
+    await actionSummary.click();
+    await actionSummary.focus();
+    await page.evaluate(() => refreshDisclosureFixture("after"));
+    assert.equal(await refreshed.locator(".agent-run-overview").evaluate(node => node.open), true);
+    assert.equal(await refreshed.locator(".agent-completed-actions").first().evaluate(node => node.open), true);
+    assert.equal(await refreshed.locator(".agent-activity-toggle").first().evaluate(node => node.open), true);
+    assert.equal(await refreshed.locator(".agent-activity-toggle > summary").first().evaluate(node => document.activeElement === node), true,
+      "stream refresh restores focused action without scrolling");
     console.log("PASS activity layout: action/target/result, Markdown, diagnostics, narrow wrapping and complete step disclosures");
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -12,7 +12,7 @@ function renderActivityNode(activity, nested, current, context) {
   if (expandable) {
     var details = document.createElement("details");
     details.className = "agent-activity-toggle";
-    details.setAttribute("data-disclosure-key", "activity:" + activityTimelineKey(activity));
+    details.setAttribute("data-disclosure-key", "activity:" + activityTimelineKey(activity) + (status === "failed" ? ":failed" : ""));
     details.open = false;
     details.appendChild(renderActivityRow(activity, current, true, context));
     appendActivityDetailsContent(details, activity, context);

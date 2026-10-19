@@ -105,6 +105,26 @@ async function assertAboveResources(page, selector) {
         assert.equal(await page.locator("#contextMeterTooltip").isVisible(), false);
       }
     }
+    await page.evaluate(() => {
+      state.contextUsage = {}; renderContextMeter();
+      document.getElementById("messages").innerHTML = "<div style='min-height:2400px'>Длинный диалог</div>";
+    });
+    assert.equal(await page.locator("#contextMeterWrap").isVisible(), false, "unknown context occupies no toolbar space");
+    for (const height of [760, 560]) {
+      await page.setViewportSize({ width: 360, height });
+      const contained = await page.locator("#chatForm").evaluate(form => {
+        const rect = form.getBoundingClientRect();
+        return Array.from(form.querySelectorAll(".composer-toolbar button, .composer-toolbar summary"))
+          .filter(node => node.getClientRects().length && !node.closest(".composer-picker-menu"))
+          .every(node => { const b = node.getBoundingClientRect(); return b.top >= rect.top && b.bottom <= rect.bottom && b.left >= rect.left && b.right <= rect.right; });
+      });
+      assert.equal(contained, true, "long transcript cannot shrink composer around its controls");
+    }
+    await page.setViewportSize({ width: 360, height: 760 });
+    await page.evaluate(() => {
+      state.contextUsage = { lastPromptTokens: 100, contextWindowTokens: 1000 }; renderContextMeter();
+    });
+    assert.equal(await page.locator("#contextMeterWrap").isVisible(), true, "usage arrival restores the indicator");
     console.log("PASS composer: menu and context tooltip fit 1100/740/360px; ring precedes plain model label, ping is absent");
     assert.equal(await page.locator("#testModelConnectionButton").count(), 1,
       "manual model connection check remains in settings");

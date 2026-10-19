@@ -93,7 +93,7 @@ const tests = [
     assert.match(note.textContent, /Подтверждённые записи: 5/);
     assert.doesNotMatch(note.textContent, /завершила задачу/);
   }],
-  ["repeated progress comments collapse without losing actions or later distinct comments", () => {
+  ["progress comments keep their chronological boundaries", () => {
     const steps = [
       { message: "Загружу схему.", items: [{ id: "a" }] },
       { message: "", items: [{ id: "b" }] },
@@ -102,14 +102,12 @@ const tests = [
       { message: "Загружу схему.", items: [{ id: "e" }] }
     ];
     const groups = context.groupAgentRunUpdates(steps);
-    assert.equal(groups.length, 3, "only consecutive visible repetitions collapse");
-    assert.equal(groups[0].messageCount, 2);
-    assert.equal(groups[0].items.map(item => item.id).join(","), "a,b,c");
-    assert.equal(groups[2].messageCount, 1);
+    assert.equal(groups.length, 4, "every explicit comment separates actions");
+    assert.equal(groups[0].items.map(item => item.id).join(","), "a,b");
     assert.equal(steps[0].items.length, 1, "saved steps remain unchanged");
     const parent = new Element("section");
-    context.appendAgentStepMessage(parent, groups[0].message, groups[0].messageCount);
-    assert.equal(parent.textContent, "Загружу схему.Повторено: 2");
+    context.appendAgentStepMessage(parent, groups[0].message);
+    assert.equal(parent.textContent, "Загружу схему.");
   }],
   ["older run views also leave goal verification unassessed", () => {
     const older = view("clean", { reason: "model_done" });
@@ -444,10 +442,10 @@ tests.push(["live feed keeps previous steps and nested actions visible until the
   assert.match(live.textContent, /Ищу таблицу/);
   assert.match(live.textContent, /Проверяю данные/);
   assert.match(live.textContent, /Продажи/);
-  assert.doesNotMatch(live.textContent, /Действия ·/);
+  assert.match(live.textContent, /1 действие/);
   assert.equal(walk(live).filter(node => /agent-activity kind-tool/.test(node.className)).length, 2);
   assert.equal(walk(live).filter(node => /is-live-current/.test(node.className)).length, 1);
-  assert.equal(walk(live).some(node => node.tagName === "details"), false, "children do not hide behind a group disclosure");
+  assert.equal(walk(live).filter(node => /agent-active-actions/.test(node.className))[0].open, true, "active stage starts expanded");
   const thinking = new Element("div");
   const ambient = { activity: { Kind: "notice", Status: "running", Title: "Думаю" } };
   context.appendLiveAgentStep(thinking, { items: [{ activity: done }], ambient }, true);
@@ -461,7 +459,7 @@ tests.push(["live feed keeps previous steps and nested actions visible until the
   context.appendAgentRunOverview(overview, context.groupAgentRunSteps(items), items, stats);
   assert.equal(overview.childNodes[0].tagName, "details");
   assert.equal(overview.childNodes[0].open, false);
-  assert.match(overview.childNodes[0].childNodes[0].textContent, /Действия/);
+  assert.match(overview.childNodes[0].childNodes[0].textContent, /Ход работы/);
 }]);
 
 tests.push(["one step narration groups all calls and completion replaces its running row", () => {
@@ -489,6 +487,21 @@ tests.push(["undispatched repeats keep actionable reasons instead of cancellatio
     assert.match(context.activityDisplayResult(activity), /Повтор не выполнен|Очистка не удаляет столбец/);
   }
   assert.equal(context.activityDisplayResult({ Status: "cancelled" }), "Отменено");
+}]);
+
+tests.push(["late status updates preserve failure evidence and notices split stages", () => {
+  const failure = { Kind: "tool", ToolCallId: "retry", Status: "failed", ResultMessage: "First error" };
+  const success = { Kind: "tool", ToolCallId: "retry", Status: "completed" };
+  const timeline = context.collectVisibleAgentTimelineItems([failure, success].map(activity => ({ activity })));
+  assert.equal(timeline.length, 2, "a successful update cannot erase a failed attempt");
+  assert.equal(timeline[0].activity.ResultMessage, "First error");
+  const notice = { Kind: "notice", Status: "warning", Title: "Check source" };
+  const steps = context.groupAgentRunSteps([success, notice, { ...success, ToolCallId: "next" }].map(activity => ({ activity })));
+  const groups = context.groupAgentRunUpdates(steps);
+  const host = new Element("div");
+  context.appendLiveAgentStep(host, groups[0], false);
+  assert.equal(host.childNodes.length, 3, "a notice separates adjacent action disclosures");
+  assert.match(host.childNodes[1].textContent, /Check source/);
 }]);
 
 for (const [name, test] of tests) {

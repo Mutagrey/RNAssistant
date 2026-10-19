@@ -684,3 +684,14 @@
   .artifact-catalog-actions { padding:6px; gap:4px; }
   .artifact-catalog-preview { padding:8px; }
 }
+
+/* Transcript links retain the same resource handlers as the catalog. */
+.messages .chat-artifact-list, .messages .agent-run-resource-list { width: fit-content; max-width: 100%; }
+.messages .chat-artifact-card, .messages .chat-resource-row {
+  grid-template-columns: 20px minmax(0, 1fr) 16px;
+  gap: 8px; min-height: 34px; padding: 6px 10px; border-radius: 7px;
+}
+.messages .artifact-type-icon { width: 20px; height: 24px; background: none; }
+.messages .chat-artifact-copy, .messages .chat-resource-row-copy { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 9px; }
+.messages .chat-artifact-title, .messages .chat-resource-row-copy strong,
+.messages .chat-artifact-meta, .messages .chat-resource-row-copy span { white-space: normal; overflow-wrap: anywhere; }

@@ -75,7 +75,7 @@
   .shell #tab-chat .chat-workspace.inspector-transition.with-inspector .chat-inspector { transition: opacity var(--motion-fast) var(--motion-ease), visibility 0s, transform var(--motion-duration) var(--motion-ease); }
 }
 .shell #tab-chat .chatbar { flex-basis: 52px; min-height: 52px; margin: 0; padding: 0 var(--panel-toggle-inset); border-bottom-color: var(--line); }
-.shell #tab-chat .messages { padding: 28px max(18px, calc((100% - 720px) / 2)) 24px; }
+.shell #tab-chat .messages { padding: 22px max(28px, calc((100% - 720px) / 2)) 16px; }
 .shell #tab-chat .chat-utility-dock,
 .shell #tab-chat .agent-approval-dock { width: min(780px, calc(100% - 36px)); margin-inline: auto; }
 .shell #tab-chat .composer {
@@ -89,14 +89,14 @@
 }
 .shell #tab-chat .composer:focus-within { border-color: var(--accent); box-shadow: 0 3px 14px #16271e0b, 0 0 0 2px var(--accent-soft); }
 .shell #tab-chat .chat-session-list { padding: 8px; }
-.shell #tab-chat .messages .table-wrap { margin: 18px 0 12px; padding: 0; border: 0; background: transparent; }
+.shell #tab-chat .messages .table-wrap { margin: 8px 0 12px; padding: 0; border: 0; background: transparent; }
 .shell #tab-chat .messages .table-wrap .block-tools { position: absolute; top: -22px; right: 0; z-index: 1; margin: 0; opacity: 0; }
 .shell #tab-chat .messages .table-wrap:hover .block-tools,
 .shell #tab-chat .messages .table-wrap:focus-within .block-tools { opacity: 1; }
 .shell #tab-chat .messages .table-wrap .block-tool-button { min-height: 24px; padding: 2px 5px; }
 .shell #tab-chat .messages .table-wrap table { background: transparent; }
 .shell #tab-chat .messages .table-wrap th,
-.shell #tab-chat .messages .table-wrap td { padding: 12px; border: 0; border-bottom: 1px solid var(--line); background: transparent; }
+.shell #tab-chat .messages .table-wrap td { font-size: 12px; padding: 7px 10px; border: 0; border-bottom: 1px solid var(--line); background: transparent; }
 .shell #tab-chat .messages .table-wrap th { color: var(--ink-muted); font-size: 11px; font-weight: 500; }
 
 .shell .product-nav-heading strong { flex: 1; font-size: inherit; }

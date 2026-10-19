@@ -113,6 +113,7 @@ for (const [prompt, limit, level, offset] of [
     LastTotalTokens: 130, ContextWindowTokens: limit, usedTokens: 77 };
   c.renderContextMeter();
   assert.equal(f.node("contextMeter").dataset.level, level);
+  assert.equal(f.node("contextMeterWrap").hidden, level === "unknown", "ring only appears for known usage and capacity");
   assert.equal(Number(f.node("contextMeter").style["--context-meter-offset"]), offset);
   assert.doesNotMatch(f.node("contextMeterSummary").textContent, /NaN|undefined|Осталось -/);
   if (prompt === null) assert.match(f.node("contextMeterSummary").textContent, /API ещё не сообщил/);

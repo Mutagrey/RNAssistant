@@ -113,7 +113,7 @@ assert.deepEqual(visibleStepMessages(box), ["Narration s1", "Narration s2"],
 assert.equal(walk(completedOverview).filter(n => n.classList.contains("agent-model-step-history")).length, 2);
 assert.equal(walk(completedOverview).filter(n => n.classList.contains("kind-tool")).length, 3);
 completedOverview.open = false; completedOverview.listeners.toggle();
-assert.equal(completedOverview.childNodes.length, 1, "collapse releases rendered history");
+assert.equal(completedOverview.childNodes.length, 1, "collapse releases DOM while retaining disclosure state");
 completedOverview.open = true; completedOverview.listeners.toggle();
 assert.equal(walk(completedOverview).filter(n => n.classList.contains("agent-model-step-history")).length, 2,
   "every saved step can be reopened after completion");
@@ -144,10 +144,8 @@ assert.equal(box.childNodes[2].messageUnitKey, "live:agent-run");
 assert.equal(ctx.liveAgentTailActivities().map(a => a.StepId).join("|"), "s2|s2",
   "live replay cannot move earlier narration or actions below the applied steer");
 const prefix = box.childNodes[0], reply = box.childNodes[1];
-assert.deepEqual(visibleStepMessages(prefix), [],
-  "applying a steer folds the completed prefix above the user input");
-const prefixOverview = walk(prefix).find(n => n.classList.contains("agent-run-overview"));
-prefixOverview.open = true; prefixOverview.listeners.toggle();
+assert.deepEqual(visibleStepMessages(prefix), ["Narration s1"],
+  "steering preserves progress above the user input without an explicit final");
 assert.deepEqual(visibleStepMessages(prefix), ["Narration s1"],
   "the earlier comment remains inspectable above the user input");
 ctx.state.liveAgentRun.push(action("s2", "c", "running", "{}"));
@@ -191,15 +189,10 @@ assert.doesNotMatch(box.textContent, /Последний шаг|Подтверж
 assert.match(box.textContent, /Модель повторила описание прогресса/);
 assert.equal(walk(box).filter(n => n.classList.contains("status-running")).length, 0,
   "terminal failure does not leave earlier progress cards running");
-const overview = walk(box).find(n => n.classList.contains("agent-run-overview"));
-assert.ok(overview, "no-tool progress remains inspectable");
-assert.deepEqual(visibleStepMessages(box), [],
-  "a failed run folds progress while keeping its diagnostic visible");
-overview.open = true; overview.listeners.toggle();
-assert.deepEqual(visibleStepMessages(box), ["Narration s1", "Narration s2"],
-  "failed history restores each accepted comment once");
-assert.equal(walk(overview).filter(n => n.classList.contains("kind-step")).length, 0,
-  "step text is not repeated inside its own activity row");
+assert.equal(walk(box).some(n => n.classList.contains("agent-run-overview")), false,
+  "failure without a final answer does not fold the run");
+assert.deepEqual(visibleStepMessages(box), ["Narration s1", "Narration s2"]);
+assert.equal(walk(box).filter(n => n.classList.contains("kind-step")).length, 0);
 
 ctx.state.messages = [{ Id: "cancelled", Role: "assistant", RunId: "r", Content: "Текст модели сохранён.",
   RunViewState: Object.assign({}, failed, { Lifecycle: "cancelled" }) }];
@@ -246,12 +239,8 @@ const preparation = [0, 1, 2].map(index => {
 });
 for (const active of [true, false]) {
   const article = ctx.renderAgentRunArticle({ live: active, items: preparation });
-  assert.deepEqual(visibleStepMessages(article), active ? ["Inspect the styles before choosing a change."] : [],
-    "active progress stays visible and saved progress is folded");
-  if (!active) {
-    const overview = article.querySelector(".agent-run-overview");
-    overview.open = true; overview.listeners.toggle();
-  }
+  assert.deepEqual(visibleStepMessages(article), ["Inspect the styles before choosing a change."],
+    "a transcript without a final answer keeps its progress visible");
   const nodes = walk(article);
   assert.equal(nodes.filter(n => n.classList.contains("agent-step-message")).length, 1, "one update covers three tool steps");
   assert.equal(nodes.filter(n => n.classList.contains("kind-tool")).length, 3, "silent preparation keeps every tool activity");

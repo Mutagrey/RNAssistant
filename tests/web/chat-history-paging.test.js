@@ -123,8 +123,9 @@ function testClosedRunIsLazy() {
   context.agentToolCallCount = () => 1;
   context.activityKind = activity => activity.Kind || "";
   context.agentRunStats = () => ({});
-  context.appendAgentStepMessage = () => { throw new Error("model comments belong outside action history"); };
-  context.buildAgentRunTranscript = () => { builtSteps++; return context.document.createElement("div"); };
+  context.appendAgentStepMessage = () => {};
+  context.activityPresentationState = () => "completed";
+  context.appendLiveAgentStep = () => { builtSteps++; };
   context.enhanceActivity = () => {};
   const parent = context.document.createElement("div");
   const details = context.appendAgentRunOverview(

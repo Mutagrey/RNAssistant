@@ -309,7 +309,7 @@
 }
 
 .message.user .markdown {
-  max-width: 100%;
+  max-width: 92%;
   padding: 10px 14px;
   border: 0;
   border-radius: 18px;
@@ -409,6 +409,7 @@
 }
 
 .message.assistant .markdown {
+  line-height: 1.65;
   box-sizing: border-box;
   width: auto;
   max-width: 100%;
@@ -454,10 +455,16 @@
 }
 
 .message.user .message-footer {
+  position: absolute;
+  top: 100%;
+  right: 0;
   max-width: 100%;
+  z-index: 1;
 }
 
 .message.assistant .message-footer {
+  opacity: 1;
+  transform: none;
   max-width: 100%;
   justify-content: flex-start;
 }
@@ -682,3 +689,7 @@
     transform: none;
   }
 }
+
+
+.message.assistant .markdown h3 { font-size: 1rem; margin: 14px 0 6px; }
+.message.assistant .markdown p { margin: 6px 0 9px; }

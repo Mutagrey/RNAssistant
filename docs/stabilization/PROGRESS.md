@@ -1,5 +1,18 @@
 # Stabilization progress
 
+## Chat transcript presentation — 2026-10-19
+
+The web transcript now uses compact material links, demo spacing and adjacent-action
+disclosures. Active actions start open; explicit final answers fold prior progress,
+while interrupted runs retain their commentary. Notices split action groups and a
+successful update cannot erase a failed attempt. Runtime effect warnings remain
+outside the folded history. Nested expansion and keyboard focus survive refresh;
+closed history releases rendered content while retaining disclosure state.
+The composer no longer shrinks around its toolbar in a long conversation; its
+context ring stays hidden until input usage and window capacity are known.
+Focused projection, evidence, paging, resource-card and Chromium layout checks cover
+this presentation change. Windows/Office/WebView2 qualification remains open.
+
 ## Connected workspace tree — 2026-10-19
 
 The Projects scope now lists connected workspaces and their own chats. Users can

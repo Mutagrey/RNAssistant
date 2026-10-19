@@ -437,6 +437,7 @@ function renderMessageArticle(message, index) {
   var node = document.createElement("article");
   node.className = "message " + messageRole(message) + (message.Pending ? " pending" : "") +
     (message.Failed ? " failed" : "");
+  if (messageRole(message) === "assistant") node.setAttribute("aria-label", "Ответ агента");
   var activity = messageActivity(message);
   if (activity) {
     if (activityKind(activity) === "compaction" && activityStatus(activity) === "completed") {
@@ -777,6 +778,9 @@ function messageDisclosureSnapshot(node) {
   if (!node || !node.querySelectorAll) return result;
   Array.prototype.forEach.call(node.querySelectorAll("details"), function (details, index) {
     var key = details.getAttribute("data-disclosure-key") || details.className + ":" + index;
+    if (details.savedDisclosureState) Object.keys(details.savedDisclosureState).forEach(function (savedKey) {
+      result[savedKey] = details.savedDisclosureState[savedKey];
+    });
     result[key] = details.open;
   });
   return result;
@@ -784,6 +788,11 @@ function messageDisclosureSnapshot(node) {
 
 function restoreMessageDisclosures(node, snapshot) {
   if (!node || !node.querySelectorAll) return;
+  Array.prototype.forEach.call(node.querySelectorAll("details"), function (details) {
+    if (!details.ensureDisclosureContent) return;
+    details.savedDisclosureState = snapshot;
+    if (snapshot[details.getAttribute("data-disclosure-key")]) details.ensureDisclosureContent();
+  });
   Array.prototype.forEach.call(node.querySelectorAll("details"), function (details, index) {
     var key = details.getAttribute("data-disclosure-key") || details.className + ":" + index;
     if (Object.prototype.hasOwnProperty.call(snapshot, key)) details.open = snapshot[key];
@@ -804,6 +813,9 @@ function reconcileMessageUnits(box, units, liveOnly) {
     if (node && unit.update) unit.update(node);
     if (!node) {
       var disclosures = messageDisclosureSnapshot(cached && cached.node);
+      var focused = document.activeElement;
+      var focusKey = focused && focused.tagName === "SUMMARY" && cached && cached.node.contains(focused)
+        ? focused.parentNode.getAttribute("data-disclosure-key") : null;
       if (cached && cached.node && typeof releaseMessageMediaThumbnails === "function") {
         releaseMessageMediaThumbnails(cached.node);
       }
@@ -823,6 +835,11 @@ function reconcileMessageUnits(box, units, liveOnly) {
       if (cached && cached.node && cached.node.parentNode === box) {
         box.insertBefore(node, cached.node);
         box.removeChild(cached.node);
+        if (focusKey) Array.prototype.some.call(node.querySelectorAll("details[data-disclosure-key]"), function (details) {
+          if (details.getAttribute("data-disclosure-key") !== focusKey) return false;
+          details.querySelector("summary").focus({ preventScroll: true });
+          return true;
+        });
       }
     }
     nextCache[unit.key] = { signature: unit.signature, actionsSignature: unit.actionsSignature, node: node };

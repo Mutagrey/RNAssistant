@@ -741,6 +741,8 @@ function renderContextMeter() {
   var knownInput = used !== null && isFinite(used) && used >= 0;
   var knownWindow = isFinite(windowTokens) && windowTokens > 0;
   var percent = knownInput && knownWindow ? Math.min(100, used * 100 / windowTokens) : null;
+  if ($("contextMeterWrap")) $("contextMeterWrap").hidden = percent === null;
+  if (percent === null && $("contextMeterTooltip")) $("contextMeterTooltip").hidden = true;
   summary.textContent = !knownInput ? "API ещё не сообщил число входных токенов"
     : !knownWindow ? "Использовано " + formatNumber(used) + " токенов · размер окна неизвестен"
     : "Осталось " + Math.round(100 - percent) + "% · использовано " + formatNumber(used) +

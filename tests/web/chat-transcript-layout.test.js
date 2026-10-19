@@ -39,7 +39,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       window.logOnce = () => {};
       window.log = () => {};
     });
-    for (const file of ["vendor/purify.min.js", "vendor/marked.min.js", "vendor/highlight.min.js", "app-accent.js", "app-utils.js",
+    for (const file of ["vendor/purify.min.js", "vendor/marked.min.js", "vendor/highlight.min.js", "app-icons.js", "app-accent.js", "app-utils.js",
       "app-markdown.js", "app-run-view-state.js", "app-agent-model.js", "app-agent.js", "app-agent-activity.js", "app-messages.js", "app-chat-inbox.js"])
       await page.addScriptTag({ content: read("js/" + file) });
     await page.evaluate(() => {
