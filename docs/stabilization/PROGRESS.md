@@ -1,5 +1,16 @@
 # Stabilization progress
 
+## Chat activity visual parity — 2026-10-19
+
+Transcript stages now use demo symbols, counts, spacing, text shimmer and expanded
+action details; terminal runs and reduced motion suppress animation. The activity
+inspector projects existing steps and opens the exact run journal. Persistent error,
+unknown-effect and approval surfaces use semantic notice styling; clipboard success
+has transient feedback while failure remains dismissible. The Resources chip and
+its obsolete popover path are removed; the material catalog and message links remain.
+Focused Chromium and projection checks cover disclosure/focus, narrow layouts,
+notifications, motion and retained effect evidence. Windows/WebView2 remains open.
+
 ## Chat transcript presentation — 2026-10-19
 
 The web transcript now uses compact material links, demo spacing and adjacent-action

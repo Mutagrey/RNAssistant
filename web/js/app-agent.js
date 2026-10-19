@@ -28,7 +28,8 @@ function appendAgentRunProcess(parent, timeline, stats) {
       message: item.message,
       currentActivity: stats.current,
       renderInlineArtifacts: false,
-      liveFeed: !!stats.liveFeed
+      liveFeed: !!stats.liveFeed,
+      terminal: !!stats.terminal
     };
     entry.appendChild(renderActivityNode(item.activity, false, isCurrent, activityContext));
     process.appendChild(entry);
@@ -242,19 +243,35 @@ function groupAgentRunUpdates(steps) {
   return groups;
 }
 
-function appendAgentCompletedActions(parent, actions, stats) {
+function appendAgentActionStage(parent, actions, stats) {
   if (!actions.length) return;
   var details = document.createElement("details");
-  var active = actions.some(function (item) { return isActiveTimelineStatus(activityStatus(item.activity)); });
-  details.className = "agent-run-history " + (active ? "agent-active-actions" : "agent-completed-actions");
-  details.open = active;
+  var active = !!stats.current && actions.some(function (item) { return activityContains(item.activity, stats.current) && activityPresentationState(item.activity) === "running"; });
+  var issues = actions.filter(function (item) { return ["failed", "warning", "unknown", "partial", "cancelled"].indexOf(activityPresentationState(item.activity)) >= 0; });
+  details.className = "agent-run-history agent-action-stage " + (active ? "agent-active-actions" : "agent-completed-actions");
+  details.open = active || issues.length > 0;
   details.setAttribute("data-disclosure-key", "actions:" + activityTimelineKey(actions[0].activity));
   var summary = document.createElement("summary");
   summary.className = "agent-run-history-summary";
+  var symbol = document.createElement("span");
+  symbol.className = "agent-stage-symbol";
+  symbol.setAttribute("aria-hidden", "true");
+  symbol.innerHTML = window.RNAssistantIcons ? window.RNAssistantIcons.render("layers") : '<svg data-rna-icon="layers"></svg>';
+  summary.appendChild(symbol);
   var title = document.createElement("span");
-  title.className = "agent-run-history-title";
-  title.textContent = activityPrimaryText(actions[active ? actions.length - 1 : 0].activity) + " · " + agentActionCountText(actions.length);
+  title.className = "agent-run-history-title" + (active ? " agent-status-shimmer" : "");
+  title.textContent = activityPrimaryText(active ? stats.current : actions[0].activity);
   summary.appendChild(title);
+  var count = document.createElement("span");
+  count.className = "agent-work-count";
+  count.textContent = agentActionCountText(actions.length);
+  summary.appendChild(count);
+  if (issues.length) {
+    var issue = document.createElement("span");
+    issue.className = "agent-run-history-issues";
+    issue.textContent = "Есть замечания";
+    summary.appendChild(issue);
+  }
   var caret = document.createElement("span");
   caret.className = "agent-run-history-caret";
   caret.setAttribute("aria-hidden", "true");
@@ -264,7 +281,7 @@ function appendAgentCompletedActions(parent, actions, stats) {
   parent.appendChild(details);
 }
 
-function appendLiveAgentStep(parent, step, isLast, suppressAmbient, suppressArtifacts) {
+function appendLiveAgentStep(parent, step, isLast, suppressAmbient, suppressArtifacts, terminal) {
   var actions = [];
   function append(item, activity, nested) {
     if (activityKind(activity) !== "step" && activityKind(activity) !== "group") {
@@ -277,23 +294,22 @@ function appendLiveAgentStep(parent, step, isLast, suppressAmbient, suppressArti
   var stats = agentRunStats((step.items || []).filter(function (item) {
     return activityKind(item.activity) !== "notice";
   }), !isLast, null);
-  var active = isLast && stats.current && isActiveTimelineStatus(activityStatus(stats.current))
+  stats.terminal = !!terminal;
+  var active = !terminal && isLast && stats.current && isActiveTimelineStatus(activityStatus(stats.current))
     ? stats.current : null;
   stats.current = active;
   stats.liveFeed = true;
   var adjacent = [];
   function flush() {
-    appendAgentCompletedActions(parent, adjacent, stats);
+    appendAgentActionStage(parent, adjacent, stats);
     adjacent = [];
   }
   actions.forEach(function (item) {
     var kind = activityKind(item.activity);
     var presentation = activityPresentationState(item.activity);
     var groupable = (kind === "tool" || kind === "control") &&
-      (presentation === "completed" || presentation === "running");
+      activityToolId(item.activity) !== "common.questions_ask" && presentation !== "waiting";
     if (groupable) {
-      if (adjacent.length && isActiveTimelineStatus(activityStatus(adjacent[0].activity)) !==
-          isActiveTimelineStatus(activityStatus(item.activity))) flush();
       adjacent.push(item);
     } else {
       flush();
@@ -311,7 +327,7 @@ function appendLiveAgentStep(parent, step, isLast, suppressAmbient, suppressArti
   var ambient = step.ambient || (step.items || []).filter(function (item) {
     return activityKind(item.activity) === "notice";
   }).slice(-1)[0];
-  if (isLast && !active && ambient && !suppressAmbient) {
+  if (!terminal && isLast && !active && ambient && !suppressAmbient) {
     parent.appendChild(renderActivityRow(ambient.activity, true, false, {
       hideIcon: true, liveFeed: true, currentActivity: ambient.activity
     }));
@@ -346,9 +362,16 @@ function appendAgentRunOverview(parent, steps, timeline, stats) {
   var title = document.createElement("span");
   title.className = "agent-run-history-title";
   title.textContent = actionCount
-    ? "Ход работы" + (stats.elapsed ? " · " + stats.elapsed : "") + " · " + agentActionCountText(actionCount)
-    : "Ход работы" + (stats.elapsed ? " · " + stats.elapsed : "");
-  summary.appendChild(title);
+    ? (stats.elapsed ? "Работа заняла " + stats.elapsed : "Ход работы")
+    : "Ход работы";
+  if (actionCount) {
+    var count = document.createElement("span");
+    count.className = "agent-work-count";
+    count.textContent = agentActionCountText(actionCount);
+    summary.appendChild(title);
+    summary.appendChild(count);
+  }
+  if (!actionCount) summary.appendChild(title);
   if ((stats.runViewState && stats.runViewState.executionHealth !== "clean") ||
       timeline.some(function (item) { return ["failed", "warning", "unknown", "partial"].indexOf(activityPresentationState(item.activity)) >= 0; })) {
     var issues = document.createElement("span");
@@ -380,7 +403,7 @@ function appendAgentRunOverview(parent, steps, timeline, stats) {
       var section = document.createElement("section");
       section.className = "agent-model-step agent-model-step-history";
       appendAgentStepMessage(section, step.message);
-      appendLiveAgentStep(section, { items: historyItems }, false, true, true);
+      appendLiveAgentStep(section, { items: historyItems }, false, true, true, true);
       content.appendChild(section);
     });
     if (!content.childNodes.length) {
@@ -487,7 +510,8 @@ function renderAgentRunArticle(run) {
     var section = document.createElement("section");
     section.className = "agent-model-step";
     appendAgentStepMessage(section, step.message);
-    appendLiveAgentStep(section, step, stepIndex === updates.length - 1, run.hasLiveDraft);
+    appendLiveAgentStep(section, step, stepIndex === updates.length - 1, run.hasLiveDraft, false,
+      !run.live && runViewState && ["failed", "cancelled", "completed"].indexOf(runViewState.lifecycle) >= 0);
     if (section.childNodes.length) process.appendChild(section);
   });
   if (!expanded) appendAgentRunOverview(process, steps, timeline, stats);
@@ -546,7 +570,7 @@ function appendAgentRunFooter(node, items, finalMessage) {
   var historyActionsBlocked = !!currentActiveSend() || hasActiveMessageEdit() ||
     (typeof pendingAgentApprovalActivity === "function" && !!pendingAgentApprovalActivity());
   actions.appendChild(smallIconButton(finalMessage ? "Копировать итоговый ответ" : "Копировать ход работы", "copy", function () {
-    copyText(finalMessage ? messageContent(finalMessage.message) : agentRunText(items));
+    copyChatMessage(finalMessage ? messageContent(finalMessage.message) : agentRunText(items));
     log(finalMessage ? "Итоговый ответ скопирован." : "Ход работы скопирован.");
   }));
   if (!historyActionsBlocked) {

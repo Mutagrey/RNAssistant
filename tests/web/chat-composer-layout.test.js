@@ -8,18 +8,6 @@ const { chromium } = require("playwright");
 const root = path.resolve(__dirname, "../../web");
 const read = file => fs.readFileSync(path.join(root, file), "utf8");
 
-async function assertAboveResources(page, selector) {
-  assert.equal(await page.locator(selector).evaluate(surface => {
-    const rect = surface.getBoundingClientRect();
-    const dock = document.getElementById("toggleChatResourcesButton").getBoundingClientRect();
-    const left = Math.max(rect.left, dock.left), top = Math.max(rect.top, dock.top);
-    const right = Math.min(rect.right, dock.right), bottom = Math.min(rect.bottom, dock.bottom);
-    if (left >= right || top >= bottom) return true;
-    const x = (left + right) / 2, y = (top + bottom) / 2;
-    return surface.contains(document.elementFromPoint(x, y));
-  }), true, selector + " paints above the Resources chip");
-}
-
 (async () => {
   const browser = await chromium.launch({ headless: true,
     ...(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : {}) });
@@ -44,7 +32,7 @@ async function assertAboveResources(page, selector) {
       window.saveChatMode = mode => { state.activeChatMode = mode; renderSendControls(); };
       window.findEditingMessage = () => null;
     });
-    for (const file of ["app-accent.js", "app-utils.js", "app-model-picker.js", "app-chat-composer.js", "app-chat-state.js", "app-context-inspector.js", "app-diagnostics.js"])
+    for (const file of ["app-icons.js", "app-run-view-state.js", "app-accent.js", "app-utils.js", "app-model-picker.js", "app-chat-composer.js", "app-chat-state.js", "app-context-inspector.js", "app-diagnostics.js"])
       await page.addScriptTag({ content: read("js/" + file) });
     await page.evaluate(() => {
       RNAssistantAccents.apply("blue", false);
@@ -53,8 +41,6 @@ async function assertAboveResources(page, selector) {
       window.loadPromptContextInspector = () => { window.inspections = (window.inspections || 0) + 1; };
       $("chatModelButtonLabel").textContent = "Модель с длинным названием";
       $("compactContextButton").hidden = false;
-      $("chatResourceDock").classList.remove("hidden");
-      $("toggleChatResourcesButton").disabled = false;
       bindComposerPickers(); bindContextInspectorActions(); bindDiagnosticsActions(); renderSendControls(); renderContextMeter();
     });
 
@@ -68,7 +54,7 @@ async function assertAboveResources(page, selector) {
         const trigger = await page.locator("#composerAddButton").boundingBox();
         assert.ok(menu.x >= 0 && menu.x + menu.width <= width && menu.y >= 0 && menu.y + menu.height <= trigger.y,
           `menu overlays above the composer inside ${width}px / ${theme}`);
-        await assertAboveResources(page, "#composerAddMenu");
+        assert.equal(await page.locator("#toggleChatResourcesButton").count(), 0);
         for (const id of ["attachFileButton", "addSelectionContextButton", "compactContextButton"])
           assert.equal(await page.locator("#" + id).isVisible(), true);
         assert.equal(await page.locator('#chatModeMenu button').count(), 1);
@@ -90,7 +76,7 @@ async function assertAboveResources(page, selector) {
         await page.locator("#contextMeter").hover();
         const tooltip = await page.locator("#contextMeterTooltip").boundingBox();
         assert.ok(tooltip && tooltip.x >= 0 && tooltip.x + tooltip.width <= width && tooltip.y >= 0);
-        await assertAboveResources(page, "#contextMeterTooltip");
+
         assert.match(await page.locator("#contextMeterSummary").textContent(), /Осталось 54%/);
         assert.equal(await page.locator("#contextMeter").textContent().then(t => t.trim()), "");
         const ring = await page.locator("#contextMeter").boundingBox();
@@ -125,6 +111,15 @@ async function assertAboveResources(page, selector) {
       state.contextUsage = { lastPromptTokens: 100, contextWindowTokens: 1000 }; renderContextMeter();
     });
     assert.equal(await page.locator("#contextMeterWrap").isVisible(), true, "usage arrival restores the indicator");
+    await page.evaluate(() => {
+      state.activeRunViewState = { runId: "uncertain", lifecycle: "failed", executionHealth: "unknown", unknownEffects: 1 };
+      renderSendControls();
+    });
+    assert.equal(await page.locator("#chatRunNotice").isVisible(), true);
+    assert.match(await page.locator("#chatRunNotice").innerText(), /не подтверждён/);
+    assert.equal(await page.locator("#chatRunNotice button").count(), 0, "unknown effects offer no automatic retry");
+    await page.evaluate(() => { state.activeRunViewState = null; renderSendControls(); });
+    assert.equal(await page.locator("#chatRunNotice").isVisible(), false, "next chat/run clears the notice");
     console.log("PASS composer: menu and context tooltip fit 1100/740/360px; ring precedes plain model label, ping is absent");
     assert.equal(await page.locator("#testModelConnectionButton").count(), 1,
       "manual model connection check remains in settings");

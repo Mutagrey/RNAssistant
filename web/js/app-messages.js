@@ -258,6 +258,28 @@ function messageSupportsEdit(message, index, activity) {
   return !activity && !currentActiveSend() && !hasActiveMessageEdit() && canEditMessage(message) && !isEditingMessage(message, index);
 }
 
+var chatCopyFeedbackTimer = null;
+function copyChatMessage(text) {
+  return window.copyTextResult(text).then(function () { showChatCopyFeedback("Сообщение скопировано", false); },
+    function () { showChatCopyFeedback("Не удалось скопировать сообщение. Выделите текст и скопируйте его вручную.", true); });
+}
+
+function showChatCopyFeedback(text, failed) {
+  var toast = $("chatCopyFeedback");
+  if (!toast) {
+    toast = document.createElement("div"); toast.id = "chatCopyFeedback"; document.body.appendChild(toast);
+  }
+  clearTimeout(chatCopyFeedbackTimer);
+  toast.className = "chat-toast" + (failed ? " is-error" : "");
+  toast.setAttribute("role", failed ? "alert" : "status");
+  toast.textContent = text; toast.hidden = false;
+  if (failed) {
+    var close = document.createElement("button"); close.type = "button";
+    close.className = "icon-btn"; close.setAttribute("aria-label", "Закрыть уведомление"); close.textContent = "×";
+    close.addEventListener("click", function () { toast.hidden = true; }); toast.appendChild(close);
+  } else chatCopyFeedbackTimer = setTimeout(function () { toast.hidden = true; }, 2400);
+}
+
 function appendMessageFooter(node, message, index, activity) {
   var footer = document.createElement("div");
   footer.className = "message-footer";
@@ -301,7 +323,7 @@ function appendMessageFooter(node, message, index, activity) {
   var historyActionsBlocked = !!currentActiveSend() || hasActiveMessageEdit() ||
     (typeof pendingAgentApprovalActivity === "function" && !!pendingAgentApprovalActivity());
   actions.appendChild(smallIconButton("Копировать сообщение", "copy", function () {
-    copyText(activity ? activityText(activity) : messageContent(message));
+    copyChatMessage(activity ? activityText(activity) : messageContent(message));
     log("Сообщение скопировано.");
   }));
   if (!historyActionsBlocked) {
@@ -925,7 +947,7 @@ function renderStreamingMessages(outputOnly) {
 function renderMessages(options) {
   if (typeof isPanelActive === "function" && !isPanelActive("chat")) return;
   options = options || {};
-  if (typeof renderChatResourceNavigation === "function") renderChatResourceNavigation();
+  if (window.RNAssistantArtifactCatalog) window.RNAssistantArtifactCatalog.sync();
   var box = $("messages");
   var chatChanged = renderedMessagesChatId !== state.activeChatId;
   var viewport = captureMessageViewport(box);

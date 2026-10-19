@@ -779,10 +779,12 @@ function syncTokenEstimateCalibrationFromUsage() {
 
 function showSendError(error, text) {
   state.failedSend = { text: text || "", error: error || "Unknown error" };
+  if (typeof renderChatRunNotice === "function") renderChatRunNotice();
 }
 
 function clearSendError() {
   state.failedSend = null;
+  if (typeof renderChatRunNotice === "function") renderChatRunNotice();
 }
 
 function markLocalMessage(text, values) {

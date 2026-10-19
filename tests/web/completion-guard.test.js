@@ -236,7 +236,7 @@ tests.push(["semantic target is visible and unknown effect takes precedence over
   const activity = { Kind: "tool", ToolId: "common.resources_read", Display: { action: "Чтение ресурса", runningAction: "Читаю ресурс", operation: "Read" }, Title: "Resource read", ProgressTitle: "Working", Subtitle: "Продажи!A1:D120", Status: "running" };
   const row = context.renderActivityRow(activity, true, false, null);
   assert.match(row.textContent, /Читаю/);
-  assert.match(row.textContent, /Продажи!A1:D120/);
+  assert.match(context.renderActivityNode(activity, false, true, null).textContent, /Продажи!A1:D120/);
   const conflict = { Status: "failed", ErrorCode: "excel_sheet_already_exists", ResultMessage: "raw", ExecutionEvidence: { Dispatch: "NotDispatched", Effect: "None" } };
   assert.equal(context.activityDisplayResult(conflict), "Лист уже существует. Создание не выполнено.");
   conflict.ExecutionEvidence = { Dispatch: "MayHaveDispatched", Effect: "Unknown" };
@@ -280,7 +280,7 @@ tests.push(["tool rows preserve action target and result without rewriting model
   const before = JSON.stringify(activity);
   const row = context.renderActivityRow(activity, false, true, null);
   assert.match(row.textContent, /Изучение/);
-  assert.match(row.textContent, /excel.write_range/);
+  assert.match(context.renderActivityNode(activity, false, false, null).textContent, /excel.write_range/);
   assert.match(row.textContent, /Загружено/);
   assert.doesNotMatch(row.textContent, /catalogRevision|private-revision|Capability loaded/);
   assert.equal(JSON.stringify(activity), before, "presentation leaves exact arguments and results unchanged");
@@ -289,7 +289,7 @@ tests.push(["tool rows preserve action target and result without rewriting model
     ExecutionEvidence: { Effect: "VerifiedChange", Dispatch: "MayHaveDispatched" } };
   const changed = context.renderActivityRow(write, false, false, null);
   assert.match(changed.textContent, /Замена текста/);
-  assert.ok(changed.textContent.includes(longTarget), "long semantic target wraps, it is not cropped");
+  assert.ok(context.renderActivityNode(write, false, false, null).textContent.includes(longTarget), "expanded detail preserves the full semantic target");
   assert.match(changed.textContent, /Изменения подтверждены/);
   write.ExecutionEvidence = { Effect: "VerifiedNoChange", Dispatch: "MayHaveDispatched" };
   assert.equal(context.activityDisplayResult(write), "Без изменений");
@@ -377,7 +377,7 @@ tests.push(["result representations work for new tools without identity-specific
   activity.ToolId = "custom.read_table";
   delete activity.ResultSummary;
   const row = context.renderActivityRow(activity, false, true, null);
-  const target = walk(row).find(node => node.tagName === "code");
+  const target = walk(context.renderActivityNode(activity, false, false, null)).find(node => node.tagName === "code");
   assert.equal(target.textContent, activity.Subtitle);
   assert.equal(target.innerHTML, "", "targets are literal text, never Markdown or HTML");
   activity.ExecutionEvidence = { Effect: "Unknown" };
@@ -502,6 +502,15 @@ tests.push(["late status updates preserve failure evidence and notices split sta
   context.appendLiveAgentStep(host, groups[0], false);
   assert.equal(host.childNodes.length, 3, "a notice separates adjacent action disclosures");
   assert.match(host.childNodes[1].textContent, /Check source/);
+}]);
+
+tests.push(["terminal runtime state stops motion without discarding incomplete actions", () => {
+  const activity = { Kind: "tool", ToolCallId: "interrupted", ToolId: "common.resources_read", Status: "running", StepMessage: "Проверю данные" };
+  const node = context.renderAgentRunArticle({ items: [{ activity, message: { RunId: "r", Activity: activity,
+    RunViewState: view("errors", { lifecycle: "failed", failed: 1 }) } }] });
+  assert.equal(walk(node).some(item => /agent-status-shimmer|is-live-current/.test(item.className)), false);
+  assert.match(node.textContent, /Остановлено/);
+  assert.equal(activity.Status, "running", "presentation never rewrites retained events");
 }]);
 
 for (const [name, test] of tests) {

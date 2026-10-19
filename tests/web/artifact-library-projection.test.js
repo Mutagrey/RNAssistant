@@ -160,39 +160,4 @@ vm.runInContext(source, context, { filename: "app-artifacts.js" });
   console.log("PASS artifact library: collection and chat image contexts stay exact and ephemeral");
 }
 
-async function testLazyHeadPages() {
-  const listeners = {};
-  const more = {
-    classList: { toggle() {} },
-    addEventListener(name, handler) { listeners[name] = handler; }
-  };
-  context.$ = id => id === "chatResourcesMoreButton" ? more : null;
-  context.state.chatNavigationVersion = 1;
-  context.state.artifactLibrary.nextCursor = "page-50";
-  context.bindChatResourceNavigation();
-  let request;
-  context.send = async (command, payload) => {
-    request = { command, payload };
-    return { chatId: "c", sessionRevision: 12, heads: [{ artifactId: "late-chart", displayKind: "chart",
-      resourceClass: "immutable_snapshot", group: "generated_snapshots" }],
-      artifacts: [{ id: "late-chart", kind: "chart", title: "Late chart", revision: 1 }], nextCursor: null };
-  };
-  await listeners.click();
-  assert.equal(request.command, "getArtifactLibraryPage");
-  assert.equal(request.payload.expectedSessionRevision, 12);
-  assert.equal(context.state.artifactLibrary.nextCursor, null);
-  assert.ok(Array.from(context.artifactResourceHeads()).some(item => item.id === "late-chart"));
-
-  context.state.artifactLibrary.nextCursor = "page-100";
-  let resolveLate;
-  context.send = () => new Promise(resolve => { resolveLate = resolve; });
-  const late = listeners.click();
-  context.state.chatNavigationVersion = 2;
-  resolveLate({ chatId: "c", sessionRevision: 12,
-    heads: [{ artifactId: "stale-chart" }], artifacts: [{ id: "stale-chart" }], nextCursor: null });
-  await late;
-  assert.ok(!Array.from(context.artifactResourceHeads()).some(item => item.id === "stale-chart"));
-  console.log("PASS artifact library: head pages append lazily and discard stale navigation");
-}
-
-testLazyHeadPages().then(() => console.log("OK 6/6")).catch(error => { console.error(error); process.exitCode = 1; });
+console.log("OK 5/5");

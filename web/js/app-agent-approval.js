@@ -32,7 +32,8 @@
       var mark = document.createElement("span");
       mark.className = "agent-approval-mark";
       mark.setAttribute("aria-hidden", "true");
-      mark.textContent = "!";
+      if (window.RNAssistantIcons) mark.innerHTML = window.RNAssistantIcons.render("warning");
+      else mark.textContent = "!";
       panel.appendChild(mark);
 
       var copy = document.createElement("div");

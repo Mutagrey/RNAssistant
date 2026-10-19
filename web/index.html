@@ -113,37 +113,8 @@
         </div>
         <div class="chat-utility-dock" id="chatUtilityDock">
           <div class="agent-plan-dock hidden" id="agentPlanDock" aria-live="polite"></div>
-          <div class="chat-resource-dock hidden" id="chatResourceDock" aria-live="polite">
-            <div class="chat-resource-menu" id="chatResourceMenu">
-              <button type="button" class="chat-resource-dock-button" id="toggleChatResourcesButton" title="В чате пока нет ресурсов" aria-label="В чате пока нет ресурсов" aria-haspopup="dialog" aria-expanded="false" aria-controls="chatResourcesPopover" disabled>
-                <span class="chat-resource-dock-icon" aria-hidden="true"><svg data-rna-icon="resources" viewBox="0 0 24 24"></svg></span>
-                <span class="chat-resource-dock-label">Ресурсы</span>
-                <span class="chat-resource-count hidden" id="chatResourceCount">0</span>
-                <span class="chat-resource-dock-caret" aria-hidden="true"><svg data-rna-icon="right" viewBox="0 0 24 24"></svg></span>
-              </button>
-              <section class="chat-resource-popover hidden" id="chatResourcesPopover" role="dialog" aria-label="Ресурсы чата" aria-hidden="true">
-                <div class="chat-resource-popover-head">
-                  <strong>Ресурсы чата</strong>
-                  <span>Текущие версии артефактов и файлов этого чата.</span>
-                </div>
-                <label class="chat-resource-search-wrap hidden">
-                  <svg data-rna-icon="search" viewBox="0 0 24 24" aria-hidden="true"></svg>
-                  <input id="chatResourcesSearchInput" type="search" placeholder="Найти ресурс..." autocomplete="off">
-                </label>
-                <div class="chat-resource-list" id="chatResourcesList"></div>
-                <button type="button" class="link-button hidden" id="chatResourcesMoreButton">Следующие 50 ресурсов</button>
-                <button type="button" class="link-button" id="openDocumentArtifactCatalog">Из документа…</button>
-                <div class="chat-resource-popover-foot">
-                  <button type="button" class="link-button" id="openArtifactsTabButton">Открыть все артефакты</button>
-                </div>
-              </section>
-            </div>
-          </div>
         </div>
-        <div class="agent-approval-dock hidden" id="agentApprovalDock" aria-live="polite"></div>
-        <form class="composer" id="chatForm">
-          <span id="inboxAnnouncer" class="inbox-sr-only" aria-live="polite"></span>
-          <span id="inboxStatus" class="inbox-status" role="status" aria-live="polite"></span>
+        <div class="chat-run-notice" id="chatRunNotice" role="status" hidden></div>
           <div class="composer-reply-prompt" id="composerReplyPrompt" hidden>
             <div class="composer-reply-copy" role="status" aria-live="polite">
               <strong>Нужен ваш ответ</strong>
@@ -151,6 +122,10 @@
             </div>
             <button type="button" class="link-button" id="focusReplyButton" aria-controls="chatInput">Ответить</button>
           </div>
+        <div class="agent-approval-dock hidden" id="agentApprovalDock" aria-live="polite"></div>
+        <form class="composer" id="chatForm">
+          <span id="inboxAnnouncer" class="inbox-sr-only" aria-live="polite"></span>
+          <span id="inboxStatus" class="inbox-status" role="status" aria-live="polite"></span>
           <div class="composer-edit-bar hidden" id="messageEditBar" aria-hidden="true">
             <span>Редактирование сообщения</span>
             <button type="button" class="composer-edit-cancel" id="cancelMessageEditButton" title="Отменить редактирование" aria-label="Отменить редактирование">
@@ -1164,9 +1139,9 @@
   <script src="js/app-logs.js?v=diagnostics-clarity-20260930-1"></script>
   <script src="js/app-diagnostics.js?v=composer-tooltips-20261015-1"></script>
   <script src="js/app-viewer-registry.js?v=artifact-preview-20260902-2"></script>
+  <script src="js/app-viewer-ui.js?v=shared-viewers-20261019-1"></script>
   <script src="js/app-json-viewer.js?v=chat-projection-20260907-1"></script>
   <script src="js/app-text-viewer.js?v=artifact-text-20260831-1"></script>
-  <script src="js/app-viewer-ui.js?v=shared-viewers-20261019-1"></script>
   <script src="js/app-sequence-viewer.js?v=artifact-gallery-20260902-1"></script>
   <script src="js/app-resource-viewer.js?v=agent-planning-20261002-2-image-display-1"></script>
   <script src="js/app-run-journal.js?v=catalog-display-chat-20260908-1"></script>

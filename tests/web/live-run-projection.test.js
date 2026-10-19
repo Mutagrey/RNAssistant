@@ -265,8 +265,8 @@ for (const extra of [
 ]) {
   const activity = Object.assign(action("next", "next", "running", '{}'), extra, { StepMessage: "" });
   const article = ctx.renderAgentRunArticle({ live: true, items: preparation.concat({ activity, message: message(activity, 3), index: 3 }) });
-  const completed = article.querySelector(".agent-completed-actions");
-  assert.equal(completed.querySelectorAll(".kind-tool").length, 3, "only completed calls are collapsed");
+  const completed = article.querySelector(".agent-action-stage");
+  assert.equal(completed.querySelectorAll(".kind-tool").length, extra.Status === "waiting" ? 3 : 4, "adjacent actions share a stage; confirmation remains outside");
   assert.equal(article.querySelectorAll(".kind-tool").length, 4, "attention and current activity remain outside the disclosure");
   assert.equal(article.querySelectorAll(".agent-model-step").length, 1);
 }

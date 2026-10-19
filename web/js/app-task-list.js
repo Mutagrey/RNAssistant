@@ -149,7 +149,6 @@
     details.open = !approvalPending && !!state.agentPlanExpanded[expansionKey];
     details.addEventListener("toggle", function () {
       state.agentPlanExpanded[expansionKey] = details.open;
-      if (details.open && typeof window.setChatResourcePopoverOpen === "function") window.setChatResourcePopoverOpen(false);
     });
 
     var summary = document.createElement("summary");

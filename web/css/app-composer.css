@@ -43,15 +43,17 @@
 
 .composer-reply-prompt {
   display: flex;
-  order: 0;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px 12px;
-  margin: 2px 2px 6px;
-  padding: 8px 10px;
-  border-left: 3px solid var(--accent);
-  border-radius: 6px;
-  background: var(--secondary-bg);
+  flex: 0 0 auto;
+  width: min(780px, calc(100% - 36px));
+  margin: 0 auto 10px;
+  padding: 11px 13px;
+  border: 0;
+  border-radius: var(--radius-sm, 10px);
+  background: var(--info-soft);
+  color: var(--info);
   line-height: 1.4;
 }
 

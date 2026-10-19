@@ -144,14 +144,60 @@
   }
 
   function renderActivity(body) {
-    paragraph(body, "Состояние текущего выполнения в выбранном чате.");
-    heading(body, "Последний запуск");
     var run = state.activeRunViewState || {};
     var lifecycle = run.lifecycle || "idle";
-    var labels = { idle: "Нет выполнения", running: "Выполняется", completed: "Завершён", failed: "Ошибка", stopped: "Остановлен", unknown: "Результат неизвестен" };
-    info(body, labels[lifecycle] || lifecycle, run.runId || run.RunId || "", "clock");
-    if (lifecycle === "idle") paragraph(body, "Отправьте сообщение, чтобы увидеть ход работы.");
-    action(body, "История и диагностика", "clock", function () { switchTab("settings"); });
+    var labels = { idle: "Нет выполнения", running: "Выполняется", completed: "Завершён",
+      failed: "Ошибка", cancelled: "Остановлен", awaiting_user: "Нужен ваш ответ", awaiting_confirmation: "Нужно подтверждение" };
+    heading(body, "Последний запуск");
+    info(body, labels[lifecycle] || "Состояние недоступно", run.currentAction || "", "clock");
+    if (lifecycle === "idle") { paragraph(body, "Отправьте сообщение, чтобы увидеть ход работы."); return; }
+    if (typeof collectVisibleAgentTimelineItems === "function") {
+      var items = (state.messages || []).map(function (message, index) {
+        return { message: message, index: index, activity: messageActivity(message) };
+      }).filter(function (item) { return item.activity && messageRunId(item.message) === run.runId; });
+      (state.liveAgentRun || []).forEach(function (activity) {
+        if (activityValue(activity, "RunId", "runId", "") === run.runId) items.push({ activity: activity });
+      });
+      var timeline = collectVisibleAgentTimelineItems(items);
+      var steps = groupAgentRunUpdates(groupAgentRunSteps(timeline));
+      var list = node("div", "chat-inspector-steps");
+      steps.forEach(function (step, index) {
+        var actions = [];
+        function collect(activity) {
+          if (["tool", "control", "diagnostic", "notice"].indexOf(activityKind(activity)) >= 0) actions.push(activity);
+          activityChildren(activity).forEach(collect);
+        }
+        step.items.forEach(function (item) { collect(item.activity); });
+        var terminal = ["failed", "cancelled", "completed"].indexOf(lifecycle) >= 0;
+        var states = actions.map(function (activity) {
+          var value = activityPresentationState(activity);
+          return terminal && ["running", "waiting"].indexOf(value) >= 0 ? "cancelled" : value;
+        });
+        var status = states.indexOf("unknown") >= 0 ? "unknown" : states.indexOf("failed") >= 0 ? "failed"
+          : states.some(function (value) { return ["warning", "partial", "waiting"].indexOf(value) >= 0; }) ? "warning"
+          : states.indexOf("running") >= 0 ? "running" : states.indexOf("cancelled") >= 0 ? "cancelled" : states.length && states.every(function (value) { return value === "completed"; }) ? "completed" : "idle";
+        var row = node("div", "chat-inspector-step is-" + status);
+        row.appendChild(node("span", "chat-inspector-step-number", String(index + 1)));
+        var copy = node("div");
+        copy.appendChild(node("strong", "", step.message || (actions.length ? activityPrimaryText(actions[0]) : "Ход работы")));
+        var last = actions[actions.length - 1];
+        if (last) copy.appendChild(node("small", "", activityDisplayResult(last) || agentStatusLabel(status)));
+        row.appendChild(copy); list.appendChild(row);
+      });
+      if (steps.length) body.appendChild(list);
+    }
+    if (run.executionHealth === "unknown" || run.executionHealth === "errors") {
+      var note = node("div", "chat-inspector-run-notice", run.executionHealth === "unknown"
+        ? "Есть неподтверждённые результаты. Проверьте фактическое состояние." : "В ходе работы были неудачные попытки.");
+      note.setAttribute("role", "status"); body.appendChild(note);
+    }
+    heading(body, "Подробности запуска");
+    if (run.runId) {
+      var chatId = state.activeChatId, runId = run.runId;
+      action(body, "История и диагностика", "clock", function () {
+        if (state.activeChatId === chatId) window.openRunJournal({ chatId: chatId, runId: runId });
+      });
+    }
   }
 
   function render() {

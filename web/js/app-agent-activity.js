@@ -6,7 +6,7 @@ function renderActivityNode(activity, nested, current, context) {
   var kind = activityKind(activity) || "activity";
   var operation = activityOperation(activity);
   node.className = "agent-activity kind-" + kind + " operation-" + operation +
-    (nested ? " nested" : "") + (current ? " current" : "") + " status-" + status;
+    (nested ? " nested" : "") + (current ? " current" : "") + " status-" + status + " presentation-" + activityPresentationState(activity);
 
   var expandable = activityHasDetails(activity, context);
   if (expandable) {
@@ -24,7 +24,7 @@ function renderActivityNode(activity, nested, current, context) {
   if (!context || context.renderInlineArtifacts !== false) {
     appendActivityArtifacts(node, activity, context);
   }
-  appendQuestionCards(node, activity, context);
+  if (!context || !context.terminal) appendQuestionCards(node, activity, context);
   return node;
 }
 
@@ -53,7 +53,7 @@ function appendQuestionCards(node, activity, context) {
       retry.textContent = "Повторить загрузку";
       retry.addEventListener("click", function () {
         slot.remove();
-        appendQuestionCards(node, activity, context);
+        if (!context || !context.terminal) appendQuestionCards(node, activity, context);
       });
       target.appendChild(retry);
       return;
@@ -131,8 +131,10 @@ function renderActivityRow(activity, current, expandable, context) {
   var comment = activityCommentText(activity);
   var time = activityTimeText(context);
   var presentation = activityPresentationState(activity);
+  if (context && context.terminal && isActiveTimelineStatus(status)) presentation = "cancelled";
   var hideIcon = (context && context.hideIcon) ||
-    ["notice", "reasoning", "step", "compaction"].indexOf(activityKind(activity)) >= 0;
+    ["reasoning", "step", "compaction"].indexOf(activityKind(activity)) >= 0 ||
+    (activityKind(activity) === "notice" && isActiveTimelineStatus(status));
   row.className = "agent-activity-row" + (comment ? " has-comment" : " has-no-comment") +
     (hideIcon ? " is-status-label" : "") +
     (context && context.liveFeed && activity === context.currentActivity && status === "running" ? " is-live-current" : "");
@@ -140,9 +142,9 @@ function renderActivityRow(activity, current, expandable, context) {
 
   if (!hideIcon) {
     var mark = document.createElement("span");
-    mark.className = "agent-activity-mark operation-" + activityOperation(activity);
+    mark.className = "agent-activity-mark operation-" + activityOperation(activity) + " presentation-" + presentation;
     mark.setAttribute("aria-hidden", "true");
-    mark.innerHTML = activityOperationIcon(activity);
+    mark.innerHTML = presentation === "running" && current ? '<span class="agent-work-spinner"></span>' : activityOperationIcon(activity);
     row.appendChild(mark);
   }
 
@@ -158,24 +160,11 @@ function renderActivityRow(activity, current, expandable, context) {
   heading.appendChild(name);
   copy.appendChild(heading);
 
-  if (comment) {
-    var target = document.createElement("span");
-    target.className = "agent-activity-target";
-    var targetValue = document.createElement("code");
-    targetValue.textContent = comment;
-    target.appendChild(targetValue);
-    copy.appendChild(target);
-  }
 
-  var resultText = activityDisplayResult(activity);
+  var resultText = context && context.terminal && isActiveTimelineStatus(status) ? "Остановлено" : activityDisplayResult(activity);
   if (resultText && resultText !== title && resultText !== comment) {
     var resultLine = document.createElement("span");
     resultLine.className = "agent-activity-caption status-" + presentation;
-    var symbol = document.createElement("span");
-    symbol.className = "agent-activity-status-symbol";
-    symbol.setAttribute("aria-hidden", "true");
-    symbol.textContent = { failed: "×", unknown: "!", warning: "!", waiting: "…", partial: "…", cancelled: "−", completed: "✓" }[presentation] || "";
-    resultLine.appendChild(symbol);
     var resultCopy = document.createElement("span");
     resultCopy.textContent = resultText;
     resultLine.appendChild(resultCopy);
@@ -501,6 +490,7 @@ function activityTimeText(context) {
 
 function activityHasDetails(activity, context) {
   return !!((!(context && context.liveFeed) && activityChildren(activity).length) ||
+    activityCommentText(activity) ||
     activityArgumentsJson(activity) ||
     activityDataJson(activity) ||
     activityDetailTexts(activity, context).length ||
@@ -565,6 +555,18 @@ function appendActivityDetailsContent(node, activity, context) {
 
   var body = document.createElement("div");
   body.className = "agent-activity-detail-body";
+  var outcome = activityDisplayResult(activity);
+  if (outcome && !activityDetailTexts(activity, context).length) {
+    var summary = document.createElement("p"); summary.className = "agent-activity-detail-summary";
+    summary.textContent = outcome; body.appendChild(summary);
+  }
+  var target = activityCommentText(activity);
+  if (target) {
+    var source = document.createElement("code");
+    source.className = "agent-activity-target";
+    source.textContent = target;
+    body.appendChild(source);
+  }
 
   if (activityToolId(activity)) {
     var tool = document.createElement("div");

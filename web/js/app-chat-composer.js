@@ -81,7 +81,44 @@ function bindComposerPickers() {
   });
 }
 
+function renderChatRunNotice() {
+  var root = $("chatRunNotice");
+  if (!root) return;
+  var run = state.activeRunViewState;
+  var unknown = run && run.executionHealth === "unknown" && run.unknownEffects > 0;
+  var failed = run && run.lifecycle === "failed";
+  var sendError = state.failedSend && state.failedSend.error;
+  var title = unknown ? "Результат изменений не подтверждён" : failed ? "Работа остановлена" : "Не удалось выполнить действие";
+  var text = unknown ? "Проверьте фактическое состояние перед повторной записью." : failed
+    ? window.RNAssistantRunViewState.failureReasonLabel(run.reason) : String(sendError || "");
+  var signature = JSON.stringify([state.activeChatId, run && run.runId, unknown, failed, text]);
+  if (root.noticeSignature === signature) return;
+  root.noticeSignature = signature;
+  root.replaceChildren();
+  root.hidden = !(unknown || failed || sendError);
+  if (root.hidden) return;
+  root.setAttribute("role", "alert");
+  var notice = document.createElement("div");
+  notice.className = "chat-notice-content" + (unknown ? "" : " is-danger");
+  if (window.RNAssistantIcons) notice.innerHTML = window.RNAssistantIcons.render("warning");
+  var copy = document.createElement("div");
+  copy.className = "chat-notice-copy";
+  var heading = document.createElement("strong"); heading.textContent = title; copy.appendChild(heading);
+  var description = document.createElement("p"); description.textContent = text; copy.appendChild(description);
+  if (run && run.runId && typeof window.openRunJournal === "function") {
+    var button = document.createElement("button"); button.type = "button";
+    button.className = "agent-details-link"; button.textContent = "Подробности";
+    var chatId = state.activeChatId, runId = run.runId;
+    button.addEventListener("click", function () {
+      if (state.activeChatId === chatId) window.openRunJournal({ chatId: chatId, runId: runId, filter: "problems" });
+    });
+    copy.appendChild(button);
+  }
+  notice.appendChild(copy); root.appendChild(notice);
+}
+
 function renderSendControls() {
+  renderChatRunNotice();
   var navigating = !!(state.chatNavigationPending || state.initializePromise);
   var detailUnavailable = !!(state.chatDetailPending || state.chatDetailError);
   var activeSend = currentActiveSend();

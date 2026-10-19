@@ -1,7 +1,6 @@
 (function () {
   "use strict";
 
-  var resourceNavigationChatId = "";
   var artifactProjectionIndex = null;
 
   function value(source, pascal, camel, fallback) {
@@ -259,7 +258,6 @@
     if (!artifact || artifactRemoved(artifact) || artifactResourceUri(artifact) !== item.resourceUri) return false;
     context.currentIndex = index;
     state.htmlWorkspaceSelection = { type: "artifact", id: artifactId(artifact) };
-    setChatResourcePopoverOpen(false);
     switchTab("artifacts");
     if (window.RNAssistantArtifactCatalog) window.RNAssistantArtifactCatalog.editor(artifact);
     if (typeof renderHtmlWorkspace === "function") renderHtmlWorkspace();
@@ -415,15 +413,6 @@
     });
   }
 
-  function chatDockResourceHeads() {
-    var activePlanId = String(state.activePlanDocumentArtifactId || "").toLowerCase();
-    return artifactResourceHeads().filter(function (artifact) {
-      var isActivePlan = activePlanId && artifactKind(artifact) === "plan" &&
-        String(artifactId(artifact)).toLowerCase() === activePlanId;
-      return !isActivePlan;
-    });
-  }
-
   function openArtifactResource(artifact, galleryArtifacts, gallerySource) {
     if (!artifact || value(artifact, "AvailabilityIssue", "availabilityIssue", "") === "metadata_unavailable") return false;
     if (state.htmlWorkspaceDirty) {
@@ -453,7 +442,6 @@
     } else {
       state.htmlWorkspaceSelection = { type: kind === "plan" ? "plan" : "artifact", id: artifactId(artifact) };
     }
-    setChatResourcePopoverOpen(false);
     switchTab("artifacts");
     if (window.RNAssistantArtifactCatalog) window.RNAssistantArtifactCatalog.editor(artifact);
     if (typeof renderHtmlWorkspace === "function") renderHtmlWorkspace();
@@ -727,222 +715,6 @@
     parent.appendChild(details);
   }
 
-  function setChatResourcePopoverOpen(open) {
-    var menu = $("chatResourceMenu");
-    var button = $("toggleChatResourcesButton");
-    var panel = $("chatResourcesPopover");
-    if (!menu || !button || !panel) return;
-    menu.classList.toggle("is-open", !!open);
-    panel.classList.toggle("hidden", !open);
-    panel.setAttribute("aria-hidden", open ? "false" : "true");
-    button.setAttribute("aria-expanded", open ? "true" : "false");
-    if (open) {
-      if (typeof window.setAgentPlanDockOpen === "function") window.setAgentPlanDockOpen(false);
-      var itemCount = renderChatResourceNavigation();
-      var search = $("chatResourcesSearchInput");
-      if (search && itemCount > 6) search.focus();
-    }
-  }
-
-  function renderChatResourceNavigation() {
-    if (window.RNAssistantArtifactCatalog) window.RNAssistantArtifactCatalog.sync();
-    var dock = $("chatResourceDock");
-    var button = $("toggleChatResourcesButton");
-    var count = $("chatResourceCount");
-    var list = $("chatResourcesList");
-    var search = $("chatResourcesSearchInput");
-    if (!button || !count || !list) return 0;
-    var items = chatDockResourceHeads();
-    var hasMoreHeads = !!value(state.artifactLibrary, "NextCursor", "nextCursor", null);
-    [$("chatResourcesMoreButton")].forEach(function (more) {
-      if (more) more.classList.toggle("hidden", !hasMoreHeads);
-    });
-    var hasResources = !!state.activeChatId;
-    if (dock) dock.classList.toggle("hidden", !hasResources);
-    if (!hasResources) setChatResourcePopoverOpen(false);
-    if (resourceNavigationChatId !== String(state.activeChatId || "")) {
-      resourceNavigationChatId = String(state.activeChatId || "");
-      if (search) search.value = "";
-    }
-    if (search && items.length <= 6) search.value = "";
-    var query = String(search && search.value || "").trim().toLowerCase();
-    button.disabled = !state.activeChatId;
-    button.title = hasMoreHeads ? "Ресурсы чата: показаны " + items.length + ", есть ещё" :
-      items.length ? "Ресурсы чата: " + items.length : "В чате пока нет ресурсов";
-    button.setAttribute("aria-label", button.title);
-    count.textContent = String(items.length) + (hasMoreHeads ? "+" : "");
-    count.classList.toggle("hidden", !items.length);
-    if (search) search.parentElement.classList.toggle("hidden", items.length <= 6);
-    list.replaceChildren();
-
-    var filtered = items.filter(function (artifact) {
-      if (!query) return true;
-      return [artifactTitle(artifact), kindLabel(artifactKind(artifact)), artifactMeta(artifact)]
-        .join(" ").toLowerCase().indexOf(query) >= 0;
-    });
-    if (!filtered.length) {
-      var empty = document.createElement("div");
-      empty.className = "chat-resource-empty";
-      empty.textContent = query ? "Ничего не найдено." : "Ресурсов пока нет.";
-      list.appendChild(empty);
-      return items.length;
-    }
-
-    var groups = { authored: [], files: [], generated: [], system: [] };
-    filtered.forEach(function (artifact) {
-      var category = kindCategory(artifact);
-      if (!groups[category]) groups[category] = [];
-      groups[category].push(artifact);
-    });
-    ["authored", "files", "generated", "system"].forEach(function (category) {
-      var groupItems = groups[category] || [];
-      if (!groupItems.length) return;
-      var section = document.createElement("section");
-      section.className = "chat-resource-group";
-      var heading = document.createElement("div");
-      heading.className = "chat-resource-group-title";
-      heading.textContent = categoryLabel(category);
-      section.appendChild(heading);
-      groupItems.forEach(function (artifact) {
-        var row = document.createElement("button");
-        row.type = "button";
-        row.className = "chat-resource-row category-" + category;
-        row.disabled = value(artifact, "AvailabilityIssue", "availabilityIssue", "") === "metadata_unavailable";
-        row.title = row.disabled ? "Метаданные ресурса недоступны" : "Открыть во вкладке «Артефакты»";
-        var icon = document.createElement("span");
-        icon.className = "artifact-type-icon";
-        icon.innerHTML = iconSvg(artifactKind(artifact));
-        var copy = document.createElement("span");
-        copy.className = "chat-resource-row-copy";
-        var title = document.createElement("strong");
-        title.textContent = artifactTitle(artifact);
-        var meta = document.createElement("span");
-        meta.textContent = artifactMeta(artifact);
-        copy.appendChild(title);
-        copy.appendChild(meta);
-        var arrow = document.createElement("span");
-        arrow.className = "chat-resource-row-arrow";
-        arrow.setAttribute("aria-hidden", "true");
-        arrow.textContent = "›";
-        row.appendChild(icon);
-        row.appendChild(copy);
-        row.appendChild(arrow);
-        row.addEventListener("click", function () { openArtifactResource(artifact); });
-        var entry = document.createElement("div");
-        entry.className = "artifact-link-entry";
-        entry.appendChild(row);
-        var head = libraryHeadForArtifact(artifact);
-        if (value(head, "CanDetach", "canDetach", false)) {
-          var sourceChatId = state.activeChatId;
-          var revision = value(state.artifactLibrary, "SessionRevision", "sessionRevision", 0);
-          var remove = document.createElement("button");
-          remove.type = "button";
-          remove.className = "link-button";
-          remove.textContent = "Убрать";
-          remove.title = "Убрать из этого чата; ресурс документа и история сохранятся";
-          remove.addEventListener("click", function () {
-            changeDocumentArtifactLink(sourceChatId, revision, artifactResourceUri(artifact), true, remove);
-          });
-          entry.appendChild(remove);
-        }
-        section.appendChild(entry);
-      });
-      list.appendChild(section);
-    });
-    return items.length;
-  }
-
-  async function changeDocumentArtifactLink(chatId, revision, resourceUri, detached, button) {
-    if (window.RNAssistantArtifactCatalog) return window.RNAssistantArtifactCatalog.changeLink(chatId, revision, resourceUri, detached, button);
-  }
-
-  var artifactPagePending = false;
-  async function loadMoreArtifactHeads() {
-    var library = state.artifactLibrary || {};
-    var cursor = value(library, "NextCursor", "nextCursor", null);
-    var revision = value(library, "SessionRevision", "sessionRevision", 0);
-    var chatId = state.activeChatId, navigation = state.chatNavigationVersion;
-    if (!cursor || !chatId || artifactPagePending) return;
-    artifactPagePending = true;
-    try {
-      var response = await send("getArtifactLibraryPage", {
-        chatId: chatId, expectedSessionRevision: revision, cursor: cursor
-      });
-      if (chatId !== state.activeChatId || navigation !== state.chatNavigationVersion ||
-          library !== state.artifactLibrary || cursor !== value(library, "NextCursor", "nextCursor", null)) return;
-      if (response.chatId !== chatId || response.sessionRevision !== revision) throw new Error("Страница ресурсов устарела.");
-      var seen = Object.create(null);
-      artifactLibraryHeads().forEach(function (head) { seen[String(value(head, "ArtifactId", "artifactId", "")).toLowerCase()] = true; });
-      (response.heads || []).forEach(function (head) {
-        var id = String(value(head, "ArtifactId", "artifactId", "")).toLowerCase();
-        if (id && !seen[id]) { library.heads.push(head); seen[id] = true; }
-      });
-      var artifacts = state.artifacts || [];
-      var known = Object.create(null);
-      artifacts.forEach(function (artifact) { known[String(artifactId(artifact)).toLowerCase()] = true; });
-      (response.artifacts || []).forEach(function (artifact) {
-        var id = String(artifactId(artifact)).toLowerCase();
-        if (id && !known[id]) { artifacts.push(artifact); known[id] = true; }
-      });
-      state.artifacts = artifacts;
-      library.nextCursor = response.nextCursor || null;
-      renderChatResourceNavigation();
-      if (typeof renderHtmlWorkspace === "function") renderHtmlWorkspace();
-    } catch (error) {
-      if (chatId === state.activeChatId && navigation === state.chatNavigationVersion) {
-        var more = $("chatResourcesMoreButton") || $("artifactLibraryMoreButton");
-        if (more) more.title = error.detail || error.message || "Не удалось загрузить ресурсы";
-      }
-    } finally { artifactPagePending = false; }
-  }
-
-  function bindChatResourceNavigation() {
-    var button = $("toggleChatResourcesButton");
-    var menu = $("chatResourceMenu");
-    [$("chatResourcesMoreButton")].forEach(function (more) {
-      if (more) more.addEventListener("click", loadMoreArtifactHeads);
-    });
-    var search = $("chatResourcesSearchInput");
-    var openAll = $("openArtifactsTabButton");
-    if (!button || !menu) return;
-    button.addEventListener("click", function () {
-      setChatResourcePopoverOpen(!menu.classList.contains("is-open"));
-    });
-    if (search) {
-      search.addEventListener("input", renderChatResourceNavigation);
-      search.addEventListener("keydown", function (event) {
-        if (event.key === "Escape") {
-          event.preventDefault();
-          setChatResourcePopoverOpen(false);
-          button.focus();
-        }
-      });
-    }
-    if (openAll) {
-      openAll.addEventListener("click", function () {
-        setChatResourcePopoverOpen(false);
-        switchTab("artifacts");
-        if (typeof renderHtmlWorkspace === "function") renderHtmlWorkspace();
-      });
-    }
-    document.addEventListener("pointerdown", function (event) {
-      if (menu.classList.contains("is-open") && !menu.contains(event.target)) setChatResourcePopoverOpen(false);
-    });
-    document.addEventListener("keydown", function (event) {
-      if (event.key === "Escape" && menu.classList.contains("is-open")) {
-        setChatResourcePopoverOpen(false);
-        button.focus();
-      }
-    });
-    var fromDocument = $("openDocumentArtifactCatalog");
-    if (fromDocument) fromDocument.addEventListener("click", function () {
-      setChatResourcePopoverOpen(false);
-      switchTab("artifacts");
-      window.RNAssistantArtifactCatalog.show("document");
-    });
-    renderChatResourceNavigation();
-  }
-
   window.RNAssistantArtifactVisuals = {
     category: kindCategory,
     categoryLabel: categoryLabel,
@@ -969,8 +741,5 @@
   window.releaseMessageMediaThumbnails = releaseMessageMediaThumbnails;
   window.appendMessageArtifactCards = appendMessageArtifactCards;
   window.appendAgentRunResourceCards = appendAgentRunResourceCards;
-  window.bindChatResourceNavigation = bindChatResourceNavigation;
-  window.renderChatResourceNavigation = renderChatResourceNavigation;
-  window.setChatResourcePopoverOpen = setChatResourcePopoverOpen;
   window.openArtifactResource = openArtifactResource;
 }());
