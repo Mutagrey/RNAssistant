@@ -1,7 +1,7 @@
 (function () {
   'use strict';
   var items=[],selected=null,candidate=null,view=null,chat=null,busy=false,chatBusy=false,poll=null,epoch=0;
-  var savedIcons=[],selectedIconId='puzzle';
+  var savedIcons=[],selectedIconId='puzzle',customSource=false;
   var frameReady=false,pendingNavigation=null;
   var navigation={projectName:'Проект данных',view:'sources',templateId:'',templates:[],expanded:{project:true,templates:true,dictionary:true}};
   function el(id){return document.getElementById('plugin'+id);}
@@ -85,6 +85,7 @@
       actions.forEach(function(id){toolbar.insertBefore(el(id),before);});}
   }
   async function refresh(){var result=await send('getPlugins',{});items=result.items;var rail=el('Rail');
+    if(result.defaultSourceParent)el('DefaultSourcePath').textContent=result.defaultSourceParent;
     if(window.RNAssistantRailPopovers)window.RNAssistantRailPopovers.hide();rail.replaceChildren();items.forEach(function(item){
     var node=button('',function(){select(item.pluginId);});node.innerHTML=window.RNAssistantIcons.renderPlugin(item.pluginId==='data-templates'?'dataTemplates':item.icon || 'puzzle',item.iconPaths);node.className='rail-button';node.setAttribute('aria-label',item.name);node.dataset.railLabel=item.name;node.dataset.railPopover='plugin-item';node.dataset.railError=item.iconError||'';node.dataset.pluginId=item.pluginId;node.dataset.section='plugins';rail.appendChild(node);
   });if(result.error)status(result.error,true);else if(items.some(function(item){return item.iconError;}))status('У одного из плагинов некорректная SVG-иконка. Исправьте исходник и проверьте пакет.',true);return items;}
@@ -121,6 +122,11 @@
     try{var result=await action(id);if(selected&&selected.pluginId===id){chat=result;renderChat();}}catch(error){el('ChatStatus').textContent=error.message;}finally{clearInterval(poll);chatBusy=false;controls();}}
   function setIconEditor(open){el('IconEditor').hidden=!open;el('IconTrigger').setAttribute('aria-expanded',String(open));
     if(!open&&el('IconEditor').contains(document.activeElement))el('IconTrigger').focus();}
+  function updateSourceLocation(){var connecting=el('Connect').checked,manual=connecting||customSource;
+    el('SourceLocation').hidden=connecting;el('SourceFolder').hidden=!manual;
+    el('Root').required=manual;el('Root').disabled=!manual;
+    el('SourceChange').textContent=customSource?'Использовать папку по умолчанию':'Указать другую папку';
+  }
   function updateCreatePreview(){var connecting=el('Connect').checked,name=el('Name').value.trim();
     el('CreateTitle').textContent=connecting?'Подключить плагин':name||'Новый плагин';
     el('CreateSubtitle').textContent=connecting?'Укажите папку с plugin.json.':'Нажмите на значок, чтобы выбрать или нарисовать иконку.';
@@ -183,7 +189,7 @@
     el('Project').onclick=function(){var frame=el('PreviewMount').querySelector('iframe');if(frame&&frame.contentWindow)frame.contentWindow.postMessage({type:'rna.dataTemplates.project'},'*');};
     el('NavigationProject').onclick=function(){el('Project').click();};
     el('NavigationSearch').oninput=renderNavigation;
-    el('Add').onclick=function(){switchTab('plugins');el('Manager').hidden=false;el('Workbench').hidden=true;status('');
+    el('Add').onclick=function(){switchTab('plugins');el('Manager').hidden=false;el('Workbench').hidden=true;status('');customSource=false;updateSourceLocation();
       setIconEditor(false);renderIconChoices();refreshIcons().catch(function(error){status(error.message,true);});el('Name').focus();};
     el('Name').oninput=updateCreatePreview;
     el('IconTrigger').onclick=function(){setIconEditor(el('IconEditor').hidden);if(!el('IconEditor').hidden)el('BuiltinIcons').querySelector('button').focus();};
@@ -191,20 +197,21 @@
     el('IconDrawButton').onclick=function(){run(drawIcon);};
     el('IconImportButton').onclick=function(){run(async function(){var item=await send('savePluginIcon',{name:el('IconImportName').value.trim(),svg:el('IconImportSvg').value.trim()});
       await refreshIcons();selectedIconId=item.id;renderIconChoices();el('IconImportName').value='';el('IconImportSvg').value='';status('SVG-иконка сохранена.');});};
+    el('SourceChange').onclick=function(){customSource=!customSource;updateSourceLocation();if(customSource)el('Root').focus();};
     el('CreateForm').onsubmit=function(event){event.preventDefault();run(async function(){var connecting=el('Connect').checked,task=el('Task').value.trim(),iconBrief=el('IconDescription').value.trim();
       if(!connecting&&selectedIconId==='draw'){await drawIcon();iconBrief='';}
       if(selectedIconId!=='draw')iconBrief='';
-      var created=await send(connecting?'connectPlugin':'createPlugin',{name:el('Name').value,rootPath:el('Root').value,description:task,iconDescription:iconBrief,iconId:selectedIconId});
-      await refresh();status(connecting?'Исходники подключены.':'Исходники созданы.');busy=false;await select(created.pluginId);el('Develop').checked=true;el('Develop').onchange();
+      var created=await send(connecting?'connectPlugin':'createPlugin',{name:el('Name').value,rootPath:connecting||customSource?el('Root').value.trim():null,description:task,iconDescription:iconBrief,iconId:selectedIconId});
+      await refresh();status((connecting?'Исходники подключены: ':'Исходники созданы: ')+created.sourceRoot);busy=false;await select(created.pluginId);el('Develop').checked=true;el('Develop').onchange();
       if(!connecting&&(task||iconBrief)){var message='Загрузи навыки workspace.plugin_authoring и workspace.files. Прочитай README.md и plugin.json. ';
         if(task)message+='Создай плагин по задаче: '+task+'. ';
         if(iconBrief)message+='Нарисуй SVG-иконку по описанию: '+iconBrief+'. Создай icon.svg, добавь его в files и укажи в plugin.json. ';
         message+='После изменений проверь пакет и предпросмотр; применяй только после подтверждения.';
         el('Message').value=message;el('ChatForm').requestSubmit();}
       el('CreateForm').reset();el('IconDescription').value='';el('IconImportName').value='';el('IconImportSvg').value='';
-      selectedIconId='puzzle';renderIconChoices();el('Connect').onchange();
+      selectedIconId='puzzle';customSource=false;renderIconChoices();el('Connect').onchange();
     });};
-    el('Connect').onchange=function(){var connecting=this.checked;el('NewFields').hidden=connecting;el('Name').required=!connecting;el('Task').disabled=connecting;el('IconDescription').disabled=connecting||selectedIconId!=='draw';if(connecting)setIconEditor(false);updateCreatePreview();
+    el('Connect').onchange=function(){var connecting=this.checked;el('NewFields').hidden=connecting;el('Name').required=!connecting;el('Task').disabled=connecting;el('IconDescription').disabled=connecting||selectedIconId!=='draw';if(connecting)setIconEditor(false);updateCreatePreview();updateSourceLocation();
       el('CreateSubmit').textContent=connecting?'Подключить папку':'Создать плагин';el('ModeHint').textContent=connecting?
         'Будет подключён существующий plugin.json без изменения исходников.':'Проверка и публикация доступны в разделе «Разработка».';};
     el('Check').onclick=function(){run(async function(){candidate=await send('checkPlugin',{pluginId:selected.pluginId});status(candidate.previewSimulated?

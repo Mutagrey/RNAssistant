@@ -507,7 +507,8 @@
       return { state: workspaceState(), dictionary: { file: "dictionary-1730000000000-" + "b".repeat(32) + ".json",
         format: "dictionary", sha256: await hash(dictionaryText), input: dictionaryText } };
     }
-    if (type === "getPlugins") return { items: clone([pluginItem].concat(extraPlugins).filter(function (item) { return !item.hidden; })) };
+    if (type === "getPlugins") return { defaultSourceParent: "C:\\Users\\Demo\\AppData\\Roaming\\RNAssistant\\plugin-workspaces",
+      items: clone([pluginItem].concat(extraPlugins).filter(function (item) { return !item.hidden; })) };
     if (type === "getRemovedPlugins") return { items: clone([pluginItem].concat(extraPlugins).filter(function (item) { return !!item.hidden; })) };
     if (type === "getPluginIcons") return { items: clone(savedPluginIcons) };
     if (type === "savePluginIcon") {
@@ -544,10 +545,13 @@
       return type === "removePlugin" ? { pluginId: payload.pluginId, hidden: true } : clone(visiblePlugin);
     }
     if (type === "createPlugin" || type === "connectPlugin") {
-      if (!payload.rootPath || type === "createPlugin" && !payload.name) fail("Укажите название и папку исходников.", "preview_input_invalid");
+      if (type === "connectPlugin" && !payload.rootPath || type === "createPlugin" && !payload.name)
+        fail("Укажите название плагина или папку готового плагина.", "preview_input_invalid");
+      var sourceRoot = payload.rootPath || "C:\\Users\\Demo\\AppData\\Roaming\\RNAssistant\\plugin-workspaces\\" +
+        (payload.name || "Plugin").replace(/[<>:\"/\\|?*]/g, "-").slice(0, 48) + "-" + (extraPlugins.length + 1);
       var newPlugin = { pluginId: "preview-plugin-" + (extraPlugins.length + 1),
         name: type === "createPlugin" ? payload.name : "Подключённый плагин",
-        icon: "puzzle", iconDescription: payload.iconDescription || "", sourceRoot: payload.rootPath,
+        icon: "puzzle", iconDescription: payload.iconDescription || "", sourceRoot: sourceRoot,
         releaseId: null, enabled: false, previewSimulated: true };
       if (type === "createPlugin" && payload.iconId && payload.iconId !== "draw") {
         var selectedIcon = savedPluginIcons.find(function (item) { return item.id === payload.iconId; });

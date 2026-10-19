@@ -70,13 +70,13 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
     const item={pluginId:'example',name:'Example',sourceWorkspaceId:'source-1',sourceRoot:'C:\\Plugins\\Example',releaseId:null,enabled:false};
     await page.exposeFunction('testPluginHost',async (type,payload)=>{
       switch(type){
-        case 'getPlugins':return {items:item.hidden?[]:[{...item}]};
+        case 'getPlugins':return {defaultSourceParent:'C:\\Users\\Demo\\AppData\\Roaming\\RNAssistant\\plugin-workspaces',items:item.hidden?[]:[{...item}]};
         case 'getRemovedPlugins':return {items:item.hidden?[{...item}]:[]};
         case 'getPluginIcons':return {items:savedIcons.slice()};
         case 'savePluginIcon':{const saved={id:'icon-test',name:payload.name,paths:['M4 4h16v16H4Z']};savedIcons=[saved];return saved;}
         case 'deletePluginIcon':assert.equal(payload.id,'icon-test');savedIcons=[];return {items:[]};
         case 'drawPluginIcon':assert.equal(payload.description,'Таблица с восходящей линией');drawCalls++;{const saved={id:'icon-drawn',name:payload.name,paths:['M3 4h18v16H3z','M3 10h18M9 4v16']};savedIcons=[saved];return saved;}
-        case 'createPlugin':assert.equal(payload.name,'Example');assert.equal(payload.iconId,'icon-drawn');assert.equal(payload.iconDescription,'');return {...item};
+        case 'createPlugin':assert.equal(payload.name,'Example');assert.equal(payload.rootPath,null);assert.equal(payload.iconId,'icon-drawn');assert.equal(payload.iconDescription,'');return {...item};
         case 'getPluginChat':return {messages:[{role:'assistant',text:'Исходники готовы к изменению.'}],state:{Status:'idle'}};
         case 'submitPluginChat':iconPrompt=payload.input.Message;return {messages:[{role:'assistant',text:'SVG-иконка смоделирована.'}],state:{Status:'completed'}};
         case 'checkPlugin':candidate='candidate-'+version;return {candidateId:candidate,files:3,bytes:100};
@@ -146,7 +146,13 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
     assert.equal(await page.locator('#pluginNewFields').isVisible(),false,'connection hides creation-only fields');
     assert.equal(await page.locator('#pluginCreateSubmit').textContent(),'Подключить папку');
     await page.locator('#pluginConnect').uncheck();
-    await page.locator('#pluginTask').fill('Сводка продаж');await page.locator('#pluginRoot').fill('C:\\Plugins\\Example');
+    await page.locator('#pluginTask').fill('Сводка продаж');
+    assert.equal(await page.locator('#pluginRoot').isVisible(),false,'default folder is used without a path input');
+    await page.locator('#pluginSourceChange').click();
+    assert.equal(await page.locator('#pluginRoot').isVisible(),true,'custom source path is available on demand');
+    await page.locator('#pluginRoot').fill('C:\\Plugins\\Example');
+    await page.locator('#pluginSourceChange').click();
+    assert.equal(await page.locator('#pluginRoot').isVisible(),false,'returning to the default path hides the custom input');
     await page.locator('#pluginCreateForm button[type=submit]').click();
     await page.waitForFunction(()=>document.querySelector('#pluginChatMessages')?.textContent.includes('SVG-иконка смоделирована.'));
     assert.match(iconPrompt,/workspace\.plugin_authoring/);

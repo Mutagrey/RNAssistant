@@ -430,7 +430,7 @@ async function serve() {
     await normal.locator('#pluginCreateForm').waitFor({ state: 'visible' });
     await normal.locator('#pluginName').fill('Сводка продаж');
     await normal.locator('#pluginTask').fill('Собрать сводку продаж');
-    await normal.locator('#pluginRoot').fill('C:\\Projects\\SalesPlugin');
+    assert.equal(await normal.locator('#pluginRoot').isVisible(), false, 'the default source folder needs no path input');
     await normal.locator('#pluginIconTrigger').click();
     await normal.locator('#pluginBuiltinIcons [data-icon-id="draw"]').click();
     await normal.locator('#pluginIconDescription').fill('Три растущих столбца');
@@ -439,6 +439,7 @@ async function serve() {
     assert.equal(drawnIcons.items.length, 1, 'preview saves a simulated drawing immediately');
     await normal.locator('#pluginCreateSubmit').click();
     await normal.locator('#pluginChatMessages').getByText(/запрос на исходники принят/).waitFor();
+    assert.match(await normal.locator('#pluginSource').textContent(), /plugin-workspaces[\\/]Сводка продаж-/, 'preview uses the default source folder');
     await normal.locator('#pluginCheck').click();
     await normal.locator('#pluginPreview').click();
     await normal.frameLocator('#pluginPreviewMount iframe').getByRole('heading', { name: 'Сводка продаж' }).waitFor();

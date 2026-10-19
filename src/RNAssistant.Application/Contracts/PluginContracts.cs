@@ -65,6 +65,7 @@ namespace RNAssistant.Application.Contracts
     {
         [JsonProperty("error")] public string Error { get; set; }
         [JsonProperty("items")] public IReadOnlyList<PluginItemDto> Items { get; set; }
+        [JsonProperty("defaultSourceParent", NullValueHandling = NullValueHandling.Ignore)] public string DefaultSourceParent { get; set; }
     }
     public sealed class PluginItemDto
     {

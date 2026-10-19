@@ -126,6 +126,23 @@ namespace RNAssistant.Harness
             WithPluginPaths(paths=>{
                 using(var service=new PluginApplicationService(paths))
                 {
+                    var defaultParent=Path.Combine(paths.Root,"plugin-workspaces");
+                    AssertEqual(defaultParent,service.List().DefaultSourceParent,"UI learns the actual default source location");
+                    var automatic=service.Create(new PluginCreateRequest { Name="Default source" });
+                    AssertEqual(defaultParent,Path.GetDirectoryName(automatic.SourceRoot),"creation chooses the managed plugin folder");
+                    AssertTrue(Directory.Exists(automatic.SourceRoot),"default source folder is created");
+                    PluginFailure(()=>service.Create(new PluginCreateRequest { Name="Missing custom path",RootPath=" " }),"plugin_create_invalid");
+                    PluginFailure(()=>service.Create(new PluginCreateRequest { Name="Relative custom path",RootPath="relative-plugin" }),"plugin_create_invalid");
+                    var emptyRoot=Path.Combine(paths.Root,"prepared-empty");Directory.CreateDirectory(emptyRoot);
+                    AssertEqual(emptyRoot,service.Create(new PluginCreateRequest { Name="Empty source",RootPath=emptyRoot }).SourceRoot,
+                        "creation accepts a pre-created empty folder");
+                    var occupied=Path.Combine(paths.Root,"occupied");Directory.CreateDirectory(occupied);
+                    File.WriteAllText(Path.Combine(occupied,"keep.txt"),"user data");
+                    PluginFailure(()=>service.Create(new PluginCreateRequest { Name="Occupied",RootPath=occupied }),"target_exists");
+                    AssertEqual("user data",File.ReadAllText(Path.Combine(occupied,"keep.txt")),"occupied source is never overwritten");
+                    var wrapped=PluginApplicationService.ExtractModelSvg("Here is your icon:\n```svg\n<svg viewBox=\"0 0 24 24\"><path d=\"M3 3h18v18H3z\"/></svg>\n```");
+                    AssertEqual(1,PluginPackageFiles.ReadIconPaths(PluginPackageFiles.Utf8.GetBytes(wrapped)).Length,
+                        "a fenced model reply yields only the validated SVG document");
                     var item=service.Create(new PluginCreateRequest { Name="Sales", RootPath=Path.Combine(paths.Root,"svg-source"),
                         Description="Summarize sales", IconDescription="Three rising columns" });
                     AssertTrue(File.ReadAllText(Path.Combine(item.SourceRoot,"README.md")).Contains("Three rising columns"),

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
@@ -50,7 +51,19 @@ namespace RNAssistant.Application
         }
 
         public PluginCatalogDto List()
-        { using (PluginStore.AcquireRuntimeUse(_paths)) lock (_sync) { RequireOpen(); return new PluginCatalogDto { Error = StartupError, Items = _store.List().Where(item => !item.Hidden).Select(Item).ToArray() }; } }
+        { using (PluginStore.AcquireRuntimeUse(_paths)) lock (_sync) { RequireOpen(); return new PluginCatalogDto { Error = StartupError, DefaultSourceParent = DefaultSourceParent, Items = _store.List().Where(item => !item.Hidden).Select(Item).ToArray() }; } }
+        private string DefaultSourceParent { get { return Path.Combine(_paths.Root, "plugin-workspaces"); } }
+        private string NewDefaultSourcePath(string name)
+        {
+            StorageFileSystem.EnsureRegularDirectory(DefaultSourceParent);
+            var leaf = Regex.Replace(name.Trim(), "[<>:\"/\\\\|?*\\x00-\\x1F]", "-").Trim(' ', '.');
+            if (leaf.Length > 48) leaf = leaf.Substring(0, 48).Trim(' ', '.');
+            if (leaf.Length == 0) leaf = "Плагин";
+            string path;
+            do { path = Path.Combine(DefaultSourceParent, leaf + "-" + Guid.NewGuid().ToString("N").Substring(0, 8)); }
+            while (Directory.Exists(path) || File.Exists(path));
+            return path;
+        }
         public PluginCatalogDto ListRemoved()
         { using (PluginStore.AcquireRuntimeUse(_paths)) lock (_sync) { RequireOpen(); return new PluginCatalogDto { Items = _store.List().Where(item => item.Hidden).Select(Item).ToArray() }; } }
         public PluginIconCatalogDto ListIcons()
@@ -79,24 +92,46 @@ namespace RNAssistant.Application
                 string.IsNullOrWhiteSpace(request.Description) || request.Description.Trim().Length > 500)
                 throw new PluginException("plugin_icon_invalid", "Provide a plugin name and an icon description of at most 500 characters.");
             var configuration = (settings ?? new AppSettings()).Clone();
-            configuration.MaxTokens = 700;
+            configuration.MaxTokens = 1000;
             configuration.RequestTimeoutSeconds = Math.Min(configuration.RequestTimeoutSeconds, 75);
             configuration.Temperature = 0.35;
-            var completion = await new LlmClient(apiKeyProvider).CompleteAsync(configuration,
-                new[] {
+            var messages = new List<ChatMessage> {
                     new ChatMessage { Role = "system", Content =
                         "Draw one clear, balanced outline icon as SVG for a 24x24 viewBox. Return only the SVG document. " +
                         "Use <svg viewBox=\"0 0 24 24\"> with 1 to 6 <path d=\"...\"/> children. " +
                         "No other elements, attributes, fills, text, comments, XML declaration or Markdown. " +
                         "Use only path commands and coordinates; the app applies currentColor stroke, round joins and caps." },
                     new ChatMessage { Role = "user", Content = "Plugin: " + request.Name.Trim() + "\nIcon brief: " + request.Description.Trim() }
-                }, new LlmRequestOptions { ResponseFormat = LlmResponseFormats.Text, ReasoningEnabled = false },
-                null, token).ConfigureAwait(false);
-            var svg = (completion?.Content ?? string.Empty).Trim();
-            if (svg.Length == 0 || svg.Length > 4096)
-                throw new PluginException("plugin_icon_invalid", "The model did not return a bounded SVG icon. Edit the description and try again.");
-            token.ThrowIfCancellationRequested();
-            return SaveIcon(new PluginIconSaveRequest { Name = request.Name.Trim(), Svg = svg });
+                };
+            for (var attempt = 0; attempt < 2; attempt++)
+            {
+                var completion = await new LlmClient(apiKeyProvider).CompleteAsync(configuration, messages,
+                    new LlmRequestOptions { ResponseFormat = LlmResponseFormats.Text, ReasoningEnabled = false },
+                    null, token).ConfigureAwait(false);
+                var svg = ExtractModelSvg(completion?.Content);
+                try
+                {
+                    var bytes = PluginPackageFiles.Utf8.GetBytes(svg);
+                    PluginPackageFiles.ReadIconPaths(bytes);
+                    token.ThrowIfCancellationRequested();
+                    return SaveIcon(new PluginIconSaveRequest { Name = request.Name.Trim(), Svg = svg });
+                }
+                catch (PluginException error) when (error.Code == "plugin_icon_invalid")
+                {
+                    if (attempt == 1) throw new PluginException("plugin_icon_invalid",
+                        "Модель не смогла нарисовать корректный SVG. Сократите описание или добавьте готовый SVG.");
+                    messages.Add(new ChatMessage { Role = "user", Content =
+                        "The previous icon was rejected: " + error.Message +
+                        " Return one complete valid SVG document only, with a 24x24 viewBox and 1–6 path elements. Keep every path d under 1024 characters." });
+                }
+            }
+            throw new PluginException("plugin_icon_invalid", "Модель не смогла нарисовать корректный SVG. Сократите описание или добавьте готовый SVG.");
+        }
+        public static string ExtractModelSvg(string content)
+        {
+            var source = (content ?? string.Empty).Trim();
+            var matches = Regex.Matches(source, @"<svg(?=\s|>)[\s\S]*?</svg\s*>", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            return matches.Count == 1 ? matches[0].Value : source;
         }
         public void ResetAfterRuntimeDataClear()
         {
@@ -126,20 +161,24 @@ namespace RNAssistant.Application
         public PluginItemDto Create(PluginCreateRequest request)
         {
             if (request == null || string.IsNullOrWhiteSpace(request.Name) || request.Name.Length > 120 ||
-                string.IsNullOrWhiteSpace(request.RootPath) || (request.Description?.Length ?? 0) > 8000 ||
+                (request.Description?.Length ?? 0) > 8000 ||
                 (request.IconDescription?.Length ?? 0) > 500)
-                throw new PluginException("plugin_create_invalid", "Name, a new source folder and a bounded description are required.");
+                throw new PluginException("plugin_create_invalid", "Укажите название плагина и краткое описание задачи.");
+            if (request.RootPath != null && (string.IsNullOrWhiteSpace(request.RootPath) || !Path.IsPathRooted(request.RootPath.Trim())))
+                throw new PluginException("plugin_create_invalid", "Укажите полный путь к другой папке исходников.");
             using (PluginStore.AcquireRuntimeUse(_paths)) lock (_sync)
             {
                 RequireOpen();
-                if (Directory.Exists(request.RootPath) || File.Exists(request.RootPath)) throw new PluginException("target_exists", "Create requires a new source directory.");
+                var rootPath = request.RootPath == null ? NewDefaultSourcePath(request.Name) : request.RootPath.Trim();
+                if (File.Exists(rootPath) || Directory.Exists(rootPath) && Directory.EnumerateFileSystemEntries(rootPath).Any())
+                    throw new PluginException("target_exists", "Папка уже содержит файлы. Укажите пустую папку или подключите готовый плагин с plugin.json.");
                 var chosenIcon = request.IconId ?? "draw";
                 PluginIconRecord savedIcon = null;
                 if (chosenIcon.StartsWith("icon-", StringComparison.Ordinal)) savedIcon = _icons.Get(chosenIcon);
                 else if (chosenIcon != "draw" &&
                     !System.Text.RegularExpressions.Regex.IsMatch(chosenIcon, "^[A-Za-z][A-Za-z0-9_-]{0,63}$"))
                     throw new PluginException("plugin_icon_invalid", "Choose a built-in or saved icon.");
-                var workspace = _workspaces.Open(request.RootPath, true, true);
+                var workspace = _workspaces.Open(rootPath, true, true);
                 var files = new WorkspaceFileService(_paths);
                 var manifest = new PluginManifestV1 { FormatVersion = 1, HostProtocol = 1, Id = "plugin-" + Guid.NewGuid().ToString("N"),
                     Name = request.Name, Version = "1.0.0", Entry = "index.html", Icon = savedIcon == null ? chosenIcon == "draw" ? "puzzle" : chosenIcon : "icon.svg",
