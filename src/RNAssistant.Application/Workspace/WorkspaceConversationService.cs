@@ -80,6 +80,11 @@ namespace RNAssistant.Runtime
             return _workspaces.ListSessions(_chats, workspace);
         }
 
+        public WorkspaceConnection[] ListConnectedWorkspaces()
+        {
+            return _workspaces.ListConnected(_chats);
+        }
+
         public ChatSession RenameSession(WorkspaceDescriptor workspace, string sessionId, string title)
         {
             using (AcquireSessionLease(sessionId))
@@ -93,6 +98,7 @@ namespace RNAssistant.Runtime
         {
             using (AcquireSessionLease(sessionId))
             {
+                if (GetSession(workspace, sessionId) == null) return false;
                 RequireIdleSession(workspace, sessionId);
                 return _workspaces.DeleteSession(_chats, workspace, sessionId);
             }

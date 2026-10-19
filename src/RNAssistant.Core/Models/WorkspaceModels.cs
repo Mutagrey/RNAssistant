@@ -27,6 +27,15 @@ namespace RNAssistant.Core.Models
         public IReadOnlyList<WorkspaceMountDescriptor> Mounts { get; internal set; }
     }
 
+    public sealed class WorkspaceConnection
+    {
+        public string WorkspaceId { get; internal set; }
+        public string Name { get; internal set; }
+        public string RootPath { get; internal set; }
+        public bool Available { get; internal set; }
+        public IReadOnlyList<ChatSessionHeader> Chats { get; internal set; }
+    }
+
     public sealed class WorkspaceMountDescriptor
     {
         public string Id { get; internal set; }

@@ -1,5 +1,17 @@
 # Stabilization progress
 
+## Connected workspace tree — 2026-10-19
+
+The Projects scope now lists connected workspaces and their own chats. Users can
+search the tree, connect an existing folder, create a workspace, switch chats,
+and delete one chat or a workspace's chat history without deleting its files.
+Deleting the history hides the workspace from the tree; reconnecting its folder
+restores the same workspace ID with empty history.
+Workspace chat operations use exact workspace IDs through the shared conversation
+service; plugin selection and publication no longer own the project-chat tree.
+Connected workspaces allow edits. Focused host-neutral and Chromium checks cover
+separate histories and UI actions. Windows/Office/WebView2 delivery is still open.
+
 ## Plugin panel and icon editor — 2026-10-19
 
 The plugin creation screen now shows a live name/icon preview above a compact
@@ -31,8 +43,8 @@ browser checks pass; actual model authoring and Windows/WebView2 remain unqualif
 The Data Templates plugin now sits in the shared project tree/editor composition.
 Its existing browser/native UI handles template and dictionary edits, Worker
 processing, cancellation and result read-back/export; the tree only navigates
-these views. The selected enabled data project owns separate workspace chat
-sessions through typed bridge operations and the shared conversation service.
+these views. Connected workspaces own separate workspace chat sessions through
+typed bridge operations and the shared conversation service.
 The five old plugin lifecycle actions live in Development by product decision.
 Mock preview seeds a valid in-memory project, exercises real browser processing,
 simulates chat/publication explicitly and supplies a model catalog for UI review.

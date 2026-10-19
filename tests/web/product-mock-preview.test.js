@@ -362,6 +362,15 @@ async function serve() {
     await normal.locator('.section-rail [data-section="chat"]').click();
     await normal.locator("#chatScopeSwitcher summary").click();
     await normal.locator('#chatScopeSwitcher [data-workspace-scope="projects"]').click();
+    assert.equal(await normal.locator('#projectChatTree [data-tree-key^="project:"]').count(), 2,
+      'the workspace tree lists connected projects');
+    await normal.locator('#projectChatTree [data-tree-key="project:preview-plan-workspace"] > .navigation-tree-row > .navigation-tree-label').click();
+    await normal.locator('#projectChatTitle').getByText('План запуска').waitFor();
+    await normal.locator('#projectChatSearch').fill('Подготовка');
+    assert.equal(await normal.locator('#projectChatTree [data-tree-key^="project:"]').count(), 1,
+      'search finds a chat inside its workspace');
+    await normal.locator('#projectChatSearch').fill('');
+    await normal.locator('#projectChatTree [data-tree-key="project:preview-data-workspace"] > .navigation-tree-row > .navigation-tree-label').click();
     await normal.locator("#projectChatTitle").getByText("Подготовка отчёта").waitFor();
     await normal.locator("#projectChatMessages .project-chat-suggest").click();
     assert.match(await normal.locator("#projectChatInput").inputValue(), /Сравни сентябрь с августом/);
@@ -374,6 +383,35 @@ async function serve() {
     await normal.locator("#projectChatStop").click();
     await normal.waitForFunction(() => document.querySelector("#projectChatNotice").textContent.includes("прервано"));
     assert.match(await normal.locator("#projectChatMessages").textContent(), /Проверь источники/);
+    await normal.locator('#projectChatConnect').click();
+    await normal.locator('#projectChatConnectionPath').fill('C:\\Projects\\Archive');
+    await normal.waitForFunction(() => !document.querySelector('#projectChatConnectionSubmit').disabled);
+    await normal.locator('#projectChatConnectionSubmit').click();
+    await normal.locator('#projectChatTree [data-tree-key="project:preview-workspace-3"]').waitFor();
+    await normal.locator('#projectChatCreate').click();
+    await normal.locator('#projectChatConnectionPath').fill('C:\\Projects\\NewWorkspace');
+    await normal.locator('#projectChatConnectionSubmit').click();
+    await normal.locator('#projectChatTree [data-tree-key="project:preview-workspace-4"]').waitFor();
+    const workspaceIsolation = await normal.evaluate(async () => {
+      const second = await send('createProjectChat', { workspaceId: 'preview-plan-workspace', title: 'Другой проект' });
+      let crossWorkspace = false;
+      try { await send('getProjectChat', { workspaceId: 'preview-data-workspace', sessionId: second.sessionId }); }
+      catch (_) { crossWorkspace = true; }
+      const projects = (await send('getProjectChats', {})).projects;
+      return { crossWorkspace, secondCount: projects.find(p => p.workspaceId === 'preview-plan-workspace').chats.length,
+        firstCount: projects.find(p => p.workspaceId === 'preview-data-workspace').chats.length };
+    });
+    assert.deepEqual(workspaceIsolation, { crossWorkspace: true, secondCount: 2, firstCount: 3 });
+    await normal.locator('#projectChatRefresh').click();
+    await normal.locator('#projectChatTree [data-tree-key="project:preview-plan-workspace"] > .navigation-tree-row').hover();
+    normal.once('dialog', dialog => dialog.accept());
+    await normal.locator('#projectChatTree [data-tree-key="project:preview-plan-workspace"] > .navigation-tree-row').getByRole('button', { name: 'Удалить историю «План продаж»' }).click();
+    await normal.waitForFunction(async () => !(await send('getProjectChats', {})).projects.some(p => p.workspaceId === 'preview-plan-workspace'));
+    assert.equal(await normal.locator('#projectChatTree [data-tree-key="project:preview-plan-workspace"]').count(), 0,
+      'deleting history removes the workspace from the tree');
+    const reconnected = await normal.evaluate(() => send('connectProjectWorkspace', { rootPath: 'C:\\Projects\\SalesPlan' }));
+    assert.equal(reconnected.selectedWorkspaceId, 'preview-plan-workspace', 'reconnecting keeps the workspace identity');
+    assert.equal(reconnected.projects.find(p => p.workspaceId === 'preview-plan-workspace').chats.length, 0);
     const mockProjectCycle = await normal.evaluate(async () => {
       await send("disablePlugin", { pluginId: "data-templates" });
       const disabled = await send("getProjectChats", {});
@@ -382,10 +420,11 @@ async function serve() {
       const unpublishedProject = await send("getProjectChats", {});
       await send("openPlugin", { pluginId: "data-templates" });
       const reopened = await send("getProjectChats", {});
-      return { disabled: disabled.project, unpublishedProject: unpublishedProject.project,
-        reopened: reopened.project && reopened.project.name, count: reopened.chats.length };
+      return { disabled: disabled.projects.length, unpublishedProject: unpublishedProject.projects.length,
+        reopened: reopened.projects.find(p => p.workspaceId === 'preview-data-workspace').name,
+        count: reopened.projects.find(p => p.workspaceId === 'preview-data-workspace').chats.length };
     });
-    assert.deepEqual(mockProjectCycle, { disabled: null, unpublishedProject: null,
+    assert.deepEqual(mockProjectCycle, { disabled: 4, unpublishedProject: 4,
       reopened: "Управленческая отчётность", count: 3 });
     await normal.locator('#pluginAdd').click();
     await normal.locator('#pluginCreateForm').waitFor({ state: 'visible' });
@@ -422,8 +461,8 @@ async function serve() {
     normal.once('dialog', dialog => dialog.accept());
     await normal.locator('.rail-hover-card').getByRole('button', { name: 'Удалить с панели' }).click();
     await normal.locator('#pluginRail [data-plugin-id="data-templates"]').waitFor({ state: 'detached' });
-    assert.equal((await normal.evaluate(() => send('getProjectChats', {}))).project, null,
-      'removing the shipped plugin revokes its data selection');
+    assert.equal((await normal.evaluate(() => send('getProjectChats', {}))).projects.length, 4,
+      'removing the shipped plugin preserves connected workspaces');
     await normal.locator('#pluginAdd').hover();
     await normal.locator('.rail-hover-card').getByRole('button', { name: 'Данные и шаблоны' }).click();
     await normal.locator('#pluginRail [data-plugin-id="data-templates"]').waitFor();

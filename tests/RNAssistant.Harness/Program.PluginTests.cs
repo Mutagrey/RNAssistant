@@ -288,28 +288,69 @@ namespace RNAssistant.Harness
                     var firstRoot=Path.Combine(paths.Root,"data-project-one");
                     var secondRoot=Path.Combine(paths.Root,"data-project-two");
                     Directory.CreateDirectory(firstRoot);Directory.CreateDirectory(secondRoot);
+                    File.WriteAllText(Path.Combine(firstRoot,"source.txt"),"keep");
                     var picker=new PluginPicker{Root=firstRoot};service.ProjectPicker=picker;
-                    var first=PluginRequest(service,instance,PluginMethod.PickProject).Result.Result.Handle;
-                    var created=service.CreateProjectChat(new ProjectChatRequest{ProjectId=first,Title="Project discussion"});
-                    AssertEqual(created.SessionId,service.ProjectChats().Chats.Single().Id,"project chat appears in its selected workspace");
-                    service.RenameProjectChat(new ProjectChatRequest{ProjectId=first,SessionId=created.SessionId,Title="Renamed discussion"});
-                    AssertEqual("Renamed discussion",service.ProjectChat(new ProjectChatRequest{ProjectId=first,SessionId=created.SessionId}).State.Title,
+                    PluginRequest(service,instance,PluginMethod.PickProject).GetAwaiter().GetResult();
+                    var first=service.ConnectProjectWorkspace(new ProjectConnectionRequest{RootPath=firstRoot}).SelectedWorkspaceId;
+                    var second=service.ConnectProjectWorkspace(new ProjectConnectionRequest{RootPath=secondRoot}).SelectedWorkspaceId;
+                    AssertTrue(first!=second,"connected workspaces have separate identities");
+                    var created=service.CreateProjectChat(new ProjectChatRequest{WorkspaceId=first,Title="Project discussion"});
+                    AssertEqual(created.SessionId,service.ProjectChats().Projects.Single(p=>p.WorkspaceId==first).Chats.Single().Id,
+                        "project chat appears under its workspace");
+                    service.RenameProjectChat(new ProjectChatRequest{WorkspaceId=first,SessionId=created.SessionId,Title="Renamed discussion"});
+                    AssertEqual("Renamed discussion",service.ProjectChat(new ProjectChatRequest{WorkspaceId=first,SessionId=created.SessionId}).State.Title,
                         "project chat title persists in workspace history");
+                    PluginFailure(()=>service.ProjectChat(new ProjectChatRequest{WorkspaceId=second,SessionId=created.SessionId}),"project_chat_missing");
                     picker.Root=secondRoot;PluginRequest(service,instance,PluginMethod.PickProject).GetAwaiter().GetResult();
-                    AssertEqual(0,service.ProjectChats().Chats.Count,"another data project has separate chats");
-                    PluginFailure(()=>service.ProjectChat(new ProjectChatRequest{ProjectId=first,SessionId=created.SessionId}),"plugin_project_changed");
-                    picker.Root=firstRoot;first=PluginRequest(service,instance,PluginMethod.PickProject).Result.Result.Handle;
-                    AssertEqual(created.SessionId,service.ProjectChats().Chats.Single().Id,"project chat history survives project reselection");
-                    PluginFailure(()=>service.ControlProjectChatAsync(new ProjectChatRequest {ProjectId=first,
+                    AssertEqual(0,service.ProjectChats().Projects.Single(p=>p.WorkspaceId==second).Chats.Count,
+                        "another workspace has separate chats");
+                    AssertEqual(created.SessionId,service.ProjectChats().Projects.Single(p=>p.WorkspaceId==first).Chats.Single().Id,
+                        "project chat history survives plugin project reselection");
+                    PluginFailure(()=>service.ControlProjectChatAsync(new ProjectChatRequest {WorkspaceId=first,
                         SessionId=created.SessionId,RunId="missing",Cursor="events1.missing"},true,
                         new AppSettings(),()=>"",CancellationToken.None).GetAwaiter().GetResult(),"project_chat_stale");
-                    service.DeleteProjectChat(new ProjectChatRequest{ProjectId=first,SessionId=created.SessionId});
-                    AssertEqual(0,service.ProjectChats().Chats.Count,"project chat deletion removes only its history");
+                    var forgedRoot=Path.Combine(paths.Root,"unrelated-folder");Directory.CreateDirectory(forgedRoot);
+                    var associationPath=Path.Combine(paths.WorkspaceDirectory,first+".json");
+                    var originalAssociation=File.ReadAllText(associationPath);
+                    try
+                    {
+                        var forgedAssociation=JObject.Parse(originalAssociation);forgedAssociation["RootPath"]=forgedRoot;
+                        File.WriteAllText(associationPath,forgedAssociation.ToString());
+                        try { service.CreateProjectChat(new ProjectChatRequest{WorkspaceId=first});throw new Exception("Expected connection refusal"); }
+                        catch(InvalidDataException) { }
+                        AssertTrue(!Directory.Exists(Path.Combine(forgedRoot,".rnassistant")),
+                            "changed connection cannot create a manifest in another folder");
+                    }
+                    finally { File.WriteAllText(associationPath,originalAssociation); }
+                    service.DeleteProjectHistory(new ProjectChatRequest{WorkspaceId=first});
+                    AssertTrue(!service.ProjectChats().Projects.Any(p=>p.WorkspaceId==first),
+                        "project history deletion removes the workspace from the tree");
+                    AssertTrue(File.Exists(Path.Combine(firstRoot,"source.txt")),"project history deletion preserves source files");
+                    var missingRoot=Path.Combine(paths.Root,"missing-project");Directory.CreateDirectory(missingRoot);
+                    var missing=service.ConnectProjectWorkspace(new ProjectConnectionRequest{RootPath=missingRoot}).SelectedWorkspaceId;
+                    service.CreateProjectChat(new ProjectChatRequest{WorkspaceId=missing,Title="Offline history"});
+                    var movedRoot=missingRoot+"-moved";Directory.Move(missingRoot,movedRoot);
+                    AssertTrue(!service.ProjectChats().Projects.Single(p=>p.WorkspaceId==missing).Available,
+                        "missing workspace remains visible for history management");
+                    service.DeleteProjectHistory(new ProjectChatRequest{WorkspaceId=missing});
+                    AssertTrue(!service.ProjectChats().Projects.Any(p=>p.WorkspaceId==missing) && Directory.Exists(movedRoot),
+                        "unavailable workspace history can be removed without touching moved files");
                     AssertTrue(Directory.Exists(firstRoot)&&Directory.Exists(secondRoot),"project chat actions preserve data folders");
                     service.RemoveAsync(item.PluginId).GetAwaiter().GetResult();
                     AssertEqual(0,service.List().Items.Count,"shipped plugin can leave the rail");
                     AssertEqual(item.PluginId,service.ListRemoved().Items.Single().PluginId,"shipped plugin remains restorable");
-                    AssertEqual(null,service.ProjectChats().Project,"hiding the plugin revokes selected data access");
+                    AssertTrue(!service.ProjectChats().Projects.Any(p=>p.WorkspaceId==first),"hidden workspace stays out of tree after plugin removal");
+                    AssertEqual(first,service.ConnectProjectWorkspace(new ProjectConnectionRequest{RootPath=firstRoot}).SelectedWorkspaceId,
+                        "reconnecting a workspace restores its identity");
+                    AssertEqual(0,service.ProjectChats().Projects.Single(p=>p.WorkspaceId==first).Chats.Count,
+                        "reconnected workspace has empty history");
+                    AssertTrue(!new WorkspaceStore(paths).OpenConnected(first).ReadOnly,"connected workspace chats can edit files");
+                    var independent=service.CreateProjectChat(new ProjectChatRequest{WorkspaceId=first,Title="Independent chat"});
+                    AssertEqual(independent.SessionId,service.ProjectChats().Projects.Single(p=>p.WorkspaceId==first).Chats.Single().Id,
+                        "workspace chat remains usable after plugin removal");
+                    service.DeleteProjectChat(new ProjectChatRequest{WorkspaceId=first,SessionId=independent.SessionId});
+                    PluginFailure(()=>service.DeleteProjectChat(new ProjectChatRequest{WorkspaceId=first,SessionId=independent.SessionId}),
+                        "project_chat_missing");
                     AssertEqual(item.ReleaseId,service.Restore(item.PluginId).ReleaseId,"restoring shipped plugin keeps publication");
                 }
             });

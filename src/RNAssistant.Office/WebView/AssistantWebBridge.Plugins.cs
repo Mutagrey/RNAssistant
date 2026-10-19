@@ -44,10 +44,13 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.ImportPluginVendor: return Plugins.Vendors.Import(Payload<PluginConnectRequest>(payload).RootPath);
                     case BridgeOperationId.ResolveHtmlVendor: return Plugins.ResolveHtmlVendor(Payload<PluginVendorRequest>(payload));
                     case BridgeOperationId.GetProjectChats: return Plugins.ProjectChats();
+                    case BridgeOperationId.ConnectProjectWorkspace: return Plugins.ConnectProjectWorkspace(Payload<ProjectConnectionRequest>(payload));
+                    case BridgeOperationId.CreateProjectWorkspace: return Plugins.CreateProjectWorkspace(Payload<ProjectConnectionRequest>(payload));
                     case BridgeOperationId.CreateProjectChat: return Plugins.CreateProjectChat(Payload<ProjectChatRequest>(payload));
                     case BridgeOperationId.GetProjectChat: return Plugins.ProjectChat(Payload<ProjectChatRequest>(payload));
                     case BridgeOperationId.RenameProjectChat: return Plugins.RenameProjectChat(Payload<ProjectChatRequest>(payload));
                     case BridgeOperationId.DeleteProjectChat: return Plugins.DeleteProjectChat(Payload<ProjectChatRequest>(payload));
+                    case BridgeOperationId.DeleteProjectHistory: return Plugins.DeleteProjectHistory(Payload<ProjectChatRequest>(payload));
                     case BridgeOperationId.SubmitProjectChat: return await Plugins.SubmitProjectChatAsync(Payload<ProjectChatRequest>(payload),settings.Load(),settings.LoadApiKey,token);
                     case BridgeOperationId.ResolveProjectChat: case BridgeOperationId.CancelProjectChat:
                         return await Plugins.ControlProjectChatAsync(Payload<ProjectChatRequest>(payload),operation==BridgeOperationId.CancelProjectChat,settings.Load(),settings.LoadApiKey,token);

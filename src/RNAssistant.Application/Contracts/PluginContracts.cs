@@ -128,7 +128,7 @@ namespace RNAssistant.Application.Contracts
     }
     public sealed class ProjectChatRequest
     {
-        [JsonProperty("projectId", Required = Required.Always)] public string ProjectId { get; set; }
+        [JsonProperty("workspaceId", Required = Required.Always)] public string WorkspaceId { get; set; }
         [JsonProperty("sessionId")] public string SessionId { get; set; }
         [JsonProperty("title")] public string Title { get; set; }
         [JsonProperty("input")] public WorkspaceSubmitInputRequest Input { get; set; }
@@ -139,14 +139,20 @@ namespace RNAssistant.Application.Contracts
     }
     public sealed class ProjectChatProjectDto
     {
-        [JsonProperty("projectId")] public string ProjectId { get; set; }
         [JsonProperty("workspaceId")] public string WorkspaceId { get; set; }
         [JsonProperty("name")] public string Name { get; set; }
+        [JsonProperty("rootPath")] public string RootPath { get; set; }
+        [JsonProperty("available")] public bool Available { get; set; }
+        [JsonProperty("chats")] public IReadOnlyList<ChatSessionHeader> Chats { get; set; }
     }
     public sealed class ProjectChatCatalogDto
     {
-        [JsonProperty("project")] public ProjectChatProjectDto Project { get; set; }
-        [JsonProperty("chats")] public IReadOnlyList<ChatSessionHeader> Chats { get; set; }
+        [JsonProperty("projects")] public IReadOnlyList<ProjectChatProjectDto> Projects { get; set; }
+        [JsonProperty("selectedWorkspaceId", NullValueHandling = NullValueHandling.Ignore)] public string SelectedWorkspaceId { get; set; }
+    }
+    public sealed class ProjectConnectionRequest
+    {
+        [JsonProperty("rootPath", Required = Required.Always)] public string RootPath { get; set; }
     }
     public sealed class ProjectChatStateDto
     {

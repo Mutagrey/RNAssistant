@@ -8,6 +8,16 @@
 .shell #tab-chat .chat-scope-switcher > summary > span:nth-child(2) { flex: 1; }
 .shell #tab-chat .chat-scope-switcher .popover-menu { top: 46px; left: 8px; right: auto; width: 240px; }
 .shell #tab-chat .project-chat-tree { min-height: 0; padding: 8px; overflow-y: auto; }
+.shell #tab-chat .project-workspace-controls,
+.shell #tab-chat .project-workspace-connection { display: grid; gap: 7px; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+.shell #tab-chat .project-workspace-connection[hidden] { display: none; }
+.shell #tab-chat .project-workspace-controls input,
+.shell #tab-chat .project-workspace-connection input { box-sizing: border-box; width: 100%; min-width: 0; padding: 7px 9px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface); color: var(--ink); font: inherit; font-size: 12px; }
+.shell #tab-chat .project-workspace-controls > div,
+.shell #tab-chat .project-workspace-connection > div { display: flex; gap: 6px; }
+.shell #tab-chat .project-workspace-controls button,
+.shell #tab-chat .project-workspace-connection button { flex: 1; min-width: 0; padding: 6px 5px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface); color: var(--ink); font: inherit; font-size: 11px; cursor: pointer; }
+.shell #tab-chat .project-workspace-connection label { display: grid; gap: 5px; color: var(--ink-muted); font-size: 11px; }
 .shell #tab-chat .project-chat-main .chatbar { flex-shrink: 0; }
 .shell #tab-chat .project-chat-main .chatbar > .icon-btn { flex: 0 0 auto; }
 .shell #tab-chat .project-chat-notice { min-height: 0; padding: 0 20px; color: var(--ink-muted); font-size: 12px; }

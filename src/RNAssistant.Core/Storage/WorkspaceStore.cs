@@ -20,6 +20,7 @@ namespace RNAssistant.Core.Storage
             public string RootPath { get; set; }
             public string Name { get; set; }
             public bool ManifestStored { get; set; }
+            public bool HiddenFromProjectTree { get; set; }
         }
 
         public WorkspaceStore(AppDataPaths paths)
@@ -28,6 +29,17 @@ namespace RNAssistant.Core.Storage
         }
 
         public WorkspaceDescriptor Open(string rootPath, bool createIfMissing = true, bool permitManifestWrite = true)
+        {
+            return OpenCore(rootPath, createIfMissing, permitManifestWrite, null, false);
+        }
+
+        public WorkspaceDescriptor ConnectProject(string rootPath, bool createIfMissing)
+        {
+            return OpenCore(rootPath, createIfMissing, true, null, true);
+        }
+
+        private WorkspaceDescriptor OpenCore(string rootPath, bool createIfMissing, bool permitManifestWrite,
+            string expectedWorkspaceId, bool showInProjects)
         {
             if (string.IsNullOrWhiteSpace(rootPath)) throw new ArgumentException("A workspace path is required.", nameof(rootPath));
             var root = Path.GetFullPath(rootPath);
@@ -60,9 +72,13 @@ namespace RNAssistant.Core.Storage
                     throw new InvalidDataException("Workspace manifest conflicts with the saved path association.");
 
                 var id = manifest?.WorkspaceId ?? previous?.WorkspaceId ?? NewId();
+                if (expectedWorkspaceId != null && id != expectedWorkspaceId)
+                    throw new InvalidDataException("Workspace connection changed.");
                 var name = manifest?.Name ?? previous?.Name ?? new DirectoryInfo(root).Name;
                 if (string.IsNullOrWhiteSpace(name)) name = "Workspace";
                 var saved = ReadAssociation(IdPath(id));
+                if (expectedWorkspaceId != null && (saved == null || saved.HiddenFromProjectTree))
+                    throw new InvalidDataException("Workspace connection is unavailable.");
                 if (saved != null && !SamePath(saved.RootPath, root) && Directory.Exists(saved.RootPath))
                     throw new InvalidDataException("Workspace ID is already connected to another existing root. Resolve move or copy explicitly.");
                 if (saved != null && !SamePath(saved.RootPath, root))
@@ -78,7 +94,9 @@ namespace RNAssistant.Core.Storage
 
                 var association = new WorkspaceAssociation
                 {
-                    WorkspaceId = id, RootPath = root, Name = name, ManifestStored = manifest != null
+                    WorkspaceId = id, RootPath = root, Name = name, ManifestStored = manifest != null,
+                    HiddenFromProjectTree = !showInProjects &&
+                        ((previous != null && previous.HiddenFromProjectTree) || (saved != null && saved.HiddenFromProjectTree))
                 };
                 StorageFileSystem.WriteAllTextAtomic(IdPath(id), JsonConvert.SerializeObject(association), Utf8);
                 StorageFileSystem.WriteAllTextAtomic(byPath, JsonConvert.SerializeObject(association), Utf8);
@@ -88,6 +106,81 @@ namespace RNAssistant.Core.Storage
                     Mounts = new[] { new WorkspaceMountDescriptor
                     { Id = "root", Kind = "directory", RootPath = root, ReadOnly = !permitManifestWrite || manifest == null } }
                 };
+            }
+        }
+
+        public WorkspaceConnection[] ListConnected(ChatStore chats)
+        {
+            if (chats == null) throw new ArgumentNullException(nameof(chats));
+            WorkspaceConnection[] connections;
+            using (StorageFileSystem.AcquireWriteLock(Path.Combine(_paths.WorkspaceDirectory, "catalog.lck")))
+            {
+                var files = Directory.GetFiles(_paths.WorkspaceDirectory, "ws_*.json", SearchOption.TopDirectoryOnly);
+                if (files.Length > 1000) throw new InvalidDataException("Workspace catalog exceeds its limit.");
+                connections = files.Select(path =>
+                {
+                    var id = Path.GetFileNameWithoutExtension(path);
+                    if (!ValidId(id)) throw new InvalidDataException("Workspace catalog contains an invalid entry.");
+                    var association = ReadAssociation(path);
+                    if (association == null || association.WorkspaceId != id)
+                        throw new InvalidDataException("Workspace catalog identity does not match its entry.");
+                    if (association.HiddenFromProjectTree) return null;
+                    return new WorkspaceConnection
+                    {
+                        WorkspaceId = id, Name = association.Name, RootPath = association.RootPath
+                    };
+                }).Where(item => item != null).ToArray();
+            }
+            foreach (var item in connections)
+            {
+                item.Available = Directory.Exists(item.RootPath) && !StorageFileSystem.IsReparsePoint(item.RootPath);
+                item.Chats = chats.ListHeaders("Workspace", item.WorkspaceId, item.Name)
+                    .Where(chat => chat.WorkspaceId == item.WorkspaceId).ToArray();
+            }
+            return connections.OrderBy(item => item.Name, StringComparer.CurrentCultureIgnoreCase)
+                .ThenBy(item => item.WorkspaceId, StringComparer.Ordinal).ToArray();
+        }
+
+        public WorkspaceDescriptor OpenConnected(string workspaceId)
+        {
+            var association = ConnectedAssociation(workspaceId);
+            return OpenCore(association.RootPath, false, true, workspaceId, false);
+        }
+
+        public WorkspaceDescriptor OpenConnectedHistory(string workspaceId)
+        {
+            var association = ConnectedAssociation(workspaceId);
+            return new WorkspaceDescriptor
+            {
+                WorkspaceId = workspaceId, Name = association.Name, RootPath = association.RootPath, ReadOnly = true,
+                Mounts = new[] { new WorkspaceMountDescriptor
+                { Id = "root", Kind = "directory", RootPath = association.RootPath, ReadOnly = true } }
+            };
+        }
+
+        private WorkspaceAssociation ConnectedAssociation(string workspaceId)
+        {
+            if (!ValidId(workspaceId)) throw new ArgumentException("A connected workspace ID is required.", nameof(workspaceId));
+            using (StorageFileSystem.AcquireWriteLock(Path.Combine(_paths.WorkspaceDirectory, "catalog.lck")))
+            {
+                var association = ReadAssociation(IdPath(workspaceId));
+                if (association == null || association.WorkspaceId != workspaceId || association.HiddenFromProjectTree)
+                    throw new InvalidDataException("Workspace connection is unavailable.");
+                return association;
+            }
+        }
+
+        public void HideProject(string workspaceId)
+        {
+            if (!ValidId(workspaceId)) throw new ArgumentException("A connected workspace ID is required.", nameof(workspaceId));
+            using (StorageFileSystem.AcquireWriteLock(Path.Combine(_paths.WorkspaceDirectory, "catalog.lck")))
+            {
+                var path = IdPath(workspaceId);
+                var association = ReadAssociation(path);
+                if (association == null || association.WorkspaceId != workspaceId || association.HiddenFromProjectTree)
+                    throw new InvalidDataException("Workspace connection is unavailable.");
+                association.HiddenFromProjectTree = true;
+                StorageFileSystem.WriteAllTextAtomic(path, JsonConvert.SerializeObject(association), Utf8);
             }
         }
 

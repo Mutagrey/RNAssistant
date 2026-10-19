@@ -172,8 +172,10 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.GetPluginChat:
                     case BridgeOperationId.SubmitPluginChat: case BridgeOperationId.ResolvePluginChat: case BridgeOperationId.CancelPluginChat:
                     case BridgeOperationId.GetPluginVendors: case BridgeOperationId.ImportPluginVendor: case BridgeOperationId.ResolveHtmlVendor:
-                    case BridgeOperationId.GetProjectChats: case BridgeOperationId.CreateProjectChat: case BridgeOperationId.GetProjectChat:
-                    case BridgeOperationId.RenameProjectChat: case BridgeOperationId.DeleteProjectChat: case BridgeOperationId.SubmitProjectChat:
+                    case BridgeOperationId.GetProjectChats: case BridgeOperationId.ConnectProjectWorkspace: case BridgeOperationId.CreateProjectWorkspace:
+                    case BridgeOperationId.CreateProjectChat: case BridgeOperationId.GetProjectChat:
+                    case BridgeOperationId.RenameProjectChat: case BridgeOperationId.DeleteProjectChat: case BridgeOperationId.DeleteProjectHistory:
+                    case BridgeOperationId.SubmitProjectChat:
                     case BridgeOperationId.ResolveProjectChat: case BridgeOperationId.CancelProjectChat:
                         responsePayload = await HandlePluginAsync(type, payload, cancellationToken).ConfigureAwait(false);
                         break;

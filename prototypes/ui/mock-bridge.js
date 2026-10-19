@@ -44,7 +44,14 @@
   var projectChatSequence = 2;
   var projectChats = dataProject ? [{ Id: "preview-project-review", Title: "Подготовка отчёта", RunStatus: "completed" },
     { Id: "preview-project-clean", Title: "Проверка источников", RunStatus: "completed" }] : [];
+  var workspaceProjects = dataProject ? [
+    { workspaceId: dataProject.workspaceId, name: dataProject.name, rootPath: "C:\\Projects\\Reports", available: true, chats: projectChats },
+    { workspaceId: "preview-plan-workspace", name: "План продаж", rootPath: "C:\\Projects\\SalesPlan", available: true,
+      chats: [{ Id: "preview-plan-chat", Title: "План запуска", RunStatus: "completed" }] }
+  ] : [];
+  var hiddenWorkspaceProjects = [];
   var projectMessages = { "preview-project-review": [], "preview-project-clean": [] };
+  if (dataProject) projectMessages["preview-plan-chat"] = [];
   var projectRuns = Object.create(null), projectRequests = Object.create(null);
   var pluginItem = { pluginId: "data-templates", name: "Данные и шаблоны", icon: "dataTemplates",
     sourceRoot: "Локальный демонстрационный плагин", releaseId: "preview-release-1", enabled: true,
@@ -183,17 +190,23 @@
       running: !!run, phase: run ? run.phase : "", paused: false,
       items: [], receipts: [], acceptedInput: receipt || null };
   }
+  function projectCatalog(selectedWorkspaceId) {
+    return { projects: clone(workspaceProjects), selectedWorkspaceId: selectedWorkspaceId || null };
+  }
+  function requireWorkspace(payload) {
+    var entry = workspaceProjects.find(function (item) { return item.workspaceId === payload.workspaceId; });
+    if (!entry || !entry.available) fail("Папка проекта недоступна.", "preview_project_changed");
+    return entry;
+  }
   function requireProjectChat(payload) {
-    if (!projectSelected || !pluginItem.enabled || !dataProject || payload.projectId !== dataProject.projectId)
-      fail("Проект примера изменился.", "preview_project_changed");
-    var chat = projectChats.find(function (item) { return item.Id === payload.sessionId; });
+    var chat = requireWorkspace(payload).chats.find(function (item) { return item.Id === payload.sessionId; });
     if (!chat) fail("Чат проекта отсутствует.", "preview_chat_changed");
     return chat;
   }
   function projectChatState(payload) {
-    var chat = requireProjectChat(payload), run = projectRuns[chat.Id];
-    return { project: clone(dataProject), sessionId: chat.Id,
-      state: { id: chat.Id, workspaceId: dataProject.workspaceId, title: chat.Title,
+    var entry = requireWorkspace(payload), chat = requireProjectChat(payload), run = projectRuns[chat.Id];
+    return { project: clone(entry), sessionId: chat.Id,
+      state: { id: chat.Id, workspaceId: entry.workspaceId, title: chat.Title,
         status: run ? "running" : chat.RunStatus, runId: run && run.runId || null,
         cursor: run && run.cursor || "preview-project-cursor", userInput: null },
       pendingId: null, pendingTool: null, pendingArguments: null,
@@ -545,26 +558,52 @@
       extraPlugins.push(newPlugin); extraPluginMessages[newPlugin.pluginId] = [];
       return clone(newPlugin);
     }
-    if (type === "getProjectChats") return { project: projectSelected && pluginItem.enabled ? clone(dataProject) : null,
-      chats: projectSelected && pluginItem.enabled ? clone(projectChats) : [] };
+    if (type === "getProjectChats") return projectCatalog();
+    if (type === "connectProjectWorkspace" || type === "createProjectWorkspace") {
+      var rootPath = (payload.rootPath || "").trim();
+      if (!/^(?:[a-z]:[\\/]|\/)/i.test(rootPath)) fail("Укажите полный путь к папке.", "preview_project_root_invalid");
+      var connected = workspaceProjects.concat(hiddenWorkspaceProjects).find(function (item) {
+        return item.rootPath.toLowerCase() === rootPath.toLowerCase();
+      });
+      if (connected && type === "createProjectWorkspace") fail("Папка уже существует.", "preview_project_root_exists");
+      if (connected && hiddenWorkspaceProjects.includes(connected)) {
+        hiddenWorkspaceProjects = hiddenWorkspaceProjects.filter(function (item) { return item !== connected; });
+        workspaceProjects.push(connected);
+      } else if (!connected) {
+        connected = { workspaceId: "preview-workspace-" + (workspaceProjects.length + 1),
+          name: rootPath.split(/[\\/]/).filter(Boolean).pop(), rootPath: rootPath,
+          available: true, chats: [] };
+        workspaceProjects.push(connected);
+      }
+      return projectCatalog(connected.workspaceId);
+    }
     if (type === "getProjectChat") return projectChatState(payload);
     if (type === "createProjectChat") {
-      if (!projectSelected || !pluginItem.enabled || !dataProject || payload.projectId !== dataProject.projectId)
-        fail("Проект примера изменился.", "preview_project_changed");
+      var targetWorkspace = requireWorkspace(payload);
       var created = { Id: "preview-project-" + (++projectChatSequence), Title: payload.title || "Новый чат", RunStatus: "" };
-      projectChats.unshift(created); projectMessages[created.Id] = [];
-      return projectChatState({ projectId: dataProject.projectId, sessionId: created.Id });
+      targetWorkspace.chats.unshift(created); projectMessages[created.Id] = [];
+      return projectChatState({ workspaceId: targetWorkspace.workspaceId, sessionId: created.Id });
     }
     if (type === "renameProjectChat") {
       var renamed = requireProjectChat(payload);
       if (!payload.title || !payload.title.trim()) fail("Название чата пусто.", "preview_chat_invalid");
-      renamed.Title = payload.title.trim(); return { project: clone(dataProject), chats: clone(projectChats) };
+      renamed.Title = payload.title.trim(); return projectCatalog();
     }
     if (type === "deleteProjectChat") {
-      requireProjectChat(payload);
+      var chatWorkspace = requireWorkspace(payload); requireProjectChat(payload);
       if (projectRuns[payload.sessionId]) fail("Сначала остановите чат.", "preview_run_busy");
-      projectChats = projectChats.filter(function (item) { return item.Id !== payload.sessionId; });
-      delete projectMessages[payload.sessionId]; return { project: clone(dataProject), chats: clone(projectChats) };
+      chatWorkspace.chats = chatWorkspace.chats.filter(function (item) { return item.Id !== payload.sessionId; });
+      delete projectMessages[payload.sessionId]; return projectCatalog();
+    }
+    if (type === "deleteProjectHistory") {
+      var historyWorkspace = requireWorkspace(payload);
+      if (historyWorkspace.chats.some(function (item) { return !!projectRuns[item.Id]; }))
+        fail("Сначала остановите чаты проекта.", "preview_run_busy");
+      historyWorkspace.chats.forEach(function (item) { delete projectMessages[item.Id]; });
+      historyWorkspace.chats = [];
+      workspaceProjects = workspaceProjects.filter(function (item) { return item !== historyWorkspace; });
+      hiddenWorkspaceProjects.push(historyWorkspace);
+      return projectCatalog();
     }
     if (type === "submitProjectChat") {
       var submitting = requireProjectChat(payload), input = payload.input || {};

@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Application.Contracts;
+using RNAssistant.Core.Agent;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
@@ -486,39 +487,56 @@ namespace RNAssistant.Application
             }
         }
 
-        private PluginDataGrant CurrentDataProject()
+        private WorkspaceDescriptor RequireProjectWorkspace(string workspaceId)
         {
-            lock (_sync)
-            {
-                RequireOpen();
-                var registration = _store.Get("data-templates");
-                if (registration == null || registration.Hidden || !registration.Enabled || registration.ActiveReleaseId == null) return null;
-                PluginDataGrant grant;
-                _data.TryGetValue("data-templates:" + registration.ActiveReleaseId, out grant);
-                return grant != null && !grant.Lifetime.IsCancellationRequested ? grant : null;
-            }
+            if (string.IsNullOrWhiteSpace(workspaceId))
+                throw new PluginException("project_chat_invalid", "Select a connected workspace.");
+            return _workspaces.OpenConnected(workspaceId);
         }
 
-        private PluginDataGrant RequireDataProject(string projectId)
-        {
-            var grant = CurrentDataProject();
-            if (grant == null || string.IsNullOrEmpty(projectId) || grant.ProjectId != projectId)
-                throw new PluginException("plugin_project_changed", "The selected data project changed. Open it again before continuing the chat.");
-            return grant;
-        }
+        private static ProjectChatProjectDto ProjectChatProject(WorkspaceConnection item)
+        { return new ProjectChatProjectDto { WorkspaceId = item.WorkspaceId, Name = item.Name,
+            RootPath = item.RootPath, Available = item.Available, Chats = item.Chats }; }
 
-        private static ProjectChatProjectDto ProjectChatProject(PluginDataGrant grant)
-        { return new ProjectChatProjectDto { ProjectId = grant.ProjectId, WorkspaceId = grant.DataWorkspaceId, Name = grant.Workspace.Name }; }
+        private static ProjectChatProjectDto ProjectChatProject(WorkspaceDescriptor workspace)
+        { return new ProjectChatProjectDto { WorkspaceId = workspace.WorkspaceId, Name = workspace.Name,
+            RootPath = workspace.RootPath, Available = true }; }
 
         public ProjectChatCatalogDto ProjectChats()
         {
             using (PluginStore.AcquireRuntimeUse(_paths))
             {
-            var grant = CurrentDataProject();
-            if (grant == null) return new ProjectChatCatalogDto { Chats = Array.Empty<ChatSessionHeader>() };
-            var chats = Conversations.ListSessions(grant.Workspace);
-            RequireDataProject(grant.ProjectId);
-            return new ProjectChatCatalogDto { Project = ProjectChatProject(grant), Chats = chats };
+                return new ProjectChatCatalogDto { Projects = Conversations.ListConnectedWorkspaces().Select(ProjectChatProject).ToArray() };
+            }
+        }
+
+        private static string ProjectRoot(ProjectConnectionRequest request)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.RootPath) || !Path.IsPathRooted(request.RootPath))
+                throw new PluginException("project_root_invalid", "Use a full path to the project folder.");
+            return Path.GetFullPath(request.RootPath);
+        }
+
+        public ProjectChatCatalogDto ConnectProjectWorkspace(ProjectConnectionRequest request)
+        {
+            using (PluginStore.AcquireRuntimeUse(_paths))
+            {
+                var workspace = _workspaces.ConnectProject(ProjectRoot(request), false);
+                var catalog = ProjectChats(); catalog.SelectedWorkspaceId = workspace.WorkspaceId;
+                return catalog;
+            }
+        }
+
+        public ProjectChatCatalogDto CreateProjectWorkspace(ProjectConnectionRequest request)
+        {
+            using (PluginStore.AcquireRuntimeUse(_paths))
+            {
+                var root = ProjectRoot(request);
+                if (Directory.Exists(root) || File.Exists(root))
+                    throw new PluginException("project_root_exists", "Choose a new folder for this workspace.");
+                var workspace = _workspaces.ConnectProject(root, true);
+                var catalog = ProjectChats(); catalog.SelectedWorkspaceId = workspace.WorkspaceId;
+                return catalog;
             }
         }
 
@@ -528,12 +546,11 @@ namespace RNAssistant.Application
             {
             if (request == null || string.IsNullOrWhiteSpace(request.SessionId))
                 throw new PluginException("project_chat_invalid", "A project chat is required.");
-            var grant = RequireDataProject(request.ProjectId);
-            var session = Conversations.GetSession(grant.Workspace, request.SessionId);
-            if (session == null) throw new PluginException("project_chat_missing", "The chat is not in the selected data project.");
-            var snapshot = Conversations.ReadState(grant.Workspace, session.Id);
-            RequireDataProject(request.ProjectId);
-            return new ProjectChatStateDto { Project = ProjectChatProject(grant), SessionId = session.Id,
+            var workspace = RequireProjectWorkspace(request.WorkspaceId);
+            var session = Conversations.GetSession(workspace, request.SessionId);
+            if (session == null) throw new PluginException("project_chat_missing", "The chat is not in this workspace.");
+            var snapshot = Conversations.ReadState(workspace, session.Id);
+            return new ProjectChatStateDto { Project = ProjectChatProject(workspace), SessionId = session.Id,
                 State = snapshot,
                 PendingId = session.LastRun?.KernelState?.Summary?.PendingConfirmation?.PendingId,
                 PendingTool = session.LastRun?.KernelState?.Summary?.PendingConfirmation?.Call?.Name,
@@ -547,11 +564,11 @@ namespace RNAssistant.Application
         {
             using (PluginStore.AcquireRuntimeUse(_paths))
             {
-            var grant = RequireDataProject(request?.ProjectId);
+            var workspace = RequireProjectWorkspace(request?.WorkspaceId);
             var title = string.IsNullOrWhiteSpace(request.Title) ? "Новый чат" : request.Title.Trim();
             if (title.Length > 200) throw new PluginException("project_chat_invalid", "The chat title is too long.");
-            var session = Conversations.CreateSession(grant.Workspace, title);
-            return ProjectChat(new ProjectChatRequest { ProjectId = request.ProjectId, SessionId = session.Id });
+            var session = Conversations.CreateSession(workspace, title);
+            return ProjectChat(new ProjectChatRequest { WorkspaceId = request.WorkspaceId, SessionId = session.Id });
             }
         }
 
@@ -559,8 +576,8 @@ namespace RNAssistant.Application
         {
             using (PluginStore.AcquireRuntimeUse(_paths))
             {
-            var grant = RequireDataProject(request?.ProjectId);
-            Conversations.RenameSession(grant.Workspace, request.SessionId, request.Title);
+            var workspace = RequireProjectWorkspace(request?.WorkspaceId);
+            Conversations.RenameSession(workspace, request.SessionId, request.Title);
             return ProjectChats();
             }
         }
@@ -569,9 +586,28 @@ namespace RNAssistant.Application
         {
             using (PluginStore.AcquireRuntimeUse(_paths))
             {
-            var grant = RequireDataProject(request?.ProjectId);
-            Conversations.DeleteSession(grant.Workspace, request.SessionId);
+            var workspace = RequireProjectWorkspace(request?.WorkspaceId);
+            if (!Conversations.DeleteSession(workspace, request.SessionId))
+                throw new PluginException("project_chat_missing", "The chat is not in this workspace.");
             return ProjectChats();
+            }
+        }
+
+        public ProjectChatCatalogDto DeleteProjectHistory(ProjectChatRequest request)
+        {
+            using (PluginStore.AcquireRuntimeUse(_paths))
+            {
+                var workspace = _workspaces.OpenConnectedHistory(request?.WorkspaceId);
+                var chats = Conversations.ListSessions(workspace);
+                if (chats.Any(item => {
+                    var lifecycle = Conversations.GetSession(workspace, item.Id)?.LastRun?.KernelState?.Summary?.Lifecycle;
+                    return lifecycle == RunLifecycle.Running || lifecycle == RunLifecycle.AwaitingConfirmation;
+                })) throw new PluginException("project_chat_busy", "Stop or resolve active project chats before deleting their history.");
+                foreach (var chat in chats)
+                    if (!Conversations.DeleteSession(workspace, chat.Id))
+                        throw new PluginException("project_chat_changed", "A project chat changed while deleting history. Refresh the tree.");
+                _workspaces.HideProject(workspace.WorkspaceId);
+                return ProjectChats();
             }
         }
 
@@ -580,14 +616,13 @@ namespace RNAssistant.Application
         {
             using (PluginStore.AcquireRuntimeUse(_paths))
             {
-            var grant = RequireDataProject(request?.ProjectId);
+            var workspace = RequireProjectWorkspace(request?.WorkspaceId);
             if (request.Input == null || request.Input.SessionId != request.SessionId)
                 throw new PluginException("project_chat_invalid", "The submitted chat identity changed.");
-            if (Conversations.GetSession(grant.Workspace, request.SessionId) == null)
-                throw new PluginException("project_chat_missing", "The chat is not in the selected data project.");
-            using (var linked = CancellationTokenSource.CreateLinkedTokenSource(token, grant.Lifetime.Token))
-                await Conversations.SubmitInputAsync(grant.Workspace, request.Input, settings, key,
-                    cancellationToken: linked.Token).ConfigureAwait(false);
+            if (Conversations.GetSession(workspace, request.SessionId) == null)
+                throw new PluginException("project_chat_missing", "The chat is not in this workspace.");
+            await Conversations.SubmitInputAsync(workspace, request.Input, settings, key,
+                cancellationToken: token).ConfigureAwait(false);
             return ProjectChat(request);
             }
         }
@@ -597,17 +632,14 @@ namespace RNAssistant.Application
         {
             using (PluginStore.AcquireRuntimeUse(_paths))
             {
-            var grant = RequireDataProject(request?.ProjectId);
-            var session = Conversations.GetSession(grant.Workspace, request.SessionId);
-            if (session == null) throw new PluginException("project_chat_missing", "The chat is not in the selected data project.");
+            var workspace = RequireProjectWorkspace(request?.WorkspaceId);
+            var session = Conversations.GetSession(workspace, request.SessionId);
+            if (session == null) throw new PluginException("project_chat_missing", "The chat is not in this workspace.");
             RNAssistant.Runtime.Contracts.WorkspaceCancellationReceipt cancellation = null;
-            using (var linked = CancellationTokenSource.CreateLinkedTokenSource(token, grant.Lifetime.Token))
-            {
-                if (cancel) cancellation = await Conversations.CancelRunAsync(grant.Workspace, new RNAssistant.Runtime.Contracts.WorkspaceRunControlRequest {
-                    SessionId = session.Id, RunId = request.RunId, Cursor = request.Cursor }, linked.Token).ConfigureAwait(false);
-                else await Conversations.ResolvePendingAsync(grant.Workspace, session.Id, request.PendingId, request.Approve,
-                    settings, key, cancellationToken: linked.Token, modelDigest: session.LastRun?.ModelConfiguration?.Digest).ConfigureAwait(false);
-            }
+            if (cancel) cancellation = await Conversations.CancelRunAsync(workspace, new RNAssistant.Runtime.Contracts.WorkspaceRunControlRequest {
+                SessionId = session.Id, RunId = request.RunId, Cursor = request.Cursor }, token).ConfigureAwait(false);
+            else await Conversations.ResolvePendingAsync(workspace, session.Id, request.PendingId, request.Approve,
+                settings, key, cancellationToken: token, modelDigest: session.LastRun?.ModelConfiguration?.Digest).ConfigureAwait(false);
             if (cancellation?.Status == RNAssistant.Runtime.Contracts.WorkspaceCancellationStatus.StaleState)
                 throw new PluginException("project_chat_stale", "The run changed. Refresh the chat before requesting cancellation again.");
             if (cancellation?.Status == RNAssistant.Runtime.Contracts.WorkspaceCancellationStatus.Unconfirmed)
