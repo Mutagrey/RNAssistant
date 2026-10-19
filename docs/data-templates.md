@@ -33,6 +33,10 @@ is required by the browser application.
 | Browser adapter | User-selected Files, browser execution/save capabilities and explicit limitations. No RNAssistant globals, path grants or native credentials. |
 | RNAssistant adapter | Agent workflow, generic workspace file/history owners, exact source capabilities, isolated execution and optional Office. The preparation queue supplies immutable inputs; it must not become another parser or business queue. |
 
+Package asset URLs must use exact manifest paths without cache-busting query strings.
+The isolated plugin host rejects query-bearing package GETs and serves assets with
+`Cache-Control: no-store`; release snapshots already provide version isolation.
+
 There is one application shell and one engine. `ui/browser.js` composes the same
 screens in a browser and a plugin iframe. `ui/plugin-adapter.js` selects the native
 scoped file handles/command service when the host is present. Browser file selection

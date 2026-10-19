@@ -42,8 +42,10 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
     let body;
     if(name==='.data/read/source'){const offset=Number(url.searchParams.get('offset')),count=Number(url.searchParams.get('count'));assert.ok(count<=262144);body=realm.input.subarray(offset,offset+count);}
     else if(name==='.result/write/out'||name==='.data/write/out'){const bytes=route.request().postDataBuffer();assert.ok(bytes.length<=262144);assert.equal(Number(url.searchParams.get('offset')),Buffer.concat(realm.output).length);realm.output.push(bytes);body=Buffer.alloc(0);}
-    else if(name.startsWith('.host/'))body=read('plugin-host/'+name.slice(6));
-    else body=realm.files(name);
+    else {
+      assert.equal(url.search,'','package assets use exact paths, as required by PluginWebViewHost');
+      body=name.startsWith('.host/')?read('plugin-host/'+name.slice(6)):realm.files(name);
+    }
     assert.ok(body,'manifest member '+name);
     await route.fulfill({status:200,body,contentType:name.endsWith('.html')?'text/html':name.endsWith('.js')?'text/javascript':name.endsWith('.css')?'text/css':'application/octet-stream',headers:{'Content-Security-Policy':"default-src 'none'; script-src 'self'; connect-src 'self'; worker-src 'self'; style-src 'self'"}});
   });
@@ -191,6 +193,14 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
     await page.locator('#pluginRail [data-plugin-id="example"]').waitFor();
     console.log('PASS plugins UI: create/check/preview/apply/update/disable, actual isolated Worker, desktop/narrow screenshots');
     const manifest=JSON.parse(read('data-templates/plugin.json')),members=new Set(manifest.files),files=name=>members.has(name)?read('data-templates/'+name):null;
+    const uiOrigin='https://templates-ui.rnassistant-plugin.invalid';
+    realms.set(uiOrigin,{origin:uiOrigin,files});
+    const templatePage=await context.newPage();
+    await templatePage.goto(uiOrigin+'/index.html');
+    await templatePage.waitForFunction(()=>typeof RNPlugin!=='undefined' && document.querySelector('.dt-header'));
+    assert.match(await templatePage.locator('body').evaluate(node=>getComputedStyle(node).fontFamily),/Segoe UI/,'base stylesheet loads inside the isolated plugin');
+    assert.equal(await templatePage.locator('button svg').first().evaluate(node=>getComputedStyle(node).width),'16px','button icons retain their intended size');
+    await templatePage.close();realms.delete(uiOrigin);
     const input=read('data-templates/core/examples/matrix-xlsx-extraction.json').toString();
     const inspected=JSON.parse(await execute(files,'inspect-template',JSON.stringify({input})));assert.equal(inspected.inspection.template.id,'production-form');
     const extracted=JSON.parse(await execute(files,'extract',JSON.stringify({input,sourcePath:'matrix-source.xlsx',templateName:'template.json',maximumBytes:10485760})));

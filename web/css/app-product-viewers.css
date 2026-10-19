@@ -10,7 +10,7 @@
 .product-viewer .rn-text-viewer-source { display: block; flex: 1; min-height: 0; max-height: none; overflow: auto; border: 0; border-radius: 0; background: transparent; }
 .product-viewer .rn-text-viewer-source pre { margin: 0; padding: 8px 0; border: 0; border-radius: 0; background: none; font: 14px/1.75 var(--font); white-space: pre-wrap; overflow-wrap: anywhere; }
 .product-viewer .rn-text-viewer-lines { display: none; }
-.product-viewer .rn-text-viewer-content { max-width: 780px; }
+.product-viewer .rn-text-viewer-content { width: 100%; max-width: none; }
 .product-viewer .rn-text-viewer-status { padding: 8px 10px; background: var(--warning-soft); color: var(--warning); border-radius: var(--radius-sm); font-size: 12px; }
 .product-viewer .rn-json-toolbar { display: flex; gap: 8px; padding: 0 0 10px; border-bottom: 1px solid var(--line); background: transparent; }
 .product-viewer .rn-json-toolbar .rn-json-modes { flex: 0 1 auto; }
@@ -26,7 +26,7 @@ html[data-theme] .product-viewer .rn-json-key { color: var(--syntax-key); }
 html[data-theme] .product-viewer .rn-json-string { color: var(--syntax-string); }
 html[data-theme] .product-viewer .rn-json-number { color: var(--syntax-number); }
 html[data-theme] .product-viewer :is(.rn-json-boolean, .rn-json-null) { color: var(--syntax-literal); }
-.product-viewer .rn-markdown-viewer { min-height: 0; max-width: 780px; margin-inline: auto; align-content: start; }
+.product-viewer .rn-markdown-viewer { min-height: 0; width: 100%; max-width: none; margin-inline: auto; align-content: start; }
 .product-viewer .rn-markdown-viewer h1 { font-size: 24px; margin: 12px 0 20px; }
 .product-viewer .rn-markdown-viewer h2 { font-size: 18px; margin: 22px 0 12px; }
 .product-viewer .rn-markdown-viewer p, .product-viewer .rn-markdown-viewer li { line-height: 1.8; margin-block: 12px; }

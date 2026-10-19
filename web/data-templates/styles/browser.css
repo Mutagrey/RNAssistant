@@ -19,7 +19,7 @@
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 body { margin: 0; }
-.data-templates { width: 100%; max-width: 1500px; margin: 0 auto; padding: 24px; }
+.data-templates { width: 100%; max-width: none; margin: 0 auto; padding: 24px; }
 .dt-embedded .data-templates { max-width: none; min-height: 100vh; padding: 20px; }
 .dt-embedded .dt-header, .dt-embedded .dt-navigation { display: none; }
 .dt-embedded #dtOperation[data-state="completed"] { display: none; }

@@ -687,7 +687,7 @@
 .message.assistant .markdown h3 { font-size: 1rem; margin: 14px 0 6px; }
 .message.assistant .markdown p { margin: 6px 0 9px; }
 
-.chat-run-notice { flex: 0 0 auto; width: min(780px, calc(100% - 36px)); margin: 0 auto 10px; }
+.chat-run-notice { flex: 0 0 auto; width: calc(100% - 36px); margin: 0 auto 10px; }
 .chat-notice-content { display: flex; gap: 10px; padding: 11px 13px; border-radius: var(--radius-sm, 10px); background: var(--warning-soft); color: var(--warning); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
 .chat-notice-content.is-danger { background: var(--danger-soft); color: var(--danger); }
 .chat-notice-content > svg { flex: 0 0 16px; width: 16px; height: 16px; margin-top: 2px; }

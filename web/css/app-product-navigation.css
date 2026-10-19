@@ -109,7 +109,7 @@
   .shell #tab-settings .settings-heading h2 { order: 2; color: var(--ink); font-size: 15px; }
   .shell #tab-settings .settings-heading p { order: 1; color: var(--ink-muted); font-size: 10px; }
   .shell #tab-settings .settings-actions-row { position: absolute; top: 8px; right: var(--page-inset); bottom: auto; z-index: 3; width: auto; margin: 0; padding: 0; border: 0; background: transparent; }
-  .shell #tab-settings .settings-page > :not(.settings-heading) { width: min(100%, 860px); margin-inline: auto; }
+  .shell #tab-settings .settings-page > :not(.settings-heading) { width: 100%; margin-inline: auto; }
   .shell #tab-settings .settings-page[data-settings-page="connection"] .form-grid { grid-template-columns: minmax(0, 1fr); gap: 14px; }
   .shell #tab-settings .product-settings-section { padding-top: 10px; }
   .shell #tab-settings .product-settings-section h3 { margin: 0 0 12px; color: var(--ink); font-size: 16px; }

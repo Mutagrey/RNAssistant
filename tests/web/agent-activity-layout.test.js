@@ -299,6 +299,12 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     await refreshed.locator(".agent-run-history-content").waitFor({ state: "visible" });
     await refreshed.locator(".agent-completed-actions > summary").first().click();
     const actionSummary = refreshed.locator(".agent-activity-toggle > summary").first();
+    for (const summary of [refreshed.locator('.agent-completed-actions > summary').first(), actionSummary]) {
+      assert.ok(await summary.evaluate(node => {
+        const caret = node.querySelector('.agent-run-history-caret, .agent-activity-caret');
+        return caret && node.getBoundingClientRect().right - caret.getBoundingClientRect().right >= 7;
+      }), 'hover area extends beyond the disclosure arrow');
+    }
     await actionSummary.click();
     await actionSummary.focus();
     await page.evaluate(() => refreshDisclosureFixture("after"));

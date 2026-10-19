@@ -31,7 +31,7 @@
 .shell #tab-chat .project-chat-suggest { display: flex; align-items: center; gap: 8px; margin-top: 20px; padding: 8px 12px; border: 0; border-radius: 9px; background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 600; }
 .shell #tab-chat .project-chat-suggest svg { width: 16px; height: 16px; }
 .shell #tab-chat .project-chat-control,
-.shell #tab-chat .project-chat-questions { width: min(780px, calc(100% - 36px)); margin: 0 auto 12px; padding: 14px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface-subtle); }
+.shell #tab-chat .project-chat-questions { width: calc(100% - 36px); margin: 0 auto 12px; padding: 14px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface-subtle); }
 .shell #tab-chat .project-chat-control pre { overflow-wrap: anywhere; white-space: pre-wrap; }
 .shell #tab-chat .project-chat-control button { margin-right: 8px; }
 .shell #tab-chat .project-chat-questions fieldset { margin: 0 0 10px; border: 0; }
@@ -75,11 +75,11 @@
   .shell #tab-chat .chat-workspace.inspector-transition.with-inspector .chat-inspector { transition: opacity var(--motion-fast) var(--motion-ease), visibility 0s, transform var(--motion-duration) var(--motion-ease); }
 }
 .shell #tab-chat .chatbar { flex-basis: 52px; min-height: 52px; margin: 0; padding: 0 var(--panel-toggle-inset); border-bottom-color: var(--line); }
-.shell #tab-chat .messages { padding: 22px max(28px, calc((100% - 720px) / 2)) 16px; }
+.shell #tab-chat .messages { padding: 22px var(--page-inset) 16px; }
 .shell #tab-chat .chat-utility-dock,
-.shell #tab-chat .agent-approval-dock { width: min(780px, calc(100% - 36px)); margin-inline: auto; }
+.shell #tab-chat .agent-approval-dock { width: calc(100% - 36px); margin-inline: auto; }
 .shell #tab-chat .composer {
-  width: min(780px, calc(100% - 36px));
+  width: calc(100% - 36px);
   min-height: 0;
   margin: 0 auto 18px;
   padding: 12px 12px 16px;

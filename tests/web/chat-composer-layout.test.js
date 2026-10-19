@@ -44,9 +44,20 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       bindComposerPickers(); bindContextInspectorActions(); bindDiagnosticsActions(); renderSendControls(); renderContextMeter();
     });
 
-    for (const width of [1100, 740, 360]) {
+    for (const width of [1800, 1100, 740, 360]) {
       await page.setViewportSize({ width, height: 760 });
       await page.evaluate(width => document.querySelector(".shell").classList.toggle("navigation-closed", width < 800), width);
+      if (width === 1800) {
+        const widths = await page.evaluate(() => {
+          const main = document.querySelector('#tab-chat .chat-main');
+          const messages = main.querySelector('.messages'), composer = main.querySelector('.composer');
+          const style = getComputedStyle(messages);
+          return { main: main.clientWidth, composer: composer.getBoundingClientRect().width,
+            content: messages.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) };
+        });
+        assert.ok(widths.content > widths.main - 60, 'transcript fills the central pane');
+        assert.ok(widths.composer > widths.main - 60, 'composer fills the central pane');
+      }
       for (const theme of ["light", "dark"]) {
         await page.evaluate(theme => { document.documentElement.dataset.theme = theme; RNAssistantAccents.apply("blue", false); }, theme);
         await page.locator("#composerAddButton").click();
@@ -120,7 +131,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     assert.equal(await page.locator("#chatRunNotice button").count(), 0, "unknown effects offer no automatic retry");
     await page.evaluate(() => { state.activeRunViewState = null; renderSendControls(); });
     assert.equal(await page.locator("#chatRunNotice").isVisible(), false, "next chat/run clears the notice");
-    console.log("PASS composer: menu and context tooltip fit 1100/740/360px; ring precedes plain model label, ping is absent");
+    console.log("PASS composer: menu and context tooltip fit 1800/1100/740/360px; ring precedes plain model label, ping is absent");
     assert.equal(await page.locator("#testModelConnectionButton").count(), 1,
       "manual model connection check remains in settings");
 
