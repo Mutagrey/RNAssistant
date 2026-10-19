@@ -225,25 +225,6 @@
               <input id="attachmentFileInput" type="file" multiple hidden>
             </div>
             <div class="composer-actions">
-              <details class="composer-picker composer-model-picker" id="chatModelPicker">
-                <summary class="composer-picker-trigger" id="chatModelButton" title="Модель чата" aria-label="Модель чата">
-                  <span class="composer-picker-trigger-label" id="chatModelButtonLabel">Модель</span>
-                  <svg data-rna-icon="down" class="composer-picker-trigger-caret" viewBox="0 0 16 16" aria-hidden="true"></svg>
-                </summary>
-                <div class="composer-picker-menu composer-model-menu" id="chatModelMenu" role="listbox" aria-label="Выбор модели чата"></div>
-              </details>
-              <div class="composer-tooltip-wrap" id="modelConnectionWrap">
-                <span class="model-connection-indicator is-idle" id="modelConnectionIndicator" role="img" tabindex="0" aria-label="Связь не проверена" aria-describedby="modelConnectionTooltip">
-                  <i aria-hidden="true"></i><span id="modelConnectionIndicatorText">—</span>
-                </span>
-                <div class="composer-tooltip" id="modelConnectionTooltip" role="tooltip" hidden>
-                  <strong>Связь с моделью</strong>
-                  <span id="modelConnectionSummary">Связь с моделью ещё не проверялась.</span>
-                </div>
-              </div>
-              <button type="button" class="composer-reasoning-button" id="chatReasoningToggle" title="Reasoning выключен" aria-label="Включить reasoning" aria-pressed="false">
-                <svg data-rna-icon="bulb" viewBox="0 0 24 24" aria-hidden="true"></svg>
-              </button>
               <div class="composer-tooltip-wrap" id="contextMeterWrap">
                 <button class="context-meter" id="contextMeter" type="button" data-level="unknown" aria-label="Контекстное окно" aria-describedby="contextMeterTooltip" aria-expanded="false" aria-controls="promptContextInspector">
                   <svg data-rna-icon="contextMeter" viewBox="0 0 24 24" aria-hidden="true"></svg>
@@ -253,6 +234,16 @@
                   <span id="contextMeterSummary">API ещё не сообщил число входных токенов</span>
                 </div>
               </div>
+              <details class="composer-picker composer-model-picker" id="chatModelPicker">
+                <summary class="composer-picker-trigger" id="chatModelButton" title="Модель чата" aria-label="Модель чата">
+                  <span class="composer-picker-trigger-label" id="chatModelButtonLabel">Модель</span>
+                  <svg data-rna-icon="down" class="composer-picker-trigger-caret" viewBox="0 0 16 16" aria-hidden="true"></svg>
+                </summary>
+                <div class="composer-picker-menu composer-model-menu" id="chatModelMenu" role="listbox" aria-label="Выбор модели чата"></div>
+              </details>
+              <button type="button" class="composer-reasoning-button" id="chatReasoningToggle" title="Reasoning выключен" aria-label="Включить reasoning" aria-pressed="false">
+                <svg data-rna-icon="bulb" viewBox="0 0 24 24" aria-hidden="true"></svg>
+              </button>
               <button type="submit" class="composer-send-button" id="sendButton" title="Отправить" aria-label="Отправить">
                 <svg data-rna-icon="send" class="composer-send-icon" viewBox="0 0 24 24" aria-hidden="true"></svg>
                 <svg data-rna-icon="check" class="composer-save-icon" viewBox="0 0 24 24" aria-hidden="true"></svg>

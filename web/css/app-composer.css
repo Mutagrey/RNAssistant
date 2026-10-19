@@ -375,21 +375,6 @@
   cursor: default;
 }
 
-.composer-picker-trigger-icon {
-  display: grid;
-  flex: 0 0 15px;
-  width: 15px;
-  height: 15px;
-  place-items: center;
-  color: #5d6b7d;
-  font-size: 12px;
-  line-height: 1;
-}
-
-.composer-picker-trigger-icon.model {
-  color: #7c5cc4;
-}
-
 .composer-picker-trigger-label {
   min-width: 0;
   max-width: 128px;
@@ -737,57 +722,6 @@
   justify-content: flex-end;
   min-width: 0;
   margin-top: 0;
-}
-
-.model-connection-indicator {
-  display: inline-flex;
-  flex: 0 0 auto;
-  gap: 5px;
-  align-items: center;
-  height: 32px;
-  padding: 0 4px;
-  border-radius: var(--control-radius);
-  color: var(--composer-muted);
-  font-size: 11px;
-  font-weight: var(--label-font-weight);
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-  cursor: help;
-  white-space: nowrap;
-}
-
-.model-connection-indicator:hover,
-.model-connection-indicator:focus-visible {
-  background: var(--composer-control-hover);
-}
-
-.model-connection-indicator:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 1px;
-}
-
-.model-connection-indicator i {
-  width: 6px;
-  height: 6px;
-  flex: 0 0 6px;
-  border-radius: 50%;
-  background: var(--composer-muted);
-}
-
-.model-connection-indicator.is-active i {
-  background: var(--accent);
-}
-
-.model-connection-indicator.is-slow i {
-  background: #d97706;
-}
-
-.model-connection-indicator.is-ok i {
-  background: var(--success);
-}
-
-.model-connection-indicator.is-failed i {
-  background: var(--danger);
 }
 
 .composer-reasoning-button,

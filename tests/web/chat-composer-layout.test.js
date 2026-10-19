@@ -35,8 +35,6 @@ async function assertAboveResources(page, selector) {
     await page.evaluate(() => {
       window.$ = id => document.getElementById(id);
       window.state = { activeChatId: "chat", activeChatMode: "agent", draftAttachments: [], settings: {},
-        modelDiagnostics: { Phase: "completed", Model: "Модель с длинным названием", PreparationMs: 150,
-          ResponseHeadersMs: 410, FirstChunkMs: 650, TotalMs: 2460, StatusCode: 200 },
         contextUsage: { lastPromptTokens: 118000, lastCompletionTokens: 500,
           lastTotalTokens: 118500, contextWindowTokens: 258000 } };
       window.currentActiveSend = () => state.sending ? {} : null;
@@ -95,45 +93,21 @@ async function assertAboveResources(page, selector) {
         await assertAboveResources(page, "#contextMeterTooltip");
         assert.match(await page.locator("#contextMeterSummary").textContent(), /Осталось 54%/);
         assert.equal(await page.locator("#contextMeter").textContent().then(t => t.trim()), "");
+        const ring = await page.locator("#contextMeter").boundingBox();
+        const model = await page.locator("#chatModelButton").boundingBox();
+        assert.ok(ring && model && ring.x + ring.width <= model.x && Math.abs(ring.y - model.y) < 2,
+          `context ring precedes the model on one row at ${width}px / ${theme}`);
+        assert.equal(await page.locator("#chatModelButtonLabel").textContent(), "Модель с длинным названием");
+        assert.equal(await page.locator("#chatModelButton .composer-picker-trigger-icon").count(), 0);
+        assert.equal(await page.locator("#chatModelButton").innerText(), "Модель с длинным названием");
+        assert.equal(await page.locator("#modelConnectionWrap").count(), 0);
         await page.keyboard.press("Escape");
         assert.equal(await page.locator("#contextMeterTooltip").isVisible(), false);
-        await page.locator("#modelConnectionIndicator").hover();
-        const connection = await page.locator("#modelConnectionTooltip").boundingBox();
-        assert.ok(connection && connection.x >= 0 && connection.x + connection.width <= width && connection.y >= 0,
-          `connection tooltip fits ${width}px / ${theme}`);
-        await assertAboveResources(page, "#modelConnectionTooltip");
-        assert.equal(await page.locator("#modelConnectionIndicator").getAttribute("title"), null);
-        assert.match(await page.locator("#modelConnectionSummary").textContent(), /API до заголовков: 260 мс/);
-        await page.locator("#modelConnectionTooltip").hover();
-        assert.equal(await page.locator("#modelConnectionTooltip").isVisible(), true, "pointer can enter the tooltip");
-        await page.locator("#contextMeter").hover();
-        assert.equal(await page.locator("#modelConnectionTooltip").isVisible(), false);
-        await page.keyboard.press("Escape");
       }
     }
-    console.log("PASS composer: menu, connection and context tooltips fit 1100/740/360px in both themes");
-
-    await page.locator("#modelConnectionIndicator").focus();
-    assert.equal(await page.locator("#modelConnectionTooltip").isVisible(), true);
-    await page.evaluate(() => {
-      state.modelDiagnostics = { Phase: "failed", Error: "<img src=x onerror=alert(1)>" + "Длинная ошибка API без пробелов".repeat(200) };
-      renderModelConnectionIndicator();
-    });
-    const longTooltip = await page.locator("#modelConnectionTooltip").boundingBox();
-    assert.ok(longTooltip.x >= 0 && longTooltip.x + longTooltip.width <= 360 && longTooltip.y >= 0,
-      "a live diagnostic update stays inside the viewport");
-    assert.equal(await page.locator("#modelConnectionSummary img").count(), 0);
-    assert.equal(await page.locator("#modelConnectionSummary").evaluate(node => node.scrollHeight > node.clientHeight), true,
-      "long diagnostics scroll inside the tooltip");
-    await page.keyboard.press("Escape");
-    assert.equal(await page.locator("#modelConnectionTooltip").isVisible(), false);
-    await page.locator("#modelConnectionIndicator").blur();
-    await page.evaluate(() => { state.modelDiagnostics = null; renderModelConnectionIndicator(); });
-    await page.locator("#modelConnectionIndicator").focus();
-    assert.match(await page.locator("#modelConnectionSummary").textContent(), /ещё не проверялась/);
-    await page.locator("#chatInput").focus();
-    assert.equal(await page.locator("#modelConnectionTooltip").isVisible(), false);
-    console.log("PASS connection tooltip: keyboard dismissal, live updates, bounded long errors and idle state");
+    console.log("PASS composer: menu and context tooltip fit 1100/740/360px; ring precedes plain model label, ping is absent");
+    assert.equal(await page.locator("#testModelConnectionButton").count(), 1,
+      "manual model connection check remains in settings");
 
     await page.evaluate(() => {
       state.settings.AutoConfirmToolActions = true; state.mutationPolicy = "Deny"; renderSendControls();

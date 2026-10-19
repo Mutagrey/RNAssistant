@@ -76,9 +76,6 @@ var state = {
   modelSaving: false,
   modeSaving: false,
   reasoningSaving: false,
-  modelDiagnostics: null,
-  modelDiagnosticsTimer: null,
-  modelDiagnosticsLocalStart: 0,
   bridgeUnavailable: false,
   selectedToolIndex: -1,
   selectedSkillIndex: -1,
@@ -444,12 +441,7 @@ if (window.chrome && window.chrome.webview) {
       failBridgeTransport(response, null);
       return;
     }
-    if (response && response.type === "modelDiagnostics") {
-      if (typeof handleModelDiagnosticsUpdate === "function") {
-        handleModelDiagnosticsUpdate(response.payload || {});
-      }
-      return;
-    }
+    if (response && response.type === "modelDiagnostics") return;
     if (response && response.type === "resourceChanged") {
       if (typeof handleResourceAuthorityChanged === "function") handleResourceAuthorityChanged(response);
       return;
