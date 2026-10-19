@@ -41,12 +41,15 @@ async function serve() {
       probe.style.cssText = "position:fixed;right:12px;bottom:12px;z-index:100";
       document.body.appendChild(probe);
     });
+    await page.waitForFunction(() => getComputedStyle(document.querySelector('#themePaletteProbe')).backgroundColor !== 'rgb(239, 239, 239)');
 
     const read = () => page.evaluate(() => {
       const color = selector => getComputedStyle(document.querySelector(selector)).backgroundColor;
       return {
         theme: document.documentElement.dataset.theme,
         accent: document.documentElement.dataset.accent,
+        canvas: getComputedStyle(document.documentElement).getPropertyValue('--canvas').trim(),
+        surface: getComputedStyle(document.documentElement).getPropertyValue('--surface').trim(),
         primary: color("#themePaletteProbe"),
         selected: color("#settingsNavTree .navigation-tree-row.selected"),
         sidebar: color("#tab-settings .settings-nav")
@@ -72,8 +75,10 @@ async function serve() {
       const green = results[theme].green;
       for (const accent of accents.slice(1)) {
         const value = results[theme][accent];
-        for (const property of ["primary", "primaryHover", "selected", "sidebar", "railHover"])
+        for (const property of ["primary", "primaryHover", "selected", "railHover"])
           assert.notEqual(value[property], green[property], theme + "/" + accent + ": " + property);
+        for (const property of ["canvas", "surface", "sidebar"])
+          assert.equal(value[property], green[property], theme + "/" + accent + ": neutral " + property);
       }
     }
     assert.notEqual(results.light.green.sidebar, results.dark.green.sidebar);
@@ -106,7 +111,7 @@ async function serve() {
     }));
     assert.equal(after.accent, "#007AAE");
     assert.notEqual(before.background, after.background);
-    console.log("PASS theme palette: 10 accents update buttons, hover, selection, surfaces and embedded Data Templates");
+    console.log("PASS theme palette: neutral surfaces, 10 accent controls and embedded Data Templates");
   } finally {
     if (browser) await browser.close();
     server.process.kill();

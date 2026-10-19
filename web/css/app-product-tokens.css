@@ -1,17 +1,17 @@
 /* One visual palette for the prototype and every product screen. */
 :root {
   color-scheme: light;
-  --canvas: color-mix(in srgb, var(--accent) 3%, #e9ece8);
+  --canvas: #eef0ef;
   --surface: #ffffff;
-  --surface-subtle: color-mix(in srgb, var(--accent) 3%, #f7f8f5);
-  --surface-hover: color-mix(in srgb, var(--accent) 9%, #eef1eb);
-  --surface-selected: color-mix(in srgb, var(--accent) 13%, #f7f8f5);
-  --ink: #202d26;
-  --ink-muted: #68736b;
-  --ink-faint: #788278;
+  --surface-subtle: #f7f8f7;
+  --surface-hover: color-mix(in srgb, var(--accent) 2%, #eff1ef);
+  --surface-selected: color-mix(in srgb, var(--accent) 5%, #edf0ee);
+  --ink: #252b28;
+  --ink-muted: #68716c;
+  --ink-faint: #7a837e;
   --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2368736b' stroke-width='1.55' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-  --line: #e1e6de;
-  --line-strong: #c7d0c4;
+  --line: #e2e6e3;
+  --line-strong: #c9d0cc;
   --palette-green: #35684b;
   --palette-blue: #355fba;
   --palette-violet: #7550ad;
@@ -20,7 +20,7 @@
   --accent: var(--palette-green);
   --accent-hover: color-mix(in srgb, var(--accent) 82%, var(--ink));
   --accent-ink: #ffffff;
-  --accent-soft: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  --accent-soft: color-mix(in srgb, var(--accent) 8%, var(--surface));
   --warning: #86571b;
   --success: #287348;
   --success-soft: #eaf5ed;
@@ -30,13 +30,13 @@
   --danger-ink: #ffffff;
   --info: #426683;
   --info-soft: #ecf2f7;
-  --code-bg: #f6f8f4;
+  --code-bg: #f7f8f7;
   --syntax-key: var(--palette-violet);
   --syntax-string: var(--palette-green);
   --syntax-number: var(--palette-blue);
   --syntax-literal: var(--palette-rose);
-  --scrim: #17271e55;
-  --shadow: 0 12px 40px #1a30201c;
+  --scrim: #1d242255;
+  --shadow: 0 12px 40px #2028251c;
   --focus: var(--accent);
   --font: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
   --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
@@ -60,8 +60,8 @@
   --page-inset: 18px;
   --list-width: 250px;
   --inspector-width: 292px;
-  --user-bubble-bg: color-mix(in srgb, var(--accent) 15%, var(--surface));
-  --user-bubble-text: color-mix(in srgb, var(--accent) 45%, var(--ink));
+  --user-bubble-bg: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  --user-bubble-text: color-mix(in srgb, var(--accent) 25%, var(--ink));
   --shimmer: #ffffffb3;
   --shimmer-peak: #14291e;
   --shimmer-duration: 2.2s;
@@ -71,21 +71,21 @@
 }
 html[data-theme="dark"] {
   color-scheme: dark;
-  --canvas: color-mix(in srgb, var(--accent) 3%, #151b17);
-  --surface: color-mix(in srgb, var(--accent) 2%, #202723);
-  --surface-subtle: color-mix(in srgb, var(--accent) 4%, #1b221e);
-  --surface-hover: color-mix(in srgb, var(--accent) 13%, #2c352e);
-  --surface-selected: color-mix(in srgb, var(--accent) 26%, #263129);
-  --ink: #e2e8df;
-  --ink-muted: #a5b0a4;
-  --ink-faint: #9ca698;
+  --canvas: #16181b;
+  --surface: #202328;
+  --surface-subtle: #1b1e22;
+  --surface-hover: color-mix(in srgb, var(--accent) 3%, #2a2f34);
+  --surface-selected: color-mix(in srgb, var(--accent) 8%, #2b3035);
+  --ink: #e5e7e8;
+  --ink-muted: #a8afb4;
+  --ink-faint: #99a2a8;
   --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a5b0a4' stroke-width='1.55' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-  --line: #354035;
-  --line-strong: #52604e;
+  --line: #353a3f;
+  --line-strong: #515960;
   --accent: #9bc8a5;
   --accent-hover: color-mix(in srgb, var(--accent) 82%, white);
   --accent-ink: #172c1d;
-  --accent-soft: color-mix(in srgb, var(--accent) 20%, var(--surface));
+  --accent-soft: color-mix(in srgb, var(--accent) 12%, var(--surface));
   --warning: #e5c18b;
   --success: #8bd4a2;
   --success-soft: #273c2d;
@@ -95,18 +95,18 @@ html[data-theme="dark"] {
   --danger-ink: #281614;
   --info: #adc8df;
   --info-soft: #2c3540;
-  --code-bg: #1c231e;
+  --code-bg: #1c2024;
   --syntax-key: #c7adf2;
   --syntax-string: #9bc8a5;
   --syntax-number: #a4bffc;
   --syntax-literal: #f0aec3;
-  --scrim: #060b08aa;
+  --scrim: #080a0daa;
   --shadow: 0 12px 40px #00000055;
   --shimmer: #d9eedb38;
   --shimmer-peak: #ffffff;
   --focus: var(--accent);
-  --user-bubble-bg: color-mix(in srgb, var(--accent) 24%, var(--surface));
-  --user-bubble-text: color-mix(in srgb, var(--accent) 40%, var(--ink));
+  --user-bubble-bg: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  --user-bubble-text: color-mix(in srgb, var(--accent) 18%, var(--ink));
 }
 
 /* The prototype sets its accent through data-accent; the product sets --accent in app-accent.js. */
@@ -150,7 +150,7 @@ html:not([data-ui-prototype]) {
   --button-primary-bg-hover: var(--accent-hover);
   --button-accent-bg: var(--accent-soft);
   --button-accent-bg-hover: var(--surface-selected);
-  --button-accent-border: color-mix(in srgb, var(--accent) 35%, var(--line));
+  --button-accent-border: color-mix(in srgb, var(--accent) 20%, var(--line));
   --button-danger-bg-hover: color-mix(in srgb, var(--danger) 82%, var(--ink));
   --button-danger-soft-bg: var(--danger-soft);
   --button-danger-soft-bg-hover: color-mix(in srgb, var(--danger) 16%, var(--surface));
