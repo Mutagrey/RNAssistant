@@ -1051,6 +1051,7 @@ namespace RNAssistant.Harness
                     "cleanup failure records unchanged session state");
                 var blocked = service.Execute(PackageExecution(source), CancellationToken.None);
                 AssertEqual("vba_session_cleanup_required", blocked.ErrorCode, "later run remains blocked");
+                AssertContains(blocked.Message, "Library > Tools", "blocked run explains where cleanup is available");
 
                 var recovery = service.RemoveOwned(new VbaPackageRemoveRequest { Source = source }, CancellationToken.None);
                 AssertEqual(VbaMutationOutcomeStatus.Ok, recovery.Status, "fresh explicit cleanup recovers orphan");

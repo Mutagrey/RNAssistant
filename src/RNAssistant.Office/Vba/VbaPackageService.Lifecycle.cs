@@ -197,7 +197,7 @@ namespace RNAssistant.Office.Vba
                 probe.Data != null && probe.Data.Value<bool?>("durableLifecycleIncomplete") == true)
             {
                 return VbaMutationOutcome.Error(
-                    "A previous temporary VBA lifecycle is incomplete. Run explicit Uninstall cleanup before persistent installation.",
+                    "A temporary VBA package from a previous run remains in the document. Open Library > Tools, select this tool, and click Remove from document before installing it.",
                     probe.Data,
                     "vba_session_cleanup_required",
                     false);
@@ -324,7 +324,7 @@ namespace RNAssistant.Office.Vba
                 probe.State == VbaPackageInstallationState.RecoveryRequired)
             {
                 return VbaMutationOutcome.Error(
-                    "A session-owned or ambiguously owned VBA package remains in the document. Macro execution is blocked until an explicit Tools > Uninstall cleanup succeeds.",
+                    "A temporary VBA package from a previous run remains in the document. Open Library > Tools, select this tool, and click Remove from document before running it again.",
                     probe.Data,
                     "vba_session_cleanup_required",
                     false);

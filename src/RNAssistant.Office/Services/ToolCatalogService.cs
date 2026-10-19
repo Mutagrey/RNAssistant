@@ -120,7 +120,7 @@ namespace RNAssistant.Office.Services
                         else if (existing.InstallationStatus == "session_cleanup_required" ||
                             existing.InstallationStatus == "recovery_required")
                         {
-                            existing.Limitations = "A temporary or ambiguously owned VBA package remains. Run explicit Uninstall cleanup before execution.";
+                            existing.Limitations = "A temporary VBA package from a previous run remains. Open Library > Tools, select this tool, and click Remove from document before running it again.";
                         }
                         continue;
                     }
