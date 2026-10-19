@@ -9,20 +9,6 @@
   min-height: 0;
 }
 
-.html-workspace-layout.is-sidebar-hidden {
-  grid-template-columns: minmax(0, 1fr);
-  gap: 0;
-}
-
-.html-workspace-layout.is-sidebar-hidden .html-workspace-sidebar,
-.html-workspace-layout.is-sidebar-hidden .splitter {
-  display: none;
-}
-
-.html-workspace-layout.is-sidebar-hidden .html-workspace-editor {
-  grid-column: 1;
-}
-
 .html-workspace-sidebar {
   grid-template-rows: auto auto minmax(0, 1fr);
   padding: 8px 8px 0 10px;
@@ -512,11 +498,6 @@
 
   .html-workspace-layout .splitter {
     display: none;
-  }
-
-  .html-workspace-layout.is-sidebar-hidden {
-    grid-template-columns: 1fr;
-    grid-template-rows: minmax(0, 1fr);
   }
 
   .html-workspace-tree {

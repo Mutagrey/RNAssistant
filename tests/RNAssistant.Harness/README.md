@@ -300,11 +300,11 @@ real-model quality claim.
 
 `node tests/web/skills-contract.test.js` and
 `node tests/web/skill-editor-resource.test.js` cover manifest transport and editor
-preservation. `tests/web/agent-arsenal.test.js` uses Playwright/Chromium with the
-shipped HTML/CSS. Set `BROWSER_EXECUTABLE` if the browser is not bundled and optional
-`LAYOUT_SCREENSHOT=/tmp/arsenal.png` for light/dark screenshots. It checks narrow
-panes, full scrollable tools, tabs/search/focus retention, restrictions and stale
-chat responses. These checks are not Windows/Office/WebView2 qualification.
+preservation. `tests/web/product-mock-preview.test.js` checks the real chat inspector's
+abilities view through the typed preview bridge; `product-shell-parity.test.js`
+checks the shared shell and navigation geometry. Use bundled Playwright through
+`NODE_PATH` and set `BROWSER_EXECUTABLE` if needed. These are not
+Windows/Office/WebView2 qualification.
 
 Unified-agent checks: `unified policy:` covers the permission matrix, prohibition
 before preparation, forged planning bindings, retired history byte preservation,

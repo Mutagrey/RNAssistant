@@ -18,7 +18,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       <div class="trajectory-workspace split-layout" id="trajectoryWorkspace" data-min-left="160" data-max-ratio="0.6">
       <div class="trajectory-events"><button class="trajectory-event"><span class="trajectory-event-line"><span class="trajectory-event-type">#103 agent.response.rejected</span></span><span class="trajectory-event-time">08.09.2026, 12:05:56</span></button></div>
       <div class="splitter"></div><div class="trajectory-detail"><strong>Технические события</strong><span>Данные события</span><div id="json" class="trajectory-json-host"></div></div></div></div></div>`);
-    for (const file of ["app-navigation-tree.js", "app-tree-adapter.js", "app-viewer-registry.js", "app-json-viewer.js", "app-layout.js"])
+    for (const file of ["app-icons.js", "app-navigation-tree.js", "app-tree-adapter.js", "app-viewer-registry.js", "app-json-viewer.js", "app-layout.js"])
       await page.addScriptTag({ content: read("js/" + file) });
     await page.evaluate(async () => {
       await RNAssistantTreeAdapter.mount(document.getElementById("tree"), { selectedKey: "plan", nodes: [

@@ -10,7 +10,6 @@ function sortedChatSessions(chats) {
 }
 
 function renderChatSessions() {
-  if (window.RNAssistantArsenal) window.RNAssistantArsenal.sync();
   if (typeof isPanelActive === "function" && !isPanelActive("chat")) return;
   var select = $("chatSessionSelect");
   if (!select) {
@@ -53,18 +52,16 @@ function renderChatSessions() {
   $("openDocumentButton").hidden = isCurrentDocument || !chatDocumentPath(activeChat);
 
   var hasActive = !!state.activeChatId;
-  var hasMessages = state.messageTotalCount > 0 || !!(state.messages && state.messages.length);
   var compactableMessages = (state.messages || []).filter(function (message) {
     return !messageActivity(message);
   }).length;
   $("newChatButton").disabled = !!state.bridgeUnavailable;
-  $("clearChatButton").disabled = !hasActive || !hasMessages || !!currentActiveSend();
-  $("clearChatButton").hidden = !hasActive || !hasMessages;
   if ($("compactContextButton")) {
     $("compactContextButton").disabled = !hasActive || compactableMessages < 3 || !!currentActiveSend();
     $("compactContextButton").hidden = !hasActive || compactableMessages < 3;
   }
   renderSendControls();
+  if (window.RNAssistantChatInspector) window.RNAssistantChatInspector.render();
 }
 
 function activeChatSummary() {
@@ -424,7 +421,6 @@ function renderChatSessionList(chats) {
   var selectionChanged = list.dataset.selectedChatId !== (state.activeChatId || "");
   list.dataset.selectedChatId = state.activeChatId || "";
   list.innerHTML = "";
-  renderChatTreeControls();
   var query = (state.chatSearch || "").trim().toLowerCase();
   if (launchMount !== list) launchMount.innerHTML = "";
   renderOfficeHostLaunchRows(launchMount);
@@ -553,9 +549,9 @@ function renderOfficeHostLaunchRows(list) {
   });
   var heading = document.createElement("summary");
   heading.className = "chat-office-launch-heading";
-  heading.innerHTML = "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 5v14M5 12h14\"/></svg>" +
+  heading.innerHTML = window.RNAssistantIcons.render("plus") +
     "<span>Новый документ Office</span>" +
-    "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"m6 9 6 6 6-6\"/></svg>";
+    window.RNAssistantIcons.render("down");
   group.appendChild(heading);
 
   var unavailable = officeHostChatUnavailableReason();
@@ -650,23 +646,6 @@ function chatTreeNode(chat) {
   };
 }
 
-function renderChatTreeControls() {
-  var layout = $("chatLayout");
-  var sidebarButton = $("toggleChatSidebarButton");
-  if (layout) {
-    layout.classList.toggle("is-sidebar-hidden", !!state.chatSidebarHidden);
-  }
-  if (sidebarButton) {
-    var label = state.chatSidebarHidden ? "Показать список" : "Скрыть список";
-    sidebarButton.title = label;
-    sidebarButton.setAttribute("aria-label", label);
-    sidebarButton.setAttribute("aria-pressed", state.chatSidebarHidden ? "true" : "false");
-    sidebarButton.innerHTML = state.chatSidebarHidden
-      ? "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"m10 6 6 6-6 6\"/></svg>"
-      : "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"m14 6-6 6 6 6\"/></svg>";
-  }
-}
-
 function documentHostClass(host) {
   var values = { Excel: " is-host-excel", Word: " is-host-word", PowerPoint: " is-host-powerpoint", Outlook: " is-host-outlook" };
   return values[host] || " is-host-generic";
@@ -680,7 +659,7 @@ function documentHostIcon(host) {
       "<span class=\"office-app-tile\">" + letters[host] + "</span>" +
       "</span>";
   }
-  return "<svg class=\"office-generic-document\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M6 3h9l3 3v15H6zM15 3v4h4\"/></svg>";
+  return window.RNAssistantIcons.render("document", "office-generic-document");
 }
 
 function formatChatStorageBytes(value) {

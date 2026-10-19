@@ -30,7 +30,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
         "bindAttachmentActions", "createChat", "clearChat", "compactChatContext", "openActiveDocument",
         "cancelMessageEdit", "renderContext", "renderContextMeter", "renderModelControls", "renderAttachmentDrafts",
         "setComposerPickerDisabled", "logOnce", "log"]) window[name] = () => {};
-      $("chatLayout").classList.add("is-sidebar-hidden");
+      document.querySelector(".shell").classList.add("navigation-closed");
     });
     for (const file of ["vendor/purify.min.js", "vendor/marked.min.js", "vendor/highlight.min.js", "app-utils.js",
       "app-markdown.js", "app-run-view-state.js", "app-agent-model.js", "app-agent.js", "app-agent-activity.js",

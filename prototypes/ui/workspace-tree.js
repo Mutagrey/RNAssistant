@@ -8,20 +8,19 @@
     s.treeSearchOpen = false;
     s.treeSearch = "";
     s.collapsedParents = { "office-budget": true, "office-notes": true, "project-budget": true };
-    s.parents = [
-      { id: "office-sales", scope: "office", name: P.fixtures.document, host: "Excel", open: true },
-      { id: "office-budget", scope: "office", name: "Бюджет · IV квартал.xlsx", host: "Excel", open: false },
-      { id: "office-notes", scope: "office", name: "Заметки к отчёту.docx", host: "Word", open: true },
+    s.parents = P.fixtures.officeExamples.map(function (example) {
+      return { id: example.id, scope: "office", name: example.name, host: example.host, open: example.open };
+    }).concat([
       { id: "project-reports", scope: "projects", name: "Управленческая отчётность", path: "C:\\Projects\\Reports" },
       { id: "project-budget", scope: "projects", name: "Бюджет 2027", path: "C:\\Projects\\Budget" }
-    ];
+    ]);
     s.chats.sales.scope = "office"; s.chats.sales.parent = "office-sales";
     s.chats.sales.attachments = s.attachments;
     s.chats.summary.scope = "office"; s.chats.summary.parent = "office-sales";
     s.chats.summary.document = P.fixtures.document;
     [
-      ["budget", "План бюджета", "office-budget", "office"],
-      ["notes", "Обсуждение отчёта", "office-notes", "office"],
+      ["budget", P.fixtures.officeExamples[1].chats[0].title, "office-budget", "office"],
+      ["notes", P.fixtures.officeExamples[2].chats[0].title, "office-notes", "office"],
       ["project-review", "Подготовка отчёта", "project-reports", "projects"],
       ["project-clean", "Проверка источников", "project-reports", "projects"],
       ["project-plan", "Планирование бюджета", "project-budget", "projects"]

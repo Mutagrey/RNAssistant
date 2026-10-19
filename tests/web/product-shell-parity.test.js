@@ -34,7 +34,6 @@ const { chromium } = require("playwright");
       ['.rail-button[data-tab="artifacts"]', "#htmlWorkspaceLayout", ".artifact-catalog-toolbar", ".artifact-overview-heading"],
       ["#libraryRootTab", "#instructionsLayout", ".product-nav-heading", ".instruction-editor-content:not(.hidden) .resource-editor-head"],
       ['.rail-button[data-tab="vba"]', "#vbaLayout", ".product-nav-heading", ".vba-editor-head"],
-      ['.rail-button[data-tab="workspace"]', ".workspace-projects", ".dt-nav-heading", ".dt-header"],
       ['.rail-button[data-tab="settings"]', "#settingsLayout", ".settings-nav-heading", ".settings-page.active .settings-heading"]
     ];
     for (const [button, layout, nav, main] of sections) {
@@ -46,7 +45,7 @@ const { chromium } = require("playwright");
           assertNode(node, selector);
           const box = node.getBoundingClientRect(), style = getComputedStyle(node);
           return { x: box.x, y: box.y, width: box.width, height: box.height,
-            borderWidth: style.borderBottomWidth, borderColor: style.borderBottomColor };
+            paddingLeft: style.paddingLeft, borderWidth: style.borderBottomWidth, borderColor: style.borderBottomColor };
         };
         function assertNode(node, selector) { if (!node) throw new Error("Missing visible " + selector); }
         const split = root.querySelector(":scope > .splitter").getBoundingClientRect();
@@ -65,6 +64,13 @@ const { chromium } = require("playwright");
       assert.equal(geometry.split.x, geometry.nav.x + geometry.nav.width, name + " divider joins nav");
       assert.equal(geometry.split.width, reference.splitWidth);
       assert.equal(geometry.main.x, geometry.split.x + geometry.split.width, name + " main joins divider");
+      const toggle = await page.locator("#productMobileMenuButton").evaluate(element => {
+        const box = element.getBoundingClientRect();
+        return { x: box.x, y: box.y, display: getComputedStyle(element).display };
+      });
+      assert.equal(toggle.display, "grid", name + " keeps the navigation toggle beside the title");
+      assert.equal(toggle.x, geometry.main.x + 18, name + " aligns the toggle with the title inset");
+      assert.equal(geometry.main.paddingLeft, "62px", name + " reserves the shared title gap");
     }
 
     await page.locator('.rail-button[data-tab="artifacts"]').click();
@@ -80,18 +86,63 @@ const { chromium } = require("playwright");
     await page.locator("#skillSearchInput").press("Escape");
     assert.equal(await page.locator("#skillSearchInput").isVisible(), false);
 
-    await page.locator('.rail-button[data-tab="workspace"]').click();
-    assert.equal(await page.locator(".dt-nav-leaf .navigation-tree-icon svg").count(), 7,
-      "project leaves use demo SVG icons");
-    await page.locator("#dtNavProjectToggle").click();
-    assert.equal(await page.locator('#dtNavTree > ul > li > ul').isVisible(), false);
-    await page.locator("#dtNavProjectToggle").click();
-    await page.locator("#dtNavSearchToggle").click();
-    await page.locator("#dtNavSearch").fill("рез");
-    assert.deepEqual(await page.locator(".dt-nav-leaf:visible").allTextContents(), ["Результаты"]);
-    await page.locator("#dtNavSearch").press("Escape");
-    assert.equal(await page.locator(".dt-nav-leaf:visible").count(), 7);
+    await page.locator("#libraryRootTab").click();
+    await page.locator("#instructionsLayout > .splitter").focus();
+    await page.keyboard.press("Home");
+    await page.locator("#instructionsLayout > .global-nav").waitFor({ state: "hidden" });
+    assert.equal(await page.locator("#instructionsLayout > .global-nav").isVisible(), false);
+    await page.locator('.rail-button[data-tab="settings"]').click();
+    await page.locator("#settingsLayout > .global-nav").waitFor({ state: "hidden" });
+    assert.equal(await page.locator("#settingsLayout > .global-nav").isVisible(), false,
+      "one navigation preference applies to every section");
+    await page.locator("#productMobileMenuButton").click();
+    await page.locator("#settingsLayout > .global-nav").waitFor({ state: "visible" });
+    await page.waitForFunction(() => document.querySelector("#settingsLayout > .global-nav").getBoundingClientRect().width === 290);
+    assert.equal(await page.locator("#settingsLayout > .global-nav").isVisible(), true);
+    await page.setViewportSize({ width: 700, height: 760 });
+    await page.waitForFunction(() => document.querySelector(".shell").classList.contains("navigation-compact"));
+    assert.equal(await page.locator(".shell").evaluate(element => element.classList.contains("navigation-transition")), true,
+      "resizing into compact animates the navigation collapse");
+    const resizePositions = await page.evaluate(async () => {
+      const main = document.querySelector("#settingsLayout .settings-pages"), positions = [];
+      for (let frame = 0; frame < 8; frame += 1) {
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        positions.push(Math.round(main.getBoundingClientRect().left));
+      }
+      return positions;
+    });
+    assert.ok(new Set(resizePositions).size > 2, "the central panel moves through intermediate positions on resize");
+    await page.locator("#settingsLayout > .global-nav").waitFor({ state: "hidden" });
+    assert.equal(await page.locator("#settingsLayout > .global-nav").isVisible(), false);
+    const menuOffsets = await page.evaluate(async () => {
+      const button = document.getElementById("productMobileMenuButton");
+      const main = document.querySelector("#settingsLayout .settings-pages");
+      const offsets = [];
+      button.click();
+      for (let frame = 0; frame < 16; frame += 1) {
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        offsets.push(Math.abs(button.getBoundingClientRect().left - main.getBoundingClientRect().left - 18));
+      }
+      return offsets;
+    });
+    assert.ok(Math.max(...menuOffsets) < 2, "navigation button follows the moving main header");
+    await page.locator("#settingsLayout > .global-nav").waitFor({ state: "visible" });
+    await page.waitForFunction(() => document.querySelector("#settingsLayout > .global-nav").getBoundingClientRect().width === 290);
+    assert.equal(await page.locator("#settingsLayout > .global-nav").isVisible(), true);
+    assert.equal(await page.locator("#settingsLayout > .global-nav").evaluate(element => element.getBoundingClientRect().width), 290);
+    await page.setViewportSize({ width: 390, height: 760 });
+    await page.waitForFunction(() => document.querySelector(".shell").classList.contains("navigation-single"));
+    assert.equal(await page.locator(".section-rail").isVisible(), false);
+    for (const [button, , , main] of sections) {
+      await page.evaluate(selector => document.querySelector(selector).click(), button);
+      const inset = await page.evaluate(selector => {
+        const heading = Array.from(document.querySelectorAll(".panel.active " + selector))
+          .find(element => element.getBoundingClientRect().height);
+        return heading && getComputedStyle(heading).paddingLeft;
+      }, main);
+      assert.equal(inset, "56px", button + " keeps the title clear of the toggle in single-pane mode");
+    }
     assert.deepEqual(errors, []);
-    console.log("PASS product shell: demo palette and joined 52px headers in all six sections; project tree icons/search/collapse");
+    console.log("PASS product shell: demo palette, joined built-in headers and shared navigation collapse");
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

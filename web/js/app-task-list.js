@@ -161,7 +161,7 @@
     var icon = document.createElement("span");
     icon.className = "agent-plan-icon";
     icon.setAttribute("aria-hidden", "true");
-    icon.innerHTML = "<svg viewBox=\"0 0 24 24\"><rect x=\"4\" y=\"3\" width=\"16\" height=\"18\" rx=\"2\"/><path d=\"m8 9 1.5 1.5L12 8\"/><path d=\"M14 9h3\"/><path d=\"m8 15 1.5 1.5L12 14\"/><path d=\"M14 15h3\"/></svg>";
+    icon.innerHTML = window.RNAssistantIcons.render("plan");
     var label = document.createElement("span");
     label.className = "agent-plan-label";
     label.textContent = "Задачи";

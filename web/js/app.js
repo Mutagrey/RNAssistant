@@ -1,11 +1,5 @@
 function setMobileNavigationOpen(open) {
-  var shell = document.querySelector(".shell");
-  var button = $("productMobileMenuButton");
-  if (!shell || !button) return;
-  shell.classList.toggle("navigation-open", !!open);
-  button.setAttribute("aria-expanded", open ? "true" : "false");
-  button.setAttribute("aria-label", open ? "Закрыть навигацию" : "Открыть навигацию");
-  button.setAttribute("title", open ? "Закрыть навигацию" : "Открыть навигацию");
+  if (window.RNAssistantShellLayout) window.RNAssistantShellLayout.setNavigationOpen(open);
 }
 
 function bindProductNavSearches() {
@@ -54,7 +48,7 @@ function bindProductNavSearches() {
 }
 
 function switchTab(name) {
-  setMobileNavigationOpen(false);
+  if (window.RNAssistantShellLayout && window.RNAssistantShellLayout.mode() !== "wide") setMobileNavigationOpen(false);
   if ($("tab-instructions") && $("tab-instructions").classList.contains("active") && name !== "instructions" && typeof syncSelectedLibraryItem === "function") {
     syncSelectedLibraryItem();
   }
@@ -75,6 +69,11 @@ function switchTab(name) {
   Array.prototype.slice.call(document.querySelectorAll(".panel")).forEach(function (panel) {
     panel.classList.toggle("active", panel.id === "tab-" + name);
   });
+  var selectedPanel = document.getElementById("tab-" + name);
+  if (changed && selectedPanel && document.querySelector(".shell.layout-ready") &&
+      !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    selectedPanel.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 140, easing: "cubic-bezier(.2, .8, .2, 1)" });
+  }
   if (typeof activateCodeEditorsForTab === "function") {
     activateCodeEditorsForTab(name);
   }
@@ -104,13 +103,15 @@ function switchTab(name) {
 }
 
 document.addEventListener("DOMContentLoaded", function () {
+  var chatScopeIcon = document.getElementById("chatScopeIcon");
+  if (chatScopeIcon) chatScopeIcon.innerHTML = window.RNAssistantNavigationTree.icon("office");
   var mobileMenuButton = document.getElementById("productMobileMenuButton");
-  if (mobileMenuButton) mobileMenuButton.addEventListener("click", function () {
-    setMobileNavigationOpen(!document.querySelector(".shell").classList.contains("navigation-open"));
-  });
-  window.addEventListener("resize", function () {
-    if (window.innerWidth > 620) setMobileNavigationOpen(false);
-  });
+  if (mobileMenuButton) {
+    mobileMenuButton.innerHTML = window.RNAssistantNavigationTree.icon("panelLeft");
+    mobileMenuButton.addEventListener("click", function () {
+      setMobileNavigationOpen(!window.RNAssistantShellLayout.isNavigationOpen());
+    });
+  }
   document.querySelector(".content").addEventListener("click", function (event) {
     var creationMenu = event.target.closest(".product-create-menu, .product-material-menu");
     if (creationMenu && event.target.closest("button")) {
@@ -124,21 +125,12 @@ document.addEventListener("DOMContentLoaded", function () {
     }
     var treeItem = event.target.closest(".global-nav [role='treeitem']");
     var treeControl = event.target.closest(".navigation-tree-expander, .tree-action");
-    if (window.innerWidth <= 620 && document.querySelector(".shell").classList.contains("navigation-open") &&
+    if (window.innerWidth <= 820 && document.querySelector(".shell").classList.contains("navigation-open") &&
         (event.target.closest(".global-nav .dt-tabs button") ||
           (treeItem && !treeControl))) {
       setMobileNavigationOpen(false);
     }
   });
-  try {
-    state.chatSidebarHidden = window.localStorage.getItem("rnassistant.chat.sidebar.hidden") === "1";
-    state.htmlWorkspaceSidebarHidden = window.localStorage.getItem("rnassistant.artifacts.sidebar.hidden") === "1";
-    state.vbaSidebarHidden = window.localStorage.getItem("rnassistant.vba.sidebar.hidden") === "1";
-  } catch (error) {
-    state.chatSidebarHidden = false;
-    state.htmlWorkspaceSidebarHidden = false;
-    state.vbaSidebarHidden = false;
-  }
   ["focusin", "focusout", "selectionchange", "mouseup", "keyup"].forEach(function (name) {
     document.addEventListener(name, scheduleFocusStateReport);
   });
@@ -169,6 +161,7 @@ document.addEventListener("DOMContentLoaded", function () {
   bindToolActions();
   bindSkillActions();
   bindProductNavSearches();
+  if (window.RNAssistantChatInspector) window.RNAssistantChatInspector.bind();
   if (typeof initializeSplitPanes === "function") {
     initializeSplitPanes();
   }

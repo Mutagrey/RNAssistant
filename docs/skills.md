@@ -117,20 +117,18 @@ The Library reader validates the published supporting-file basename for all thre
 allowed directories (`references`, `scripts`, `assets`); it does not strip a fixed
 `references/` prefix from every path.
 
-### Arsenal in chat
+### Agent abilities in the chat inspector
 
-The header button opens a compact panel with **Навыки** and **Инструменты** tabs,
-search, selected statuses, shared-tool relationships and collapsed supporting and
-technical details. Other published skills are rendered when their section opens.
-Current, prepared, pending and historical states are labelled separately; the
-permission line does not grant access. Base tools remain visible without skills.
+The chat header has one right-panel toggle. Its **Возможности агента** view shows
+selected skills, callable tools and explicit availability/restriction information;
+editing remains in the Library. The former standalone Arsenal popover and its
+header button have been removed.
 
 `getAgentArsenal` returns typed `rnassistant.agentArsenal` v1 metadata from the run,
-`ContextReceipt.Arsenal` and published metadata. Opening, searching or expanding
-never executes or selects anything. Closed panels request summary counts; open
-panels preserve the active tab, query, disclosures, focus and scroll. Late responses
-from another chat are discarded. The panel follows application themes and font
-scaling, supports keyboard tabs, Escape and closing by clicking outside.
+`ContextReceipt.Arsenal` and published metadata. The inspector requests details
+only when its abilities view opens; the read never executes or selects anything.
+Late responses from another chat or revision are discarded. The right panel
+shares the prototype's width, view switcher and responsive presentation.
 
 ### Independent workspace runtime
 

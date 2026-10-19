@@ -65,6 +65,43 @@ async function serve() {
       chatId: "preview-chat", runId: "preview-run-initial"
     })), { chatId: "preview-chat", runId: "preview-run-initial", complete: true, items: [] });
     assert.equal(await normal.locator("#chatSessionList [data-tree-key='chat:preview-chat']").count(), 1);
+    assert.equal(await normal.locator("#chatSessionList [data-tree-key='chat:preview-summary']").count(), 1);
+    assert.equal(await normal.locator("#agentArsenalButton, #clearChatButton").count(), 0,
+      "chat header only keeps the demo's inspector action");
+    assert.equal(await normal.locator("#productMobileMenuButton svg").count(), 1);
+    assert.equal(await normal.locator("#toggleChatInspectorButton svg").count(), 1);
+    assert.equal(await normal.locator("#productMobileMenuButton").isVisible(), true,
+      "the central heading keeps its navigation button at wide widths");
+    assert.equal(await normal.locator("#chatScopeIcon svg").count(), 1);
+    const railIcons = await normal.evaluate(() => {
+      const center = selector => {
+        const rect = document.querySelector(selector).getBoundingClientRect();
+        return rect.left + rect.width / 2;
+      };
+      return [center('.section-rail [data-section="chat"] svg'),
+        center('#pluginRail [data-plugin-id="data-templates"] svg')];
+    });
+    assert.equal(railIcons[0], railIcons[1], "plugin icon uses the same rail alignment as built-in sections");
+    await normal.locator("#toggleChatInspectorButton").click();
+    await normal.locator("#chatInspector").waitFor({ state: "visible" });
+    await normal.waitForFunction(() => Math.abs(document.getElementById("chatInspector").getBoundingClientRect().width - 292) < 0.5);
+    assert.equal(await normal.locator("#chatInspector").isVisible(), true);
+    assert.equal(await normal.locator("#productMobileMenuButton").isVisible(), true,
+      "the left navigation button remains visible beside the chat title with the inspector open");
+    assert.match(await normal.locator("#chatInspectorBody").textContent(), /Продажи · сентябрь\.xlsx/);
+    const inspectorGeometry = await normal.evaluate(() => {
+      const main = document.querySelector("#chatDropZone").getBoundingClientRect();
+      const divider = document.querySelector("#chatInspectorSplitter").getBoundingClientRect();
+      const panel = document.querySelector("#chatInspector").getBoundingClientRect();
+      return { joined: Math.abs(main.right - divider.left) < 1 && Math.abs(divider.right - panel.left) < 1,
+        header: document.querySelector("#chatInspector .chat-inspector-head").getBoundingClientRect().height };
+    });
+    assert.deepEqual(inspectorGeometry, { joined: true, header: 52 });
+    await normal.locator("#chatInspectorSwitcher summary").click();
+    await normal.locator('[data-chat-inspector-view="abilities"]').click();
+    assert.match(await normal.locator("#chatInspectorBody").textContent(), /excel\.sales_analysis/);
+    await normal.locator("#toggleChatInspectorButton").click();
+    await normal.locator("#chatInspector").waitFor({ state: "hidden" });
     const progress = [];
     await normal.evaluate(() => {
       window.__previewProgress = [];
@@ -83,6 +120,23 @@ async function serve() {
     assert.equal(await normal.locator("#chatInput").inputValue(), "");
     await normal.locator('.section-rail [data-section="library"]').click();
     await normal.locator('#instructionsList [data-tree-key="skill:0"]').click();
+    async function libraryEdges() {
+      return normal.evaluate(() => {
+        const nav = document.querySelector("#instructionsLayout > .global-nav .product-nav-heading").getBoundingClientRect();
+        const header = document.querySelector("#instructionsLayout .library-editor-pane:not(.hidden) > .resource-editor-head").getBoundingClientRect();
+        const tabs = document.querySelector("#instructionsLayout .library-editor-pane:not(.hidden) > :is(.rna-editor-tabs, .library-editor-mode-row)").getBoundingClientRect();
+        const divider = document.querySelector("#instructionsLayout > .splitter").getBoundingClientRect();
+        return { navBottom: nav.bottom, headerBottom: header.bottom, navEnd: nav.right,
+          headerStart: header.left, headerEnd: header.right, mainStart: divider.right,
+          tabsStart: tabs.left, tabsEnd: tabs.right, tabsTop: tabs.top };
+      });
+    }
+    const skillEdges = await libraryEdges();
+    assert.equal(skillEdges.navBottom, skillEdges.headerBottom);
+    assert.equal(skillEdges.headerStart, skillEdges.mainStart);
+    assert.equal(skillEdges.tabsStart, skillEdges.mainStart);
+    assert.equal(skillEdges.tabsEnd, skillEdges.headerEnd);
+    assert.equal(skillEdges.tabsTop, skillEdges.headerBottom);
     assert.equal(await normal.locator("#skillEditorPanel .rna-editor-tabs.skill-page-tabs").count(), 1);
     assert.equal(await normal.locator("#skillActionsMenu.rna-action-menu .rna-action-menu-body > button svg").count(), 4);
     assert.equal(await normal.locator('.skill-page-tabs [data-skill-page="instruction"][aria-current="page"]').count(), 1);
@@ -135,11 +189,14 @@ async function serve() {
     assert.match(await normal.evaluate(() => getCodeEditorValue("skillBodyInput")), /# details/);
     assert.equal(await normal.locator("#skillForm.rna-skill-fields").count(), 1);
     await normal.locator('#instructionsList [data-tree-key="tool:0"]').click();
+    assert.deepEqual(await libraryEdges(), skillEdges, "tool and skill use one full-width editor grid");
     assert.equal(await normal.locator("#toolEditorPanel .rna-editor-tabs.tool-page-tabs").count(), 1);
     assert.equal(await normal.locator("#toolActionsMenu .rna-action-menu-check #toolEnabledInput").count(), 1);
     await normal.locator('.tool-page-tabs [data-tool-page="schema"]').click();
     assert.equal(await normal.locator('.tool-page-tabs [data-tool-page="schema"][aria-current="page"]').count(), 1);
     assert.equal(await normal.locator('[data-tool-page-view="schema"]').isVisible(), true);
+    await normal.locator('#instructionsList [data-tree-key="prompt:0"]').click();
+    assert.deepEqual(await libraryEdges(), skillEdges, "instruction header and controls meet the tree line");
     await normal.locator('.section-rail [data-section="vba"]').click();
     assert.equal(await normal.locator("#tab-vba .rna-editor-tabs.vba-mode-toggle").count(), 1);
     await normal.locator("#refreshVbaEmptyButton").click();
@@ -151,31 +208,51 @@ async function serve() {
     assert.equal(await normal.locator('[data-vba-view="diff"]').isVisible(), true);
     await normal.locator('.section-rail [data-section="artifacts"]').click();
     await normal.locator("#artifactCatalogOverviewRows .artifact-overview-link").first().waitFor();
-    assert.equal(await normal.locator("#artifactCatalogOverviewRows tr").count(), 3);
+    assert.equal(await normal.locator("#artifactCatalogOverviewRows tr").count(), 9);
+    assert.equal(await normal.locator("#artifactCatalogAll").evaluate(node => node.closest('[role="tree"]')), null,
+      "the catalog shortcut stays a button outside the tree");
+    assert.equal(await normal.locator('#htmlWorkspaceTree [data-tree-key="catalog-owner::chat"] > .navigation-tree-row > .navigation-tree-icon').count(), 0,
+      "owner groups use the demo tree spacing without a redundant icon");
+    assert.deepEqual(await normal.evaluate(() => {
+      const styles = selector => {
+        const style = getComputedStyle(document.querySelector(selector));
+        return [style.minHeight, style.borderRadius, style.paddingRight, style.transitionProperty];
+      };
+      return styles("#artifactCatalogAll");
+    }), await normal.evaluate(() => {
+      const style = getComputedStyle(document.querySelector('#htmlWorkspaceTree [data-tree-key="catalog-owner::chat"] > .navigation-tree-row'));
+      return [style.minHeight, style.borderRadius, style.paddingRight, style.transitionProperty];
+    }), "the standalone button inherits the shared tree navigation geometry and motion");
+    assert.equal(await normal.locator("#htmlWorkspaceTree .navigation-tree-row.selected").count(), 0,
+      "the overview does not select a second tree row");
     await normal.locator("#artifactCatalogOverviewRows .artifact-overview-link").first().click();
     await normal.waitForFunction(() => document.querySelector("#artifactDetailPreview").textContent.includes("Москва"));
     assert.ok((await normal.locator("#artifactDetailPreview").textContent()).includes("18,4%"));
+    assert.equal(await normal.locator("#artifactCatalogAll").getAttribute("aria-current"), null);
+    const allMaterialsNormal = await normal.locator("#artifactCatalogAll").evaluate(node => getComputedStyle(node).backgroundColor);
+    await normal.locator("#artifactCatalogAll").hover();
+    await normal.waitForTimeout(180);
+    assert.notEqual(await normal.locator("#artifactCatalogAll").evaluate(node => getComputedStyle(node).backgroundColor),
+      allMaterialsNormal, "the separate catalog button has the shared tinted hover");
     await normal.locator("#artifactCatalogAll").click();
+    assert.equal(await normal.locator("#htmlWorkspaceTree .navigation-tree-row.selected").count(), 0);
     await normal.locator("#artifactCatalogOverviewRows").getByRole("button", { name: "Продажи по регионам.json" }).click();
     await normal.locator("#artifactCatalogPreviewBody .rn-json-viewer").waitFor();
     await normal.locator("#artifactCatalogPreviewBody").getByRole("button", { name: "Текст", exact: true }).click();
     assert.ok((await normal.locator("#artifactCatalogPreviewBody").textContent()).includes("7420000"));
+    await normal.locator("#artifactCatalogAll").click();
+    await normal.locator("#artifactCatalogOverviewRows").getByRole("button", { name: "Диаграмма.png" }).click();
+    await normal.locator("#artifactCatalogPreviewBody img").waitFor();
     assert.equal(await normal.locator("#artifactCatalogStatus").textContent(), "");
-    await normal.locator('.section-rail [data-section="workspace"]').click();
-    await normal.waitForFunction(() => document.querySelector("#wsSelectedList").textContent.includes("Москва.xlsx"));
-    await normal.waitForFunction(() => document.querySelector("#dtNativeCatalogList").textContent.includes("sales") &&
-      document.querySelector("#dtNativeParametersRows").textContent.includes("Выручка"));
-    await normal.locator("#wsSourceBrowse").click();
-    await normal.locator('#wsBrowseList [data-ws-file="Самара.xlsx"]').check();
-    await normal.locator("#wsSourceSave").click();
-    await normal.waitForFunction(() => document.querySelector("#wsSourcePersistence").textContent.includes("Состав сохранён") &&
-      document.querySelector("#wsSelectedList").textContent.includes("Самара.xlsx"));
-    await normal.locator('#dtNavTree [data-tree-key="dt:templates"] .navigation-tree-row').click();
-    await normal.locator("#dtNativeCatalogList button").waitFor();
-    await normal.locator("#dtNativeCatalogList button").click();
-    await normal.waitForFunction(() => document.querySelector("#dtNativeCatalogCode").textContent.includes('"sales"'));
-    await normal.locator('#dtNavTree [data-tree-key="dt:parameters"] .navigation-tree-row').click();
-    await normal.waitForFunction(() => document.querySelector("#dtNativeParametersRows").textContent.includes("Выручка"));
+    await normal.locator('#pluginRail [data-plugin-id="data-templates"]').click();
+    await normal.frameLocator("#pluginPreviewMount iframe").locator("#dtTabSources").waitFor();
+    await normal.frameLocator("#pluginPreviewMount iframe").locator("#dtTabTemplates").click();
+    assert.equal(await normal.frameLocator("#pluginPreviewMount iframe").locator("#dtViewTemplates").isVisible(), true);
+    await normal.locator('.section-rail [data-section="artifacts"]').click();
+    await normal.locator("#artifactCatalogAll").click();
+    await normal.locator("#artifactCatalogOverviewRows").getByRole("button", { name: "Методика расчёта.pdf" }).click();
+    await normal.locator("#artifactCatalogPreviewBody iframe").waitFor();
+    assert.equal(await normal.locator("#artifactCatalogStatus").textContent(), "");
     assert.deepEqual(errors, []);
     await normal.close();
 
@@ -220,6 +297,10 @@ async function serve() {
     });
     await sideBySide.locator("#run-example").click();
     await sideBySide.waitForFunction(() => document.getElementById("product").contentWindow.state.messages.length >= 4);
+    await sideBySide.locator("#example").selectOption("library/skill");
+    await sideBySide.frameLocator("#product").locator("#skillEditorPanel .rna-skill-fields").waitFor();
+    await sideBySide.locator("#example").selectOption("materials/image");
+    await sideBySide.frameLocator("#product").locator("#artifactCatalogPreviewBody img").waitFor();
     await sideBySide.close();
 
     const failed = await browser.newPage();

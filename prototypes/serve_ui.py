@@ -14,6 +14,9 @@ class PreviewHandler(SimpleHTTPRequestHandler):
         path = unquote(urlsplit(self.path).path)
         if path in ("/preview/web/", "/preview/web/index.html"):
             html = (ROOT / "web/index.html").read_text(encoding="utf-8")
+            # Preview-only binary examples are served locally; the native WebView CSP stays unchanged.
+            html = html.replace("connect-src https://rnassistant.local-resource/v1/;",
+                                "connect-src 'self' https://rnassistant.local-resource/v1/;", 1)
             marker = '<script src="js/app-core.js'
             if html.count(marker) != 1:
                 self.send_error(500, "Product bridge entrypoint changed")
@@ -24,7 +27,7 @@ class PreviewHandler(SimpleHTTPRequestHandler):
                 self.send_error(500, "Bridge catalog unavailable")
                 return
             operations = []
-            for match in re.finditer(r"^\s*(?:\[BridgeOperationPolicy\(([^)]*)\)\]\s*)?([A-Z]\w+),\s*$", enum.group(1), re.M):
+            for match in re.finditer(r"(?:\[BridgeOperationPolicy\(([^)]*)\)\]\s*)?([A-Z]\w+)\s*,", enum.group(1)):
                 policy, name = match.groups()
                 parts = [part.strip() for part in policy.split(",")] if policy else []
                 operations.append({"name": name[0].lower() + name[1:],

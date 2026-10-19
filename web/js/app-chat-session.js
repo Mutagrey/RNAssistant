@@ -322,27 +322,6 @@ async function renameChat(chatIdValue) {
   }
 }
 
-async function clearChat() {
-  if (state.chatNavigationPending || !state.activeChatId ||
-      (typeof confirmDiscardHtmlWorkspaceChanges === "function" &&
-       !confirmDiscardHtmlWorkspaceChanges("Очистить чат")) ||
-      !window.confirm("Очистить этот чат?")) {
-    return;
-  }
-
-  setControlBusy("clearChatButton", true);
-  var targetChatId = state.activeChatId;
-  try {
-    await navigateChat("clearChat", { chatId: targetChatId });
-    clearSendError();
-    log("Чат очищен.");
-  } catch (error) {
-    log(error.detail || error.message, "error");
-  } finally {
-    setControlBusy("clearChatButton", false);
-  }
-}
-
 async function compactChatContext() {
   if (!state.activeChatId || currentActiveSend()) return;
   var targetChatId = state.activeChatId;

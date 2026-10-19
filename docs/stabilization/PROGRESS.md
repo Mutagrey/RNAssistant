@@ -40,6 +40,18 @@ the legacy native/CLI consumers listed in MIGRATION_MAP, with no plugin fallback
 Private scratch left by a crashed process needs managed orphan cleanup; normal
 discard/instance shutdown releases its data. User data is preserved on disable.
 
+## Product shell correction — 2026-10-19
+
+The working chat header now matches the prototype's single right-panel action;
+the Arsenal popover and header clear-history button are removed. Chat deletion
+remains on its tree row. The shared panel icons, nested plugin rail buttons and
+aligned navigation headers now use one shell style. Navigation and right-inspector
+open/close transitions use the prototype's motion timing and respect reduced
+motion; the inspector abilities view reads typed metadata for the active chat.
+The static preview includes binary and sequence materials as well as text
+examples. Browser checks cover shell geometry and the preview; Office/WebView2
+behavior remains unqualified.
+
 ## Product UI cutover — 2026-10-19
 
 Demo and product mock preview now read one preview-only example set for the

@@ -60,7 +60,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
         Data: [], ExternalDependencies: [] }, Views: [] }) : "План исследования\n\n1. Собрать данные\n2. Проверить результат") };
       window.RNAssistantHtmlWorkspacePreview = { ensureVendors: async () => {}, build: () => '<style>body{font:15px system-ui;padding:20px;color:#243246}h1{font-size:24px}.card{padding:20px;background:#f3f6fa;border-radius:12px}</style><h1>Продажи за октябрь</h1><div class="card">Выручка<br><strong style="font-size:30px">1 240 000 ₽</strong></div>' };
     });
-    for (const file of ["app-navigation-tree.js", "app-tree-adapter.js", "vendor/purify.min.js", "vendor/marked.min.js", "app-markdown.js", "app-viewer-registry.js", "app-text-viewer.js", "app-json-viewer.js", "app-html-workspace-tree.js", "app-artifact-versions.js", "app-artifact-catalog.js", "app-layout.js"])
+    for (const file of ["app-icons.js", "app-navigation-tree.js", "app-tree-adapter.js", "vendor/purify.min.js", "vendor/marked.min.js", "app-markdown.js", "app-viewer-registry.js", "app-text-viewer.js", "app-json-viewer.js", "app-html-workspace-tree.js", "app-artifact-versions.js", "app-artifact-catalog.js", "app-layout.js"])
       await page.addScriptTag({ content: read("js/" + file) });
     await page.evaluate(() => { RNAssistantArtifactCatalog.show("document"); initializeSplitPanes(); });
     await page.locator("#htmlWorkspaceTree").getByText("В документе", { exact: true }).waitFor();
@@ -99,11 +99,13 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       const sidebar = await page.locator("#htmlWorkspaceSidebar").boundingBox();
       const viewer = await page.locator("#artifactCatalogPreview").boundingBox();
       const content = await page.locator("#artifactCatalog").boundingBox();
-      assert.ok(sidebar.x + sidebar.width <= viewer.x + 1, "tree stays to the left of viewer at " + width);
-      assert.ok(Math.abs(sidebar.y - content.y) < 2, "viewer column is alongside tree at " + width);
+      if (width > 560) {
+        assert.ok(sidebar.x + sidebar.width <= viewer.x + 1, "tree stays to the left of viewer at " + width);
+        assert.ok(Math.abs(sidebar.y - content.y) < 2, "viewer column is alongside tree at " + width);
+      } else assert.equal(await page.locator("#htmlWorkspaceSidebar").isVisible(), false, "compact layout shows the central viewer");
       assert.ok(viewer.height > 400, "preview fills the available height at " + width);
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), "no page overflow at " + width);
-      assert.ok(await page.locator("#htmlWorkspaceTree").isVisible());
+      if (width > 560) assert.ok(await page.locator("#htmlWorkspaceTree").isVisible());
       assert.equal(await page.locator("#artifactCatalogPreviewBody pre").isVisible(), false);
       if (process.env.LAYOUT_SCREENSHOT) await page.screenshot({ path: process.env.LAYOUT_SCREENSHOT.replace(/\.png$/, "-" + width + ".png") });
     }
@@ -125,7 +127,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     const exportsBeforeDirtyNavigation = await page.evaluate(() => exportRequests.length);
     await page.evaluate(() => { state.htmlWorkspaceDirty = true; });
     await versions.getByRole("button", { name: /^v1 / }).click();
-    assert.ok(await page.getByText("Сохраните или отмените правки перед изменением артефактов.", { exact: true }).isVisible());
+    assert.ok(await page.locator("#artifactCatalogPreviewStatus").getByText("Сохраните или отмените правки перед изменением артефактов.", { exact: true }).isVisible());
     assert.equal(await page.evaluate(() => exportRequests.length), exportsBeforeDirtyNavigation, "dirty draft blocks version navigation");
     await page.evaluate(() => { state.htmlWorkspaceDirty = false; state.htmlWorkspaceMode = "edit";
       state.activeHtmlArtifactId = "unchanged-head"; state.htmlWorkspaceSelection = { type: "file", id: "css" };
@@ -149,6 +151,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     await page.locator("#artifactCatalogActions .artifact-action-menu > summary").click();
     await versions.locator("summary").click();
     await page.waitForFunction(() => historyRequests.length === 3);
+    await page.setViewportSize({ width: 1100, height: 760 });
     await page.locator("#htmlWorkspaceTree").getByText("План исследования", { exact: true }).click();
     await page.evaluate(() => { releaseHistory(); historyWait = null; });
     await page.locator("#artifactCatalogActions .artifact-action-menu > summary").click();

@@ -20,15 +20,24 @@
       RunId: "preview-run-initial", RunViewState: runView("preview-run-initial", "2026-10-18T09:00:00Z"),
       ArtifactIds: ["report"], CreatedUtc: "2026-10-18T09:00:05Z" }
   ];
-  var chats = activeChatId ? [{ Id: activeChatId, Title: fixtures.chat.title, Host: "Excel",
-    DocumentKey: "preview-document", DocumentTitle: fixtures.document, IsCurrentDocument: true,
-    LastActivityUtc: "2026-10-18T09:00:05Z", MessageCount: messages.length, Revision: revision }] : [];
-  var documentItems = scenario === "empty" ? [] : [{ documentKey: "preview-document",
-    title: fixtures.document, host: "Excel", isActive: true }];
+  var chats = activeChatId ? fixtures.officeExamples.flatMap(function (documentExample) {
+    return documentExample.chats.map(function (chatExample, index) {
+      return { Id: chatExample.previewId, Title: chatExample.title, Host: documentExample.host,
+        DocumentKey: documentExample.documentKey, DocumentTitle: documentExample.name,
+        IsCurrentDocument: documentExample.documentKey === "preview-document",
+        LastActivityUtc: new Date(Date.parse("2026-10-18T09:00:05Z") - index * 60000).toISOString(),
+        MessageCount: chatExample.previewId === "preview-chat" ? messages.length : 0, Revision: revision };
+    });
+  }) : [];
+  var documentItems = scenario === "empty" ? [] : fixtures.officeExamples.map(function (example) {
+    return { documentKey: example.documentKey, title: example.name, host: example.host,
+      isActive: example.documentKey === "preview-document", isOpen: example.open };
+  });
   var initialSkillText = fixtures.skill;
   var promptText = "# Агент\n\nОтвечай по данным текущего документа и явно указывай ограничения результата.\n";
   var skills = [], skillTexts = Object.create(null), skillReferences = Object.create(null);
-  var messagesByChat = activeChatId ? { [activeChatId]: messages } : {};
+  var messagesByChat = activeChatId ? { "preview-chat": messages, "preview-summary": [],
+    "preview-budget": [], "preview-notes": [] } : {};
   var previewRuns = Object.create(null);
   var inboxRevision = 1, inputSequence = 0, inputReceipts = Object.create(null);
   var tool = null;
@@ -48,11 +57,33 @@
   var artifactExamples = [
     { id: "report", title: fixtures.materials[0].name, kind: "markdown",
       contentType: "text/markdown; charset=utf-8", body: fixtures.report, linked: true },
+    { id: "html", title: fixtures.materials[1].name, kind: "html_workspace",
+      contentType: "application/json; charset=utf-8", body: JSON.stringify({ Project: {
+        Files: [{ Path: "index.html", Kind: "html", Content: fixtures.materialSources.html }],
+        EntryPath: "index.html", Data: [], ExternalDependencies: [] }, Views: [] }), linked: true },
     { id: "json", title: fixtures.materials[2].name, kind: "file",
       contentType: "application/json; charset=utf-8", body: fixtures.materialSources.json, linked: true },
+    { id: "pdf", title: fixtures.materials[3].name, kind: "file",
+      contentType: "application/pdf", assetUrl: "/preview/assets/sales-methodology.pdf", linked: false },
+    { id: "image", title: fixtures.materials[4].name, kind: "image",
+      contentType: "image/png", assetUrl: "/preview/assets/sales-chart.png", linked: false },
+    { id: "sequence", title: fixtures.materials[5].name, kind: "sequence",
+      contentType: "application/json; charset=utf-8", body: fixtures.materialSources.sequence, linked: false },
+    { id: "plan", title: "План отчёта.md", kind: "plan_document",
+      contentType: "text/markdown; charset=utf-8", body: fixtures.materialSources.plan, linked: true },
+    { id: "tasks", title: "Подготовка отчёта", kind: "task_list",
+      contentType: "application/vnd.rnassistant.task-list+json; charset=utf-8", body: fixtures.materialSources.tasks, linked: true },
     { id: "text", title: "Заметки к отчёту.txt", kind: "file",
       contentType: "text/plain; charset=utf-8", body: fixtures.materialSources.text, linked: false }
   ];
+  function exampleDate(item) {
+    var today = new Date(), date = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 12, 0);
+    var times = { report: 42, html: 40, json: 39, plan: 38, tasks: 38 };
+    if (Object.prototype.hasOwnProperty.call(times, item.id)) date.setMinutes(times[item.id]);
+    else if (item.id === "sequence") date.setDate(date.getDate() - 5);
+    else date.setDate(date.getDate() - 1);
+    return date.toISOString();
+  }
   artifactExamples.forEach(function (item) {
     item.resourceUri = "rna://chat/preview-chat/artifact/" + item.id + "/revision/1";
   });
@@ -66,7 +97,7 @@
       FailedCalls: 0, UnknownEffects: 0, PendingConfirmation: null, Reason: "", CurrentAction: "",
       StartedUtc: startedUtc };
   }
-  function bytes(value) { return new TextEncoder().encode(value); }
+  function bytes(value) { return value instanceof Uint8Array ? value : new TextEncoder().encode(value); }
   async function hash(value) {
     var data = value instanceof Uint8Array ? value : bytes(value);
     var digest = new Uint8Array(await crypto.subtle.digest("SHA-256", data));
@@ -389,6 +420,14 @@
       return { state: workspaceState(), dictionary: { file: "dictionary-1730000000000-" + "b".repeat(32) + ".json",
         format: "dictionary", sha256: await hash(dictionaryText), input: dictionaryText } };
     }
+    if (type === "getPlugins") return { items: [{ pluginId: "data-templates", name: "Данные и шаблоны", icon: "chart",
+      sourceRoot: "Локальный демонстрационный плагин", enabled: true }] };
+    if (type === "openPlugin") {
+      if (payload.pluginId !== "data-templates") fail("Плагин примера отсутствует.");
+      return { instanceId: "preview-data-templates", entryUrl: "/web/data-templates/index.html" };
+    }
+    if (type === "closePlugin") return {};
+    if (type === "getPluginChat") return { messages: [], state: { Status: "Готов" }, pendingId: null };
     if (type === "listArtifactCatalog") {
       requireChat(payload);
       var items = scenario === "empty" || payload.cursor ? [] : artifactExamples.filter(function (item) {
@@ -399,9 +438,11 @@
           (!payload.documentId || payload.documentId === "preview-document");
       }).map(function (item) {
         var linked = item.linked && activeChatId === "preview-chat";
-        return { documentId: "preview-document", documentTitle: fixtures.document,
+        var otherDocument = item.id === "sequence";
+        return { documentId: otherDocument ? "preview-other-document" : "preview-document",
+          documentTitle: otherDocument ? "Все документы" : fixtures.document,
           resourceUri: item.resourceUri, title: item.title, kind: item.kind,
-          updatedUtc: "2026-10-18T09:00:00Z", linked: linked, selected: linked,
+          updatedUtc: exampleDate(item), linked: linked, selected: linked,
           canTransfer: true, canDelete: false };
       });
       return { chatId: activeChatId, sessionRevision: revision, documentId: "preview-document",
@@ -410,10 +451,16 @@
     if (type === "exportArtifact") {
       requireChat(payload);
       var example = artifactExamples.find(function (item) { return item.resourceUri === payload.resourceUri; });
-      if (payload.documentId !== "preview-document" || !example)
+      if (!example || payload.documentId !== (example.id === "sequence" ? "preview-other-document" : "preview-document"))
         fail("Материал примера изменился.", "preview_revision_changed");
-      var artifactData = download(example.body, example.contentType);
-      artifactData.payload.sha256 = await hash(example.body);
+      var body = example.body;
+      if (example.assetUrl) {
+        var asset = await nativeFetch(example.assetUrl);
+        if (!asset.ok) fail("Файл демонстрационного материала недоступен.");
+        body = new Uint8Array(await asset.arrayBuffer());
+      }
+      var artifactData = download(body, example.contentType);
+      artifactData.payload.sha256 = await hash(body);
       return { kind: example.kind, contentType: example.contentType,
         fileName: example.title, data: artifactData };
     }
@@ -441,6 +488,22 @@
       if (!messages.some(function (item) { return item.RunId === payload.runId && item.RunViewState; }))
         fail("Запуск примера отсутствует.", "preview_run_changed");
       return { chatId: activeChatId, runId: payload.runId, complete: true, items: [] };
+    }
+    if (type === "getAgentArsenal") {
+      requireChat(payload);
+      var selectedSkills = skills.map(function (skill) {
+        return { Id: skill.id, Name: skill.name || skill.id, Description: skill.description || "Анализ данных в связанной книге",
+          Status: "selected", Tools: ["excel.read_table"], References: [], Revision: skill.revision };
+      });
+      var availableTools = [
+        { Id: "common.resources_find", Name: "Поиск ресурсов", Description: "Поиск материалов чата" },
+        { Id: "excel.read_table", Name: "Чтение таблицы", Description: "Чтение данных Excel" },
+        { Id: "excel.format_range", Name: "Форматирование диапазона", Description: "Изменение документа", RequiresConfirmation: true }
+      ];
+      return { type: "rnassistant.agentArsenal", contractVersion: 1, chatId: activeChatId,
+        revision: revision, historical: true, prepared: false, pending: false, restriction: "",
+        skillCount: selectedSkills.length, toolCount: availableTools.length,
+        details: { Policy: "agent/confirm", Selected: selectedSkills, Tools: availableTools, Available: [] } };
     }
     if (type === "getVbaProject") return { result: { Success: true, Message: "VBA-проект примера загружен.",
       DataJson: JSON.stringify({ modules: [{ name: "FormatSales", type: "StdModule",

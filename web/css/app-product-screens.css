@@ -1,5 +1,39 @@
 /* Product-only composition around the shared prototype palette and components. */
 .shell #tab-chat .chat-main { padding: 0; background: var(--surface); }
+.shell #tab-chat .chat-workspace { grid-template-columns: var(--split-left, var(--nav-width)) 1px minmax(0, 1fr) 0px 0px; }
+.shell #tab-chat .chat-workspace.with-inspector { grid-template-columns: var(--split-left, var(--nav-width)) 1px minmax(0, 1fr) 1px var(--inspector-width); }
+.shell #tab-chat .chat-inspector { display: flex; grid-column: 5; grid-row: 1; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; visibility: hidden; opacity: 0; background: var(--surface-subtle); }
+.shell #tab-chat .with-inspector .chat-inspector { visibility: visible; opacity: 1; }
+.shell #tab-chat .chat-inspector[hidden], .shell #tab-chat .chat-inspector-splitter[hidden] { display: none; }
+.shell #tab-chat .chat-inspector-splitter { grid-column: 4; grid-row: 1; visibility: hidden; }
+.shell #tab-chat .with-inspector .chat-inspector-splitter { visibility: visible; }
+.shell #tab-chat .chat-inspector-head { display: flex; align-items: center; gap: 5px; flex: 0 0 52px; min-height: 52px; padding: 5px 10px 5px 14px; border-bottom: 1px solid var(--line); }
+.shell #tab-chat .chat-inspector-head, .shell #tab-chat .chat-inspector-body { width: var(--inspector-width); }
+.shell #tab-chat .chat-inspector-back { display: none; flex: 0 0 30px; width: 30px; height: 30px; padding: 0; border: 0; background: transparent; }
+.shell #tab-chat .chat-inspector-switcher { margin: 0; }
+.shell #tab-chat .chat-inspector-switcher .popover-menu { z-index: 50; }
+.shell #tab-chat .chat-inspector-body { flex: 1; min-height: 0; padding: 12px 14px 16px; overflow: auto; }
+.shell #tab-chat .chat-inspector-body h3 { margin: 16px 0 4px; font-size: 12px; font-weight: 600; }
+.shell #tab-chat .chat-inspector-body h3:first-child { margin-top: 0; }
+.shell #tab-chat .chat-inspector-body p { margin: 0 0 10px; color: var(--ink-muted); font-size: 11px; line-height: 1.6; }
+.shell #tab-chat .chat-inspector-info { display: flex; gap: 9px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.shell #tab-chat .chat-inspector-info > svg { flex: 0 0 16px; width: 16px; height: 16px; margin-top: 2px; color: var(--ink-muted); }
+.shell #tab-chat .chat-inspector-info > span { display: grid; gap: 2px; min-width: 0; }
+.shell #tab-chat .chat-inspector-info strong { font-size: 12px; font-weight: 500; overflow-wrap: anywhere; }
+.shell #tab-chat .chat-inspector-info small { color: var(--ink-muted); font-size: 11px; }
+.shell #tab-chat .chat-inspector-action { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 34px; margin-top: 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--ink); font-size: 11px; text-align: left; }
+.shell #tab-chat .chat-inspector-action:hover { background: var(--surface-hover); }
+.shell #tab-chat .chat-inspector-action svg { width: 15px; height: 15px; }
+.shell.navigation-closed #tab-chat .chat-workspace { grid-template-columns: 0px 0px minmax(0, 1fr) 0px 0px !important; }
+.shell.navigation-closed #tab-chat .chat-workspace.with-inspector { grid-template-columns: 0px 0px minmax(0, 1fr) 1px var(--inspector-width) !important; }
+.shell.navigation-closed #tab-chat .chat-workspace .chat-main { grid-column: 3 !important; }
+.shell.navigation-closed #tab-chat .chat-inspector-splitter { grid-column: 4; }
+.shell.navigation-closed #tab-chat .chat-inspector { grid-column: 5; }
+@media (prefers-reduced-motion: no-preference) {
+  .shell #tab-chat .chat-workspace.inspector-transition { transition: grid-template-columns var(--motion-duration) var(--motion-ease); }
+  .shell #tab-chat .chat-workspace.inspector-transition .chat-inspector { transition: opacity var(--motion-fast) var(--motion-ease), visibility 0s linear var(--motion-duration), transform var(--motion-duration) var(--motion-ease); }
+  .shell #tab-chat .chat-workspace.inspector-transition.with-inspector .chat-inspector { transition: opacity var(--motion-fast) var(--motion-ease), visibility 0s, transform var(--motion-duration) var(--motion-ease); }
+}
 .shell #tab-chat .chatbar { flex-basis: 52px; min-height: 52px; margin: 0; padding: 0 18px; border-bottom-color: var(--line); }
 .shell #tab-chat .messages { padding: 28px max(18px, calc((100% - 720px) / 2)) 24px; }
 .shell #tab-chat .chat-utility-dock,
@@ -18,11 +52,6 @@
 
 .shell .product-nav-heading strong { flex: 1; font-size: inherit; }
 .shell .product-create-menu { position: relative; margin-left: auto; }
-.shell .product-create-menu > summary,
-.shell .product-nav-action { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--ink-muted); font-size: 20px; cursor: pointer; list-style: none; }
-.shell .product-create-menu > summary::-webkit-details-marker { display: none; }
-.shell .product-create-menu > summary:hover,
-.shell .product-nav-action:hover { background: var(--surface-hover); color: var(--ink); }
 .shell #tab-instructions .tool-list-controls,
 .shell #tab-vba .tool-list-controls { margin: 8px 0; }
 .shell #tab-instructions .tool-search,
@@ -30,6 +59,8 @@
 .shell #tab-instructions .instruction-editor,
 .shell #tab-instructions #toolEditorPanel,
 .shell #tab-vba .vba-editor { min-width: 0; padding: 0 18px 12px; border: 0; border-radius: 0; background: var(--surface); }
+.shell #tab-instructions .instruction-editor { padding: 0; }
+.shell #tab-instructions .instruction-editor-content { padding: 0 18px 12px; }
 .shell #tab-instructions .library-editor-head,
 .shell #tab-vba .vba-editor-head { min-height: 52px; margin: 0 -18px; padding: 5px 18px; border-bottom: 1px solid var(--line); background: var(--surface); }
 .shell #tab-instructions .library-editor-head .resource-editor-titlebox,
@@ -42,7 +73,7 @@
 .shell #tab-instructions .library-editor-mode-row .mode-toggle { border: 0; border-radius: 0; background: transparent; }
 .shell #tab-instructions .library-editor-mode-row .mode-button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--ink-muted); }
 .shell #tab-instructions .library-editor-mode-row .mode-button.active { border-bottom-color: var(--accent); color: var(--ink); }
-.shell #tab-instructions .skill-editor-pane { grid-template-rows: 52px 37px minmax(0, 1fr); gap: 0; }
+.shell #tab-instructions .library-editor-pane { grid-template-rows: 52px 37px minmax(0, 1fr); gap: 0; }
 .shell #tab-instructions .prompt-editor-pane { grid-template-rows: 52px 37px minmax(0, 1fr) 25px; gap: 0; }
 .shell #tab-instructions .prompt-editor-stage { padding-top: 16px; }
 .shell #tab-instructions .skill-instruction-view { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 0; min-height: 0; padding-top: 16px; }
@@ -88,9 +119,23 @@
 .shell #tab-workspace .dt-card { border-color: var(--line); }
 
 @media (max-width: 620px) {
-  .shell #tab-chat .chatbar { padding-left: 48px; }
+  .shell #tab-chat .chatbar { padding-left: calc(12px + var(--control) + 10px); }
   .shell #tab-chat .composer { width: calc(100% - 16px); min-height: 140px; margin-bottom: 8px; }
   .shell #tab-chat .messages { padding-inline: 12px; }
   .shell #tab-instructions .library-editor-head,
   .shell #tab-vba .vba-editor-head { padding-left: 48px; }
+}
+@media (max-width: 1100px) {
+  .shell #tab-chat .chat-workspace,
+  .shell #tab-chat .chat-workspace.with-inspector { position: relative; grid-template-columns: var(--split-left, var(--nav-width)) 1px minmax(0, 1fr) 0px 0px; }
+  .shell #tab-chat .chat-workspace.with-inspector .chat-inspector-splitter { display: none !important; }
+  .shell #tab-chat .chat-workspace .chat-inspector { position: absolute; top: 0; right: 0; bottom: 0; z-index: 10; width: min(320px, 92%); border-left: 1px solid var(--line); box-shadow: -12px 0 30px #142a151a; transform: translateX(100%); }
+  .shell #tab-chat .chat-workspace.with-inspector .chat-inspector { transform: translateX(0); }
+  .shell #tab-chat .chat-inspector-head, .shell #tab-chat .chat-inspector-body { width: 100%; }
+  .shell #tab-chat .chat-inspector-back { display: grid; place-items: center; }
+  .shell.navigation-closed #tab-chat .chat-workspace,
+  .shell.navigation-closed #tab-chat .chat-workspace.with-inspector { grid-template-columns: 0px 0px minmax(0, 1fr) 0px 0px !important; }
+}
+@media (max-width: 620px) {
+  .shell #tab-chat .chat-workspace.with-inspector .chat-inspector { width: 100%; }
 }

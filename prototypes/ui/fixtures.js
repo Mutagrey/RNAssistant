@@ -32,5 +32,26 @@ window.PrototypeFixtures.materialSources = {
   json: JSON.stringify({ period: "2026-09", regions: [{ name: "Москва", revenue: 7420000 }, { name: "Казань", revenue: 5380000 }, { name: "Самара", revenue: null }] }, null, 2),
   plan: "# План подготовки отчёта\n\n1. Сверить источники и периоды.\n2. Объяснить изменения показателей.\n3. Подготовить отчёт и проверить выводы.\n",
   tasks: JSON.stringify({ goal: "Подготовить отчёт за сентябрь", status: "active", steps: [{ id: "read", text: "Проверить источники", status: "completed" }, { id: "compare", text: "Сравнить периоды", status: "in_progress", note: "Москва и Казань включены; Самара требует уточнения." }, { id: "report", text: "Собрать итоговый отчёт", status: "pending" }] }, null, 2),
+  sequence: JSON.stringify({ title: "Обзор регионов", items: [
+    { region: "Москва", revenue: 7420000, changePercent: 20.1 },
+    { region: "Казань", revenue: 5380000, changePercent: 16.2 },
+    { region: "Самара", status: "Нужна проверка источника" }
+  ] }, null, 2),
   text: "Заметки к отчёту\n\nСравнить сентябрь с августом.\nУказать состав источников и пропуски.\nНе включать Самару без поля «Выручка»."
 };
+
+window.PrototypeFixtures.officeExamples = [
+  { id: "office-sales", documentKey: "preview-document", name: window.PrototypeFixtures.document,
+    host: "Excel", open: true, chats: [
+      { id: "sales", previewId: "preview-chat", title: window.PrototypeFixtures.chat.title },
+      { id: "summary", previewId: "preview-summary", title: "Сводка по регионам" }
+    ] },
+  { id: "office-budget", documentKey: "preview-budget-document", name: "Бюджет · IV квартал.xlsx",
+    host: "Excel", open: false, chats: [
+      { id: "budget", previewId: "preview-budget", title: "План бюджета" }
+    ] },
+  { id: "office-notes", documentKey: "preview-notes-document", name: "Заметки к отчёту.docx",
+    host: "Word", open: true, chats: [
+      { id: "notes", previewId: "preview-notes", title: "Обсуждение отчёта" }
+    ] }
+];

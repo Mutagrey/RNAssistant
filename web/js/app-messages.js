@@ -224,7 +224,7 @@ function renderChatEmptyState() {
 
   var mark = document.createElement("div");
   mark.className = "chat-empty-mark";
-  mark.innerHTML = "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z\"/><path d=\"M8 9h8\"/><path d=\"M8 13h5\"/></svg>";
+  mark.innerHTML = window.RNAssistantIcons.render("chat");
   empty.appendChild(mark);
 
   var title = document.createElement("div");
@@ -816,6 +816,11 @@ function reconcileMessageUnits(box, units, liveOnly) {
       if (unit.update) unit.update(node);
       restoreMessageDisclosures(node, disclosures);
       node.messageUnitKey = unit.key;
+      if (!cached && Object.keys(renderedMessageUnits).length &&
+          !(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) &&
+          node.animate) {
+        node.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 140, easing: "cubic-bezier(.2, .8, .2, 1)" });
+      }
       // Insert first: removing a tall live article first temporarily clamps scrollTop.
       if (cached && cached.node && cached.node.parentNode === box) {
         box.insertBefore(node, cached.node);

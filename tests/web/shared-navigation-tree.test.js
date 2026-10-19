@@ -27,7 +27,7 @@ const { chromium } = require("playwright");
 
     const sections = [
       ["artifacts", "#htmlWorkspaceTree"], ["instructions", "#instructionsList"],
-      ["vba", "#vbaModuleList"], ["workspace", "#dtNavTree"], ["settings", "#settingsNavTree"]
+      ["vba", "#vbaModuleList"], ["settings", "#settingsNavTree"]
     ];
     for (const [section, selector] of sections) {
       if (section === "instructions") await product.locator("#libraryRootTab").click();
@@ -58,6 +58,6 @@ const { chromium } = require("playwright");
     assert.deepEqual(await sharedStyle(product, "#settingsNavTree .navigation-tree-row"),
       await sharedStyle(demo, "[data-product-tree] .navigation-tree-row"), "demo and product use the same tree row geometry");
     assert.deepEqual(errors, []);
-    console.log("PASS shared tree: one renderer and common row geometry across demo and all six product sections");
+    console.log("PASS shared tree: one renderer and common row geometry across demo and native product sections");
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

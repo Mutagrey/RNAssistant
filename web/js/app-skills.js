@@ -408,7 +408,7 @@ function renderSkillFileList(skill, disabled, builtIn) {
     row.className = "skill-file-row";
     var info = document.createElement("div");
     info.className = "skill-file-info";
-    info.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6zM14 3v5h4M9 12h6M9 16h6"/></svg>';
+    info.innerHTML = window.RNAssistantIcons.render("document");
     var copy = document.createElement("span");
     var name = document.createElement("strong");
     name.textContent = file.label;

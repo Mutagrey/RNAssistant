@@ -22,7 +22,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       window.hasActiveMessageEdit = () => false;
       window.canEditMessage = () => false;
       window.smallIconButton = (title, icon, handler) => {
-        const button = document.createElement("button"); button.className = "message-action";
+        const button = document.createElement("button"); button.className = "message-action icon-btn";
         button.title = title; button.textContent = icon === "copy" ? "▣" : icon === "branch" ? "⑂" : "×";
         button.addEventListener("click", handler); return button;
       };

@@ -83,10 +83,6 @@
     grid-template-rows: clamp(145px, 24vh, 190px) minmax(0, 1fr);
   }
 
-  .vba-layout.is-sidebar-hidden {
-    grid-template-rows: minmax(0, 1fr);
-  }
-
   .splitter {
     display: none;
   }

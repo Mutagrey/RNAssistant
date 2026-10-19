@@ -62,7 +62,7 @@ async function assertAboveResources(page, selector) {
 
     for (const width of [1100, 740, 360]) {
       await page.setViewportSize({ width, height: 760 });
-      await page.evaluate(width => document.querySelector(".chat-workspace").classList.toggle("is-sidebar-hidden", width < 800), width);
+      await page.evaluate(width => document.querySelector(".shell").classList.toggle("navigation-closed", width < 800), width);
       for (const theme of ["light", "dark"]) {
         await page.evaluate(theme => { document.documentElement.dataset.theme = theme; RNAssistantAccents.apply("blue", false); }, theme);
         await page.locator("#composerAddButton").click();

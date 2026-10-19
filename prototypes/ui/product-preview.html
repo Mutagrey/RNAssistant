@@ -8,10 +8,11 @@
     * { box-sizing: border-box; }
     html, body { width: 100%; height: 100%; margin: 0; }
     body { display: flex; flex-direction: column; background: #e9ece8; color: #27372e; font: 12px/1.4 system-ui, sans-serif; }
-    header { display: flex; align-items: center; gap: 16px; min-height: 40px; padding: 0 14px; }
+    header { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 5px 14px; flex-wrap: wrap; }
     header strong { font-weight: 600; }
     header span { color: #5e6a61; }
-    header select { margin-left: auto; font: inherit; padding: 4px 8px; }
+    header select { font: inherit; padding: 4px 8px; }
+    header #example { min-width: 180px; margin-left: auto; }
     header button { padding: 4px 8px; border: 1px solid #b9c8be; border-radius: 5px; background: white; color: inherit; font: inherit; cursor: pointer; }
     header button[aria-pressed="true"] { border-color: #3d725a; background: #e4f1e8; }
     header button:disabled { opacity: .5; cursor: default; }
@@ -27,34 +28,18 @@
   </style>
 </head>
 <body>
-  <header><strong>Рабочий UI</strong><span>Реальные экраны и обработчики с временным mock bridge</span><select id="scenario" aria-label="Состояние примера"><option value="ready">Заполнено</option><option value="empty">Пусто</option><option value="error">Ошибка чтения</option></select><button id="run-example" type="button">Запустить пример чата</button><button id="compare" type="button" aria-pressed="false">Сравнить рядом</button><a href="/" target="_blank" rel="noopener">Открыть демо ↗</a></header>
+  <header><strong>Рабочий UI</strong><span>Реальные экраны и обработчики с временным mock bridge</span><select id="example" aria-label="Открыть пример">
+    <optgroup label="Чаты"><option value="chat/main">Отчёт о продажах</option><option value="chat/summary">Пустой чат</option><option value="chat/offline">Закрытый документ</option><option value="chat/context">Контекст</option><option value="chat/abilities">Возможности</option><option value="chat/usage">Использование</option><option value="chat/activity">Ход работы</option></optgroup>
+    <optgroup label="Материалы"><option value="materials/all">Каталог</option><option value="materials/report">Markdown-отчёт</option><option value="materials/html">HTML-отчёт</option><option value="materials/json">JSON-данные</option><option value="materials/pdf">PDF</option><option value="materials/image">Диаграмма PNG</option><option value="materials/sequence">Коллекция</option></optgroup>
+    <optgroup label="Библиотека"><option value="library/skill">Навык</option><option value="library/references">Файлы навыка</option><option value="library/prompt">Инструкция</option><option value="library/tool">Инструмент</option><option value="library/schema">Параметры</option><option value="library/implementation">Код инструмента</option><option value="library/test">Проверка</option><option value="library/docs">Документация</option></optgroup>
+    <optgroup label="VBA"><option value="vba/code">Код</option><option value="vba/diff">Изменения</option><option value="vba/run">Запуск</option><option value="vba/history">История</option></optgroup>
+    <optgroup label="Данные и шаблоны"><option value="projects/sources">Источники</option><option value="projects/templates">Шаблоны</option><option value="projects/parameters">Параметры</option><option value="projects/mapping" disabled>Соответствия · ещё не подключено</option><option value="projects/results" disabled>Результаты · ещё не подключено</option></optgroup>
+    <optgroup label="Настройки"><option value="settings/connection">Подключение</option><option value="settings/model">Модель</option><option value="settings/context">Контекст и вложения</option><option value="settings/agent">Агент</option><option value="settings/interface">Интерфейс</option><option value="settings/protection">Защита</option><option value="settings/diagnostics">Помощь и обслуживание</option></optgroup>
+  </select><select id="scenario" aria-label="Состояние примера"><option value="ready">Заполнено</option><option value="empty">Пусто</option><option value="error">Ошибка чтения</option></select><button id="run-example" type="button">Запустить пример чата</button><button id="compare" type="button" aria-pressed="false">Сравнить рядом</button><a href="/" target="_blank" rel="noopener">Открыть демо ↗</a></header>
   <main id="comparison" data-compare="false">
     <section id="demo-pane" hidden><span>Демо · образец оформления и поведения</span><iframe id="demo" title="Демонстрационный интерфейс RNAssistant"></iframe></section>
     <section><span>Продукт · реальные обработчики и mock bridge</span><iframe id="product" src="/preview/web/?scenario=ready" title="Рабочий интерфейс RNAssistant"></iframe></section>
   </main>
-  <script>
-    document.getElementById("scenario").addEventListener("change", function (event) {
-      document.getElementById("product").src = "/preview/web/?scenario=" + encodeURIComponent(event.target.value);
-      document.getElementById("run-example").disabled = event.target.value === "empty";
-    });
-    document.getElementById("run-example").addEventListener("click", function () {
-      var view = document.getElementById("product").contentWindow;
-      var chat = view.document.querySelector('.section-rail [data-section="chat"]');
-      if (chat) chat.click();
-      var input = view.document.getElementById("chatInput");
-      var send = view.document.getElementById("sendButton");
-      if (!input || !send || !view.PrototypeFixtures) return;
-      input.value = view.PrototypeFixtures.chat.user;
-      input.dispatchEvent(new view.Event("input", { bubbles: true }));
-      if (!send.disabled) send.click();
-    });
-    document.getElementById("compare").addEventListener("click", function (event) {
-      var active = event.currentTarget.getAttribute("aria-pressed") !== "true";
-      event.currentTarget.setAttribute("aria-pressed", String(active));
-      document.getElementById("comparison").dataset.compare = String(active);
-      document.getElementById("demo-pane").hidden = !active;
-      if (active && !document.getElementById("demo").src) document.getElementById("demo").src = "/#/chat/main";
-    });
-  </script>
+  <script src="product-preview.js?v=examples-20261019-1"></script>
 </body>
 </html>

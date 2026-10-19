@@ -74,7 +74,7 @@
           rnItemId: itemId,
           rnGroupKey: groupKey,
           rnMeta: clippedText(inputNode.meta, resolved.maxMetaChars),
-          rnIconKind: String(inputNode.iconKind || "file").toLowerCase(),
+          rnIconKind: inputNode.iconKind === null ? "" : String(inputNode.iconKind || "file").toLowerCase(),
           rnDeletable: !!inputNode.deletable && !!itemType
         };
         if (childrenInput.length) result.children = visit(childrenInput, depth + 1);
@@ -127,7 +127,7 @@
         selectable: selectable,
         title: item.title,
         tooltip: [item.title, item.rnMeta, item.tooltip === item.title ? "" : item.tooltip].filter(Boolean).join(" · "),
-        iconHtml: tree.icon(item.rnIconKind),
+        iconHtml: item.rnIconKind ? tree.icon(item.rnIconKind) : "",
         expanded: item.expanded,
         selected: item.key === String(options.selectedKey || ""),
         itemType: item.rnItemType,

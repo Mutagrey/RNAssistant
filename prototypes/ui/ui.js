@@ -49,7 +49,7 @@
       return line ? '<p>' + P.escape(line) + '</p>' : '';
     }).join("");
   };
-  P.table = function (headers, rows) { return '<div class="table-wrap"><table><thead><tr>' + headers.map(function (v) { return '<th scope="col">' + v + '</th>'; }).join("") + '</tr></thead><tbody>' + rows.map(function (row) { return '<tr data-filter-row>' + row.map(function (v) { return '<td>' + v + '</td>'; }).join("") + '</tr>'; }).join("") + '</tbody></table></div>'; };
+  P.table = function (headers, rows) { return '<div class="rna-table-wrap"><table class="rna-table"><thead><tr>' + headers.map(function (v) { return '<th scope="col">' + v + '</th>'; }).join("") + '</tr></thead><tbody>' + rows.map(function (row) { return '<tr data-filter-row>' + row.map(function (v) { return '<td>' + v + '</td>'; }).join("") + '</tr>'; }).join("") + '</tbody></table></div>'; };
   P.info = function (title, subtitle, icon, action) { return '<div class="info-row">' + P.icon(icon || "file") + '<div class="row-copy"><strong>' + P.escape(title) + '</strong><small>' + P.escape(subtitle) + '</small></div>' + (action || "") + '</div>'; };
   P.chart = function () { return '<div class="mini-chart" role="img" aria-label="Демонстрационная выручка: июнь 9,6, июль 10,2, август 10,8, сентябрь 12,8 миллиона рублей.">' + [["Июн", "9,6", 60], ["Июл", "10,2", 68], ["Авг", "10,8", 76], ["Сен", "12,8", 94]].map(function (v) { return '<div class="chart-bar" style="height:' + v[2] + '%"><b>' + v[1] + '</b><span>' + v[0] + '</span></div>'; }).join("") + '</div>'; };
   P.dirtyBar = function (key) { return '<div class="editor-status"><span data-dirty-status="' + key + '">' + (P.state.dirty[key] ? "Есть изменения" : "") + '</span><span data-editor-position>Строка 1, столбец 1</span></div>'; };

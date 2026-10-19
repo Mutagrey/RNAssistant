@@ -94,6 +94,7 @@ assert.ok(titles(grouped).includes("Ответвить чат отсюда"));
 console.log("PASS message actions: send/edit/approval/reconnect transitions restore footers without remounting content");
 
 // A persisted mid-run snapshot and the live replay must produce one run unit.
+vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-run-view-state.js"), "utf8"), ctx);
 vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-agent-model.js"), "utf8"), ctx);
 const activity = (id, status) => ({ RunId: "r", StepId: "s", StepMessage: "One step",
   Kind: "tool", ToolId: "common.resources_read", ToolCallId: id, Status: status });

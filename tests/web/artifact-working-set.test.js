@@ -18,7 +18,7 @@ class Element {
   get textContent() { return (this._text || "") + this.children.map(c => c.textContent).join(""); }
   click() { return this.handlers.click && this.handlers.click(); }
 }
-const ids = ["", "Scope", "Import", "File", "Kind", "Document", "Refresh", "Status", "More", "Preview", "Actions", "PreviewTitle", "PreviewBody",
+const ids = ["", "Scope", "Import", "File", "Kind", "Status", "PreviewStatus", "More", "Preview", "Actions", "PreviewTitle", "PreviewBody",
   "All", "Overview", "OverviewRows", "OverviewTable", "OverviewEmpty", "OverviewCreate"];
 const elements = Object.fromEntries(ids.map(id => ["artifactCatalog" + id, new Element()]));
 elements.htmlWorkspaceLayout = new Element(); elements.htmlWorkspaceEditor = new Element(); elements.htmlWorkspaceSearchInput = new Element();
@@ -33,6 +33,7 @@ const context = vm.createContext({ console, TextDecoder, TextEncoder, Blob, cryp
   RNAssistantResourceDownload: { read: async () => new TextEncoder().encode(JSON.stringify({ Project: { Files: [{ Path: "index.html", Kind: "html", Content: "<h1>Saved</h1>" }], EntryPath: "index.html", Data: [], ExternalDependencies: [] }, Views: [] })) },
   RNAssistantHtmlWorkspacePreview: { ensureVendors: async () => {}, build: options => { previews.push(options); return "<h1>Saved</h1>"; } }
 });
+context.RNAssistantNavigationTree = { icon: () => "" };
 context.window = context;
 vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-artifact-catalog.js"), "utf8"), context);
 const flush = () => new Promise(resolve => setImmediate(resolve));

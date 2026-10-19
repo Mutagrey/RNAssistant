@@ -121,17 +121,6 @@ function bindChatActions() {
     var wrap = $("chatSearchWrap");
     setChatSearchOpen(!wrap.classList.contains("is-open"), true);
   });
-  $("toggleChatSidebarButton").addEventListener("click", function () {
-    state.chatSidebarHidden = !state.chatSidebarHidden;
-    try {
-      window.localStorage.setItem("rnassistant.chat.sidebar.hidden", state.chatSidebarHidden ? "1" : "0");
-    } catch (error) {
-    }
-    renderChatTreeControls();
-    if (typeof refreshCodeEditors === "function") {
-      refreshCodeEditors();
-    }
-  });
   $("openDocumentButton").addEventListener("click", openActiveDocument);
   $("chatSearchInput").addEventListener("input", function () {
     state.chatSearch = $("chatSearchInput").value || "";
@@ -145,7 +134,6 @@ function bindChatActions() {
     }
   });
   bindComposerPickers();
-  $("clearChatButton").addEventListener("click", clearChat);
   $("compactContextButton").addEventListener("click", compactChatContext);
   $("stopButton").addEventListener("click", stopActiveSend);
   $("clearInputButton").addEventListener("click", function () { setChatInputText("", true); });

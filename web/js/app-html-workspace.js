@@ -471,38 +471,11 @@
     showHtmlWorkspaceCreate("data", "data");
   }
 
-  function updateHtmlSidebarToggle() {
-    var button = $("toggleHtmlSidebarButton");
-    if (!button) return;
-    var label = state.htmlWorkspaceSidebarHidden ? "Показать список" : "Скрыть список";
-    button.setAttribute("title", label);
-    button.setAttribute("aria-label", label);
-    button.setAttribute("aria-pressed", state.htmlWorkspaceSidebarHidden ? "true" : "false");
-    button.innerHTML = state.htmlWorkspaceSidebarHidden
-      ? "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"m10 6 6 6-6 6\"/></svg>"
-      : "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"m14 6-6 6 6 6\"/></svg>";
-  }
-
-  function toggleHtmlWorkspaceSidebar() {
-    state.htmlWorkspaceSidebarHidden = !state.htmlWorkspaceSidebarHidden;
-    try {
-      window.localStorage.setItem("rnassistant.artifacts.sidebar.hidden", state.htmlWorkspaceSidebarHidden ? "1" : "0");
-    } catch (error) {
-    }
-    renderHtmlWorkspace();
-    if (typeof refreshCodeEditors === "function") refreshCodeEditors(["htmlWorkspaceEditorInput"]);
-  }
-
   function renderHtmlWorkspace() {
     if (typeof isPanelActive === "function" && !isPanelActive("artifacts")) return;
     workspace();
     ensureSelection();
     if (state.htmlWorkspaceDirty && window.RNAssistantArtifactCatalog) window.RNAssistantArtifactCatalog.editor();
-    var layout = $("htmlWorkspaceLayout");
-    if (layout) {
-      layout.classList.toggle("is-sidebar-hidden", !!state.htmlWorkspaceSidebarHidden);
-    }
-    updateHtmlSidebarToggle();
     renderHtmlWorkspaceList();
     if ($("htmlWorkspaceEditor").hidden) { workspaceEditor.suspendPreview(); return; }
     renderHtmlWorkspaceEditor();
@@ -638,7 +611,6 @@
     $("recoverHtmlWorkspaceButton").addEventListener("click", workspaceActions.recoverRevision);
     $("refreshHtmlDataButton").addEventListener("click", workspaceActions.refreshAll);
     $("exportHtmlWorkspaceButton").addEventListener("click", workspaceActions.exportWorkspace);
-    $("toggleHtmlSidebarButton").addEventListener("click", toggleHtmlWorkspaceSidebar);
     $("addPlanButton").addEventListener("click", workspaceActions.createPlan);
     $("addHtmlFileButton").addEventListener("click", function () { addHtmlWorkspaceFile("html"); });
     $("addCssFileButton").addEventListener("click", function () { addHtmlWorkspaceFile("css"); });

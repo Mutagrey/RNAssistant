@@ -204,24 +204,12 @@ function activityOperation(activity) {
 }
 
 function activityOperationIcon(activity) {
-  var icons = {
-    search: "<svg viewBox=\"0 0 24 24\"><circle cx=\"11\" cy=\"11\" r=\"6.5\"/><path d=\"m16 16 4 4\"/></svg>",
-    read: "<svg viewBox=\"0 0 24 24\"><path d=\"M3.5 5.5A7.5 7.5 0 0 1 12 7v13a7.5 7.5 0 0 0-8.5-1.5Z\"/><path d=\"M20.5 5.5A7.5 7.5 0 0 0 12 7v13a7.5 7.5 0 0 1 8.5-1.5Z\"/></svg>",
-    write: "<svg viewBox=\"0 0 24 24\"><path d=\"M4 20h4l11-11a2.1 2.1 0 0 0-4-4L4 16Z\"/><path d=\"m13.5 6.5 4 4\"/></svg>",
-    command: "<svg viewBox=\"0 0 24 24\"><rect x=\"3\" y=\"4\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"m7 9 3 3-3 3\"/><path d=\"M13 15h4\"/></svg>",
-    reasoning: "<svg viewBox=\"0 0 24 24\"><path d=\"M9 18h6M10 22h4\"/><path d=\"M8.5 15.5A7 7 0 1 1 15.5 15.5c-.8.6-1 1.1-1 2h-5c0-.9-.2-1.4-1-2Z\"/></svg>",
-    diagnostic: "<svg viewBox=\"0 0 24 24\"><path d=\"M12 3 2.8 20h18.4Z\"/><path d=\"M12 9v5M12 17.5v.1\"/></svg>",
-    status: "<svg viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"8\"/><path d=\"m8.5 12 2.3 2.3 4.8-5\"/></svg>"
-  };
-  icons.learn = '<svg viewBox="0 0 24 24"><path d="M4 4h10l4 4v12H4Z"/><path d="M14 4v5h5M8 12h6M8 16h4"/><path d="m17 14 2 2 3-4"/></svg>';
-  icons.question = '<svg viewBox="0 0 24 24"><path d="M4 4h16v13H9l-5 4Z"/><path d="M9 8a3 3 0 0 1 6 0c0 2-3 2-3 4M12 14v.1"/></svg>';
-  icons.delete = '<svg viewBox="0 0 24 24"><path d="M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7M14 10v7"/></svg>';
-  icons.export = '<svg viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></svg>';
-  icons.plan = '<svg viewBox="0 0 24 24"><path d="m3 6 2 2 3-4M11 6h10m-18 7 2 2 3-4M11 13h10M4 20h3M11 20h10"/></svg>';
-  icons.chart = '<svg viewBox="0 0 24 24"><path d="M4 3v18h17M8 17v-5M13 17V6M18 17V9"/></svg>';
-  icons.package = '<svg viewBox="0 0 24 24"><path d="m3 7 9-4 9 4v10l-9 4-9-4Zm0 0 9 4 9-4M12 11v10M8 5l9 4"/></svg>';
-  icons.check = icons.status;
-  return icons[activityOperation(activity)] || icons.status;
+  var names = { search: "search", read: "book", write: "edit", command: "terminal",
+    reasoning: "bulb", diagnostic: "warning", status: "status", learn: "learn",
+    question: "question", delete: "trash", export: "download", plan: "plan",
+    chart: "chart", package: "package", check: "check" };
+  var name = names[activityOperation(activity)] || "status";
+  return window.RNAssistantIcons ? window.RNAssistantIcons.render(name) : '<svg data-rna-icon="' + name + '" aria-hidden="true"></svg>';
 }
 
 function activityPrimaryText(activity) {

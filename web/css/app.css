@@ -184,17 +184,6 @@ button.danger-soft:hover {
   min-width: 320px;
 }
 
-.icon-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  min-height: var(--control-height);
-  padding: 0;
-  border-radius: 6px;
-}
-
 .icon-text-button {
   display: inline-flex;
   gap: 7px;
@@ -237,14 +226,14 @@ button.is-busy::after {
   animation: control-busy-spin .7s linear infinite;
 }
 
-button.icon-button.is-busy::after {
+button.icon-btn.is-busy::after {
   position: absolute;
   top: 50%;
   left: 50%;
   margin: -7px 0 0 -7px;
 }
 
-button.icon-button.is-busy svg {
+button.icon-btn.is-busy svg {
   visibility: hidden;
 }
 

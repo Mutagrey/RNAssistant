@@ -14,7 +14,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     const errors = [];
     page.on("pageerror", error => errors.push(error.message));
     await page.setContent('<div class="chat-workspace" style="height:600px"><aside class="chat-sidebar">' +
-      '<button id="toggleChatSidebarButton"></button><div id="chatOfficeLaunchMount"></div>' +
+      '<div id="chatOfficeLaunchMount"></div>' +
       '<div id="chatSessionList" class="chat-session-list"></div></aside><div class="splitter"></div><main class="chat-main"></main></div>');
     for (const file of ["app.css", "app-chat.css", "app-theme.css", "app-product-tokens.css", "app-product-components.css"])
       await page.addStyleTag({ content: read("css/" + file) });
@@ -44,7 +44,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       window.renameChat = () => {};
       window.deleteChat = () => {};
     });
-    for (const file of ["app-utils.js", "app-navigation-tree.js", "app-chat-state.js"])
+    for (const file of ["app-icons.js", "app-utils.js", "app-navigation-tree.js", "app-chat-state.js"])
       await page.addScriptTag({ content: read("js/" + file) });
     await page.evaluate(() => renderChatSessionList(state.chats));
 

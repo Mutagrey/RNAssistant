@@ -37,7 +37,7 @@ function createRemoveContextButton(note) {
   button.className = "context-chip-remove";
   button.title = "Убрать из контекста";
   button.setAttribute("aria-label", "Убрать из контекста");
-  button.innerHTML = "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M18 6 6 18\"/><path d=\"m6 6 12 12\"/></svg>";
+  button.innerHTML = window.RNAssistantIcons.render("close");
   button.addEventListener("click", function (event) {
     event.preventDefault();
     event.stopPropagation();
@@ -195,6 +195,7 @@ function renderContext() {
   renderContextList(notes);
   renderContextJson(state.context || {});
   renderContextMeter();
+  if (window.RNAssistantChatInspector) window.RNAssistantChatInspector.render();
 }
 
 async function syncActiveChatState() {

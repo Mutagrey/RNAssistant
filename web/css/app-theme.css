@@ -293,10 +293,6 @@ html[data-theme="dark"] .settings-nav {
   border-color: var(--line);
 }
 
-html[data-theme="dark"] .mode-button.active {
-  background: var(--secondary-bg);
-}
-
 html[data-theme="dark"] .danger-zone,
 html[data-theme="dark"] .message.failed .markdown {
   border-color: #63383a;
@@ -405,11 +401,6 @@ html[data-theme="dark"] .chatbar {
   border-color: var(--line);
 }
 
-html[data-theme="dark"] .chat-tree-toolbar .icon-button:hover,
-html[data-theme="dark"] .chat-tree-toolbar .icon-button.active {
-  background: #232830;
-}
-
 html[data-theme="dark"] .document-notice {
   background: #191d23;
   color: var(--muted);
@@ -424,15 +415,6 @@ html[data-theme="dark"] .attachment-draft {
 html[data-theme="dark"] .attachment-thumb {
   background: #29313c;
   color: #a8b4c4;
-}
-
-html[data-theme="dark"] .message-action {
-  color: #929eae;
-}
-
-html[data-theme="dark"] .message-action:hover {
-  background: var(--secondary-bg-hover);
-  color: #e1e6ed;
 }
 
 html[data-theme="dark"] .chat-scroll-button {

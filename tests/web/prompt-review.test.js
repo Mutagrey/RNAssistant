@@ -160,7 +160,7 @@ function fixture(loadPrompts = true) {
     console.log("PASS library uses the shared navigation tree for all three sections");
   }
   {
-    ["app-prompts.js", "app-settings.js", "app-navigation-tree.js", "app-tools.css"].forEach(file =>
+    ["app-prompts.js", "app-settings.js", "app-icons.js", "app-navigation-tree.js", "app-tools.css"].forEach(file =>
       assert.match(read("index.html"), new RegExp(file.replace(/\./g, "\\.") + "\\?v=[^\"'\\s]+")));
     assert.ok(read("js/app-prompts.js").includes("fetch: window.fetch.bind(window)"));
     assert.ok(!read("js/app-settings.js").includes("readPromptSettings")); console.log("PASS direct-cutover delivery keys and retired form reader removal");

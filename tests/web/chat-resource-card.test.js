@@ -85,6 +85,8 @@ const context = vm.createContext({
 context.window = context;
 context.$ = () => null;
 context.renderHtmlWorkspace = () => {};
+vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-icons.js"), "utf8"), context,
+  { filename: "app-icons.js" });
 vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-artifacts.js"), "utf8"), context,
   { filename: "app-artifacts.js" });
 

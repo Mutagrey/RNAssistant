@@ -647,13 +647,12 @@
 .artifact-link-entry > .chat-resource-row-copy { flex: 1; min-width: 0; }
 .artifact-link-entry > .link-button { flex-shrink: 0; }
 /* One artifact tree and one adjacent viewer/editor. */
-.artifact-catalog-toolbar, .artifact-catalog-filters, .artifact-catalog-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.artifact-catalog-toolbar, .artifact-catalog-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
 .artifact-catalog-toolbar { padding:8px 12px; border-bottom:1px solid var(--line); background:var(--panel); }
 .artifact-catalog-toolbar label { display:flex; align-items:center; gap:8px; font-weight:500; }
-.artifact-catalog-toolbar select, .artifact-catalog-filters select, #artifactCatalogPreviewBody select {
+.artifact-catalog-toolbar select, #artifactCatalogPreviewBody select {
   min-width:0; max-width:100%; border:1px solid var(--line); border-radius:var(--control-radius); padding:5px 8px; color:var(--text); background:var(--panel);
 }
-.artifact-catalog-filters select { flex:1; }
 .artifact-workspace-content { display:flex; flex-direction:column; min-width:0; min-height:0; overflow:hidden; }
 .artifact-workspace-content > .html-workspace-editor { flex:1; min-height:0; }
 .artifact-catalog-actions { padding:8px 12px; border-bottom:1px solid var(--line); }
@@ -675,16 +674,12 @@
 #artifactCatalogPreviewBody pre { margin:0; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; background:var(--code); border:1px solid var(--code-border); border-radius:6px; padding:12px; }
 .artifact-tree-footer { padding:6px 0; }
 #artifactCatalogStatus { color:var(--muted); font-size:12px; margin:0; overflow-wrap:anywhere; }
-#artifactCatalog [hidden], .artifact-tree-footer [hidden], .artifact-catalog-filters [hidden] { display:none; }
+#artifactCatalog [hidden], .artifact-tree-footer [hidden] { display:none; }
 #htmlWorkspaceSidebar { grid-template-rows:auto auto minmax(0,1fr) auto; }
-#htmlWorkspaceLayout.is-sidebar-hidden .artifact-workspace-content { grid-column:1; }
 @media (max-width:560px) {
-  /* Keep the requested tree/view relationship even in a narrow Office pane. */
-  #htmlWorkspaceLayout:not(.is-sidebar-hidden) { grid-template-columns:minmax(130px, 36%) minmax(0,1fr); grid-template-rows:minmax(0,1fr); gap:4px; }
   #htmlWorkspaceLayout .html-workspace-tree { max-height:none; }
   #htmlWorkspaceSidebar { padding:6px 4px; }
   #htmlWorkspaceSidebar .tool-list-controls { gap:4px; }
-  .artifact-catalog-filters { gap:4px; }
   .artifact-catalog-toolbar { gap:6px; }
   .artifact-catalog-actions { padding:6px; gap:4px; }
   .artifact-catalog-preview { padding:8px; }

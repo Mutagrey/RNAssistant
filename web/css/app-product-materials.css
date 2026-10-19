@@ -1,6 +1,6 @@
 #tab-artifacts .html-workspace-layout { gap: 0; }
 #tab-artifacts .html-workspace-sidebar {
-  grid-template-rows: auto auto auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
   padding: 0 8px 6px;
   background: var(--surface-subtle);
 }
@@ -20,18 +20,10 @@
   font-size: 13px;
   font-weight: 600;
 }
-#tab-artifacts .artifact-catalog-toolbar .product-material-menu > summary { width: 30px; min-height: 30px; padding: 0; border-radius: 8px; background: transparent; color: var(--ink-muted); font-size: 20px; }
 #tab-artifacts .artifact-catalog-toolbar.product-search-heading.searching .tree-toolbar { flex: 1; }
-#tab-artifacts .artifact-catalog-toolbar .product-material-menu > summary:hover { background: var(--surface-hover); color: var(--ink); }
 #tab-artifacts .artifact-catalog-toolbar .product-material-menu .html-workspace-menu-items { position: absolute; top: calc(100% + 4px); right: 0; min-width: 180px; margin: 0; }
 #tab-artifacts .artifact-catalog-toolbar .product-material-menu .html-workspace-menu-items button { width: 100%; padding: 7px 10px; font-size: 12px; }
-#tab-artifacts .artifact-catalog-filters { justify-content: flex-end; min-height: 0; }
-#tab-artifacts .artifact-catalog-filters:empty { display: none; }
-#tab-artifacts .artifact-catalog-filters button { min-height: 26px; border: 0; background: transparent; color: var(--ink-muted); }
 #tab-artifacts .tool-list-controls { margin: 0; }
-#tab-artifacts .artifact-overview-nav { display: flex; align-items: center; gap: 8px; margin: 5px 0; padding: 9px 12px; border: 0; border-radius: 8px; background: transparent; color: var(--ink); font: 12px var(--font); text-align: left; cursor: pointer; }
-#tab-artifacts .artifact-overview-nav[aria-current="page"] { background: var(--surface-selected); }
-#tab-artifacts .artifact-overview-nav svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.55; stroke-linecap: round; stroke-linejoin: round; }
 #tab-artifacts .artifact-catalog-actions {
   justify-content: space-between;
   flex-wrap: nowrap;
@@ -39,6 +31,7 @@
   padding: 5px 18px;
   background: var(--surface);
 }
+#tab-artifacts .artifact-inline-status { display: none; margin: 0; }
 #tab-artifacts .artifact-detail-heading { min-width: 0; }
 #tab-artifacts .artifact-detail-heading span { display: block; overflow: hidden; color: var(--ink-muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 #tab-artifacts .artifact-detail-heading h2 { margin: 2px 0 0; overflow: hidden; font-size: 15px; text-overflow: ellipsis; white-space: nowrap; }
@@ -53,21 +46,14 @@
 #tab-artifacts .artifact-overview-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 52px; padding: 5px 18px; border-bottom: 1px solid var(--line); }
 #tab-artifacts .artifact-overview-heading h2 { margin: 2px 0 0; font-size: 15px; }
 #tab-artifacts .artifact-overview-heading p { margin: 0; color: var(--ink-muted); font-size: 10px; }
-#tab-artifacts .artifact-overview-create > summary { min-height: 30px; padding: 5px 10px; border-color: var(--accent); background: var(--accent); color: var(--accent-ink); font-size: 12px; font-weight: 600; }
 #tab-artifacts .artifact-overview-create .html-workspace-menu-items { position: absolute; top: calc(100% + 4px); right: 0; min-width: 185px; }
 #tab-artifacts .artifact-overview-create .html-workspace-menu-items button { width: 100%; text-align: left; }
 #tab-artifacts .artifact-overview-content { min-height: 0; overflow: auto; padding: 16px 18px; }
 #tab-artifacts .artifact-overview-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 18px; }
 #tab-artifacts .artifact-overview-toolbar .tool-search { flex: 1 1 220px; width: auto; min-height: 36px; margin: 0; padding: 7px 12px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface-subtle); font-size: 12px; }
 #tab-artifacts .artifact-overview-toolbar select { flex: 0 1 auto; max-width: 170px; min-height: 36px; padding: 7px 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); color: var(--ink); font: 12px var(--font); }
-#tab-artifacts .artifact-overview-table-wrap { width: 100%; overflow-x: auto; }
-#tab-artifacts .artifact-overview-table-wrap table { width: 100%; border-collapse: collapse; font-size: 12px; }
-#tab-artifacts .artifact-overview-table-wrap th { padding: 10px 12px; border-bottom: 1px solid var(--line-strong); color: var(--ink-muted); font-size: 10px; font-weight: 500; text-align: left; }
-#tab-artifacts .artifact-overview-table-wrap td { padding: 12px; border-bottom: 1px solid var(--line); }
 #tab-artifacts .artifact-overview-table-wrap th:first-child,
 #tab-artifacts .artifact-overview-table-wrap td:first-child { min-width: 180px; }
-#tab-artifacts .artifact-overview-link { padding: 0; border: 0; background: transparent; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
-#tab-artifacts .artifact-overview-link:hover { color: var(--accent); text-decoration: underline; }
 #tab-artifacts .artifact-overview-empty { padding: 30px 18px; color: var(--ink-muted); font-size: 13px; text-align: center; }
 #tab-artifacts .artifact-catalog-preview { padding: 16px 18px; background: var(--surface); }
 #tab-artifacts #artifactCatalogActions:not([hidden]) + .artifact-catalog-preview > h3 { display: none; }
@@ -83,6 +69,10 @@
 #tab-artifacts .html-workspace-tree button { font-family: var(--font); }
 
 @media (max-width: 560px) {
+  #tab-artifacts .artifact-inline-status:not(:empty) { display: block; padding: 7px 12px; border-bottom: 1px solid var(--line); color: var(--ink-muted); font-size: 11px; }
+  #tab-artifacts .html-workspace-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+  #tab-artifacts .html-workspace-sidebar, #tab-artifacts .html-workspace-layout > .splitter { display: none; }
+  #tab-artifacts .artifact-workspace-content { grid-column: 1; grid-row: 1; }
   #tab-artifacts .html-workspace-sidebar { padding-inline: 4px; }
   #tab-artifacts .artifact-catalog-toolbar { margin-inline: -4px; padding-left: 8px; }
   #tab-artifacts .artifact-catalog-toolbar strong { display: none; }

@@ -53,12 +53,10 @@
   margin-left: auto;
 }
 
-.prompt-context-inspector-head-actions .icon-button {
+.prompt-context-inspector-head-actions .icon-btn {
   width: 28px;
   height: 28px;
   min-height: 28px;
-  border-color: transparent;
-  background: transparent;
 }
 
 .prompt-context-inspector-scroll {

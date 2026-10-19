@@ -366,25 +366,7 @@
 
   function iconSvg(kind) {
     kind = String(kind || "file").toLowerCase();
-    var icons = {
-      plan: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><rect x=\"4\" y=\"3\" width=\"16\" height=\"18\" rx=\"2\"/><path d=\"m8 9 1.5 1.5L12 8\"/><path d=\"M14 9h3\"/><path d=\"m8 15 1.5 1.5L12 14\"/><path d=\"M14 15h3\"/></svg>",
-      html_workspace: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><rect x=\"3\" y=\"4\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"M3 8h18\"/><path d=\"m9 12-2 2 2 2\"/><path d=\"m15 12 2 2-2 2\"/></svg>",
-      html: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z\"/><path d=\"M14 2v6h6\"/><path d=\"m10 13-2 2 2 2\"/><path d=\"m14 13 2 2-2 2\"/></svg>",
-      css: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z\"/><path d=\"M14 2v6h6\"/><path d=\"M8 14c0-1 1-2 2-2\"/><path d=\"M8 14c0 1 1 2 2 2\"/><path d=\"M16 12h-2v4h2\"/></svg>",
-      js: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z\"/><path d=\"M14 2v6h6\"/><path d=\"M9 12v4a1 1 0 0 1-1 1H7\"/><path d=\"M13 16c.5.7 2.7.7 3 0 .5-1-3-1-2.5-2 .3-.7 2.2-.7 2.8 0\"/></svg>",
-      json: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M8 3H6a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2 2 2 0 0 1 2 2v6a2 2 0 0 0 2 2h2\"/><path d=\"M16 3h2a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2 2 2 0 0 0-2 2v6a2 2 0 0 1-2 2h-2\"/></svg>",
-      chart: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M4 20V10\"/><path d=\"M10 20V4\"/><path d=\"M16 20v-7\"/><path d=\"M22 20H2\"/></svg>",
-      image: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><rect x=\"3\" y=\"4\" width=\"18\" height=\"16\" rx=\"2\"/><circle cx=\"9\" cy=\"10\" r=\"2\"/><path d=\"m21 15-4-4L5 20\"/></svg>",
-      audio: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M9 18V5l10-2v13\"/><circle cx=\"6\" cy=\"18\" r=\"3\"/><circle cx=\"16\" cy=\"16\" r=\"3\"/></svg>",
-      markdown: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z\"/><path d=\"M14 2v6h6\"/><path d=\"M7 17v-5l2 2 2-2v5\"/><path d=\"m14 14 2 2 2-2\"/><path d=\"M16 12v4\"/></svg>",
-      tool_result: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><rect x=\"3\" y=\"4\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"m7 9 3 3-3 3\"/><path d=\"M13 15h4\"/></svg>",
-      compaction: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"m4 9 5-5\"/><path d=\"M4 4h5v5\"/><path d=\"m20 9-5-5\"/><path d=\"M20 4h-5v5\"/><path d=\"m4 15 5 5\"/><path d=\"M4 20h5v-5\"/><path d=\"m20 15-5 5\"/><path d=\"M20 20h-5v-5\"/></svg>",
-      file: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z\"/><path d=\"M14 2v6h6\"/><path d=\"M8 13h8\"/><path d=\"M8 17h6\"/></svg>"
-    };
-    if (kind === "attachment") kind = "file";
-    if (kind === "script") kind = "js";
-    if (kind === "data") kind = "json";
-    return icons[kind] || icons.file;
+    return window.RNAssistantIcons ? window.RNAssistantIcons.render(kind) : "";
   }
 
   function planMeta(artifact) {
@@ -718,7 +700,7 @@
 
     var icon = document.createElement("span");
     icon.className = "chat-resource-bundle-icon";
-    icon.innerHTML = "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><rect x=\"7\" y=\"3\" width=\"13\" height=\"15\" rx=\"2\"/><path d=\"M17 21H6a2 2 0 0 1-2-2V8\"/><path d=\"M10 8h7M10 12h5\"/></svg>";
+    icon.innerHTML = window.RNAssistantIcons.render("files");
     summary.appendChild(icon);
 
     var copy = document.createElement("span");

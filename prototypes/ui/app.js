@@ -4,7 +4,7 @@
   var initial = { title: P.fixtures.chat.title, document: P.fixtures.document, subtitle: "Сравнение периодов · 12:42", draft: "", messages: P.sampleMessages(), plan: false, status: "ready", empty: false, usage: { input: 24600, limit: 128000 } };
   var S = P.state = {
     route: "chat/main", review: "app", theme: "light", scenario: "ready", standalone: false,
-    chatId: "sales", chats: { sales: Object.assign({}, initial), summary: { title: "Сводка по регионам", subtitle: "3 региона · 11:18", draft: "", messages: [], plan: false, status: "ready", empty: true } },
+    chatId: "sales", chats: { sales: Object.assign({}, initial), summary: { title: P.fixtures.officeExamples[0].chats[1].title, subtitle: "3 региона · 11:18", draft: "", messages: [], plan: false, status: "ready", empty: true } },
     document: P.fixtures.document, attachments: ["Продажи · A1:F1249"], fields: {}, drafts: {}, dirty: {}, saved: {},
     vbaModule: "FormatSales", requestPage: 3, removedMaterials: [], processing: "running", sourceSelection: [true, true, true],
     mappings: [["Регион", "region"], ["Выручка", "revenue"], ["Месяц", "period"]],
