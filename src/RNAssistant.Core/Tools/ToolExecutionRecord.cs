@@ -15,10 +15,12 @@ namespace RNAssistant.Core.Tools
         public bool RequiresConfirmation { get; private set; }
         public bool IndependentLocalRead { get; private set; }
         public ToolPolicy Policy { get; private set; }
+        public string AdmissionRevision { get; private set; }
 
         [JsonConstructor]
         public ToolPolicySnapshot(string toolId, string revision, bool mayHaveSideEffects,
-            bool requiresConfirmation = false, bool independentLocalRead = false, ToolPolicy policy = null)
+            bool requiresConfirmation = false, bool independentLocalRead = false, ToolPolicy policy = null,
+            string admissionRevision = null)
         {
             if (string.IsNullOrWhiteSpace(toolId)) throw new ArgumentException("Tool id is required.", nameof(toolId));
             if (string.IsNullOrWhiteSpace(revision)) throw new ArgumentException("Policy revision is required.", nameof(revision));
@@ -33,11 +35,12 @@ namespace RNAssistant.Core.Tools
             RequiresConfirmation = requiresConfirmation;
             IndependentLocalRead = independentLocalRead;
             Policy = policy;
+            AdmissionRevision = admissionRevision;
         }
 
-        public ToolPolicySnapshot(string toolId, string revision, ToolPolicy policy)
+        public ToolPolicySnapshot(string toolId, string revision, ToolPolicy policy, string admissionRevision = null)
             : this(toolId, revision, (policy ?? throw new ArgumentNullException(nameof(policy))).MayHaveSideEffects,
-                policy.RequiresConfirmation, policy.IndependentLocalRead, policy)
+                policy.RequiresConfirmation, policy.IndependentLocalRead, policy, admissionRevision)
         {
         }
 
@@ -62,13 +65,15 @@ namespace RNAssistant.Core.Tools
         public ToolRecoveryContract Recovery { get; private set; }
         public string ResultFingerprint { get; private set; }
         public bool IndependentLocalRead { get; private set; }
+        public string AdmissionRevision { get; private set; }
 
         [JsonConstructor]
         public ToolExecutionProgress(ToolExecutionOutcome outcome, ToolRecoveryContract recovery = null,
-            string resultFingerprint = null, bool independentLocalRead = false)
+            string resultFingerprint = null, bool independentLocalRead = false, string admissionRevision = null)
         {
             Outcome = outcome; Recovery = recovery; ResultFingerprint = resultFingerprint;
             IndependentLocalRead = independentLocalRead;
+            AdmissionRevision = admissionRevision;
         }
 
         public static ToolExecutionProgress Capture(ToolExecutionRecord record)
@@ -81,7 +86,8 @@ namespace RNAssistant.Core.Tools
                 // progress metadata must not prevent recording an actual effect.
             }
             return new ToolExecutionProgress(record.Outcome, record.Recovery, fingerprint,
-                record.Context.Policy.IndependentLocalRead);
+                record.Context.Policy.IndependentLocalRead,
+                record.Context.Policy.AdmissionRevision ?? record.Context.Policy.Revision);
         }
     }
 

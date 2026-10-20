@@ -614,6 +614,20 @@ successful mutation, with typed recovery and no runtime identity in HTTP. Move/d
 still require approval. A separate-process approval test proves that recovery
 survives accepted-history restoration and an unrelated verified deletion does not
 clear the target's failed call. These use scripted HTTP models, not real-model quality evidence.
+After building the CLI, `python3 -B tests/cli/stabilization_smoke.py` checks a
+five-read batch with one narration, a bounded large-file tail, refusal of whole
+replacement from partial evidence, and patch → delivered after-source → patch.
+Both mutations resume approval in fresh processes; exact mixed line endings and
+Unicode outside the patch are preserved. Focused Harness filters `workspace files:
+guarded`, `resources: known VBA target`, `tool runtime: exceptions`, `skill packages:
+exact request`, `context continuity:` and `tools: html source read` cover pre-effect
+conflicts, direct VBA resolution, dependency-scoped recovery, source admission and
+overlapping anchors. These are host-neutral checks, not Office qualification.
+`skill packages:` includes complete-next-request selection admission: the 32K VBA
+case refuses activation and stays usable after state restoration; a separate 64K
+control executes the patch. `skill_packages_smoke.py` also rejects an oversized
+workspace procedure before activation and resumes the chat in a fresh process.
+Neither check changes product context defaults or silently removes selected skills.
 `python3 -B tests/cli/read_acceptance_context_smoke.py` checks the dynamic final-read
 projection: distinct counts, invalidation after edits, the single required block
 after current results, frozen JSON repair, native result transport and no credit

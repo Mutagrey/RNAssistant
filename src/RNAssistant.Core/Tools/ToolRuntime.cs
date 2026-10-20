@@ -26,11 +26,12 @@ namespace RNAssistant.Core.Tools
         private readonly Func<ToolExecutionContext, ToolPreparationResult, string> _pendingRegistrar;
         private readonly IToolMutationObserver _mutationObserver;
         private readonly Func<ToolExecutionContext, string> _dispatchGuard;
+        private readonly Func<ToolCall, string> _admissionRevision;
 
         public ToolRuntime(ToolHandlerRegistry registry, string mode, bool autoConfirm, bool allowsConfirmation,
             Func<ToolExecutionContext, ToolPreparationResult, string> pendingRegistrar = null,
             IToolMutationObserver mutationObserver = null, ConversationRunPolicy runPolicy = null,
-            Func<ToolExecutionContext, string> dispatchGuard = null)
+            Func<ToolExecutionContext, string> dispatchGuard = null, Func<ToolCall, string> admissionRevision = null)
         {
             _registry = registry ?? throw new ArgumentNullException(nameof(registry));
             if (mode != "agent" && mode != "plan" && mode != "chat") throw new ArgumentException("A supported conversation mode is required.", nameof(mode));
@@ -42,12 +43,21 @@ namespace RNAssistant.Core.Tools
             _pendingRegistrar = pendingRegistrar;
             _mutationObserver = mutationObserver;
             _dispatchGuard = dispatchGuard;
+            _admissionRevision = admissionRevision;
         }
 
         public ToolPolicySnapshot Describe(ToolCall call)
         {
             var tool = call == null ? null : _registry.Lookup(call.Name);
-            return tool == null ? null : EffectivePolicy(tool);
+            if (tool == null) return null;
+            var policy = EffectivePolicy(tool);
+            return new ToolPolicySnapshot(policy.ToolId, policy.Revision, policy.Policy, _admissionRevision?.Invoke(call));
+        }
+
+        private string CheckDispatch(ToolExecutionContext context)
+        {
+            try { return _dispatchGuard?.Invoke(context); }
+            catch (Exception ex) { return "The published binding could not be verified: " + ex.Message; }
         }
 
         public async Task<ToolExecutionRecord> ExecuteAsync(ToolExecutionContext context, CancellationToken cancellationToken)
@@ -56,7 +66,7 @@ namespace RNAssistant.Core.Tools
             if (cancellationToken.IsCancellationRequested) return NotDispatched(context, "Cancelled before handler dispatch.");
             var tool = _registry.Lookup(context.Call.Name);
             if (tool == null) return Reject(context, "unknown_tool", "No handler is registered for this exact tool id.");
-            var admissionError = _dispatchGuard?.Invoke(context);
+            var admissionError = CheckDispatch(context);
             if (admissionError != null) return Reject(context, "tool_not_exposed", admissionError);
             if (!context.Policy.Matches(EffectivePolicy(tool))) return Reject(context, "tool_policy_changed", "The captured tool policy or revision changed.");
             var policy = _runPolicy == null ? tool.Registration.Policy : EffectivePolicy(tool).Policy;
@@ -165,7 +175,7 @@ namespace RNAssistant.Core.Tools
             var preparedState = context.PreparedStateJson ?? preparation?.PreparedStateJson;
 
             string mutationAttemptId = null;
-            admissionError = _dispatchGuard?.Invoke(context);
+            admissionError = CheckDispatch(context);
             if (admissionError != null) return Reject(context, "tool_binding_unavailable", admissionError);
             if (policy.MayHaveSideEffects && _mutationObserver != null)
             {
@@ -174,6 +184,10 @@ namespace RNAssistant.Core.Tools
                 {
                     return Record(context, ToolExecutionOutcome.Error, ToolResult.Error(ex.Message, Code(ex.Code)), false,
                         ToolEffectEvidence.None, recovery: new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.Replan));
+                }
+                catch (Exception ex)
+                {
+                    return Reject(context, "mutation_preparation_failed", ex.Message);
                 }
             }
             ToolExecutionRecord publishedTerminal = null;
@@ -320,6 +334,9 @@ namespace RNAssistant.Core.Tools
             {
                 case "invalid_arguments":
                 case "unknown_tool":
+                case "tool_not_exposed":
+                case "tool_binding_unavailable":
+                case "tool_policy_changed":
                     return new ToolRecoveryContract(
                         ToolFailureKind.RejectedNoEffect,
                         ToolRetryPolicy.Replan);

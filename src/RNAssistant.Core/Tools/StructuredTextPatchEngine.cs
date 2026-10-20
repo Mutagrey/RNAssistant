@@ -260,7 +260,7 @@ namespace RNAssistant.Core.Tools
         {
             var exact = new List<PatchMatch>();
             for (var index = 0; (index = source.IndexOf(find, index, StringComparison.Ordinal)) >= 0;
-                 index += find.Length)
+                 index++)
             {
                 exact.Add(new PatchMatch { Start = index, Length = find.Length });
             }
@@ -290,7 +290,7 @@ namespace RNAssistant.Core.Tools
             var normalizedFind = NormalizeLineEndings(find);
             var result = new List<PatchMatch>();
             for (var index = 0; (index = normalizedSource.IndexOf(normalizedFind,
-                     index, StringComparison.Ordinal)) >= 0; index += normalizedFind.Length)
+                     index, StringComparison.Ordinal)) >= 0; index++)
             {
                 result.Add(new PatchMatch
                 {
@@ -307,6 +307,8 @@ namespace RNAssistant.Core.Tools
             var offset = 0;
             foreach (var match in matches)
             {
+                if (match.Start < offset)
+                    throw Error("text_patch_ambiguous", "Replacement matches overlap. Use a unique larger anchor.");
                 result.Append(current, offset, match.Start - offset);
                 result.Append(replacement);
                 offset = match.Start + match.Length;

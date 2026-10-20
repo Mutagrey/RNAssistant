@@ -86,14 +86,19 @@ def run_case(root, operation, restart=False):
         assert len(requests) >= 2, (run.stdout, run.stderr)
         failure = list(results(requests[1]))[-1]
         assert failure["status"] == "error" and failure["data"]["code"] == "source_observation_required", failure
-        assert failure["data"].get("recovery") == {
+        expected_recovery = {
             "failureKind": "RejectedNoEffect", "retryPolicy": "RefreshRequired",
-            "target": "app.txt", "representation": "text"}, failure
-        if run.returncode == 3:
+            "target": "app.txt", "representation": "text"}
+        if operation == "patch":
+            expected_recovery["readScope"] = "relevant_lines"
+        assert failure["data"].get("recovery") == expected_recovery, failure
+        approvals = 0
+        while run.returncode == 3 and approvals < (2 if restart else 1):
             pending = json.loads(run.stdout.splitlines()[-1])["data"]
             assert target.read_text() == "original", "No effect before approval"
             run = cli("approve", "--workspace", str(workspace), "--session", pending["SessionId"],
                       "--pending", pending["pendingId"])
+            approvals += 1
         assert run.returncode == 0, (run.stdout, run.stderr)
         assert len(requests) == len(responses), (len(requests), len(responses))
         final = json.loads(run.stdout.splitlines()[-1])["data"]

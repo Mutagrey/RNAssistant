@@ -16,6 +16,7 @@ namespace RNAssistant.Core.Agent
             internal int Attempts;
             internal ToolRecoveryContract Recovery;
             internal string Message;
+            internal string AdmissionRevision;
         }
         private readonly HashSet<string> _unknown = new HashSet<string>(StringComparer.Ordinal);
         private readonly Dictionary<string, Failure> _failures = new Dictionary<string, Failure>(StringComparer.Ordinal);
@@ -39,7 +40,8 @@ namespace RNAssistant.Core.Agent
         // Reconstructed from terminal facts; never clears unknown replay guards.
         internal bool InspectionRequired { get; private set; }
 
-        internal bool CanDispatch(ToolCall call, out string reason, out string message, out int delayMilliseconds)
+        internal bool CanDispatch(ToolCall call, out string reason, out string message, out int delayMilliseconds,
+            ToolPolicySnapshot policy = null)
         {
             reason = message = null; delayMilliseconds = 0;
             var key = Signature(call);
@@ -58,6 +60,13 @@ namespace RNAssistant.Core.Agent
             }
             Failure previous;
             if (!_failures.TryGetValue(key, out previous)) return true;
+            var admission = policy?.AdmissionRevision ?? policy?.Revision;
+            if (previous.Recovery?.RetryPolicy == ToolRetryPolicy.Replan &&
+                previous.AdmissionRevision != null && admission != null && previous.AdmissionRevision != admission)
+            {
+                _failures.Remove(key);
+                return true; // The normal runtime still checks exposure, policy and live bindings.
+            }
             if (previous.Recovery?.RetryPolicy == ToolRetryPolicy.RetryLater && previous.Attempts < 3)
             {
                 delayMilliseconds = 250 * previous.Attempts;
@@ -86,6 +95,7 @@ namespace RNAssistant.Core.Agent
                 Failure previous;
                 if (!_failures.TryGetValue(key, out previous)) _failures.Add(key, previous = new Failure());
                 previous.Attempts++; previous.Recovery = progress.Recovery; previous.Message = message;
+                previous.AdmissionRevision = progress.AdmissionRevision;
                 return;
             }
             if (progress.Outcome == ToolExecutionOutcome.Ok && progress.IndependentLocalRead)

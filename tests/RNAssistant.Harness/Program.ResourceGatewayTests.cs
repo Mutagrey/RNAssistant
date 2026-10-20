@@ -212,6 +212,24 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void VbaSemanticTargetBypassesDiscovery()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                for (var index = 0; index < 1001; index++)
+                    adapter.SetVbaModule("Other" + index.ToString("D4"), "unrelated source", "StdModule");
+                adapter.SetVbaModule("ZTarget", "exact target source", "StdModule");
+                var session = NewSession(adapter);
+                executor.BindResourceAuthority(session);
+                var target = executor.ResourceGateway.ResolveIntentTarget(session, "VBA module: ZTarget");
+                AssertEqual(0, adapter.CountVbaCalls(FakeVbaOperation.ReadModule), "known target never searches sibling bodies");
+                var source = executor.ResourceGateway.Read(session, new ResourceReadRequest
+                    { Reference = target.Reference, Representation = "source", MaxChars = 1000 }).Result;
+                AssertEqual("exact target source", source.Text, "known module beyond discovery cap is readable");
+                AssertEqual(1, adapter.CountVbaCalls(FakeVbaOperation.ReadModule), "only the selected module source is read");
+            });
+        }
+
         private static void GenericVbaSearchSeparatesScansAndMetadata()
         {
             WithTempPaths(paths =>

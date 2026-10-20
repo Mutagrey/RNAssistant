@@ -197,7 +197,7 @@ namespace RNAssistant.Office.Vba
                         ["inspectTool"] = "common.resources_read",
                         ["discoveryScope"] = "vba"
                     },
-                    "vba_patch_stale_source",
+                    "vba_patch_not_found",
                     true);
             }
             if (patch.Status == VbaPatchStatus.Ambiguous)

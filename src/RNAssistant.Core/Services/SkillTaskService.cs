@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
@@ -123,7 +124,8 @@ namespace RNAssistant.Core.Services
         }
 
         public static ArsenalSkill Select(ChatSession session, string id, SkillCatalogSnapshot skills,
-            ToolPackSnapshot pack, AppSettings settings, string callId)
+            ToolPackSnapshot pack, AppSettings settings, string callId,
+            Func<IReadOnlyList<SelectedSkill>, ArsenalSkill, string> admit = null)
         {
             if (session?.LastRun == null) throw new InvalidOperationException("An active task is required.");
             var skill = skills.Skills.SingleOrDefault(item => item.Id == id && item.Enabled);
@@ -146,23 +148,27 @@ namespace RNAssistant.Core.Services
                 .Sum(tool => ModelContextBudget.EstimateTextTokens(pack.Find(tool)?.Descriptor.ParametersJson ?? "", settings));
             if (tokens > ModelContextBudget.InputBudgetTokens(settings) / 2)
                 throw new InvalidOperationException("Skill instructions and dependencies exceed the task context budget.");
+            var pending = Describe(skill, "pending", optional, pins, skills.Revision(id));
+            var admissionError = admit?.Invoke(candidate, pending);
+            if (admissionError != null) throw new InvalidOperationException(admissionError);
             // Commit only after the complete candidate has passed validation. The caller
             // persists this together with the accepted terminal through the existing store.
             if (!previous.Any(item => item.Id == id && item.Revision == selection.Revision &&
                 JsonConvert.SerializeObject(item.Tools) == JsonConvert.SerializeObject(pins)))
                 session.LastRun.SelectedSkills = candidate;
-            return Describe(skill, "pending", optional, pins, skills.Revision(id));
+            return pending;
         }
 
         public static SkillRequestSurface Compile(ChatSession session, SkillCatalogSnapshot skills,
             ToolPackSnapshot pack, IReadOnlyList<ToolCatalogEntry> catalog,
-            IReadOnlyList<ToolCatalogEntry> directTools, string stepId, AppSettings settings)
+            IReadOnlyList<ToolCatalogEntry> directTools, string stepId, AppSettings settings,
+            IReadOnlyList<SelectedSkill> candidateSelections = null)
         {
             var arsenal = new AgentArsenal { RunId = session?.LastRun?.RunId, StepId = stepId,
                 Policy = session?.LastRun?.ConversationPolicy == null ? null :
                     session.LastRun.ConversationPolicy.Mode + "/" + session.LastRun.ConversationPolicy.MutationPolicy +
                     (session.LastRun.ConversationPolicy.AutoConfirmsToolActions ? "/auto" : "") };
-            var selected = session?.LastRun?.SelectedSkills ?? new List<SelectedSkill>();
+            var selected = candidateSelections ?? session?.LastRun?.SelectedSkills ?? new List<SelectedSkill>();
             var definitions = skills.Skills;
             var instructions = new List<SkillDefinition>();
             var ids = new HashSet<string>((directTools ?? new ToolCatalogEntry[0])
@@ -237,6 +243,54 @@ namespace RNAssistant.Core.Services
             if (actual == null || offered.Revision != actual.Revision)
                 return "The exact originating tool binding is unavailable or revoked.";
             return null;
+        }
+
+        // Catalog publication is not itself a contract change. Revalidate only the
+        // offered operation and the selected skills/dependencies that supplied it.
+        public static string CheckPublishedBindings(ChatSession session, ToolExecutionContext context,
+            ToolPackSnapshot current, SkillCatalogSnapshot skills)
+        {
+            var request = session?.LastContextReceipt?.Arsenal;
+            var offered = request?.Tools.SingleOrDefault(item => item.Id == context.Call.Name);
+            if (offered == null || current.Find(offered.Id)?.Revision != offered.Revision)
+                return "The published tool contract changed; obtain a fresh request before dispatch.";
+            foreach (var id in offered.Skills ?? new List<string>())
+            {
+                var selected = request.Selected.SingleOrDefault(item => item.Id == id && item.Status == "selected");
+                var skill = skills.Skills.SingleOrDefault(item => item.Id == id && item.Enabled);
+                if (selected == null || skill == null || skills.Revision(id) != selected.Revision)
+                    return "A supplying skill changed or was revoked; load its current publication before dispatch.";
+                string error, notice;
+                var pins = Resolve(skill, current, out error, out notice);
+                if (error != null || pins.Any(pin => request.Tools.SingleOrDefault(item => item.Id == pin.Id)?.Revision != pin.Revision))
+                    return "A supplying skill dependency changed; obtain a fresh request before dispatch.";
+            }
+            return null;
+        }
+
+        public static string AdmissionRevision(ChatSession session, ToolCall call, ToolPackSnapshot pack)
+        {
+            var request = session?.LastContextReceipt?.Arsenal;
+            var offered = request?.Tools.SingleOrDefault(item => item.Id == call.Name);
+            var selectionState = string.Empty;
+            if (call.Name == SkillLoadToolHandler.ToolId && request != null)
+            {
+                // A rejected load can become usable after another selection is
+                // removed or its own publication changes; unrelated catalog edits cannot.
+                string id = null;
+                try { id = (string)JObject.Parse(call.ArgumentsJson)["id"]; }
+                catch (Exception ex) when (ex is JsonException || ex is ArgumentException) { }
+                var candidate = request.Available.SingleOrDefault(item => item.Id == id);
+                selectionState = "\n" + candidate?.Revision + ":" + candidate?.Status + "\n" +
+                    string.Join("\n", (candidate?.Tools ?? new List<string>()).OrderBy(item => item, StringComparer.Ordinal)
+                        .Select(item => item + ":" + pack.Find(item)?.Revision)) + "\n" +
+                    string.Join("\n", request.Selected.OrderBy(item => item.Id, StringComparer.Ordinal)
+                        .Select(item => item.Id + ":" + item.Revision + ":" + item.Status));
+            }
+            return SkillRevision.ComputeMarkdown((pack.Find(call.Name)?.Revision ?? "unavailable") + "\n" +
+                (offered == null ? "not-offered" : offered.Revision + "\n" + string.Join("\n",
+                    request.Selected.Where(item => (offered.Skills ?? new List<string>()).Contains(item.Id))
+                        .OrderBy(item => item.Id, StringComparer.Ordinal).Select(item => item.Id + ":" + item.Revision + ":" + item.Status))) + selectionState);
         }
     }
 }

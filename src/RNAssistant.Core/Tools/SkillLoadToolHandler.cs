@@ -1,15 +1,20 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Services;
 using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Core.Tools
 {
+    // Pure next-request admission; the preview result is never execution evidence.
+    public delegate string SkillSelectionAdmission(IReadOnlyList<SelectedSkill> selections, ChatMessage previewResult);
+
     public sealed class SkillLoadToolHandler : IReadOnlyToolHandler
     {
         public const string ToolId = "common.skills_load";
@@ -18,10 +23,11 @@ namespace RNAssistant.Core.Tools
         private readonly Func<SkillCatalogSnapshot> _skills;
         private readonly Func<ToolPackSnapshot> _tools;
         private readonly AppSettings _settings;
+        private readonly SkillSelectionAdmission _admit;
 
         public SkillLoadToolHandler(ChatSession session, Func<SkillCatalogSnapshot> skills,
-            Func<ToolPackSnapshot> tools, AppSettings settings)
-        { _session = session; _skills = skills; _tools = tools; _settings = settings; }
+            Func<ToolPackSnapshot> tools, AppSettings settings, SkillSelectionAdmission admit = null)
+        { _session = session; _skills = skills; _tools = tools; _settings = settings; _admit = admit; }
 
         public static ToolCatalogEntry Entry()
         {
@@ -48,16 +54,31 @@ namespace RNAssistant.Core.Tools
                         new JObject { ["id"] = id, ["status"] = "removed_for_next_request" }.ToString(Formatting.None))));
                 }
                 var selected = SkillTaskService.Select(_session, (string)context.Arguments["id"], _skills(), _tools(),
-                    _settings, context.Execution.Call.Id);
-                return Task.FromResult(new ToolHandlerResult(RuntimeResult.Ok("Skill selected for the next request: " + selected.Name,
-                    new JObject { ["id"] = selected.Id, ["status"] = "selected_for_next_request", ["notice"] = selected.Reason,
-                        ["tools"] = new JArray(selected.Tools), ["references"] = new JArray(selected.References) }.ToString(Formatting.None))));
+                    _settings, context.Execution.Call.Id, (candidate, pending) =>
+                    {
+                        if (_admit == null) return null;
+                        var role = ToolResultRoles.Normalize(_settings.ToolResultRole);
+                        var wire = ToolResultWire.Write(context.Execution.Call.Id, ToolId, SelectionResult(pending));
+                        return _admit(candidate, new ChatMessage { Role = role, ToolResultRole = role,
+                            ProtocolMessage = true, ToolCallId = context.Execution.Call.Id, ToolName = ToolId,
+                            RunId = _session.LastRun.RunId, ToolResultProtocolVersion = ToolResultWire.CurrentVersion,
+                            Content = role == ToolResultRoles.Tool ? wire : "TOOL_RESULT:\n" + wire });
+                    });
+                return Task.FromResult(new ToolHandlerResult(SelectionResult(selected)));
             }
             catch (InvalidOperationException ex)
             {
                 return Task.FromResult(new ToolHandlerResult(RuntimeResult.Error(ex.Message,
-                    "{\"code\":\"skill_unavailable\"}")));
+                    "{\"code\":\"skill_unavailable\"}"), recovery:
+                    new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.Replan)));
             }
+        }
+
+        private static RuntimeResult SelectionResult(ArsenalSkill selected)
+        {
+            return RuntimeResult.Ok("Skill selected for the next request: " + selected.Name,
+                new JObject { ["id"] = selected.Id, ["status"] = "selected_for_next_request", ["notice"] = selected.Reason,
+                    ["tools"] = new JArray(selected.Tools), ["references"] = new JArray(selected.References) }.ToString(Formatting.None));
         }
     }
 }

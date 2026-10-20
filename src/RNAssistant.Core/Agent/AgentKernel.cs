@@ -270,7 +270,7 @@ namespace RNAssistant.Core.Agent
             }
             string progressReason, progressMessage;
             int retryDelay = 0;
-            if (!confirmed && !state.Progress.CanDispatch(call, out progressReason, out progressMessage, out retryDelay))
+            if (!confirmed && !state.Progress.CanDispatch(call, out progressReason, out progressMessage, out retryDelay, policy))
             {
                 await RecordNotDispatchedAsync(state, call, policy, stepId, progressMessage,
                     code: progressReason).ConfigureAwait(false);

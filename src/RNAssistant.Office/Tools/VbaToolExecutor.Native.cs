@@ -263,7 +263,7 @@ namespace RNAssistant.Office.Tools
                 string.Equals(mutation.ErrorCode,
                     "stale_vba_module", StringComparison.Ordinal);
             var rejected = string.Equals(mutation.ErrorCode,
-                    "vba_patch_stale_source", StringComparison.Ordinal) ||
+                    "vba_patch_not_found", StringComparison.Ordinal) ||
                 string.Equals(mutation.ErrorCode,
                     "vba_patch_ambiguous", StringComparison.Ordinal) ||
                 string.Equals(mutation.ErrorCode,

@@ -142,9 +142,21 @@ namespace RNAssistant.Office.Services
                     var error = SkillTaskService.CheckDispatch(_session, context, _toolPack, _confirmationOrigin);
                     if (error != null) return error;
                     if (_catalogGeneration != _executor.CaptureCatalogGeneration())
-                        return "Published catalog changed after this request; recompile before dispatch.";
+                    {
+                        var current = _executor.CaptureCatalogs();
+                        var currentSkills = new SkillCatalogSnapshot(_policy.SelectSkills(_executor.CaptureSkills(current).Skills));
+                        var currentTools = ConversationRunService.PrepareToolsForRun(_input.Tools
+                            .Where(tool => !string.Equals(tool.Scope, "global", StringComparison.OrdinalIgnoreCase))
+                            .Concat(_executor.CapturePublishedGlobalTools(current)).ToList());
+                        currentTools = _policy.SelectTools(_executor.AvailableConversationToolsForSession(currentTools, _session));
+                        CapabilityCatalogService.BindReadSchema(currentTools, currentSkills.Skills);
+                        return SkillTaskService.CheckPublishedBindings(_session, context,
+                            ToolPackSnapshotFactory.Capture(_policy.Mode, _adapter.HostName, currentTools), currentSkills);
+                    }
                     return null;
-                });
+                }, skillAdmission: (selections, preview) => _modelSession == null
+                    ? "No accepted model request is available for skill admission."
+                    : _modelSession.AdmitSkillSelection(selections, preview));
             // Tool/skill projection may materialize an already registered catalog
             // resource. Pin the stable generation after all local publication reads.
             _catalogGeneration = _executor.ResourceAuthority

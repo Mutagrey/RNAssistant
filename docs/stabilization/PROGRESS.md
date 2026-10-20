@@ -1,5 +1,81 @@
 # Stabilization progress
 
+## Unified stabilization — 2026-10-20
+
+Applied the user-supplied `RNAssistant_UNIFIED_STABILIZATION_PLAN_2026-10-20.md`
+against `main` at `90be14b7741ad4b3087f61a8161e03854727fb7a` plus the existing dirty
+workspace. Concurrent UI/model/plugin edits were retained. No version change,
+release or VSTO/Office validation was performed. Four invalid multi-variable `var`
+declarations in concurrently added `PluginIconSvg.cs` were mechanically changed to
+`double` to unblock compilation; its feature implementation belongs to the other work.
+
+Owners remain the existing kernel/ToolRuntime, SkillTaskService and request composers,
+WorkspaceFileService/resource providers, ModelContextCompiler and typed UI projections.
+There is no new store, registry, generic Office writer or model protocol version.
+
+| Item / original symptom | Applicability before change | Current evidence / owner | Decision | Execution | Validation | Remaining boundary |
+|---|---|---|---|---|---|---|
+| A01 — narration copied per call | Confirmed in workspace storage | `WorkspaceConversationService.AppendAsync` / accepted-history replay | Keep narration on first sibling; rejoin batch without duplicating it | Implemented | CLI stabilization: five calls, next HTTP request and approval in fresh processes pass; UI projection inspected | Real streaming/WebView2 delivery not qualified |
+| A02 — raw plugin protocol | Already resolved in current tree | Workspace presentation projects `message`; shared `app-workspace-chat.js` renders `message.text` | Preserve existing projection | No additional UI change | Static path inspection | No new browser/Windows qualification claim; concurrent UI work kept separate |
+| A03 — unrelated catalog invalidates tool | Confirmed in Office and workspace guards | `SkillTaskService.CheckPublishedBindings`; both adapters | Recheck offered descriptor/policy/binding and supplying skills/dependencies | Implemented | Skill exact-dispatch checks pass: unrelated publication allowed, changed supplier refused | Real Office publication race remains host evidence |
+| A04 — recovery/no-progress identity | Partially confirmed; random IDs were already excluded | `AgentProgressTracker`, persisted `ToolExecutionProgress.AdmissionRevision` | Replan recovery follows real admission changes; load also pins selected set and target dependencies | Implemented | Skill and continuity checks pass; random IDs/unrelated edits stay blocked; rebind never clears unknown | Source recovery remains target/coverage-bound, not general retry permission |
+| A05 — large file tail inaccessible | Confirmed at 16000-character whole-read limit | Workspace resource schema/provider/file owner | Add paired line selectors and exact partial evidence; patch only an observed anchor | Implemented | CLI tail → refused whole replacement → two verified patches; mixed newlines/Unicode pass | Text capture still ≤1 MiB; excerpt ≤16000 characters/500 lines. A longer single line needs a further bounded view |
+| A06 — known target depends on discovery | Partially resolved for document/Excel/Word/PowerPoint/HTML/attachments; VBA still enumerated | `VbaResourceProvider.ResolveSemanticTarget`, gateway | Resolve bound project/module directly; preserve target's own availability checks | Implemented | Named module beyond 1000 discovery items reads only its own source | Ambiguous name-only collections still require uniqueness; real COM identity not qualified |
+| A07 — after-source only in cache | Confirmed for workspace writes | File owner → ResourceEvidence → compiler → DeliveredObservations | Deliver verified whole/partial after-source; persist exact preparation for approval | Implemented | CLI patch → after-source → patch succeeds across two approval processes; omitted reads still grant no authority | Body omission/drift requires another addressed read; no invented source after uncertain effect |
+| A08 — patch base/error semantics | Partially confirmed | Workspace exact patch, VBA mutation owner; existing sequential hunk contracts | Preserve existing sequential coordinates; retain untouched line endings; separate missing/ambiguous/invalid/stale errors | Implemented | Guarded workspace, HTML and six VBA patch checks pass | No filesystem/COM cross-target transaction; UTF-16 coordinates and provider-specific normalization remain explicit |
+| A09 — false unknown before effect | Confirmed for file staging/rechecks; guard exceptions also escaped | Workspace mutation journal and ToolRuntime | Move marker after preconditions, directly before possible effect; pre-dispatch exceptions remain no-effect refusals | Implemented | Injected pre-replace conflict, guard exceptions, unknown after dispatch, move/recovery and delete/restore pass | External editor can still race the final filesystem recheck; no OS compare-and-swap guarantee |
+| A10 — overlapping occurrences | Confirmed in workspace/structured text; VBA already counted every start | WorkspaceFileService / StructuredTextPatchEngine | Count overlapping starts; reject overlapping replace-all | Implemented | `aaa` in `aaaa`: workspace and HTML replace/replaceAll/insertBefore/insertAfter refuse without write; VBA checks pass | Public editor semantics remain domain-specific |
+| A11 — projection/budget and lost archived body | Partially confirmed: transport builder already shared; archived admission preceded folding | ModelContextCompiler / LlmMessageBuilder / ModelProtocol | Reconsider a bounded materialized body after folding only as much old mutation history as it actually needs | Implemented | Continuity 14/14, incremental budget, strict/fallback and exact request trace pass | Separate schema-size fixture fails before its wire assertions; see check log below. Token totals remain estimates |
+| A12 — oversized input/compaction dead end | Infinite compaction not reproduced; skill selection liveness defect reproduced | ContextCompactionRuntime; SkillLoadToolHandler + both request composers | Preserve bounded no-prefix refusal; stage complete next request before publishing skill selection | Implemented for new selections | Oversized first-input/protocol-pair check, CLI compaction/resume, skills 7/7; controlled CLI refusal and cold restart pass | Already-persisted oversized selections require explicit reset/profile correction; no silent eviction or larger default budget |
+| A13 — waiting/final conflation | Existing v7 action + runtime reason already distinguishes outcomes | AgentKernel, ConversationRunProjection, question handler | Preserve protocol and structured questions; no action-format migration | No additional lifecycle change | CLI Plan/tool and Agent/user question/resume scenarios pass, including invalid answers | Completed lifecycle is not proof of user goal or Office compilation |
+
+The 32K admission regression initially reproduced the recorded P1: the load was
+accepted, then the next request used about 24309 message tokens against 23422.
+The fix keeps candidate selection and its preview result transient until the existing
+complete compiler accepts them. The 32K case now receives an error through the old
+usable surface and can continue after state restoration. A separate 64K control
+still performs exactly one VBA patch. Workspace HTTP testing additionally rejects a
+large procedure before activation and continues after a cold process restart. No
+product budget or active-instruction truncation changed. Original evidence is retained
+in the [risk entry](RISK_REGISTER.md#architecture-and-regression-review--2026-10-15).
+
+Verification run on this macOS host (all Office adapters are fakes):
+
+- CLI build passes with zero warnings/errors. Harness compilation passes with the
+  two existing PDF CA1416 warnings.
+- Harness `context continuity:` 14/14; `skill packages:` 7/7; `vba: patch` 6/6.
+  Focused guarded-file, uncertain-dispatch, move/recovery, delete/restore, known-VBA,
+  runtime-exception, HTML-source, compaction-pair, oversized-prompt, fallback,
+  combined-retry, incremental-budget and exact-request-trace checks pass.
+- `python3 -B tests/cli/stabilization_smoke.py`, `read_recovery_smoke.py` (six cases),
+  `resource_selectors_smoke.py`, `mode_questions_smoke.py` (two modes),
+  `compaction_resume_smoke.py` (two transports) and `skill_packages_smoke.py`
+  (20 controlled HTTP requests including admission refusal/restart) pass.
+- `model context: request schema modes and fallback` passes. The separate unchanged
+  `model context: request schema duplication size` fixture fails at
+  `representative extension stages from exact schema evidence`, before its HTTP
+  assertions. It still reconstructs admission from a manual projected result;
+  this is an open Harness fixture gap, not evidence that the wire-size check passed.
+  Full Harness, live LLM and Windows/Office/WebView2 were not run.
+
+Supplementary static review retains the bound-document HostRuntime/DocumentAccessGate,
+VBE/STA boundary, cancellation/correlation and CAS retention owners. No new P0 was
+established there; real Save As/reopen, two-book switching, VBE reset and late callbacks
+remain open host evidence. Scripted endpoints test runtime behavior, not model quality.
+
+Existing selectors and evidence cover the observed patch defect, so region handles,
+per-procedure versions, Code Mode and a new capability/protocol platform are deferred.
+Standalone direct tools remain discoverable; skill dependencies deduplicate schemas;
+references are not loaded automatically and load grants no mutation rights. Preferred
+editors stay `files.patch` for an observed workspace anchor, structured HTML edits,
+and the existing VBA patch/whole-source operations under their own guards.
+
+Next qualification step: on Windows x64 + Office x64 + VS 2022, run one recorded
+bound-workbook read → patch → delivered after-source → patch scenario, including
+switching to another workbook while awaiting approval and a fault after possible
+write. Verify target identity, one narration, explicit unknown and no automatic replay.
+Use the same trace to distinguish actual source read-back from VBA compilation.
+
 ## Plugin development preview — 2026-10-20
 
 The development panel now uses the shared chat message and composer styling,

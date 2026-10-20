@@ -51,7 +51,7 @@ namespace RNAssistant.Harness
                     false,
                     false,
                     agentSession);
-                AssertEqual("vba_patch_stale_source", staleAgent.ErrorCode,
+                AssertEqual("vba_patch_not_found", staleAgent.ErrorCode,
                     "exact patch cannot use an anchor absent from current live source");
                 AssertEqual("B", adapter.VbaModuleCode,
                     "stale patch does not mutate the module");

@@ -322,6 +322,16 @@ namespace RNAssistant.Office.Services
                 return new ResourceIntentTarget { Target = target, Type = type, Scope = IntentScope(descriptor, type),
                     Descriptor = descriptor, Reference = descriptor.Reference };
             }
+            if (target.StartsWith("VBA module: ", StringComparison.Ordinal) ||
+                target.StartsWith("VBA project: ", StringComparison.Ordinal))
+            {
+                var provider = _registry.All().OfType<VbaResourceProvider>().SingleOrDefault();
+                if (provider == null)
+                    throw new ResourceRequestException("VBA resource provider is unavailable.", "RESOURCE_PROVIDER_UNAVAILABLE", false);
+                var descriptor = WithProvider(provider, session, () => provider.ResolveSemanticTarget(session, target));
+                return new ResourceIntentTarget { Target = target, Type = IntentType(descriptor), Scope = "vba",
+                    Descriptor = descriptor, Reference = descriptor.Reference.Copy() };
+            }
             if (target.StartsWith("document: ", StringComparison.Ordinal) ||
                 target.StartsWith("selection: ", StringComparison.Ordinal))
             {

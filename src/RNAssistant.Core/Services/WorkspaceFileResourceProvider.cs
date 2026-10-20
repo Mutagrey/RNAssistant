@@ -58,9 +58,12 @@ namespace RNAssistant.Core.Services
             return result;
         }
 
-        public ResourceReadObservation Read(string relativePath)
+        public ResourceReadObservation Read(string relativePath, int? startLine = null, int? lineCount = null)
         {
-            return Project(_files.ReadText(_workspace, relativePath), false);
+            if (startLine.HasValue != lineCount.HasValue)
+                throw new WorkspaceFileException("resource_lines_invalid", "Supply startLine and lineCount together.");
+            return Project(startLine.HasValue ? _files.ReadTextLines(_workspace, relativePath, startLine.Value, lineCount.Value)
+                : _files.ReadText(_workspace, relativePath), false);
         }
 
         public ResourceReadObservation ReadBytes(string relativePath)
@@ -93,10 +96,11 @@ namespace RNAssistant.Core.Services
             descriptor.Representations.Add(ResourceRepresentations.Text);
             var result = new ResourceReadResult { Resource = descriptor,
                 Representation = ResourceRepresentations.Text, Text = observed.Text, Bytes = observed.Bytes,
-                ContentSha256 = observed.ContentSha256, Coverage = ResourceCoverage.Whole(),
-                Complete = true, ReturnedCharacters = observed.Text.Length,
-                TotalCharacters = observed.Text.Length, RawContentIncluded = true,
-                CompleteViewPayload = observed.Evidence.Payload };
+                ContentSha256 = observed.ContentSha256, Coverage = observed.Evidence.Coverage,
+                Complete = observed.Evidence.Complete, SourceComplete = true, Offset = observed.Offset,
+                ReturnedCharacters = observed.Text.Length,
+                TotalCharacters = observed.TotalCharacters ?? observed.Text.Length, RawContentIncluded = true,
+                CompleteViewPayload = observed.Evidence.Complete ? observed.Evidence.Payload : null };
             return new ResourceReadObservation(result, new[] { observed.Evidence });
         }
 

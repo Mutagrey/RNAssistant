@@ -106,8 +106,15 @@ and model wire: `directory` belongs only to file discovery, `referencePath` only
 to skill reads, and the skill branch requires explicit `type="skill"`. Wrong-kind
 selectors fail before dispatch rather than being silently ignored. Chat exposes
 only the file branch. Existing nullable optional arguments preserve their defaults.
-CLI `common.resources_read(target)` returns complete whole UTF-8 text with matching
-retained payload, coverage and exact evidence. CLI prepares fresh current-run
+CLI `common.resources_read(target)` returns complete whole UTF-8 text up to 16000
+characters with matching retained payload, coverage and exact evidence. File reads
+also accept paired `startLine` (1-based) and `lineCount` (1–500), with the same
+16000-character excerpt bound. Each call captures the current revision; ranges
+from different revisions are never combined into a whole observation. Line slicing
+preserves CR/LF/CRLF and Unicode; exact character coverage uses UTF-16 offsets.
+The existing text owner still limits the captured UTF-8 file to 1 MiB. Longer
+single lines and larger text files require a separate bounded-view extension.
+CLI prepares fresh current-run
 authority through the same file owner, then passes the frozen tuple and accepted
 kernel facts to the existing `ModelContextCompiler`, now in Core. The compiler owns
 projection, freshness filtering, budgeting, receipt and frozen format repair for
@@ -115,7 +122,21 @@ both CLI and Office; it never calls a live provider. Office supplies its pure do
 projection through an explicit dependency. The separate CLI result projector and
 request assembler are removed. A prior-turn read without freshly admitted authority
 is unavailable. A body omitted by the compiler, or an incomplete/stale read, cannot
-authorize a CLI overwrite. `inspect` exposes the persisted context receipt.
+authorize a CLI overwrite. A delivered current excerpt can authorize `files.patch`
+only when it contains the exact nonempty `oldText`; the owner still requires the
+pinned full-file revision and one matching start across the complete source.
+Overlapping starts count separately. Empty, missing and ambiguous anchors return
+`invalid_patch`, `patch_not_found` and `patch_ambiguous`; external drift returns
+`target_conflict`. Patch leaves untouched line endings intact. Replace/copy/move/
+delete retain the complete-read prerequisite.
+
+Verified mutations return exact after-source evidence through the common authority
+and context compiler. A partial patch returns the corresponding verified new
+excerpt with `complete=false`; a cache entry alone grants no subsequent write.
+Prepared file mutations persist that exact observation (prepared-state version 1)
+across explicit approval/restart. Unsupported preparations fail explicitly and
+require a new read/action; execution never reconstructs authority from a nearby
+historical read. `inspect` exposes the persisted context receipt.
 
 CLI resources also accept `type="skill"`: discovery returns up to 50 enabled
 host-visible metadata entries with explicit incompleteness; read selects the
@@ -124,8 +145,8 @@ published core by skill id or a listed `referencePath`. Core
 Office's catalog provider. Its evidence depends on the committed catalog root;
 raw authoring drift is not activation. The CLI adds that catalog scope and skill
 generation to the compiler's frozen authority. Skill reads grant neither file
-write authority nor file-read acceptance. The 16000-character whole-read bound
-fails explicitly; CLI reference continuation is open scope. See
+write authority nor file-read acceptance. The 16000-character skill-read bound
+fails explicitly; CLI skill-reference continuation is open scope. See
 [skills](skills.md#independent-workspace-runtime) for selection and publication.
 
 Task Lists use the shared Core `TaskListPublication` owner for

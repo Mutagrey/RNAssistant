@@ -831,6 +831,24 @@ namespace RNAssistant.Harness
                 AssertEqual(1, restored.Receipt.HydratedPayloads, "one selected exact body is hydrated once");
                 AssertContains(string.Join("\n", restored.Messages.Select(item => item.Content)), body, "the complete current source survives compaction");
                 AssertEqual("source", restored.DeliveredObservations.Single().EvidenceId, "synthetic archived body retains delivery authority");
+                var write = ContinuityResult("large_write", "files.create", ToolResult.Ok("Written.", "{\"path\":\"other.txt\"}"));
+                write.ResourceEffect = new ResourceEffect("fx", "files.create", ResourceEffectOutcome.VerifiedChanged);
+                var writeCall = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = "large_write", Name = "files.create",
+                    Arguments = new Dictionary<string, object> { ["text"] = new string('x', 12000) } },
+                    "Saved another file.", null, "tool", FixtureCallOrigin("large_write"));
+                var latest = ContinuityResult("latest", "fixture.read", ToolResult.Ok("Small result.", "{}"));
+                var withLargeFrame = new[] { writeCall, write, ContinuityCall(latest), latest };
+                var enoughRoom = compiler.Compile(authority, new ChatMessage[0], withLargeFrame, null,
+                    new ToolCatalogEntry[0], new AppSettings(), 6000,
+                    workingSet: ContextWorkingSet.Restore(session, withLargeFrame, 5000));
+                AssertTrue(enoughRoom.Messages.SelectMany(item => item.ToolCalls).Any(item =>
+                    item.Id == "large_write" && item.ArgumentsJson.Contains(new string('x', 12000))),
+                    "actual fitting source does not fold history merely to fund an unused reservation");
+                var funded = compiler.Compile(authority, new ChatMessage[0], withLargeFrame, null,
+                    new ToolCatalogEntry[0], new AppSettings(), 2500,
+                    workingSet: ContextWorkingSet.Restore(session, withLargeFrame, 1000));
+                AssertEqual(1, funded.Receipt.RetainedBodies, "folded old write funds archived source before admission");
+                AssertContains(string.Join("\n", funded.Messages.Select(item => item.Content)), body, "freed budget delivers exact source");
                 restored.Messages.Single(item => item.SyntheticResourceObservation).ResourceEvidence.Clear();
                 AssertEqual(1, restored.DeliveredObservations.Count, "delivery is detached from mutable message projections");
                 foreach (var diagnostic in new[] { ToolResult.Ok("Verified.", "{\"checks\":[]}"),

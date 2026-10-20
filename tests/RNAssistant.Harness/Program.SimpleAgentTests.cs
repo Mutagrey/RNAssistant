@@ -2307,7 +2307,7 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void SimpleAgentVbaSchemaInspectionDoesNotLoop()
+        private static void SimpleAgentVbaSchemaInspectionDoesNotLoop(bool tightBudget)
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
             {
@@ -2320,24 +2320,27 @@ namespace RNAssistant.Harness
                 Func<string, JObject, string> call = (name, arguments) => ModelProtocolWire.Write("", new[]
                 { new ConversationToolCall { Name = name, Arguments = arguments } });
                 var schemaRead = call(CapabilityToolCatalog.ReadToolId, new JObject { ["id"] = "common.vba_apply_patch" });
-                var responses = new Queue<string>(new[] {
+                var script = new List<string> {
                     call(ResourceToolCatalog.ReadToolId, new JObject {
                         ["target"] = VbaResourceProvider.ProjectSemanticTarget(adapter.DocumentTitle), ["representation"] = "structure" }),
                     call(ResourceToolCatalog.ReadToolId, new JObject { ["target"] = "VBA module: UniLoader", ["representation"] = "source" }),
                     schemaRead,
-                    LoadSkillResponse("common.vba_code_editing"),
+                    LoadSkillResponse("common.vba_code_editing") };
+                if (!tightBudget) script.AddRange(new[] {
                     schemaRead,
                     call("common.vba_apply_patch", new JObject { ["moduleName"] = "UniLoader", ["patch"] = new JArray(
                         new JObject { ["find"] = "End Sub", ["text"] = "End If\nEnd Sub" }) }),
                     ModelProtocolWire.Write("Исходник исправлен; компиляция Office не проверялась.", new ConversationToolCall[0])
                 });
+                else script.Add(ModelProtocolWire.Write("Навык не подключён: контекст не вмещает полный запрос.", new ConversationToolCall[0]));
+                var responses = new Queue<string>(script);
                 var requests = 0;
                 LlmCompletionDelegate complete = (settings, messages, options, stream, token) =>
                 {
                     requests++;
                     AssertTrue(responses.Count > 0, "schema inspection must not trigger a repair loop");
                     var callable = session.LastContextReceipt.Arsenal.Tools.Select(tool => tool.Id).ToArray();
-                    AssertEqual(requests >= 5, callable.Contains("common.vba_apply_patch"),
+                    AssertEqual(!tightBudget && requests >= 5, callable.Contains("common.vba_apply_patch"),
                         "only skill selection exposes patch on the next request");
                     if (requests == 1)
                         AssertTrue(FlattenSimple(messages).Contains("Inspect the bound project before asking"),
@@ -2352,19 +2355,40 @@ namespace RNAssistant.Harness
                             "discovery neither duplicates selected schemas nor claims admission");
                         AssertEqual(0, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "inspection grants no mutation");
                     }
+                    if (tightBudget && requests == 5)
+                    {
+                        var load = LastToolResult(messages.ToList(), SkillLoadToolHandler.ToolId);
+                        AssertEqual("error", (string)load["status"], "oversized selection is refused before activation");
+                        AssertContains((string)load["message"], "previous selection remains active", "load preserves the usable surface");
+                        AssertEqual(0, session.LastRun.SelectedSkills.Count, "candidate never becomes durable selection");
+                    }
                     return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
                 };
                 var result = CreateConversationRunService(adapter, executor, complete).ExecuteAsync(
                     ChatModes.Agent, "Исправь незакрытый If в UniLoader.", session, NewContext(adapter),
-                    new AppSettings { AutoConfirmToolActions = true },
+                    new AppSettings { AutoConfirmToolActions = true, ContextWindowOverrideTokens = tightBudget ? 32768 : 65536 },
                     OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null)
                     .GetAwaiter().GetResult();
-                AssertEqual(7, requests, "one discovery/load/inspect/patch sequence completes: " + result.AssistantText);
+                AssertEqual(tightBudget ? 5 : 7, requests, "discovery/load reaches a usable next request: " + result.AssistantText);
                 AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "patch run completes");
-                AssertEqual(after, adapter.GetVbaModuleCode("UniLoader"), "the exact correction is written");
-                AssertEqual(1, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "patch dispatches once");
-                AssertEqual(0, session.LastRun.KernelState.Summary.ToolCounts.ReadError, "no cached skill-required failure remains");
-                AssertEqual(1, session.LastRun.SelectedSkills.Count, "one skill selection is enough");
+                AssertEqual(tightBudget ? before : after, adapter.GetVbaModuleCode("UniLoader"), "only admitted patch can change source");
+                AssertEqual(tightBudget ? 0 : 1, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "no invented dispatch or retry");
+                AssertEqual(tightBudget ? 1 : 0, session.LastRun.KernelState.Summary.ToolCounts.ReadError, "only the actual admission refusal is counted");
+                AssertEqual(tightBudget ? 0 : 1, session.LastRun.SelectedSkills.Count, "only admitted selections persist");
+                if (tightBudget)
+                {
+                    session = JsonConvert.DeserializeObject<ChatSession>(JsonConvert.SerializeObject(session));
+                    var resumedCalls = 0;
+                    var resumed = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
+                    {
+                        resumedCalls++;
+                        return Task.FromResult(new LlmCompletionResult { Content = ModelProtocolWire.Write("Можно продолжать.", new ConversationToolCall[0]) });
+                    }).ExecuteAsync(ChatModes.Agent, "Продолжим без этого навыка.", session, NewContext(adapter),
+                        new AppSettings { ContextWindowOverrideTokens = 32768 },
+                        OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
+                    AssertEqual(1, resumedCalls, "restored next user turn can reach the model");
+                    AssertEqual(AgentResponseStatuses.Completed, resumed.ResponseStatus, "refused selection does not trap the chat");
+                }
             });
         }
 

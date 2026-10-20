@@ -2086,7 +2086,7 @@ namespace RNAssistant.Harness
                     false,
                     false,
                     session);
-                AssertEqual("vba_patch_stale_source", rejected.ErrorCode,
+                AssertEqual("vba_patch_not_found", rejected.ErrorCode,
                     "an exact patch is checked against current live source");
                 AssertContains(rejected.Message, "hunk 1", "stale patch identifies the failed hunk");
                 AssertEqual("A\nX\nB\nC", adapter.VbaModuleCode, "stale exact patch leaves current module intact");
@@ -2808,7 +2808,7 @@ namespace RNAssistant.Harness
                         "patch", new JArray(new JObject {
                             ["find"] = "\"missing\"", ["text"] = "\"after\""
                         }))).Record;
-                AssertEqual("vba_patch_stale_source", ToolRunResultFactory.Create(failed).ErrorCode,
+                AssertEqual("vba_patch_not_found", ToolRunResultFactory.Create(failed).ErrorCode,
                     "large patch refusal is definite and causes no write");
                 AssertTrue(failed.Recovery != null && failed.Recovery.RetryPolicy == ToolRetryPolicy.Replan &&
                     failed.Recovery.ReadScope == ToolRecoveryReadScope.RelevantLines &&
@@ -2902,7 +2902,7 @@ namespace RNAssistant.Harness
                 AssertEqual("Sub One()\nDebug.Print \"same\"\nEnd Sub\n" +
                     "Sub Two()\nDebug.Print \"changed\"\nEnd Sub", adapter.VbaModuleCode,
                     "only the selected occurrence changes");
-                AssertEqual("vba_patch_stale_source", apply().ErrorCode,
+                AssertEqual("vba_patch_not_found", apply().ErrorCode,
                     "repeating the old patch cannot redirect to the remaining occurrence");
                 AssertEqual(1, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule),
                     "ambiguous and stale positions never dispatch");
@@ -3797,7 +3797,7 @@ namespace RNAssistant.Harness
                     }
 
                     AssertTrue(writeTask.GetAwaiter().GetResult().Success, "first mutation succeeds");
-                    AssertEqual("vba_patch_stale_source", queuedTask.GetAwaiter().GetResult().ErrorCode,
+                    AssertEqual("vba_patch_not_found", queuedTask.GetAwaiter().GetResult().ErrorCode,
                         "queued patch validates its exact hunk after acquiring the gate");
                     AssertEqual(1, writeCalls, "stale queued mutation never dispatches a second write");
                     AssertEqual(after, adapter.VbaModuleCode, "first mutation source is preserved");

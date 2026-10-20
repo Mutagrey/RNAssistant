@@ -555,6 +555,20 @@ namespace RNAssistant.Harness
 
         private static async Task ToolRuntimeClassifiesExceptionsAndMissingResults()
         {
+            foreach (var failureCheck in new[] { 1, 2 })
+            {
+                var f = new ToolRuntimeFixture(RuntimeRegistration(policy: Policy(ToolEffect.Write)));
+                var checks = 0;
+                var runtime = new ToolRuntime(f.Registry, "agent", true, true, dispatchGuard: context =>
+                {
+                    if (++checks == failureCheck) throw new InvalidOperationException("catalog unavailable");
+                    return null;
+                });
+                var rejected = await runtime.ExecuteAsync(f.Context(), CancellationToken.None);
+                AssertEqual(ToolExecutionOutcome.Error, rejected.Outcome, "guard exceptions are pre-dispatch refusals");
+                AssertEqual(ToolEffectEvidence.None, rejected.Evidence.Effect, "guard failure cannot create unknown effect");
+                AssertEqual(0, f.Handler.Calls, "guard exception never reaches the writer");
+            }
             foreach (var write in new[] { false, true })
             foreach (var dispatch in new[] { false, true })
             foreach (var missing in new[] { false, true })

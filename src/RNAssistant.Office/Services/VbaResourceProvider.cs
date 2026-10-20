@@ -114,6 +114,22 @@ namespace RNAssistant.Office.Services
             });
         }
 
+        public ResourceDescriptor ResolveSemanticTarget(ChatSession session, string target)
+        {
+            return _scope.Read(session, delegate
+            {
+                if (string.Equals(target, ProjectSemanticTarget(_adapter.DocumentTitle), StringComparison.Ordinal))
+                    return DescribeProject(session);
+                const string prefix = "VBA module: ";
+                var module = target.StartsWith(prefix, StringComparison.Ordinal)
+                    ? LoadModules().SingleOrDefault(item => string.Equals(item.Name,
+                        target.Substring(prefix.Length), StringComparison.Ordinal)) : null;
+                if (module != null) return DescribeComponent(session, module, null);
+                throw new ResourceRequestException("VBA target is no longer available: " + target,
+                    "resource_target_not_found", true);
+            });
+        }
+
         private ResourceDescriptor DescribeProject(ChatSession session)
         {
             var descriptor = new ResourceDescriptor

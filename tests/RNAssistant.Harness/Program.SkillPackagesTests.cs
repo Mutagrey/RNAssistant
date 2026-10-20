@@ -169,24 +169,49 @@ namespace RNAssistant.Harness
             registry.Register(pack.Find(load.Id), new SkillLoadToolHandler(session, () => skills, () => pack, new AppSettings()));
             var currentPack = pack;
             var runtime = new ToolRuntime(registry, "agent", false, true,
-                dispatchGuard: context => SkillTaskService.CheckDispatch(session, context, currentPack));
+                dispatchGuard: context => SkillTaskService.CheckDispatch(session, context, currentPack),
+                admissionRevision: command => SkillTaskService.AdmissionRevision(session, command, currentPack));
             session.LastContextReceipt = CompilePackage(session, skills, pack, catalog).Receipt;
+            var loadIdentity = new ToolCall("load-stamp", load.Id, "{\"id\":\"fixture.skill\"}");
+            var initialLoadStamp = SkillTaskService.AdmissionRevision(session, loadIdentity, pack);
             Func<string, string, ToolExecutionContext> call = (id, arguments) => {
                 var command = new ToolCall(Guid.NewGuid().ToString("N"), id, arguments);
                 return new ToolExecutionContext(command, runtime.Describe(command), "run", "run", "step", DateTime.UtcNow, false, 5);
             };
             var guessed = await runtime.ExecuteAsync(call(tool.Id, "{}"), CancellationToken.None);
             AssertTrue(!guessed.MayHaveDispatched && probe.Calls == 0, "S02 guessed call refused");
+            AssertEqual(ToolRetryPolicy.Replan, guessed.Recovery.RetryPolicy, "admission failure is replannable");
+            var tracker = new AgentProgressTracker();
+            var failedProgress = JsonConvert.DeserializeObject<ToolExecutionProgress>(JsonConvert.SerializeObject(ToolExecutionProgress.Capture(guessed)));
+            tracker.Observe(guessed.Context.Call, failedProgress, guessed.Message, null, null);
+            string reason, message; int delay;
+            var retry = call(tool.Id, "{}");
+            AssertTrue(!tracker.CanDispatch(retry.Call, out reason, out message, out delay, retry.Policy), "new call ID cannot erase unchanged admission failure");
             var selected = await runtime.ExecuteAsync(call(load.Id, "{\"id\":\"fixture.skill\"}"), CancellationToken.None);
             AssertEqual(ToolExecutionOutcome.Ok, selected.Outcome, "S03 canonical loader");
             await runtime.ExecuteAsync(call(tool.Id, "{}"), CancellationToken.None);
             AssertEqual(0, probe.Calls, "S04 same-response call remains forbidden after loader");
             session.LastContextReceipt = CompilePackage(session, skills, pack, catalog).Receipt;
+            retry = call(tool.Id, "{}");
+            AssertTrue(tracker.CanDispatch(retry.Call, out reason, out message, out delay, retry.Policy), "newly admitted contract satisfies recovery");
+            var selectedLoadStamp = SkillTaskService.AdmissionRevision(session, loadIdentity, pack);
+            AssertTrue(selectedLoadStamp != initialLoadStamp, "changed selected set can release a prior load refusal");
+            var unrelated = PackageTools(catalog.Concat(new[] { PackageTool("fixture.unrelated", ToolExposure.Direct, "other") }).ToArray());
+            AssertEqual(null, SkillTaskService.CheckPublishedBindings(session, retry, unrelated,
+                new SkillCatalogSnapshot(new[] { skill, PackageSkill("fixture.unrelated") })), "unrelated publication does not revoke exact call");
+            AssertEqual(selectedLoadStamp, SkillTaskService.AdmissionRevision(session, loadIdentity, unrelated),
+                "unrelated publication cannot release a rejected load");
+            var changedSkill = PackageSkill("fixture.skill", tool.Id); changedSkill.BodyMarkdown += " changed rule";
+            AssertTrue(SkillTaskService.CheckPublishedBindings(session, retry, pack, new SkillCatalogSnapshot(new[] { changedSkill })) != null,
+                "used skill instruction revision remains pinned");
             await runtime.ExecuteAsync(call(tool.Id, "{}"), CancellationToken.None);
             AssertEqual(1, probe.Calls, "next request dispatches exact handler");
             currentPack = PackageTools(PackageTool(binding: "replacement"), load);
             var changed = await runtime.ExecuteAsync(call(tool.Id, "{}"), CancellationToken.None);
             AssertTrue(!changed.MayHaveDispatched && probe.Calls == 1, "S10/S11 rebind refused before dispatch");
+            tracker.Observe(retry.Call, new ToolExecutionProgress(ToolExecutionOutcome.Unknown), "unknown", null, null);
+            var rebound = call(tool.Id, "{}");
+            AssertTrue(!tracker.CanDispatch(rebound.Call, out reason, out message, out delay, rebound.Policy), "rebinding never clears unknown effects");
             currentPack = pack;
             var original = call(tool.Id, "{}");
             var origin = new RNAssistant.Core.Persistence.AgentRunState(new RunSummary("run", "run", RunLifecycle.AwaitingConfirmation,

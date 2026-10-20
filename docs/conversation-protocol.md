@@ -136,7 +136,9 @@ draft, separate provider-native refusal, or typed failure. Model wording and
 The workspace prompt includes Core's `AgentPromptDefaults.StructuredResponseContract`,
 the same complete response contract used by Office defaults. Both response formats
 receive the raw JSON envelope, exact `name`/`arguments` call shape, escaping,
-batching and commentary rules on the initial request. Catalog metadata is not a
+batching and commentary rules on the initial request. Workspace per-call storage
+keeps the accepted narration on the first sibling only; kernel replay rejoins the
+batch with that one narration and retains each call/result identity. Catalog metadata is not a
 substitute for this contract when `json_object` has no provider-enforced schema.
 The parser and captured tool authority remain unchanged.
 
@@ -550,7 +552,10 @@ same delivery evidence; diagnostics, operation receipts and omitted/stale bodies
 confer none. CLI refreshes retained source authority across user turns before
 compilation, so unchanged prior reads can remain in context and external changes
 invalidate their bytes. Its write guards still retain only previously admitted same-run file observations
-with exact whole-text coverage. This projection is neither a durable store nor a
+with exact coverage. Whole-file operations require whole-text delivery; workspace
+patch accepts a delivered exact excerpt containing its anchor. Verified patch
+after-source retains the same bounded coverage, including through approval/restart.
+This projection is neither a durable store nor a
 model field. Source deduplication reserves coverage only for a materialized body;
 successful/failed diagnostics that cite it, or an unavailable active payload,
 cannot suppress a usable archived copy.
@@ -560,7 +565,10 @@ once and updates only changed atom costs. These values live only in that compile
 call. Request-level calibration/intercept and the existing media rounding branch
 remain unchanged, including removal of the last media message. The final complete
 request still passes through `ModelContextBudget.EstimateMessagesTokens`; cached
-costs neither select evidence nor grant authority.
+costs neither select evidence nor grant authority. Before admitting archived bodies,
+the compiler may fold eligible older completed mutation frames to fund the working
+set; it then evaluates source candidates against the freed budget. Latest pairs,
+required instructions and original durable facts remain intact.
 
 Working-set recovery walks history backward and retains successful results as
 candidates for earlier failures. Matching stays in `ToolRecoveryContract`;

@@ -18,12 +18,12 @@ namespace RNAssistant.Runtime
         private readonly WorkspaceFileResourceProvider _files;
         private readonly SkillPublicationService _publications;
         private readonly Func<SkillCatalogSnapshot> _skills;
-        private readonly Dictionary<string, ResourceRef> _observed;
+        private readonly Dictionary<string, ResourceEvidence> _observed;
         private readonly bool _find;
         private readonly WorkspacePlanService _plans;
 
         internal WorkspaceResourceHandler(WorkspaceFileResourceProvider files, SkillPublicationService publications,
-            Func<SkillCatalogSnapshot> skills, Dictionary<string, ResourceRef> observed, bool find, WorkspacePlanService plans)
+            Func<SkillCatalogSnapshot> skills, Dictionary<string, ResourceEvidence> observed, bool find, WorkspacePlanService plans)
         { _files = files; _publications = publications; _skills = skills; _observed = observed; _find = find; _plans = plans; }
 
         public Task<ToolHandlerResult> ExecuteAsync(ToolHandlerContext context, CancellationToken cancellationToken)
@@ -56,7 +56,7 @@ namespace RNAssistant.Runtime
                 ResourceReadObservation read;
                 SkillDefinition skill = null;
                 var referencePath = Value(context, "referencePath");
-                if (type == "file") read = _files.Read(target);
+                if (type == "file") read = _files.Read(target, Number(context, "startLine"), Number(context, "lineCount"));
                 else if (type == "plan")
                 {
                     var versionText = Value(context, "version");
@@ -73,9 +73,9 @@ namespace RNAssistant.Runtime
                         string.IsNullOrEmpty(referencePath) ? null : referencePath));
                 }
                 if (read.Result.Text.Length > (type == "plan" ? PlanDocumentService.MaximumMarkdownCharacters : 16000))
-                    throw Error("The complete source exceeds the model read bound; no read evidence was accepted.", "read_too_large");
-                read.RequireCompleteExactText();
-                if (type == "file") _observed[target] = read.Result.Resource.Reference;
+                    throw Error("The source exceeds the model read bound. For files, use startLine and lineCount (1–500) to read a bounded region.", "read_too_large");
+                if (type != "file" || read.Result.Complete) read.RequireCompleteExactText();
+                if (type == "file") _observed[target] = read.Evidence.Single();
                 var projection = ResourceReadProjection.From(read.Result, target, type, type == "skill" ? "catalog" : "workspace");
                 if (type == "plan")
                 {
@@ -88,7 +88,8 @@ namespace RNAssistant.Runtime
                     projection.References = (skill.References ?? new List<SkillReferenceMetadata>())
                         .Select(item => new SkillReferenceProjection { Path = item.Path, ByteLength = item.ByteLength }).ToArray();
                 }
-                return Return(ToolResult.Ok("Complete resource representation read.", JsonConvert.SerializeObject(projection),
+                return Return(ToolResult.Ok(read.Result.Complete ? "Complete resource representation read." :
+                    "Exact lines read from the current version; other regions are not observed. Read another line range as needed; each read rechecks the current source.", JsonConvert.SerializeObject(projection),
                     new[] { read.Result.Resource.Reference }), read.Evidence);
             }
             catch (ResourceRequestException error)
@@ -114,6 +115,8 @@ namespace RNAssistant.Runtime
         { return new ResourceRequestException(message, code, false); }
         private static string Value(ToolHandlerContext context, string name)
         { object value; return context.Arguments.TryGetValue(name, out value) ? Convert.ToString(value) : string.Empty; }
+        private static int? Number(ToolHandlerContext context, string name)
+        { object value; return context.Arguments.TryGetValue(name, out value) && value != null ? (int?)Convert.ToInt32(value) : null; }
         private static Task<ToolHandlerResult> Return(ToolResult result, IReadOnlyList<ResourceEvidence> evidence = null)
         { return Task.FromResult(new ToolHandlerResult(result, ToolEffectEvidence.None, resourceEvidence: evidence)); }
     }

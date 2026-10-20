@@ -80,7 +80,7 @@ def run_case(root):
                         for item in branch["items"]["anyOf"]}
         for operation, file_keys, skill_keys in (
                 ("find", {"type", "directory", "query"}, {"type", "query"}),
-                ("read", {"type", "target"}, {"type", "target", "referencePath"})):
+                ("read", {"type", "target", "startLine", "lineCount"}, {"type", "target", "referencePath"})):
             name = "common.resources_" + operation
             for schema in (prompt_catalog[name]["Schema"], wire_catalog[name]):
                 assert len(schema["anyOf"]) == 3, schema
@@ -100,7 +100,7 @@ def run_case(root):
             assert field in requests[repaired]["messages"][-1]["content"]
             assert read_progress(requests[repaired])["currentCompleteFileReads"] == 0
         for after_failure in (7, 9):
-            last = requests[after_failure]["messages"][-1]
+            last = next(message for message in reversed(requests[after_failure]["messages"]) if message["role"] == "tool")
             assert last["role"] == "tool", last
             assert "path_outside_mount" in last["content"] and "omit directory" in last["content"], last
         assert "SKILL_CORE_BYTES" in json.dumps(requests[5]["messages"])

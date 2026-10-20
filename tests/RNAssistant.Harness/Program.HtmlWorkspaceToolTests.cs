@@ -378,6 +378,17 @@ namespace RNAssistant.Harness
                         "wrong-file repair guidance is visible without expanding data");
 
                     var ambiguousSource = "x\r\ny\nx\ry";
+                    foreach (var operation in new[] { "replace", "replaceAll", "insertBefore", "insertAfter" })
+                    {
+                        try
+                        {
+                            StructuredTextPatchEngine.Apply("aaaa", new[] {
+                                new StructuredTextPatchOperation { Op = operation, Find = "aaa", Text = "b" } }, 100);
+                            throw new Exception("Overlapping anchor was accepted: " + operation);
+                        }
+                        catch (StructuredTextPatchException ex)
+                        { AssertEqual("text_patch_ambiguous", ex.ErrorCode, "overlapping anchors fail before writing"); }
+                    }
                     try
                     {
                         StructuredTextPatchEngine.Apply(ambiguousSource,

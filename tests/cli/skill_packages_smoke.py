@@ -23,6 +23,10 @@ def check(root):
     source = package / "SKILL.md"
     source.write_text("---\nid: fixture.report\nname: Report\nhost: Workspace\ndescription: Validate a file report\n"
                       "rnassistant: " + json.dumps(manifest) + "\n---\n" + marker)
+    large = state / "skills" / "workspace" / "large"
+    large.mkdir()
+    large_body = "REQUIRED_LARGE_PROCEDURE " + "x" * 24000
+    (large / "SKILL.md").write_text("---\nid: fixture.large\nname: Large\nhost: Workspace\ndescription: Large procedure\n---\n" + large_body)
     responses, requests, errors = deque(), [], []
 
     class Handler(BaseHTTPRequestHandler):
@@ -107,8 +111,18 @@ def check(root):
         responses.extend([call("common.skills_load", id="fixture.report"), DONE])
         cli("run", "--message", "Inspect only", "--mutation-policy", "deny")
         assert not selected(requests[-1]), "Unavailable required writer prevents partial selection under Deny"
+        responses.extend([call("common.skills_load", id="fixture.large"), DONE])
+        limited = cli("run", "--message", "Select fixture.large if the complete request fits.", "--context-tokens", "24576")
+        assert not selected(requests[-1]), "Rejected candidate never becomes active instructions"
+        refusals = [message.get("content", "") for message in requests[-1]["messages"]
+                    if "skill_unavailable" in str(message.get("content", ""))]
+        assert any("complete next request exceeds its budget" in text for text in refusals), refusals
+        assert limited["ToolCounts"]["ReadError"] == 1, limited
+        responses.append(DONE)
+        cli("run", "--session", limited["SessionId"], "--message", "Continue without the rejected procedure.")
+        assert not selected(requests[-1]), "Cold restart retains the previous usable selection"
         assert not errors and not responses, errors
-        print("PASS skill packages CLI: canonical load, guarded read/patch/report/readback, approvals, exact publication, follow-up without reload and explicit removal")
+        print("PASS skill packages CLI: canonical load, guarded read/patch/report/readback, approvals, exact publication, follow-up/removal, whole-request admission refusal and cold restart")
         print(json.dumps({"controlledModelRequests": len(requests), "pilotRequests": prior,
                           "selectedInstructionCharacters": len(marker), "realModelEvaluation": False}))
     finally:

@@ -103,6 +103,40 @@ namespace RNAssistant.Harness
             {
                 var workspace = new WorkspaceStore(paths).Open(Path.Combine(paths.Root, "project"));
                 var files = new WorkspaceFileService(paths);
+                var overlapping = files.CreateText(workspace, "overlap.txt", "aaaa");
+                var dispatched = false;
+                try
+                {
+                    files.PatchExact(workspace, "overlap.txt", overlapping.Reference, "aaa", "b", () => dispatched = true);
+                    throw new Exception("Overlapping anchor was accepted.");
+                }
+                catch (WorkspaceFileException ex)
+                { AssertEqual("patch_ambiguous", ex.Code, "distinct overlapping starts are ambiguous"); }
+                AssertTrue(!dispatched, "ambiguous patch never reaches the effect boundary");
+                AssertEqual("aaaa", File.ReadAllText(Path.Combine(workspace.RootPath, "overlap.txt")), "ambiguous patch preserves bytes");
+                var mixed = files.CreateText(workspace, "mixed.txt", "first\r\nTARGET\nlast\r尾😀");
+                var excerpt = files.ReadTextLines(workspace, "mixed.txt", 2, 1);
+                AssertEqual("TARGET\n", excerpt.Text, "line slicing preserves exact terminators");
+                AssertTrue(!excerpt.Evidence.Complete && excerpt.Evidence.Coverage.Kind == ResourceCoverageKinds.CharacterRange,
+                    "line selection cannot authorize whole replacement");
+                var mixedPatch = files.PatchExact(workspace, "mixed.txt", excerpt.Reference, "TARGET", "UPDATED");
+                AssertEqual("first\r\nUPDATED\nlast\r尾😀", mixedPatch.Text, "patch preserves untouched mixed newlines and Unicode");
+                AssertTrue(mixedPatch.Evidence != null && mixedPatch.Evidence.Resource.Revision == mixedPatch.Reference.Revision,
+                    "verified mutation supplies exact after-source evidence");
+                AssertEqual("first\r\nTARGET\nlast\r尾😀", files.ReadExactText(workspace, "mixed.txt", mixed.Reference).Text,
+                    "old snapshots are not replaced by latest");
+                files.FaultPoint = stage => { if (stage == "before-replace-check") File.WriteAllText(Path.Combine(workspace.RootPath, "mixed.txt"), "foreign"); };
+                dispatched = false;
+                try
+                {
+                    files.ReplaceText(workspace, "mixed.txt", mixedPatch.Reference, "candidate", () => dispatched = true);
+                    throw new Exception("Late precondition conflict accepted.");
+                }
+                catch (WorkspaceFileException ex)
+                { AssertEqual("target_conflict", ex.Code, "late proven pre-dispatch conflict is not unknown"); }
+                finally { files.FaultPoint = null; }
+                AssertTrue(!dispatched, "precondition failure precedes possible target effect");
+                AssertEqual("foreign", files.ReadText(workspace, "mixed.txt").Text, "no unresolved attempt or blind retry after conflict");
                 var first = files.CreateText(workspace, "dashboard/app.js", "const value = 1;\r\n");
                 AssertEqual("const value = 1;\r\n", File.ReadAllText(Path.Combine(workspace.RootPath, "dashboard", "app.js")),
                     "created a real file");

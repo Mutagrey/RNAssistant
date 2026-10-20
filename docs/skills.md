@@ -99,19 +99,31 @@ Dispatch validates that invocation against the exact durable pending call's orig
 request, turn, step, arguments, policy and prepared state; it still rejects changed
 bindings. It does not relabel a previous request as a new one.
 Changed/revoked publications suspend incompatible selections until explicit reload.
-Catalog drift after request compilation blocks dispatch. Office refreshes complete
+Catalog drift after request compilation revalidates the offered tool's exact
+descriptor/policy/binding and its supplying selected skills/dependencies. An unrelated
+publication does not revoke an unchanged call. A used contract change or revocation
+refuses dispatch with replan feedback. The progress tracker persists a fingerprint
+of that operation's admission state: real rebind/selection can release a prior
+replan refusal; new call/request IDs or unrelated publications cannot. Unknown
+effects keep their replay guard regardless of later admission changes.
+Office refreshes complete
 catalog authority at the next model-request boundary after an in-run publication;
-the already accepted request stays pinned. Instructions and schemas
-must fit the budget: selection reserves at most half the input budget, and the
-complete compiler may explicitly refuse an oversized request; it never truncates
-active instructions while leaving their tools callable.
+the already accepted request stays pinned. Instructions and schemas must fit the
+budget: the Core half-input check is an initial bound, then Office and workspace
+stage a candidate surface and the projected load result through their existing
+complete request compiler, including schemas and reserves. Only an admitted
+candidate replaces the selection in the accepted run record. Refusal returns
+bounded feedback through the previous usable surface. Preview results never enter
+history or count as execution facts; preflight performs no LLM call or compaction.
+Actual dispatch still recompiles against its own frozen authority.
 
-This selection estimate is not complete request admission. The current 32K Excel
-VBA case can persist a selection that prevents both the next request and a later
-turn from compiling, including a request to remove that skill. This remains an
-[open admission defect](stabilization/RISK_REGISTER.md#architecture-and-regression-review--2026-10-15).
-The intended correction stages selection until the actual request compiler accepts
-the complete candidate; no automatic deselection or larger-budget fallback exists.
+The [32K admission defect](stabilization/RISK_REGISTER.md#architecture-and-regression-review--2026-10-15)
+is contained for new selections: the 32K Excel case now refuses the load and permits
+the next request and restored user turn; a separate 64K control still executes the
+patch. Product defaults are unchanged. No automatic deselection, larger-budget
+fallback or truncation of active instructions exists. Previously persisted
+oversized selections are not silently rewritten; explicit reset/profile correction
+remains necessary for that old state.
 
 The Library reader validates the published supporting-file basename for all three
 allowed directories (`references`, `scripts`, `assets`); it does not strip a fixed

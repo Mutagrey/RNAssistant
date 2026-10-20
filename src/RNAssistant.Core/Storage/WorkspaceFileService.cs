@@ -26,6 +26,8 @@ namespace RNAssistant.Core.Storage
         public string ContentSha256 { get; internal set; }
         public ResourceEvidence Evidence { get; internal set; }
         public ResourceAuthorityCommit AuthorityCommit { get; internal set; }
+        public int Offset { get; internal set; }
+        public int? TotalCharacters { get; internal set; }
     }
 
     // Runtime-only source pin. Content is opened separately, never serialized as
@@ -218,6 +220,47 @@ namespace RNAssistant.Core.Storage
         public WorkspaceFileObservation ReadText(WorkspaceDescriptor workspace, string relativePath,
             CancellationToken token = default(CancellationToken))
         { return ReadContent(workspace, relativePath, false, token); }
+
+        public WorkspaceFileObservation ReadTextLines(WorkspaceDescriptor workspace, string relativePath,
+            int startLine, int lineCount)
+        {
+            if (startLine < 1 || lineCount < 1 || lineCount > 500)
+                throw new WorkspaceFileException("resource_lines_invalid", "Use startLine >= 1 and lineCount between 1 and 500.");
+            var source = ReadText(workspace, relativePath);
+            var starts = new List<int> { 0 };
+            for (var i = 0; i < source.Text.Length; i++)
+            {
+                if (source.Text[i] != '\r' && source.Text[i] != '\n') continue;
+                if (source.Text[i] == '\r' && i + 1 < source.Text.Length && source.Text[i + 1] == '\n') i++;
+                starts.Add(i + 1);
+            }
+            if (startLine > starts.Count)
+                throw new WorkspaceFileException("resource_lines_invalid", "startLine exceeds the current source's " + starts.Count + " lines.");
+            var start = starts[startLine - 1];
+            var next = Math.Min((long)starts.Count, (long)startLine - 1 + lineCount);
+            var end = next < starts.Count ? starts[(int)next] : source.Text.Length;
+            if (end - start > 16000)
+                throw new WorkspaceFileException("read_too_large", "Selected lines exceed 16000 characters; reduce lineCount.");
+            return SelectTextRange(source, start, end - start);
+        }
+
+        // Slice a captured/read-back source, never a candidate or a new live read.
+        public WorkspaceFileObservation SelectTextRange(WorkspaceFileObservation source, int start, int length)
+        {
+            if (source?.Text == null || start < 0 || length < 0 || start > source.Text.Length - length || source.Offset != 0)
+                throw new ArgumentException("A bounded range of a complete captured source is required.");
+            var whole = source.Evidence ?? PublishedEvidence(source.Reference, ResourceRepresentations.Text);
+            if (!whole.Complete || whole.Coverage.Kind != ResourceCoverageKinds.Whole)
+                throw new ArgumentException("A complete captured source is required.");
+            var text = source.Text.Substring(start, length);
+            var payload = PayloadRef.FromBlob(_blobs.StoreText(text, "text/plain; charset=utf-8"));
+            return new WorkspaceFileObservation { RelativePath = source.RelativePath, Text = text,
+                Reference = source.Reference.Copy(), Offset = start, TotalCharacters = source.Text.Length,
+                ContentSha256 = source.ContentSha256, AuthorityCommit = source.AuthorityCommit,
+                Evidence = new ResourceEvidence("ev_" + Guid.NewGuid().ToString("N"), whole.ScopeId,
+                    whole.Resource, whole.View, new ResourceCoverage(ResourceCoverageKinds.CharacterRange, start: start, end: start + length),
+                    false, whole.AuthorityGeneration, payload, whole.Dependencies, contentSha256: whole.ContentSha256) };
+        }
 
         public WorkspaceFileObservation ReadBytes(WorkspaceDescriptor workspace, string relativePath)
         { return ReadContent(workspace, relativePath, true); }
@@ -499,14 +542,14 @@ namespace RNAssistant.Core.Storage
                 try
                 {
                     SaveMoveIntent(intent);
-                    onDispatch?.Invoke();
-                    _journal.MarkDispatchMayHaveOccurred(attempt.AttemptId);
-                    dispatched = true;
                     ResolvePath(workspace, sourceRelativePath, false, true);
                     ResolvePath(workspace, targetRelativePath, false, true);
                     if (Hash(ReadBounded(source)) != hash || File.Exists(target) || Directory.Exists(target) ||
                         ExistingLocatorId(target) != null || PendingMoveFileId(target) != id)
                         throw new WorkspaceFileException("target_conflict", "Move paths changed just before dispatch.");
+                    onDispatch?.Invoke();
+                    _journal.MarkDispatchMayHaveOccurred(attempt.AttemptId);
+                    dispatched = true;
                     File.Move(source, target);
                     FaultPoint?.Invoke("after-dispatch");
                     ResolvePath(workspace, targetRelativePath, false, true);
@@ -536,7 +579,9 @@ namespace RNAssistant.Core.Storage
                     _journal.Resolve(attempt.AttemptId, commit.CommitId);
                     RemoveMoveIntent(attempt.AttemptId);
                     return new WorkspaceFileObservation { RelativePath = targetRelativePath,
-                        Text = Decode(bytes), Reference = exact, ContentSha256 = hash, AuthorityCommit = commit };
+                        Text = Decode(bytes), Reference = exact, ContentSha256 = hash, AuthorityCommit = commit,
+                        Evidence = new ResourceEvidence("ev_" + Guid.NewGuid().ToString("N"), scope, exact, "text",
+                            ResourceCoverage.Whole(), true, current.Generation + 1, revision.Payload, contentSha256: hash) };
                 }
                 catch (Exception ex)
                 {
@@ -566,9 +611,10 @@ namespace RNAssistant.Core.Storage
                 if (File.Exists(path)) throw new WorkspaceFileException("target_exists", "Target appeared before dispatch.");
                 var head = _authority.Capture(scope).GetHead(Identity(id));
                 if (head != null) throw new WorkspaceFileException("target_conflict", "The path has prior resource history; inspect it before reuse.");
-                return Mutate(scope, id, relativePath, bytes, null, null, operation, onDispatch, () =>
+                return Mutate(scope, id, relativePath, bytes, null, null, operation, onDispatch, markDispatch =>
                 {
                     ResolvePath(workspace, relativePath, false, true);
+                    markDispatch();
                     Directory.CreateDirectory(Path.GetDirectoryName(path));
                     ResolvePath(workspace, relativePath, false, true);
                     using (var output = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None))
@@ -633,11 +679,11 @@ namespace RNAssistant.Core.Storage
                 var dispatched = false;
                 try
                 {
+                    ResolvePath(workspace, relativePath, false, true);
+                    if (File.Exists(trashPath)) throw new IOException("Managed trash target already exists.");
                     onDispatch?.Invoke();
                     _journal.MarkDispatchMayHaveOccurred(attempt.AttemptId);
                     dispatched = true;
-                    ResolvePath(workspace, relativePath, false, true);
-                    if (File.Exists(trashPath)) throw new IOException("Managed trash target already exists.");
                     File.Move(path, trashPath);
                     FaultPoint?.Invoke("after-dispatch");
                     if (File.Exists(path) || Hash(ReadBounded(trashPath)) != revision.ContentSha256)
@@ -699,11 +745,12 @@ namespace RNAssistant.Core.Storage
                 Decode(bytes);
                 if (Hash(bytes) != retained.ContentSha256)
                     throw new WorkspaceFileException("snapshot_unavailable", "The managed trash preimage changed.");
-                return Mutate(scope, id, relativePath, bytes, null, previous, "files.restore", onDispatch, () =>
+                return Mutate(scope, id, relativePath, bytes, null, previous, "files.restore", onDispatch, markDispatch =>
                 {
                     ResolvePath(workspace, relativePath, false, true);
                     if (File.Exists(path) || Directory.Exists(path))
                         throw new WorkspaceFileException("target_conflict", "Restore target appeared before dispatch.");
+                    markDispatch();
                     File.Move(trashPath, path);
                 }, path, expectedHead: head);
             }
@@ -736,7 +783,7 @@ namespace RNAssistant.Core.Storage
                     Observe(scope, id, before);
                     throw new WorkspaceFileException("target_conflict", "File changed outside RNAssistant since the accepted read.");
                 }
-                var updated = PreserveLineEndings(text, beforeText);
+                var updated = operation == "files.patch" ? text : PreserveLineEndings(text, beforeText);
                 // UTF-8 decoding retains U+FEFF. A whole-file replacement from a
                 // model usually omits it, so preserve the source BOM explicitly.
                 if (before.Length >= 3 && before[0] == 0xef && before[1] == 0xbb && before[2] == 0xbf &&
@@ -745,8 +792,9 @@ namespace RNAssistant.Core.Storage
                 var bytes = Encode(updated);
                 if (Hash(bytes) == Hash(before))
                     return new WorkspaceFileObservation
-                    { RelativePath = relativePath, Text = Decode(before), Reference = expected.Copy(), ContentSha256 = Hash(before) };
-                return Mutate(scope, id, relativePath, bytes, expected, restoredFrom, operation, onDispatch, () =>
+                    { RelativePath = relativePath, Text = Decode(before), Reference = expected.Copy(), ContentSha256 = Hash(before),
+                        Evidence = PublishedEvidence(expected, "text") };
+                return Mutate(scope, id, relativePath, bytes, expected, restoredFrom, operation, onDispatch, markDispatch =>
                 {
                     var temp = path + ".rna-" + Guid.NewGuid().ToString("N") + ".tmp";
                     try
@@ -754,9 +802,11 @@ namespace RNAssistant.Core.Storage
                         using (var output = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
                         { output.Write(bytes, 0, bytes.Length); output.Flush(true); }
                         // This recheck narrows, but cannot eliminate, races with uncoordinated editors.
+                        FaultPoint?.Invoke("before-replace-check");
                         ResolvePath(workspace, relativePath, false, true);
                         if (Hash(ReadBounded(path)) != Hash(before))
                             throw new WorkspaceFileException("target_conflict", "File changed just before replace.");
+                        markDispatch();
                         File.Replace(temp, path, null);
                     }
                     finally { if (File.Exists(temp)) File.Delete(temp); }
@@ -772,8 +822,10 @@ namespace RNAssistant.Core.Storage
             if (expected == null || observed.Reference.Revision != expected.Revision)
                 throw new WorkspaceFileException("target_conflict", "File changed since the accepted read.");
             var first = observed.Text.IndexOf(oldText, StringComparison.Ordinal);
-            if (first < 0 || observed.Text.IndexOf(oldText, first + oldText.Length, StringComparison.Ordinal) >= 0)
-                throw new WorkspaceFileException("invalid_patch", "Patch anchor is missing or ambiguous.");
+            if (first < 0)
+                throw new WorkspaceFileException("patch_not_found", "Patch anchor does not match the current source; correct oldText.");
+            if (observed.Text.IndexOf(oldText, first + 1, StringComparison.Ordinal) >= 0)
+                throw new WorkspaceFileException("patch_ambiguous", "Patch anchor has multiple starts; use a unique larger anchor.");
             return ReplaceTextCore(workspace, relativePath, expected,
                 observed.Text.Substring(0, first) + (newText ?? string.Empty) + observed.Text.Substring(first + oldText.Length),
                 null, "files.patch", onDispatch);
@@ -956,7 +1008,7 @@ namespace RNAssistant.Core.Storage
 
         private WorkspaceFileObservation Mutate(ResourceAuthorityScopeId scope, string id, string relativePath,
             byte[] bytes, ResourceRef before, ResourceRef restoredFrom, string operation,
-            Action onDispatch, Action dispatch, string path, ResourceRef copySource = null,
+            Action onDispatch, Action<Action> dispatch, string path, ResourceRef copySource = null,
             ResourceHeadState expectedHead = null)
         {
             var payload = PayloadRef.FromBlob(_blobs.StoreBytes(bytes, "text/plain; charset=utf-8"));
@@ -964,10 +1016,12 @@ namespace RNAssistant.Core.Storage
             var dispatched = false;
             try
             {
-                onDispatch?.Invoke();
-                _journal.MarkDispatchMayHaveOccurred(attempt.AttemptId);
-                dispatched = true;
-                dispatch();
+                dispatch(() =>
+                {
+                    onDispatch?.Invoke();
+                    _journal.MarkDispatchMayHaveOccurred(attempt.AttemptId);
+                    dispatched = true;
+                });
                 FaultPoint?.Invoke("after-dispatch");
                 var afterBytes = ReadBounded(path);
                 if (Hash(afterBytes) != payload.Sha256)
@@ -999,7 +1053,10 @@ namespace RNAssistant.Core.Storage
                 _journal.Resolve(attempt.AttemptId, commit.CommitId);
                 return new WorkspaceFileObservation
                 { RelativePath = relativePath, Text = Decode(afterBytes), Reference = exact,
-                    ContentSha256 = payload.Sha256, AuthorityCommit = commit };
+                    ContentSha256 = payload.Sha256,
+                    Evidence = new ResourceEvidence("ev_" + Guid.NewGuid().ToString("N"), scope, exact, "text",
+                        ResourceCoverage.Whole(), true, snapshot.Generation + 1, payload, contentSha256: payload.Sha256),
+                    AuthorityCommit = commit };
             }
             catch (Exception ex)
             {

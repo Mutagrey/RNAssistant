@@ -232,7 +232,7 @@ namespace RNAssistant.Office.Tools
             IReadOnlyList<SkillDefinition> skillCatalog = null,
             bool manualRun = false,
             bool dryRun = false, ConversationRunPolicy runPolicy = null,
-            Func<ToolExecutionContext, string> dispatchGuard = null)
+            Func<ToolExecutionContext, string> dispatchGuard = null, SkillSelectionAdmission skillAdmission = null)
         {
             session = BoundManualSession(session);
             BindResourceAuthority(session);
@@ -251,7 +251,7 @@ namespace RNAssistant.Office.Tools
                     : new ResourceMutationAuthorityObserver(
                         _resourceAuthority, _resourceMutationJournal, session, Payloads,
                         saved => _persistResourceFacts?.Invoke(saved, new ConversationCommit()),
-                        _catalogPublication.CaptureReadBack), _markdownDocuments, runPolicy, dispatchGuard, _authoredFiles);
+                        _catalogPublication.CaptureReadBack), _markdownDocuments, runPolicy, dispatchGuard, _authoredFiles, skillAdmission);
         }
 
         // Explicit UI resource commands share the mutation journal/commit owner.

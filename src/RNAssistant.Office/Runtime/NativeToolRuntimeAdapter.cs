@@ -72,7 +72,7 @@ namespace RNAssistant.Office.Runtime
             bool trace = true,
             IToolMutationObserver mutationObserver = null, MarkdownDocumentService markdownDocuments = null,
             ConversationRunPolicy runPolicy = null, Func<ToolExecutionContext, string> dispatchGuard = null,
-            AuthoredFileService authoredFiles = null)
+            AuthoredFileService authoredFiles = null, SkillSelectionAdmission skillAdmission = null)
         {
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
             var registry = new ToolHandlerRegistry();
@@ -89,7 +89,7 @@ namespace RNAssistant.Office.Runtime
                 if (registration.Descriptor.Id == SkillLoadToolHandler.ToolId)
                 {
                     binding = SkillLoadToolHandler.Binding;
-                    handler = new SkillLoadToolHandler(session, () => new SkillCatalogSnapshot(skillCatalog), () => snapshot, settings);
+                    handler = new SkillLoadToolHandler(session, () => new SkillCatalogSnapshot(skillCatalog), () => snapshot, settings, skillAdmission);
                 }
                 else if (string.Equals(registration.Descriptor.Id, ResourceToolCatalog.FindToolId, StringComparison.Ordinal))
                 {
@@ -330,7 +330,8 @@ namespace RNAssistant.Office.Runtime
             if (policy.Mode != mode) throw new InvalidOperationException("The runtime intent differs from the bound session.");
             _runtime = new ToolRuntime(registry, policy.Mode,
                 settings != null && settings.AutoConfirmToolActions,
-                policy.AllowsConfirmation, pendingRegistrar, mutationObserver, manualRun ? null : policy, dispatchGuard);
+                policy.AllowsConfirmation, pendingRegistrar, mutationObserver, manualRun ? null : policy, dispatchGuard,
+                manualRun ? (Func<ToolCall, string>)null : call => SkillTaskService.AdmissionRevision(session, call, snapshot));
             _session = session;
             _trace = trace;
         }

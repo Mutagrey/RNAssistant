@@ -8,6 +8,17 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## Unified stabilization verification gap — 2026-10-20
+
+**Harness / request inspector fixture, open.** The unchanged `model context:
+request schema duplication size` check fails before its wire assertions because
+`ReadSchemaEvidence` reconstructs capability admission from a manual projected
+result. Rework that fixture to use the native accepted descriptor evidence, then
+rerun its exact HTTP-size/inspector comparison. Do not relax production admission
+to make a projected result authoritative. Incremental budget, schema modes/fallback
+and exact request trace checks pass; the failed fixture is recorded separately in
+the [unified report](PROGRESS.md#unified-stabilization--2026-10-20).
+
 ## Plugin native qualification and interrupted scratch — 2026-10-19
 
 Owner: application plugin services and WebView transport. Host-neutral checks cover
@@ -133,10 +144,10 @@ the winning model/artifact and permits a new explicit write. Regression covers
 title, model and reasoning setters, exact journal preservation and reload.
 No controller/COM behavior or on-disk format changed.
 
-**P1 open / Core skill selection and Office/Runtime request admission.**
-`SkillTaskService.Select` checks only bodies/dependency schemas against half the
-input budget, then persists selection. It does not admit the complete next
-request. A scripted Excel conversation with normal ToolStore/settings dependencies,
+**P1 contained for new selections — 2026-10-20 / Core skill selection and Office/Runtime request admission.**
+Original finding: `SkillTaskService.Select` checked only bodies/dependency schemas
+against half the input budget, then persisted selection without admitting the
+complete next request. A scripted Excel conversation with normal ToolStore/settings dependencies,
 32,768 context tokens, default 3,072 output tokens and default prompts accepts
 `common.skills_load(common.vba_code_editing)` as `ok`, then fails before the next
 model call: estimated messages 23,668 tokens versus 23,422 available. After cold
@@ -146,10 +157,15 @@ completes; that control is not a fix or real-model acceptance.
 The probe uses the built Harness production owners and a fake Excel adapter;
 no VBA mutation or HTTP dispatch occurs. This independently establishes an
 admission/liveness defect; it does not establish the cause of every VBA test
-failure below. Next change: stage a candidate skill/tool surface, admit it with
-the same complete frozen request/compiler and reserves used by dispatch, then
-publish once. Refusal must preserve the previous usable selection and return
-bounded feedback. Do not silently evict selected skills or enlarge budgets.
+failure below. The 2026-10-20 change stages the candidate skill/tool surface and
+projected load result through the same request compiler and reserves before
+replacing selection. The 32K fake-Excel regression now returns a load refusal,
+reaches the next model request, and permits another turn after state serialization;
+the 64K control performs one patch. Workspace uses the same staged selection
+owner and its own existing request compiler. There is no LLM preflight, silent
+eviction or enlarged product budget. Older already-persisted oversized selections
+still require explicit reset/profile correction; Windows and live-model evidence
+remain open. See the [unified report](PROGRESS.md#unified-stabilization--2026-10-20).
 
 **Existing open risks confirmed by source review:** chat relocation still appends
 the binding before physical rename; interruption between them is not covered by

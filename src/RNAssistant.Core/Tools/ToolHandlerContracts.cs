@@ -102,8 +102,9 @@ namespace RNAssistant.Core.Tools
 
         public bool IsSatisfiedBy(ResourceEvidence evidence)
         {
-            return ResourceIdentity != null && evidence != null && evidence.Complete &&
-                evidence.Coverage.Kind == ResourceCoverageKinds.Whole &&
+            return ResourceIdentity != null && evidence != null &&
+                (evidence.Complete && evidence.Coverage.Kind == ResourceCoverageKinds.Whole ||
+                    ReadScope == ToolRecoveryReadScope.RelevantLines && evidence.Coverage.Kind == ResourceCoverageKinds.CharacterRange) &&
                 string.Equals(evidence.View, View, StringComparison.Ordinal) &&
                 ResourceIdentity.Equals(evidence.Resource.Identity);
         }

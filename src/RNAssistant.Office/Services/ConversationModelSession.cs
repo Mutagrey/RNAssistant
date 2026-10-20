@@ -451,6 +451,21 @@ namespace RNAssistant.Office.Services
 
         internal ContextReceipt LastReceipt { get { return _lastSnapshot == null ? null : _lastSnapshot.Receipt; } }
 
+        internal string AdmitSkillSelection(IReadOnlyList<SelectedSkill> selections, ChatMessage previewResult)
+        {
+            try
+            {
+                CompileCurrent(_toolPack.Tools, _toolPack.Revision,
+                    _packState ?? _toolPack.RestorationStateMessage, true, false, selections, previewResult);
+                return null;
+            }
+            catch (PromptBudgetExceededException ex)
+            {
+                return "Skill selection refused before activation: the complete next request exceeds its budget. " +
+                    "The previous selection remains active. Remove an unneeded skill or compact earlier history. " + ex.Message;
+            }
+        }
+
         private ModelContextSnapshot CompileCurrent(bool enforceBudget = false)
         {
             return CompileCurrent(
@@ -466,17 +481,18 @@ namespace RNAssistant.Office.Services
             string toolGeneration,
             ChatMessage packState,
             bool enforceBudget,
-            bool retainAuthority)
+            bool retainAuthority, IReadOnlyList<SelectedSkill> candidateSelections = null, ChatMessage previewResult = null)
         {
             var skills = _skillSnapshot;
             var skillDefinitions = skills.Skills;
             var surface = SkillTaskService.Compile(_session, skills,
                 ToolPackSnapshotFactory.Capture(_mode, _adapter.HostName, _runnableCatalog),
-                _runnableCatalog, tools, _requestStepId, _settings);
+                _runnableCatalog, tools, _requestStepId, _settings, candidateSelections);
             tools = surface.Tools;
             toolGeneration = surface.Arsenal.ToolFingerprint;
             if (retainAuthority) _skills = skillDefinitions;
             var facts = PromptBudgetComposer.ConversationHistory(_session, true, false);
+            if (previewResult != null) facts.Add(previewResult);
             var currentIndex = facts.FindIndex(item => item.Id == _currentUserId);
             var current = currentIndex < 0 ? null : facts[currentIndex];
             if (current == null && _currentUserId == null)
