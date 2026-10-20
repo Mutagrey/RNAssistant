@@ -1,5 +1,32 @@
 # Stabilization progress
 
+## Bound HTML and VBA baseline — 2026-10-20
+
+The original four-file task was rerun before changing the bootstrap tool set,
+using the retained isolated binary for the `286ba967` runtime changes. Its hash
+matches the successful minimal VBA runs. The fake document is correctly bound:
+all 15 exact HTTP requests advertise `office_tools_available=true`. The profile
+remains `gemma4:cloud`, `json_object`, 32K context, 4096 output, developer
+instructions, `reasoning_effort=none`, temperature 0 and the existing run bounds.
+
+The task fails with `model_blocked`: all three HTML files and the VBA module retain
+their original bytes; zero writes or unknown effects occur. HTML skill admission
+needs 24,942 message tokens against 21,375; later VBA admission needs 22,750.
+There are 15 provider requests, 243,975 actual input tokens and 2250 output tokens
+in about 35 seconds. Four repair requests address fenced JSON, invalid escaping
+and two calls to an unselected skill-only tool. Repeated unchanged failed loads
+are blocked by the no-progress guard. No successful compaction occurs and the
+final answer does not claim that the files were changed.
+
+This is a concrete baseline for the proposed smaller bootstrap, not evidence that
+the complete task works. Retain the same task, sources, profile and exact-file
+acceptance when comparing the change; count discovery, repair and total input.
+The repair messages also contain conflicting skill/direct-schema advice, recorded
+in the [risk register](RISK_REGISTER.md#live-prompt-qualification--2026-10-20).
+Evidence: the existing local evaluation directory, `office-bound-baseline-1/` and
+`office-bound-baseline-results.json`. The saved binary was reused without a build;
+concurrent working-tree changes and real Office/COM were not exercised.
+
 ## Colored plugin SVG icons — 2026-10-20
 
 The shared create/appearance editor defaults to a neutral color following the theme,

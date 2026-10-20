@@ -18,10 +18,18 @@ uses one cloud endpoint/profile with unchanged task bounds and acceptance.
 - Minimal VBA admission is [fixed and checked live](PROGRESS.md#minimal-vba-admission-and-live-check--2026-10-20)
   at `json_object` / 32K / 4096 output: controlled sequence and two live runs pass.
   Only 120 estimated message tokens remain in the final live request; larger tasks
-  remain unqualified. The combined Office fixture also lacked its document runtime
-  binding and advertised Office as unavailable. It is corrected; rerun that task
-  before interpreting the earlier admission/protocol failures as model quality.
-  Keep admission and parser guards intact.
+  remain unqualified. The corrected [combined HTML/VBA baseline](PROGRESS.md#bound-html-and-vba-baseline--2026-10-20)
+  advertises the bound Office document but still fails: HTML/VBA admission requires
+  24,942 / 22,750 tokens against 21,375; all four files stay unchanged. Its 15 model
+  requests use 243,975 actual input tokens. Use this case to measure the smaller
+  bootstrap proposal without weakening admission, parser or final-source acceptance.
+- Repair guidance conflict, owner `ModelProtocolClient.CreateFormatRepairMessage`:
+  the specific error directs an unselected skill-only call to `common.skills_load`,
+  while the generic repair instruction directs unloaded tools to
+  `common.capabilities_read` and waits for schema admission. That read cannot admit
+  a skill-only tool. The retained combined run contains this contradiction and two
+  rejected direct VBA calls; it does not establish how much the wording caused the
+  retries. Align recovery guidance with exact exposure and preserve dispatch guards.
 - Workspace: both versions produce exact final files, then choose `done` despite
   violating the explicitly required read-after-each-edit order (0/9 sequence stages).
   Current final-file acceptance does not certify arbitrary user-prescribed ordering.
