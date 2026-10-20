@@ -477,6 +477,8 @@ namespace RNAssistant.Harness
                     var result = parser.Parse(batch, new[] { read, tool }, new[] { read, tool }, new ModelProtocolCallContext(batchSafe));
                     AssertTrue(!result.Success, kind + " cannot be batched, regardless of position");
                     AssertContains(result.Error, "one at a time", "singleton diagnosis");
+                    AssertContains(result.Error, tool.Id, "repair names the singleton tool");
+                    AssertContains(result.Error, "No calls from this response were executed", "rejected batch grants no partial progress");
                     AssertResponseBatchSchema(false, batch, catalog, context);
                 }
                 if (kind == "document" || kind == "local")
@@ -486,6 +488,21 @@ namespace RNAssistant.Harness
                 AssertTrue(parser.Parse(V4Envelope(V4Call(name: tool.Id)), new[] { tool }, new[] { tool }, new ModelProtocolCallContext(batchSafe)).Success,
                     kind + " singleton is valid protocol, not execution permission");
             }
+            var loader = SkillLoadToolHandler.Entry();
+            var load = V4Call(loader.Id, new JObject { ["id"] = "common.html_workspace_authoring" });
+            var loadVba = V4Call(loader.Id, new JObject { ["id"] = "common.vba_code_editing" });
+            var selectionContext = new ModelProtocolCallContext(new[] { read.Id });
+            var selectionTools = new[] { loader, read };
+            foreach (var batch in new[] { V4Envelope(load, loadVba), V4Envelope(V4Call(), load) })
+            {
+                var rejected = parser.Parse(batch, selectionTools, selectionTools, selectionContext);
+                AssertTrue(!rejected.Success && rejected.Response == null, "skill batch is rejected as a whole");
+                AssertContains(rejected.Error, "No skill in this rejected response was loaded", "repair does not imply admission");
+                AssertContains(rejected.Error, "common.skills_load call alone", "repair preserves the prerequisite load");
+                AssertResponseBatchSchema(false, batch, selectionTools, selectionContext);
+            }
+            AssertTrue(parser.Parse(V4Envelope(load), selectionTools, selectionTools, selectionContext).Success,
+                "the same skill selection is valid when returned alone");
         }
 
         private static void ConversationV4ValidatesArgumentsBeforeAcceptance()
@@ -2355,6 +2372,7 @@ namespace RNAssistant.Harness
                         var load = LastToolResult(messages.ToList(), SkillLoadToolHandler.ToolId);
                         AssertEqual("error", (string)load["status"], "oversized selection is refused before activation");
                         AssertContains((string)load["message"], "previous selection remains active", "load preserves the usable surface");
+                        AssertContains((string)load["message"], "common.skills_load with action=remove", "budget recovery names the explicit removal operation");
                         AssertEqual(0, session.LastRun.SelectedSkills.Count, "candidate never becomes durable selection");
                     }
                     return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
@@ -3340,7 +3358,20 @@ namespace RNAssistant.Harness
                         if (failure == "empty" || failure == "cancel") return Task.FromResult(new LlmCompletionResult());
                         var draft = JObject.Parse(CompactionReply(messages, "Unproven claim.").Content);
                         if (failure == "unknown-source") draft["claims"][0]["sourceIds"] = new JArray("not-an-included-source");
-                        else draft["claims"][0]["kind"] = "observation";
+                        else
+                        {
+                            draft["claims"][0]["kind"] = "observation";
+                            AssertContains(messages.First().Content, "observationEligible=true", "prompt uses explicit source eligibility");
+                            if (calls > 1)
+                            {
+                                var repair = messages.Last().Content;
+                                AssertContains(repair, "'observation' is not supported by " + (string)draft["claims"][0]["sourceIds"][0],
+                                    "repair identifies the invalid kind and exact supplied source");
+                                AssertContains(repair, "Allowed kinds for this source: interpretation, question, next_action",
+                                    "repair preserves the prior interpretation boundary");
+                                AssertTrue(!repair.Contains("Unproven claim."), "rejected claim text is not copied into repair");
+                            }
+                        }
                         return Task.FromResult(new LlmCompletionResult { Content = draft.ToString() });
                     });
                     Action run = () => runtime.EnsureWithinBudgetAsync(session, new AppSettings { MaxAgentFormatRetries = configuredLimit },

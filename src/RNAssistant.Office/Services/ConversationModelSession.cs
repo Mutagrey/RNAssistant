@@ -462,7 +462,8 @@ namespace RNAssistant.Office.Services
             catch (PromptBudgetExceededException ex)
             {
                 return "Skill selection refused before activation: the complete next request exceeds its budget. " +
-                    "The previous selection remains active. Remove an unneeded skill or compact earlier history. " + ex.Message;
+                    "The previous selection remains active. To free selected instructions and tool schemas, call common.skills_load with action=remove for a skill whose editing work is finished or currently unneeded; wait for that result, then retry the requested load. " +
+                    "Do not call tools from the refused selection. If every selected skill is still needed, reduce other context before retrying. " + ex.Message;
             }
         }
 

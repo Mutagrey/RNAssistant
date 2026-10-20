@@ -207,6 +207,12 @@ source IDs; `json_object` uses the same schema in the prompt. The schema and loc
 parser share the source-kind predicate. Schema bytes count toward request
 admission. The parser still validates every claim and runtime attaches evidence;
 constrained generation does not prove that a claim's text follows from its source.
+The helper instructions name the transcript's exact eligibility flags:
+`userSource=true` for constraints/decisions, `observationEligible=true` for current
+observations. A successful mutation receipt is historical execution, not a current
+observation; its outcome may be remembered as an interpretation. Prior claims retain
+their source-kind restrictions. A kind mismatch names the offending source alias
+and its allowed kinds, without copying rejected claim text into the next request.
 Compaction uses the same normalized `MaxAgentFormatRetries` limit as the main
 response: 1–20 attempts including the first, default 10. Limit 1 disables repair.
 The counter belongs to each compaction operation; it does not consume or reset the
@@ -987,6 +993,10 @@ dispatches. The next model step receives the previous mutation result before it 
 propose another edit. Confirmation-required, external, opaque and unclassified calls
 also remain singleton. Effective batch authority comes from the current local policy
 snapshot, not tool-name guesses, serialized catalog flags or model claims.
+Batch-repair diagnostics name the tool requiring a standalone call and state that
+none of the rejected response's calls executed. For `common.skills_load`, they
+explicitly require one load before using the skill's tools; rejected batched loads
+do not imply that any skill was selected.
 
 Empty calls are valid only for `done`, `blocked` and `needs_input`; accepted
 terminal decisions end the turn with distinct reasons. Explicit workspace

@@ -461,6 +461,11 @@ response modes, schema budget, mixed provenance and unknown-source rejection.
 limits normalize to 10/20, and exhausted replies preserve the prior checkpoint.
 Both modes keep frozen sources/schema and only the latest correction, preserve
 accepted history, and do not retry refusal, transport errors or cancellation.
+Kind-mismatch repair names the supplied source and allowed kinds without copying
+the rejected claim. `conversation v7: batches only independent reads` also checks
+that rejected skill-load batches expose no partial calls and require a standalone
+load; the existing exact-admission and usable-selection checks cover recovery
+after a refused load.
 `context: compaction repair must fit` makes the initial strict request fit while
 the added repair exceeds its budget, and checks refusal before the second dispatch.
 Completed receipts keep correlation without blocking a safe checkpoint as if they

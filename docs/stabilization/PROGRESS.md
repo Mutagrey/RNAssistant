@@ -1,5 +1,41 @@
 # Stabilization progress
 
+## Live recovery through compaction and skill removal — 2026-10-21
+
+The combined HTML/VBA task now has one complete live pass at the unchanged
+`gemma4:cloud` / 32K / 4096 profile and two format attempts. All four final sources
+match the requested edits byte-for-byte, with four verified writes, no unknown
+effects and one published context checkpoint. Office remains simulated.
+
+The helper contract now distinguishes `observationEligible=true` sources from
+successful historical mutation receipts. Kind errors identify the source alias
+and allowed kinds. Batch errors name the standalone tool and explain that no call
+or skill selection executed. After a refused load, repair preserves that blocker;
+Office budget feedback names explicit `common.skills_load` / `action=remove`
+before retrying a load. Eligibility, admission and effect guards are unchanged;
+no automatic skill removal or larger limit was introduced.
+
+| Candidate | Requests / actual input / output tokens | Exact edits | Outcome |
+|---|---:|---:|---|
+| Source-kind and batch guidance | 17 / 250,153 / 6509 | 3/4 | Checkpoint succeeds; HTML+VBA skill budget still blocks VBA |
+| Plus admission recovery | 19 / 282,998 / 6918 | 4/4 | HTML skill explicitly removed, VBA loaded and patched, `model_done` |
+
+Initial input stays at 9201 tokens. In the successful run, removing HTML reduces
+the next input to 12,726 tokens; loading VBA then uses 16,960. One recovered
+admission failure remains recorded in execution health. Five ordinary repair
+requests and one helper repair are included in the totals; the initial empty
+response still consumes 4096 output tokens. This is one successful trajectory,
+not a reliability rate or an overall token-saving result.
+
+Validation: 12 focused checks pass, covering source-kind rejection, frozen repair,
+batch safety and exact skill admission. Evidence is in the existing local eval
+directory: `office-recovery-guidance-{1,2}/`, `recovery-guidance-results.json`,
+`recovery-guidance.patch` and `recovery-guidance-v2.patch`. Metadata pins `c0d63e93`
+plus each scoped patch/binary hash; full profiles, source/task hashes and final
+bytes were independently compared. Next: live Excel report/discovery coverage
+with production skill text, then repeatable success and fewer repair requests.
+Live interruption/resume and real Windows/Office qualification remain open.
+
 ## Shared compaction attempt setting — 2026-10-21
 
 `ContextCompactionRuntime` now uses the existing `MaxAgentFormatRetries` setting
@@ -36,7 +72,7 @@ The same bound HTML/VBA task and `gemma4:cloud` / 32K / 4096 profile still start
 | Compaction repair 2 | 5 / 51,643 / 4639 | 0/4 | Ordinary protocol exhausted before compaction |
 
 In the first run, the repaired response promotes assistant skill selection to a
-user decision and cites assistant patch calls as observations. No checkpoint is
+user decision and cites successful patch receipts as current observations. No checkpoint is
 published; VBA remains unchanged. The second run mixes skill loads, then calls an
 unloaded HTML tool. Neither run reports false completion or unknown effects.
 This validates the bounded recovery boundary, not reliable live compaction or

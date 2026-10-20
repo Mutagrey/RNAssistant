@@ -19,8 +19,10 @@ uses one cloud endpoint/profile with unchanged task bounds and acceptance.
   at `json_object` / 32K / 4096 output: controlled sequence and two live runs pass.
   Its previous twenty-tool core left only 120 estimated message tokens at the end.
   The [six-tool Excel bootstrap](PROGRESS.md#minimal-excel-bootstrap--2026-10-20)
-  lowers actual first-request input from 14,110 to 9201. Two combined runs now
-  complete 3/4 edits, but neither reaches full acceptance. Simultaneous HTML/VBA
+  lowers actual first-request input from 14,110 to 9201. Its first two combined
+  runs complete 3/4 edits. The later [recovery-guidance run](PROGRESS.md#live-recovery-through-compaction-and-skill-removal--2026-10-21)
+  passes 4/4 after explicit removal of the completed HTML skill and loading VBA.
+  This is one successful trajectory, not a reliability rate. Simultaneous HTML/VBA
   selection can still exceed 32K; active skills and correctness checks must not
   be silently dropped. Full live Excel report/discovery coverage also remains open:
   the fake host's report skill body is a stub, despite complete dependency checks.
@@ -35,13 +37,17 @@ uses one cloud endpoint/profile with unchanged task bounds and acceptance.
   including the first attempt, with unchanged frozen sources, strict provenance
   checks and separately budgeted requests. In the captured two-attempt live
   run that reaches repair, JSON fences disappear, but the response promotes an
-  assistant choice to a user decision and cites assistant calls as observations;
+  assistant choice to a user decision and cites successful mutation receipts as current observations;
   validation rejects the whole response and publishes no checkpoint. The helper
   inputs are 4871 and 4928 actual tokens, so this failure is not an overflow.
-  A second run fails before compaction on an unloaded tool. Successful live
-  checkpoint publication and full acceptance remain open. Next: make claim/source
-  selection and skill-load recovery reliable against these captured failures.
-  No JSON stripping, larger context or fabricated summary.
+  A second run fails before compaction on an unloaded tool. The later correction
+  makes the prompt use `observationEligible` and reports the offending source/kinds.
+  Both subsequent live runs publish a valid checkpoint; the final candidate also
+  reaches full source acceptance after explicit skill removal. Rejected-batch
+  feedback now states that no calls or skill loads executed, and admission recovery
+  names `action=remove` without dropping skills automatically. Repeated reliability
+  and live interruption/resume remain open. No JSON stripping, larger context or
+  fabricated summary.
 - Initial empty model responses consume 4096 output tokens in all three new runs;
   ordinary repair recovers each initial step. One run later exhausts its two
   protocol attempts on mixed skill loads and an unloaded tool. The endpoint reports
@@ -56,9 +62,10 @@ uses one cloud endpoint/profile with unchanged task bounds and acceptance.
   the available evidence. Make that boundary reachable in a representative live
   scenario without synthesizing model replies/checkpoints or weakening acceptance.
 
-Actual first-request input shrinks and combined partial progress improves, but
-full task success remains unqualified; workspace cumulative input grows in the
-earlier comparison. No general quality or latency gain is established.
+Actual first-request input shrinks and the combined task has one full live pass;
+repeatable success remains unqualified. The successful run costs 19 requests and
+282,998 actual input tokens, including recovery; workspace cumulative input also
+grows in the earlier comparison. No general token, quality or latency gain is established.
 Local 12B/9B profiles failed the memory preflight; cloud results
 do not qualify those models or real Office/COM/WebView2 delivery.
 

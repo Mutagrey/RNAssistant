@@ -703,6 +703,8 @@ namespace RNAssistant.Harness
                     "local parser distinguishes an unloaded known tool during repair");
                 AssertContains(FlattenSimple(requests[1]), "common.skills_load",
                     "repair directs specialized tools through the skill loader");
+                AssertContains(FlattenSimple(requests[1]), "If that load was refused, resolve its reported blocker",
+                    "unloaded-tool repair does not override an admission refusal");
                 var repair = requests[1].Single(message =>
                     (message.Content ?? string.Empty).StartsWith("FORMAT_REPAIR:\n", StringComparison.Ordinal));
                 AssertTrue(!repair.Content.Contains("common.capabilities_read"),

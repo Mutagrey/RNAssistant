@@ -116,6 +116,11 @@ candidate replaces the selection in the accepted run record. Refusal returns
 bounded feedback through the previous usable surface. Preview results never enter
 history or count as execution facts; preflight performs no LLM call or compaction.
 Actual dispatch still recompiles against its own frozen authority.
+Office budget-refusal guidance names `common.skills_load` with `action=remove`
+for a completed or currently unneeded selection, followed by a separate new load.
+It does not remove a skill automatically. Unloaded-tool protocol repair requires
+resolving any prior admission refusal before retrying; failed loading grants no
+callable tools.
 
 The [32K admission defect](stabilization/RISK_REGISTER.md#architecture-and-regression-review--2026-10-15)
 is contained for new selections. With schema 51 guidance, the default 32K Excel

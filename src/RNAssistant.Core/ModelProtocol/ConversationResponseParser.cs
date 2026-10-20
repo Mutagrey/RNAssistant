@@ -37,14 +37,17 @@ namespace RNAssistant.Core.ModelProtocol
                     ToolCatalogEntry entry;
                     return ConversationResponseParseResult.Fail(catalog.TryGetValue(call.Name, out entry)
                         ? entry.Exposure == ToolExposure.Skill
-                            ? "Tool schema is not loaded: " + call.Name + ". Select its published skill with common.skills_load, then wait for the next request before using its tools."
+                            ? "Tool schema is not loaded: " + call.Name + ". Select its published skill with common.skills_load, then wait for the next request before using its tools. If that load was refused, resolve its reported blocker before retrying; the rejected selection grants no tools."
                             : "Tool schema is not loaded: " + call.Name + ". Call common.capabilities_read with arguments " +
                             new JObject { ["id"] = call.Name }.ToString(Formatting.None) + ", wait for its complete TOOL_RESULT, then call the tool in a later response."
                         : "Unknown tool: " + call.Name + ". Use an exact name from the current callable tools.");
                 }
                 if (parsed.Response.ToolCalls.Count > 1 && !context.AllowsSequentialBatch(tool))
                     return ConversationResponseParseResult.Fail("Only independent local reads may be returned in a sequential batch. " +
-                        "Every mutation, confirmation-required, external, opaque or unclassified call must be returned one at a time; wait for its result before the next mutation.");
+                        tool.Id + " must be returned one at a time. No calls from this response were executed. " +
+                        (tool.Id == SkillLoadToolHandler.ToolId
+                            ? "No skill in this rejected response was loaded. Return one required common.skills_load call alone, then wait for its result before using that skill's tools."
+                            : "Return one required standalone call, then wait for its result before the next call."));
 
                 JObject schema;
                 string error;
