@@ -1,5 +1,54 @@
 # Stabilization progress
 
+## Shared compaction attempt setting — 2026-10-21
+
+`ContextCompactionRuntime` now uses the existing `MaxAgentFormatRetries` setting
+and the same normalization as `ModelProtocolClient`: 1–20 total attempts, including
+the first; default 10. No new setting or migration. Each compaction operation has
+its own counter. Every retry keeps frozen sources/schema and only the latest
+correction; earlier repair prompts and rejected responses do not accumulate.
+The settings tooltip now includes compaction. Provider/refusal/cancellation and
+checkpoint-publication boundaries remain unchanged. The earlier live evidence
+below used limit 2; this setting change does not close its model-behavior gaps.
+
+Validation: six focused compaction checks and three existing main-response retry
+checks pass. They cover disabled/exhausted repair, success on the last configured
+attempt, normalization and budget refusal. Harness build passes with the two
+existing PDF platform warnings. No new live-model or Office run was needed.
+
+## Bounded compaction response recovery — 2026-10-20
+
+The initial `ContextCompactionRuntime` recovery candidate permitted one correction
+after an invalid helper response. Both attempts retained the frozen sources/schema
+and passed separate request budget checks. Invalid output stays outside accepted history; source-role checks,
+provider refusal, cancellation and the previous checkpoint remain protected.
+That candidate used a separate fixed limit, superseded by the shared setting above.
+Six focused compaction checks pass, including both response modes and refusal before an oversized retry.
+The live fixture now records the helper's own context receipt and reserves.
+
+The same bound HTML/VBA task and `gemma4:cloud` / 32K / 4096 profile still start at
+9201 actual input tokens. The helper is a separate request: 4871 tokens initially,
+4928 with repair. It does not need the full Excel tool/skill context.
+
+| Run | Provider requests / actual input / output tokens | Exact edits | Outcome |
+|---|---:|---:|---|
+| Compaction repair 1 | 10 / 124,704 / 6011 | 3/4 | Repair removes fences; source-kind validation rejects the claims |
+| Compaction repair 2 | 5 / 51,643 / 4639 | 0/4 | Ordinary protocol exhausted before compaction |
+
+In the first run, the repaired response promotes assistant skill selection to a
+user decision and cites assistant patch calls as observations. No checkpoint is
+published; VBA remains unchanged. The second run mixes skill loads, then calls an
+unloaded HTML tool. Neither run reports false completion or unknown effects.
+This validates the bounded recovery boundary, not reliable live compaction or
+end-to-end success. Next: address claim/source selection and skill-load recovery
+using the captured failures, without weakening validation or increasing limits.
+
+Evidence: `compaction-repair.patch`, `compaction-repair-results.json`, and
+`office-compaction-repair-{1,2}/` in the existing local evaluation directory.
+Metadata records `d04db7b5` plus the scoped patch and binary hashes; exact wire
+profiles, task/source hashes and final bytes were independently checked. The
+unrelated web-test diff is outside the Harness build. No Office/COM validation.
+
 ## Minimal Excel bootstrap — 2026-10-20
 
 `CallableToolPack` now starts Agent/Excel with six schemas instead of twenty:
@@ -47,9 +96,9 @@ are excluded. Only the two existing PDF platform warnings remain.
 Evidence is in the existing local evaluation directory: `excel-bootstrap.patch`,
 `excel-bootstrap-results.json`, `office-bootstrap-1/`, `office-bootstrap-2/`,
 `office-bootstrap-helper-1/` and `compaction-format-replay/`. Exact wire profiles,
-task/source hashes and final bytes are independently checked. Next priority is
-bounded compaction-response recovery and full scenario completion, followed by
-live Excel report/discovery coverage with production skill text. The fake report
+task/source hashes and final bytes are independently checked. Subsequent bounded
+compaction recovery is recorded above; full scenario completion and live Excel
+report/discovery coverage with production skill text remain open. The fake report
 skill remains a stub; no Office/COM qualification is claimed.
 
 ## Bound HTML and VBA baseline — 2026-10-20

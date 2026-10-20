@@ -456,6 +456,13 @@ This uses controlled HTTP claims, not real-model compaction quality. Run
 `compaction` for shared checkpoint/publication regression and durable batch
 boundaries. It also checks actual source-bound compaction schemas, both explicit
 response modes, schema budget, mixed provenance and unknown-source rejection.
+`context: compaction repairs` covers the shared `MaxAgentFormatRetries` limit:
+1 disables repair, valid responses on attempts 3 and 20 succeed, unset/oversized
+limits normalize to 10/20, and exhausted replies preserve the prior checkpoint.
+Both modes keep frozen sources/schema and only the latest correction, preserve
+accepted history, and do not retry refusal, transport errors or cancellation.
+`context: compaction repair must fit` makes the initial strict request fit while
+the added repair exceeds its budget, and checks refusal before the second dispatch.
 Completed receipts keep correlation without blocking a safe checkpoint as if they
 were unanswered calls. Original incomplete calls/batches still block that boundary.
 `context continuity:` checks source/result projection. The omitted-read

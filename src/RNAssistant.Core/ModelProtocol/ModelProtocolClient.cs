@@ -224,10 +224,7 @@ namespace RNAssistant.Core.ModelProtocol
 
         public static int EstimateFormatRepairOverheadTokens(AppSettings settings)
         {
-            var configured = settings == null || settings.MaxAgentFormatRetries <= 0
-                ? AppSettings.DefaultMaxAgentFormatRetries
-                : settings.MaxAgentFormatRetries;
-            var attempts = Math.Max(1, Math.Min(AppSettings.MaximumAgentFormatRetries, configured));
+            var attempts = ModelProtocolRetryBudget.GetProtocolAttemptLimit(settings);
             if (attempts <= 1) return 0;
             // Three-byte BMP characters are the maximum UTF-8 cost per valid
             // UTF-16 code unit; include the truncation suffix used at the bound.

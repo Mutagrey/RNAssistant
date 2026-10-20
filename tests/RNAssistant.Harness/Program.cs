@@ -378,6 +378,8 @@ namespace RNAssistant.Harness
                 Test("settings: prompt migration allows conversation dispatch", SettingsPromptMigrationAllowsConversationDispatch),
                 Test("settings: invalid numeric values are normalized", SettingsNormalizeInvalidNumericValues),
                 Test("context: compaction uses structured source claims", CompactionUsesStructuredSourceClaims),
+                Test("context: compaction repairs within configured attempts", CompactionRepairsWithinConfiguredAttempts),
+                Test("context: compaction repair must fit its request budget", CompactionRepairMustFitRequestBudget),
                 Test("context continuity: preserves recent pair and transport", ContextContinuityKeepsRecentPair),
                 Test("context continuity: folds older frames only for budget", ContextContinuityFoldsOnlyForBudget),
                 Test("context perf: request compilation profile", ContextPerformanceProfile),

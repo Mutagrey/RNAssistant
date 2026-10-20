@@ -30,11 +30,18 @@ uses one cloud endpoint/profile with unchanged task bounds and acceptance.
   admission. This does not prove that the model always follows recovery guidance.
 - Compaction response failure, owner `ContextCompactionRuntime`: two combined
   runs reach the helper after three verified HTML edits and fail on fenced JSON.
-  The helper currently has one raw attempt; its failed response publishes no
-  checkpoint. An explicit no-fences wording experiment also fails on the exact
-  captured helper request and is not retained. Next: bounded response repair with
-  unchanged provenance validation and separately budgeted helper requests, then
-  repeat full acceptance. No JSON stripping, larger context or fabricated summary.
+  [Bounded response repair](PROGRESS.md#bounded-compaction-response-recovery--2026-10-20)
+  now follows the [shared attempt setting](PROGRESS.md#shared-compaction-attempt-setting--2026-10-21),
+  including the first attempt, with unchanged frozen sources, strict provenance
+  checks and separately budgeted requests. In the captured two-attempt live
+  run that reaches repair, JSON fences disappear, but the response promotes an
+  assistant choice to a user decision and cites assistant calls as observations;
+  validation rejects the whole response and publishes no checkpoint. The helper
+  inputs are 4871 and 4928 actual tokens, so this failure is not an overflow.
+  A second run fails before compaction on an unloaded tool. Successful live
+  checkpoint publication and full acceptance remain open. Next: make claim/source
+  selection and skill-load recovery reliable against these captured failures.
+  No JSON stripping, larger context or fabricated summary.
 - Initial empty model responses consume 4096 output tokens in all three new runs;
   ordinary repair recovers each initial step. One run later exhausts its two
   protocol attempts on mixed skill loads and an unloaded tool. The endpoint reports

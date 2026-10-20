@@ -143,11 +143,42 @@ namespace RNAssistant.Core.Services
                 TraceSession = session,
                 TracePurpose = "context_compaction"
             };
-            var compiled = _compiler.Compile(frozen, request, new ChatMessage[0], null, new ToolCatalogEntry[0],
-                settings, Math.Max(1, inputBudget - ModelContextBudget.EstimateRequestOptionsTokens(options, settings)));
-            options.TraceContextReceipt = compiled.Receipt;
-            var completion = await _completeAsync(settings, compiled.Messages, options, null, cancellationToken).ConfigureAwait(false);
-            var claims = ParseClaims(completion?.Content, sourceClaims);
+            List<StructuredContextClaim> claims = null;
+            var attemptLimit = ModelProtocolRetryBudget.GetProtocolAttemptLimit(settings);
+            string lastError = null;
+            // Repair the same frozen source set within the shared attempt limit. Transport failures, refusal
+            // and cancellation never become format retries or publish a checkpoint.
+            for (var attempt = 1; attempt <= attemptLimit; attempt++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var attemptRequest = new List<ChatMessage>(request);
+                if (lastError != null)
+                {
+                    attemptRequest.Add(new ChatMessage { Role = "user", ProtocolMessage = true,
+                        Content = "COMPACTION_REPAIR:\n" + new JObject {
+                            ["error"] = lastError,
+                            ["attempt"] = attempt,
+                            ["max_attempts"] = attemptLimit,
+                            ["instruction"] = "Return only the JSON object described by OUTPUT_SCHEMA, without Markdown, code fences or surrounding prose. Use the same supplied sources and preserve their allowed claim kinds."
+                        }.ToString(Formatting.None) });
+                }
+                var compiled = _compiler.Compile(frozen, attemptRequest, new ChatMessage[0], null, new ToolCatalogEntry[0],
+                    settings, Math.Max(1, inputBudget - ModelContextBudget.EstimateRequestOptionsTokens(options, settings)));
+                options.TraceContextReceipt = compiled.Receipt;
+                var completion = await _completeAsync(settings, compiled.Messages, options, null, cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!string.IsNullOrWhiteSpace(completion?.RefusalContent))
+                    throw new InvalidOperationException("Context compaction was refused by the provider; the previous checkpoint remains intact.");
+                try
+                {
+                    claims = ParseClaims(completion?.Content, sourceClaims);
+                    break;
+                }
+                catch (CompactionResponseException error) when (attempt < attemptLimit)
+                {
+                    lastError = error.Message;
+                }
+            }
             var summaryJson = JsonConvert.SerializeObject(claims);
             var summaryMarkdown = string.Join("\n", claims.Select(claim => claim.Text));
             if (ModelContextBudget.EstimateTextTokens(summaryMarkdown, settings) > Math.Max(256, Math.Min(4096, inputBudget / 4)))
@@ -578,7 +609,7 @@ namespace RNAssistant.Core.Services
         {
             if (string.IsNullOrWhiteSpace(content))
             {
-                throw new InvalidOperationException("Context compaction returned an empty response.");
+                throw new CompactionResponseException("Context compaction returned an empty response.");
             }
             JObject value;
             try
@@ -587,15 +618,15 @@ namespace RNAssistant.Core.Services
             }
             catch (JsonException ex)
             {
-                throw new InvalidOperationException("Context compaction returned invalid JSON.", ex);
+                throw new CompactionResponseException("Context compaction returned invalid JSON.", ex);
             }
             if (value.Properties().Any(property => !string.Equals(property.Name, "claims", StringComparison.Ordinal)))
             {
-                throw new InvalidOperationException("Context compaction response contains unexpected fields.");
+                throw new CompactionResponseException("Context compaction response contains unexpected fields.");
             }
             var drafts = value["claims"] as JArray;
             if (drafts == null || drafts.Count == 0 || drafts.Count > 64 || drafts.Any(item => item.Type != JTokenType.Object))
-                throw new InvalidOperationException("Context compaction requires bounded structured claims, not a free-form summary.");
+                throw new CompactionResponseException("Context compaction requires bounded structured claims, not a free-form summary.");
             var result = new List<StructuredContextClaim>();
             foreach (var draft in drafts.OfType<JObject>())
             {
@@ -604,11 +635,11 @@ namespace RNAssistant.Core.Services
                     draft["kind"]?.Type != JTokenType.String || !StructuredContextClaim.SupportsKind((string)draft["kind"]) ||
                     draft["text"]?.Type != JTokenType.String || string.IsNullOrWhiteSpace((string)draft["text"]) || ids == null || ids.Count == 0 ||
                     ids.Any(id => id.Type != JTokenType.String || !sources.ContainsKey((string)id)))
-                    throw new InvalidOperationException("Every compacted claim requires exact, fully included source provenance.");
+                    throw new CompactionResponseException("Every compacted claim requires exact, fully included source provenance.");
                 var provenance = ids.Select(id => sources[(string)id]).ToArray();
                 var kind = (string)draft["kind"];
                 if (provenance.Any(item => !SupportsClaimKind(kind, item)))
-                    throw new InvalidOperationException("Claim kind is not supported by its source roles; keep assistant conclusions as interpretations.");
+                    throw new CompactionResponseException("Claim kind is not supported by its source roles; keep assistant conclusions as interpretations.");
                 var claim = new StructuredContextClaim { ClaimId = "claim_" + Guid.NewGuid().ToString("N"), Kind = kind, Text = ((string)draft["text"]).Trim(),
                     SourceRoles = provenance.SelectMany(item => item.SourceRoles).Distinct(StringComparer.Ordinal).ToList(),
                     SourceSnapshots = provenance.SelectMany(item => item.SourceSnapshots ?? new List<ContextClaimSource>())
@@ -620,6 +651,11 @@ namespace RNAssistant.Core.Services
             }
             if (result.Count != drafts.Count) throw new InvalidOperationException("Malformed context claim.");
             return result;
+        }
+
+        private sealed class CompactionResponseException : InvalidOperationException
+        {
+            public CompactionResponseException(string message, Exception inner = null) : base(message, inner) { }
         }
 
         private static string CompactionPrompt(AppSettings settings)

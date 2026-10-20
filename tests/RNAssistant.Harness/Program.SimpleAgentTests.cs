@@ -3250,6 +3250,145 @@ namespace RNAssistant.Harness
                 ["kind"] = "interpretation", ["text"] = text, ["sourceIds"] = new JArray(match.Groups[1].Value) }) }.ToString() };
         }
 
+        private static ChatSession CompactionRepairSession()
+        {
+            var session = NewSession(FakeOfficeAdapter.ForHost("Excel"));
+            for (var i = 0; i < 8; i++) session.Messages.Add(new ChatMessage {
+                Role = i % 2 == 0 ? "user" : "assistant", Content = "Keep the original report source " + i + "." });
+            new ContextCompactionService((settings, messages, options, stream, token) =>
+                Task.FromResult(CompactionReply(messages, "Prior valid memory.")))
+                .EnsureWithinBudgetAsync(session, new AppSettings(), null, true, null, CancellationToken.None).GetAwaiter().GetResult();
+            for (var i = 0; i < 8; i++) session.Messages.Add(new ChatMessage {
+                Role = i % 2 == 0 ? "user" : "assistant", Content = "Preserve the remaining task " + i + "." });
+            return session;
+        }
+
+        private static void CompactionRepairsWithinConfiguredAttempts()
+        {
+            foreach (var mode in new[] { AgentResponseModes.JsonObject, AgentResponseModes.JsonSchema })
+            foreach (var attemptLimit in new[] { 1, 3, 20 })
+            {
+                var session = CompactionRepairSession();
+                var previous = session.ActiveContextCheckpointId;
+                var artifacts = session.Artifacts.Count;
+                var messagesCount = session.Messages.Count;
+                var calls = 0;
+                JArray initial = null;
+                string schema = null, receiptId = null;
+                var settings = new AppSettings { AgentResponseMode = mode, ContextWindowOverrideTokens = 32768,
+                    MaxTokens = 4096, MaxAgentFormatRetries = attemptLimit };
+                var runtime = new ContextCompactionService((config, messages, options, stream, token) =>
+                {
+                    calls++;
+                    var current = messages.ToList();
+                    AssertEqual(previous, session.ActiveContextCheckpointId, "rejected response cannot replace the prior checkpoint");
+                    AssertEqual(artifacts, session.Artifacts.Count, "no checkpoint artifact before valid claims");
+                    AssertEqual(messagesCount, session.Messages.Count, "helper attempts do not enter accepted history");
+                    AssertTrue(ModelContextBudget.EstimateRequestTokens(current, options, config) <=
+                        ModelContextBudget.InputBudgetTokens(config), "each helper attempt fits with its response schema");
+                    AssertEqual("context_compaction", options.TracePurpose, "repair retains helper trace ownership");
+                    if (calls == 1)
+                    {
+                        initial = JArray.FromObject(current);
+                        schema = options.ResponseSchemaJson;
+                    }
+                    else
+                    {
+                        AssertTrue(JToken.DeepEquals(initial, JArray.FromObject(current.Take(initial.Count))),
+                            "repair reuses the complete frozen instructions and source transcript");
+                        AssertEqual(initial.Count + 1, current.Count, "prior repair instructions never accumulate");
+                        AssertContains(current.Last().Content, "COMPACTION_REPAIR:", "helper-specific repair contract");
+                        var repair = JObject.Parse(current.Last().Content.Substring("COMPACTION_REPAIR:\n".Length));
+                        AssertEqual(calls, (int)repair["attempt"], "repair reports its current attempt");
+                        AssertEqual(attemptLimit, (int)repair["max_attempts"], "repair reports the configured total limit");
+                        AssertEqual(calls == 2 ? "Context compaction returned invalid JSON." : "Context compaction returned an empty response.",
+                            (string)repair["error"], "only the latest parser error is supplied");
+                        AssertTrue(!FlattenSimple(current).Contains("REJECTED_HELPER_BODY"), "invalid output is not promoted into source material");
+                        AssertEqual(schema, options.ResponseSchemaJson, "strict schema and source aliases stay fixed");
+                        AssertTrue(receiptId != options.TraceContextReceipt.SnapshotId, "repair has a new compiled request receipt");
+                    }
+                    receiptId = options.TraceContextReceipt.SnapshotId;
+                    if (calls == attemptLimit) return Task.FromResult(CompactionReply(messages, "Remaining work preserved."));
+                    return Task.FromResult(new LlmCompletionResult { Content = calls == 1 ? "```json\n" +
+                        CompactionReply(messages, "REJECTED_HELPER_BODY").Content + "\n```" : string.Empty });
+                });
+                var checkpoint = runtime.EnsureWithinBudgetAsync(session, settings, null, true, null, CancellationToken.None).GetAwaiter().GetResult();
+                AssertEqual(attemptLimit, calls, "valid response is accepted on the last configured attempt");
+                AssertEqual(2, session.ContextCheckpoints.Count, "one valid new checkpoint is published");
+                AssertEqual("Remaining work preserved.", checkpoint.SummaryMarkdown, "only repaired claims are stored");
+                AssertTrue(checkpoint.Claims.All(claim => claim.HasTypedProvenance()), "repaired claims retain exact typed provenance");
+                AssertTrue(!session.Messages.Any(message => (message.Content ?? "").Contains("COMPACTION_REPAIR")), "repair stays outside accepted history");
+            }
+
+            foreach (var failure in new[] { "empty", "unknown-source", "promotion", "transport", "refusal", "cancel" })
+            foreach (var configuredLimit in new[] { 1, 3, 0, 99 })
+            {
+                var expectedAttempts = configuredLimit == 0 ? 10 : configuredLimit == 99 ? 20 : configuredLimit;
+                var session = CompactionRepairSession();
+                var previous = session.ActiveContextCheckpointId;
+                var artifactCount = session.Artifacts.Count;
+                var messageCount = session.Messages.Count;
+                var calls = 0;
+                using (var cancellation = new CancellationTokenSource())
+                {
+                    var runtime = new ContextCompactionService((config, messages, options, stream, token) =>
+                    {
+                        calls++;
+                        if (failure == "transport") throw new LlmRequestException(LlmFailureKind.ResponseFormatUnsupported, "fixture rejection");
+                        if (failure == "refusal") return Task.FromResult(new LlmCompletionResult { RefusalContent = "fixture refusal" });
+                        if (failure == "cancel") cancellation.Cancel();
+                        if (failure == "empty" || failure == "cancel") return Task.FromResult(new LlmCompletionResult());
+                        var draft = JObject.Parse(CompactionReply(messages, "Unproven claim.").Content);
+                        if (failure == "unknown-source") draft["claims"][0]["sourceIds"] = new JArray("not-an-included-source");
+                        else draft["claims"][0]["kind"] = "observation";
+                        return Task.FromResult(new LlmCompletionResult { Content = draft.ToString() });
+                    });
+                    Action run = () => runtime.EnsureWithinBudgetAsync(session, new AppSettings { MaxAgentFormatRetries = configuredLimit },
+                        null, true, null, cancellation.Token).GetAwaiter().GetResult();
+                    if (failure == "cancel") RuntimeThrows<OperationCanceledException>(run);
+                    else RuntimeThrows<InvalidOperationException>(run);
+                }
+                AssertEqual(failure == "empty" || failure == "unknown-source" || failure == "promotion" ? expectedAttempts : 1,
+                    calls, "bounded attempts for " + failure);
+                AssertEqual(previous, session.ActiveContextCheckpointId, "failure preserves prior checkpoint: " + failure);
+                AssertEqual(1, session.ContextCheckpoints.Count, "failure publishes no checkpoint: " + failure);
+                AssertEqual(artifactCount, session.Artifacts.Count, "failure publishes no artifact: " + failure);
+                AssertEqual(messageCount, session.Messages.Count, "failure preserves accepted history: " + failure);
+            }
+        }
+
+        private static void CompactionRepairMustFitRequestBudget()
+        {
+            var session = CompactionRepairSession();
+            var previous = session.ActiveContextCheckpointId;
+            var settings = new AppSettings { AgentResponseMode = AgentResponseModes.JsonSchema,
+                ContextWindowOverrideTokens = 8192, MaxTokens = 1024 };
+            var initialTokens = 0;
+            var probe = new ContextCompactionService((config, messages, options, stream, token) =>
+            {
+                initialTokens = ModelContextBudget.EstimateRequestTokens(messages, options, config);
+                throw new OperationCanceledException("Estimate fixture request without publication.");
+            });
+            RuntimeThrows<OperationCanceledException>(() => probe.EnsureWithinBudgetAsync(session, settings, null, true,
+                null, CancellationToken.None).GetAwaiter().GetResult());
+            var paddingTokens = ModelContextBudget.InputBudgetTokens(settings) - initialTokens - 8;
+            AssertTrue(paddingTokens > 0, "fixture leaves room for its required prompt");
+            settings.ContextCompactionPrompt += new string('x', paddingTokens * 4);
+            var calls = 0;
+            var runtime = new ContextCompactionService((config, messages, options, stream, token) =>
+            {
+                calls++;
+                AssertTrue(ModelContextBudget.EstimateRequestTokens(messages, options, config) <=
+                    ModelContextBudget.InputBudgetTokens(config), "first request fits before repair");
+                return Task.FromResult(new LlmCompletionResult { Content = "```json\n{}\n```" });
+            });
+            RuntimeThrows<PromptBudgetExceededException>(() => runtime.EnsureWithinBudgetAsync(session, settings, null, true,
+                null, CancellationToken.None).GetAwaiter().GetResult());
+            AssertEqual(1, calls, "oversized repaired request is refused before provider dispatch");
+            AssertEqual(previous, session.ActiveContextCheckpointId, "budget refusal preserves prior checkpoint");
+            AssertEqual(1, session.ContextCheckpoints.Count, "budget refusal publishes no new checkpoint");
+        }
+
         private static void CompactionPreservesClaimKindsAndRoles()
         {
             var responseMode = AgentResponseModes.JsonSchema;
@@ -3278,7 +3417,8 @@ namespace RNAssistant.Harness
                     var strict = responseMode == AgentResponseModes.JsonSchema;
                     AssertEqual(strict ? LlmResponseFormats.JsonSchema : LlmResponseFormats.JsonObject, options.ResponseFormat,
                         "compaction honors the selected response mode");
-                    var schema = JObject.Parse(messages.Last().Content.Split('\n')[1]);
+                    var schema = JObject.Parse(messages.Single(entry =>
+                        (entry.Content ?? string.Empty).StartsWith("OUTPUT_SCHEMA:\n", StringComparison.Ordinal)).Content.Split('\n')[1]);
                     var wire = LlmClient.BuildRequestBody(settings, new LlmMessageBuilder().Build(messages, settings, options).Messages, 100, options);
                     AssertTrue(strict ? JToken.DeepEquals(schema, wire.SelectToken("response_format.json_schema.schema"))
                         : wire.SelectToken("response_format.json_schema") == null,

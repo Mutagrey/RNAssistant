@@ -111,12 +111,14 @@ namespace RNAssistant.Harness
                 LlmCompletionDelegate complete = async (config, messages, options, stream, token) => {
                     var number = ++requests;
                     File.WriteAllText(Path.Combine(evidence, "request-" + number + ".json"), JsonConvert.SerializeObject(messages, Formatting.Indented));
-                    File.WriteAllText(Path.Combine(evidence, "context-" + number + ".json"), JsonConvert.SerializeObject(session.LastContextReceipt, Formatting.Indented));
+                    File.WriteAllText(Path.Combine(evidence, "context-" + number + ".json"), JsonConvert.SerializeObject(options.TraceContextReceipt ?? session.LastContextReceipt, Formatting.Indented));
+                    var helper = options.TracePurpose == "context_compaction";
                     File.WriteAllText(Path.Combine(evidence, "budget-" + number + ".json"), JsonConvert.SerializeObject(new {
+                        purpose = options.TracePurpose,
                         input = ModelContextBudget.InputBudgetTokens(config),
                         options = ModelContextBudget.EstimateRequestOptionsTokens(options, config),
-                        repair = ModelProtocolClient.EstimateFormatRepairOverheadTokens(config),
-                        continuation = ModelContextBudget.ContinuationReserveTokens(config)
+                        repair = helper ? 0 : ModelProtocolClient.EstimateFormatRepairOverheadTokens(config),
+                        continuation = helper ? 0 : ModelContextBudget.ContinuationReserveTokens(config)
                     }));
                     Console.WriteLine("MODEL request " + number);
                     LlmCompletionResult response;

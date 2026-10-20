@@ -207,9 +207,19 @@ source IDs; `json_object` uses the same schema in the prompt. The schema and loc
 parser share the source-kind predicate. Schema bytes count toward request
 admission. The parser still validates every claim and runtime attaches evidence;
 constrained generation does not prove that a claim's text follows from its source.
-Compaction makes one helper request and does not inherit ModelProtocol's automatic
-transport fallback or format-repair attempts. Provider rejection leaves the prior
-checkpoint intact and fails explicitly.
+Compaction uses the same normalized `MaxAgentFormatRetries` limit as the main
+response: 1–20 attempts including the first, default 10. Limit 1 disables repair.
+The counter belongs to each compaction operation; it does not consume or reset the
+main response's counter. Each retry uses the same frozen instructions, source
+transcript and schema plus one correction containing the latest parser error.
+Rejected output and earlier correction messages are not copied into the request
+or accepted history. Each attempt is compiled and budgeted separately, including
+strict schema cost, and has
+its own context receipt. Parsing and source-kind/provenance validation remain
+mandatory before checkpoint publication. Transport errors, provider refusal and
+cancellation are not format retries; no transport fallback is introduced. Exhausting
+the configured attempts or a repair that cannot fit fails with the previous checkpoint
+intact. A valid but oversized summary also fails without publication.
 Prefix boundaries distinguish an accepted call from a typed `CompletedOperation`:
 a completed receipt retains its correlation ID but is not an unanswered call.
 It can be summarized together with the following history. Original durable batches
@@ -1183,8 +1193,9 @@ content is not accepted as a successful completion and no format repair runs.
 Error-like text inside model content remains ordinary content.
 
 The `MaxAgentFormatRetries` settings/bridge key and its stored number are kept;
-the number now means total responses, not additional corrections. The form label
-and tooltip state that distinction. Default 10 and normalization to 1–20 remain.
+the number means total responses, not additional corrections, for both main
+responses and compaction. The form label and tooltip state that distinction.
+Default 10 and normalization to 1–20 remain.
 No second setting key or settings migration is introduced.
 
 Every raw attempt retains step correlation and gets a distinct modelAttemptId.
@@ -1325,8 +1336,9 @@ checkpoint creation for both Office and the independent workspace CLI. Office's
 `ContextCompactionService` captures host authority and supplies its domain result
 projection; it has no separate compaction algorithm. CLI uses the same LlmClient
 for the bounded summary request and retains its exact request/response trace.
-With auto-compression enabled, a compactable CLI budget failure permits one helper
-request, durable checkpoint publication, fresh authority capture and recompilation.
+With auto-compression enabled, a compactable CLI budget failure permits one
+compaction operation (with the bounded response repair above), durable checkpoint
+publication, fresh authority capture and recompilation.
 If the request still cannot fit, it fails explicitly. The helper cannot call tools
 or change kernel counters, acceptance criteria or the original run limits.
 

@@ -14,9 +14,14 @@ namespace RNAssistant.Core.ModelProtocol
 
         public ModelProtocolRetryBudget(AppSettings settings)
         {
-            var configured = settings.MaxAgentFormatRetries > 0
-                ? settings.MaxAgentFormatRetries : AppSettings.DefaultMaxAgentFormatRetries;
-            ProtocolAttemptLimit = Math.Max(1, Math.Min(AppSettings.MaximumAgentFormatRetries, configured));
+            ProtocolAttemptLimit = GetProtocolAttemptLimit(settings);
+        }
+
+        public static int GetProtocolAttemptLimit(AppSettings settings)
+        {
+            var configured = settings == null || settings.MaxAgentFormatRetries <= 0
+                ? AppSettings.DefaultMaxAgentFormatRetries : settings.MaxAgentFormatRetries;
+            return Math.Max(1, Math.Min(AppSettings.MaximumAgentFormatRetries, configured));
         }
 
         public bool TryTakeProviderRetry(LlmRequestException failure, out TimeSpan delay)
