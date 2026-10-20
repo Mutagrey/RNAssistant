@@ -59,7 +59,7 @@
 </head>
 <body>
   <div class="shell app-shell">
-    <button type="button" class="product-mobile-menu-button icon-btn" id="productMobileMenuButton" aria-label="Открыть навигацию" aria-expanded="false" title="Открыть навигацию"></button>
+    <button class="product-mobile-menu-button" id="productMobileMenuButton"></button>
     <nav class="section-rail" aria-label="Разделы ассистента">
       <button class="rail-button active" data-section="chat" data-tab="chat" aria-label="Рабочая область" title="Рабочая область" aria-current="page"><svg data-rna-icon="home" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
       <button class="rail-button" data-section="artifacts" data-tab="artifacts" aria-label="Материалы" title="Материалы"><svg data-rna-icon="files" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
@@ -98,7 +98,7 @@
             <span id="activeChatSubtitle"></span>
           </div>
           <div class="chatbar-actions">
-            <button type="button" class="icon-btn" id="toggleChatInspectorButton" title="Показать боковую панель" aria-label="Показать боковую панель" aria-controls="chatInspector" aria-expanded="false"></button>
+            <button id="toggleChatInspectorButton"></button>
           </div>
         </div>
         <div class="document-notice hidden" id="documentNotice">
@@ -594,8 +594,8 @@
             <div class="splitter" role="separator" aria-label="Ширина дерева проекта" aria-orientation="vertical"></div>
             <div class="plugin-content"><div class="plugin-toolbar"><div class="plugin-title"><span id="pluginProjectName"></span><strong id="pluginTitle"></strong><span class="plugin-source" id="pluginSource"></span></div>
               <button id="pluginProject" class="button compact" type="button"><svg data-rna-icon="folder" viewBox="0 0 24 24" aria-hidden="true"></svg>Проект</button>
-              <button id="pluginPreview" class="icon-btn plugin-refresh" type="button" title="Обновить предпросмотр из исходников" aria-label="Обновить предпросмотр"><svg data-rna-icon="refresh" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
-              <label class="icon-btn plugin-development-toggle" title="Показать или скрыть разработку"><input type="checkbox" id="pluginDevelop" aria-label="Показать разработку" aria-controls="pluginChat"><svg data-rna-icon="code" viewBox="0 0 24 24" aria-hidden="true"></svg></label>
+              <button id="pluginPreview" class="icon-btn" type="button" title="Обновить предпросмотр из исходников" aria-label="Обновить предпросмотр"><svg data-rna-icon="refresh" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
+              <button id="pluginDevelop"></button>
             </div>
             <div class="plugin-body" id="pluginBody"><div class="plugin-preview" id="pluginPreviewMount"></div><div class="plugin-development-splitter" id="pluginDevelopmentSplitter" role="separator" aria-orientation="vertical" aria-controls="pluginChat" aria-label="Ширина панели разработки" tabindex="0" hidden></div><aside class="plugin-chat chat-main" id="pluginChat" hidden>
               <div class="plugin-chat-head chatbar"><strong>Чат исходников</strong><div id="pluginDevelopmentActions"><button id="pluginApply" class="button compact primary" type="button">Применить</button><details class="plugin-actions-menu"><summary class="icon-btn" title="Действия с плагином" aria-label="Действия с плагином"><svg data-rna-icon="more" viewBox="0 0 24 24" aria-hidden="true"></svg></summary><div class="popover-menu"><button id="pluginReopen" type="button" aria-label="Открыть активную версию">Открыть активную</button><button id="pluginDisable" type="button" aria-label="Отключить плагин">Отключить</button></div></details></div></div>
@@ -1126,6 +1126,7 @@
   <script src="js/app-skill-fields-view.js?v=shared-skill-fields-20261018-1"></script>
   <script src="js/app-core.js?v=bridge-contract-20261015-1"></script>
   <script src="js/app-icons.js?v=shared-icons-20261019-1"></script>
+  <script src="js/app-panel-toggle.js"></script>
   <script src="js/app-rail-popovers.js"></script>
   <script src="js/app-navigation-tree.js?v=shared-tree-20261018-1"></script>
   <script src="js/app-library-groups.js"></script>

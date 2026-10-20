@@ -248,15 +248,6 @@
   flex: 1 1 auto;
 }
 
-.html-sidebar-toggle-button {
-  flex: 0 0 auto;
-  width: 28px;
-  height: 28px;
-  min-width: 28px;
-  min-height: 28px;
-  padding: 0;
-}
-
 .html-workspace-mode-toggle {
   flex: 0 0 auto;
   max-width: 100%;

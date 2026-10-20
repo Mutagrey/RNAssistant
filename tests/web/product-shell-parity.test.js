@@ -8,6 +8,8 @@ const { chromium } = require("playwright");
     ...(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : {}) });
   try {
     const demo = await browser.newPage({ viewport: { width: 1100, height: 760 } });
+    const demoErrors = [];
+    demo.on("pageerror", error => demoErrors.push(error.message));
     await demo.goto("file://" + path.resolve(__dirname, "../../prototypes/ui/index.html") + "#/settings/connection");
     const reference = await demo.evaluate(() => {
       const heading = document.querySelector("#global-nav .workspace-heading");
@@ -162,6 +164,18 @@ const { chromium } = require("playwright");
     assert.equal(await demo.locator('#global-nav [data-action="navigation"]').count(), 0);
     await demo.locator("#demoNavigationToggle").click();
     await demo.locator("#global-nav").waitFor({ state: "hidden" });
+    await demo.setViewportSize({ width: 1360, height: 900 });
+    await demo.evaluate(() => { location.hash = "#/chat/main"; });
+    const inspectorToggle = demo.locator("#demoInspectorToggle");
+    await inspectorToggle.waitFor({ state: "visible" });
+    assert.equal(await demo.locator('[data-panel-toggle="right"]').count(), 1, "the demo has one shared right-panel toggle");
+    await inspectorToggle.press("Enter");
+    await demo.waitForFunction(() => document.getElementById("demoInspectorToggle").getAttribute("aria-expanded") === "true");
+    assert.equal(await inspectorToggle.getAttribute("aria-expanded"), "true", "the shared toggle opens the demo inspector once");
+    await inspectorToggle.click();
+    await demo.waitForFunction(() => document.getElementById("demoInspectorToggle").getAttribute("aria-expanded") === "false");
+    assert.equal(await inspectorToggle.getAttribute("aria-expanded"), "false", "the shared toggle closes the demo inspector once");
+    assert.deepEqual(demoErrors, []);
     assert.deepEqual(errors, []);
     console.log("PASS product shell: demo palette, joined built-in headers and shared navigation collapse");
   } finally { await browser.close(); }

@@ -10,6 +10,7 @@
   var openKey = "rnassistant.ui.inspector.open";
   var abilitiesKey = "", abilities = null, abilitiesError = "", abilitiesGeneration = 0;
   var inspectorTransitionTimer = null;
+  var panelToggle = null;
 
   try {
     width = Number(window.localStorage.getItem(widthKey)) || width;
@@ -233,9 +234,7 @@
     panel.setAttribute("aria-hidden", String(!open));
     divider.hidden = window.innerWidth <= 1100;
     divider.inert = !open;
-    toggle.setAttribute("aria-expanded", String(open));
-    toggle.setAttribute("aria-label", open ? "Скрыть боковую панель" : "Показать боковую панель");
-    toggle.title = toggle.getAttribute("aria-label");
+    if (panelToggle) panelToggle.sync();
     if (open) render();
   }
 
@@ -298,13 +297,14 @@
   }
 
   function bind() {
-    document.getElementById("toggleChatInspectorButton").innerHTML = window.RNAssistantNavigationTree.icon("panel");
+    panelToggle = window.RNAssistantPanelToggle.bind(document.getElementById("toggleChatInspectorButton"), {
+      controls: "chatInspector", isOpen: function () { return open; }, setOpen: setOpen
+    });
     var summary = document.querySelector("#chatInspectorSwitcher summary");
     summary.insertBefore(icon(icons.context), summary.firstChild);
     document.querySelectorAll("[data-chat-inspector-view]").forEach(function (button) {
       button.insertBefore(icon(icons[button.dataset.chatInspectorView]), button.firstChild);
     });
-    document.getElementById("toggleChatInspectorButton").addEventListener("click", function () { setOpen(!open); });
     var panel = document.getElementById("chatInspector");
     var toggle = document.getElementById("toggleChatInspectorButton");
     document.getElementById("closeChatInspectorButton").addEventListener("click", function () {

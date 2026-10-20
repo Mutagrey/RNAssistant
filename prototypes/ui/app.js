@@ -79,6 +79,14 @@
       document.getElementById("section-rail").hidden = S.standalone && S.route.startsWith("projects/");
       document.getElementById("demoNavigationToggle").hidden = S.standalone && S.route.startsWith("projects/");
       document.getElementById("main").innerHTML = P.renderScreen();
+      var inspectorToggle = document.getElementById("demoInspectorToggle");
+      if (inspectorToggle) window.RNAssistantPanelToggle.bind(inspectorToggle, {
+        controls: "chat-inspector", isOpen: function () { return !!P.inspectorTitles[S.route.split("/")[1]]; },
+        setOpen: function (open) {
+          nextFocus = "#demoInspectorToggle";
+          navigate(open ? "chat/" + (chat().inspector || "context") : "chat/main");
+        }
+      });
       P.edits.capture(document.getElementById("main"));
       P.layout.refresh();
       P.chatScroll.restore();
@@ -93,7 +101,7 @@
     if (!focusMain && !nextFocus && composerFocus) { var input = document.getElementById("chat-input"); if (input) { input.focus({ preventScroll: true }); input.setSelectionRange(composerFocus.start, composerFocus.end); } }
     if (nextFocus) {
       var target = document.querySelector(nextFocus), panelBack = document.querySelector('.inspector-compact-back'); nextFocus = null;
-      if (target && target.dataset.action === "toggle-inspector" && panelBack && getComputedStyle(panelBack).display !== "none") target = panelBack;
+      if (target && target.id === "demoInspectorToggle" && panelBack && getComputedStyle(panelBack).display !== "none") target = panelBack;
       if (target) target.focus({ preventScroll: true });
     }
     if (S.openNavigationAfterNavigate) { S.openNavigationAfterNavigate = false; P.layout.setNavigation(true, true); }
@@ -230,12 +238,10 @@
     "toggle-chat-demo": function () { P.demo.toggle(); },
     "next-chat-demo": function () { P.demo.next(); },
     "scroll-chat-bottom": function () { P.chatScroll.bottom(); },
-    "navigation": function () { P.layout.setNavigation(!document.getElementById("app-shell").classList.contains("navigation-open"), true); },
     "close-dialog": closeDialog,
     "confirm": function () { var callback = confirmCallback; closeDialog(); confirmCallback = null; if (callback) callback(); },
     "open-project-dialog": function () { navigate("projects/open"); },
-    "close-inspector": function () { nextFocus = '[data-action="toggle-inspector"]'; navigate("chat/main"); },
-    "toggle-inspector": function () { nextFocus = '[data-action="toggle-inspector"]'; navigate(P.inspectorTitles[S.route.split("/")[1]] ? "chat/main" : "chat/" + (chat().inspector || "context")); },
+    "close-inspector": function () { nextFocus = "#demoInspectorToggle"; navigate("chat/main"); },
     "new-chat": function () { createChat(true); },
     "new-scoped-chat": function () { createChat(true); },
     "toggle-tree-search": function () {

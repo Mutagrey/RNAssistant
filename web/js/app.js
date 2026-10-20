@@ -106,13 +106,6 @@ function switchTab(name) {
 document.addEventListener("DOMContentLoaded", function () {
   var chatScopeIcon = document.getElementById("chatScopeIcon");
   if (chatScopeIcon) chatScopeIcon.innerHTML = window.RNAssistantNavigationTree.icon("office");
-  var mobileMenuButton = document.getElementById("productMobileMenuButton");
-  if (mobileMenuButton) {
-    mobileMenuButton.innerHTML = window.RNAssistantNavigationTree.icon("panelLeft");
-    mobileMenuButton.addEventListener("click", function () {
-      setMobileNavigationOpen(!window.RNAssistantShellLayout.isNavigationOpen());
-    });
-  }
   document.querySelector(".content").addEventListener("click", function (event) {
     var creationMenu = event.target.closest(".product-create-menu, .product-material-menu");
     if (creationMenu && event.target.closest("button")) {

@@ -37,9 +37,8 @@
     if (status === "stopped") return P.notice("Выполнение остановлено", "Новые действия не запускаются. Уже полученные данные доступны в ходе работы.", "", G("Открыть ход работы", "chat/activity", "clock"));
     return "";
   }
-  function inspectorToggle(open) {
-    var label = open ? "Скрыть боковую панель" : "Показать боковую панель";
-    return '<button class="icon-btn" data-action="toggle-inspector" aria-label="' + label + '" title="' + label + '" aria-controls="chat-inspector" aria-expanded="' + open + '">' + I("panel") + '</button>';
+  function inspectorToggle() {
+    return '<button id="demoInspectorToggle"></button>';
   }
   function chatInspector(sub) {
     var titles = P.inspectorTitles;
@@ -64,7 +63,7 @@
     if (s.scenario === "loading") message = loadingTranscript();
     else message += progress();
     var composer = '<div class="composer-wrap">' + (["error", "unknown"].includes(s.scenario) ? '<div class="composer-notice">' + stateNotice() + '</div>' : '') + '<form class="composer" id="composer"><div class="composer-chips">' + s.attachments.map(function (n, i) { return '<span class="chip">' + I("file") + '<span class="truncate">' + E(n) + '</span><button type="button" data-action="remove-attachment:' + i + '" aria-label="Убрать ' + E(n) + '">×</button></span>'; }).join("") + '</div>' + (c.editing ? '<div class="composer-chips"><span class="badge warning">Редактирование · новая ветка</span>' + B("Отменить", "cancel-edit", "close", "ghost") + '</div>' : "") + '<textarea id="chat-input" data-chat-draft placeholder="' + (c.plan ? "Опишите задачу — составлю план…" : "Спросите о документе или поручите задачу…") + '" aria-label="Сообщение" title="Enter — отправить · Shift+Enter — новая строка" aria-describedby="composer-keys">' + E(c.draft) + '</textarea><span id="composer-keys" class="sr-only">Enter — отправить. Shift+Enter — новая строка.</span><div class="composer-toolbar"><div class="actions">' + P.composerMenu() + '</div><div class="actions composer-model-actions">' + composerContextMeter() + P.renderModelPicker() + composerReasoningToggle() + (c.status === "running" ? P.iconButton("Остановить выполнение", "stop-run", "stop", "send-btn") : '<button type="submit" class="icon-btn send-btn" aria-label="Отправить сообщение">' + I("arrow") + '</button>') + '</div></div></form></div>';
-    return '<div class="body-split chat-layout ' + (inspector ? 'with-inspector' : '') + '"><div class="chat-main">' + P.header(c.title, (P.isProjectChat() ? "Проекты / " : "Документы Office / ") + P.chatContextName(), inspectorToggle(!!inspector)) + '<section class="conversation" aria-label="Переписка">' + (s.scenario === "offline" ? '<div class="chat-notices">' + stateNotice() + '</div>' : '') + '<div class="conversation-viewport"><div class="conversation-scroll" tabindex="0" aria-label="История сообщений" data-chat="' + s.chatId + '"><div class="transcript">' + message + '</div></div><button id="chat-scroll-bottom" class="chat-scroll-button" data-action="scroll-chat-bottom" aria-label="К последним сообщениям" title="К последним сообщениям" hidden>' + I("arrowDown") + '<span></span></button></div>' + composer + '</section></div>' + inspector + '</div>';
+    return '<div class="body-split chat-layout ' + (inspector ? 'with-inspector' : '') + '"><div class="chat-main">' + P.header(c.title, (P.isProjectChat() ? "Проекты / " : "Документы Office / ") + P.chatContextName(), inspectorToggle()) + '<section class="conversation" aria-label="Переписка">' + (s.scenario === "offline" ? '<div class="chat-notices">' + stateNotice() + '</div>' : '') + '<div class="conversation-viewport"><div class="conversation-scroll" tabindex="0" aria-label="История сообщений" data-chat="' + s.chatId + '"><div class="transcript">' + message + '</div></div><button id="chat-scroll-bottom" class="chat-scroll-button" data-action="scroll-chat-bottom" aria-label="К последним сообщениям" title="К последним сообщениям" hidden>' + I("arrowDown") + '<span></span></button></div>' + composer + '</section></div>' + inspector + '</div>';
   }
   function materials() {
     var s = P.state, sub = s.route.split("/")[1], all = sub === "all";

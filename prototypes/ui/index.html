@@ -36,7 +36,7 @@
   <div class="demo-strip"><span>Интерактивный прототип · демонстрационные данные</span><div class="demo-playback" id="chat-demo-controls" aria-label="Демонстрация чата"></div><label>Состояние <select id="scenario" aria-label="Демонстрационное состояние"><option value="ready">Обычное</option><option value="empty">Пустое</option><option value="loading">Загрузка</option><option value="running">Выполнение</option><option value="approval">Подтверждение</option><option value="needs-input">Нужен ответ</option><option value="unknown">Результат неизвестен</option><option value="error">Ошибка</option><option value="offline">Документ недоступен</option><option value="dirty">Несохранённые изменения</option></select></label></div>
   <div class="preview-stage" id="stage">
     <div class="app-shell" id="app-shell">
-      <button type="button" class="icon-btn" id="demoNavigationToggle" data-action="navigation" aria-label="Свернуть навигацию" aria-controls="global-nav" aria-expanded="true" title="Свернуть навигацию"><svg data-rna-icon="panelLeft" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
+      <button id="demoNavigationToggle"></button>
       <nav class="section-rail" id="section-rail" aria-label="Разделы"></nav>
       <aside class="global-nav" id="global-nav" aria-label="Дерево раздела"></aside>
       <main id="main" class="main-region" tabindex="-1"></main>
@@ -67,6 +67,7 @@
   <script src="screen-map.js?v=style-system-20261018-9"></script>
   <script src="fixtures.js?v=shared-preview-20261019-1"></script>
   <script src="../../web/js/app-icons.js?v=shared-icons-20261019-1"></script>
+  <script src="../../web/js/app-panel-toggle.js"></script>
   <script src="../../web/js/app-navigation-tree.js?v=shared-tree-20261018-1"></script>
   <script src="../../web/js/app-library-groups.js"></script>
   <script src="../../web/js/app-editor-tabs.js?v=shared-editor-tabs-20261019-1"></script>

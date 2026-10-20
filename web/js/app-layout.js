@@ -5,6 +5,7 @@
   var compactNavigationOpen = false;
   var productLayoutMode = null;
   var navigationTransitionTimer = null;
+  var navigationToggle = null;
 
   try { productNavigationPreference = window.localStorage.getItem(productNavigationOpenKey) !== "0"; }
   catch (error) { /* Presentation preferences are optional. */ }
@@ -39,18 +40,12 @@
     shell.classList.toggle("navigation-open", open);
     shell.classList.toggle("navigation-closed", !open);
     var button = document.getElementById("productMobileMenuButton");
-    if (button) {
-      var label = open ? "Свернуть навигацию" : "Открыть навигацию";
-      button.setAttribute("aria-expanded", String(open));
-      button.setAttribute("aria-label", label);
-      button.title = label;
-    }
+    if (navigationToggle) navigationToggle.sync();
     shell.querySelectorAll(".split-layout > .splitter:not(.chat-inspector-splitter)").forEach(function (handle) {
       handle.hidden = mode === "single";
     });
     var active = shell.querySelector(".panel.active .global-nav");
     if (active) {
-      if (button) button.setAttribute("aria-controls", active.id);
       active.inert = !open;
       active.setAttribute("aria-hidden", String(!open));
     }
@@ -317,6 +312,12 @@
 
   window.initializeSplitPanes = function () {
     Array.prototype.slice.call(document.querySelectorAll(".split-layout")).forEach(bindSplitLayout);
+    navigationToggle = window.RNAssistantPanelToggle.bind(document.getElementById("productMobileMenuButton"), {
+      side: "left",
+      controls: function () { var panel = document.querySelector(".panel.active .global-nav"); return panel && panel.id; },
+      isOpen: navigationIsOpen,
+      setOpen: setProductNavigationOpen
+    });
     syncProductNavigation();
     requestAnimationFrame(function () {
       var shell = document.querySelector(".shell");

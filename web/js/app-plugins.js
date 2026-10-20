@@ -2,6 +2,7 @@
   'use strict';
   var items=[],selected=null,candidate=null,view=null,chat=null,busy=false,chatBusy=false,poll=null,epoch=0;
   var previewBusy=false,selecting=false,sourceStamp=null,candidateStamp=null,sourceTimer=null,sourceDebounce=null;
+  var developmentOpen=false,developmentToggle=null;
   var savedIcons=[],selectedIconId='puzzle',customSource=false;
   var frameReady=false,pendingNavigation=null;
   var navigation={projectName:'Проект данных',view:'sources',templateId:'',templates:[],expanded:{project:true,templates:true,dictionary:true}};
@@ -103,15 +104,15 @@
       candidate=checked;candidateStamp=source;await showView(true);sourceStamp=source;status('');}
     catch(error){if(current===epoch){candidate=null;candidateStamp=null;status('Предпросмотр не обновлён: '+error.message,true);}}
     finally{previewBusy=false;controls();
-      if(current!==epoch&&!selecting&&selected&&(!view||!view.preview)&&!el('Workbench').hidden&&el('Develop').checked)checkAndPreview(sourceStamp);}}
-  async function pollSource(){if(!selected||el('Workbench').hidden||!el('Develop').checked||document.hidden||!el('Workbench').closest('.panel.active')||previewBusy)return;
+      if(current!==epoch&&!selecting&&selected&&(!view||!view.preview)&&!el('Workbench').hidden&&developmentOpen)checkAndPreview(sourceStamp);}}
+  async function pollSource(){if(!selected||el('Workbench').hidden||!developmentOpen||document.hidden||!el('Workbench').closest('.panel.active')||previewBusy)return;
     var id=selected.pluginId,current=epoch;
     try{var state=await send('getPluginSourceState',{pluginId:id});if(current!==epoch||!selected||selected.pluginId!==id||state.stamp===sourceStamp)return;
       sourceStamp=state.stamp;clearTimeout(sourceDebounce);sourceDebounce=setTimeout(function(){checkAndPreview(state.stamp);},450);
     }catch(error){if(current===epoch)status('Не удалось проверить изменения исходников: '+error.message,true);}}
   function startSourceWatch(){clearInterval(sourceTimer);sourceTimer=setInterval(function(){pollSource();},1200);}
-  function updateDevelopment(refresh){var open=el('Develop').checked;el('Chat').hidden=!open;el('DevelopmentSplitter').hidden=!open;
-    el('Develop').setAttribute('aria-label',open?'Скрыть разработку':'Показать разработку');
+  function updateDevelopment(refresh){var open=developmentOpen;el('Chat').hidden=!open;el('DevelopmentSplitter').hidden=!open;
+    developmentToggle.sync();
     el('Workbench').classList.toggle('plugin-developing',open);
     if(refresh&&open){if(!view||!view.preview)checkAndPreview();else pollSource();}}
   function bindDevelopmentSplitter(){var handle=el('DevelopmentSplitter'),body=el('Body'),key='rnassistant.plugin.development.width';
@@ -143,12 +144,12 @@
     if(typeof refreshSplitPanes==='function')refreshSplitPanes();
     navigation={projectName:'Проект данных',view:'sources',templateId:'',templates:[],expanded:{project:true,templates:true,dictionary:true}};el('ProjectName').textContent=dataPlugin()?selected.name:'';el('Title').textContent=dataPlugin()?navigation.projectName:selected.name;renderNavigation();
     if(window.RNAssistantShellLayout)window.RNAssistantShellLayout.refresh();
-    if(selected.enabled)await showView(false);else el('Develop').checked=true;
+    if(selected.enabled)await showView(false);else developmentOpen=true;
     updateDevelopment(false);
     try{sourceStamp=(await send('getPluginSourceState',{pluginId:id})).stamp;}catch(error){status(error.message,true);}
-    if(el('Develop').checked)await checkAndPreview(sourceStamp);
+    if(developmentOpen)await checkAndPreview(sourceStamp);
     startSourceWatch();await readChat();});}finally{selecting=false;
-      if(selected&&!el('Workbench').hidden&&el('Develop').checked&&(!view||!view.preview))checkAndPreview(sourceStamp);}}
+      if(selected&&!el('Workbench').hidden&&developmentOpen&&(!view||!view.preview))checkAndPreview(sourceStamp);}}
   function renderChat(){if(!chat)return;var list=el('ChatMessages'),atBottom=list.scrollHeight-list.scrollTop-list.clientHeight<64;list.replaceChildren();
     chat.messages.forEach(function(message){var article=document.createElement('article');article.className='message '+(message.role==='user'?'user':'assistant');
       if(message.text){var body=document.createElement('div');body.className='markdown';body.innerHTML=window.markdown(message.text,{preserveLineBreaks:message.role==='user'});article.appendChild(body);}
@@ -253,7 +254,7 @@
       if(!connecting&&selectedIconId==='draw'){await drawIcon();iconBrief='';}
       if(selectedIconId!=='draw')iconBrief='';
       var created=await send(connecting?'connectPlugin':'createPlugin',{name:el('Name').value,rootPath:connecting||customSource?el('Root').value.trim():null,description:task,iconDescription:iconBrief,iconId:selectedIconId});
-      await refresh();status((connecting?'Исходники подключены: ':'Исходники созданы: ')+created.sourceRoot);busy=false;await select(created.pluginId);el('Develop').checked=true;el('Develop').onchange();
+      await refresh();status((connecting?'Исходники подключены: ':'Исходники созданы: ')+created.sourceRoot);busy=false;await select(created.pluginId);developmentToggle.setOpen(true);
       if(!connecting&&(task||iconBrief)){var message='Загрузи навыки workspace.plugin_authoring и workspace.files. Прочитай README.md и plugin.json. ';
         if(task)message+='Создай плагин по задаче: '+task+'. ';
         if(iconBrief)message+='Нарисуй SVG-иконку по описанию: '+iconBrief+'. Создай icon.svg, добавь его в files и укажи в plugin.json. ';
@@ -272,7 +273,17 @@
       status('Версия опубликована. Открытый предпросмотр сохраняет свой снимок.');});};
     el('Reopen').onclick=function(){el('Reopen').closest('details').open=false;run(function(){return showView(false);});};
     el('Disable').onclick=function(){el('Disable').closest('details').open=false;run(async function(){selected=await send('disablePlugin',{pluginId:selected.pluginId});candidate=null;candidateStamp=null;await closeView();await refresh();status('Плагин отключён. Исходники и данные сохранены.');});};
-    el('Develop').onchange=function(){updateDevelopment(true);};
+    developmentToggle=window.RNAssistantPanelToggle.bind(el('Develop'),{
+      controls:'pluginChat',isOpen:function(){return developmentOpen;},
+      setOpen:function(open){developmentOpen=open;updateDevelopment(true);}
+    });
+    el('Chat').addEventListener('keydown',function(event){
+      if(event.key!=='Escape'||event.defaultPrevented)return;
+      var menu=el('Chat').querySelector('.plugin-actions-menu[open]');
+      if(menu){menu.open=false;menu.querySelector('summary').focus();}
+      else developmentToggle.setOpen(false);
+      event.preventDefault();event.stopPropagation();
+    });
     el('ChatForm').onsubmit=function(event){event.preventDefault();var message=el('Message').value.trim();if(!message)return;el('Message').value='';chatAction(function(id){return send('submitPluginChat',{pluginId:id,input:{Message:message,Mode:'agent',RequestId:crypto.randomUUID()}});});};
     el('Stop').onclick=async function(){if(!chat||!selected)return;var s=chat.state;try{chat=await send('cancelPluginChat',{pluginId:selected.pluginId,runId:s.RunId||s.runId,cursor:s.Cursor||s.cursor});renderChat();}catch(error){el('ChatStatus').textContent=error.message;}};
     ['Approve','Reject'].forEach(function(id){el(id).onclick=function(){var pending=chat.pendingId;chatAction(function(plugin){return send('resolvePluginChat',{pluginId:plugin,pendingId:pending,approve:id==='Approve'});});};});

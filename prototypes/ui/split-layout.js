@@ -3,6 +3,7 @@
   var P = window.Prototype, shell = document.getElementById("app-shell");
   var storageKey = "rnassistant.prototype.panel-widths.v3", widths = {}, entries = [], drag, frame, navigationOpen = null;
   var layoutMode, compactNavigationOpen = false, navigationTransition;
+  var navigationToggle = null;
   var keys = ["navigation", "inspector"];
   function readWidths() {
     try {
@@ -44,8 +45,7 @@
     var rail = document.getElementById("section-rail"), hidesRail = layoutMode === "single" && !open;
     rail.inert = hidesRail; rail.setAttribute("aria-hidden", String(hidesRail));
     var button = document.getElementById("demoNavigationToggle");
-    var label = open ? "Свернуть навигацию" : "Открыть навигацию";
-    button.setAttribute("aria-expanded", String(open)); button.setAttribute("aria-label", label); button.title = label;
+    if (navigationToggle) navigationToggle.sync();
     if (!open && (nav.contains(focused) || focused.matches('[data-split="navigation"]'))) {
       button.focus({ preventScroll: true });
     }
@@ -198,6 +198,11 @@
       sync();
     }
   };
+  navigationToggle = window.RNAssistantPanelToggle.bind(document.getElementById("demoNavigationToggle"), {
+    side: "left", controls: "global-nav",
+    isOpen: function () { return shell.classList.contains("navigation-open"); },
+    setOpen: function (open) { P.layout.setNavigation(open, true); }
+  });
   var observer = new ResizeObserver(schedule);
   observer.observe(document.getElementById("stage"));
   observer.observe(document.getElementById("main"));

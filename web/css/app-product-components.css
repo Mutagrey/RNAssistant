@@ -14,6 +14,7 @@
 summary.icon-btn { list-style: none; cursor: pointer; }
 summary.icon-btn::-webkit-details-marker { display: none; }
 .icon-btn > svg { flex: 0 0 18px; width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.55; stroke-linecap: round; stroke-linejoin: round; }
+.panel-toggle[aria-expanded="true"] { background: var(--accent-soft); color: var(--accent); }
 .tree-toolbar .icon-btn, .chat-tree-toolbar .icon-btn { flex: 0 0 30px; width: 30px; height: 30px; min-height: 30px; }
 .tree-toolbar .icon-btn > svg, .chat-tree-toolbar .icon-btn > svg { flex-basis: 16px; width: 16px; height: 16px; }
 .message-actions .icon-btn { flex: 0 0 28px; width: 28px; height: 28px; min-height: 28px; }

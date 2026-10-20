@@ -76,6 +76,14 @@ switching to another workbook while awaiting approval and a fault after possible
 write. Verify target identity, one narration, explicit unknown and no automatic replay.
 Use the same trace to distinguish actual source read-back from VBA compilation.
 
+## Shared panel controls — 2026-10-20
+
+Navigation, chat inspector and plugin source chat use one panel-toggle component,
+including the demo. The plugin checkbox/code icon and duplicate button styles and
+handlers are removed. Chromium workspace-chat and product-shell checks pass for
+opening/closing, keyboard focus, draft retention and desktop/narrow geometry.
+Windows/Office/WebView2 delivery remains unverified.
+
 ## Plugin development preview — 2026-10-20
 
 The development panel now uses the shared chat message and composer styling,
