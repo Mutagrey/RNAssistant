@@ -347,6 +347,8 @@ document catalog authority. Reads create no model observations or execution righ
 
 No input becomes editable until the complete source is verified. Failed reads
 cannot become empty drafts; unchanged unloaded items are not serialized as writes.
+Built-in tools remain read-only in the Library; their editor offers creation of a
+separate custom tool with its own id and source.
 Clean source cache is selection-bounded; hydration does not mark the package dirty.
 Local source edits survive refresh and late save responses. A changed published
 source with a dirty draft blocks saving rather than silently rebasing it. Chat,

@@ -44,6 +44,8 @@ Owner: web tests / model settings UI. В текущем рабочем дере�
 статус модели (`Настройки—`), а assertion ожидает только `Настройки`.
 `chat-composer-layout.test.js` проходит начальные проверки composer, затем fixture
 настроек не предоставляет `formModel`, используемый `renderContextWindowSummary`.
+`prompt-review.test.js` также останавливается до проверок редактора: fixture не
+предоставляет `renderModelCapabilityList` для `app-settings.js`.
 Согласовать fixtures с текущим UI настроек отдельной правкой. Адресные
 `workspace-chat-layout.test.js`, `splitter-preferences.test.js` и
 `product-shell-parity.test.js` проходят; это не результат полного web suite.

@@ -194,6 +194,9 @@ The existing Library UI already owns skills under `Library → Instructions → 
 It supports Markdown edit/preview, references, enable/disable, clone and custom
 delete; built-ins are read-only. It does not currently expose useful revision
 history, restore, provenance or a complete version display.
+The editor labels built-ins as read-only and offers an editable copy after the
+core text has loaded. The copy has a distinct id; the original keeps its
+published id.
 
 Agent-side authoring uses four exact Agent-only native intents: core
 `common.skills_upsert/delete` and reference

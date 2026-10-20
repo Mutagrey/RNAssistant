@@ -462,6 +462,7 @@ function updateToolWriteControls() {
   var sourceUnavailable = !tool || !tool._sourceLoaded;
   if ($("cloneToolButton")) $("cloneToolButton").disabled = unavailable || sourceUnavailable || !!tool.BuiltIn;
   if ($("addToolButton")) $("addToolButton").disabled = unavailable;
+  if ($("createToolFromBuiltinButton")) $("createToolFromBuiltinButton").disabled = unavailable;
   ["installVbaToolButton", "uninstallVbaToolButton"].forEach(function (id) {
     if ($(id)) $(id).disabled = unavailable || sourceUnavailable || readOnly || !isVba || !!tool._sourceConflict ||
       id === "uninstallVbaToolButton" && tool.InstallationStatus === "not_installed";
@@ -692,7 +693,9 @@ function renderToolEditor() {
   }
   if ($("toolEditorTitle")) $("toolEditorTitle").textContent = skill ? (skill.Name || skill.Id || "Инструмент") : "Инструмент";
   if ($("toolEditorMeta")) $("toolEditorMeta").textContent = skill ? ("Библиотека / Инструменты" +
+    (builtIn ? " · Встроенный · только чтение" : "") +
     (skill._sourceConflict ? " · Исходник изменился: черновик сохранён, запись заблокирована" : skill._sourceError ? " · Ошибка чтения: обновите Library" : sourceUnavailable ? " · Загрузка исходника…" : "")) : "";
+  if ($("createToolFromBuiltinButton")) $("createToolFromBuiltinButton").hidden = !builtIn;
   $("toolEnabledInput").checked = skill ? skill.Enabled !== false : false;
   $("toolIdInput").value = skill ? (skill.Id || "") : "";
   $("toolNameDisplay").value = $("toolIdInput").value;
@@ -862,6 +865,7 @@ function addVbaComponent(type) {
 }
 
 function bindToolActions() {
+  $("createToolFromBuiltinButton").addEventListener("click", function () { $("addToolButton").click(); });
   window.addEventListener("pagehide", cancelToolDocumentationRead);
   window.addEventListener("pagehide", cancelToolSourceRead);
   window.addEventListener("pagehide", cancelToolLibraryWrite);

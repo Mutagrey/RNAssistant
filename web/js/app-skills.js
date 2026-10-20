@@ -497,7 +497,7 @@ function updateSkillSourceReadOnly() {
   var readOnly = !!state.bridgeUnavailable || !skill || !!skill.BuiltIn || !skill._sourceLoaded[path];
   if ($("skillBodyInput")) $("skillBodyInput").readOnly = readOnly;
   if (typeof setCodeEditorReadOnly === "function") setCodeEditorReadOnly("skillBodyInput", readOnly);
-  ["cloneSkillButton", "copySkillContextButton"].forEach(function (id) {
+  ["cloneSkillButton", "cloneBuiltinSkillButton", "copySkillContextButton"].forEach(function (id) {
     if ($(id)) $(id).disabled = !!state.bridgeUnavailable || !!skillWriteOperation || !skill || !skill._sourceLoaded[""];
   });
 }
@@ -636,7 +636,8 @@ function renderSkillEditor() {
   var panel = $("skillEditorPanel");
   if (panel) panel.classList.toggle("hidden", disabled);
   if ($("skillTitle")) $("skillTitle").textContent = skill ? (skill.Name || skill.Id || "Навык") : "Навык";
-  if ($("skillMeta")) $("skillMeta").textContent = "Библиотека / Навыки";
+  if ($("skillMeta")) $("skillMeta").textContent = "Библиотека / Навыки" + (builtIn ? " · Встроенный · только чтение" : "");
+  if ($("cloneBuiltinSkillButton")) $("cloneBuiltinSkillButton").hidden = !builtIn;
   $("skillEnabledInput").checked = skill ? skill.Enabled !== false : false;
   $("skillIdInput").value = skill ? (skill.Id || "") : "";
   $("skillHostInput").value = skill ? (skill.Host || "Common") : "Common";
@@ -797,7 +798,7 @@ function updateSkillWriteControls() {
   ["skillIdInput", "skillHostInput"].forEach(function (id) { if ($(id)) $(id).disabled = disabled || !!(skill && skill.References && skill.References.length); });
   if ($("addSkillButton")) $("addSkillButton").disabled = unavailable;
   if ($("deleteSkillReferenceButton")) $("deleteSkillReferenceButton").disabled = disabled || !selectedSkillReferencePath(skill);
-  ["cloneSkillButton", "copySkillContextButton"].forEach(function (id) {
+  ["cloneSkillButton", "cloneBuiltinSkillButton", "copySkillContextButton"].forEach(function (id) {
     if ($(id)) $(id).disabled = unavailable || !skill || !skill._sourceLoaded[""];
   });
 }
@@ -1037,6 +1038,7 @@ async function deleteSelectedSkillReference(pathOverride) {
 }
 
 function bindSkillActions() {
+  $("cloneBuiltinSkillButton").addEventListener("click", function () { $("cloneSkillButton").click(); });
   $("skillPreviewToggleButton").addEventListener("click", function () {
     syncSelectedSkillFromEditor();
     state.promptEditorMode = state.promptEditorMode === "preview" ? "edit" : "preview";
@@ -1091,7 +1093,9 @@ function bindSkillActions() {
       return;
     }
 
-    var id = (source.Id || "skill") + ".copy";
+    var baseId = (source.Id || "skill") + ".copy", id = baseId, suffix = 2;
+    while (state.skills.some(function (skill) { return String(skill.Id || "").toLowerCase() === id.toLowerCase(); }))
+      id = baseId + "_" + suffix++;
     state.skills.push(skillWithBodyDraft({
       Id: id,
       Host: source.Host || "Common",
