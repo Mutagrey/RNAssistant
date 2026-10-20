@@ -653,9 +653,9 @@ remaining percentage and exact input / window size. The inspector's primary
 counter shows exact input and output counts from API usage, without an
 approximation mark or calibration. Missing usage is shown explicitly;
 partial usage never substitutes a total or an estimate for missing input.
-The ring uses exact input divided by the model's full context window, clamps its
+The ring uses exact input divided by RNAssistant's effective context window, clamps its
 fill to 0–100%, and shows an unknown state if either value is unavailable. Its
-remaining percentage describes that full window, including room reserved for output.
+remaining percentage describes that window, including room reserved for output.
 Live model results carry all supplied usage fields; the UI neither recomputes counts
 from drafts nor searches paged history for usage. When a newer chat revision arrives, an open
 inspector updates its usage counter while its next-request preview stays a manual
@@ -670,6 +670,12 @@ are shown as local resource sizes; only their model-visible representations, oft
 compact references, count toward the next request.
 
 ### Model context window
+
+For request admission, a positive `ContextWindowOverrideTokens` is an RNAssistant
+upper bound: the effective window is the smaller of that limit and the selected
+model's known `MaxContextTokens`. Zero uses the known model window. If the model
+window is unknown, a positive limit is the planning window; otherwise the
+fallback estimate is 32,768 tokens. This setting does not reconfigure the provider.
 
 The composer’s **Контекст модели** button and the token inspector open the same
 window. Its default view follows the latest saved model request; selecting an older

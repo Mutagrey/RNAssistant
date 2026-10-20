@@ -52,6 +52,15 @@ const { chromium } = require("playwright");
     }
     await page.waitForFunction(() => !document.querySelector(".shell").classList.contains("navigation-transition"));
 
+    await page.locator("#toggleChatSearchButton").click();
+    await page.locator("#chatSearchInput").fill("проверка");
+    await page.locator('.rail-button[data-tab="settings"]').focus();
+    assert.equal(await page.locator("#chatSearchInput").isVisible(), false, "chat search closes on blur");
+    assert.equal(await page.locator("#toggleChatSearchButton.has-search-query").count(), 1, "filter remains active");
+    await page.locator("#toggleChatSearchButton").click();
+    await page.locator("#chatSearchInput").press("Escape");
+    assert.equal(await page.locator("#chatSearchInput").inputValue(), "", "Escape clears chat search");
+
     const sections = [
       ['.rail-button[data-tab="chat"]', "#chatLayout", ".chat-sidebar-head", ".chatbar"],
       ['.rail-button[data-tab="artifacts"]', "#htmlWorkspaceLayout", ".artifact-catalog-toolbar", ".artifact-overview-heading"],
@@ -99,10 +108,11 @@ const { chromium } = require("playwright");
     await page.locator('.rail-button[data-tab="artifacts"]').click();
     await page.locator('[data-nav-search-toggle="artifactNavSearch"]').click();
     await page.locator("#artifactNavSearch").fill("отчёт");
-    assert.equal(await page.locator("#htmlWorkspaceSearchInput").inputValue(), "отчёт",
-      "sidebar and catalog share one material query");
+    assert.equal(await page.locator("#artifactNavSearch").inputValue(), "отчёт",
+      "one material query serves the tree and catalog");
+    assert.equal(await page.locator("#htmlWorkspaceSearchInput").count(), 0);
     await page.locator("#artifactNavSearch").press("Escape");
-    assert.equal(await page.locator("#htmlWorkspaceSearchInput").inputValue(), "");
+    assert.equal(await page.locator("#artifactNavSearch").inputValue(), "");
     await page.locator("#libraryRootTab").click();
     await page.locator('[data-nav-search-toggle="skillSearchInput"]').click();
     assert.equal(await page.locator("#skillSearchInput").isVisible(), true);

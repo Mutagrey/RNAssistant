@@ -45,6 +45,7 @@ function appendModelCapabilitySelect(row, label, mode, onChange) {
   select.addEventListener("change", function () { onChange(select.value); });
   holder.appendChild(select);
   row.appendChild(holder);
+  return select;
 }
 
 function appendModelCapabilityNumber(row, label, value, placeholder, onChange) {
@@ -57,16 +58,142 @@ function appendModelCapabilityNumber(row, label, value, placeholder, onChange) {
   input.className = "model-capability-number";
   input.type = "number";
   input.min = "1";
+  input.step = "1";
   input.value = Number(value || 0) > 0 ? String(value) : "";
   input.placeholder = placeholder || "Авто";
   input.setAttribute("aria-label", label);
   input.title = label;
   input.addEventListener("change", function () {
     var parsed = Number(input.value || 0);
-    onChange(parsed > 0 && isFinite(parsed) ? Math.floor(parsed) : null);
+    var next = parsed > 0 && isFinite(parsed) ? Math.floor(parsed) : null;
+    input.value = next === null ? "" : String(next);
+    onChange(next);
   });
   holder.appendChild(input);
   row.appendChild(holder);
+  return input;
+}
+
+function appendModelReasoningModeSelect(row, value, catalogMode, onChange) {
+  var holder = document.createElement("label");
+  holder.className = "model-capability-flag";
+  var caption = document.createElement("span");
+  caption.textContent = "Передача reasoning";
+  holder.appendChild(caption);
+  var select = document.createElement("select");
+  select.className = "model-capability-select";
+  select.setAttribute("aria-label", "Передача reasoning");
+  [["", catalogMode ? "Из каталога: " + catalogMode : "Общий режим"], ["auto", "auto"], ["reasoning_effort", "reasoning_effort"],
+    ["enable_thinking", "enable_thinking"], ["chat_template_kwargs", "chat_template_kwargs"],
+    ["reasoning_enabled", "reasoning_enabled"], ["custom_json", "custom_json"]].forEach(function (item) {
+    var option = document.createElement("option");
+    option.value = item[0];
+    option.textContent = item[1];
+    select.appendChild(option);
+  });
+  select.value = value || "";
+  select.addEventListener("change", function () { onChange(select.value || null); });
+  holder.appendChild(select);
+  row.appendChild(holder);
+  return select;
+}
+
+function modelCapabilityEditorValue(value, field, catalogValue) {
+  var camel = field.charAt(0).toLowerCase() + field.slice(1);
+  var snake = field.replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase();
+  var stored = storedModelCapabilityValue(value, field, camel, snake);
+  return stored === null || stored === undefined || stored === "" || String(stored) === String(catalogValue)
+    ? null : stored;
+}
+
+function modelCapabilityNumberText(value) {
+  var number = Number(value);
+  return number > 0 && isFinite(number) ? Math.floor(number).toLocaleString("ru-RU") : "?";
+}
+
+function modelCapabilityPlaceholder(value) {
+  return modelCapabilityNumberText(value) === "?" ? "Не указано" : modelCapabilityNumberText(value) + " из каталога";
+}
+
+function updateModelCapabilitySummary(value, targetItem) {
+  var list = $("modelCapabilityList");
+  if (!list) return;
+  var items = targetItem ? [targetItem] : Array.prototype.slice.call(list.querySelectorAll(".model-capability-item"));
+  items.forEach(function (item) {
+    if (item.dataset.modelValue.toLowerCase() !== value.toLowerCase()) return;
+    var model = findModel(value) || {};
+    var context = effectiveModelCapabilityValue(value, "MaxContextTokens", "maxContextTokens", model.maxContextTokens);
+    var output = effectiveModelCapabilityValue(value, "MaxOutputTokens", "maxOutputTokens", model.maxOutputTokens);
+    var meta = item.querySelector(".model-capability-meta");
+    meta.textContent = "Контекст " + modelCapabilityNumberText(context) + " · Ответ " + modelCapabilityNumberText(output);
+    var badges = item.querySelector(".model-capability-tags");
+    badges.replaceChildren();
+    var support = [["Vision", effectiveModelSupportsImages(value)], ["Audio", effectiveModelSupportsAudio(value)],
+      ["Reasoning", effectiveModelSupportsReasoning(value)]];
+    support.forEach(function (entry) {
+      if (entry[1] !== true) return;
+      var badge = document.createElement("span");
+      badge.textContent = entry[0];
+      badges.appendChild(badge);
+    });
+    if (!badges.children.length) {
+      var unknown = document.createElement("span");
+      unknown.className = "is-muted";
+      unknown.textContent = support.every(function (entry) { return entry[1] === false; }) ? "Только текст" : "Возможности ?";
+      badges.appendChild(unknown);
+    }
+  });
+}
+
+function renderModelCapabilityEditor(item, value, model) {
+  if (item.querySelector(".model-capability-body")) return;
+  var body = document.createElement("div");
+  body.className = "model-capability-body";
+  var note = document.createElement("p");
+  note.textContent = "Пустое поле берёт значение из каталога. Для неизвестного окна без общего лимита используется оценка 32 768 токенов.";
+  body.appendChild(note);
+  var fields = document.createElement("div");
+  fields.className = "model-capability-fields";
+  appendModelCapabilityNumber(fields, "Окно модели, токенов",
+    modelCapabilityEditorValue(value, "MaxContextTokens", model.maxContextTokens),
+    modelCapabilityPlaceholder(model.maxContextTokens), function (next) {
+      setStoredModelCapabilityField(value, "MaxContextTokens", next);
+    });
+  appendModelCapabilityNumber(fields, "Макс. ответ, токенов",
+    modelCapabilityEditorValue(value, "MaxOutputTokens", model.maxOutputTokens),
+    modelCapabilityPlaceholder(model.maxOutputTokens), function (next) {
+      setStoredModelCapabilityField(value, "MaxOutputTokens", next);
+    });
+  appendModelCapabilitySelect(fields, "Изображения", modelOverrideState(modelImageSupportOverrides(), value), function (mode) {
+    setModelCapabilityOverride("image", value, mode);
+  });
+  appendModelCapabilitySelect(fields, "Аудио", modelOverrideState(modelAudioSupportOverrides(), value), function (mode) {
+    setModelCapabilityOverride("audio", value, mode);
+  });
+  var reasoning = modelCapabilityEditorValue(value, "SupportsReasoning", model.supportsReasoning);
+  appendModelCapabilitySelect(fields, "Рассуждения", reasoning === null ? "auto" : (reasoning ? "true" : "false"), function (mode) {
+    setStoredModelCapabilityField(value, "SupportsReasoning", mode === "auto" ? null : mode === "true");
+  });
+  appendModelReasoningModeSelect(fields,
+    modelCapabilityEditorValue(value, "ReasoningRequestMode", model.reasoningRequestMode),
+    model.reasoningRequestMode, function (mode) {
+      setStoredModelCapabilityField(value, "ReasoningRequestMode", mode);
+    });
+  appendModelCapabilityNumber(fields, "Изображений в запросе",
+    modelCapabilityEditorValue(value, "MaxImagesPerPrompt", model.maxImagesPerPrompt),
+    modelCapabilityPlaceholder(model.maxImagesPerPrompt), function (next) {
+      setStoredModelCapabilityField(value, "MaxImagesPerPrompt", next);
+    });
+  body.appendChild(fields);
+  item.appendChild(body);
+}
+
+function refreshModelCapabilityDependents(value) {
+  updateModelCapabilitySummary(value);
+  renderModelCapabilityBadges();
+  renderAttachmentModelPriority();
+  renderActiveModelCapability();
+  if (typeof renderContextWindowSummary === "function") renderContextWindowSummary();
 }
 
 function setStoredModelCapabilityField(value, field, nextValue) {
@@ -78,10 +205,12 @@ function setStoredModelCapabilityField(value, field, nextValue) {
   var entry = storedModelCapabilityEntry(value);
   var capability = entry ? entry.value : {};
   if (!entry) capabilities[value] = capability;
-  capability[field] = nextValue;
+  if (nextValue === null || nextValue === undefined || nextValue === "") delete capability[field];
+  else capability[field] = nextValue;
+  if (!Object.keys(capability).length) delete capabilities[entry ? entry.key : value];
   settingsDirty = true;
   updateSettingsSaveButton();
-  renderModelControls();
+  refreshModelCapabilityDependents(value);
 }
 
 function setModelCapabilityOverride(kind, value, mode) {
@@ -100,48 +229,70 @@ function setModelCapabilityOverride(kind, value, mode) {
   settings.AttachmentModelPriority = attachmentModelPriorityForSettings();
   settingsDirty = true;
   updateSettingsSaveButton();
-  renderModelControls();
+  refreshModelCapabilityDependents(value);
 }
 
 function renderModelCapabilityList() {
   var list = $("modelCapabilityList");
   if (!list) return;
-
-  var value = formModel();
+  var search = $("modelCapabilitySearch");
+  var query = search ? search.value.trim().toLocaleLowerCase("ru") : "";
+  var open = {};
+  Array.prototype.slice.call(list.querySelectorAll(".model-capability-item[open]")).forEach(function (item) {
+    open[item.dataset.modelValue.toLowerCase()] = true;
+  });
   list.replaceChildren();
-  if (!value) {
+  var values = allKnownModelValues().filter(function (value) {
+    var model = findModel(value);
+    return !query || (value + " " + (model ? model.title : "")).toLocaleLowerCase("ru").includes(query);
+  });
+  if (!values.length) {
     var empty = document.createElement("div");
     empty.className = "model-capability-empty";
-    empty.textContent = "Выберите модель.";
+    empty.textContent = query ? "Модели не найдены." :
+      (state.modelCatalog.loading ? "Загрузка моделей…" : "Обновите каталог или введите ID модели.");
     list.appendChild(empty);
     return;
   }
-  var model = findModel(value) || { value: value, supportsReasoning: null, supportsImages: null, supportsAudio: null, inputModalities: [] };
-  var imageOverrides = modelImageSupportOverrides();
-  var audioOverrides = modelAudioSupportOverrides();
-  var reasoningValue = effectiveModelSupportsReasoning(value);
-  var reasoningMode = reasoningValue === null ? "auto" : (reasoningValue ? "true" : "false");
-  var row = document.createElement("div");
-  row.className = "model-capability-fields";
-  appendModelCapabilitySelect(row, "Изображения", modelOverrideState(imageOverrides, value), function (mode) {
-    setModelCapabilityOverride("image", value, mode);
+  values.forEach(function (value) {
+    var model = findModel(value) || { value: value, title: value };
+    var item = document.createElement("details");
+    item.className = "model-capability-item";
+    item.dataset.modelValue = value;
+    item.open = !!open[value.toLowerCase()];
+    if (value.toLowerCase() === formModel().toLowerCase()) item.classList.add("is-selected");
+    var summary = document.createElement("summary");
+    var text = document.createElement("span");
+    text.className = "model-capability-text";
+    var title = document.createElement("strong");
+    title.className = "model-capability-title";
+    title.textContent = model.title || value;
+    text.appendChild(title);
+    if (model.title && model.title !== value) {
+      var id = document.createElement("small");
+      id.className = "model-capability-id";
+      id.textContent = value;
+      text.appendChild(id);
+    }
+    summary.appendChild(text);
+    var meta = document.createElement("span");
+    meta.className = "model-capability-meta";
+    summary.appendChild(meta);
+    var badges = document.createElement("span");
+    badges.className = "model-capability-tags";
+    summary.appendChild(badges);
+    item.appendChild(summary);
+    item.addEventListener("toggle", function () {
+      if (item.open) renderModelCapabilityEditor(item, value, model);
+      else {
+        var body = item.querySelector(".model-capability-body");
+        if (body) body.remove();
+      }
+    });
+    list.appendChild(item);
+    if (item.open) renderModelCapabilityEditor(item, value, model);
+    updateModelCapabilitySummary(value, item);
   });
-  appendModelCapabilitySelect(row, "Аудио", modelOverrideState(audioOverrides, value), function (mode) {
-    setModelCapabilityOverride("audio", value, mode);
-  });
-  appendModelCapabilitySelect(row, "Рассуждения", reasoningMode, function (mode) {
-    setStoredModelCapabilityField(value, "SupportsReasoning", mode === "auto" ? null : mode === "true");
-  });
-  appendModelCapabilityNumber(row, "Контекст, токенов", effectiveModelCapabilityValue(value, "MaxContextTokens", "maxContextTokens", model.maxContextTokens), "Из каталога", function (next) {
-    setStoredModelCapabilityField(value, "MaxContextTokens", next);
-  });
-  appendModelCapabilityNumber(row, "Ответ, токенов", effectiveModelCapabilityValue(value, "MaxOutputTokens", "maxOutputTokens", model.maxOutputTokens), "Из каталога", function (next) {
-    setStoredModelCapabilityField(value, "MaxOutputTokens", next);
-  });
-  appendModelCapabilityNumber(row, "Изображений в запросе", effectiveModelCapabilityValue(value, "MaxImagesPerPrompt", "maxImagesPerPrompt", model.maxImagesPerPrompt), "Из каталога", function (next) {
-    setStoredModelCapabilityField(value, "MaxImagesPerPrompt", next);
-  });
-  list.appendChild(row);
 }
 
 function setAttachmentModelPriority(values) {

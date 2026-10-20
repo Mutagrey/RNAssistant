@@ -23,6 +23,8 @@
 #tab-artifacts .artifact-catalog-toolbar.product-search-heading.searching .tree-toolbar { flex: 1; }
 #tab-artifacts .artifact-catalog-toolbar .product-material-menu .html-workspace-menu-items { position: absolute; top: calc(100% + 4px); right: 0; min-width: 180px; margin: 0; }
 #tab-artifacts .artifact-catalog-toolbar .product-material-menu .html-workspace-menu-items button { width: 100%; padding: 7px 10px; font-size: 12px; }
+#tab-artifacts .artifact-catalog-toolbar .artifact-create-label { display: none; }
+#tab-artifacts .artifact-overview-create > summary { gap: 6px; }
 #tab-artifacts .tool-list-controls { margin: 0; }
 #tab-artifacts .artifact-catalog-actions {
   justify-content: space-between;
@@ -50,7 +52,6 @@
 #tab-artifacts .artifact-overview-create .html-workspace-menu-items button { width: 100%; text-align: left; }
 #tab-artifacts .artifact-overview-content { min-height: 0; overflow: auto; padding: 16px 18px; }
 #tab-artifacts .artifact-overview-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 18px; }
-#tab-artifacts .artifact-overview-toolbar .tool-search { flex: 1 1 220px; width: auto; min-height: 36px; margin: 0; padding: 7px 12px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface-subtle); font-size: 12px; }
 #tab-artifacts .artifact-overview-toolbar select { flex: 0 1 auto; max-width: 170px; min-height: 36px; padding: 7px 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); color: var(--ink); font: 12px var(--font); }
 #tab-artifacts .artifact-overview-table-wrap th:first-child,
 #tab-artifacts .artifact-overview-table-wrap td:first-child { min-width: 180px; }
@@ -71,10 +72,21 @@
 #tab-artifacts #artifactCatalogPreviewBody .rn-markdown-viewer { width: 100%; }
 #tab-artifacts #artifactCatalogPreviewBody .rn-text-viewer-toolbar button { min-height: 30px; }
 #tab-artifacts #artifactCatalogPreviewBody .rn-text-viewer-source pre { border: 0; background: transparent; }
+.material-viewer-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-height: 40px; padding-bottom: 10px; margin-bottom: 12px; border-bottom: 1px solid var(--line); }
+.material-viewer-toolbar .artifact-preview-modes { flex: 0 0 auto; min-width: max-content; }
+.material-copy-button { flex: 0 0 30px; width: 30px; height: 30px; min-height: 30px; margin-left: auto; }
+.material-copy-status:empty { display: none; }
+.material-copy-status { color: var(--ink-muted); font-size: 11px; }
+#tab-artifacts .html-workspace-mode-toggle { flex: 0 0 auto; min-width: max-content; max-width: none; overflow: visible; }
+#tab-artifacts .html-workspace-mode-toggle > button { flex: 0 0 auto; white-space: nowrap; }
+#tab-artifacts .html-workspace-toolbar { align-items: flex-start; }
+#tab-artifacts .html-workspace-toolbar .resource-editor-actions { flex: 0 1 auto; min-width: 0; }
+#tab-artifacts .artifact-detail-tabs .artifact-detail-modes { flex: 0 0 auto; min-width: max-content; }
+#tab-artifacts .artifact-detail-tabs .material-copy-button { margin-left: auto; }
 #tab-artifacts .html-workspace-editor { background: var(--surface); }
 #tab-artifacts .resource-editor-head { min-height: 52px; border-bottom-color: var(--line); }
 #tab-artifacts #artifactCatalogActions:not([hidden]) ~ #htmlWorkspaceEditor .resource-editor-titlebox { display: none; }
-#tab-artifacts #htmlWorkspaceEditor:has(#artifactDetailPreview:not(.hidden)) .html-workspace-head:has(.html-workspace-mode-button[data-html-mode="edit"].hidden):not(:has(.resource-editor-actions > :not(.hidden))) { display: none; }
+#tab-artifacts #htmlWorkspaceEditor.is-readonly-artifact .html-workspace-head { display: none; }
 #tab-artifacts .artifact-detail-preview:not(.is-media-preview) { padding: 16px 18px 24px; }
 #tab-artifacts .artifact-detail-preview .rn-markdown-viewer { width: 100%; max-width: none; margin: 0; }
 #tab-artifacts .artifact-detail-preview .rn-markdown-viewer-rendered { padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }

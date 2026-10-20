@@ -68,11 +68,13 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       "catalog groups by ownership rather than format");
     await page.locator("#artifactCatalogOverview").waitFor({ state: "visible" });
     assert.equal(await page.locator("#artifactCatalogOverviewRows tr").count(), 3, "demo-style catalog table uses the loaded projection");
-    assert.ok(await page.locator("#artifactCatalogOverview").getByRole("searchbox", { name: "Найти материал" }).isVisible());
+    assert.equal(await page.locator("#htmlWorkspaceSearchInput").count(), 0, "catalog and tree use one material search");
+    assert.equal(await page.locator("#artifactNavSearch").count(), 1);
     await page.evaluate(() => { window.createCalls = 0;
       document.getElementById("addPlanButton").addEventListener("click", () => createCalls++); });
-    await page.locator("#artifactCatalogOverviewCreate > summary").click();
-    await page.locator("#artifactCatalogOverviewCreate").getByRole("button", { name: "План" }).click();
+    await page.locator("#artifactCreateMenu > summary").click();
+    assert.equal(await page.locator("#artifactCreateMenu .html-workspace-menu-items button svg").count(), 6);
+    await page.locator("#artifactCreateMenu").getByRole("button", { name: "План" }).click();
     assert.equal(await page.evaluate(() => createCalls), 1, "main Add entry uses the existing material action owner");
     if (process.env.LAYOUT_SCREENSHOT) {
       await page.screenshot({ path: process.env.LAYOUT_SCREENSHOT.replace(/\.png$/, "-overview-1100.png") });
@@ -114,6 +116,10 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     assert.equal(await page.locator("#artifactCatalogPreviewBody iframe").isVisible(), false);
     const versions = page.locator(".artifact-version-menu");
     await page.locator("#artifactCatalogActions .artifact-action-menu > summary").click();
+    const artifactActions = page.locator("#artifactCatalogActions .artifact-action-menu > .html-workspace-menu-items > button");
+    assert.ok(await artifactActions.count() > 0);
+    assert.equal(await artifactActions.locator("svg").count(), await artifactActions.count(),
+      "material actions have an icon for every command");
     await versions.locator("summary").click();
     await versions.getByRole("button", { name: /v3 · текущая/ }).waitFor();
     assert.equal(await versions.getByRole("button", { name: /v3 · текущая/ }).getAttribute("aria-current"), "true");

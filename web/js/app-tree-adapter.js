@@ -65,6 +65,8 @@
         if (itemType && !ITEM_TYPES[itemType]) throw new Error("Unsupported tree item type: " + itemType);
         var itemId = itemType ? exactIdentifier(inputNode.itemId, "Tree item id", resolved.maxKeyChars) : "";
         var groupKey = inputNode.groupKey ? exactIdentifier(inputNode.groupKey, "Tree group key", resolved.maxKeyChars) : "";
+        var rowActions = inputNode.rowActions || [];
+        if (!Array.isArray(rowActions) || rowActions.length > 3) throw new Error("Tree row has too many actions.");
         var result = {
           key: key,
           title: clippedText(inputNode.title, resolved.maxTitleChars),
@@ -75,7 +77,16 @@
           rnGroupKey: groupKey,
           rnMeta: clippedText(inputNode.meta, resolved.maxMetaChars),
           rnIconKind: inputNode.iconKind === null ? "" : String(inputNode.iconKind || "file").toLowerCase(),
-          rnDeletable: !!inputNode.deletable && !!itemType
+          rnDeletable: !!inputNode.deletable && !!itemType,
+          rnRowActions: itemType ? rowActions.map(function (action) {
+            return {
+              id: exactIdentifier(action && action.id, "Tree action id", 64),
+              title: clippedText(action.title, resolved.maxTitleChars),
+              iconKind: String(action.iconKind || "").toLowerCase(),
+              danger: !!action.danger,
+              disabled: !!action.disabled
+            };
+          }) : []
         };
         if (childrenInput.length) result.children = visit(childrenInput, depth + 1);
         return result;
@@ -134,14 +145,21 @@
         itemId: item.rnItemId,
         groupKey: item.rnGroupKey,
         children: navigationNodes(children, options, tree),
-        actions: item.rnDeletable ? [{
+        actions: item.rnRowActions.map(function (action) {
+          return { title: action.title, iconHtml: tree.icon(action.iconKind), danger: action.danger,
+            disabled: action.disabled, onClick: function () {
+              if (typeof options.onAction === "function") {
+                options.onAction({ type: item.rnItemType, id: item.rnItemId, title: item.title }, action.id);
+              }
+            } };
+        }).concat(item.rnDeletable ? [{
           title: "Удалить " + item.title, iconHtml: tree.icon("trash"), danger: true,
           onClick: function () {
             if (typeof options.onDelete === "function") {
               options.onDelete({ type: item.rnItemType, id: item.rnItemId, title: item.title });
             }
           }
-        }] : []
+        }] : [])
       };
     });
   }

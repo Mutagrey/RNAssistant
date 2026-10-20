@@ -121,19 +121,15 @@ function modelCapabilitiesForSettings() {
   var settings = state.settings || {};
   var existing = settings.ModelCapabilities || settings.modelCapabilities || {};
   var result = {};
+  var storedKeys = {};
   Object.keys(existing).forEach(function (key) {
     result[key] = existing[key];
+    storedKeys[key.toLowerCase()] = key;
   });
   (state.modelCatalog.models || []).forEach(function (model) {
-    var stored = existing[model.value] || {};
-    if (!existing[model.value]) {
-      Object.keys(existing).some(function (key) {
-        if (key.toLowerCase() !== String(model.value).toLowerCase()) return false;
-        stored = existing[key] || {};
-        return true;
-      });
-    }
-    result[model.value] = {
+    var storedKey = storedKeys[String(model.value).toLowerCase()];
+    var stored = storedKey ? existing[storedKey] || {} : {};
+    result[storedKey || model.value] = {
       MaxContextTokens: preferredCapabilityValue(stored, "MaxContextTokens", "maxContextTokens", model.maxContextTokens),
       MaxOutputTokens: preferredCapabilityValue(stored, "MaxOutputTokens", "maxOutputTokens", model.maxOutputTokens),
       SupportsImages: preferredCapabilityValue(stored, "SupportsImages", "supportsImages", catalogModelSupportsImages(model)),

@@ -43,6 +43,17 @@
   function renderOverview() {
     var overview = el("Overview"), rows = el("OverviewRows");
     if (!overview) return;
+    var createMenu = document.getElementById("artifactCreateMenu");
+    if (createMenu) {
+      var menuHome = overviewRequested ? overview.querySelector(".artifact-overview-heading") :
+        document.querySelector("#tab-artifacts .artifact-catalog-toolbar .tree-toolbar");
+      if (menuHome && createMenu.parentNode !== menuHome) {
+        createMenu.open = false;
+        menuHome.appendChild(createMenu);
+      }
+      createMenu.classList.toggle("artifact-overview-create", overviewRequested);
+      createMenu.querySelector("summary").className = overviewRequested ? "button primary" : "icon-btn";
+    }
     overview.hidden = !overviewRequested;
     if (overviewRequested) el("All").setAttribute("aria-current", "page");
     else el("All").removeAttribute("aria-current");
@@ -222,7 +233,7 @@
     chat = id; loading = true; overviewLoading = !cursor; overviewError = "";
     status("Загрузка…"); el("More").hidden = true; renderOverview();
     try {
-      var result = await send("listArtifactCatalog", { chatId: id, scope: el("Scope").value, query: $("htmlWorkspaceSearchInput").value,
+      var result = await send("listArtifactCatalog", { chatId: id, scope: el("Scope").value, query: $("artifactNavSearch").value,
         kind: el("Kind").value, documentId: "", cursor: cursor || null });
       if (!current(id, nav) || version !== generation) return;
       if (result.chatId !== id) throw new Error("Получено дерево другого чата.");
@@ -288,12 +299,23 @@
     return mutate("deleteDocumentArtifact", { chatId: listed.chatId, expectedSessionRevision: listed.sessionRevision,
       resourceUri: item.resourceUri, confirmed: true }, button);
   }
+  function treeAction(actionId, uri) {
+    var listed = response;
+    var item = listed && listed.items.find(function (entry) { return entry.resourceUri === uri; });
+    if (!item || item.documentId !== listed.documentId) return false;
+    if (actionId === "detach" && item.linked) {
+      return changeLink(listed.chatId, listed.sessionRevision, uri, true);
+    }
+    if (actionId === "delete-document" && item.canDelete) return remove(item, listed);
+    return false;
+  }
   function actions() {
     var root = el("Actions"); root.replaceChildren(); root.hidden = !selected || overviewRequested;
     if (!selected || !response) return;
     var item = selected, listed = response, id = state.activeChatId, nav = state.chatNavigationVersion;
-    function action(parent, label, fn, disabled, className) {
+    function action(parent, label, iconName, fn, disabled, className) {
       var b = node("button", label, className); b.type = "button"; b.disabled = pending || !!disabled;
+      b.insertAdjacentHTML("afterbegin", RNAssistantIcons.render(iconName));
       b.addEventListener("click", function () { if (!b.disabled && current(id, nav)) fn(b); }); parent.appendChild(b);
     }
     var heading = node("div", "", "artifact-detail-heading");
@@ -318,15 +340,15 @@
     });
     if (selectedRevision) {
       options.appendChild(node("span", "Только просмотр", "artifact-version-readonly"));
-      action(options, "К текущей версии", function () { select(item.resourceUri); });
-      if (item.canTransfer) action(options, "Скачать v" + selectedRevision.revision, function () {
+      action(options, "К текущей версии", "rotateLeft", function () { select(item.resourceUri); });
+      if (item.canTransfer) action(options, "Скачать v" + selectedRevision.revision, "download", function () {
         download(Object.assign({}, item, { resourceUri: selectedRevision.resourceUri }));
       });
       root.appendChild(menu);
       return;
     }
     if (item.documentId === listed.documentId) {
-      action(options, item.linked ? "Убрать из чата" : "Подключить к чату", async function (b) {
+      action(options, item.linked ? "Убрать из чата" : "Подключить к чату", item.linked ? "minus" : "link", async function (b) {
         if (await changeLink(id, listed.sessionRevision, item.resourceUri, item.linked, b)) {
           if (selected && !item.linked) select(selected.resourceUri);
           else if (selected) preview(selected);
@@ -334,10 +356,10 @@
       }, !item.linked && item.availabilityIssue);
     }
     if (item.canTransfer) {
-      action(options, "Независимая копия", function (b) { copyItem(item, b, listed); });
-      action(options, item.kind === "html_workspace" ? "Экспорт проекта" : "Скачать", function () { download(item); });
+      action(options, "Независимая копия", "copy", function (b) { copyItem(item, b, listed); });
+      action(options, item.kind === "html_workspace" ? "Экспорт проекта" : "Скачать", "download", function () { download(item); });
     }
-    if (item.canDelete) action(options, "Удалить из документа…", function (b) { remove(item, listed, b); }, false, "danger-soft");
+    if (item.canDelete) action(options, "Удалить из документа…", "trash", function (b) { remove(item, listed, b); }, false, "danger-soft");
     if (options.children.length) root.appendChild(menu);
   }
   function localArtifact(item) {
@@ -386,6 +408,13 @@
         title: item.title, iconKind: icon(item), meta: item.availabilityIssue ? "Недоступен" : (item.linked ? "В чате" : ""),
         tooltip: item.title + " · " + item.documentTitle,
         expanded: !collapsed["catalog::" + item.resourceUri] };
+      if (item.documentId === response.documentId) {
+        entry.rowActions = [];
+        if (item.linked) entry.rowActions.push({ id: "detach", title: "Убрать из чата",
+          iconKind: "minus" });
+        if (item.canDelete) entry.rowActions.push({ id: "delete-document", title: "Удалить из документа…",
+          iconKind: "trash", danger: true });
+      }
       if (item.kind === "html_workspace" && item.documentId === response.documentId && item.selected) {
         entry.children = htmlChildren; entry.groupKey = "catalog::" + item.resourceUri;
       }
@@ -501,15 +530,30 @@
           frame.srcdoc = window.RNAssistantHtmlWorkspacePreview.build({ files: files, activeFileId: project.EntryPath.toLowerCase(), dataSources: project.Data.map(function (d) { return { name: d.Name }; }), resourceSnapshot: snapshot, hostBridge: false });
           el("PreviewBody").appendChild(frame);
         }
-        var modes = node("div", "", "mode-toggle");
-        var viewButton = node("button", "Просмотр", "mode-button active"), sourceButton = node("button", "Код", "mode-button");
+        var modes = node("div", "", "view-switch artifact-preview-modes");
+        var viewButton = node("button", "Просмотр", "button compact active"), sourceButton = node("button", "Код", "button compact");
+        var toolbar = node("div", "", "material-viewer-toolbar");
+        var copy = node("button", "", "icon-btn material-copy-button");
+        var copyStatus = node("span", "", "material-copy-status");
+        viewButton.type = sourceButton.type = copy.type = "button";
+        modes.setAttribute("role", "group"); modes.setAttribute("aria-label", "Режим материала");
+        copy.setAttribute("aria-label", "Копировать выбранный файл");
+        copy.title = "Копировать выбранный файл";
+        copy.innerHTML = RNAssistantIcons.render("copy");
+        copyStatus.setAttribute("role", "status");
+        copy.addEventListener("click", function () {
+          Promise.resolve(window.copyTextResult(pre.textContent)).then(function () { copyStatus.textContent = "Скопировано"; })
+            .catch(function () { copyStatus.textContent = "Не удалось скопировать"; });
+        });
         function mode(code) {
           frame.hidden = code; picker.hidden = !code; pre.hidden = !code;
           viewButton.classList.toggle("active", !code); sourceButton.classList.toggle("active", code);
+          viewButton.setAttribute("aria-pressed", String(!code)); sourceButton.setAttribute("aria-pressed", String(code));
         }
         viewButton.addEventListener("click", function () { mode(false); }); sourceButton.addEventListener("click", function () { mode(true); });
         modes.appendChild(viewButton); modes.appendChild(sourceButton);
-        el("PreviewBody").insertBefore(modes, el("PreviewBody").firstChild);
+        toolbar.appendChild(modes); toolbar.appendChild(copy); toolbar.appendChild(copyStatus);
+        el("PreviewBody").insertBefore(toolbar, el("PreviewBody").firstChild);
         el("PreviewBody").appendChild(picker); el("PreviewBody").appendChild(pre);
         mode(showSource);
       } else if (/^application\/pdf(?:;|$)/i.test(mime) || /^image\//i.test(mime)) {
@@ -567,21 +611,14 @@
     finally { pending = false; actions(); if (lease) await send("closeArtifactTransfer", { chatId: id, leaseId: lease.leaseId }).catch(function () {}); }
   }
   ["Scope", "Kind"].forEach(function (name) { el(name).addEventListener("change", function () { show(); }); });
-  $("htmlWorkspaceSearchInput").addEventListener("input", function () { clearTimeout(searchTimer); searchTimer = setTimeout(function () { show(); }, 200); });
+  $("artifactNavSearch").addEventListener("input", function () { clearTimeout(searchTimer); searchTimer = setTimeout(function () { show(); }, 200); });
   el("All").addEventListener("click", backToOverview);
-  el("OverviewCreate").addEventListener("click", function (event) {
-    var target = event.target.closest("[data-artifact-create]");
-    if (!target) return;
-    var original = document.getElementById(target.getAttribute("data-artifact-create"));
-    el("OverviewCreate").open = false;
-    if (original) original.click();
-  });
   el("More").addEventListener("click", function () { load(next); });
   el("Import").addEventListener("click", function () { if (canMutate()) el("File").click(); });
   el("File").addEventListener("change", function () { var file = this.files[0]; this.value = ""; importFile(file); });
   window.RNAssistantArtifactCatalog = { show: show, editor: editor, sync: sync, changeLink: changeLink,
     refreshViewer: refreshViewer,
-    tree: tree, select: select, canSelect: canMutate, remove: function (uri) {
+    tree: tree, select: select, canSelect: canMutate, treeAction: treeAction, remove: function (uri) {
       var item = response && response.items.find(function (item) { return item.resourceUri === uri; });
       if (!item || !item.canDelete) { status("Обновите дерево и выберите актуальную версию артефакта для удаления."); return false; }
       return remove(item, response);

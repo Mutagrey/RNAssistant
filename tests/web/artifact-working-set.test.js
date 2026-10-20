@@ -5,13 +5,15 @@ const vm = require("node:vm");
 const path = require("node:path");
 const { webcrypto } = require("node:crypto");
 class Element {
-  constructor(tag = "div") { this.tag = tag; this.children = []; this.handlers = {}; this.value = ""; this.hidden = false;
+  constructor(tag = "div") { this.tag = tag; this.children = []; this.handlers = {}; this.value = ""; this.hidden = false; this.dataset = {};
     this.classList = { add() {}, remove() {}, toggle() {} }; this.attributes = {}; }
   appendChild(node) { this.children.push(node); return node; }
   insertBefore(node, before) { this.children.splice(Math.max(0, this.children.indexOf(before)), 0, node); }
   get firstChild() { return this.children[0]; }
   replaceChildren(...nodes) { this.children = nodes; this._text = ""; }
   addEventListener(name, handler) { this.handlers[name] = handler; }
+  insertAdjacentHTML() {}
+  querySelectorAll() { return []; }
   setAttribute(name, value) { this.attributes[name] = value; }
   removeAttribute(name) { delete this.attributes[name]; }
   set textContent(value) { this.replaceChildren(); this._text = String(value); }
@@ -21,7 +23,7 @@ class Element {
 const ids = ["", "Scope", "Import", "File", "Kind", "Status", "PreviewStatus", "More", "Preview", "Actions", "PreviewTitle", "PreviewBody",
   "All", "Overview", "OverviewRows", "OverviewTable", "OverviewEmpty", "OverviewCreate"];
 const elements = Object.fromEntries(ids.map(id => ["artifactCatalog" + id, new Element()]));
-elements.htmlWorkspaceLayout = new Element(); elements.htmlWorkspaceEditor = new Element(); elements.htmlWorkspaceSearchInput = new Element();
+elements.htmlWorkspaceLayout = new Element(); elements.htmlWorkspaceEditor = new Element(); elements.artifactNavSearch = new Element();
 elements.artifactCatalogScope.value = "chat"; elements.artifactCatalogPreview.hidden = true;
 const requests = [], applied = [], previews = [];
 const context = vm.createContext({ console, TextDecoder, TextEncoder, Blob, crypto: webcrypto, URL, setTimeout, clearTimeout, confirm: () => true,
@@ -34,6 +36,7 @@ const context = vm.createContext({ console, TextDecoder, TextEncoder, Blob, cryp
   RNAssistantHtmlWorkspacePreview: { ensureVendors: async () => {}, build: options => { previews.push(options); return "<h1>Saved</h1>"; } }
 });
 context.RNAssistantNavigationTree = { icon: () => "" };
+context.RNAssistantIcons = { render: () => "" };
 context.window = context;
 vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-artifact-catalog.js"), "utf8"), context);
 const flush = () => new Promise(resolve => setImmediate(resolve));
@@ -51,6 +54,8 @@ async function finishPreview() {
   context.RNAssistantArtifactCatalog.show("all");
   assert.equal(requests[0].payload.scope, "all"); requests.shift().resolve(answer()); await flush();
   assert.equal(tree()[0].title, "В документе", "current document keeps its ownership group");
+  assert.deepEqual(Array.from(tree()[0].children[0].rowActions, action => action.id), ["delete-document"],
+    "an unlinked material can be deleted from its document from the tree");
   await context.RNAssistantArtifactCatalog.select(itemUri); await finishPreview();
   assert.equal(elements.htmlWorkspaceEditor.hidden, true, "external preview uses the same right pane");
   button("Подключить к чату").click(); button("Подключить к чату").click();
@@ -90,5 +95,17 @@ async function finishPreview() {
   oldRead.resolve({ contentType: "application/json", data: { leaseId: "old" } }); await flush();
   requests.shift().resolve({ closed: true }); await flush();
   assert.equal(elements.artifactCatalogPreview.hidden, true, "late preview cannot replace editor");
+  context.RNAssistantArtifactCatalog.show("chat");
+  const linkedItem = { ...answer("b", 10).items[0], linked: true };
+  requests.shift().resolve({ ...answer("b", 10), items: [linkedItem] }); await flush();
+  assert.deepEqual(Array.from(tree()[0].children[0].rowActions, action => action.id), ["detach", "delete-document"],
+    "a linked material exposes separate detach and document deletion actions");
+  const unlink = context.RNAssistantArtifactCatalog.treeAction("detach", itemUri);
+  const detachment = requests.shift();
+  assert.equal(detachment.type, "changeArtifactLink");
+  assert.equal(detachment.payload.detached, true);
+  assert.equal(detachment.payload.expectedSessionRevision, 10);
+  detachment.resolve({ activeChatId: "b" }); await flush();
+  requests.shift().resolve(answer("b", 11)); await unlink;
   console.log("PASS artifact tree: scopes, pagination, guarded selection, duplicate/unconfirmed deletion, dirty editor, late responses and isolated preview");
 })().catch(error => { console.error(error); process.exitCode = 1; });

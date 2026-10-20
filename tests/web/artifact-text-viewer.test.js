@@ -126,7 +126,7 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   assert.equal(nextCount, 1);
   const search = partialHost.querySelector(".rn-text-viewer-search");
   search.value = "script";
-  button(partialHost, "Найти").click();
+  search.dispatch("input");
   assert.match(partialHost.textContent, /Совпадений: 2/);
   console.log("PASS artifact text viewer: bounded page is inert, numbered, searchable and page-copy only");
 
@@ -315,6 +315,11 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   assert.ok(pdfDetail.querySelector(".rn-pdf-viewer"));
   assert.equal(pdfDetail.classList.contains("is-media-preview"), true);
   assert.ok(pdfDetail.querySelector(".rn-pdf-thumbnail-rail"));
+  assert.equal(pdfDetail.querySelectorAll("button").filter(item => /Копировать/.test(item.textContent)).length, 1,
+    "PDF has one copy action above the page viewer");
+  button(pdfDetail, "Копировать текст PDF").click();
+  await settle();
+  assert.equal(copied.at(-1), "visible");
   context.RNAssistantHtmlWorkspaceArtifacts.renderDetail(pdfDetail, {
     type: "artifact", item: { Kind: "file", Title: "unknown.bin", MimeType: "application/octet-stream", Revision: 1 }
   }, "", {});
@@ -648,7 +653,7 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   assert.ok(index.includes("app-text-viewer.js?v=artifact-text-20260831-1"));
   assert.ok(index.includes("app-text-viewer.css?v=artifact-text-20260831-1"));
   assert.ok(index.includes("app-sequence-viewer.js?v=artifact-gallery-20260902-1"));
-  assert.ok(index.includes("app-sequence-viewer.css?v=artifact-gallery-20260902-1"));
+  assert.ok(index.includes("app-sequence-viewer.css?v=theme-tokens-20261019-1"));
   assert.ok(index.includes("app-resource-viewer.js?v=agent-planning-20261002-2"));
   assert.ok(index.includes("app-resource-viewer.css?v=agent-planning-20261002-2"));
   assert.ok(index.includes("js/vendor/viewer.min.js"));

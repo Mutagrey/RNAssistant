@@ -61,6 +61,7 @@ const context = vm.createContext({
   clearTimeout() {}
 });
 context.window = context;
+context.RNAssistantIcons = { render: name => '<svg data-icon="' + name + '"></svg>' };
 context.markdown = text => String(text);
 context.clearMarkdownEnhancements = () => {};
 const chartInits = [];
@@ -127,6 +128,30 @@ function render(item, actions) {
   assert.equal(plain.querySelector(".rn-text-viewer-content").textContent, text);
   assert.match(plain.textContent, /исходное извлечение обрезано/);
   console.log("PASS artifact JSON viewer: non-JSON content routes to the bounded typed text viewer");
+
+  const markdownUri = "rna://chat/c/artifact/notes/revision/1";
+  const markdown = render({ Kind: "markdown", Title: "notes.md", MimeType: "text/markdown",
+    ResourceUri: markdownUri, Revision: 1 }, {
+    artifactViewerState() {
+      return { status: "ready", viewerKind: "markdown", complete: true, sourceComplete: true,
+        fullText: "# Notes", pages: [{ text: "# Notes", offset: 0, startLine: 1, totalCharacters: 7 }] };
+    }
+  });
+  assert.equal(markdown.querySelector(".artifact-detail-tabs"), null, "Markdown has no outer Preview/Details tabs");
+  assert.ok(markdown.querySelector(".rn-markdown-viewer-toolbar"));
+  assert.equal(markdown.querySelectorAll(".rn-markdown-viewer-toolbar").length, 1);
+  assert.ok(button(markdown, "Просмотр") && button(markdown, "Исходник"));
+  assert.equal(markdown.querySelectorAll(".rn-markdown-viewer-copy").length, 1);
+  console.log("PASS artifact Markdown viewer: one Preview/Source toolbar without duplicate Details panel");
+
+  const plan = new Element("div");
+  context.state.htmlWorkspaceDirty = true;
+  context.RNAssistantHtmlWorkspaceArtifacts.renderDetail(plan, {
+    type: "plan", item: { Kind: "plan_document", Title: "plan.md", InlineText: "# Plan" }
+  }, "# Draft", {});
+  context.state.htmlWorkspaceDirty = false;
+  assert.equal(plan.querySelector(".artifact-detail-tabs"), null, "plan has no outer Preview/Details tabs");
+  assert.ok(plan.querySelector(".rn-markdown-viewer-toolbar"));
 
   const metadataText = '{"attachmentId":"a-1","size":42}';
   const metadata = render({ Kind: "attachment", MimeType: "image/png", InlineText: "", MetadataJson: metadataText, Revision: 1 });

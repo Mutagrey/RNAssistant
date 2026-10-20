@@ -39,15 +39,17 @@ assert.throws(() => adapter.normalize([{ key: "a", children: "/lazy" }]), /child
 assert.throws(() => adapter.normalize([{ key: "a", itemType: "url", itemId: "1" }]), /Unsupported tree item type/);
 console.log("PASS tree adapter: bounded local typed nodes are fail-closed");
 
-const activated = [], deleted = [], toggled = [];
+const activated = [], deleted = [], toggled = [], rowActions = [];
 const controller = adapter.mount(root, {
   nodes: [{ key: "group::files", groupKey: "files", title: "Файлы", expanded: true, iconKind: "folder", children: [
-    { key: "item::file::1", itemType: "file", itemId: "1", title: malicious, meta: "HTML", iconKind: "html", deletable: true },
+    { key: "item::file::1", itemType: "file", itemId: "1", title: malicious, meta: "HTML", iconKind: "html", deletable: true,
+      rowActions: [{ id: "detach", title: "Убрать из чата", iconKind: "minus" }] },
     { key: "item::file::2", itemType: "file", itemId: "2", title: "next.html", iconKind: "html" }
   ] }],
   selectedKey: "item::file::1",
   onActivate(item) { activated.push(item); return item.id !== "2"; },
   onDelete(item) { deleted.push(item); },
+  onAction(item, actionId) { rowActions.push([item.id, actionId]); },
   onToggle(key, expanded) { toggled.push([key, expanded]); }
 });
 assert.equal(controller.vendor, "navigation-tree");
@@ -60,6 +62,9 @@ assert.match(rendered.nodes[0].children[0].iconHtml, /html/);
 rendered.options.onSelect(rendered.nodes[0].children[1]);
 assert.equal(activated.at(-1).id, "2");
 rendered.nodes[0].children[0].actions[0].onClick();
+assert.deepEqual(rowActions.at(-1), ["1", "detach"]);
+assert.match(rendered.nodes[0].children[0].actions[0].iconHtml, /minus/);
+rendered.nodes[0].children[0].actions[1].onClick();
 assert.equal(deleted.at(-1).id, "1");
 rendered.options.onToggle(rendered.nodes[0], false);
 assert.deepEqual(toggled.at(-1), ["files", false]);

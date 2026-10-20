@@ -128,7 +128,10 @@ async function saveChatReasoningSelection(enabled) {
 }
 
 function bindModelActions() {
-  $("modelInput").addEventListener("input", renderModelControls);
+  $("modelInput").addEventListener("input", function () {
+    renderModelCapabilityBadges();
+    renderContextWindowSummary();
+  });
   $("modelInput").addEventListener("change", function () {
     applyModelDefaultsToForm(findModel($("modelInput").value));
     renderModelControls();

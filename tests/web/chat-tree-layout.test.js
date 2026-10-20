@@ -92,6 +92,17 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     await page.waitForFunction(() => document.activeElement.dataset.treeKey === "chat:first");
     assert.equal(await page.evaluate(() => document.activeElement.dataset.treeKey), "chat:first",
       "a created chat takes focus after menu replacement");
+    await page.evaluate(() => { state.chats[0].jsonlByteLength = 6_000_000; renderChatSessionList(state.chats); });
+    assert.equal(await current.locator(".navigation-tree-label").getAttribute("title"), "Обзор",
+      "normal chat hover does not expose technical storage details");
+    const selectedRow = current.locator(":scope > .navigation-tree-row");
+    const selectedColor = await selectedRow.evaluate(node => getComputedStyle(node).backgroundColor);
+    await selectedRow.hover();
+    assert.equal(await selectedRow.evaluate(node => getComputedStyle(node).backgroundColor), selectedColor,
+      "hover keeps the selected row fill");
+    await page.evaluate(() => { state.chats[0].casMissingBlobCount = 1; renderChatSessionList(state.chats); });
+    assert.match(await current.locator(".navigation-tree-badge").getAttribute("title"), /Отсутствуют CAS blobs/,
+      "storage issues remain available on the warning badge");
     if (process.env.CHAT_TREE_SCREENSHOT) await page.screenshot({ path: process.env.CHAT_TREE_SCREENSHOT });
     assert.deepEqual(errors, []);
     console.log("PASS chat tree browser: visible selection, roving keyboard focus and single actions");

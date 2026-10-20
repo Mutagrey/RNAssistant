@@ -288,6 +288,17 @@
       return selected.type === "data" ? dataJson(selected.item) : (source.ready(selected.item) ? fileContent(selected.item) : "");
     }
 
+    function copySelectedSource() {
+      var selected = selectedItem();
+      if (!selected || selected.type === "artifact" || selected.type === "collection" ||
+          selected.type === "plan" && artifactInlineTruncated(selected.item) ||
+          selected.type === "file" && !source.ready(selected.item)) {
+        return Promise.reject(new Error("Исходный текст недоступен"));
+      }
+      syncHtmlEditorToState();
+      return window.copyTextResult(selectedEditorValue(selected));
+    }
+
     function renderHtmlWorkspaceEditor() {
       var selected = selectedItem();
       var empty = $("htmlWorkspaceEmptyState");
@@ -304,6 +315,7 @@
       var sourcesReady = source.ensure(wanted);
       if (editor) {
         editor.classList.toggle("is-empty", !hasItems);
+        editor.classList.toggle("is-readonly-artifact", isArtifact || isCollection);
       }
       if (empty) {
         empty.classList.toggle("hidden", hasItems);
@@ -340,6 +352,12 @@
       }
       if (isPlan && artifactInlineTruncated(selected.item)) state.htmlWorkspaceMode = "preview";
       if (isArtifact || isCollection) state.htmlWorkspaceMode = "preview";
+      var copyButton = $("copyHtmlWorkspaceButton");
+      if (copyButton) {
+        copyButton.classList.toggle("hidden", !hasItems || isArtifact || isCollection);
+        copyButton.disabled = isPlan && artifactInlineTruncated(selected.item) ||
+          selected && selected.type === "file" && !source.ready(selected.item);
+      }
       var isWorkspace = !!selected && !isPlan && !isArtifact && !isCollection;
       ["refreshHtmlDataButton", "reloadHtmlWorkspaceSourceButton", "exportHtmlWorkspaceButton"].forEach(function (id) {
         if ($(id)) $(id).classList.toggle("hidden", !isWorkspace);
@@ -434,6 +452,7 @@
       applyMode: applyHtmlWorkspaceMode,
       confirmDiscard: confirmDiscardHtmlWorkspaceChanges,
       markDirty: markHtmlWorkspaceDirty,
+      copySelectedSource: copySelectedSource,
       render: renderHtmlWorkspaceEditor,
       renderPreview: renderHtmlWorkspacePreview,
       setMode: setHtmlWorkspaceMode,

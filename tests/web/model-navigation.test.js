@@ -142,6 +142,7 @@ function fixture() {
     const loading = context.loadModelCatalog(true);
     context.document.querySelector = () => ({ id: "tab-settings" });
     context.document.querySelectorAll = () => [];
+    context.document.getElementById = () => null;
     context.document.addEventListener = () => {};
     context.renderChatSessions = context.renderMessages = context.renderContext = context.renderContextMeter = () => {};
     vm.runInContext(read("app.js"), context);

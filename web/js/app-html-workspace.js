@@ -275,7 +275,7 @@
 
   function renderHtmlWorkspaceList() {
     if (window.RNAssistantArtifactCatalog) window.RNAssistantArtifactCatalog.sync();
-    var search = $("htmlWorkspaceSearchInput");
+    var search = $("artifactNavSearch");
     var resourceHeads = typeof artifactResourceHeads === "function" ? artifactResourceHeads() : (state.artifacts || []);
     var libraryArtifacts = resourceHeads.filter(function (artifact) {
       var kind = artifactKind(artifact);
@@ -603,7 +603,7 @@
         menu.querySelector("summary").focus();
       });
     });
-    $("htmlWorkspaceSearchInput").addEventListener("input", function () {
+    $("artifactNavSearch").addEventListener("input", function () {
       renderHtmlWorkspaceList();
       if (selectedItem() && selectedItem().type === "collection") renderHtmlWorkspaceEditor();
     });
@@ -636,6 +636,12 @@
         setHtmlWorkspaceMode(button.getAttribute("data-html-mode"));
         if (button.getAttribute("data-html-mode") === "preview") workspaceActions.refreshAuto();
       });
+    });
+    $("copyHtmlWorkspaceButton").addEventListener("click", function () {
+      var status = $("htmlWorkspaceCopyStatus");
+      status.textContent = "";
+      workspaceEditor.copySelectedSource().then(function () { status.textContent = "Скопировано"; })
+        .catch(function () { status.textContent = "Не удалось скопировать"; });
     });
     var artifactsTab = document.querySelector('.section-rail [data-tab="artifacts"]');
     if (artifactsTab) artifactsTab.addEventListener("click", refreshArtifactsTab);

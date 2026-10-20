@@ -175,7 +175,7 @@
       if (artifactKind(artifact) === "plan") return false;
       return collectionIdForArtifact(artifact) === collectionId;
     });
-    var search = document.getElementById("htmlWorkspaceSearchInput");
+    var search = document.getElementById("artifactNavSearch");
     var query = String(search && search.value || "").trim().toLowerCase();
     if (query) {
       items = items.filter(function (artifact) {

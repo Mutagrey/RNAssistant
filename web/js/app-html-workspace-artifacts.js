@@ -151,7 +151,7 @@
       taskTarget.className = "artifact-viewer-host artifact-typed-viewer product-viewer";
       root.appendChild(taskTarget);
       window.RNAssistantViewerRegistry.mount("task_list", taskTarget, {
-        text: artifactInlineText(artifact)
+        text: artifactInlineText(artifact), onCopy: window.copyTextResult
       });
       return true;
     }
@@ -314,7 +314,8 @@
           : null,
         onLoadTextFull: typeof actions.loadArtifactViewerFull === "function"
           ? function () { return actions.loadArtifactViewerFull({ resourceUri: uri }); }
-          : null
+          : null,
+        onCopy: window.copyTextResult
       });
       return true;
     }
@@ -659,14 +660,17 @@
     appendLibraryHistory(root, artifact, actions);
   }
 
-  function appendDetailTabs(root, buildPreview, buildDetails) {
+  function appendDetailTabs(root, buildPreview, buildDetails, copySource) {
     var tabs = document.createElement("div");
     tabs.className = "artifact-detail-tabs";
+    var modes = document.createElement("div");
+    modes.className = "view-switch artifact-detail-modes";
+    modes.setAttribute("role", "group"); modes.setAttribute("aria-label", "Раздел материала");
     var previewButton = document.createElement("button");
     var detailsButton = document.createElement("button");
     previewButton.type = detailsButton.type = "button";
-    previewButton.className = "secondary compact active";
-    detailsButton.className = "secondary compact";
+    previewButton.className = "button compact active";
+    detailsButton.className = "button compact";
     previewButton.textContent = "Просмотр";
     detailsButton.textContent = "Детали";
     var preview = document.createElement("div");
@@ -684,8 +688,24 @@
     }
     previewButton.addEventListener("click", function () { show(false); });
     detailsButton.addEventListener("click", function () { show(true); });
-    tabs.appendChild(previewButton);
-    tabs.appendChild(detailsButton);
+    modes.appendChild(previewButton);
+    modes.appendChild(detailsButton);
+    tabs.appendChild(modes);
+    if (copySource && typeof window.copyTextResult === "function") {
+      var copy = document.createElement("button");
+      var feedback = document.createElement("span");
+      copy.type = "button"; copy.className = "icon-btn material-copy-button";
+      copy.setAttribute("aria-label", copySource.truncated ? "Копировать фрагмент" : "Копировать исходные данные");
+      copy.title = copy.getAttribute("aria-label");
+      copy.innerHTML = window.RNAssistantIcons.render("copy");
+      feedback.className = "material-copy-status"; feedback.setAttribute("role", "status");
+      copy.addEventListener("click", function () {
+        try { Promise.resolve(window.copyTextResult(copySource.text)).then(function () { feedback.textContent = "Скопировано"; })
+          .catch(function () { feedback.textContent = "Не удалось скопировать"; }); }
+        catch (error) { feedback.textContent = "Не удалось скопировать"; }
+      });
+      tabs.appendChild(copy); tabs.appendChild(feedback);
+    }
     root.appendChild(tabs);
     root.appendChild(preview);
     root.appendChild(details);
@@ -823,9 +843,10 @@
       return;
     }
     var selectedViewerKind = selected.type === "artifact" ? artifactViewerKind(selected.item) : "";
+    root.classList.toggle("is-plan-preview", selected.type === "plan");
     root.classList.toggle("is-image-preview", selectedViewerKind === "image");
     root.classList.toggle("is-media-preview", selectedViewerKind === "image" || selectedViewerKind === "pdf");
-    appendDetailTabs(root, function (preview) {
+    function renderPreview(preview) {
       if (selected.type === "plan") {
         var planMetadata = {};
         try { planMetadata = JSON.parse(prop(selected.item, "MetadataJson", "metadataJson", "{}") || "{}"); } catch (ignore) {}
@@ -855,9 +876,16 @@
       }
       if (isUploadedHtmlArtifact(selected.item)) appendUploadedHtml(preview, selected.item, actions);
       else appendArtifactContent(preview, selected.item, actions);
-    }, function (details) {
+    }
+    if (selected.type === "plan" || selectedViewerKind === "markdown") {
+      renderPreview(root);
+      return;
+    }
+    appendDetailTabs(root, renderPreview, function (details) {
       appendArtifactDetails(details, selected.item, actions);
-    });
+    }, selected.type === "artifact" && !selectedViewerKind &&
+      (!isJsonArtifact(selected.item) || isChartArtifact(selected.item)) && artifactInlineText(selected.item)
+      ? { text: artifactInlineText(selected.item), truncated: artifactInlineTruncated(selected.item) } : null);
   }
 
   function validatePlanDraft(artifact) {

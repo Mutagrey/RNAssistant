@@ -671,6 +671,7 @@
       state.completeness = metadata.completeness || state.completeness || "full";
       root.setAttribute("data-completeness", state.completeness);
       copyButton.textContent = state.completeness === "full" ? "Копировать всё" : "Копировать фрагмент";
+      copyButton.setAttribute("aria-label", copyButton.textContent);
       parseCurrent();
       render();
     }

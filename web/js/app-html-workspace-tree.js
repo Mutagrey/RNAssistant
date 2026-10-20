@@ -306,6 +306,9 @@
       onDelete: function (item) {
         if (typeof options.onDelete === "function") options.onDelete(item.type, item.id);
       },
+      onAction: function (item, actionId) {
+        if (catalog && item.id.indexOf("rna://") === 0) catalog.treeAction(actionId, item.id);
+      },
       onToggle: function (key, expanded) {
         if (catalog && key.indexOf("catalog") === 0) catalog.toggle(key, expanded);
         else setGroupExpanded(key, expanded);

@@ -87,6 +87,7 @@ select:not([multiple]):not([size]) { appearance: none; padding-inline-end: 34px;
 :where(.popover-menu, .toolbar-menu-body, .html-workspace-menu-items, .shell .product-create-menu .tool-list-actions, .chat-office-launch-menu) { position: absolute; top: calc(100% + 6px); right: 0; z-index: 30; min-width: 220px; max-width: min(290px, calc(100vw - 24px)); padding: 5px; border: 1px solid var(--line-strong); border-radius: 9px; background: var(--surface); box-shadow: var(--shadow); }
 :where(.toolbar-menu-body, .html-workspace-menu-items, .shell .product-create-menu .tool-list-actions) { display: grid; gap: 2px; }
 :where(.popover-menu, .toolbar-menu-body, .html-workspace-menu-items, .shell .product-create-menu .tool-list-actions) > button { display: flex; align-items: center; gap: 9px; justify-content: flex-start; width: 100%; padding: 9px 10px; border: 0; border-radius: 5px; background: transparent; color: var(--ink); font-size: 12px; text-align: left; box-shadow: none; }
+:where(.popover-menu, .toolbar-menu-body, .html-workspace-menu-items, .shell .product-create-menu .tool-list-actions) > button > svg { flex: 0 0 16px; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.55; stroke-linecap: round; stroke-linejoin: round; }
 :where(.popover-menu, .toolbar-menu-body, .html-workspace-menu-items, .shell .product-create-menu .tool-list-actions) > button:hover { background: var(--surface-hover); }
 :where(.popover-menu, .toolbar-menu-body, .html-workspace-menu-items) > button.danger-text { color: var(--danger); }
 .popover-menu hr { border: 0; border-top: 1px solid var(--line); }
@@ -110,6 +111,7 @@ select:not([multiple]):not([size]) { appearance: none; padding-inline-end: 34px;
 [data-density="relaxed"] :is(.navigation-tree-row, .rna-nav-button) { min-height: 40px; }
 :is(.navigation-tree-row, .rna-nav-button):hover { background: var(--surface-hover); }
 .navigation-tree-row.selected, .rna-nav-button[aria-current="page"] { background: var(--surface-selected); }
+.navigation-tree-row.selected:hover, .rna-nav-button[aria-current="page"]:hover { background: var(--surface-selected); }
 @media (prefers-reduced-motion: no-preference) { .navigation-tree-row, .rna-nav-button { transition: background-color var(--motion-fast) var(--motion-ease); } }
 .navigation-tree-item:focus-visible > .navigation-tree-row { outline: 2px solid var(--focus); outline-offset: -2px; }
 .navigation-tree-expander { display: grid; place-items: center; flex: 0 0 16px; width: 16px; height: 26px; padding: 0; border: 0; background: none; color: var(--ink-muted); }

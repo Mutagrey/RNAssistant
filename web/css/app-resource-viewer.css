@@ -17,7 +17,6 @@
   background: var(--panel);
 }
 
-.artifact-detail-tabs .active,
 .rn-resource-viewer-toolbar .active {
   border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
   color: var(--accent);

@@ -167,6 +167,30 @@ function renderTokenEstimateCalibrationStatus(settings) {
     (automatic ? " · авто после первого API usage" : "");
 }
 
+function renderContextWindowSummary() {
+  var summary = $("contextWindowSummary");
+  if (!summary) return;
+  var model = formModel();
+  var catalog = findModel(model) || {};
+  var declared = Number(effectiveModelCapabilityValue(model, "MaxContextTokens", "maxContextTokens", catalog.maxContextTokens) || 0);
+  var limit = Number($("contextLimitInput").value || 0);
+  var effective = limit > 0 ? (declared > 0 ? Math.min(limit, declared) : limit) :
+    (declared > 0 ? declared : 32768);
+  var format = function (value) { return Math.floor(value).toLocaleString("ru-RU"); };
+  summary.textContent = (model || "Модель не выбрана") + ": " +
+    (declared > 0 ? "окно модели " + format(declared) : "окно модели неизвестно") +
+    " · бюджет RNAssistant " + format(effective) + " токенов" +
+    (declared <= 0 && limit <= 0 ? " (резервная оценка)" : "") + ".";
+}
+
+function loadSettingsModelCatalogIfNeeded() {
+  var page = document.querySelector('.settings-page[data-settings-page="model"].active');
+  if (page && !state.modelCatalog.loaded && !state.modelCatalog.loading && !state.modelCatalog.error &&
+      !state.bridgeUnavailable && typeof loadModelCatalog === "function") {
+    loadModelCatalog(true);
+  }
+}
+
 function readReasoningCustomJson(mode) {
   var text = $("reasoningCustomJsonInput").value.trim();
   if (!text) {
@@ -229,12 +253,6 @@ function renderSettings() {
   var uiAccent = window.RNAssistantAccents.apply(s.UiAccent || s.uiAccent);
   renderUiAccentChoices(uiAccent);
   if ($("runningMessageDelivery")) $("runningMessageDelivery").value = String(s.RunningMessageDelivery || "Steer").toLowerCase() === "queue" ? "Queue" : "Steer";
-  var appVersion = $("appVersion");
-  if (appVersion) {
-    var appVersionText = String(state.appVersion || "").trim();
-    appVersion.textContent = formatAppVersionLabel(appVersionText);
-    appVersion.title = appVersionText ? "Build: " + appVersionText : "";
-  }
   $("baseUrlInput").value = s.BaseUrl || s.baseUrl || "";
   $("modelsConfigUrlInput").value = s.ModelsConfigUrl || s.modelsConfigUrl || "";
   $("modelInput").value = s.Model || s.model || "";
@@ -261,6 +279,7 @@ function renderSettings() {
     input.checked = input.value === uiTheme;
   });
   $("contextLimitInput").value = compatibilityValue(s, "ContextWindowOverrideTokens", "contextWindowOverrideTokens", modelSettingsDefaults.contextWindowOverrideTokens);
+  renderContextWindowSummary();
   $("attachmentHelperMaxTokensInput").value = compatibilityValue(s, "AttachmentHelperMaxTokens", "attachmentHelperMaxTokens", modelSettingsDefaults.attachmentHelperMaxTokens);
   $("attachmentEvidenceMaxTokensInput").value = compatibilityValue(s, "AttachmentEvidenceMaxTokens", "attachmentEvidenceMaxTokens", modelSettingsDefaults.attachmentEvidenceMaxTokens);
   $("tokenEstimateMultiplierInput").value = compatibilityValue(s, "TokenEstimateMultiplier", "tokenEstimateMultiplier", modelSettingsDefaults.tokenEstimateMultiplier);
@@ -416,6 +435,7 @@ function resetModelSettingsToDefaults() {
   $("temperatureInput").value = modelSettingsDefaults.temperature;
   $("topPInput").value = modelSettingsDefaults.topP;
   $("contextLimitInput").value = modelSettingsDefaults.contextWindowOverrideTokens;
+  renderContextWindowSummary();
   $("attachmentHelperMaxTokensInput").value = modelSettingsDefaults.attachmentHelperMaxTokens;
   $("attachmentEvidenceMaxTokensInput").value = modelSettingsDefaults.attachmentEvidenceMaxTokens;
   $("tokenEstimateMultiplierInput").value = modelSettingsDefaults.tokenEstimateMultiplier;
@@ -494,14 +514,23 @@ function renderModelCompatibilityResult(result) {
 
 function bindSettingsActions() {
   var navSearch = $("settingsNavSearch");
-  var navSearchToggle = $("settingsNavSearchToggle");
-  var navHeading = navSearchToggle.closest(".settings-nav-heading");
   var navRoot = $("settingsNavTree");
   var navItems = [
     ["connection", "Подключение"], ["model", "Модель"], ["context", "Контекст и вложения"],
     ["agent", "Агент"], ["interface", "Интерфейс"], ["protection", "Защита"],
     ["service", "Помощь и обслуживание"]
   ];
+
+  function selectSettingsPage(page) {
+    Array.prototype.slice.call(document.querySelectorAll(".settings-page")).forEach(function (item) {
+      item.classList.toggle("active", item.getAttribute("data-settings-page") === page);
+    });
+    var pages = document.querySelector("#tab-settings .settings-pages");
+    if (pages) pages.scrollTop = 0;
+    renderSettingsNavigation();
+    updateSettingsSaveButton();
+    loadSettingsModelCatalogIfNeeded();
+  }
 
   function renderSettingsNavigation() {
     var query = navSearch.value.trim().toLocaleLowerCase("ru");
@@ -516,58 +545,35 @@ function bindSettingsActions() {
         };
       });
     window.RNAssistantNavigationTree.render(navRoot, nodes, {
-      label: "Настройки", onSelect: function (node) {
-        Array.prototype.slice.call(document.querySelectorAll(".settings-page")).forEach(function (item) {
-          item.classList.toggle("active", item.getAttribute("data-settings-page") === node.page);
-        });
-        renderSettingsNavigation();
-        updateSettingsSaveButton();
-      }
+      label: "Настройки", onSelect: function (node) { selectSettingsPage(node.page); }
     });
   }
 
-  function filterSettingsNavigation() {
-    var query = navSearch.value.trim().toLocaleLowerCase("ru");
-    renderSettingsNavigation();
-    navSearchToggle.classList.toggle("has-search-query", !!query);
-    navSearchToggle.title = query ? "Фильтр: " + navSearch.value + " · изменить поиск" : "Поиск в настройках";
-    navSearchToggle.setAttribute("aria-description", query ? "Активен фильтр: " + navSearch.value : "");
+  var railPopovers = window.RNAssistantRailPopovers;
+  if (railPopovers) {
+    railPopovers.register("settings-menu", function (_anchor, body, _isCurrent, title) {
+      var version = document.createElement("span");
+      var fullVersion = String(state.appVersion || "").trim();
+      version.className = "rail-hover-version";
+      version.textContent = formatAppVersionLabel(fullVersion);
+      if (fullVersion) version.title = "Сборка: " + fullVersion;
+      title.appendChild(version);
+      navItems.forEach(function (item) {
+        body.appendChild(railPopovers.action(item[1], window.RNAssistantNavigationTree.icon(item[0]), function () {
+          railPopovers.hide();
+          switchTab("settings");
+          selectSettingsPage(item[0]);
+        }));
+      });
+    });
   }
 
-  function closeSettingsSearch(clear) {
-    if (clear) {
-      navSearch.value = "";
-      filterSettingsNavigation();
-    }
-    navSearch.hidden = true;
-    navHeading.classList.remove("searching");
-    navSearchToggle.setAttribute("aria-expanded", "false");
-  }
-
-  navSearchToggle.addEventListener("pointerdown", function (event) {
-    if (document.activeElement === navSearch) event.preventDefault();
-  });
-  navSearchToggle.addEventListener("click", function () {
-    if (!navSearch.hidden) {
-      closeSettingsSearch(true);
-      navSearchToggle.focus();
-      return;
-    }
-    navSearch.hidden = false;
-    navHeading.classList.add("searching");
-    navSearchToggle.setAttribute("aria-expanded", "true");
-    navSearch.focus();
-  });
-  navSearch.addEventListener("input", filterSettingsNavigation);
-  navSearch.addEventListener("blur", function () { closeSettingsSearch(false); });
-  navSearch.addEventListener("keydown", function (event) {
-    if (event.key !== "Escape") return;
-    event.preventDefault();
-    closeSettingsSearch(true);
-    navSearchToggle.focus();
-  });
+  navSearch.addEventListener("input", renderSettingsNavigation);
 
   renderSettingsNavigation();
+
+  $("modelCapabilitySearch").addEventListener("input", renderModelCapabilityList);
+  $("contextLimitInput").addEventListener("input", renderContextWindowSummary);
 
   $("uiFontScaleInput").addEventListener("input", function () {
     applyUiFontScale({ UiFontScale: Number($("uiFontScaleInput").value || 100) / 100 });
@@ -608,7 +614,7 @@ function bindSettingsActions() {
 
   Array.prototype.slice.call(document.querySelectorAll("#tab-settings input, #tab-settings textarea, #tab-settings select")).forEach(function (control) {
     control.addEventListener(control.type === "checkbox" || control.tagName === "SELECT" ? "change" : "input", function () {
-      if (control.id === "promptSearchInput" || control.id === "settingsNavSearch") {
+      if (control.id === "promptSearchInput" || control.id === "settingsNavSearch" || control.id === "modelCapabilitySearch") {
         return;
       }
       settingsDirty = true;

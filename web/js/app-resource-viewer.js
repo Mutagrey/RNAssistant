@@ -31,8 +31,17 @@
     if (options.documentPage) root.classList.add("is-document-page");
     var toolbar = element("div", "rn-resource-viewer-toolbar");
     var dimensions = element("span", "rn-resource-viewer-status", formatBytes(options.byteLength));
+    var copy = options.documentPage ? null : element("button", "secondary compact", "Копировать изображение");
+    var copyStatus = copy ? element("span", "rn-resource-viewer-copy-status", "") : null;
+    if (copy) {
+      copy.type = "button";
+      copy.dataset.viewerAction = "copy";
+      copy.title = copy.textContent;
+      copyStatus.setAttribute("role", "status");
+    }
     var download = element("button", "secondary compact", options.downloadLabel || "Скачать");
     download.type = "button";
+    download.dataset.viewerAction = "download";
     download.title = options.downloadLabel || "Скачать";
     var stageShell = element("div", "rn-image-viewer-stage-shell");
     if (options.documentPage) stageShell.classList.add("is-document-page");
@@ -190,8 +199,25 @@
       link.click();
       link.remove();
     });
+    if (copy) copy.addEventListener("click", function () {
+      try {
+        if (!navigator.clipboard || typeof navigator.clipboard.write !== "function" || typeof window.ClipboardItem !== "function" ||
+            !image.naturalWidth || !image.naturalHeight) throw new Error("Копирование изображения недоступно");
+        var canvas = document.createElement("canvas");
+        canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
+        canvas.getContext("2d").drawImage(image, 0, 0);
+        var png = new Promise(function (resolve, reject) {
+          canvas.toBlob(function (blob) { if (blob) resolve(blob); else reject(new Error("PNG недоступен")); }, "image/png");
+        });
+        Promise.resolve(navigator.clipboard.write([new ClipboardItem({ "image/png": png })])).then(function () {
+          copyStatus.textContent = "Скопировано";
+        }).catch(function () { copyStatus.textContent = "Не удалось скопировать изображение"; });
+      } catch (error) { copyStatus.textContent = "Копирование изображения недоступно"; }
+    });
     toolbar.appendChild(dimensions);
+    if (copy) toolbar.appendChild(copy);
     toolbar.appendChild(download);
+    if (copyStatus) toolbar.appendChild(copyStatus);
     stageShell.appendChild(image);
 
     var navigation = options.navigation || null;
@@ -316,6 +342,19 @@
       root.appendChild(element("div", "artifact-detail-error", "Task list preview недоступен: payload некорректен."));
       return { element: root, destroy: function () { root.replaceChildren(); } };
     }
+    if (typeof options.onCopy === "function") {
+      var toolbar = element("div", "rn-task-list-toolbar");
+      var copy = element("button", "secondary compact rn-task-list-copy", "Копировать данные задач");
+      var feedback = element("span", "rn-task-list-copy-status", "");
+      copy.type = "button"; feedback.setAttribute("role", "status");
+      copy.addEventListener("click", function () {
+        try { Promise.resolve(options.onCopy(String(options.text || ""))).then(function () {
+          feedback.textContent = "Скопировано";
+        }).catch(function () { feedback.textContent = "Не удалось скопировать"; }); }
+        catch (error) { feedback.textContent = "Не удалось скопировать"; }
+      });
+      toolbar.appendChild(copy); toolbar.appendChild(feedback); root.appendChild(toolbar);
+    }
     var goal = element("h2", "rn-task-list-goal", value(taskList, "Goal", "goal", "Task list") || "Task list");
     var status = String(value(taskList, "Status", "status", "active") || "active").toLowerCase();
     var statusLabels = { active: "В работе", completed: "Завершён", cancelled: "Отменён", blocked: "Заблокирован" };
@@ -403,13 +442,31 @@
     if (options.extractionWarning) {
       root.appendChild(element("div", "rn-pdf-viewer-warning", options.extractionWarning));
     }
+    var toolbar = element("div", "rn-pdf-viewer-toolbar");
     var tabs = element("div", "rn-pdf-viewer-tabs");
     var pagesButton = element("button", "secondary compact active", "Страницы");
     var textButton = element("button", "secondary compact", "Текст");
     pagesButton.type = textButton.type = "button";
     tabs.appendChild(pagesButton);
     tabs.appendChild(textButton);
-    root.appendChild(tabs);
+    toolbar.appendChild(tabs);
+    if (typeof options.onCopy === "function") {
+      var copyText = options.textComplete === true && typeof options.fullText === "string"
+        ? options.fullText : String(options.textPage && options.textPage.text || "");
+      var copy = element("button", "secondary compact rn-pdf-viewer-copy",
+        options.textComplete === true ? "Копировать текст PDF" : "Копировать текст страницы");
+      var feedback = element("span", "rn-pdf-viewer-copy-status", "");
+      var actions = element("div", "rn-pdf-viewer-actions");
+      copy.type = "button"; copy.disabled = !copyText; feedback.setAttribute("role", "status");
+      if (copy.disabled) copy.title = "Извлечённого текста нет";
+      copy.addEventListener("click", function () {
+        try { Promise.resolve(options.onCopy(copyText)).then(function () { feedback.textContent = "Скопировано"; })
+          .catch(function () { feedback.textContent = "Не удалось скопировать"; }); }
+        catch (error) { feedback.textContent = "Не удалось скопировать"; }
+      });
+      actions.appendChild(copy); actions.appendChild(feedback); toolbar.appendChild(actions);
+    }
+    root.appendChild(toolbar);
     var body = element("div", "rn-pdf-viewer-body");
     root.appendChild(body);
     var child = null;
@@ -441,6 +498,8 @@
       if (typeof options.onTabChange === "function") options.onTabChange("pages");
       pagesButton.classList.add("active");
       textButton.classList.remove("active");
+      pagesButton.setAttribute("aria-pressed", "true");
+      textButton.setAttribute("aria-pressed", "false");
       var page = options.page || {};
       child = createImage({
         title: fileName(options.title, "document.pdf") + ".page-" + (Number(page.pageIndex || 0) + 1) + ".jpg",
@@ -475,6 +534,8 @@
       if (typeof options.onTabChange === "function") options.onTabChange("text");
       pagesButton.classList.remove("active");
       textButton.classList.add("active");
+      pagesButton.setAttribute("aria-pressed", "false");
+      textButton.setAttribute("aria-pressed", "true");
       if (!window.RNAssistantArtifactTextViewers) {
         body.appendChild(element("div", "artifact-detail-error", "Text viewer is unavailable."));
         return;
@@ -496,7 +557,8 @@
         onPrevious: options.onTextPrevious,
         onNext: options.onTextNext,
         onLoadFull: options.onLoadTextFull,
-        onCopy: window.copyTextResult
+        onCopy: typeof options.onCopy === "function" ? null : window.copyTextResult,
+        showCopy: typeof options.onCopy !== "function"
       });
       body.appendChild(child.element);
     }

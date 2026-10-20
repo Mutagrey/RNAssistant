@@ -119,7 +119,10 @@ qualification remains open; these checks are host-neutral.
 ## Document artifact removal — 2026-10-13
 
 Owner: `DocumentArtifactStore`; application coordination: `ArtifactWorkingSetService`.
-**Убрать из чата** changes only membership. **Действия → Удалить из документа…**
+**Убрать из чата** changes only membership. The material tree exposes it as a minus
+on linked rows, and exposes **Удалить из документа…** as a trash action when the
+catalog grants deletion. Both actions remain in the selected material menu.
+**Удалить из документа…**
 requires explicit confirmation that the resource disappears from the document
 library and all its chats. The typed `deleteDocumentArtifact` request carries the
 addressed chat, expected session revision and displayed exact snapshot. It cannot

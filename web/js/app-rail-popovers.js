@@ -42,12 +42,13 @@
     current = button;
     card.dataset.kind = button.dataset.railPopover || '';
     title.textContent = button.dataset.railLabel || button.getAttribute('aria-label') || '';
+    title.removeAttribute('title');
     body.replaceChildren();
     var renderer = renderers[button.dataset.railPopover];
     card.setAttribute('role', renderer ? 'group' : 'tooltip');
     card.hidden = false;
     position();
-    if (renderer) Promise.resolve(renderer(button, body, function () { return current === button; })).then(position, function (error) {
+    if (renderer) Promise.resolve(renderer(button, body, function () { return current === button; }, title)).then(position, function (error) {
       if (current !== button) return;
       body.textContent = error.message;
       position();

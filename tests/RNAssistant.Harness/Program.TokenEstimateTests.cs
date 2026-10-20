@@ -36,6 +36,17 @@ namespace RNAssistant.Harness
         private static void TokenEstimateRequestAdmissionReserves()
         {
             var settings = new AppSettings();
+            settings.Model = "million-context";
+            settings.ModelCapabilities[settings.Model] = new ModelCapabilitySettings { MaxContextTokens = 1000000 };
+            AssertEqual(1000000, ModelContextBudget.ContextWindowTokens(settings),
+                "model context is used without an RNAssistant limit");
+            settings.ContextWindowOverrideTokens = 32768;
+            AssertEqual(32768, ModelContextBudget.ContextWindowTokens(settings),
+                "RNAssistant limit caps a larger model context");
+            settings.ContextWindowOverrideTokens = 2000000;
+            AssertEqual(1000000, ModelContextBudget.ContextWindowTokens(settings),
+                "RNAssistant limit never expands a known model context");
+            settings = new AppSettings();
             var input = ModelContextBudget.InputBudgetTokens(settings);
             var proportional = (int)Math.Ceiling(input / (double)ModelContextBudget.ContinuationReserveDivisor);
             var responseAndEnvelope = ModelContextBudget.RequestedOutputTokens(settings) +

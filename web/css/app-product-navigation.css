@@ -21,6 +21,11 @@
 .rail-hover-body button{display:flex;align-items:center;gap:6px;width:100%;min-height:24px;padding:3px 5px;border:0;border-radius:5px;background:transparent;color:var(--ink);font:inherit;text-align:left;cursor:pointer}
 .rail-hover-body button:hover,.rail-hover-body button:focus-visible{background:var(--surface-hover)}
 .rail-hover-body button svg{flex:none;width:14px;height:14px}
+.rail-hover-card[data-kind="settings-menu"]{min-width:210px}
+.rail-hover-card[data-kind="settings-menu"] .rail-hover-title{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:2px 10px}
+.rail-hover-version{color:var(--ink-muted);font-weight:400;white-space:nowrap}
+.rail-hover-card[data-kind="settings-menu"] .rail-hover-body{gap:2px}
+.rail-hover-card[data-kind="settings-menu"] .rail-hover-body button{min-height:30px;font-size:12px}
 .rail-hover-body button span{flex:1;min-width:0;overflow-wrap:anywhere}
 .rail-hover-body .rail-hover-danger{color:var(--danger)}
 .rail-hover-body .rail-hover-separator{height:1px;margin:2px 4px;background:var(--line)}
@@ -61,10 +66,7 @@
 .shell .chat-sidebar-head .product-nav-heading #chatScopeIcon svg { display: block; width: 16px; height: 16px; flex: 0 0 16px; }
 .shell .chat-tree-toolbar { padding-right: 8px; }
 .shell .chat-sidebar-head.searching .product-nav-heading { display: none; }
-.shell .chat-sidebar-head.searching .chat-tree-toolbar { flex: 1; justify-content: space-between; padding-left: 8px; }
-.shell .chat-search-wrap.is-open { position: absolute; top: 10px; right: 44px; left: 44px; display: block; margin: 0; }
-.shell .chat-search-wrap.is-open > svg { display: none; }
-.shell .chat-search-wrap.is-open input { height: 30px; padding-left: 8px; border-color: var(--line-strong); border-radius: 9px; background: var(--surface); }
+.shell .chat-sidebar-head.searching .chat-tree-toolbar { flex: 1; padding-left: 8px; }
 .shell .instruction-layout .tool-list-panel { grid-template-rows: 52px minmax(0, 1fr); padding: 0 8px 6px; }
 .shell .instruction-layout .product-nav-heading { margin: 0 -8px; }
 .shell .vba-layout .tool-list-panel { grid-template-rows: 52px auto minmax(0, 1fr); padding: 0 8px 6px; }
@@ -92,6 +94,21 @@
 .shell #tab-settings .product-model-badges { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; }
 .shell #tab-settings .product-model-badges span { padding: 4px 7px; border-radius: 4px; background: var(--surface-subtle); color: var(--ink); font-size: 11px; }
 .shell #tab-settings .product-model-badges span.is-muted { color: var(--ink-muted); }
+.shell #tab-settings .settings-page > .model-settings-section:first-of-type,
+.shell #tab-settings .settings-page > .agent-parameter-section:first-of-type { padding-top: 0; border-top: 0; }
+.shell #tab-settings .model-settings-section h3 { margin: 0 0 10px; }
+.shell #tab-settings .history-protection-toggles { display: grid; gap: 10px; margin: 10px 0 14px; }
+.shell #tab-settings .history-protection-toggles .checkline { margin: 0; }
+.shell #tab-settings .settings-full-toggle { margin: 10px 0 0; }
+.shell #tab-settings .settings-page[data-settings-page="context"] .model-request-fields > label { align-content: start; }
+.shell #tab-settings .context-window-summary { margin: 10px 0 0; color: var(--ink-muted); }
+.shell #tab-settings .agent-protocol-control select { min-height: 36px; border-color: var(--line-strong); border-radius: 7px; padding: 7px 10px; background: var(--surface); color: var(--ink); font-size: 13px; }
+.shell #tab-settings .model-compatibility-panel:not(.trajectory-panel) { padding: 14px 0 0; border: 0; border-top: 1px solid var(--line); border-radius: 0; background: transparent; }
+.shell #tab-settings .settings-page[data-settings-page="protection"] > .model-compatibility-panel:first-of-type,
+.shell #tab-settings .diagnostics-overview > .model-compatibility-panel:first-child { padding-top: 0; border-top: 0; }
+.shell #tab-settings .agent-setting-toggles { display: grid; gap: 9px; margin: 2px 0 12px; }
+.shell #tab-settings .agent-setting-toggles .checkline { margin: 0; }
+.shell #tab-settings .settings-page[data-settings-page="service"].active { overflow: visible; }
 @media (min-width: 621px) {
   .shell > .content > .panel { padding: 0; overflow: hidden; }
   .shell #tab-chat .chat-workspace,
@@ -103,13 +120,12 @@
   .shell #tab-settings .settings-nav { padding: 0; }
   .shell #tab-settings .settings-pages { padding: 16px var(--page-inset); }
   .shell #tab-settings .settings-heading { order: -1; display: flex; flex-direction: column; justify-content: center; gap: 2px; min-height: 52px; margin: -16px calc(-1 * var(--page-inset)) 14px; padding: 4px var(--page-inset); border-bottom: 1px solid var(--line); }
-  .shell #tab-settings .settings-page[data-settings-page="service"].active { overflow: visible; }
   .shell #tab-settings .settings-heading-with-action { flex-direction: row; align-items: center; justify-content: space-between; padding-right: 118px; }
   .shell #tab-settings .settings-heading-with-action > div { display: flex; flex-direction: column; }
   .shell #tab-settings .settings-heading h2 { order: 2; color: var(--ink); font-size: 15px; }
   .shell #tab-settings .settings-heading p { order: 1; color: var(--ink-muted); font-size: 10px; }
   .shell #tab-settings .settings-actions-row { position: absolute; top: 8px; right: var(--page-inset); bottom: auto; z-index: 3; width: auto; margin: 0; padding: 0; border: 0; background: transparent; }
-  .shell #tab-settings .settings-page > :not(.settings-heading) { width: 100%; margin-inline: auto; }
+  .shell #tab-settings .settings-page:not([data-settings-page="service"]) > :not(.settings-heading) { width: 100%; max-width: 920px; margin-left: 0; margin-right: auto; }
   .shell #tab-settings .settings-page[data-settings-page="connection"] .form-grid { grid-template-columns: minmax(0, 1fr); gap: 14px; }
   .shell #tab-settings .product-settings-section { padding-top: 10px; }
   .shell #tab-settings .product-settings-section h3 { margin: 0 0 12px; color: var(--ink); font-size: 16px; }
@@ -123,6 +139,7 @@
   .shell #tab-settings .product-model-primary > p { margin: 0 0 16px; color: var(--ink-muted); font-size: 12px; }
   .shell #tab-settings .product-model-primary #loadModelsButton { margin-top: 12px; }
   .shell #tab-settings .product-model-primary #loadModelsButton svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .shell #tab-settings .product-model-catalog { padding-top: 18px; border-top-color: var(--line); }
   .shell #tab-settings .product-model-response { padding-top: 18px; border-top-color: var(--line); }
   .shell #tab-settings .product-setting-toggle { justify-content: space-between; min-height: 42px; margin-top: 2px; }
   .shell #tab-settings .product-setting-toggle > span { font-size: 13px; }

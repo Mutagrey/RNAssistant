@@ -77,19 +77,20 @@
     root.appendChild(status);
 
     var toolbar = element("div", "rn-text-viewer-toolbar");
+    var searchGroup = element("div", "rn-text-viewer-find");
+    var actions = element("div", "rn-text-viewer-actions");
     var search = element("input", "rn-text-viewer-search");
     search.type = "search";
     search.placeholder = "Поиск в " + (hasFull ? "полном source" : "текущей странице");
-    var searchButton = element("button", "secondary compact", "Найти");
-    searchButton.type = "button";
     var searchResult = element("span", "rn-text-viewer-search-result", "");
-    searchButton.addEventListener("click", function () {
+    searchResult.setAttribute("role", "status");
+    search.addEventListener("input", function () {
       var query = String(search.value || "");
-      searchResult.textContent = query ? "Совпадений: " + occurrences(displayed, query) : "Введите текст";
+      searchResult.textContent = query ? "Совпадений: " + occurrences(displayed, query) : "";
     });
-    toolbar.appendChild(search);
-    toolbar.appendChild(searchButton);
-    toolbar.appendChild(searchResult);
+    searchGroup.appendChild(search);
+    searchGroup.appendChild(searchResult);
+    toolbar.appendChild(searchGroup);
     var actionStatus = element("span", "rn-text-viewer-action-status", "");
 
     function actionButton(label, action, successText, failureText) {
@@ -100,13 +101,15 @@
         if (button.disabled) return;
         asPromise(function () { return action(); }, actionStatus, successText, failureText);
       });
-      toolbar.appendChild(button);
+      actions.appendChild(button);
       return button;
     }
 
-    actionButton(hasFull ? "Копировать всё" : "Копировать страницу",
-      typeof options.onCopy === "function" ? function () { return options.onCopy(displayed); } : null,
-      "Скопировано", "Не удалось скопировать");
+    if (options.showCopy !== false) {
+      actionButton(hasFull ? "Копировать всё" : "Копировать страницу",
+        typeof options.onCopy === "function" ? function () { return options.onCopy(displayed); } : null,
+        "Скопировано", "Не удалось скопировать");
+    }
     if (!hasFull && options.fullReadAllowed && typeof options.onLoadFull === "function") {
       actionButton("Загрузить полностью", options.onLoadFull, "Полный source загружен", "Полный source недоступен");
     }
@@ -119,7 +122,8 @@
       actionButton("←", options.hasPrevious ? options.onPrevious : null, "Предыдущая страница", "Страница недоступна");
       actionButton("→", options.hasNext ? options.onNext : null, "Следующая страница", "Страница недоступна");
     }
-    toolbar.appendChild(actionStatus);
+    actions.appendChild(actionStatus);
+    toolbar.appendChild(actions);
     root.appendChild(toolbar);
 
     var source = element("div", "rn-text-viewer-source");
@@ -140,14 +144,28 @@
   function createMarkdown(options) {
     options = options || {};
     var root = element("div", "rn-markdown-viewer");
+    var toolbar = element("div", "rn-markdown-viewer-toolbar");
     var tabs = element("div", "rn-markdown-viewer-tabs");
-    var sourceButton = element("button", "secondary compact", "Исходник");
-    sourceButton.type = "button";
+    var renderButton = element("button", "secondary compact rn-markdown-viewer-mode", "Просмотр");
+    var sourceButton = element("button", "secondary compact rn-markdown-viewer-mode", "Исходник");
+    renderButton.type = sourceButton.type = "button";
     var body = element("div", "rn-markdown-viewer-body");
     var child = null;
     var canRender = typeof options.fullText === "string" && options.complete === true;
-    var showingSource = false;
-    sourceButton.disabled = !canRender;
+    renderButton.disabled = !canRender;
+    var actions = element("div", "rn-markdown-viewer-actions");
+    if (typeof options.onCopy === "function") {
+      var copy = element("button", "secondary compact rn-markdown-viewer-copy",
+        canRender ? "Копировать всё" : "Копировать фрагмент");
+      var copyStatus = element("span", "rn-text-viewer-action-status", "");
+      copy.type = "button";
+      copy.addEventListener("click", function () {
+        asPromise(function () { return options.onCopy(canRender ? options.fullText : String(options.text || "")); },
+          copyStatus, "Скопировано", "Не удалось скопировать");
+      });
+      actions.appendChild(copy);
+      actions.appendChild(copyStatus);
+    }
 
     function clear() {
       if (child && typeof child.destroy === "function") child.destroy();
@@ -158,17 +176,21 @@
 
     function showSource() {
       clear();
-      showingSource = true;
-      sourceButton.textContent = "Просмотр";
-      child = createText(options);
+      renderButton.classList.remove("active");
+      sourceButton.classList.add("active");
+      renderButton.setAttribute("aria-pressed", "false");
+      sourceButton.setAttribute("aria-pressed", "true");
+      child = createText(Object.assign({}, options, { showCopy: false }));
       body.appendChild(child.element);
     }
 
     function showRendered() {
       if (!canRender) return showSource();
       clear();
-      showingSource = false;
-      sourceButton.textContent = "Исходник";
+      renderButton.classList.add("active");
+      sourceButton.classList.remove("active");
+      renderButton.setAttribute("aria-pressed", "true");
+      sourceButton.setAttribute("aria-pressed", "false");
       var rendered = element("div", "markdown rn-markdown-viewer-rendered");
       rendered.innerHTML = window.markdown(String(options.fullText));
       body.appendChild(rendered);
@@ -177,11 +199,13 @@
       }
     }
 
-    sourceButton.addEventListener("click", function () {
-      if (showingSource) showRendered(); else showSource();
-    });
+    renderButton.addEventListener("click", showRendered);
+    sourceButton.addEventListener("click", showSource);
+    tabs.appendChild(renderButton);
     tabs.appendChild(sourceButton);
-    root.appendChild(tabs);
+    toolbar.appendChild(tabs);
+    toolbar.appendChild(actions);
+    root.appendChild(toolbar);
     if (!canRender) {
       var note = element("div", "rn-markdown-viewer-note",
         "Markdown preview отключён до полного exact read; сокращённый source не рендерится.");

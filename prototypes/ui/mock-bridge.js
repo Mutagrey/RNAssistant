@@ -113,6 +113,7 @@
     { id: "text", title: "Заметки к отчёту.txt", kind: "file",
       contentType: "text/plain; charset=utf-8", body: fixtures.materialSources.text, linked: false }
   ];
+  var removedArtifactUris = [];
   var pdfText = "Методика расчёта\n\nДемонстрационные данные: сентябрь 2026\n\nПоказатели\nВыручка — сумма подтверждённых заказов за месяц.\nСредний чек — выручка, делённая на число заказов.\nИзменение — отношение к предыдущему периоду.\n\nОграничения\nПо Самаре отсутствует поле «Выручка». Файл требует проверки.";
   function exampleDate(item) {
     var today = new Date(), date = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 12, 0);
@@ -171,18 +172,19 @@
   }
   function chatState() {
     var lastRunMessage = messages.slice().reverse().find(function (item) { return item.RunViewState || item.runViewState; });
+    var report = artifactExamples.find(function (item) { return item.id === "report" && item.linked; });
     return { sessionRevision: revision, activeChatId: activeChatId, activeChatMode: "agent",
       activeChatModel: "preview-model", activeChatReasoning: false, chats: clone(chats), documents: clone(documentItems),
       messages: clone(messages), messageStartIndex: 0, messageTotalCount: messages.length,
       skills: skillLibrary(), tools: toolLibrary(), context: {}, contextUsage: {},
       runViewState: previewRuns[activeChatId] ? null : lastRunMessage && (lastRunMessage.RunViewState || lastRunMessage.runViewState) || null,
-      artifacts: activeChatId === "preview-chat" ? [{ id: "report", kind: "markdown",
+      artifacts: activeChatId === "preview-chat" && report ? [{ id: "report", kind: "markdown",
         title: fixtures.materials[0].name, mimeType: "text/markdown", sourceMessageId: "preview-answer",
         runId: "preview-run-initial", revision: 1, inlineText: fixtures.report,
         inlineTruncated: false, metadataJson: "{}", relatedArtifactIds: [],
-        createdUtc: "2026-10-18T09:00:05Z", resourceUri: artifactExamples[0].resourceUri,
+        createdUtc: "2026-10-18T09:00:05Z", resourceUri: report.resourceUri,
         documentScoped: false }] : [],
-      artifactLibrary: { sessionRevision: revision, heads: [] }, inbox: chatInbox() };
+      artifactLibrary: { sessionRevision: revision, heads: [], removedResourceUris: clone(removedArtifactUris) }, inbox: chatInbox() };
   }
   function chatInbox(receipt) {
     var run = previewRuns[activeChatId];
@@ -734,10 +736,30 @@
           documentTitle: otherDocument ? "Все документы" : fixtures.document,
           resourceUri: item.resourceUri, title: item.title, kind: item.kind,
           updatedUtc: exampleDate(item), linked: linked, selected: linked,
-          canTransfer: true, canDelete: false };
+          canTransfer: true, canDelete: !otherDocument };
       });
       return { chatId: activeChatId, sessionRevision: revision, documentId: "preview-document",
         documents: [{ id: "preview-document", title: fixtures.document }], items: items, nextCursor: null };
+    }
+    if (type === "changeArtifactLink") {
+      requireChat(payload);
+      if (payload.expectedSessionRevision !== revision) fail("Список материалов изменился.", "preview_revision_changed");
+      var linkedItem = artifactExamples.find(function (item) { return item.resourceUri === payload.resourceUri && item.id !== "sequence"; });
+      if (!linkedItem) fail("Материал недоступен.", "preview_revision_changed");
+      linkedItem.linked = !payload.detached;
+      revision += 1;
+      return chatState();
+    }
+    if (type === "deleteDocumentArtifact") {
+      requireChat(payload);
+      if (payload.expectedSessionRevision !== revision || payload.confirmed !== true)
+        fail("Подтвердите удаление из актуального списка материалов.", "preview_revision_changed");
+      var removeIndex = artifactExamples.findIndex(function (item) { return item.resourceUri === payload.resourceUri && item.id !== "sequence"; });
+      if (removeIndex < 0) fail("Материал недоступен.", "preview_revision_changed");
+      removedArtifactUris.push(artifactExamples[removeIndex].resourceUri);
+      artifactExamples.splice(removeIndex, 1);
+      revision += 1;
+      return chatState();
     }
     if (type === "exportArtifact") {
       requireChat(payload);

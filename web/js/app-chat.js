@@ -83,32 +83,6 @@ async function saveChatMode(mode) {
   }
 }
 
-function setChatSearchOpen(open, clearQuery) {
-  var wrap = $("chatSearchWrap");
-  var button = $("toggleChatSearchButton");
-  var input = $("chatSearchInput");
-  if (!wrap || !button || !input) {
-    return;
-  }
-
-  wrap.classList.toggle("is-open", !!open);
-  wrap.closest(".chat-sidebar-head").classList.toggle("searching", !!open);
-  wrap.setAttribute("aria-hidden", open ? "false" : "true");
-  button.classList.toggle("active", !!open);
-  button.setAttribute("aria-expanded", open ? "true" : "false");
-
-  if (open) {
-    input.focus();
-    return;
-  }
-
-  if (clearQuery && (input.value || state.chatSearch)) {
-    input.value = "";
-    state.chatSearch = "";
-    renderChatSessionList(state.chats || []);
-  }
-}
-
 function bindChatActions() {
   bindMessageScrollControls();
   bindAttachmentActions();
@@ -116,21 +90,10 @@ function bindChatActions() {
   if (typeof bindContextInspectorActions === "function") bindContextInspectorActions();
   $("chatSessionSelect").addEventListener("change", function () { selectChat($("chatSessionSelect").value); });
   $("newChatButton").addEventListener("click", createChat);
-  $("toggleChatSearchButton").addEventListener("click", function () {
-    var wrap = $("chatSearchWrap");
-    setChatSearchOpen(!wrap.classList.contains("is-open"), true);
-  });
   $("openDocumentButton").addEventListener("click", openActiveDocument);
   $("chatSearchInput").addEventListener("input", function () {
     state.chatSearch = $("chatSearchInput").value || "";
     renderChatSessionList(state.chats || []);
-  });
-  $("chatSearchInput").addEventListener("keydown", function (event) {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      setChatSearchOpen(false, true);
-      $("toggleChatSearchButton").focus();
-    }
   });
   bindComposerPickers();
   $("compactContextButton").addEventListener("click", compactChatContext);

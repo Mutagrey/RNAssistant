@@ -81,6 +81,7 @@ function renderModelControls() {
     if (typeof renderTokenEstimateCalibrationStatus === "function") {
       renderTokenEstimateCalibrationStatus(state.settings);
     }
+    if (typeof renderContextWindowSummary === "function") renderContextWindowSummary();
   }
   if (typeof isPanelActive !== "function" || isPanelActive("chat")) {
     renderReasoningToggle();

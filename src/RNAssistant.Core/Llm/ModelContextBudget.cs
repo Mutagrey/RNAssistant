@@ -33,14 +33,15 @@ namespace RNAssistant.Core.Llm
 
         public static int ContextWindowTokens(AppSettings settings, string model = null)
         {
-            if (settings != null && settings.ContextWindowOverrideTokens > 0)
-            {
-                return settings.ContextWindowOverrideTokens;
-            }
             var capability = Capability(settings, model);
-            return capability != null && capability.MaxContextTokens.GetValueOrDefault() > 0
-                ? capability.MaxContextTokens.Value
-                : UnknownModelContextTokens;
+            var modelWindow = capability == null ? 0 : capability.MaxContextTokens.GetValueOrDefault();
+            var limit = settings == null ? 0 : settings.ContextWindowOverrideTokens;
+            if (limit > 0)
+            {
+                // The local admission limit cannot expand a known provider window.
+                return modelWindow > 0 ? Math.Min(modelWindow, limit) : limit;
+            }
+            return modelWindow > 0 ? modelWindow : UnknownModelContextTokens;
         }
 
         public static int InputBudgetTokens(AppSettings settings, string model = null)

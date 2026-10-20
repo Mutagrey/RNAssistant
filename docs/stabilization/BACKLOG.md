@@ -48,7 +48,6 @@ Owner: web tests / model settings UI. В текущем рабочем дере�
 `workspace-chat-layout.test.js`, `splitter-preferences.test.js` и
 `product-shell-parity.test.js` проходят; это не результат полного web suite.
 
-
 ## CLI smoke fixtures lag current admission contracts — 2026-10-14
 
 Owner: workspace CLI tests. On isolated `3cb0b69f` plus the explicit completion
@@ -87,6 +86,13 @@ that `app-artifacts.js` uses `artifact-library-lazy-20261002-1`; `web/index.html
 already ships `artifact-links-20261014-1-image-display-1-artifact-tree-20261013-1`.
 Align stale asset-key assertions with the shipped graph, then rerun this test.
 The authored-HTML viewer/import regression checks pass independently.
+
+## Materials browser fixture dependency — 2026-10-20
+
+Owner: Web material tests. `artifact-catalog-layout.test.js` loads `app-layout.js`
+without its `RNAssistantPanelToggle` dependency and stops before geometry checks.
+Align the isolated fixture with the shipped script graph; direct Chromium checks of
+the materials view at 1280 and 420 px pass.
 
 ## Large-source mutation and provider parity — 2026-10-14
 

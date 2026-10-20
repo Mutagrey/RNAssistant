@@ -68,23 +68,20 @@
       <span class="rail-divider" role="separator"></span>
       <span id="pluginRail" class="plugin-rail"></span>
       <button class="rail-button" id="pluginAdd" data-rail-popover="plugin-add" data-rail-label="Добавить плагины" title="Добавить плагин" aria-label="Добавить плагин"><svg data-rna-icon="plus" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
-      <button class="rail-button rail-settings" data-section="settings" data-tab="settings" aria-label="Настройки" title="Настройки"><svg data-rna-icon="settings" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
+      <button class="rail-button rail-settings" data-section="settings" data-tab="settings" data-rail-popover="settings-menu" aria-label="Настройки" title="Настройки"><svg data-rna-icon="settings" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
     </nav>
 
     <main class="content">
       <section class="panel active" id="tab-chat">
         <div class="chat-workspace split-layout" id="chatLayout" data-default-left="310" data-min-left="240">
           <aside class="chat-sidebar global-nav" aria-label="Документы и чаты">
-            <div class="chat-sidebar-head">
-              <details class="panel-switcher chat-scope-switcher product-nav-heading" id="chatScopeSwitcher"><summary aria-label="Раздел рабочей области"><span id="chatScopeIcon" aria-hidden="true"></span><span>Документы Office</span><svg data-rna-icon="down" viewBox="0 0 24 24" aria-hidden="true"></svg></summary><div class="popover-menu"><button type="button" data-workspace-scope="office">Документы Office</button><button type="button" data-workspace-scope="projects">Проекты</button></div></details>
-              <div class="chat-tree-toolbar">
-                <button type="button" class="icon-btn" id="toggleChatSearchButton" title="Поиск по чатам" aria-label="Поиск по чатам" aria-expanded="false" aria-controls="chatSearchWrap"><svg data-rna-icon="search" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
+            <div class="chat-sidebar-head product-search-heading">
+              <details class="panel-switcher chat-scope-switcher product-nav-heading" id="chatScopeSwitcher"><summary aria-label="Раздел рабочей области"><span id="chatScopeIcon" aria-hidden="true"></span><span>Документы Office</span><svg data-rna-icon="down" viewBox="0 0 24 24" aria-hidden="true"></svg></summary><div class="popover-menu"><button type="button" data-workspace-scope="office"><svg data-rna-icon="office" viewBox="0 0 24 24" aria-hidden="true"></svg>Документы Office</button><button type="button" data-workspace-scope="projects"><svg data-rna-icon="folder" viewBox="0 0 24 24" aria-hidden="true"></svg>Проекты</button></div></details>
+              <div class="chat-tree-toolbar tree-toolbar">
+                <button type="button" class="product-nav-search-toggle icon-btn" id="toggleChatSearchButton" data-nav-search-toggle="chatSearchInput" title="Поиск по чатам" aria-label="Поиск по чатам" aria-expanded="false" aria-controls="chatSearchInput"><svg data-rna-icon="search" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
+                <input id="chatSearchInput" class="product-nav-search-input" type="search" placeholder="Найти…" aria-label="Поиск по чатам" autocomplete="off" hidden>
                 <button type="button" class="icon-btn" id="newChatButton" title="Новый чат" aria-label="Новый чат"><svg data-rna-icon="plus" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
               </div>
-              <label class="chat-search-wrap" id="chatSearchWrap" role="search" aria-hidden="true">
-                <svg data-rna-icon="search" viewBox="0 0 24 24" aria-hidden="true"></svg>
-                <input id="chatSearchInput" class="chat-search" type="search" placeholder="Поиск по чатам..." autocomplete="off">
-              </label>
             </div>
             <select id="chatSessionSelect" class="hidden" aria-label="Сессия чата"></select>
             <div class="chat-office-launch-mount" id="chatOfficeLaunchMount"></div>
@@ -331,10 +328,10 @@
               <details class="panel-switcher chat-inspector-switcher" id="chatInspectorSwitcher">
                 <summary aria-label="Раздел боковой панели" aria-haspopup="menu"><span id="chatInspectorViewTitle">Контекст</span><svg data-rna-icon="down" viewBox="0 0 24 24" aria-hidden="true"></svg></summary>
                 <div class="popover-menu" role="menu" aria-label="Раздел боковой панели">
-                  <button type="button" role="menuitem" data-chat-inspector-view="context">Контекст</button>
-                  <button type="button" role="menuitem" data-chat-inspector-view="abilities">Возможности агента</button>
-                  <button type="button" role="menuitem" data-chat-inspector-view="usage">Использование контекста</button>
-                  <button type="button" role="menuitem" data-chat-inspector-view="activity">Ход работы</button>
+                  <button type="button" role="menuitem" data-chat-inspector-view="context"><svg data-rna-icon="files" viewBox="0 0 24 24" aria-hidden="true"></svg>Контекст</button>
+                  <button type="button" role="menuitem" data-chat-inspector-view="abilities"><svg data-rna-icon="tool" viewBox="0 0 24 24" aria-hidden="true"></svg>Возможности агента</button>
+                  <button type="button" role="menuitem" data-chat-inspector-view="usage"><svg data-rna-icon="chart" viewBox="0 0 24 24" aria-hidden="true"></svg>Использование контекста</button>
+                  <button type="button" role="menuitem" data-chat-inspector-view="activity"><svg data-rna-icon="clock" viewBox="0 0 24 24" aria-hidden="true"></svg>Ход работы</button>
                 </div>
               </details>
             </div>
@@ -343,11 +340,11 @@
         </div>
         <div class="project-chat-layout chat-workspace split-layout" id="projectChatLayout" data-default-left="310" data-min-left="240" hidden>
           <aside class="chat-sidebar global-nav" aria-label="Проекты и чаты">
-            <div class="chat-sidebar-head">
-              <details class="panel-switcher chat-scope-switcher product-nav-heading" id="projectScopeSwitcher"><summary aria-label="Раздел рабочей области"><span data-project-scope-icon aria-hidden="true"></span><span>Проекты</span><svg data-rna-icon="down" viewBox="0 0 24 24" aria-hidden="true"></svg></summary><div class="popover-menu"><button type="button" data-workspace-scope="office">Документы Office</button><button type="button" data-workspace-scope="projects">Проекты</button></div></details>
-              <div class="chat-tree-toolbar"><button type="button" class="icon-btn" id="projectChatRefresh" title="Обновить проекты" aria-label="Обновить проекты"><svg data-rna-icon="refresh" viewBox="0 0 24 24" aria-hidden="true"></svg></button><button type="button" class="icon-btn" id="projectChatNew" title="Новый чат проекта" aria-label="Новый чат проекта"><svg data-rna-icon="plus" viewBox="0 0 24 24" aria-hidden="true"></svg></button></div>
+            <div class="chat-sidebar-head product-search-heading">
+              <details class="panel-switcher chat-scope-switcher product-nav-heading" id="projectScopeSwitcher"><summary aria-label="Раздел рабочей области"><span data-project-scope-icon aria-hidden="true"></span><span>Проекты</span><svg data-rna-icon="down" viewBox="0 0 24 24" aria-hidden="true"></svg></summary><div class="popover-menu"><button type="button" data-workspace-scope="office"><svg data-rna-icon="office" viewBox="0 0 24 24" aria-hidden="true"></svg>Документы Office</button><button type="button" data-workspace-scope="projects"><svg data-rna-icon="folder" viewBox="0 0 24 24" aria-hidden="true"></svg>Проекты</button></div></details>
+              <div class="chat-tree-toolbar"><button type="button" class="product-nav-search-toggle icon-btn" id="projectChatSearchToggle" data-nav-search-toggle="projectChatSearch" title="Поиск проектов и чатов" aria-label="Поиск проектов и чатов" aria-expanded="false" aria-controls="projectChatSearch"><svg data-rna-icon="search" viewBox="0 0 24 24" aria-hidden="true"></svg></button><input class="product-nav-search-input" type="search" id="projectChatSearch" placeholder="Найти…" aria-label="Найти проект или чат" autocomplete="off" hidden><button type="button" class="icon-btn" id="projectChatRefresh" title="Обновить проекты" aria-label="Обновить проекты"><svg data-rna-icon="refresh" viewBox="0 0 24 24" aria-hidden="true"></svg></button><button type="button" class="icon-btn" id="projectChatNew" title="Новый чат проекта" aria-label="Новый чат проекта"><svg data-rna-icon="plus" viewBox="0 0 24 24" aria-hidden="true"></svg></button></div>
             </div>
-            <div class="project-workspace-controls"><input type="search" id="projectChatSearch" placeholder="Найти проект или чат…" aria-label="Найти проект или чат"><div><button type="button" id="projectChatConnect">Подключить</button><button type="button" id="projectChatCreate">Создать</button></div></div>
+            <div class="project-workspace-controls"><div><button type="button" id="projectChatConnect">Подключить</button><button type="button" id="projectChatCreate">Создать</button></div></div>
             <form class="project-workspace-connection" id="projectChatConnection" hidden><label><span id="projectChatConnectionTitle">Подключить папку</span><input id="projectChatConnectionPath" type="text" placeholder="Полный путь к папке" autocomplete="off" required></label><div><button type="button" id="projectChatConnectionCancel">Отмена</button><button type="submit" id="projectChatConnectionSubmit">Подключить</button></div></form>
             <div class="project-chat-tree" id="projectChatTree" aria-label="Чаты проекта"></div>
           </aside>
@@ -598,7 +595,7 @@
               <button id="pluginDevelop"></button>
             </div>
             <div class="plugin-body split-layout" id="pluginBody" data-split-key="plugin-development" data-default-ratio="0.56" data-min-left="240" data-min-right="300" data-max-ratio="0.95"><div class="plugin-preview" id="pluginPreviewMount"></div><div class="splitter" id="pluginDevelopmentSplitter" role="separator" aria-orientation="vertical" aria-controls="pluginChat" aria-label="Ширина панели разработки" tabindex="0" hidden></div><aside class="plugin-chat chat-main" id="pluginChat" hidden>
-              <div class="plugin-chat-head chatbar"><strong id="pluginChatTitle">Чат исходников</strong><div id="pluginDevelopmentActions"><button id="pluginChatHistory" class="icon-btn" type="button" title="История чатов плагина" aria-label="История чатов плагина"><svg data-rna-icon="clock" viewBox="0 0 24 24" aria-hidden="true"></svg></button><button id="pluginChatNew" class="icon-btn" type="button" title="Новый чат плагина" aria-label="Новый чат плагина"><svg data-rna-icon="plus" viewBox="0 0 24 24" aria-hidden="true"></svg></button><button id="pluginApply" class="button compact primary" type="button">Применить</button><details class="plugin-actions-menu"><summary class="icon-btn" title="Действия с плагином" aria-label="Действия с плагином"><svg data-rna-icon="more" viewBox="0 0 24 24" aria-hidden="true"></svg></summary><div class="popover-menu"><button id="pluginReopen" type="button" aria-label="Открыть активную версию">Открыть активную</button><button id="pluginDisable" type="button" aria-label="Отключить плагин">Отключить</button></div></details></div></div>
+              <div class="plugin-chat-head chatbar"><strong id="pluginChatTitle">Чат исходников</strong><div id="pluginDevelopmentActions"><button id="pluginChatHistory" class="icon-btn" type="button" title="История чатов плагина" aria-label="История чатов плагина"><svg data-rna-icon="clock" viewBox="0 0 24 24" aria-hidden="true"></svg></button><button id="pluginChatNew" class="icon-btn" type="button" title="Новый чат плагина" aria-label="Новый чат плагина"><svg data-rna-icon="plus" viewBox="0 0 24 24" aria-hidden="true"></svg></button><button id="pluginApply" class="button compact primary" type="button">Применить</button><details class="plugin-actions-menu"><summary class="icon-btn" title="Действия с плагином" aria-label="Действия с плагином"><svg data-rna-icon="more" viewBox="0 0 24 24" aria-hidden="true"></svg></summary><div class="popover-menu"><button id="pluginReopen" type="button" aria-label="Открыть активную версию"><svg data-rna-icon="open" viewBox="0 0 24 24" aria-hidden="true"></svg>Открыть активную</button><button id="pluginDisable" type="button" aria-label="Отключить плагин"><svg data-rna-icon="pause" viewBox="0 0 24 24" aria-hidden="true"></svg>Отключить</button></div></details></div></div>
               <div class="chat-scroll-region"><div class="plugin-chat-messages messages" id="pluginChatMessages" role="region" aria-label="Сообщения чата исходников" tabindex="0"></div></div><p id="pluginChatStatus" class="plugin-chat-status" role="status"></p>
               <div class="plugin-approval" id="pluginApproval" hidden><pre id="pluginApprovalText"></pre><button type="button" id="pluginApprove">Разрешить</button><button type="button" id="pluginReject">Отклонить</button></div>
               <form id="pluginQuestions" class="plugin-questions" hidden></form>
@@ -613,15 +610,15 @@
           <aside class="tool-list-panel html-workspace-sidebar global-nav" id="htmlWorkspaceSidebar">
             <div class="artifact-catalog-toolbar product-search-heading">
               <strong>Материалы</strong>
-              <div class="tree-toolbar"><button class="product-nav-search-toggle icon-btn" type="button" data-nav-search-toggle="artifactNavSearch" aria-label="Поиск материалов" aria-expanded="false" aria-controls="artifactNavSearch"><svg data-rna-icon="search" viewBox="0 0 24 24" aria-hidden="true"></svg></button><input class="tool-search product-nav-search-input" id="artifactNavSearch" data-nav-search-mirror="htmlWorkspaceSearchInput" type="search" placeholder="Найти…" aria-label="Поиск материалов в дереве" autocomplete="off" hidden><details class="html-workspace-menu html-workspace-create-menu product-material-menu">
-                <summary class="icon-btn" title="Добавить материал" aria-label="Добавить материал"><svg data-rna-icon="plus" viewBox="0 0 24 24" aria-hidden="true"></svg></summary>
+              <div class="tree-toolbar"><button class="product-nav-search-toggle icon-btn" type="button" data-nav-search-toggle="artifactNavSearch" aria-label="Поиск материалов" aria-expanded="false" aria-controls="artifactNavSearch"><svg data-rna-icon="search" viewBox="0 0 24 24" aria-hidden="true"></svg></button><input class="tool-search product-nav-search-input" id="artifactNavSearch" type="search" placeholder="Найти…" aria-label="Поиск материалов" autocomplete="off" hidden><details class="html-workspace-menu html-workspace-create-menu product-material-menu" id="artifactCreateMenu">
+                <summary class="icon-btn" title="Добавить материал" aria-label="Добавить материал"><svg data-rna-icon="plus" viewBox="0 0 24 24" aria-hidden="true"></svg><span class="artifact-create-label">Добавить</span></summary>
                 <div class="html-workspace-menu-items">
-                  <button id="artifactCatalogImport" type="button">Импортировать файл</button>
-                  <button id="addPlanButton" type="button">План</button>
-                  <button id="addHtmlFileButton" type="button">HTML-страницу</button>
-                  <button id="addCssFileButton" type="button">Стили CSS</button>
-                  <button id="addJsFileButton" type="button">Скрипт JS</button>
-                  <button id="addHtmlDataButton" type="button">Данные JSON</button>
+                  <button id="artifactCatalogImport" type="button"><svg data-rna-icon="upload" viewBox="0 0 24 24" aria-hidden="true"></svg>Импортировать файл</button>
+                  <button id="addPlanButton" type="button"><svg data-rna-icon="plan" viewBox="0 0 24 24" aria-hidden="true"></svg>План</button>
+                  <button id="addHtmlFileButton" type="button"><svg data-rna-icon="html" viewBox="0 0 24 24" aria-hidden="true"></svg>HTML-страницу</button>
+                  <button id="addCssFileButton" type="button"><svg data-rna-icon="css" viewBox="0 0 24 24" aria-hidden="true"></svg>Стили CSS</button>
+                  <button id="addJsFileButton" type="button"><svg data-rna-icon="js" viewBox="0 0 24 24" aria-hidden="true"></svg>Скрипт JS</button>
+                  <button id="addHtmlDataButton" type="button"><svg data-rna-icon="json" viewBox="0 0 24 24" aria-hidden="true"></svg>Данные JSON</button>
                 </div>
               </details></div>
               <input type="file" id="artifactCatalogFile" hidden>
@@ -647,10 +644,9 @@
           <div class="artifact-workspace-content" id="artifactCatalog">
             <p id="artifactCatalogPreviewStatus" class="artifact-inline-status" role="status" aria-live="polite"></p>
             <section id="artifactCatalogOverview" class="artifact-catalog-overview" hidden aria-label="Каталог материалов">
-              <div class="artifact-overview-heading"><div><p>Результаты работы и файлы</p><h2>Материалы</h2></div><details id="artifactCatalogOverviewCreate" class="html-workspace-menu artifact-overview-create"><summary class="button primary"><svg data-rna-icon="plus" viewBox="0 0 24 24" aria-hidden="true"></svg>Добавить</summary><div class="html-workspace-menu-items"><button type="button" data-artifact-create="artifactCatalogImport">Импортировать файл</button><button type="button" data-artifact-create="addPlanButton">План</button><button type="button" data-artifact-create="addHtmlFileButton">HTML-страницу</button><button type="button" data-artifact-create="addCssFileButton">Стили CSS</button><button type="button" data-artifact-create="addJsFileButton">Скрипт JS</button><button type="button" data-artifact-create="addHtmlDataButton">Данные JSON</button></div></details></div>
+              <div class="artifact-overview-heading"><div><p>Результаты работы и файлы</p><h2>Материалы</h2></div></div>
               <div class="artifact-overview-content">
                 <div class="artifact-overview-toolbar">
-                  <input class="tool-search" id="htmlWorkspaceSearchInput" type="search" maxlength="200" aria-label="Найти материал" placeholder="Найти материал" autocomplete="off">
                   <select id="artifactCatalogScope" aria-label="Принадлежность материалов"><option value="all">Все материалы</option><option value="chat">Этот чат</option><option value="document">В документе</option></select>
                   <select id="artifactCatalogKind" aria-label="Формат материала"><option value="">Все форматы</option><option value="html_workspace">HTML</option><option value="markdown">Markdown</option><option value="file">Файлы и JSON</option><option value="image">Изображения</option><option value="plan_document">Планы</option></select>
                 </div>
@@ -672,11 +668,12 @@
                 </div>
               </div>
               <div class="html-workspace-toolbar">
-                <div class="mode-toggle html-workspace-mode-toggle" role="group" aria-label="Режим артефакта">
-                  <button class="mode-button html-workspace-mode-button active" type="button" data-html-mode="preview">Просмотр</button>
-                  <button class="mode-button html-workspace-mode-button" type="button" data-html-mode="edit">Код</button>
+                <div class="view-switch html-workspace-mode-toggle" role="group" aria-label="Режим артефакта">
+                  <button class="button compact html-workspace-mode-button active" type="button" data-html-mode="preview">Просмотр</button>
+                  <button class="button compact html-workspace-mode-button" type="button" data-html-mode="edit">Код</button>
                 </div>
                 <div class="resource-editor-actions">
+                  <button class="icon-btn html-workspace-icon" id="copyHtmlWorkspaceButton" type="button" title="Копировать исходный текст" aria-label="Копировать исходный текст"><svg data-rna-icon="copy" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
                   <button class="icon-btn html-workspace-icon" id="undoHtmlWorkspaceButton" type="button" title="Восстановить предыдущую версию" aria-label="Восстановить предыдущую версию">
                     <svg data-rna-icon="rotateLeft" viewBox="0 0 24 24" aria-hidden="true"></svg>
                   </button>
@@ -693,11 +690,12 @@
                       <svg data-rna-icon="more" viewBox="0 0 24 24" aria-hidden="true"></svg>
                     </summary>
                     <div class="html-workspace-menu-items">
-                      <button id="reloadHtmlWorkspaceSourceButton" type="button" title="Загрузить текущую версию и повторить чтение исходников">Перезагрузить исходники</button>
-                      <button id="refreshHtmlDataButton" type="button">Обновить данные</button>
-                      <button class="danger-soft" id="deleteHtmlWorkspaceButton" type="button">Удалить выбранное</button>
+                      <button id="reloadHtmlWorkspaceSourceButton" type="button" title="Загрузить текущую версию и повторить чтение исходников"><svg data-rna-icon="refresh" viewBox="0 0 24 24" aria-hidden="true"></svg>Перезагрузить исходники</button>
+                      <button id="refreshHtmlDataButton" type="button"><svg data-rna-icon="rotateRight" viewBox="0 0 24 24" aria-hidden="true"></svg>Обновить данные</button>
+                      <button class="danger-soft" id="deleteHtmlWorkspaceButton" type="button"><svg data-rna-icon="trash" viewBox="0 0 24 24" aria-hidden="true"></svg>Удалить выбранное</button>
                     </div>
                   </details>
+                  <span class="material-copy-status" id="htmlWorkspaceCopyStatus" role="status"></span>
                 </div>
               </div>
             </div>
@@ -729,7 +727,7 @@
         <div class="settings-shell split-layout" id="settingsLayout" data-default-left="310" data-min-left="240">
           <nav class="settings-nav global-nav" aria-label="Разделы настроек">
             <div class="settings-navigation-content">
-              <div class="workspace-heading settings-nav-heading"><h2 class="nav-label">Настройки</h2><div class="tree-toolbar"><button class="product-nav-search-toggle icon-btn" id="settingsNavSearchToggle" type="button" aria-label="Поиск в настройках" aria-expanded="false" title="Поиск в настройках"><svg data-rna-icon="search" viewBox="0 0 24 24" aria-hidden="true"></svg></button><input class="tree-search-input" id="settingsNavSearch" type="search" aria-label="Найти раздел настроек" placeholder="Найти…" autocomplete="off" hidden></div></div>
+              <div class="workspace-heading settings-nav-heading product-search-heading"><h2 class="nav-label">Настройки</h2><div class="tree-toolbar"><button class="product-nav-search-toggle icon-btn" id="settingsNavSearchToggle" data-nav-search-toggle="settingsNavSearch" type="button" aria-label="Поиск в настройках" aria-expanded="false" aria-controls="settingsNavSearch" title="Поиск в настройках"><svg data-rna-icon="search" viewBox="0 0 24 24" aria-hidden="true"></svg></button><input class="tree-search-input" id="settingsNavSearch" type="search" aria-label="Найти раздел настроек" placeholder="Найти…" autocomplete="off" hidden></div></div>
               <div class="section-tree-scroll settings-nav-list" id="settingsNavTree"></div>
             </div>
           </nav>
@@ -739,9 +737,8 @@
             <section class="settings-page active" data-settings-page="connection">
               <div class="settings-heading">
                 <h2>Подключение</h2>
-                <p>Настройки</p>
               </div>
-              <div class="product-settings-section"><h3>Провайдер</h3><p>Любой совместимый API, включая локальный сервер.</p></div>
+              <div class="product-settings-section"><h3>Провайдер</h3></div>
               <div class="form-grid two-columns">
                 <label><span>Адрес API</span><input id="baseUrlInput" autocomplete="off" placeholder="https://host"></label>
                 <label><span>Адрес каталога моделей</span><input id="modelsConfigUrlInput" autocomplete="off" placeholder="/v1/models"><small>Относительный путь или полный URL.</small></label>
@@ -757,20 +754,25 @@
               <div class="settings-heading settings-heading-with-action">
                 <div>
                   <h2>Модель</h2>
-                  <p>Настройки</p>
                 </div>
                 <button class="secondary" id="resetModelSettingsButton" type="button" title="Вернуть модель, параметры запроса и возможности к исходным значениям">Сбросить параметры</button>
               </div>
               <section class="model-settings-section product-model-primary" aria-labelledby="modelPrimaryTitle">
                 <h3 id="modelPrimaryTitle">Основная модель</h3>
-                <p>Выбор для новых чатов. В отдельном чате модель можно изменить.</p>
                 <div class="form-grid model-selection-fields">
-                  <label><span>Модель</span><input id="modelInput" list="modelOptions" autocomplete="off" placeholder="Выберите или введите ID модели"><small>Выберите из каталога или введите идентификатор модели.</small></label>
+                  <label><span>Модель</span><input id="modelInput" list="modelOptions" autocomplete="off" placeholder="Выберите или введите ID модели"></label>
                 </div>
                 <datalist id="modelOptions"></datalist>
                 <button class="secondary" id="loadModelsButton" type="button"><svg data-rna-icon="refresh" viewBox="0 0 24 24" aria-hidden="true"></svg>Обновить каталог</button>
                 <div class="status" id="modelStatus"></div>
                 <div class="product-model-badges" id="modelCapabilityBadges" aria-label="Возможности выбранной модели"></div>
+              </section>
+              <section class="model-settings-section product-model-catalog" aria-labelledby="modelCapabilityTitle">
+                <div class="model-capability-heading">
+                  <h3 id="modelCapabilityTitle">Каталог моделей</h3>
+                </div>
+                <input id="modelCapabilitySearch" type="search" autocomplete="off" aria-label="Найти модель в каталоге" placeholder="Найти модель…">
+                <div class="model-capability-list" id="modelCapabilityList"></div>
               </section>
               <section class="model-settings-section product-model-response" aria-labelledby="modelRequestTitle">
                 <h3 id="modelRequestTitle">Ответ</h3>
@@ -786,26 +788,23 @@
                 <label class="wide"><span>Передача параметров рассуждения</span><select id="reasoningRequestModeInput"><option value="auto">Авто — стандарт OpenAI reasoning_effort</option><option value="reasoning_effort">reasoning_effort: medium / none</option><option value="enable_thinking">enable_thinking: true / false</option><option value="chat_template_kwargs" selected>chat_template_kwargs.enable_thinking</option><option value="reasoning_enabled">reasoning.enabled: true / false</option><option value="custom_json">Кастомный JSON в теле запроса</option></select><small>Зависит от API провайдера.</small></label>
                 <label class="wide hidden" id="reasoningCustomJsonField"><span>Дополнительный JSON</span><textarea class="reasoning-json-input" id="reasoningCustomJsonInput" rows="5" spellcheck="false" placeholder='{"reasoning":{"effort":"high"}}'></textarea><small>Системные поля model, messages, tools и response_format переопределять нельзя.</small></label>
               </div></details>
-              <details class="product-settings-advanced product-model-disclosure"><summary>Возможности выбранной модели</summary><div>
-                <p>Уточните возможности, если каталог провайдера неполон. Настройки относятся только к выбранной модели.</p>
-                <div class="model-capability-list" id="modelCapabilityList"></div>
-              </div></details>
             </section>
 
             <section class="settings-page" data-settings-page="context">
-              <div class="settings-heading"><h2>Контекст и вложения</h2><p>Настройки</p></div>
+              <div class="settings-heading"><h2>Контекст и вложения</h2></div>
               <section class="model-settings-section" aria-labelledby="contextBudgetTitle">
                 <div class="model-capability-heading"><h3 id="contextBudgetTitle">Окно контекста</h3></div>
                 <div class="form-grid two-columns model-request-fields">
-                  <label><span>Окно контекста, токены (0 = по модели)</span><input id="contextLimitInput" type="number" min="0"></label>
+                  <label><span>Лимит RNAssistant, токенов</span><input id="contextLimitInput" type="number" min="0" step="1"><small>0 — без лимита RNAssistant; окно модели не увеличивается.</small></label>
                   <label><span>Коэффициент без API usage</span><input id="tokenEstimateMultiplierInput" type="number" min="0.25" max="4" step="0.05"><small id="tokenEstimateCalibrationStatus">×1,00 · UTF-8/4</small></label>
-                  <label class="checkline"><input id="autoCalibrateTokenEstimateInput" type="checkbox"><span>Автокалибровка по API usage для каждой модели</span></label>
                 </div>
+                <p class="setting-note context-window-summary" id="contextWindowSummary" aria-live="polite"></p>
+                <label class="checkline settings-full-toggle"><input id="autoCalibrateTokenEstimateInput" type="checkbox"><span>Автокалибровка по API usage для каждой модели</span></label>
               </section>
               <section class="model-settings-section" aria-labelledby="attachmentModelPriorityTitle">
                 <div class="model-capability-heading">
                   <h3 id="attachmentModelPriorityTitle">Маршрутизация вложений</h3>
-                  <p>Если модель чата не поддерживает вложение, используется первая подходящая модель из списка. Ей передаются только текущий запрос и файлы.</p>
+                  <p>Если модель чата не принимает вложение, используется первая подходящая модель. Ей передаются текущий запрос и файлы.</p>
                 </div>
                 <div class="attachment-model-priority" id="attachmentModelPriorityList"></div>
                 <div class="form-grid two-columns model-attachment-fields">
@@ -819,27 +818,22 @@
               <div class="settings-heading settings-heading-with-action">
                 <div>
                   <h2>Агент</h2>
-                  <p>Настройки</p>
                 </div>
                 <button class="secondary" id="resetAgentSettingsButton" type="button" title="Вернуть параметры агента к встроенным значениям">Сбросить параметры</button>
               </div>
               <section class="agent-parameter-section" aria-labelledby="agentInstructionsTitle">
-
-              <div class="settings-subheading">
+                <div class="settings-subheading">
                   <h3 id="agentInstructionsTitle">Инструкции</h3>
-                  <p>Приоритет системных Markdown-инструкций во всех запросах.</p>
                 </div>
                 <div class="form-grid two-columns agent-instruction-settings">
-                  <label><span>Роль Markdown-инструкций</span><select id="systemPromptRoleInput"><option value="developer">developer — по умолчанию</option><option value="system">system</option><option value="user">user</option></select><small>Применяется к Agent, Plan, Chat и служебным запросам.</small></label>
+                  <label><span>Роль Markdown-инструкций</span><select id="systemPromptRoleInput"><option value="developer">developer — по умолчанию</option><option value="system">system</option><option value="user">user</option></select><small>Для Agent, Plan и служебных запросов.</small></label>
                 </div>
               </section>
               <section class="agent-protocol-panel agent-parameter-section" aria-labelledby="agentProtocolTitle">
                 <div class="agent-protocol-head">
                   <div>
                     <h3 id="agentProtocolTitle">Протокол</h3>
-                    <p>Единый контракт Chat, Plan и Agent; доступные tools задаются политикой режима.</p>
                   </div>
-                  <span class="agent-protocol-badge">единый JSON-поток</span>
                 </div>
                 <div class="agent-protocol-content">
                   <div class="agent-protocol-controls">
@@ -849,7 +843,6 @@
                         <option value="json_object">json_object — совместимый</option>
                         <option value="json_schema">json_schema — строгий</option>
                       </select>
-                      <small>В обоих форматах ответ — объект status + message + tool_calls.</small>
                     </label>
                     <label class="agent-protocol-control">
                       <span>Роль результата tool</span>
@@ -858,39 +851,35 @@
                         <option value="developer">developer · TOOL_RESULT</option>
                         <option value="tool">tool · native pair</option>
                       </select>
-                      <small>Для tool runtime добавляет парный assistant.tool_calls.</small>
                     </label>
                     <label class="checkline agent-protocol-fallback" id="agentJsonFallbackField">
                       <input id="fallbackJsonObjectInput" type="checkbox">
                       <span>При отказе endpoint повторить через json_object</span>
                     </label>
                   </div>
-                  <div class="agent-protocol-facts">
-                    <div class="agent-protocol-fact"><span>Conversation envelope</span><code>message + final + tool_calls[]</code></div>
-                    <div class="agent-protocol-fact"><span>Аргументы tools</span><code>strict JSON Schema</code></div>
-                  </div>
                 </div>
               </section>
               <section class="agent-parameter-section" aria-labelledby="agentExecutionTitle">
                 <div class="settings-subheading">
                   <h3 id="agentExecutionTitle">Выполнение</h3>
-                  <p>Подтверждения, сжатие контекста и предельные значения одного запуска.</p>
                 </div>
-                <div class="form-grid two-columns agent-settings-grid">
+                <div class="agent-setting-toggles">
                   <label class="checkline"><input id="autoConfirmToolActionsInput" type="checkbox" aria-describedby="autoConfirmToolActionsNote"><span>Автоподтверждение действий</span></label>
                   <label class="checkline"><input id="enableAgentJavaScriptInput" type="checkbox"><span>JavaScript инструменты агента (экспериментально)</span></label>
                   <label class="checkline"><input id="autoCompressContextInput" type="checkbox"><span>Создавать summary при заполнении контекста</span></label>
+                </div>
+                <div class="form-grid two-columns agent-settings-grid">
                   <label><span>Макс. итераций запуска</span><input id="maxAgentIterationsInput" type="number" min="1"></label>
                   <label><span>Попыток формата (включая первую)</span><input id="maxAgentFormatRetriesInput" type="number" min="1" max="20" title="Всего ответов для проверки формата: 1–20. Сетевые повторы (до двух) и schema fallback (один) считаются отдельно."></label>
                   <label><span>Макс. tool шагов</span><input id="maxAgentToolStepsInput" type="number" min="1"></label>
                 </div>
-                <div class="setting-note" id="autoConfirmToolActionsNote">Разрешает изменения и запуск кода без отдельных подтверждений. Действует для новых запусков во всех чатах после сохранения. Текущий запуск и ожидающие действия сохраняют прежние правила. Plan и запрет изменений имеют приоритет.</div>
+                <div class="setting-note" id="autoConfirmToolActionsNote">Изменения и запуск кода — без отдельных подтверждений для новых запусков. Plan и запрет изменений имеют приоритет.</div>
               </section>
               <section class="model-compatibility-panel" aria-labelledby="modelCompatibilityTitle">
                 <div class="model-compatibility-head">
                   <div>
                     <h3 id="modelCompatibilityTitle">Проверка совместимости</h3>
-                    <p>Тестирует роль инструкций, Agent JSON и TOOL_RESULT без запуска Office-инструментов. Перед тестом текущие настройки сохраняются.</p>
+                    <p>Проверяет ответ модели без запуска Office-инструментов. Текущие настройки сохраняются перед тестом.</p>
                   </div>
                   <button class="secondary" id="testModelCompatibilityButton" type="button">Запустить тест</button>
                 </div>
@@ -901,26 +890,24 @@
             <section class="settings-page" data-settings-page="interface">
               <div class="settings-heading">
                 <h2>Интерфейс</h2>
-                <p>Настройки</p>
               </div>
               <div class="form-grid two-columns">
                 <label><span>Размер шрифта, %</span><input id="uiFontScaleInput" type="number" min="85" max="130" step="5"></label>
                 <label><span>Ширина отдельного окна, px</span><input id="desktopWindowWidthInput" type="number" min="900" max="3840" step="1"></label>
-                <label class="checkline"><input id="smartChatTitlesInput" type="checkbox"><span>Умные названия чатов</span></label>
               </div>
-              <div class="setting-note">Для окон Desktop и Native CLI; встроенные VSTO-панели не меняются. Ширина применяется после сохранения, в развёрнутом окне — после возврата к обычному размеру.</div>
+              <div class="setting-note">Ширина относится к отдельному окну, не к панели Office.</div>
+              <label class="checkline settings-full-toggle"><input id="smartChatTitlesInput" type="checkbox"><span>Умные названия чатов</span></label>
               <div class="form-grid two-columns">
                 <label><span>Сообщения во время работы агента</span>
                   <select id="runningMessageDelivery">
                     <option value="Steer">Отправлять сразу</option>
                     <option value="Queue">Добавлять в очередь</option>
                   </select>
-                  <small>Действие Enter. Меню возле отправки позволяет разово выбрать другой способ. Shift+Enter — новая строка.</small>
+                  <small>Меню возле отправки позволяет разово выбрать другой способ.</small>
                 </label>
               </div>
               <div class="settings-subheading">
                 <h3>Тема</h3>
-                <p>Цветовая схема всего интерфейса и рабочих областей.</p>
               </div>
               <div class="theme-choice-grid" role="radiogroup" aria-label="Тема интерфейса">
                 <label class="theme-choice">
@@ -930,7 +917,7 @@
                       <span class="theme-preview-sidebar"><i></i><i></i><i></i></span>
                       <span class="theme-preview-main"><b></b><i></i><i></i><em></em></span>
                     </span>
-                    <span class="theme-choice-copy"><strong>Светлая</strong><span>Светлый фон и спокойные серые поверхности</span></span>
+                    <span class="theme-choice-copy"><strong>Светлая</strong></span>
                     <span class="theme-choice-check" aria-hidden="true">✓</span>
                   </span>
                 </label>
@@ -941,57 +928,53 @@
                       <span class="theme-preview-sidebar"><i></i><i></i><i></i></span>
                       <span class="theme-preview-main"><b></b><i></i><i></i><em></em></span>
                     </span>
-                    <span class="theme-choice-copy"><strong>Тёмная</strong><span>Контрастная тёмная схема без ярких заливок</span></span>
+                    <span class="theme-choice-copy"><strong>Тёмная</strong></span>
                     <span class="theme-choice-check" aria-hidden="true">✓</span>
                   </span>
                 </label>
               </div>
               <div class="settings-subheading">
                 <h3>Акцентный цвет</h3>
-                <p>Цвет кнопок, выделения и элементов управления во всём интерфейсе.</p>
               </div>
               <div class="accent-choice-grid" id="uiAccentChoices" role="radiogroup" aria-label="Акцентный цвет"></div>
-              <div class="setting-note">HTML preview и его скрипты всегда доступны в sandboxed iframe.</div>
             </section>
 
             <section class="settings-page" data-settings-page="protection">
               <div class="settings-heading">
                 <h2>Защита</h2>
-                <p>Настройки</p>
               </div>
               <section class="model-compatibility-panel" aria-labelledby="screenCaptureProtectionTitle">
                 <div class="model-compatibility-head">
                   <div>
                     <h3 id="screenCaptureProtectionTitle">Защита экрана</h3>
-                    <p>Для отдельного окна RN Assistant, запущенного через NativeHostCli.</p>
+                    <p>Только для отдельного окна ассистента.</p>
                   </div>
                 </div>
                 <label class="checkline"><input id="screenCaptureProtectionInput" type="checkbox"><span>Исключать окно ассистента из захвата экрана</span></label>
-                <div class="setting-note">Настройка применяется сразу: совместимые средства захвата увидят окно Office под ассистентом. VSTO-панель является частью окна Office и этой настройкой не защищается. Это не защита от камеры или привилегированного ПО.</div>
+                <div class="setting-note">Панель Office не защищается. Это не защита от камеры или привилегированного ПО.</div>
               </section>
               <section class="model-compatibility-panel" aria-labelledby="historyProtectionTitle">
                 <div class="model-compatibility-head">
                   <div>
                     <h3 id="historyProtectionTitle">Защита истории</h3>
-                    <p>По умолчанию история остаётся незашифрованной с обычной SHA-256 hash chain.</p>
                   </div>
                 </div>
+                <div class="history-protection-toggles">
+                  <label class="checkline"><input id="historyHmacInput" type="checkbox"><span>Проверять целостность истории с ключом (HMAC-SHA256)</span></label>
+                  <label class="checkline"><input id="historyEncryptionInput" type="checkbox"><span>Шифровать историю чатов и VBA</span></label>
+                </div>
                 <div class="form-grid two-columns">
-                  <label class="checkline"><input id="historyHmacInput" type="checkbox"><span>Защищать chat/VBA event streams через HMAC-SHA256</span></label>
-                  <label class="checkline"><input id="historyEncryptionInput" type="checkbox"><span>Шифровать chat/VBA event data и committed CAS</span></label>
                   <label><span>Источник ключа</span><select id="historyKeySourceInput"><option value="api_key">API-ключ — по умолчанию</option><option value="custom_secret">Отдельный секрет — для переноса</option></select><small>Смена API-ключа сделает защищённую им историю недоступной.</small></label>
                   <label id="historySecretField"><span>Отдельный секрет</span><input id="historySecretInput" type="password" autocomplete="off" placeholder="Оставьте пустым, чтобы не менять"><small id="historySecretStatus"></small></label>
                 </div>
-                <div class="setting-note">HMAC подтверждает целостность, но не скрывает содержимое. Шифрование использует AES-256-CBC + HMAC-SHA256; envelope событий остаётся видимым. Режим или ключ меняются только после «Очистить данные».</div>
+                <div class="setting-note">HMAC проверяет целостность, шифрование скрывает тела событий. Метаданные остаются видимыми. Изменить режим или ключ можно только после очистки данных.</div>
               </section>
             </section>
 
             <section class="settings-page" data-settings-page="service">
               <div class="settings-heading">
                 <h2>Помощь и обслуживание</h2>
-                <p>Настройки</p>
               </div>
-              <p class="settings-app-version" id="appVersion" aria-label="Версия и commit RNAssistant">—</p>
               <input id="debugModelTrafficInput" type="checkbox" hidden>
               <div class="diagnostics-tabs" role="tablist" aria-label="Разделы диагностики">
                 <button class="diagnostics-tab-button active" type="button" role="tab" aria-selected="true" data-diagnostics-tab="runtime-log">Ход работы</button>

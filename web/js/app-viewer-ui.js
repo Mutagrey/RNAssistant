@@ -3,13 +3,16 @@
   // Presentation only. Parsing, completeness, resource leases and navigation stay in web/.
   window.RNAssistantViewerUI = {
     mount: function (root, kind, options, controller) {
-      var events = new AbortController(), queued = false;
+      var queued = false;
       function icon(control, name, only) {
-        if (control.dataset.uiIcon) return;
-        control.dataset.uiIcon = name;
         var label = control.getAttribute("aria-label") || control.title || control.textContent;
-        if (only) { control.setAttribute("aria-label", label); control.title = label; control.innerHTML = window.RNAssistantNavigationTree.icon(name); }
-        else control.insertAdjacentHTML("afterbegin", window.RNAssistantNavigationTree.icon(name));
+        if (only) {
+          control.setAttribute("aria-label", label); control.title = label;
+          control.classList.add("icon-btn");
+          control.classList.remove("button", "secondary", "compact", "ghost");
+          if (control.dataset.uiIcon !== name || !control.querySelector("svg")) control.innerHTML = window.RNAssistantNavigationTree.icon(name);
+        } else if (control.dataset.uiIcon !== name) control.insertAdjacentHTML("afterbegin", window.RNAssistantNavigationTree.icon(name));
+        control.dataset.uiIcon = name;
       }
       function decorate() {
         root.querySelectorAll('button.secondary, button.rn-json-more, button.rn-json-copy').forEach(function (button) {
@@ -42,12 +45,21 @@
           reader.querySelector('.rn-text-viewer-source').setAttribute("aria-label", "Текст документа · только чтение");
           reader.querySelectorAll('.rn-text-viewer-toolbar button').forEach(function (button) {
             var label = button.textContent;
-            if (label === "Найти") icon(button, "search", true);
             if (label.startsWith("Копировать")) icon(button, "copy", true);
             if (label === "Скачать") icon(button, "download", true);
+            if (label === "←") { button.setAttribute("aria-label", "Предыдущая страница"); icon(button, "left", true); }
+            if (label === "→") { button.setAttribute("aria-label", "Следующая страница"); icon(button, "right", true); }
           });
         });
-        root.querySelectorAll('.rn-resource-viewer-toolbar button').forEach(function (button) { icon(button, "download", false); });
+        root.querySelectorAll('.rn-json-actions .rn-json-action').forEach(function (button, index) {
+          icon(button, index === 0 ? "collapse" : "copy", true);
+        });
+        root.querySelectorAll('.rn-markdown-viewer-copy, .rn-pdf-viewer-copy, .rn-task-list-copy').forEach(function (button) {
+          icon(button, "copy", true);
+        });
+        root.querySelectorAll('.rn-resource-viewer-toolbar button[data-viewer-action]').forEach(function (button) {
+          icon(button, button.dataset.viewerAction, true);
+        });
         root.querySelectorAll('.rn-preview-nav').forEach(function (button) {
           button.classList.add("icon-btn"); icon(button, button.classList.contains("rn-preview-nav-next") ? "right" : "left", true);
         });
@@ -67,17 +79,14 @@
           }
         }
       }
-      root.addEventListener("keydown", function (event) {
-        if (event.key === "Enter" && event.target.matches('.rn-text-viewer-search')) {
-          event.preventDefault(); event.target.parentElement.querySelector('button').click();
-        }
-      }, { signal: events.signal });
       var observer = new MutationObserver(function (records) {
-        if (queued || !records.some(function (record) { return Array.from(record.addedNodes).some(function (node) { return node.nodeType === 1; }); })) return;
+        if (queued || !records.some(function (record) { return Array.from(record.addedNodes).some(function (node) {
+          return node.nodeType === 1 || node.nodeType === 3 && record.target.matches && record.target.matches(".rn-json-action");
+        }); })) return;
         queued = true; queueMicrotask(function () { queued = false; if (root.isConnected) decorate(); });
       });
       decorate(); observer.observe(root, { childList: true, subtree: true });
-      return { destroy: function () { observer.disconnect(); events.abort(); } };
+      return { destroy: function () { observer.disconnect(); } };
     }
   };
 }());

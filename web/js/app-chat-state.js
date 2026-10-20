@@ -625,14 +625,13 @@ function chatTreeNode(chat) {
   var hasActiveRun = !!run || !!(persistedRun && persistedRun.lifecycle === "running");
   var loading = id === state.chatNavigationTargetId && !!state.chatNavigationPending;
   var warning = chatStorageWarningLevel(chat);
-  var storedFootprint = chatJsonlByteLength(chat) + chatCasStoredByteLength(chat);
-  var storageTooltip = storedFootprint || warning !== "none" || chatCasMissingBlobCount(chat) || chatCasReferenceIssueCount(chat)
-    ? buildChatStorageTooltip(chat, warning) : "";
+  var badgeLevel = chatCasMissingBlobCount(chat) || chatCasReferenceIssueCount(chat) ? "critical" : warning;
+  var storageTooltip = badgeLevel !== "none" ? buildChatStorageTooltip(chat, badgeLevel) : "";
   return {
     key: "chat:" + id, kind: "leaf", title: chatTitle(chat), chatId: id,
     selected: id === state.activeChatId, disabled: !!state.bridgeUnavailable,
-    tooltip: storageTooltip || chatTitle(chat),
-    badge: warning !== "none" ? "!" : "", badgeKind: warning, badgeTitle: storageTooltip,
+    tooltip: chatTitle(chat),
+    badge: badgeLevel !== "none" ? "!" : "", badgeKind: badgeLevel, badgeTitle: storageTooltip,
     status: hasActiveRun || loading ? "running" : "",
     statusLabel: loading ? "Подготовка истории чата" : state.activeSends[id] && state.activeSends[id].canceling
       ? "Запрос останавливается" : "Запрос выполняется",

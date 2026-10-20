@@ -11,7 +11,6 @@
 .shell #tab-chat .project-workspace-controls,
 .shell #tab-chat .project-workspace-connection { display: grid; gap: 7px; padding: 8px 12px; border-bottom: 1px solid var(--line); }
 .shell #tab-chat .project-workspace-connection[hidden] { display: none; }
-.shell #tab-chat .project-workspace-controls input,
 .shell #tab-chat .project-workspace-connection input { box-sizing: border-box; width: 100%; min-width: 0; padding: 7px 9px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface); color: var(--ink); font: inherit; font-size: 12px; }
 .shell #tab-chat .project-workspace-controls > div,
 .shell #tab-chat .project-workspace-connection > div { display: flex; gap: 6px; }
