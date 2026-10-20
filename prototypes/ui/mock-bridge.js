@@ -57,6 +57,7 @@
     sourceRoot: "Локальный демонстрационный плагин", releaseId: "preview-release-1", enabled: true,
     previewSimulated: true };
   var extraPlugins = [], extraPluginMessages = Object.create(null), pluginCandidateOwner = null;
+  var pluginSourceRevision = Object.create(null);
   var savedPluginIcons = [], pluginIconSequence = 0;
   function validatedPluginIconPaths(svg) {
     if (typeof svg !== "string" || new TextEncoder().encode(svg).length > 4096) fail("SVG должен быть меньше 4 КБ.", "preview_icon_invalid");
@@ -640,6 +641,10 @@
     if (type === "resolveProjectChat") {
       requireProjectChat(payload); fail("В этом примере нет ожидающего подтверждения.", "preview_run_changed");
     }
+    if (type === "getPluginSourceState") {
+      if (![pluginItem].concat(extraPlugins).some(function (item) { return item.pluginId === payload.pluginId && !item.hidden; })) fail("Плагин примера отсутствует.");
+      return { pluginId: payload.pluginId, stamp: "preview-source-" + (pluginSourceRevision[payload.pluginId] || 0) };
+    }
     if (type === "checkPlugin") {
       if (![pluginItem].concat(extraPlugins).some(function (item) { return item.pluginId === payload.pluginId && !item.hidden; })) fail("Плагин примера отсутствует.");
       pluginCandidate = "preview-candidate-" + (++pluginInstanceSequence);
@@ -680,7 +685,8 @@
       return { instanceId: "preview-plugin-instance-" + (++pluginInstanceSequence), pluginId: opening.pluginId,
         releaseId: payload.candidateId || opening.releaseId,
         preview: !!payload.candidateId, previewSimulated: true,
-        entryUrl: opening === pluginItem ? "/preview/web/data-templates/index.html" : "/preview/mock-plugin.html?name=" + encodeURIComponent(opening.name) };
+        entryUrl: opening === pluginItem ? "/preview/web/data-templates/index.html?revision=" + (pluginSourceRevision[opening.pluginId] || 0) :
+          "/preview/mock-plugin.html?name=" + encodeURIComponent(opening.name) + "&revision=" + (pluginSourceRevision[opening.pluginId] || 0) };
     }
     if (type === "closePlugin") return {};
     if (type === "getPluginChat") return pluginChatState(payload.pluginId);
@@ -693,6 +699,7 @@
       if (createdPlugin) {
         extraPluginMessages[createdPlugin.pluginId].push({ role: "user", text: pluginText },
           { role: "assistant", text: "Пример: запрос на исходники принят. Модель и запись файлов здесь не запускаются." });
+        pluginSourceRevision[createdPlugin.pluginId] = (pluginSourceRevision[createdPlugin.pluginId] || 0) + 1;
         return pluginChatState(createdPlugin.pluginId);
       }
       if (pluginRequestIds[requestId] && pluginRequestIds[requestId] !== pluginText) fail("ID сообщения уже занят.", "preview_input_invalid");
@@ -705,6 +712,7 @@
         await new Promise(function (resolve) { setTimeout(resolve, 1600); });
         if (pluginRun === sourceRun) {
           pluginMessages.push({ role: "assistant", text: "Изменение исходников смоделировано в preview. Файлы плагина не менялись." });
+          pluginSourceRevision[payload.pluginId] = (pluginSourceRevision[payload.pluginId] || 0) + 1;
           pluginRun = null;
         }
       }

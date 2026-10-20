@@ -118,7 +118,7 @@ preview scratch separation, runtime-clear exclusion/drain, command lifetime/canc
 HTML/plugin/export admission, binary/directory unknown-effect recovery, result scopes
 and runtime-owned prepared confirmation. The source-inclusion check verifies old-style
 project registration; no Office/VSTO build is needed.
-`node tests/web/plugins.test.js` checks creation/check/preview/apply/reopen/disable,
+`node tests/web/plugins.test.js` checks creation/automatic check/preview/apply/reopen/disable,
 immediate SVG drawing, reusable rail hover menus and remove/restore,
 source chat presentation, actual Chromium Worker and native-protocol XLSX extraction
 with complete canonical result read-back. It uses a controlled bridge/file transport,

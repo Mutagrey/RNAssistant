@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -11,6 +13,7 @@ using RNAssistant.Application.Contracts;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Runtime;
@@ -244,6 +247,42 @@ namespace RNAssistant.Application
             }
         }
 
+        // A cheap change token for the declared package members. The immutable
+        // candidate is still created by Check; this token grants no file access.
+        public PluginSourceStateDto SourceState(string pluginId)
+        {
+            using (PluginStore.AcquireRuntimeUse(_paths)) lock (_sync)
+            {
+                RequireOpen();
+                var root = Source(RequireRegistration(pluginId)).Workspace.RootPath;
+                var stamp = new StringBuilder();
+                byte[] manifestBytes;
+                try { manifestBytes = PluginPackageFiles.Read(root, "plugin.json", 1024 * 1024); }
+                catch (PluginException error) { return new PluginSourceStateDto { PluginId = pluginId, Stamp = error.Code }; }
+                using (var hash = SHA256.Create())
+                    stamp.Append(Convert.ToBase64String(hash.ComputeHash(manifestBytes)));
+                try
+                {
+                    var manifest = PluginPackageFiles.ParseManifest(PluginPackageFiles.Utf8.GetString(manifestBytes));
+                    foreach (var member in manifest.Files.OrderBy(path => path, StringComparer.Ordinal))
+                    {
+                        stamp.Append('|').Append(member);
+                        try
+                        {
+                            var file = new FileInfo(PluginPackageFiles.Resolve(root, member, false));
+                            stamp.Append(':').Append(file.Exists ? file.Length.ToString() + ":" + file.LastWriteTimeUtc.Ticks : "missing");
+                        }
+                        catch (PluginException error) { stamp.Append(':').Append(error.Code); }
+                    }
+                }
+                catch (Exception error) when (error is PluginException || error is DecoderFallbackException)
+                { stamp.Append("|manifest-invalid"); }
+                using (var hash = SHA256.Create())
+                    return new PluginSourceStateDto { PluginId = pluginId,
+                        Stamp = Convert.ToBase64String(hash.ComputeHash(Encoding.UTF8.GetBytes(stamp.ToString()))) };
+            }
+        }
+
         public PluginItemDto Apply(PluginApplyRequest request)
         {
             using (PluginStore.AcquireRuntimeUse(_paths)) lock (_sync)
@@ -365,7 +404,7 @@ namespace RNAssistant.Application
                     var source = Source(RequireRegistration(instance.Manifest.Id));
                     PluginDataSelection selection;
                     if (instance.Preview)
-                        selection = new PluginDataSelection { RootPath = Path.Combine(_paths.Root, "plugin-preview-data", instance.Id), Writable = true };
+                        selection = new PluginDataSelection { RootPath = Path.Combine(_paths.Root, "plugin-preview-data", instance.Manifest.Id), Writable = true };
                     else
                     {
                         if (ProjectPicker == null) throw new PluginException("project_picker_unavailable", "Project selection is unavailable in this host.");
@@ -373,6 +412,8 @@ namespace RNAssistant.Application
                         if (selection == null) throw new OperationCanceledException();
                     }
                     PluginDataGrant.RequireSeparateRoot(selection.RootPath, source);
+                    if (!instance.Preview && PluginDataGrant.PathsOverlap(selection.RootPath, Path.Combine(_paths.Root, "plugin-preview-data")))
+                        throw new PluginException("preview_is_not_active", "Choose a data folder outside plugin preview data.");
                     token.ThrowIfCancellationRequested(); instance.Token.ThrowIfCancellationRequested();
                     PluginPackageFiles.Resolve(selection.RootPath,"grant-probe",false);
                     var workspace = _workspaces.Open(selection.RootPath, instance.Preview, selection.Writable);
@@ -497,8 +538,20 @@ namespace RNAssistant.Application
                     PendingTool = session.LastRun?.KernelState?.Summary?.PendingConfirmation?.Call?.Name,
                     PendingArguments = session.LastRun?.KernelState?.Summary?.PendingConfirmation?.Call?.ArgumentsJson,
                     State = Conversations.ReadState(source.Workspace, sessionId), Messages = session.Messages.Where(message => message.Role == "user" || message.Role == "assistant")
-                        .Reverse().Take(100).Reverse().Select(message => new PluginChatMessageDto { Role = message.Role, Text = message.Content }).ToArray() };
+                        .Reverse().Take(100).Reverse().Select(PresentWorkspaceMessage).ToArray() };
             }
+        }
+        internal static PluginChatMessageDto PresentWorkspaceMessage(ChatMessage message)
+        {
+            if (message.Role == "assistant" && message.ResponseProtocolVersion == ConversationResponse.ProtocolVersion)
+            {
+                var parsed = ConversationResponseHistoryReader.Read(message);
+                if (!parsed.Success)
+                    return new PluginChatMessageDto { Role = "assistant", Text = "Сообщение модели не удалось отобразить: " + parsed.Error };
+                return new PluginChatMessageDto { Role = "assistant", Text = parsed.Response.Message,
+                    Actions = parsed.Response.ToolCalls.Select(call => call.Name).ToArray() };
+            }
+            return new PluginChatMessageDto { Role = message.Role, Text = message.Content };
         }
         public async Task<PluginChatStateDto> SubmitChatAsync(PluginChatRequest request, AppSettings settings, Func<string> key, CancellationToken token)
         {
@@ -595,7 +648,7 @@ namespace RNAssistant.Application
                 PendingTool = session.LastRun?.KernelState?.Summary?.PendingConfirmation?.Call?.Name,
                 PendingArguments = session.LastRun?.KernelState?.Summary?.PendingConfirmation?.Call?.ArgumentsJson,
                 Messages = session.Messages.Where(message => message.Role == "user" || message.Role == "assistant")
-                    .Reverse().Take(100).Reverse().Select(message => new PluginChatMessageDto { Role = message.Role, Text = message.Content }).ToArray() };
+                    .Reverse().Take(100).Reverse().Select(PresentWorkspaceMessage).ToArray() };
             }
         }
 

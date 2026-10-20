@@ -21,13 +21,13 @@ namespace RNAssistant.Application
         public bool Writable { get; private set; }
         internal PluginDataGrant(WorkspaceDescriptor workspace, PluginSourceWorkspace source, bool writable)
         {
-            if (workspace.WorkspaceId == source.SourceWorkspaceId || Overlaps(workspace.RootPath, source.Workspace.RootPath))
+            if (workspace.WorkspaceId == source.SourceWorkspaceId || PathsOverlap(workspace.RootPath, source.Workspace.RootPath))
                 throw new PluginException("source_is_not_data", "Choose a data folder outside the plugin source workspace.");
             Workspace = workspace; Writable = writable && !workspace.ReadOnly;
         }
         internal static void RequireSeparateRoot(string selected, PluginSourceWorkspace source)
-        { if (Overlaps(selected,source.Workspace.RootPath)) throw new PluginException("source_is_not_data","Choose a data folder outside the plugin source workspace."); }
-        private static bool Overlaps(string left, string right)
+        { if (PathsOverlap(selected,source.Workspace.RootPath)) throw new PluginException("source_is_not_data","Choose a data folder outside the plugin source workspace."); }
+        internal static bool PathsOverlap(string left, string right)
         {
             left = Path.GetFullPath(left).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
             right = Path.GetFullPath(right).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;

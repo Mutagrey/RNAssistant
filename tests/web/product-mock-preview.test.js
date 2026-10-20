@@ -440,7 +440,6 @@ async function serve() {
     await normal.locator('#pluginCreateSubmit').click();
     await normal.locator('#pluginChatMessages').getByText(/запрос на исходники принят/).waitFor();
     assert.match(await normal.locator('#pluginSource').textContent(), /plugin-workspaces[\\/]Сводка продаж-/, 'preview uses the default source folder');
-    await normal.locator('#pluginCheck').click();
     await normal.locator('#pluginPreview').click();
     await normal.frameLocator('#pluginPreviewMount iframe').getByRole('heading', { name: 'Сводка продаж' }).waitFor();
     await normal.locator('#pluginApply').click();

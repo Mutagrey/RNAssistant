@@ -34,6 +34,7 @@
 .shell.navigation-compact .product-mobile-menu-button { display: grid; }
 .shell:is(.navigation-wide, .navigation-compact).navigation-open .product-mobile-menu-button { left: calc(52px + var(--nav-width) + 1px + var(--panel-toggle-inset)); }
 .shell:has(#tab-plugins.active .plugin-manager:not([hidden])) .product-mobile-menu-button { left: calc(52px + var(--panel-toggle-inset)); }
+.shell:has(#tab-plugins.active .plugin-workbench:not([hidden]):not(.plugin-data-templates)) .product-mobile-menu-button { display: none; }
 .shell.navigation-transition .product-mobile-menu-button:hover { background: transparent; color: var(--ink-muted); }
 @media (min-width: 621px) {
   .shell.navigation-open > .content > .panel.active .split-layout[data-default-left]:not(#chatLayout) { grid-template-columns: var(--split-left, var(--nav-width)) 1px minmax(0, 1fr) !important; }

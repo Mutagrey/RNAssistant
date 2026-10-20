@@ -49,6 +49,13 @@ namespace RNAssistant.Harness
         private static void PluginsPublishAndSeparateAuthority()
         {
             WithPluginPaths(paths=>{
+                var wire = new ChatMessage { Role = "assistant", ProtocolMessage = true, ResponseProtocolVersion = 7,
+                    Content = "{\"message\":\"Читаю исходник\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.resources_read\",\"arguments\":{\"target\":\"README.md\"}}]}",
+                    ToolCallId = "call-1", ToolName = "common.resources_read",
+                    AcceptedCallOrigin = new AcceptedToolCallOrigin("step-1", "attempt-1", 0) };
+                var presented = PluginApplicationService.PresentWorkspaceMessage(wire);
+                AssertEqual("Читаю исходник", presented.Text, "source chat presents the model message, not protocol JSON");
+                AssertEqual("common.resources_read", presented.Actions.Single(), "source chat retains the action name without arguments");
                 using(var service=new PluginApplicationService(paths))
                 {
                     var item=PluginFixture(service,paths);var active=PluginOpen(service,item.PluginId);
@@ -58,20 +65,29 @@ namespace RNAssistant.Harness
                     AssertEqual("project_required",PluginRequest(service,active,PluginMethod.List).Result.ErrorCode,"manifest grants no data access");
                     var picker=new PluginPicker{Root=item.SourceRoot};service.ProjectPicker=picker;
                     AssertEqual("source_is_not_data",PluginRequest(service,active,PluginMethod.PickProject).Result.ErrorCode,"source cannot become data");
+                    picker.Root=Path.Combine(paths.Root,"plugin-preview-data");
+                    AssertEqual("preview_is_not_active",PluginRequest(service,active,PluginMethod.PickProject).Result.ErrorCode,"test project cannot become active data");
                     picker.Root=Path.Combine(paths.Root,"data");Directory.CreateDirectory(picker.Root);File.WriteAllText(Path.Combine(picker.Root,"input.txt"),"original");
                     var project=PluginRequest(service,active,PluginMethod.PickProject).Result.Result.Handle;
                     AssertEqual("project_changed",PluginRequest(service,active,PluginMethod.OpenFile,"input.txt","forged").Result.ErrorCode,"foreign project refused");
                     var read=PluginRequest(service,active,PluginMethod.OpenFile,"input.txt",project).Result.Result;
                     var candidate=service.Check(item.PluginId);var preview=PluginOpen(service,item.PluginId,candidate.CandidateId);
+                    var sourceStamp=service.SourceState(item.PluginId).Stamp;
                     AssertEqual("project_required",PluginRequest(service,preview,PluginMethod.List).Result.ErrorCode,"preview inherits no production grant");
                     var scratch=PluginRequest(service,preview,PluginMethod.PickProject).Result.Result.Handle;
                     AssertTrue(scratch!=project && preview.Data.DataWorkspaceId!=active.Data.DataWorkspaceId,"preview test project is independent");
+                    File.WriteAllText(Path.Combine(preview.Data.Workspace.RootPath,"preview.txt"),"kept");
+                    var refreshedPreview=PluginOpen(service,item.PluginId,candidate.CandidateId);
+                    PluginRequest(service,refreshedPreview,PluginMethod.PickProject).GetAwaiter().GetResult();
+                    AssertEqual(preview.Data.DataWorkspaceId,refreshedPreview.Data.DataWorkspaceId,"preview refresh keeps its separate test project");
+                    AssertTrue(File.Exists(Path.Combine(refreshedPreview.Data.Workspace.RootPath,"preview.txt")),"preview refresh keeps test data");
                     AssertEqual("not_found",PluginRequest(service,preview,PluginMethod.OpenFile,"input.txt",scratch).Result.ErrorCode,"production bytes absent from preview");
                     var oldPreviewGrant=preview.Data;
                     PluginRequest(service,preview,PluginMethod.PickProject).GetAwaiter().GetResult();
                     AssertTrue(oldPreviewGrant.Lifetime.IsCancellationRequested,"reselecting preview data revokes its previous grant");
                     AssertEqual("original",Encoding.UTF8.GetString(active.ReadRangeAsync(read.Handle,0,8,CancellationToken.None).Result),"pinned bytes available");
                     var oldCode=service.ReadPackageFile(active,"app.js");File.WriteAllText(Path.Combine(item.SourceRoot,"app.js"),"changed");
+                    AssertTrue(sourceStamp!=service.SourceState(item.PluginId).Stamp,"source token changes after a declared file edit");
                     candidate=service.Check(item.PluginId);service.Apply(new PluginApplyRequest{PluginId=item.PluginId,CandidateId=candidate.CandidateId});
                     AssertTrue(oldCode.SequenceEqual(service.ReadPackageFile(active,"app.js")),"active operations retain frozen bytes");
                     var fresh=PluginOpen(service,item.PluginId);AssertEqual("project_required",PluginRequest(service,fresh,PluginMethod.List).Result.ErrorCode,"new publication receives no old data grant");

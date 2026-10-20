@@ -27,6 +27,7 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.DrawPluginIcon: return await Plugins.DrawIconAsync(Payload<PluginIconDrawRequest>(payload),settings.Load(),settings.LoadApiKey,token);
                     case BridgeOperationId.CreatePlugin: return Plugins.Create(Payload<PluginCreateRequest>(payload));
                     case BridgeOperationId.ConnectPlugin: return Plugins.Connect(Payload<PluginConnectRequest>(payload));
+                    case BridgeOperationId.GetPluginSourceState: return Plugins.SourceState(Payload<PluginIdRequest>(payload).PluginId);
                     case BridgeOperationId.CheckPlugin: return Plugins.Check(Payload<PluginIdRequest>(payload).PluginId);
                     case BridgeOperationId.ApplyPlugin: return Plugins.Apply(Payload<PluginApplyRequest>(payload));
                     case BridgeOperationId.OpenPlugin:

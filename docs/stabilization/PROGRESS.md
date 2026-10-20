@@ -1,5 +1,16 @@
 # Stabilization progress
 
+## Plugin development preview — 2026-10-20
+
+The development panel now uses the shared chat message and composer styling,
+projects accepted v7 responses into readable text and action names, and has a
+draggable preview/chat divider. Package validation runs when development opens,
+when declared source files change, or when the refresh icon is pressed. A failed
+check leaves the previous view visible. Preview refreshes retain a separate test
+project per plugin; publication remains explicit. Focused host-neutral plugin
+checks and local mock UI inspection pass. Windows/Office/WebView2 delivery remains
+open evidence.
+
 ## Chat activity visual parity — 2026-10-19
 
 Transcript stages now use demo symbols, counts, spacing, text shimmer and expanded

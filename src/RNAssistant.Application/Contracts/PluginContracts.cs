@@ -126,6 +126,12 @@ namespace RNAssistant.Application.Contracts
     {
         [JsonProperty("role")] public string Role { get; set; }
         [JsonProperty("text")] public string Text { get; set; }
+        [JsonProperty("actions")] public IReadOnlyList<string> Actions { get; set; }
+    }
+    public sealed class PluginSourceStateDto
+    {
+        [JsonProperty("pluginId")] public string PluginId { get; set; }
+        [JsonProperty("stamp")] public string Stamp { get; set; }
     }
     public sealed class ProjectChatRequest
     {
