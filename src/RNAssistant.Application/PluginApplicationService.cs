@@ -96,13 +96,13 @@ namespace RNAssistant.Application
                     throw new PluginException("plugin_name_invalid", "Укажите название плагина до 120 символов.");
                 var registration = RequireRegistration(request.PluginId);
                 var current = Item(registration);
-                var appearance = new PluginAppearance { Name = request.Name.Trim(), Icon = current.Icon, IconPaths = current.IconPaths };
+                var appearance = new PluginAppearance { Name = request.Name.Trim(), Icon = current.Icon, IconSvg = current.IconSvg, IconColor = PluginIconSvg.Color(request.IconColor) };
                 if (request.IconId != null)
                 {
                     if (request.IconId.StartsWith("icon-", StringComparison.Ordinal))
-                    { var saved = _icons.Get(request.IconId); appearance.Icon = saved.Id; appearance.IconPaths = saved.Paths.ToArray(); }
+                    { var saved = _icons.Get(request.IconId); appearance.Icon = saved.Id; appearance.IconSvg = saved.Svg; }
                     else if (Regex.IsMatch(request.IconId, "^[A-Za-z][A-Za-z0-9_-]{0,63}$", RegexOptions.CultureInvariant))
-                    { appearance.Icon = request.IconId; appearance.IconPaths = null; }
+                    { appearance.Icon = request.IconId; appearance.IconSvg = null; }
                     else throw new PluginException("plugin_icon_invalid", "Выберите значок из каталога.");
                 }
                 return Item(_store.SetAppearance(request.PluginId, appearance));
@@ -119,17 +119,21 @@ namespace RNAssistant.Application
                 string.IsNullOrWhiteSpace(request.Description) || request.Description.Trim().Length > 500)
                 throw new PluginException("plugin_icon_invalid", "Provide a plugin name and an icon description of at most 500 characters.");
             var configuration = (settings ?? new AppSettings()).Clone();
-            configuration.MaxTokens = 4096;
-            configuration.RequestTimeoutSeconds = Math.Min(configuration.RequestTimeoutSeconds, 75);
+            configuration.MaxTokens = 8192;
+            configuration.RequestTimeoutSeconds = Math.Min(Math.Max(configuration.RequestTimeoutSeconds, 120), 150);
             configuration.Temperature = 0.35;
+            var iconColor = PluginIconSvg.Color(request.IconColor);
             var messages = new List<ChatMessage> {
                     new ChatMessage { Role = "system", Content =
-                        "Draw one clear, balanced outline icon as an SVG document with viewBox=\"0 0 24 24\". " +
-                        "Use path, circle, ellipse, rect, line, polyline, polygon and g elements. " +
-                        "Use fill=\"none\" and stroke=\"currentColor\"; the app supplies themed outline styling. " +
-                        "Keep geometry within 2–22. Do not use transforms, text, scripts, style, references, images or external URLs. " +
-                        "Return only the SVG, at most 4096 UTF-8 bytes. No image-generation tool is needed." },
-                    new ChatMessage { Role = "user", Content = "Plugin: " + request.Name.Trim() + "\nIcon brief: " + request.Description.Trim() }
+                        "Draw one clear, legible icon as a complete, self-contained SVG document. Return only SVG text. " +
+                        "Use a viewBox fitting the artwork; the app sizes it to 24 pixels and preserves its aspect ratio. " +
+                        "Colors, fills, strokes, gradients, transforms, local defs/references and SVG styles are supported. " +
+                        "Use currentColor only when a theme-colored icon is wanted. Keep the drawing compact and legible at 20 px. " +
+                        "Do not include scripts, event handlers, animation, foreignObject, external resources or raster images. " +
+                        "No image-generation tool is needed." },
+                    new ChatMessage { Role = "user", Content = "Plugin: " + request.Name.Trim() + "\nIcon brief: " + request.Description.Trim() +
+                        (iconColor != null && iconColor.StartsWith("#", StringComparison.Ordinal) ? "\nPrimary color: " + iconColor : "") }
+
                 };
             for (var attempt = 0; attempt < 2; attempt++)
             {
@@ -139,7 +143,6 @@ namespace RNAssistant.Application
                 try
                 {
                     var svg = ExtractModelSvg(completion?.Content);
-                    PluginPackageFiles.ReadIconPaths(PluginPackageFiles.Utf8.GetBytes(svg));
                     token.ThrowIfCancellationRequested();
                     return SaveIcon(new PluginIconSaveRequest { Name = request.Name.Trim(), Svg = svg });
                 }
@@ -148,10 +151,10 @@ namespace RNAssistant.Application
                     if (attempt == 1) throw new PluginException("plugin_icon_invalid",
                         "Модель вернула некорректный рисунок: " + error.Message);
                     if (!string.IsNullOrWhiteSpace(completion?.Content))
-                        messages.Add(new ChatMessage { Role = "assistant", Content = completion.Content.Substring(0, Math.Min(completion.Content.Length, 8192)) });
+                        messages.Add(new ChatMessage { Role = "assistant", Content = completion.Content.Substring(0, Math.Min(completion.Content.Length, PluginIconSvg.MaximumBytes)) });
                     messages.Add(new ChatMessage { Role = "user", Content =
                         "The previous icon was rejected: " + error.Message +
-                        " Return one complete outline SVG with viewBox=\"0 0 24 24\", fill=\"none\" and supported shapes. Keep it under 4096 bytes." });
+                        " Return a complete, self-contained static SVG. Preserve the requested colors and drawing; correct the specific error above." });
                 }
             }
             throw new PluginException("plugin_icon_invalid", "Модель не смогла нарисовать корректный SVG. Сократите описание или добавьте готовый SVG.");
@@ -202,6 +205,7 @@ namespace RNAssistant.Application
                 if (File.Exists(rootPath) || Directory.Exists(rootPath) && Directory.EnumerateFileSystemEntries(rootPath).Any())
                     throw new PluginException("target_exists", "Папка уже содержит файлы. Укажите пустую папку или подключите готовый плагин с plugin.json.");
                 var chosenIcon = request.IconId ?? "draw";
+                var iconColor = PluginIconSvg.Color(request.IconColor);
                 PluginIconRecord savedIcon = null;
                 if (chosenIcon.StartsWith("icon-", StringComparison.Ordinal)) savedIcon = _icons.Get(chosenIcon);
                 else if (chosenIcon != "draw" &&
@@ -221,14 +225,17 @@ namespace RNAssistant.Application
                 files.CreateText(workspace, "app.js", "'use strict';\ndocument.getElementById('title').textContent = " + JsonConvert.SerializeObject(request.Name) + ";\ndocument.getElementById('run').onclick = async function () { try { var value = await RNPlugin.invoke('echo', {text:'Плагин работает'}); document.getElementById('result').textContent = value.text; } catch (error) { document.getElementById('result').textContent = error.message; } };\n");
                 files.CreateText(workspace, "commands.js", "'use strict';\nRNPluginCommands.register('echo', async function (args) { return {text: args.text}; });\n");
                 files.CreateText(workspace, "style.css", "body{margin:0;background:#f5f7f4;color:#25352c;font:14px system-ui}main{padding:24px}button{padding:8px 12px;border:1px solid #c8d5cc;border-radius:6px;background:white}output{display:block;margin-top:16px}\n");
-                if (savedIcon != null) files.CreateText(workspace, "icon.svg", PluginIconLibrary.Svg(savedIcon));
+                if (savedIcon != null) files.CreateText(workspace, "icon.svg", savedIcon.Svg);
                 files.CreateText(workspace, "README.md", "# " + request.Name + "\n\n" + (request.Description ?? "") +
                     (chosenIcon == "draw" ? "\n\nIcon brief: " + (request.IconDescription ?? "Use the plugin name and purpose.") +
-                    "\nThe source chat can load workspace.plugin_authoring to draw a 24x24 SVG icon as ordinary text in icon.svg. Set plugin.json icon to icon.svg and add that path to files; checking validates the vector paths. No image-generation model is required.\n" :
+                    "\nThe source chat can load workspace.plugin_authoring to draw a static SVG icon with colors as ordinary text in icon.svg. Give it a viewBox fitting the artwork; the host normalizes display size. Set plugin.json icon to icon.svg and add that path to files; checking validates the self-contained SVG. No image-generation model is required.\n" :
                     "\n\nSelected icon: " + (savedIcon == null ? chosenIcon : savedIcon.Name) + ". Keep this icon unless the user asks to change it.\n") +
                     "\n\nPlugin protocol v1. Edit ordinary source files; include new files in plugin.json. UI uses RNPlugin.invoke(command,args). Worker command modules register handlers with RNPluginCommands.register(id,async(args,context)=>result). context.files is a scoped project filesystem; no DOM/Office/network. Manifest capabilities project.read/project.write request host access, never grant it. Source workspace and user data projects are separate. Use plugins.check and plugins.apply after edits; checking validates package structure/dependencies, not business correctness. The preview gets a separate scratch data folder. Vendor packages use exact versions and mounts. No npm/build step.\n" +
                     "\nSDK reference:\n- UI loads /.host/sdk.js. await RNPlugin.pickProject() returns a scoped directory handle. Selection is explicit; do not substitute the source workspace.\n- RNPlugin.invoke(id,args,onProgress) returns a promise with cancel(). Commands run outside the screen in a managed Worker.\n- Worker context.files.readText(path), writeText(path,text), open(path), createWriter(path) and root() use project-relative paths. open() returns size/name/readRange(offset,count)/close(). Close readers in finally.\n- Writers accept text/bytes through write(), then close() commits or abort() discards staging. Existing target reads are pinned and rechecked; uncertain writes must be inspected with files.reconcile(path), never retried automatically.\n- context.results.create(relativeName) stages a temporary result; context.results.open(relativeName) returns its retained file. Return semantic names in command results, not runtime transport tokens.\n- context.progress(message) reports bounded progress. Maximum command time is five minutes; no Office, parent bridge, network, local native paths or arbitrary filesystem access.\n- Command schemas use type:object, properties, required and additionalProperties:false; describe every top-level field. A writing command also needs writesData:true and both project.read/project.write capabilities.\n- Vendor dependencies declare exact id/version/mount. Include transitive dependencies explicitly. Changing vendor bytes requires a new version. Manifest and locks do not grant rights.\n- plugins.check and plugins.apply take empty arguments. Runtime owns the prepared candidate and confirmation. Verify the UI in preview before applying.\n");
-                return Item(_store.Connect(new PluginSourceWorkspace(workspace)));
+                var registration = _store.Connect(new PluginSourceWorkspace(workspace));
+                if (iconColor != null) registration = _store.SetAppearance(registration.PluginId,
+                    new PluginAppearance { Name = registration.Name, Icon = registration.Icon, IconColor = iconColor });
+                return Item(registration);
             }
         }
 
@@ -787,17 +794,17 @@ namespace RNAssistant.Application
         private PluginItemDto Item(PluginRegistration value)
         {
             var item = new PluginItemDto { PluginId = value.PluginId, Name = value.Appearance?.Name ?? value.Name,
-                Icon = value.Appearance?.Icon ?? value.Icon, IconPaths = value.Appearance?.IconPaths,
+                Icon = value.Appearance?.Icon ?? value.Icon, IconSvg = value.Appearance?.IconSvg, IconColor = value.Appearance?.IconColor,
                 SourceWorkspaceId = value.SourceWorkspaceId, SourceRoot = value.SourceRoot,
                 ReleaseId = value.ActiveReleaseId, Enabled = value.Enabled, Hidden = value.Hidden };
-            if (item.IconPaths == null && PluginPackageFiles.IconIsSvgPath(item.Icon))
+            if (item.IconSvg == null && PluginPackageFiles.IconIsSvgPath(item.Icon))
             {
                 try
                 {
                     var bytes = value.Enabled && value.ActiveReleaseId != null
                         ? _store.ReadFile(_store.ReadRelease(new PluginReleaseIdentity(value.PluginId, value.ActiveReleaseId)), item.Icon)
-                        : PluginPackageFiles.Read(value.SourceRoot, item.Icon, 4096);
-                    item.IconPaths = PluginPackageFiles.ReadIconPaths(bytes);
+                        : PluginPackageFiles.Read(value.SourceRoot, item.Icon, PluginIconSvg.MaximumBytes);
+                    item.IconSvg = PluginPackageFiles.ReadIconSvg(bytes);
                 }
                 catch (PluginException error) { item.IconError = error.Message; }
             }

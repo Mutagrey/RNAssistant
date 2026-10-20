@@ -164,14 +164,14 @@ namespace RNAssistant.Harness
                     var sourceManifest = File.ReadAllText(Path.Combine(item.SourceRoot, "plugin.json"));
                     var icon = service.SaveIcon(new PluginIconSaveRequest { Name = "Outline", Svg =
                         "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\"><circle cx=\"12\" cy=\"12\" r=\"8\"/></svg>" });
-                    var edited = service.UpdateAppearance(new PluginAppearanceRequest { PluginId = item.PluginId, Name = "Мой плагин", IconId = icon.Id });
+                    var edited = service.UpdateAppearance(new PluginAppearanceRequest { PluginId = item.PluginId, Name = "Мой плагин", IconId = icon.Id, IconColor = "#E04A35" });
                     AssertEqual("Мой плагин", edited.Name, "appearance changes the panel name");
-                    AssertEqual(icon.Paths.Single(), edited.IconPaths.Single(), "appearance copies the validated icon");
+                    AssertEqual(icon.Svg, edited.IconSvg, "appearance copies the validated icon");
                     AssertEqual(item.ReleaseId, edited.ReleaseId, "appearance does not publish draft code");
                     AssertEqual(sourceManifest, File.ReadAllText(Path.Combine(item.SourceRoot, "plugin.json")), "appearance preserves source manifest");
                     AssertTrue(!open.Token.IsCancellationRequested, "appearance does not revoke running plugin instances");
                     service.DeleteIcon(new PluginIconDeleteRequest { Id = icon.Id });
-                    AssertEqual(icon.Paths.Single(), service.List().Items.Single().IconPaths.Single(), "appearance owns its icon after library deletion");
+                    AssertEqual(icon.Svg, service.List().Items.Single().IconSvg, "appearance owns its icon after library deletion");
                     PluginFailure(() => service.UpdateAppearance(new PluginAppearanceRequest { PluginId = item.PluginId, Name = " " }), "plugin_name_invalid");
                     service.RemoveAsync(item.PluginId).GetAwaiter().GetResult();
                     AssertTrue(open.Token.IsCancellationRequested, "removal revokes visible instance");
@@ -185,44 +185,85 @@ namespace RNAssistant.Harness
                     AssertEqual(item.PluginId, service.ListRemoved().Items.Single().PluginId, "panel removal survives restart");
                     var restored = service.Restore(item.PluginId);
                     AssertEqual("Мой плагин", restored.Name, "edited name survives restart and restoration");
-                    AssertEqual(1, restored.IconPaths.Length, "edited icon survives restart and restoration");
+                    AssertTrue(restored.IconSvg.Contains("circle"), "edited icon survives restart and restoration");
+                    AssertEqual("#e04a35", restored.IconColor, "chosen icon color survives restart and restoration");
                     AssertEqual(item.ReleaseId, restored.ReleaseId, "restoration keeps published version");
                     AssertEqual(true, restored.Enabled, "restoration keeps activation state");
                     AssertEqual(item.PluginId, service.List().Items.Single().PluginId, "restored plugin returns to panel");
                     AssertEqual(sourceChat, service.ChatState(item.PluginId).SessionId, "restoration keeps source chat");
+                    var original = service.UpdateAppearance(new PluginAppearanceRequest { PluginId = item.PluginId, Name = restored.Name, IconColor = "original" });
+                    AssertEqual("original", service.List().Items.Single().IconColor, "original palette mode persists");
+                    var themed = service.UpdateAppearance(new PluginAppearanceRequest { PluginId = item.PluginId, Name = restored.Name });
+                    AssertTrue(themed.IconColor == null && themed.IconSvg == original.IconSvg, "default theme color preserves the original artwork");
                     PluginOpen(service, item.PluginId);
                 }
             });
         }
         private static void PluginsSvgIcon()
         {
+            var rich = @"<svg xmlns=""http://www.w3.org/2000/svg"" width=""128"" height=""64"" viewBox=""-10,0,128,64""><title>Цветная иконка</title>" +
+                @"<defs><linearGradient id=""paint""><stop stop-color=""#ef4433""/><stop offset=""1"" stop-color=""rgb(10, 90, 220)"" stop-opacity="".45""/></linearGradient>" +
+                @"<clipPath id=""clip""><rect width=""128"" height=""64""/></clipPath></defs><style>.mark{fill:url(#paint);stroke:navy;stroke-width:5}</style>" +
+                @"<g transform=""translate(4 2) scale(.9)"" clip-path=""url(#clip)""><path class=""mark"" d=""M1e1 2 L90 2 90 60Z""/>" +
+                string.Concat(Enumerable.Range(0, 40).Select(index => "<circle cx=\"" + index + "\" cy=\"32\" r=\"1\" fill=\"orange\"/>")) + "</g></svg>";
+            rich = rich.Replace("</svg>", new string(' ', 5000) + "</svg>");
+            var normalized = PluginIconSvg.Normalize(PluginPackageFiles.Utf8.GetBytes(rich));
+            AssertTrue(normalized.Contains("viewBox=\"-10 0 128 64\"") && normalized.Contains("width=\"24\"") && normalized.Contains("height=\"24\""),
+                "a large non-square SVG is sized without rewriting its coordinate system");
+            AssertTrue(normalized.Contains("translate(4 2) scale(.9)") && normalized.Contains("#ef4433") && normalized.Contains("rgb(10, 90, 220)") &&
+                normalized.Contains("fill:url(#paint)") && normalized.Contains("stop-opacity=\".45\"") && normalized.Contains("M1e1"), "transforms, CSS, gradients, transparency and scientific path notation survive");
+            AssertEqual(normalized, PluginIconSvg.Normalize(PluginPackageFiles.Utf8.GetBytes(normalized)), "normalization is stable across library/source reads");
+            AssertTrue(normalized.Contains("width:24px!important;height:24px!important"), "root stylesheet dimensions cannot override icon sizing");
+            AssertTrue(PluginIconSvg.Normalize(PluginPackageFiles.Utf8.GetBytes("<svg width=\"64px\" height=\"32px\"><rect width=\"64\" height=\"32\" fill=\"red\"/></svg>"))
+                .Contains("viewBox=\"0 0 64 32\""), "dimensions supply a missing viewBox");
+            foreach (var unsafeSvg in new[] { rich.Replace("fill:url(#paint)", "fill:url(https://invalid)"),
+                rich.Replace("<style>", "<style>@import 'https://invalid';"), rich.Replace("<g transform", "<g onmouseover=\"alert(1)\" transform"),
+                "<!DOCTYPE svg [<!ENTITY x SYSTEM 'file:///tmp/secret'>]><svg><text>&x;</text></svg>" })
+                PluginFailure(() => PluginIconSvg.Normalize(PluginPackageFiles.Utf8.GetBytes(unsafeSvg)), "plugin_icon_invalid");
+            WithPluginPaths(paths => {
+                Directory.CreateDirectory(paths.PluginIconDirectory);
+                PluginFailure(() => new PluginIconLibrary(paths).Save("Oversized",
+                    PluginPackageFiles.Utf8.GetBytes("<svg><title>" + new string('a', PluginIconSvg.MaximumBytes - 40) + "</title></svg>")), "plugin_icon_invalid");
+                AssertEqual(0, Directory.GetFiles(paths.PluginIconDirectory).Length, "normalization size overflow cannot leave an unreadable library record");
+                var oldPaths = new[] { "M3 3h18v18H3Z" };
+                var oldId = "icon-" + PluginPackageFiles.Hash(PluginPackageFiles.Utf8.GetBytes(string.Join("\n", oldPaths)));
+                var file = Path.Combine(paths.PluginIconDirectory, oldId + ".json");
+                var oldRecord = JsonConvert.SerializeObject(new { id = oldId, name = "Existing", paths = oldPaths });
+                File.WriteAllText(file, oldRecord);
+                var migrated = new PluginIconLibrary(paths).Get(oldId);
+                AssertEqual(oldId, migrated.Id, "one-way migration preserves saved icon identity");
+                AssertTrue(migrated.Svg.Contains("stroke=\"currentColor\"") && File.ReadAllText(file) == oldRecord,
+                    "old outline files retain appearance without a write during reads");
+                AssertEqual(migrated.Svg, new PluginIconLibrary(paths).Get(oldId).Svg, "migrated icon survives reopening");
+            });
             WithPluginPaths(paths => {
                 using (var service = new PluginApplicationService(paths))
                 {
                     var standard = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><g><rect x=\"3\" y=\"3\" width=\"18\" height=\"18\" rx=\"2\"/><circle cx=\"9\" cy=\"9\" r=\"2\"/><path d=\"M4 18l5-5 4 4 3-3 4 4\"/></g></svg>";
                     var settings = new AppSettings { MaxTokens = 1000 };
                     var calls = 0;
-                    var result = service.DrawIconAsync(new PluginIconDrawRequest { Name = "Photo", Description = "Иконка фотографии" }, settings,
+                    var result = service.DrawIconAsync(new PluginIconDrawRequest { Name = "Photo", Description = "Иконка фотографии", IconColor = "original" }, settings,
                         (configuration, messages, options, progress, token) => {
-                            calls++; AssertEqual(4096, configuration.MaxTokens, "icon completion has room for provider reasoning and SVG");
+                            calls++; AssertEqual(8192, configuration.MaxTokens, "icon completion has room for provider reasoning and SVG");
                             AssertEqual(LlmResponseFormats.Text, options.ResponseFormat, "model draws ordinary SVG");
+                            AssertTrue(!messages.Any(message => message.Content.Contains("Primary color: original")), "palette mode is not sent as a literal paint value");
                             return Task.FromResult(new LlmCompletionResult { Content = "```svg\n" + standard + "\n```" });
                         }, CancellationToken.None).GetAwaiter().GetResult();
                     AssertEqual(1, calls, "standard outline SVG is accepted on the first attempt");
-                    AssertEqual(3, result.Paths.Length, "shapes retain geometry as registry paths");
+                    AssertTrue(result.Svg.Contains("<rect") && result.Svg.Contains("<circle") && result.Svg.Contains("stroke-width=\"2\""), "original SVG geometry and paint are preserved");
                     AssertEqual(1000, settings.MaxTokens, "drawing leaves user settings unchanged");
                     foreach (var unsafeSvg in new[] { standard.Replace("<g>", "<g onload=\"x()\">"),
                         standard.Replace("<g>", "<g><script>alert(1)</script>"), standard.Replace("<g>", "<g style=\"fill:url(https://invalid)\">"),
-                        standard.Replace("<g>", "<g><use href=\"https://invalid\"/>"), standard.Replace("<g>", "<g transform=\"translate(1)\">") })
-                        PluginFailure(() => PluginPackageFiles.ReadIconPaths(PluginPackageFiles.Utf8.GetBytes(unsafeSvg)), "plugin_icon_invalid");
+                        standard.Replace("<g>", "<g><use href=\"https://invalid\"/>"), standard.Replace("<g>", "<g><foreignObject/></g><g>") })
+                        PluginFailure(() => PluginPackageFiles.ReadIconSvg(PluginPackageFiles.Utf8.GetBytes(unsafeSvg)), "plugin_icon_invalid");
                     calls = 0;
                     service.DrawIconAsync(new PluginIconDrawRequest { Name = "Retry", Description = "Исправить рисунок" }, settings,
                         (configuration, messages, options, progress, token) => {
                             calls++;
-                            if (calls == 2) AssertTrue(messages.Any(message => message.Role == "assistant" && message.Content.Contains("<text>")),
+                            if (calls == 2) AssertTrue(messages.Any(message => message.Role == "assistant" && message.Content.Contains("<svg>unfinished")),
                                 "repair sees the rejected drawing, not just a generic error");
                             return Task.FromResult(new LlmCompletionResult { Content = calls == 1 ?
-                                "<svg viewBox=\"0 0 24 24\"><text>bad</text></svg>" : standard });
+                                "<svg>unfinished" : standard });
                         }, CancellationToken.None).GetAwaiter().GetResult();
                     AssertEqual(2, calls, "one bounded repair attempt");
                     AssertEqual(1, service.ListIcons().Items.Count, "invalid drawing is never saved and identical repaired geometry is deduplicated");
@@ -250,7 +291,7 @@ namespace RNAssistant.Harness
                     PluginFailure(()=>service.Create(new PluginCreateRequest { Name="Occupied",RootPath=occupied }),"target_exists");
                     AssertEqual("user data",File.ReadAllText(Path.Combine(occupied,"keep.txt")),"occupied source is never overwritten");
                     var wrapped=PluginApplicationService.ExtractModelSvg("Here is your icon:\n```svg\n<svg viewBox=\"0 0 24 24\"><path d=\"M3 3h18v18H3z\"/></svg>\n```");
-                    AssertEqual(1,PluginPackageFiles.ReadIconPaths(PluginPackageFiles.Utf8.GetBytes(wrapped)).Length,
+                    AssertTrue(PluginPackageFiles.ReadIconSvg(PluginPackageFiles.Utf8.GetBytes(wrapped)).Contains("<path"),
                         "a fenced model reply yields only the validated SVG document");
                     var item=service.Create(new PluginCreateRequest { Name="Sales", RootPath=Path.Combine(paths.Root,"svg-source"),
                         Description="Summarize sales", IconDescription="Three rising columns" });
@@ -265,21 +306,22 @@ namespace RNAssistant.Harness
                     var candidate=service.Check(item.PluginId);
                     var published=service.Apply(new PluginApplyRequest { PluginId=item.PluginId, CandidateId=candidate.CandidateId });
                     AssertEqual("icon.svg",published.Icon,"SVG source becomes the published icon");
-                    AssertEqual(1,published.IconPaths.Length,"published icon exposes validated paths only");
+                    AssertTrue(published.IconSvg.Contains("<path"),"published icon exposes normalized static SVG");
                     var catalog=service.ListIcons().Items;
                     AssertEqual(1,catalog.Count,"checking a valid icon adds it to the saved library");
-                    AssertEqual(published.IconPaths[0],catalog[0].Paths[0],"library retains the validated drawing");
-                    var reused=service.Create(new PluginCreateRequest { Name="Reused", RootPath=Path.Combine(paths.Root,"reused-source"), IconId=catalog[0].Id });
+                    AssertEqual(published.IconSvg,catalog[0].Svg,"library retains the validated drawing");
+                    var reused=service.Create(new PluginCreateRequest { Name="Reused", RootPath=Path.Combine(paths.Root,"reused-source"), IconId=catalog[0].Id, IconColor="#3F74B6" });
                     AssertEqual("icon.svg",reused.Icon,"saved icon is copied into new plugin source");
-                    AssertEqual(catalog[0].Paths[0],reused.IconPaths[0],"new source owns its copy of the drawing");
+                    AssertEqual("#3f74b6",reused.IconColor,"creation persists the chosen color");
+                    AssertEqual(catalog[0].Svg,reused.IconSvg,"new source owns its copy of the drawing");
                     PluginFailure(()=>service.DeleteIcon(new PluginIconDeleteRequest { Id="dataTemplates" }),"plugin_icon_protected");
                     service.DeleteIcon(new PluginIconDeleteRequest { Id=catalog[0].Id });
                     AssertEqual(0,service.ListIcons().Items.Count,"saved drawing is removable");
-                    AssertEqual(catalog[0].Paths[0],service.List().Items.Single(value=>value.PluginId==reused.PluginId).IconPaths[0],
+                    AssertEqual(catalog[0].Svg,service.List().Items.Single(value=>value.PluginId==reused.PluginId).IconSvg,
                         "deleting a saved drawing leaves plugin source intact");
                     File.WriteAllText(svgPath,"<svg viewBox=\"0 0 24 24\" onload=\"alert(1)\"><path d=\"M4 4L20 20\"/></svg>");
                     PluginFailure(()=>service.Check(item.PluginId),"plugin_icon_invalid");
-                    AssertEqual(published.IconPaths[0],service.List().Items.Single(value=>value.PluginId==item.PluginId).IconPaths[0],
+                    AssertEqual(published.IconSvg,service.List().Items.Single(value=>value.PluginId==item.PluginId).IconSvg,
                         "invalid draft cannot replace the active icon");
                     PluginFailure(()=>service.SaveIcon(new PluginIconSaveRequest { Name="Unsafe", Svg="<svg viewBox=\"0 0 24 24\" onload=\"alert(1)\"><path d=\"M4 4L20 20\"/></svg>" }),"plugin_icon_invalid");
                     var manual=service.SaveIcon(new PluginIconSaveRequest { Name="Manual", Svg="<svg viewBox=\"0 0 24 24\"><path d=\"M3 3h18v18H3Z\"/></svg>" });

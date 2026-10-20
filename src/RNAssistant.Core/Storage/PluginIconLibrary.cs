@@ -11,7 +11,9 @@ namespace RNAssistant.Core.Storage
     {
         [JsonProperty("id")] public string Id { get; set; }
         [JsonProperty("name")] public string Name { get; set; }
-        [JsonProperty("paths")] public string[] Paths { get; set; }
+        [JsonProperty("formatVersion")] public int FormatVersion { get; set; } = 2;
+        [JsonProperty("svg")] public string Svg { get; set; }
+        [JsonProperty("sha256")] public string Sha256 { get; set; }
     }
 
     // User-owned icon assets live outside the runtime catalog. Publications copy their
@@ -39,13 +41,12 @@ namespace RNAssistant.Core.Storage
         {
             if (string.IsNullOrWhiteSpace(name) || name.Trim().Length > 120 || name.Any(char.IsControl))
                 throw new PluginException("plugin_icon_invalid", "Icon name must be 1–120 characters.");
-            var paths = PluginPackageFiles.ReadIconPaths(svg);
-            var id = "icon-" + PluginPackageFiles.Hash(PluginPackageFiles.Utf8.GetBytes(string.Join("\n", paths)));
+            var normalized = PluginPackageFiles.ReadIconSvg(svg);
+            var digest = PluginPackageFiles.Hash(PluginPackageFiles.Utf8.GetBytes(normalized));
+            var id = "icon-" + digest;
             var path = PathFor(id);
             if (File.Exists(path)) return Read(path);
-            var record = new PluginIconRecord { Id = id, Name = name.Trim(), Paths = paths };
-            var normalized = PluginPackageFiles.Utf8.GetBytes(Svg(record));
-            PluginPackageFiles.ReadIconPaths(normalized);
+            var record = new PluginIconRecord { Id = id, Name = name.Trim(), Svg = normalized, Sha256 = digest };
             var bytes = PluginPackageFiles.Utf8.GetBytes(JsonConvert.SerializeObject(record));
             var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
             try
@@ -68,12 +69,6 @@ namespace RNAssistant.Core.Storage
             if (File.Exists(path)) throw new PluginException("plugin_icon_delete_unknown", "Icon deletion could not be verified.");
         }
 
-        public static string Svg(PluginIconRecord record)
-        {
-            return "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\">" +
-                string.Concat(record.Paths.Select(path => "<path d=\"" + path + "\"/>")) + "</svg>";
-        }
-
         private string PathFor(string id)
         {
             if (id == null || !Regex.IsMatch(id, "^icon-[a-f0-9]{64}$", RegexOptions.CultureInvariant))
@@ -84,17 +79,41 @@ namespace RNAssistant.Core.Storage
 
         private PluginIconRecord Read(string path)
         {
-            if (StorageFileSystem.IsReparsePoint(path) || new FileInfo(path).Length > 8192)
+            if (StorageFileSystem.IsReparsePoint(path) || new FileInfo(path).Length > PluginIconSvg.MaximumBytes * 8)
                 throw new PluginException("plugin_icon_invalid", "Saved icon file is invalid.");
             PluginIconRecord item;
-            try { item = JsonConvert.DeserializeObject<PluginIconRecord>(File.ReadAllText(path, PluginPackageFiles.Utf8)); }
+            try
+            {
+                var json = File.ReadAllText(path, PluginPackageFiles.Utf8);
+                var stored = Newtonsoft.Json.Linq.JObject.Parse(json);
+                if (stored["formatVersion"] == null && stored["paths"] != null)
+                {
+                    var paths = stored["paths"].ToObject<string[]>();
+                    if (paths == null || paths.Length == 0) throw new PluginException("plugin_icon_invalid", "Saved outline geometry is missing.");
+                    var oldId = "icon-" + PluginPackageFiles.Hash(PluginPackageFiles.Utf8.GetBytes(string.Join("\n", paths)));
+                    if ((string)stored["id"] != oldId || Path.GetFileName(path) != oldId + ".json")
+                        throw new PluginException("plugin_icon_invalid", "Saved outline icon identity is invalid.");
+                    var svg = PluginIconSvg.FromLegacyPaths(paths);
+                    item = new PluginIconRecord { Id = oldId, Name = (string)stored["name"], Svg = svg,
+                        Sha256 = PluginPackageFiles.Hash(PluginPackageFiles.Utf8.GetBytes(svg)) };
+                    Validate(item, path);
+                    return item;
+                }
+                item = stored.ToObject<PluginIconRecord>(JsonSerializer.Create(PluginPackageFiles.Json));
+            }
             catch (JsonException error) { throw new PluginException("plugin_icon_invalid", error.Message); }
-            if (item == null || Path.GetFileName(path) != item.Id + ".json" || string.IsNullOrWhiteSpace(item.Name) ||
-                item.Name.Length > 120 || item.Name.Any(char.IsControl) || item.Paths == null ||
-                item.Id != "icon-" + PluginPackageFiles.Hash(PluginPackageFiles.Utf8.GetBytes(string.Join("\n", item.Paths))) ||
-                !item.Paths.SequenceEqual(PluginPackageFiles.ReadIconPaths(PluginPackageFiles.Utf8.GetBytes(Svg(item)))))
-                throw new PluginException("plugin_icon_invalid", "Saved icon contents do not match their identity.");
+            Validate(item, path);
             return item;
         }
+        private static void Validate(PluginIconRecord item, string path)
+        {
+            if (item == null || item.FormatVersion != 2 || item.Id == null || !Regex.IsMatch(item.Id, "^icon-[a-f0-9]{64}$") ||
+                Path.GetFileName(path) != item.Id + ".json" || string.IsNullOrWhiteSpace(item.Name) ||
+                item.Name.Length > 120 || item.Name.Any(char.IsControl) || item.Svg == null ||
+                item.Sha256 != PluginPackageFiles.Hash(PluginPackageFiles.Utf8.GetBytes(item.Svg)) ||
+                item.Svg != PluginPackageFiles.ReadIconSvg(PluginPackageFiles.Utf8.GetBytes(item.Svg)))
+                throw new PluginException("plugin_icon_invalid", "Saved SVG contents do not match their digest.");
+        }
+
     }
 }

@@ -73,15 +73,15 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
         case 'getPlugins':return {defaultSourceParent:'C:\\Users\\Demo\\AppData\\Roaming\\RNAssistant\\plugin-workspaces',items:item.hidden?[]:[{...item}]};
         case 'getRemovedPlugins':return {items:item.hidden?[{...item}]:[]};
         case 'getPluginIcons':return {items:savedIcons.slice()};
-        case 'savePluginIcon':{const saved={id:'icon-test',name:payload.name,paths:['M4 4h16v16H4Z']};savedIcons=[saved];return saved;}
+        case 'savePluginIcon':{const saved={id:'icon-test',name:payload.name,svg:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 4h16v16H4Z"/></svg>'};savedIcons=[saved];return saved;}
         case 'deletePluginIcon':assert.equal(payload.id,'icon-test');savedIcons=[];return {items:[]};
-        case 'drawPluginIcon':assert.equal(payload.description,'Таблица с восходящей линией');drawCalls++;{const saved={id:'icon-drawn',name:payload.name,paths:['M3 4h18v16H3z','M3 10h18M9 4v16']};savedIcons=[saved];return saved;}
+        case 'drawPluginIcon':assert.equal(payload.description,'Таблица с восходящей линией');drawCalls++;{const saved={id:'icon-drawn',name:payload.name,svg:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 4h18v16H3z M3 10h18M9 4v16"/></svg>'};savedIcons=[saved];return saved;}
         case 'createPlugin':assert.equal(payload.name,'Example');assert.equal(payload.rootPath,null);assert.equal(payload.iconId,'icon-drawn');assert.equal(payload.iconDescription,'');return {...item};
         case 'getPluginSourceState':return {pluginId:payload.pluginId,stamp:'source-'+version};
         case 'getPluginChat':case 'getProjectChat':return {project:{workspaceId:'source-1'},sessionId:'source-chat-1',messages:[{role:'assistant',text:'Исходники готовы к изменению.'}],state:{Status:'idle'}};
         case 'submitProjectChat':assert.equal(payload.sessionId,'source-chat-1');assert.equal(payload.input.sessionId,payload.sessionId);iconPrompt=payload.input.message;return {project:{workspaceId:'source-1'},sessionId:payload.sessionId,messages:[{role:'assistant',text:'SVG-иконка смоделирована.'}],state:{Status:'completed'}};
         case 'checkPlugin':candidate='candidate-'+version;return {candidateId:candidate,files:3,bytes:100};
-        case 'applyPlugin':assert.equal(payload.candidateId,candidate);active=version;item.releaseId='release-'+version;item.enabled=true;item.icon='icon.svg';item.iconPaths=['M4 18V6h3v12M10 18v-7h3v7M16 18V4h3v14'];return {...item};
+        case 'applyPlugin':assert.equal(payload.candidateId,candidate);active=version;item.releaseId='release-'+version;item.enabled=true;item.icon='icon.svg';item.iconSvg='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 18V6h3v12M10 18v-7h3v7M16 18V4h3v14"/></svg>';return {...item};
         case 'openPlugin':{const origin='https://view-'+(++sequence)+'.rnassistant-plugin.invalid';realms.set(origin,{origin,files:fixture(payload.candidateId?'preview-v'+version:'v'+active)});return {instanceId:origin,entryUrl:origin+'/index.html',releaseId:'release-'+version,preview:!!payload.candidateId};}
         case 'closePlugin':realms.delete(payload.instanceId);return {};
         case 'disablePlugin':item.enabled=false;return {...item};
@@ -169,7 +169,7 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
     await page.locator('#pluginPreview').click();
     await page.frameLocator('#pluginPreviewMount iframe').locator('#run').click();await page.frameLocator('#pluginPreviewMount iframe').locator('#answer').filter({hasText:'hello preview-v1'}).waitFor();
     await page.locator('#pluginApply').click();await page.locator('#pluginDevelopmentActions summary').click();await page.locator('#pluginReopen').click();
-    assert.equal(await page.locator('#pluginRail [data-plugin-id="example"] svg path').count(),1,'published SVG icon appears in the rail');
+    assert.equal(await page.locator('#pluginRail [data-plugin-id="example"] .plugin-icon-image').count(),1,'published SVG icon appears in the rail');
     await page.frameLocator('#pluginPreviewMount iframe').locator('#run').click();await page.frameLocator('#pluginPreviewMount iframe').locator('#answer').filter({hasText:'hello v1'}).waitFor();
     version=2;await page.locator('#pluginPreview').click();await page.frameLocator('#pluginPreviewMount iframe').locator('#run').click();
     await page.frameLocator('#pluginPreviewMount iframe').locator('#answer').filter({hasText:'hello preview-v2'}).waitFor();

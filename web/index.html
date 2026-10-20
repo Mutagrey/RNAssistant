@@ -563,13 +563,14 @@
           <p class="plugin-status" id="pluginStatus" role="status"></p>
           <div class="plugin-manager" id="pluginManager">
             <div class="plugin-create-heading"><button class="plugin-create-mark" id="pluginIconTrigger" type="button" aria-label="Выбрать иконку плагина" aria-expanded="false" aria-controls="pluginIconEditor" title="Выбрать иконку"><span id="pluginIconPreview" aria-hidden="true"><svg data-rna-icon="puzzle" viewBox="0 0 24 24"></svg></span></button><div><p class="plugin-create-eyebrow">Плагин</p><h2 id="pluginCreateTitle">Новый плагин</h2><p id="pluginCreateSubtitle">Нажмите на значок, чтобы выбрать или нарисовать иконку.</p></div></div>
+            <div class="plugin-icon-color" id="pluginColorControl"><label>Цвет иконки<select id="pluginIconColorMode"><option value="theme">По теме</option><option value="original">Исходные цвета SVG</option><option value="custom">Свой цвет</option></select></label><input type="color" id="pluginIconColor" value="#368453" aria-label="Цвет иконки плагина" hidden></div>
             <div class="plugin-icon-editor" id="pluginIconEditor" hidden>
               <fieldset class="plugin-icon-picker" id="pluginIconPicker"><legend>Иконка плагина</legend>
                 <div class="plugin-icon-choices" id="pluginBuiltinIcons"></div>
                 <div class="plugin-icon-saved-heading"><strong>Сохранённые SVG</strong><span>Доступны для всех плагинов</span></div>
                 <div class="plugin-icon-choices" id="pluginSavedIcons"></div>
                 <div class="plugin-icon-draw" id="pluginIconBriefField" hidden><label>Описание для модели<textarea id="pluginIconDescription" rows="2" maxlength="500" placeholder="Например, таблица с восходящей линией и выделенной ячейкой"></textarea></label><button type="button" id="pluginIconDrawButton">Нарисовать иконку</button><p id="pluginIconDrawStatus" role="status"></p></div>
-                <details class="plugin-icon-import"><summary>Добавить готовый SVG</summary><label>Название<input id="pluginIconImportName" maxlength="120" placeholder="Например, Отчёт"></label><label>SVG-код<textarea id="pluginIconImportSvg" rows="3" maxlength="4096" placeholder="&lt;svg viewBox=&quot;0 0 24 24&quot;&gt;…&lt;/svg&gt;"></textarea></label><button type="button" id="pluginIconImportButton">Сохранить в библиотеку</button></details>
+                <details class="plugin-icon-import"><summary>Добавить готовый SVG</summary><label>Название<input id="pluginIconImportName" maxlength="120" placeholder="Например, Отчёт"></label><label>SVG-код<textarea id="pluginIconImportSvg" rows="3" maxlength="131072" placeholder="&lt;svg viewBox=&quot;0 0 24 24&quot;&gt;…&lt;/svg&gt;"></textarea></label><button type="button" id="pluginIconImportButton">Сохранить в библиотеку</button></details>
               </fieldset>
             </div>
             <form id="pluginCreateForm">

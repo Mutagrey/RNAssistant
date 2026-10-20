@@ -59,20 +59,14 @@
   var extraPlugins = [], pluginCandidateOwner = null;
   var pluginSourceRevision = Object.create(null);
   var savedPluginIcons = [], pluginIconSequence = 0;
-  function validatedPluginIconPaths(svg) {
-    if (typeof svg !== "string" || new TextEncoder().encode(svg).length > 4096) fail("SVG должен быть меньше 4 КБ.", "preview_icon_invalid");
-    var documentXml = new DOMParser().parseFromString(svg, "image/svg+xml"), root = documentXml.documentElement;
-    if (documentXml.doctype || root.localName !== "svg" || root.getAttribute("viewBox") !== "0 0 24 24" ||
-        !["", "http://www.w3.org/2000/svg"].includes(root.namespaceURI || "") ||
-        Array.from(root.attributes).some(function (attribute) { return attribute.name !== "viewBox" && attribute.name !== "xmlns"; }) ||
-        Array.from(root.childNodes).some(function (node) { return node.nodeType !== 1 && !(node.nodeType === 3 && !node.textContent.trim()); }))
-      fail("Нужен SVG 24×24 только с элементами path.", "preview_icon_invalid");
-    var paths = Array.from(root.children);
-    if (!paths.length || paths.length > 6 || paths.some(function (path) { return path.localName !== "path" || path.children.length ||
-        path.attributes.length !== 1 || path.attributes[0].name !== "d" || !path.getAttribute("d") ||
-        path.getAttribute("d").length > 1024 || !/^[MmLlHhVvCcSsQqTtAaZz0-9\s,.+\-]+$/.test(path.getAttribute("d")); }))
-      fail("Поддерживаются только 1–6 безопасных SVG path.", "preview_icon_invalid");
-    return paths.map(function (path) { return path.getAttribute("d"); });
+  // Preview-only SVG sizing; production admission and persistence are exercised by the Harness.
+  function previewIconSvg(svg) {
+    var xml = new DOMParser().parseFromString(svg, "image/svg+xml"), root = xml.documentElement;
+    if (xml.querySelector('parsererror') || root.localName !== 'svg') fail('Нужен полный SVG.', 'preview_icon_invalid');
+    root.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    if (!root.hasAttribute('viewBox')) root.setAttribute('viewBox', '0 0 ' + (parseFloat(root.getAttribute('width')) || 24) + ' ' + (parseFloat(root.getAttribute('height')) || 24));
+    root.setAttribute('width', '24'); root.setAttribute('height', '24'); root.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+    return new XMLSerializer().serializeToString(root);
   }
   var pluginCandidate = null, pluginInstanceSequence = 0;
   var inboxRevision = 1, inputSequence = 0, inputReceipts = Object.create(null);
@@ -529,20 +523,18 @@
     if (type === "getPluginIcons") return { items: clone(savedPluginIcons) };
     if (type === "savePluginIcon") {
       if (!payload.name || payload.name.length > 120) fail("Укажите название и SVG-код.", "preview_icon_invalid");
-      var paths = validatedPluginIconPaths(payload.svg);
-      var existing = savedPluginIcons.find(function (item) { return item.paths.join("\n") === paths.join("\n"); });
+      var svg = previewIconSvg(payload.svg);
+      var existing = savedPluginIcons.find(function (item) { return item.svg === svg; });
       if (existing) return clone(existing);
-      var added = { id: "icon-" + (++pluginIconSequence), name: payload.name, paths: paths };
+      var added = { id: "icon-" + (++pluginIconSequence), name: payload.name, svg: svg };
       savedPluginIcons.push(added); return clone(added);
     }
     if (type === "drawPluginIcon") {
       if (!payload.description || payload.description.length > 500) fail("Опишите иконку.", "preview_icon_invalid");
-      var drawn = payload.description.toLowerCase().includes("таблиц") ?
-        ["M3 4h18v16H3z", "M3 10h18M9 4v16M15 4v16", "M11 15l2 2 4-4"] :
-        ["M12 3l8 5v8l-8 5-8-5V8z", "M8 12h8M12 8v8"];
-      var existingDrawn = savedPluginIcons.find(function (item) { return item.paths.join("\n") === drawn.join("\n"); });
+      var drawn = previewIconSvg('<svg viewBox="0 0 64 64"><defs><linearGradient id="ink"><stop stop-color="' + (/^#[a-f0-9]{6}$/i.test(payload.iconColor || '') ? payload.iconColor : '#368453') + '"/><stop offset="1" stop-color="#69b7e4"/></linearGradient></defs><rect x="4" y="4" width="56" height="56" rx="12" fill="url(#ink)"/><path d="M16 42l12-12 8 6 12-16" fill="none" stroke="white" stroke-width="5"/></svg>');
+      var existingDrawn = savedPluginIcons.find(function (item) { return item.svg === drawn; });
       if (existingDrawn) return Object.assign(clone(existingDrawn), { previewSimulated: true });
-      var generated = { id: "icon-" + (++pluginIconSequence), name: payload.name || "Новый плагин", paths: drawn };
+      var generated = { id: "icon-" + (++pluginIconSequence), name: payload.name || "Новый плагин", svg: drawn };
       savedPluginIcons.push(generated); return Object.assign(clone(generated), { previewSimulated: true });
     }
     if (type === "deletePluginIcon") {
@@ -567,13 +559,13 @@
         (payload.name || "Plugin").replace(/[<>:\"/\\|?*]/g, "-").slice(0, 48) + "-" + (extraPlugins.length + 1);
       var newPlugin = { pluginId: "preview-plugin-" + (extraPlugins.length + 1),
         name: type === "createPlugin" ? payload.name : "Подключённый плагин",
-        icon: "puzzle", iconDescription: payload.iconDescription || "", sourceRoot: sourceRoot,
+        icon: "puzzle", iconColor: payload.iconColor || null, iconDescription: payload.iconDescription || "", sourceRoot: sourceRoot,
         releaseId: null, enabled: false, previewSimulated: true };
       if (type === "createPlugin" && payload.iconId && payload.iconId !== "draw") {
         var selectedIcon = savedPluginIcons.find(function (item) { return item.id === payload.iconId; });
         if (payload.iconId.startsWith("icon-") && !selectedIcon) fail("Сохранённая иконка недоступна.", "preview_icon_missing");
         newPlugin.icon = selectedIcon ? "icon.svg" : payload.iconId;
-        if (selectedIcon) newPlugin.iconPaths = selectedIcon.paths.slice();
+        if (selectedIcon) newPlugin.iconSvg = selectedIcon.svg;
       }
       newPlugin.sourceWorkspaceId = "source-" + newPlugin.pluginId;
       extraPlugins.push(newPlugin);
@@ -671,9 +663,9 @@
       pluginCandidateOwner = payload.pluginId;
       var checkedIcon = extraPlugins.find(function (item) { return item.pluginId === payload.pluginId; });
       if (checkedIcon && checkedIcon.iconDescription && checkedIcon.icon === "puzzle") {
-        var drawnPaths = ["M4 18V7h4v11M10 18v-7h4v7M16 18V4h4v14"];
-        if (!savedPluginIcons.some(function (item) { return item.paths.join("\n") === drawnPaths.join("\n"); }))
-          savedPluginIcons.push({ id: "icon-" + (++pluginIconSequence), name: checkedIcon.name, paths: drawnPaths });
+        var drawnSvg = previewIconSvg('<svg viewBox="0 0 24 24"><path d="M4 18V7h4v11M10 18v-7h4v7M16 18V4h4v14"/></svg>');
+        if (!savedPluginIcons.some(function (item) { return item.svg === drawnSvg; }))
+          savedPluginIcons.push({ id: "icon-" + (++pluginIconSequence), name: checkedIcon.name, svg: drawnSvg });
       }
       return { pluginId: payload.pluginId, candidateId: pluginCandidate, files: 1, bytes: 0,
         checks: ["preview-only"], previewSimulated: true };
@@ -685,7 +677,7 @@
       applying.enabled = true; applying.releaseId = "preview-release-" + (++pluginInstanceSequence);
       if (applying !== pluginItem && applying.iconDescription) {
         applying.icon = "icon.svg";
-        applying.iconPaths = ["M4 18V7h4v11M10 18v-7h4v7M16 18V4h4v14"];
+        applying.iconSvg = previewIconSvg('<svg viewBox="0 0 24 24"><path d="M4 18V7h4v11M10 18v-7h4v7M16 18V4h4v14"/></svg>');
       }
       if (applying === pluginItem) projectSelected = false;
       pluginCandidate = null; pluginCandidateOwner = null; return clone(applying);
@@ -712,10 +704,10 @@
     if (type === "updatePluginAppearance") {
       var edited = [pluginItem].concat(extraPlugins).find(function (item) { return item.pluginId === payload.pluginId; });
       if (!edited || !payload.name.trim()) fail("Укажите название плагина.");
-      edited.name = payload.name.trim();
+      edited.name = payload.name.trim(); edited.iconColor = payload.iconColor || null;
       if (payload.iconId) {
         var saved = savedPluginIcons.find(function (item) { return item.id === payload.iconId; });
-        edited.icon = payload.iconId; edited.iconPaths = saved ? clone(saved.paths) : null;
+        edited.icon = payload.iconId; edited.iconSvg = saved ? saved.svg : null;
       }
       return clone(edited);
     }

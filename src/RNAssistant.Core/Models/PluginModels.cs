@@ -116,7 +116,8 @@ namespace RNAssistant.Core.Models
     {
         public string Name { get; set; }
         public string Icon { get; set; }
-        public string[] IconPaths { get; set; }
+        public string IconSvg { get; set; }
+        public string IconColor { get; set; }
     }
 
     public sealed class PluginRegistration

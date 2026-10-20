@@ -89,7 +89,7 @@
   async function refresh(){var result=await send('getPlugins',{});items=result.items;var rail=el('Rail');
     if(result.defaultSourceParent)el('DefaultSourcePath').textContent=result.defaultSourceParent;
     if(window.RNAssistantRailPopovers)window.RNAssistantRailPopovers.hide();rail.replaceChildren();items.forEach(function(item){
-    var node=button('',function(){select(item.pluginId);});node.innerHTML=window.RNAssistantIcons.renderPlugin(item.icon || (item.pluginId==='data-templates'?'dataTemplates':'puzzle'),item.iconPaths);node.className='rail-button';node.setAttribute('aria-label',item.name);node.dataset.railLabel=item.name;node.dataset.railPopover='plugin-item';node.dataset.railError=item.iconError||'';node.dataset.pluginId=item.pluginId;node.dataset.section='plugins';rail.appendChild(node);
+    var node=button('',function(){select(item.pluginId);});node.innerHTML=window.RNAssistantIcons.renderPlugin(item.icon || (item.pluginId==='data-templates'?'dataTemplates':'puzzle'),item.iconSvg,item.iconColor);node.className='rail-button';node.setAttribute('aria-label',item.name);node.dataset.railLabel=item.name;node.dataset.railPopover='plugin-item';node.dataset.railError=item.iconError||'';node.dataset.pluginId=item.pluginId;node.dataset.section='plugins';rail.appendChild(node);
   });if(result.error)status(result.error,true);else if(items.some(function(item){return item.iconError;}))status('У одного из плагинов некорректная SVG-иконка. Исправьте исходник и проверьте пакет.',true);return items;}
   async function closeView(){frameReady=false;pendingNavigation=null;if(!view)return;var old=view;view=null;el('PreviewMount').replaceChildren();await send('closePlugin',{instanceId:old.instanceId});}
   async function showView(preview){var current=epoch,previous=view,opened=await send('openPlugin',{pluginId:selected.pluginId,candidateId:preview?candidate.candidateId:null});
@@ -177,28 +177,29 @@
     el('Root').required=manual&&!editingPlugin;el('Root').disabled=!manual||!!editingPlugin;
     el('SourceChange').textContent=customSource?'Использовать папку по умолчанию':'Указать другую папку';
   }
+  function iconColor(){var mode=el('IconColorMode').value;return mode==='custom'?el('IconColor').value:mode==='original'?'original':null;}
   function updateCreatePreview(){var connecting=el('Connect').checked,name=el('Name').value.trim();
     el('CreateTitle').textContent=connecting?'Подключить плагин':name||'Новый плагин';
     el('CreateSubtitle').textContent=editingPlugin?'Название и иконка плагина в боковой панели.':connecting?'Укажите папку с plugin.json.':'Нажмите на значок, чтобы выбрать или нарисовать иконку.';
-    el('IconTrigger').disabled=connecting;
-    var saved=selectedIconId==='current'&&editingPlugin?{paths:editingPlugin.iconPaths}:savedIcons.find(function(item){return item.id===selectedIconId;});
-    el('IconPreview').innerHTML=window.RNAssistantIcons.renderPlugin(selectedIconId==='draw'?'spark':selectedIconId,saved&&saved.paths);
+    el('IconTrigger').disabled=connecting;el('ColorControl').hidden=connecting;el('IconColor').hidden=el('IconColorMode').value!=='custom';
+    var saved=selectedIconId==='current'&&editingPlugin?{svg:editingPlugin.iconSvg}:savedIcons.find(function(item){return item.id===selectedIconId;});
+    el('IconPreview').innerHTML=window.RNAssistantIcons.renderPlugin(selectedIconId==='draw'?'spark':selectedIconId,saved&&saved.svg,iconColor());
   }
-  function iconOption(id,name,paths){
+  function iconOption(id,name,svg){
     var choice=button('',function(){selectedIconId=id;renderIconChoices();if(id==='draw')el('IconDescription').focus();else setIconEditor(false);});
     choice.className='plugin-icon-option';choice.dataset.iconId=id;choice.setAttribute('aria-label',name);
     choice.setAttribute('aria-pressed',String(selectedIconId===id));choice.title=name;
-    choice.innerHTML=window.RNAssistantIcons.renderPlugin(id==='draw'?'spark':id,paths);
+    choice.innerHTML=window.RNAssistantIcons.renderPlugin(id==='draw'?'spark':id,svg);
     var caption=document.createElement('span');caption.textContent=name;choice.appendChild(caption);return choice;
   }
   function renderIconChoices(){
     var builtins=el('BuiltinIcons'),saved=el('SavedIcons');builtins.replaceChildren();saved.replaceChildren();
     builtins.appendChild(iconOption('draw','Нарисовать'));
-    if(editingPlugin&&editingPlugin.iconPaths)builtins.appendChild(iconOption('current','Текущая иконка',editingPlugin.iconPaths));
+    if(editingPlugin&&editingPlugin.iconSvg)builtins.appendChild(iconOption('current','Текущая иконка',editingPlugin.iconSvg));
     window.RNAssistantIcons.pluginChoices.forEach(function(choice){builtins.appendChild(iconOption(choice[0],choice[1]));});
     if(!savedIcons.length){var empty=document.createElement('p');empty.className='plugin-icon-empty';empty.textContent='Пока нет сохранённых иконок.';saved.appendChild(empty);}
     savedIcons.forEach(function(item){
-      var card=document.createElement('div');card.className='plugin-icon-saved-card';card.appendChild(iconOption(item.id,item.name,item.paths));
+      var card=document.createElement('div');card.className='plugin-icon-saved-card';card.appendChild(iconOption(item.id,item.name,item.svg));
       var remove=button('×',function(){run(async function(){var catalog=await send('deletePluginIcon',{id:item.id});savedIcons=catalog.items;
         if(selectedIconId===item.id)selectedIconId='puzzle';renderIconChoices();status('Иконка удалена из библиотеки. Плагины и их исходники не изменены.');});});
       remove.className='plugin-icon-remove';remove.title='Удалить '+item.name;remove.setAttribute('aria-label','Удалить '+item.name);card.appendChild(remove);saved.appendChild(card);
@@ -210,7 +211,7 @@
   async function drawIcon(){var brief=el('IconDescription').value.trim();
     if(!brief)throw new Error('Опишите иконку перед рисованием.');
     var draw=el('IconDrawButton'),note=el('IconDrawStatus');draw.disabled=true;note.textContent='Модель рисует SVG…';
-    try{var item=await send('drawPluginIcon',{name:el('Name').value.trim()||'Новый плагин',description:brief});
+    try{var item=await send('drawPluginIcon',{name:el('Name').value.trim()||'Новый плагин',description:brief,iconColor:iconColor()});
       if(!savedIcons.some(function(saved){return saved.id===item.id;}))savedIcons.push(item);
       selectedIconId=item.id;renderIconChoices();note.textContent=item.previewSimulated?'Пример: иконка создана в памяти вкладки.':'Иконка готова и сохранена в библиотеке.';status('');return item;
     }catch(error){note.textContent=error.message;throw error;}finally{draw.disabled=false;}}
@@ -218,7 +219,9 @@
     epoch++;stopSourceWatch();await closeView();editingPlugin=item||null;
     switchTab('plugins');el('Manager').hidden=false;el('Workbench').hidden=true;status('');
     el('CreateForm').reset();el('Connect').checked=false;customSource=false;
-    selectedIconId=item?(item.iconPaths?'current':item.icon||'puzzle'):'puzzle';
+    selectedIconId=item?(item.iconSvg?'current':item.icon||'puzzle'):'puzzle';
+    var color=item&&item.iconColor;
+    el('IconColorMode').value=color==='original'?'original':color?'custom':'theme';el('IconColor').value=color&&color!=='original'?color:'#368453';
     el('Name').value=item?item.name:'';el('Task').closest('label').hidden=!!item;
     el('Connect').closest('label').hidden=!!item;el('EditCancel').hidden=!item;
     el('Manager').querySelector('.plugin-vendors').hidden=!!item;
@@ -240,7 +243,7 @@
     popovers.register('plugin-add',async function(anchor,body,isCurrent){body.textContent='Загружаю…';
       var catalog=await send('getRemovedPlugins',{});if(!isCurrent())return;body.replaceChildren();
       if(!(catalog.items||[]).length){var empty=document.createElement('p');empty.className='rail-hover-empty';empty.textContent='Удалённых с панели плагинов нет.';body.appendChild(empty);}
-      (catalog.items||[]).forEach(function(item){var restore=popovers.action(item.name,window.RNAssistantIcons.renderPlugin(item.icon||'puzzle',item.iconPaths),function(){popovers.hide();run(async function(){await send('restorePlugin',{pluginId:item.pluginId});await refresh();status('Плагин возвращён на панель.');});});
+      (catalog.items||[]).forEach(function(item){var restore=popovers.action(item.name,window.RNAssistantIcons.renderPlugin(item.icon||'puzzle',item.iconSvg,item.iconColor),function(){popovers.hide();run(async function(){await send('restorePlugin',{pluginId:item.pluginId});await refresh();status('Плагин возвращён на панель.');});});
         body.appendChild(restore);});
       var line=document.createElement('div');line.className='rail-hover-separator';body.appendChild(line);
       var create=popovers.action('Создать плагин',window.RNAssistantIcons.render('plus'),function(){popovers.hide();el('Add').click();});
@@ -249,13 +252,14 @@
   }
   function bind(){
     registerRailPopovers();
-    new MutationObserver(syncAppearance).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme','data-accent']});
+    new MutationObserver(function(){syncAppearance();renderIconChoices();el('Rail').querySelectorAll('[data-plugin-id]').forEach(function(node){var item=items.find(function(value){return value.pluginId===node.dataset.pluginId;});if(item)node.innerHTML=window.RNAssistantIcons.renderPlugin(item.icon||'puzzle',item.iconSvg,item.iconColor);});}).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme','data-accent']});
     el('Project').onclick=function(){var frame=el('PreviewMount').querySelector('iframe');if(frame&&frame.contentWindow)frame.contentWindow.postMessage({type:'rna.dataTemplates.project'},'*');};
     el('NavigationProject').onclick=function(){el('Project').click();};
     el('NavigationSearch').oninput=renderNavigation;
     el('Add').onclick=function(){run(function(){return openManager(null);});};
     el('EditCancel').onclick=function(){if(editingPlugin){var id=editingPlugin.pluginId;editingPlugin=null;select(id);}};
     el('Name').oninput=updateCreatePreview;
+    el('IconColorMode').onchange=updateCreatePreview;el('IconColor').oninput=updateCreatePreview;
     el('IconTrigger').onclick=function(){setIconEditor(el('IconEditor').hidden);if(!el('IconEditor').hidden)el('BuiltinIcons').querySelector('button').focus();};
     el('IconEditor').onkeydown=function(event){if(event.key==='Escape'){event.preventDefault();setIconEditor(false);}};
     el('IconDrawButton').onclick=function(){run(drawIcon);};
@@ -266,10 +270,10 @@
       if(!connecting&&selectedIconId==='draw'){await drawIcon();iconBrief='';}
       if(selectedIconId!=='draw')iconBrief='';
       if(editingPlugin){
-        var changed=await send('updatePluginAppearance',{pluginId:editingPlugin.pluginId,name:el('Name').value.trim(),iconId:selectedIconId==='current'?null:selectedIconId});
+        var changed=await send('updatePluginAppearance',{pluginId:editingPlugin.pluginId,name:el('Name').value.trim(),iconId:selectedIconId==='current'?null:selectedIconId,iconColor:iconColor()});
         editingPlugin=null;await refresh();busy=false;await select(changed.pluginId);status('Название и иконка сохранены.');return;
       }
-      var created=await send(connecting?'connectPlugin':'createPlugin',{name:el('Name').value,rootPath:connecting||customSource?el('Root').value.trim():null,description:task,iconDescription:iconBrief,iconId:selectedIconId});
+      var created=await send(connecting?'connectPlugin':'createPlugin',{name:el('Name').value,rootPath:connecting||customSource?el('Root').value.trim():null,description:task,iconDescription:iconBrief,iconId:selectedIconId,iconColor:iconColor()});
       await refresh();status((connecting?'Исходники подключены: ':'Исходники созданы: ')+created.sourceRoot);busy=false;await select(created.pluginId);developmentToggle.setOpen(true);
       if(!connecting&&(task||iconBrief)){var message='Загрузи навыки workspace.plugin_authoring и workspace.files. Прочитай README.md и plugin.json. ';
         if(task)message+='Создай плагин по задаче: '+task+'. ';

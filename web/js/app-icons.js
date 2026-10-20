@@ -93,14 +93,22 @@
     branch: "fork", retry: "refresh", html_workspace: "html", tool_result: "terminal", compaction: "compress", attachment: "file", script: "js", data: "json", task_list: "check", sequence: "layers" };
 
   function resolve(name) { return iconPaths[iconAliases[name] || name] || iconPaths.file; }
-  function plugin(name, paths) {
-    if (Array.isArray(paths) && paths.length > 0 && paths.length <= 6 &&
-        paths.every(function (path) { return typeof path === 'string' && path.length <= 1024 &&
-          /^[MmLlHhVvCcSsQqTtAaZz0-9\s,.+\-]+$/.test(path); })) {
-      return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-        paths.map(function (path) { return '<path d="' + path + '"/>'; }).join('') + '</svg>';
+  function plugin(name, svg, color) {
+    var original = color === 'original';
+    color = typeof color === 'string' && /^#[a-f0-9]{6}$/i.test(color) ? color : null;
+    if (typeof svg === 'string' && svg.trim()) {
+      var theme = getComputedStyle(document.documentElement).getPropertyValue('--ink-muted').trim() || '#66736c';
+      var xml = new DOMParser().parseFromString(svg, 'image/svg+xml');
+      if (!xml.documentElement.hasAttribute('color')) xml.documentElement.setAttribute('color', theme);
+      var source = new XMLSerializer().serializeToString(xml.documentElement);
+      var uri = 'data:image/svg+xml,' + encodeURIComponent(source).replace(/[!'()*]/g, function(value){return '%' + value.charCodeAt(0).toString(16);});
+      // SVG is loaded as an image, never inserted into the host document's DOM.
+      if (!original) return '<span class="plugin-icon-image plugin-icon-tint" aria-hidden="true" style="background-color:' + (color || 'var(--ink-muted)') +
+        ';mask-image:url(' + uri + ');-webkit-mask-image:url(' + uri + ')"></span>';
+      return '<img class="plugin-icon-image" alt="" aria-hidden="true" draggable="false" src="' + uri + '">';
     }
-    return render(name && iconPaths[iconAliases[name] || name] ? name : 'puzzle');
+    var markup = render(name && iconPaths[iconAliases[name] || name] ? name : 'puzzle');
+    return markup.replace('<svg ', '<svg style="color:' + (color || 'var(--ink-muted)') + '" ');
   }
   function render(name, className) {
     var cssClass = className && /^[a-z0-9_ -]+$/i.test(className) ? ' class="' + className + '"' : '';

@@ -55,7 +55,7 @@ namespace RNAssistant.Core.Storage
         {
             var manifest = PluginPackageFiles.ParseManifest(_files.ReadText(source.Workspace, "plugin.json").Text);
             if (PluginPackageFiles.IconIsSvgPath(manifest.Icon))
-                PluginPackageFiles.ReadIconPaths(PluginPackageFiles.Read(source.Workspace.RootPath, manifest.Icon, 4096));
+                PluginPackageFiles.ReadIconSvg(PluginPackageFiles.Read(source.Workspace.RootPath, manifest.Icon, PluginIconSvg.MaximumBytes));
             var current = Get(manifest.Id);
             if (current != null)
             {
@@ -85,7 +85,7 @@ namespace RNAssistant.Core.Storage
                 using (var buffer = new MemoryStream()) { stream.CopyTo(buffer); members.Add(path, buffer.ToArray()); }
                 sourcePins.Add(pin);
             }
-            if (PluginPackageFiles.IconIsSvgPath(manifest.Icon)) PluginPackageFiles.ReadIconPaths(members[manifest.Icon]);
+            if (PluginPackageFiles.IconIsSvgPath(manifest.Icon)) PluginPackageFiles.ReadIconSvg(members[manifest.Icon]);
             if (!members["plugin.json"].SequenceEqual(PluginPackageFiles.Utf8.GetBytes(observedManifest.Text)))
                 throw new PluginException("plugin_source_changed", "The plugin manifest changed while capturing its files.");
             foreach (var dependency in manifest.Vendors)
@@ -263,7 +263,21 @@ namespace RNAssistant.Core.Storage
             var data = _authority.GetView(Scope, reference, view);
             if (data?.Payload == null || data.Payload.ByteLength > 1024 * 1024)
                 throw new PluginException("plugin_release_invalid", "Invalid package metadata.");
-            return JsonConvert.DeserializeObject<T>(_blobs.ReadText(data.Payload.ToBlobReference()), PluginPackageFiles.Json);
+            var json = _blobs.ReadText(data.Payload.ToBlobReference());
+            if (typeof(T) == typeof(PluginRegistration))
+            {
+                // Decode the previous path-array appearance into the only live SVG representation.
+                var document = Newtonsoft.Json.Linq.JObject.Parse(json);
+                var appearance = document["Appearance"] as Newtonsoft.Json.Linq.JObject;
+                var paths = appearance?["IconPaths"];
+                if (paths != null)
+                {
+                    if (paths.Type != Newtonsoft.Json.Linq.JTokenType.Null)
+                        appearance["IconSvg"] = PluginIconSvg.FromLegacyPaths(paths.ToObject<string[]>());
+                    appearance.Remove("IconPaths"); json = document.ToString(Formatting.None);
+                }
+            }
+            return JsonConvert.DeserializeObject<T>(json, PluginPackageFiles.Json);
         }
 
         private static void ValidateRelease(PluginReleaseRecord record)

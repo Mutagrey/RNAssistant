@@ -25,6 +25,7 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("description")] public string Description { get; set; }
         [JsonProperty("iconDescription")] public string IconDescription { get; set; }
         [JsonProperty("iconId")] public string IconId { get; set; }
+        [JsonProperty("iconColor")] public string IconColor { get; set; }
     }
     public sealed class PluginIconSaveRequest
     {
@@ -36,9 +37,11 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("pluginId", Required = Required.Always)] public string PluginId { get; set; }
         [JsonProperty("name", Required = Required.Always)] public string Name { get; set; }
         [JsonProperty("iconId")] public string IconId { get; set; }
+        [JsonProperty("iconColor")] public string IconColor { get; set; }
     }
     public sealed class PluginIconDrawRequest
     {
+        [JsonProperty("iconColor")] public string IconColor { get; set; }
         [JsonProperty("name")] public string Name { get; set; }
         [JsonProperty("description")] public string Description { get; set; }
     }
@@ -70,7 +73,8 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("pluginId")] public string PluginId { get; set; }
         [JsonProperty("name")] public string Name { get; set; }
         [JsonProperty("icon")] public string Icon { get; set; }
-        [JsonProperty("iconPaths", NullValueHandling = NullValueHandling.Ignore)] public string[] IconPaths { get; set; }
+        [JsonProperty("iconSvg", NullValueHandling = NullValueHandling.Ignore)] public string IconSvg { get; set; }
+        [JsonProperty("iconColor", NullValueHandling = NullValueHandling.Ignore)] public string IconColor { get; set; }
         [JsonProperty("iconError", NullValueHandling = NullValueHandling.Ignore)] public string IconError { get; set; }
         [JsonProperty("sourceWorkspaceId")] public string SourceWorkspaceId { get; set; }
         [JsonProperty("sourceRoot")] public string SourceRoot { get; set; }

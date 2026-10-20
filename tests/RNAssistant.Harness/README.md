@@ -119,7 +119,8 @@ HTML/plugin/export admission, binary/directory unknown-effect recovery, result s
 and runtime-owned prepared confirmation. The source-inclusion check verifies old-style
 project registration; no Office/VSTO build is needed.
 The same filter checks SVG generation/repair through controlled model replies,
-safe shape normalization and durable name/icon editing without changing publication.
+SVG viewport normalization with retained colors/gradients/transparency/transforms, legacy icon
+conversion and durable name/icon/color editing without changing publication.
 Source chat coverage checks independent sessions in the common project catalog,
 retained message history across creation/restart, exact workspace/session refusal,
 deletion and explicit reopening after history removal.
@@ -134,7 +135,7 @@ export browser suite also passes; it does not qualify native plugin transport.
 rendering and composer metrics, preserves drafts on failed delivery, checks retry
 identity and mode/reasoning preferences, narrow layout, the development splitter,
 the shared panel buttons (geometry, Enter/Space/Escape, pointer focus after keyboard use and draft retention),
-plugin name/icon editing, new source chats, navigation through the main history tree,
+plugin name/icon/color editing and creation (including rendered SVG color pixels and neutral defaults following the theme), new source chats, navigation through the main history tree,
 draft restoration and late replies after switching chats.
 `RNA_CHAT_SCREENSHOTS` saves the visual review captures.
 `node tests/web/splitter-preferences.test.js` checks the shared divider interaction:

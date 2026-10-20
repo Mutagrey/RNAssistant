@@ -379,3 +379,15 @@ Correlation ids, значения stages и ограничения trace:
 [ADR-0002](../decisions/ADR-0002-model-protocol-boundary.md),
 [Phase 2A evidence](PHASE_2A_MODEL_PROTOCOL.md). Office stream projector адаптирует
 прежний provisional preview к callbacks Core; это presentation, не второй protocol.
+
+## Plugin icon SVG storage decoder — 2026-10-20
+
+Owner: Core `PluginIconLibrary` / `PluginStore`. The active format is a normalized
+static SVG string plus an optional appearance color; old geometry conversion and
+path-array bridge/render contracts are removed. Library v1 files are decoded on read,
+verified against their original path digest and retain the same ID without a
+write during reads. Immutable registration bodies with `Appearance.IconPaths` decode into
+`IconSvg` when read; their next normal update writes only SVG. There is no dual-write
+or alternate rendering path. Removal gate: an explicit storage-format reset or an
+offline migration proves that no library v1 or reachable registration body needs
+the decoder. Do not drop existing user icons merely to remove this decoder.

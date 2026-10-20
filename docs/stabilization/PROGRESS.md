@@ -1,5 +1,19 @@
 # Stabilization progress
 
+## Colored plugin SVG icons — 2026-10-20
+
+The shared create/appearance editor defaults to a neutral color following the theme,
+with explicit original SVG palette or custom single-color modes. Core stores normalized SVG instead of reconstructed paths;
+viewport sizing preserves coordinate systems, fills, transforms, gradients and CSS.
+The old 4 KiB / 16-shape / 1024-character restrictions and the separate UI six-path
+gate are removed. Static image isolation and bounded active/external-content checks
+remain. Old saved outlines migrate without deleting icons or changing their IDs.
+Nine focused plugin Harness cases and Chromium color pixel/create/edit/reopen/theme
+checks pass. A live `gemma4:cloud` request through the actual drawing service
+returned a colored SVG with one model call in 6 seconds; it normalized and saved.
+This is one provider sample, not a general reliability or Office qualification.
+Windows/WebView2 delivery remains unverified.
+
 ## Minimal VBA admission and live check — 2026-10-20
 
 The isolated `json_object` / 32768-context / 4096-output VBA case now completes:

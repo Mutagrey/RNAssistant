@@ -66,8 +66,8 @@ namespace RNAssistant.Core.Storage
         public static bool IconIsSvgPath(string icon)
         { return icon != null && icon.EndsWith(".svg", StringComparison.OrdinalIgnoreCase); }
 
-        public static string[] ReadIconPaths(byte[] bytes)
-        { return PluginIconSvg.Read(bytes); }
+        public static string ReadIconSvg(byte[] bytes)
+        { return PluginIconSvg.Normalize(bytes); }
 
         public static PluginManifestV1 ParseManifest(string json)
         {

@@ -10,114 +10,130 @@ using System.Xml.Linq;
 
 namespace RNAssistant.Core.Storage
 {
-    // Admission of outline SVG. Only geometry reaches the UI; styling belongs to the icon registry.
-    internal static class PluginIconSvg
+    // Static SVG artwork stays SVG. Only its viewport is normalized; paint and geometry survive.
+    public static class PluginIconSvg
     {
-        internal static string[] Read(byte[] bytes)
+        public const int MaximumBytes = 128 * 1024;
+        private const string Namespace = "http://www.w3.org/2000/svg";
+        private static readonly HashSet<string> Elements = new HashSet<string>((
+            "svg g defs path rect circle ellipse line polyline polygon text tspan textPath title desc style " +
+            "linearGradient radialGradient stop pattern clipPath mask marker filter use symbol switch view " +
+            "feBlend feColorMatrix feComponentTransfer feComposite feConvolveMatrix feDiffuseLighting " +
+            "feDisplacementMap feDistantLight feDropShadow feFlood feFuncA feFuncB feFuncG feFuncR " +
+            "feGaussianBlur feMerge feMergeNode feMorphology feOffset fePointLight feSpecularLighting " +
+            "feSpotLight feTile feTurbulence").Split(' '), StringComparer.Ordinal);
+
+        public static string Normalize(byte[] bytes)
         {
-            if (bytes == null || bytes.Length == 0 || bytes.Length > 4096) Fail("Use 1–4096 UTF-8 bytes.");
+            if (bytes == null || bytes.Length == 0 || bytes.Length > MaximumBytes)
+                Fail("SVG must contain 1–131072 UTF-8 bytes.");
             try
             {
+                XElement root;
                 using (var reader = XmlReader.Create(new StringReader(PluginPackageFiles.Utf8.GetString(bytes)),
-                    new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null, MaxCharactersInDocument = 4096 }))
+                    new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null, MaxCharactersInDocument = MaximumBytes }))
+                    root = XElement.Load(reader);
+                if (root.Name.LocalName != "svg") Fail("Return one complete SVG document.");
+                var elements = root.DescendantsAndSelf().ToArray();
+                if (elements.Length > 2048) Fail("The SVG exceeds 2048 elements.");
+                foreach (var element in elements)
                 {
-                    var root = XElement.Load(reader);
-                    if (root.Name.LocalName != "svg" || (string)root.Attribute("viewBox") != "0 0 24 24")
-                        Fail("Use an SVG with viewBox=\"0 0 24 24\".");
-                    var paths = new List<string>();
-                    ReadElement(root, paths, 0);
-                    if (paths.Count == 0 || paths.Count > 16) Fail("Use 1–16 visible outline shapes.");
-                    return paths.ToArray();
+                    if (element.Ancestors().Take(65).Count() > 64) Fail("The SVG is nested too deeply.");
+                    if (element.Name.NamespaceName != "" && element.Name.NamespaceName != Namespace || !Elements.Contains(element.Name.LocalName))
+                        Fail("Unsupported active or non-vector SVG element: " + element.Name.LocalName + ". Use self-contained static SVG.");
+                    element.Name = XName.Get(element.Name.LocalName, Namespace);
+                    foreach (var attribute in element.Attributes().ToArray())
+                    {
+                        if (attribute.IsNamespaceDeclaration) { attribute.Remove(); continue; }
+                        var name = attribute.Name.LocalName;
+                        if (name.StartsWith("on", StringComparison.OrdinalIgnoreCase) ||
+                            attribute.Name.NamespaceName != "" && !(attribute.Name.NamespaceName == "http://www.w3.org/1999/xlink" && name == "href") &&
+                            !(attribute.Name.Namespace == XNamespace.Xml && (name == "space" || name == "lang")))
+                            Fail("Scripts, event handlers and external namespaces are not supported in icons.");
+                        if (name == "href") RequireLocalReference(attribute.Value);
+                        if (name == "style") CheckCss(attribute.Value);
+                        else CheckUrls(attribute.Value);
+                    }
+                    if (element.Name.LocalName == "style") CheckCss(element.Value);
+                    foreach (var instruction in element.Nodes().OfType<XProcessingInstruction>().ToArray()) instruction.Remove();
+                    foreach (var comment in element.Nodes().OfType<XComment>().ToArray()) comment.Remove();
                 }
+                var viewBox = (string)root.Attribute("viewBox");
+                if (string.IsNullOrWhiteSpace(viewBox))
+                    viewBox = "0 0 " + Dimension((string)root.Attribute("width")) + " " + Dimension((string)root.Attribute("height"));
+                var coordinates = Regex.Split(viewBox.Trim(), @"[\s,]+");
+                if (coordinates.Length != 4) Fail("viewBox must contain x, y, width and height.");
+                var numbers = coordinates.Select(Number).ToArray();
+                if (numbers[2] <= 0 || numbers[3] <= 0) Fail("viewBox width and height must be positive.");
+                root.SetAttributeValue("viewBox", string.Join(" ", numbers.Select(Format)));
+                root.SetAttributeValue("width", "24"); root.SetAttributeValue("height", "24");
+                root.SetAttributeValue("preserveAspectRatio", "xMidYMid meet");
+                // Root CSS sizing must not override the icon's normalized viewport.
+                var style = Regex.Replace((string)root.Attribute("style") ?? "",
+                    @"(^|;)\s*(width|height|min-width|min-height|max-width|max-height)\s*:[^;]*", "$1", RegexOptions.IgnoreCase).Trim(' ', ';');
+                root.SetAttributeValue("style", (style.Length == 0 ? "" : style + ";") + "width:24px!important;height:24px!important");
+                var normalized = root.ToString(SaveOptions.DisableFormatting);
+                if (PluginPackageFiles.Utf8.GetByteCount(normalized) > MaximumBytes)
+                    Fail("The normalized SVG exceeds 131072 UTF-8 bytes. Reduce the artwork size.");
+                return normalized;
             }
             catch (Exception error) when (error is XmlException || error is DecoderFallbackException)
-            { throw new PluginException("plugin_icon_invalid", "The SVG icon is not valid UTF-8 XML."); }
+            { throw new PluginException("plugin_icon_invalid", "SVG is not complete, valid UTF-8 XML: " + error.Message); }
         }
 
-        private static void ReadElement(XElement element, List<string> paths, int depth)
+        public static string Color(string color)
         {
-            if (depth > 8 || paths.Count > 16) Fail("The SVG icon is too complex.");
-            if (element.Name.NamespaceName != "" && element.Name.NamespaceName != "http://www.w3.org/2000/svg")
-                Fail("Only SVG elements are supported.");
-            var name = element.Name.LocalName;
-            var geometry = name == "svg" && depth == 0 ? "viewBox width height" : name == "g" ? "" :
-                name == "path" ? "d" : name == "circle" ? "cx cy r" : name == "ellipse" ? "cx cy rx ry" :
-                name == "rect" ? "x y width height rx ry" : name == "line" ? "x1 y1 x2 y2" :
-                name == "polyline" || name == "polygon" ? "points" : null;
-            if (geometry == null) Fail("Unsupported SVG element: " + name + ". Use outline shapes only.");
-            foreach (var attribute in element.Attributes())
-            {
-                if (attribute.IsNamespaceDeclaration && attribute.Name.LocalName == "xmlns" && attribute.Value == "http://www.w3.org/2000/svg") continue;
-                if (attribute.Name.NamespaceName != "") Fail("SVG attribute namespaces are unsupported.");
-                var key = attribute.Name.LocalName; var value = attribute.Value;
-                if (geometry.Split(' ').Contains(key)) continue;
-                if (key == "fill" && value == "none") continue;
-                if (key == "stroke" && Regex.IsMatch(value, @"^(currentColor|black|white|#[a-fA-F0-9]{3}|#[a-fA-F0-9]{6})$")) continue;
-                if (key == "stroke-width" && Positive(value) <= 4) continue;
-                if (key == "stroke-linecap" && new[] { "round", "butt", "square" }.Contains(value)) continue;
-                if (key == "stroke-linejoin" && new[] { "round", "miter", "bevel" }.Contains(value)) continue;
-                Fail("Unsupported SVG attribute: " + key + ". Use fill=\"none\", a plain stroke and no styles, links or transforms.");
-            }
-            if (element.Nodes().Any(node => !(node is XElement) && !(node is XComment) &&
-                !(node is XText && string.IsNullOrWhiteSpace(((XText)node).Value)))) Fail("SVG text is unsupported.");
-            if (name == "svg" || name == "g")
-            {
-                foreach (var child in element.Elements()) ReadElement(child, paths, depth + 1);
-                return;
-            }
-            if (element.HasElements) Fail("Shapes cannot contain other elements.");
-            string path;
-            if (name == "path") path = (string)element.Attribute("d");
-            else if (name == "line") path = "M" + N(element, "x1") + " " + N(element, "y1") + "L" + N(element, "x2") + " " + N(element, "y2");
-            else if (name == "polyline" || name == "polygon")
-            {
-                var points = Regex.Split(((string)element.Attribute("points") ?? "").Trim(), @"[\s,]+");
-                if (points.Length < 4 || points.Length % 2 != 0) Fail("Use complete x,y pairs in points.");
-                path = "M" + string.Join(" ", points.Select(point => F(Number(point)))) + (name == "polygon" ? "Z" : "");
-            }
-            else if (name == "circle" || name == "ellipse")
-            {
-                double cx = V(element, "cx"), cy = V(element, "cy");
-                var rx = Positive((string)element.Attribute(name == "circle" ? "r" : "rx"));
-                var ry = name == "circle" ? rx : Positive((string)element.Attribute("ry"));
-                path = "M" + F(cx - rx) + " " + F(cy) + "a" + F(rx) + " " + F(ry) + " 0 1 0 " + F(2 * rx) + " 0a" +
-                    F(rx) + " " + F(ry) + " 0 1 0 " + F(-2 * rx) + " 0Z";
-            }
-            else
-            {
-                double x = V(element, "x"), y = V(element, "y");
-                double w = Positive((string)element.Attribute("width")), h = Positive((string)element.Attribute("height"));
-                double rx = V(element, "rx", V(element, "ry")), ry = V(element, "ry", rx);
-                if (rx < 0 || ry < 0) Fail("Corner radii cannot be negative.");
-                rx = Math.Min(rx, w / 2); ry = Math.Min(ry, h / 2);
-                if (rx == 0 || ry == 0) path = "M" + F(x) + " " + F(y) + "h" + F(w) + "v" + F(h) + "h" + F(-w) + "Z";
-                else
-                {
-                    var arc = "a" + F(rx) + " " + F(ry) + " 0 0 1 ";
-                    path = "M" + F(x + rx) + " " + F(y) + "h" + F(w - 2 * rx) + arc + F(rx) + " " + F(ry) +
-                        "v" + F(h - 2 * ry) + arc + F(-rx) + " " + F(ry) + "h" + F(2 * rx - w) + arc + F(-rx) + " " + F(-ry) +
-                        "v" + F(2 * ry - h) + arc + F(rx) + " " + F(-ry) + "Z";
-                }
-            }
-            if (string.IsNullOrWhiteSpace(path) || path.Length > 1024 ||
-                !Regex.IsMatch(path, @"^[Mm]\s*[+\-]?(?:\d|\.)[MmLlHhVvCcSsQqTtAaZzEe0-9\s,.+\-]*$", RegexOptions.CultureInvariant))
-                Fail("Use a valid path starting with M, at most 1024 characters.");
-            paths.Add(path);
+            if (string.IsNullOrEmpty(color)) return null;
+            if (color == "original") return color;
+            if (!Regex.IsMatch(color, @"\A#[a-fA-F0-9]{6}\z")) Fail("Choose a color in #RRGGBB format.");
+            return color.ToLowerInvariant();
         }
 
-        private static double V(XElement element, string name, double fallback = 0)
-        { var value = (string)element.Attribute(name); return value == null ? fallback : Number(value); }
-        private static string N(XElement element, string name) { return F(V(element, name)); }
-        private static string F(double value) { return value.ToString("0.########", CultureInfo.InvariantCulture); }
+        // One-way decoder for saved outline icons. New records never write path arrays.
+        internal static string FromLegacyPaths(IEnumerable<string> paths)
+        {
+            var values = paths?.ToArray();
+            if (values == null || values.Length == 0 || values.Any(string.IsNullOrWhiteSpace)) Fail("Saved outline geometry is missing.");
+            var root = new XElement("svg", new XAttribute("viewBox", "0 0 24 24"), new XAttribute("fill", "none"),
+                new XAttribute("stroke", "currentColor"), new XAttribute("stroke-width", "1.55"),
+                new XAttribute("stroke-linecap", "round"), new XAttribute("stroke-linejoin", "round"),
+                values.Select(path => new XElement("path", new XAttribute("d", path))));
+            return Normalize(PluginPackageFiles.Utf8.GetBytes(root.ToString(SaveOptions.DisableFormatting)));
+        }
+        private static void RequireLocalReference(string value)
+        {
+            if (!Regex.IsMatch(value.Trim(), @"\A#[A-Za-z_][\w.:-]*\z", RegexOptions.CultureInvariant))
+                Fail("Icons may reference local SVG IDs only; external resources are not supported.");
+        }
+        private static void CheckUrls(string value)
+        {
+            foreach (Match match in Regex.Matches(value, @"url\s*\(([^)]*)\)", RegexOptions.IgnoreCase))
+                RequireLocalReference(match.Groups[1].Value.Trim().Trim('\'', '"'));
+        }
+        private static void CheckCss(string value)
+        {
+            var css = Regex.Replace(value, @"/\*[\s\S]*?\*/", "");
+            if (css.Contains("\\") || Regex.IsMatch(css, @"@import|expression\s*\(|behavior\s*:|-moz-binding", RegexOptions.IgnoreCase))
+                Fail("SVG styles must be static and self-contained.");
+            CheckUrls(css);
+        }
+        private static string Dimension(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value) || value.Trim().EndsWith("%", StringComparison.Ordinal)) return "24";
+            var match = Regex.Match(value.Trim(), @"\A([+\-]?(?:\d*\.)?\d+(?:[eE][+\-]?\d+)?)\s*(px|pt|pc|in|cm|mm)?\z");
+            if (!match.Success) Fail("Specify a numeric width/height or a viewBox.");
+            var factor = match.Groups[2].Value == "pt" ? 96.0 / 72 : match.Groups[2].Value == "pc" ? 16 :
+                match.Groups[2].Value == "in" ? 96 : match.Groups[2].Value == "cm" ? 96 / 2.54 : match.Groups[2].Value == "mm" ? 96 / 25.4 : 1;
+            return Format(Number(match.Groups[1].Value) * factor);
+        }
         private static double Number(string value)
         {
-            double result;
-            if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out result) ||
-                double.IsNaN(result) || double.IsInfinity(result) || Math.Abs(result) > 1024) Fail("Use finite SVG coordinates.");
-            return result;
+            double number;
+            if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out number) || double.IsInfinity(number) || double.IsNaN(number))
+                Fail("SVG viewport dimensions must be finite numbers.");
+            return number;
         }
-        private static double Positive(string value)
-        { var result = Number(value); if (result <= 0) Fail("SVG dimensions must be positive."); return result; }
+        private static string Format(double value) { return value.ToString("G17", CultureInfo.InvariantCulture); }
         private static void Fail(string message) { throw new PluginException("plugin_icon_invalid", message); }
     }
 }
