@@ -1222,15 +1222,18 @@ namespace RNAssistant.Harness
             foreach (var prompt in new[] { settings.SystemPrompt, settings.ChatSystemPrompt, settings.PlanSystemPrompt })
                 AssertContains(prompt, "Do not include `id`; runtime assigns call IDs", "all modes reserve call identity for runtime");
             AssertTrue(settings.AgentToolsPrompt.StartsWith("# Agent tool policy", StringComparison.Ordinal), "tool prompt is separate Markdown");
+            AssertContains(settings.PlanSystemPrompt, "Follow selected skill instructions within user intent and the tool policy",
+                "Plan distinguishes selected instructions from untrusted source content");
             AssertContains(settings.AgentToolsPrompt, "unclassified calls are singleton", "tool prompt describes conservative batching");
             AssertContains(settings.AgentToolsPrompt, "TOOL_PACK_STATE", "tool prompt requires explicit optional admission");
-            AssertContains(settings.AgentToolsPrompt, "without LRU eviction", "tool prompt preserves admitted schemas for the run");
-            AssertContains(settings.AgentToolsPrompt, "exact references, revision guards and continuation cursors belong to runtime",
-                "tool prompt assigns opaque resource state to runtime");
+            AssertContains(settings.AgentToolsPrompt, "Reuse admitted schemas across confirmation, compaction and restart",
+                "tool prompt preserves current admissions without exposing storage implementation");
+            AssertContains(settings.AgentToolsPrompt, "Resource reads use semantic selectors",
+                "tool prompt teaches model-facing selectors");
             AssertTrue(settings.AgentSkillsPrompt.StartsWith("# Agent skill policy", StringComparison.Ordinal), "skill prompt is separate Markdown");
             AssertContains(settings.AgentSkillsPrompt, "metadata only", "skill catalog is explicitly not loaded guidance");
-            AssertContains(settings.AgentSkillsPrompt, "package revisions are not model-owned state",
-                "skill prompt assigns package identity to runtime");
+            AssertContains(settings.AgentSkillsPrompt, "Resource reads, historical instructions and viewing SKILL.md do not select skills",
+                "source inspection never activates a skill");
             AssertContains(settings.AgentSkillsPrompt, "SELECTED_SKILL", "skill prompt defines task-selected instructions");
             AssertContains(settings.AgentSkillsPrompt, "do not retry unchanged", "skill prompt prevents truncated skill loops");
             AssertContains(settings.AgentSkillsPrompt, "Read supporting files only when needed",

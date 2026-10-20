@@ -623,9 +623,10 @@ guarded`, `resources: known VBA target`, `tool runtime: exceptions`, `skill pack
 exact request`, `context continuity:` and `tools: html source read` cover pre-effect
 conflicts, direct VBA resolution, dependency-scoped recovery, source admission and
 overlapping anchors. These are host-neutral checks, not Office qualification.
-`skill packages:` includes complete-next-request selection admission: the 32K VBA
-case refuses activation and stays usable after state restoration; a separate 64K
-control executes the patch. `skill_packages_smoke.py` also rejects an oversized
+`skill packages:` includes complete-next-request selection admission: the default
+32K VBA case executes the patch after schema 51 guidance reduction; another 32K
+case with extra required user input refuses activation and stays usable after state
+restoration. `skill_packages_smoke.py` also rejects an oversized
 workspace procedure before activation and resumes the chat in a fresh process.
 Neither check changes product context defaults or silently removes selected skills.
 `python3 -B tests/cli/read_acceptance_context_smoke.py` checks the dynamic final-read
@@ -853,9 +854,13 @@ create-only import, cross-workspace publish/reuse and unsafe manifest rejection.
 `html tools: native ownership` checks exact read/write policies and bindings.
 
 `model context: request schema` measures exact retained request bytes for Excel
-Agent core plus one loaded extension, and checks strict projection, direct
-`json_object` and schema-rejection fallback during repair. The optional-schema
-admission test checks the production model-loop projection.
+Agent core, Task Tracking, VBA and HTML selections, each with one directly admitted
+extension. It uses native descriptor evidence for `common.markdown_save`, verifies
+complete selected bodies appear once, and prints prompt/skill characters plus the
+serialized UTF-8 byte breakdown for `json_schema` and `json_object`. It also checks
+schema-rejection fallback during repair. The optional-schema admission test checks
+the production model-loop projection. These local fixtures use a fake host; byte
+counts are exact, token counts are estimates and model quality is not assessed.
 
 `agent continuity:` checks retained read counts above the 8192/32768-character UI
 thresholds after save/reload, exact CAS preview and missing bodies; revised plan

@@ -10,14 +10,16 @@ exact-build gate.
 
 ## Unified stabilization verification gap — 2026-10-20
 
-**Harness / request inspector fixture, open.** The unchanged `model context:
-request schema duplication size` check fails before its wire assertions because
-`ReadSchemaEvidence` reconstructs capability admission from a manual projected
-result. Rework that fixture to use the native accepted descriptor evidence, then
-rerun its exact HTTP-size/inspector comparison. Do not relax production admission
-to make a projected result authoritative. Incremental budget, schema modes/fallback
-and exact request trace checks pass; the failed fixture is recorded separately in
-the [unified report](PROGRESS.md#unified-stabilization--2026-10-20).
+**Harness / request inspector fixture, closed 2026-10-20.** The unchanged
+`model context: request schema duplication size` check failed before its wire
+assertions: it tried direct admission of skill-only `common.html_workspace_write_file`
+and reconstructed evidence from a manual projection without the native revision.
+The fixture now admits direct optional `common.markdown_save` using the native
+accepted descriptor result. Production admission is unchanged. Both `model context:
+request schema` checks pass, including exact retained bytes for four skill states
+in two transports and schema-rejection fallback. See the
+[prompt audit](PROGRESS.md#prompt-and-skill-guidance-audit--2026-10-20) for measurements;
+live model quality and Windows/Office qualification remain separate evidence.
 
 ## Plugin native qualification and interrupted scratch — 2026-10-19
 

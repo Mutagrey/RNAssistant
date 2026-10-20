@@ -1,4 +1,5 @@
 using RNAssistant.Core.Services;
+using RNAssistant.Core.Agent;
 using System;
 using System.Linq;
 using System.Text;
@@ -9,6 +10,7 @@ using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Storage;
+using RNAssistant.Core.Tools;
 using RNAssistant.Office.Tools;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Services;
@@ -114,7 +116,7 @@ namespace RNAssistant.Harness
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
             {
-                const string extensionId = "common.html_workspace_write_file";
+                const string extensionId = "common.markdown_save";
                 var catalog = OfficeToolCatalog.ForHost("Excel").Concat(executor.GetControllerTools()).ToList();
                 var store = new ChatStore(FixturePaths.Value);
                 var session = store.Create("Excel", "size-document", "Size.xlsx", "Size");
@@ -122,8 +124,25 @@ namespace RNAssistant.Harness
                 session.LastRun = new ChatRunRecord { RunId = "size-run", TurnId = "size-turn" };
                 store.Save(session);
                 var pack = CallableToolPack.Create(ChatModes.Agent, "Excel", session.LastRun.RunId, catalog);
-                var evidence = ReadSchemaEvidence(executor, catalog, extensionId, "size-read");
-                evidence.RunId = session.LastRun.RunId;
+                var native = executor.CreateNativeRuntime(session, catalog, new AppSettings(), ChatModes.Agent,
+                    false, discoveryCatalog: catalog, manualRun: true);
+                var call = new ToolCall("size-read", CapabilityToolCatalog.ReadToolId,
+                    new JObject { ["id"] = extensionId }.ToString());
+                var read = native.ExecuteAsync(new ToolExecutionContext(call, native.Describe(call),
+                    session.LastRun.RunId, session.LastRun.TurnId, "size-read-step", DateTime.UtcNow, false, 1),
+                    CancellationToken.None).GetAwaiter().GetResult();
+                AssertEqual(ToolExecutionOutcome.Ok, read.Outcome, "native schema read succeeds");
+                // Admission consumes exact native evidence, before model-facing projection removes runtime revisions.
+                var evidence = new ChatMessage { Role = "tool", ToolResultRole = "tool", ToolName = call.Name, ToolCallId = call.Id,
+                    RunId = session.LastRun.RunId, ToolResultProtocolVersion = ToolResultWire.CurrentVersion,
+                    Content = ToolResultWire.Write(call.Id, call.Name, read.Result), ProtocolMessage = true };
+                ToolResultWireReadResult acceptedRead;
+                string readError;
+                AssertTrue(ToolResultHistoryReader.TryRead(evidence, out acceptedRead, out readError), readError ?? "native read parses");
+                var nativeData = JObject.Parse(acceptedRead.Result.DataJson);
+                AssertEqual("tool-schema", (string)nativeData["kind"], "native read returns a direct schema");
+                AssertEqual(CapabilityCatalogService.Revision(catalog.Single(tool => tool.Id == extensionId)),
+                    (string)nativeData["revision"], "native read preserves exact descriptor revision");
                 AssertTrue(pack.StageReadResult(evidence), "representative extension stages from exact schema evidence");
                 var admission = pack.PreparePending((tools, state) => true);
                 new ToolPackAdmissionJournal(new ChatEventStoreAdapter(store), session)
@@ -133,71 +152,99 @@ namespace RNAssistant.Harness
                 Console.WriteLine("REQUEST_PACK core=" + (pack.Tools.Count - pack.OptionalSchemaCount) +
                     " extension=" + extensionId);
 
+                var skills = executor.CaptureSkills(executor.CaptureCatalogs());
+                var allTools = new ToolPackSnapshot("size-pack", ChatModes.Agent, "Excel", catalog.Select(tool =>
+                    ToolPackSnapshot.Capture(new ToolDescriptor(tool.Id, tool.Description, tool.ArgumentSchemaJson,
+                        tool.Exposure, tool.ContractVersion), tool.Policy, tool.Binding)));
+                foreach (var skill in skills.Skills.Where(item => item.BuiltIn))
+                    Console.WriteLine("PROMPT_SKILL " + skill.Id + " characters=" + skill.BodyMarkdown.Length);
+                Console.WriteLine("PROMPT_BLOCKS general=" + AgentPromptDefaults.GeneralInstructions.Length +
+                    " tools=" + AgentPromptDefaults.ToolInstructions.Length + " skills=" + AgentPromptDefaults.SkillInstructions.Length);
+
                 var blobs = new ChatBlobStore(FixturePaths.Value);
                 using (var data = new ResourceDataPlaneService(new ResourceGatewayService()))
                 {
                     var inspector = new ModelContextInspectorService(new ChatEventStoreAdapter(store), blobs, data);
-                    var requestSizes = new System.Collections.Generic.Dictionary<string, int>();
-                    foreach (var mode in new[] { AgentResponseModes.JsonSchema, AgentResponseModes.JsonObject })
+                    foreach (var selection in new[] { "", "common.task_tracking", "common.vba_code_editing", "common.html_workspace_authoring" })
                     {
-                        var settings = new AppSettings { Model = "request-size-fixture", StreamResponses = false,
-                            AgentResponseMode = mode, ContextWindowOverrideTokens = 131072 };
-                        var messages = new ConversationPromptComposer().BuildRequiredMessages(ChatModes.Agent,
-                            "Inspect the workbook and update the report.", adapter, pack.Tools, new SkillDefinition[0],
-                            new DocumentContext(), settings, session, null, false, 0, pack.CapabilityContext(null));
-                        messages.Insert(1, admission.StateMessage);
-                        var options = ModelProtocolWire.CreateRequestOptions(mode, pack.Tools,
-                            new ModelProtocolCallContext(ConversationProtocolContext.SequentialBatchIds(pack.Tools)));
-                        var wireMessages = mode == AgentResponseModes.JsonSchema
-                            ? ConversationPromptComposer.ProjectJsonSchemaMessages(messages, pack.Tools,
-                                options.ResponseSchemaJson)
-                            : messages;
-                        var api = new LlmMessageBuilder().Build(wireMessages, settings, options);
-                        var body = LlmClient.BuildRequestBody(settings, api.Messages, api.EstimatedPromptTokens,
-                            options);
-                        var bytes = LlmHttpTransport.SerializeJson(body);
-                        options.TraceSession = session;
-                        new ModelTracePersistenceService(new ChatEventStoreAdapter(store)).Configure(options);
-                        options.TraceSink(new LlmTraceRecord { Type = "request", RequestId = mode,
-                            PayloadUtf8Bytes = bytes, PayloadContentType = "application/json" });
-                        var request = inspector.Query(session, new ModelContextQuery(), CancellationToken.None)
-                            .Events.First(item => item.Trace.RequestId == mode);
-                        var opened = inspector.Open(session, new ModelContextPayloadQuery { EventId = request.EventId },
-                            CancellationToken.None);
-                        string mime;
-                        var retained = data.ReadDownload(opened.Data.LeaseId, 0, bytes.Length,
-                            CancellationToken.None, out mime);
-                        data.Close(session.Id, ModelContextInspectorService.Owner, opened.Data.LeaseId);
-                        AssertTrue(bytes.SequenceEqual(retained), "inspector returns exact materialized HTTP bytes");
-                        requestSizes[mode] = retained.Length;
-                        var exact = JObject.Parse(Encoding.UTF8.GetString(retained));
-                        var messagesBytes = LlmHttpTransport.SerializeJson(new JObject { ["messages"] = exact["messages"].DeepClone() }).Length -
-                            Encoding.UTF8.GetByteCount("{\"messages\":}");
-                        var schemaToken = exact.SelectToken("response_format.json_schema");
-                        var schemaBytes = schemaToken == null ? 0 : Encoding.UTF8.GetByteCount(schemaToken.ToString(Newtonsoft.Json.Formatting.None));
-                        var content = (string)exact["messages"][0]["content"];
-                        var runtime = JObject.Parse(content.Substring(content.IndexOf("RUNTIME_CONTEXT:\n", StringComparison.Ordinal) +
-                            "RUNTIME_CONTEXT:\n".Length));
-                        var toolsJson = runtime["tools"].ToString(Newtonsoft.Json.Formatting.None);
-                        AssertEqual(mode == AgentResponseModes.JsonSchema ? 0 : pack.Tools.Count,
-                            ((JArray)runtime["tools"]).Count(item => item.SelectToken("function.parameters") != null),
-                            "strict wire omits duplicated parameters; fallback-ready prompt retains them");
-                        var marker = "\"tools\":" + toolsJson;
-                        AssertContains(content, marker, "exact prompt contains the loaded callable pack");
-                        var without = (JObject)exact.DeepClone();
-                        without["messages"][0]["content"] = content.Replace(marker, "\"tools\":[]");
-                        var toolsBytes = retained.Length - LlmHttpTransport.SerializeJson(without).Length;
-                        var otherMessagesBytes = messagesBytes - toolsBytes;
-                        var otherFieldsBytes = retained.Length - messagesBytes - schemaBytes;
-                        Console.WriteLine("REQUEST_SIZE " + mode + " tools=" + toolsBytes + " schema=" + schemaBytes +
-                            " otherMessages=" + otherMessagesBytes + " otherFields=" + otherFieldsBytes +
-                            " total=" + retained.Length + " estimatedTokens=" +
-                            ModelContextBudget.EstimateTextTokens(Encoding.UTF8.GetString(retained), settings) +
-                            " sectionTokens=" + string.Join(",", new[] { toolsBytes, schemaBytes,
-                                otherMessagesBytes, otherFieldsBytes }.Select(size => (size + 3) / 4)));
+                        var requestSizes = new System.Collections.Generic.Dictionary<string, int>();
+                        foreach (var mode in new[] { AgentResponseModes.JsonSchema, AgentResponseModes.JsonObject })
+                        {
+                            var settings = new AppSettings { Model = "request-size-fixture", StreamResponses = false,
+                                AgentResponseMode = mode, ContextWindowOverrideTokens = 131072 };
+                            session.LastRun.SelectedSkills.Clear();
+                            if (selection.Length > 0)
+                                SkillTaskService.Select(session, selection, skills, allTools, settings, "size-load");
+                            var surface = SkillTaskService.Compile(session, skills, allTools, catalog, pack.Tools,
+                                "size-step", settings);
+                            var callable = surface.Tools;
+                            var messages = new ConversationPromptComposer().BuildRequiredMessages(ChatModes.Agent,
+                                "Inspect the workbook and update the report.", adapter, callable, skills.Skills,
+                                new DocumentContext(), settings, session, null, false, 0,
+                                CapabilityCatalogService.BuildPromptCatalog(catalog, skills.Skills, callable));
+                            messages.Insert(1, admission.StateMessage);
+                            var authority = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new ResourceAuthoritySnapshot[0]),
+                                "size-pack", skills, null, 1);
+                            var compiled = new ModelContextCompiler().Compile(authority, messages, new ChatMessage[0],
+                                null, callable, settings, ModelContextBudget.InputBudgetTokens(settings), skillSurface: surface).Messages;
+                            foreach (var skill in surface.Instructions)
+                                AssertEqual(1, compiled.Count(message => message.Content == "SELECTED_SKILL " + skill.Id + "\n" + skill.BodyMarkdown),
+                                    "selected instructions remain complete and appear once");
+                            var options = ModelProtocolWire.CreateRequestOptions(mode, callable,
+                                new ModelProtocolCallContext(ConversationProtocolContext.SequentialBatchIds(callable)));
+                            var wireMessages = mode == AgentResponseModes.JsonSchema
+                                ? ConversationPromptComposer.ProjectJsonSchemaMessages(compiled, callable,
+                                    options.ResponseSchemaJson)
+                                : compiled;
+                            var api = new LlmMessageBuilder().Build(wireMessages, settings, options);
+                            var body = LlmClient.BuildRequestBody(settings, api.Messages, api.EstimatedPromptTokens,
+                                options);
+                            var bytes = LlmHttpTransport.SerializeJson(body);
+                            options.TraceSession = session;
+                            new ModelTracePersistenceService(new ChatEventStoreAdapter(store)).Configure(options);
+                            var requestId = selection + "/" + mode;
+                            options.TraceSink(new LlmTraceRecord { Type = "request", RequestId = requestId,
+                                PayloadUtf8Bytes = bytes, PayloadContentType = "application/json" });
+                            var request = inspector.Query(session, new ModelContextQuery(), CancellationToken.None)
+                                .Events.First(item => item.Trace.RequestId == requestId);
+                            var opened = inspector.Open(session, new ModelContextPayloadQuery { EventId = request.EventId },
+                                CancellationToken.None);
+                            string mime;
+                            var retained = data.ReadDownload(opened.Data.LeaseId, 0, bytes.Length,
+                                CancellationToken.None, out mime);
+                            data.Close(session.Id, ModelContextInspectorService.Owner, opened.Data.LeaseId);
+                            AssertTrue(bytes.SequenceEqual(retained), "inspector returns exact materialized HTTP bytes");
+                            requestSizes[mode] = retained.Length;
+                            var exact = JObject.Parse(Encoding.UTF8.GetString(retained));
+                            var messagesBytes = LlmHttpTransport.SerializeJson(new JObject { ["messages"] = exact["messages"].DeepClone() }).Length -
+                                Encoding.UTF8.GetByteCount("{\"messages\":}");
+                            var schemaToken = exact.SelectToken("response_format.json_schema");
+                            var schemaBytes = schemaToken == null ? 0 : Encoding.UTF8.GetByteCount(schemaToken.ToString(Newtonsoft.Json.Formatting.None));
+                            var content = (string)exact["messages"][0]["content"];
+                            var runtime = JObject.Parse(content.Substring(content.IndexOf("RUNTIME_CONTEXT:\n", StringComparison.Ordinal) +
+                                "RUNTIME_CONTEXT:\n".Length));
+                            var toolsJson = runtime["tools"].ToString(Newtonsoft.Json.Formatting.None);
+                            AssertEqual(mode == AgentResponseModes.JsonSchema ? 0 : callable.Count,
+                                ((JArray)runtime["tools"]).Count(item => item.SelectToken("function.parameters") != null),
+                                "strict wire omits duplicated parameters; fallback-ready prompt retains them");
+                            var marker = "\"tools\":" + toolsJson;
+                            AssertContains(content, marker, "exact prompt contains the loaded callable pack");
+                            var without = (JObject)exact.DeepClone();
+                            without["messages"][0]["content"] = content.Replace(marker, "\"tools\":[]");
+                            var toolsBytes = retained.Length - LlmHttpTransport.SerializeJson(without).Length;
+                            var otherMessagesBytes = messagesBytes - toolsBytes;
+                            var otherFieldsBytes = retained.Length - messagesBytes - schemaBytes;
+                            Console.WriteLine("REQUEST_SIZE " + (selection.Length == 0 ? "core" : selection) + " " + mode +
+                                " tools=" + toolsBytes + " schema=" + schemaBytes +
+                                " otherMessages=" + otherMessagesBytes + " otherFields=" + otherFieldsBytes +
+                                " total=" + retained.Length + " estimatedTokens=" +
+                                ModelContextBudget.EstimateTextTokens(Encoding.UTF8.GetString(retained), settings) +
+                                " sectionTokens=" + string.Join(",", new[] { toolsBytes, schemaBytes,
+                                    otherMessagesBytes, otherFieldsBytes }.Select(size => (size + 3) / 4)));
+                        }
+                        AssertTrue(requestSizes[AgentResponseModes.JsonSchema] < requestSizes[AgentResponseModes.JsonObject],
+                            "representative strict request is smaller than fallback-ready json_object request");
                     }
-                    AssertTrue(requestSizes[AgentResponseModes.JsonSchema] < requestSizes[AgentResponseModes.JsonObject],
-                        "representative strict request is smaller than fallback-ready json_object request");
                 }
             });
         }

@@ -1228,16 +1228,13 @@ namespace RNAssistant.Runtime
                     (_acceptance?.Requested == true ? "RUNTIME_CONTEXT.completionFeedback means the previous done failed explicit acceptance criteria. " +
                         "Continue authorized work to meet them, or use blocked/needs_input for a concrete obstacle or indispensable question. " : string.Empty) +
                     "Never invent tool results, file changes, revisions or permissions. Paths are relative to the workspace root. " +
-                    "Historical assistant messages and tool calls describe past actions, not current source bytes. " +
-                    "A stale read result requires a new read. Read an existing file before patch or replace. " +
-                    (_mode.AllowsSkills ? "Use common.task_list_set to save or revise steps, retain notes, update statuses by current 1-based index, or close the list. " +
+                    "Historical messages and calls are not current source. Reuse included current reads or verified after-source; read missing or stale source before editing. " +
+                    (_mode.AllowsSkills ? "Use common.task_list_set for useful progress tracking and durable findings. " +
                     "RUNTIME_CONTEXT.active_plan contains selected Plan metadata only; read its body with common.resources_read type=plan. Save the complete Markdown with common.plan_doc_save; use startNew only for a different task. " +
-                    "Plan writes are service artifacts and do not count as workspace file changes. " +
-                    "RUNTIME_CONTEXT.active_task_list is the current durable checklist. Statuses are your assessment, not verified file effects. " +
-                    "A task-list write does not satisfy file-write acceptance, and closing a list is not a prerequisite for done. " +
-                    "Use common.questions_ask for material decisions that require user input after available discovery. Its typed result stops the run for answers; never choose an answer for the user. " +
-                    "For a clearly applicable skill, select it with common.skills_load and its id. The next request includes complete instructions and compatible tools. " +
-                    "Selection survives new user turns, cancellation, restart and compaction in this chat. Remove irrelevant skills with common.skills_load action=remove when changing tasks. Resource reads are inspection only and never activate a skill. " +
+                    "Reuse RUNTIME_CONTEXT.active_task_list. Its statuses assess progress, not file effects; closing it is optional. " +
+                    "Ask material decisions through common.questions_ask after discovery; never answer for the user. " +
+                    "Load a missing applicable skill with common.skills_load; reuse current SELECTED_SKILL. Complete instructions and tools arrive next request. " +
+                    "Selection survives turns, cancellation, restart and compaction; remove irrelevant skills with action=remove. Resource reads never activate skills. " +
                     "Available skill metadata: " + ResourceFindProjection.Serialize(SkillCatalogService.Find(_skills, null)) + ". " : string.Empty) +
                     "Available tools and exact argument schemas: " +
                     JsonConvert.SerializeObject(((surface ?? _skillSurface)?.Tools ?? _catalog.Where(tool => tool.Exposure != ToolExposure.Skill).ToArray()).Select(tool => new { tool.Id, tool.Description, Schema = JObject.Parse(tool.ArgumentSchemaJson) })) +

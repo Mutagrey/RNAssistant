@@ -1,5 +1,45 @@
 # Stabilization progress
 
+## Prompt and skill guidance audit — 2026-10-20
+
+Prompt schema 51 removes duplicated workflow, call/result and editing instructions
+across shared defaults, built-in skills, workspace guidance and tool descriptions.
+Owners remain `AgentPromptDefaults`, the existing prompt composers, skill providers
+and tool catalogs. Shared contracts retain action, batching, source coverage,
+unknown-effect and completion rules; skills retain domain procedures. Journal,
+storage, guard and restoration mechanics no longer take space in model instructions.
+Plan now treats selected skills as instructions under policy, and workspace edits
+can reuse current delivered reads or verified after-source. Known VBA targets no
+longer require project discovery before every read. Wire/schema shapes, runtime
+guards and context limits are unchanged. Existing settings migration activates the
+new defaults and archives prior stored prompt texts on save.
+
+The three shared Agent instruction blocks decreased from 13,913 to 10,485 characters
+(24.6%). Exact serialized UTF-8 request sizes from the same corrected Harness fixture:
+
+| Selection | `json_schema`, before → after bytes | `json_object`, before → after bytes |
+|---|---:|---:|
+| Core | 64,876 → 61,183 | 75,325 → 71,632 |
+| Task Tracking | 72,443 → 67,404 | 86,033 → 80,574 |
+| VBA | 86,080 → 78,384 | 99,509 → 91,813 |
+| HTML | 90,746 → 86,139 | 106,149 → 101,542 |
+
+Requests shrink 4.3–8.9% without truncating selected instructions. These are local
+serialization/inspector checks with a fake Excel adapter, not provider token counts
+or live-model results. The fixture now uses native evidence and a direct optional
+tool; its prior admission failure is [closed](RISK_REGISTER.md#unified-stabilization-verification-gap--2026-10-20).
+The default VBA selection/patch scenario now passes at 32K. A deliberately larger
+required input still refuses selection before publication and remains usable after
+restoration; no budget increase or silent selection removal was introduced.
+
+Focused checks pass: request schema/size 2/2, settings 6/6, skill packages 7/7,
+compaction 4/4, Task Lists 5/5, both prompt checks, UserForm guidance and semantic VBA
+contracts. CLI stabilization, question/resume, compaction/resume and skill-package
+smokes pass against controlled endpoints. CLI build has no warnings/errors; Harness
+retains its two existing PDF platform warnings. No full suite or Office/VSTO build
+was run. Next evidence: representative live-model selection/edit/recovery behavior,
+then the separate Windows/Office/WebView2 scenarios recorded below.
+
 ## Unified stabilization — 2026-10-20
 
 Applied the user-supplied `RNAssistant_UNIFIED_STABILIZATION_PLAN_2026-10-20.md`
@@ -25,7 +65,7 @@ There is no new store, registry, generic Office writer or model protocol version
 | A08 — patch base/error semantics | Partially confirmed | Workspace exact patch, VBA mutation owner; existing sequential hunk contracts | Preserve existing sequential coordinates; retain untouched line endings; separate missing/ambiguous/invalid/stale errors | Implemented | Guarded workspace, HTML and six VBA patch checks pass | No filesystem/COM cross-target transaction; UTF-16 coordinates and provider-specific normalization remain explicit |
 | A09 — false unknown before effect | Confirmed for file staging/rechecks; guard exceptions also escaped | Workspace mutation journal and ToolRuntime | Move marker after preconditions, directly before possible effect; pre-dispatch exceptions remain no-effect refusals | Implemented | Injected pre-replace conflict, guard exceptions, unknown after dispatch, move/recovery and delete/restore pass | External editor can still race the final filesystem recheck; no OS compare-and-swap guarantee |
 | A10 — overlapping occurrences | Confirmed in workspace/structured text; VBA already counted every start | WorkspaceFileService / StructuredTextPatchEngine | Count overlapping starts; reject overlapping replace-all | Implemented | `aaa` in `aaaa`: workspace and HTML replace/replaceAll/insertBefore/insertAfter refuse without write; VBA checks pass | Public editor semantics remain domain-specific |
-| A11 — projection/budget and lost archived body | Partially confirmed: transport builder already shared; archived admission preceded folding | ModelContextCompiler / LlmMessageBuilder / ModelProtocol | Reconsider a bounded materialized body after folding only as much old mutation history as it actually needs | Implemented | Continuity 14/14, incremental budget, strict/fallback and exact request trace pass | Separate schema-size fixture fails before its wire assertions; see check log below. Token totals remain estimates |
+| A11 — projection/budget and lost archived body | Partially confirmed: transport builder already shared; archived admission preceded folding | ModelContextCompiler / LlmMessageBuilder / ModelProtocol | Reconsider a bounded materialized body after folding only as much old mutation history as it actually needs | Implemented | Continuity 14/14, incremental budget, strict/fallback and exact request trace pass; schema-size fixture repaired in the prompt audit above | Token totals remain estimates |
 | A12 — oversized input/compaction dead end | Infinite compaction not reproduced; skill selection liveness defect reproduced | ContextCompactionRuntime; SkillLoadToolHandler + both request composers | Preserve bounded no-prefix refusal; stage complete next request before publishing skill selection | Implemented for new selections | Oversized first-input/protocol-pair check, CLI compaction/resume, skills 7/7; controlled CLI refusal and cold restart pass | Already-persisted oversized selections require explicit reset/profile correction; no silent eviction or larger default budget |
 | A13 — waiting/final conflation | Existing v7 action + runtime reason already distinguishes outcomes | AgentKernel, ConversationRunProjection, question handler | Preserve protocol and structured questions; no action-format migration | No additional lifecycle change | CLI Plan/tool and Agent/user question/resume scenarios pass, including invalid answers | Completed lifecycle is not proof of user goal or Office compilation |
 
@@ -52,10 +92,10 @@ Verification run on this macOS host (all Office adapters are fakes):
   `compaction_resume_smoke.py` (two transports) and `skill_packages_smoke.py`
   (20 controlled HTTP requests including admission refusal/restart) pass.
 - `model context: request schema modes and fallback` passes. The separate unchanged
-  `model context: request schema duplication size` fixture fails at
+  `model context: request schema duplication size` fixture initially failed at
   `representative extension stages from exact schema evidence`, before its HTTP
-  assertions. It still reconstructs admission from a manual projected result;
-  this is an open Harness fixture gap, not evidence that the wire-size check passed.
+  assertions. The later prompt audit above fixes its projected evidence and invalid
+  direct admission of a skill-only tool, and records successful wire-size checks.
   Full Harness, live LLM and Windows/Office/WebView2 were not run.
 
 Supplementary static review retains the bound-document HostRuntime/DocumentAccessGate,

@@ -18,8 +18,8 @@ namespace RNAssistant.Core.Services
 Use for tasks that create, inspect or edit real workspace files.
 
 1. Identify the required files and completion checks. Use common.resources_find for an unfamiliar directory; known relative paths can be read directly with common.resources_read (type=file).
-2. Read existing source before editing. Use files.create only for a new path. A successful create means the file exists: continue to the next file or read it; do not create it again. An already-existing error also requires a read before any replacement.
-3. Use files.patch for one unique exact anchor, files.replace for an intentional whole-file change. Read again after a stale-source or missing-source response. Review the latest accepted tool result before choosing the next step. A failed call is not a change; an unknown effect requires reconciliation and must not be retried automatically.
+2. Before editing, reuse current source already included from a read or verified after-state; read missing/stale source. Use files.create only for a new path. Success means it exists; do not create it again. After an already-existing error, read its current content.
+3. Use files.patch for one unique exact anchor inside an observed excerpt; files.replace requires complete current source and an intended whole-file change. A failed call is not a change; reconcile an unknown effect before continuing and never retry it automatically.
 4. Verify the changed behavior with the available task checks. A write read-back confirms bytes, not application behavior. A skill read supplies instructions, not file source or mutation permission.
 5. Reuse current verified after-state for final source assessment. If RUNTIME_CONTEXT.readAcceptance is present, complete its remaining exact final-file reads and expected paths; later writes invalidate those reads, and browser checks or skill reads do not satisfy them. Report only verified outcomes and explicit remaining limitations.
 
@@ -27,7 +27,7 @@ Keep all paths relative to the selected workspace. Respect the available tool ca
                 Skill(WebId, "Local web verify and repair",
                     "Build or repair a local multi-file HTML/CSS/JS app, run browser checks, fix failures and meet explicit final-read acceptance when present.",
 @"# Local web verify and repair
-Use for a local HTML/CSS/JS application when web.verify and file mutation tools are available. Read workspace.files as well for file prerequisites and final source reads.
+Use for a local HTML/CSS/JS application when web.verify and file mutation tools are available. Load workspace.files with common.skills_load for file prerequisites and final source reads.
 
 1. Keep HTML, CSS and JS in real workspace files with local relative assets. When the task requires offline operation, use no CDN, external requests or dependencies.
 2. For an existing broken app, run web.verify before editing to obtain the failing checks. For a new app, create its files first, then run web.verify with its entryPath.
@@ -50,7 +50,7 @@ After source edits, call plugins.check when available. A successful check proves
             var tools = new List<string> { "common.resources_find", "common.resources_read", "files.create", "files.patch", "files.replace" };
             if (id == WebId) tools.Add("web.verify");
             return new SkillDefinition { Id = id, Host = "Workspace", Name = name, Description = description,
-                BodyMarkdown = body.Replace("Read workspace.files", "Load workspace.files with common.skills_load"),
+                BodyMarkdown = body,
                 BuiltIn = true, Enabled = true, Version = "1.0.0",
                 Package = new SkillPackageManifest { PackageId = id,
                     RequiredTools = tools.ConvertAll(tool => new SkillToolDependency { Id = tool }) } };

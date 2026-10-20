@@ -529,15 +529,17 @@ namespace RNAssistant.Harness
             var htmlAuthoring = skills.Single(skill => skill.Id == "common.html_workspace_authoring").BodyMarkdown;
             AssertContains(htmlAuthoring, "exact decoded strings",
                 "HTML authoring preserves model-provided source text exactly");
-            AssertContains(htmlAuthoring, "Runtime stores decoded text unchanged",
-                "HTML authoring forbids a second source unescape");
+            AssertContains(htmlAuthoring, "shared response contract for JSON escaping",
+                "HTML authoring delegates transport escaping to the shared contract");
+            AssertContains(AgentPromptDefaults.StructuredResponseContract, "never strip or pre-unescape a backslash",
+                "the shared contract forbids a second source unescape");
             AssertContains(htmlAuthoring, "echarts.getInstanceByDom(node) || echarts.init(node)",
                 "HTML authoring avoids duplicate bundled chart instances");
             AssertContains(htmlAuthoring, "Do not invent globals, copy bundles",
                 "HTML authoring rejects unsupported or duplicate vendor runtimes");
             AssertContains(htmlAuthoring, "do not also call `excel.create_chat_chart` for the same data",
                 "HTML authoring keeps ECharts workspace and chat-chart artifacts from duplicating one visual");
-            AssertContains(htmlAuthoring, "root `arguments` contains exactly `path` and `content`",
+            AssertContains(htmlAuthoring, "with root `path`/`content`",
                 "HTML writes put semantic properties directly at the schema root");
             foreach (var file in new[] { "`index.html`", "`styles.css`", "`app.js`" })
                 AssertContains(htmlAuthoring, file, "substantial HTML workspaces split responsibilities");
@@ -595,33 +597,30 @@ namespace RNAssistant.Harness
             AssertContains(skillAuthoring, "Do not invent a skill",
                 "skill authoring is not an unsolicited substitute for execution");
             var taskTracking = skills.Single(skill => skill.Id == "common.task_tracking").BodyMarkdown;
-            AssertContains(taskTracking, "multiple distinct deliverables or dependent implementation stages",
+            AssertContains(taskTracking, "multiple deliverables or dependent stages",
                 "task tracking retains the actual requested stages");
             AssertContains(taskTracking, "Skip it for a short single-step answer",
                 "task tracking does not require a list for every answer");
-            AssertContains(taskTracking, "No source read or edit is required to save a plan",
+            AssertContains(taskTracking, "Saving a plan requires no source read or edit",
                 "planning is not coupled to source admission");
-            AssertContains(taskTracking, "An open Task List does not prevent a terminal response",
-                "task tracking leaves final decisions to the model");
+            AssertContains(taskTracking, "A terminal response neither closes the list nor completes its steps",
+                "task tracking preserves independent plan and conversation outcomes");
             foreach (var skill in skills)
                 AssertTrue(skill.BodyMarkdown.IndexOf("TOOL_RESULT ok=true", StringComparison.OrdinalIgnoreCase) < 0,
                     skill.Id + " does not teach the removed result success flag");
-            foreach (var id in new[] { "common.prompt_authoring", "common.task_tracking" })
-            {
-                var body = skills.Single(skill => skill.Id == id).BodyMarkdown;
-                AssertContains(body, "TOOL_RESULT status=ok", id + " uses the active terminal success state");
-                AssertContains(body, "does not by itself prove an applied effect", id + " distinguishes success from effect evidence");
-            }
+            AssertContains(authoring, "TOOL_RESULT status=ok", "prompt authoring preserves the active terminal success state");
+            AssertContains(taskTracking, "Statuses assess evidence; closing does not prove effects",
+                "task tracking assesses evidence without duplicating the shared result contract");
             var defaults = new AppSettings();
             foreach (var prompt in new[] { defaults.SystemPrompt, defaults.ChatSystemPrompt, defaults.PlanSystemPrompt })
             {
-                AssertContains(prompt, "contains only `tool_call_id`, `name`, `status`, `message`, `data`, and optional `resources`",
-                    "every mode teaches the same bounded result envelope");
+                AssertContains(prompt, "`TOOL_RESULT` supplies an outcome and result data",
+                    "every mode explains how to interpret the result");
                 AssertContains(prompt, "`status` is exactly `ok`, `error`, or `unknown`", "no extra model-facing result states");
                 AssertContains(prompt, "does not by itself prove an applied effect", "defaults require actual effect evidence");
                 AssertContains(prompt,
-                    "Model-facing results omit runtime references, revisions, hashes, cursors, guards and internal IDs",
-                    "runtime-only result projection applies to every tool family");
+                    "Use returned semantic targets to address resources; do not construct internal identifiers",
+                    "all modes address resources without inventing runtime identity");
                 AssertTrue(prompt.IndexOf("ok=true", StringComparison.OrdinalIgnoreCase) < 0, "defaults do not teach the legacy success flag");
             }
             AssertContains(defaults.SystemPrompt, "1. **Understand.** Translate the request into explicit deliverables",
@@ -636,27 +635,27 @@ namespace RNAssistant.Harness
                 "saved planning state is advisory");
             AssertContains(defaults.SystemPrompt, "a plan status does not require a new read or mutation",
                 "Agent does not perform bookkeeping to bypass a gate");
-            AssertContains(defaults.SystemPrompt, "cannot become success prose",
+            AssertContains(defaults.SystemPrompt, "Keep each failed intended change pending",
                 "tool and protocol errors cannot be reported as completed work");
             AssertContains(defaults.SystemPrompt, "simplified placeholder",
                 "Agent does not degrade an artifact to bypass validation");
-            AssertContains(taskTracking, "For Agent work with multiple distinct deliverables or dependent implementation stages, create a concise Task List after bounded discovery",
+            AssertContains(taskTracking, "keep a concise Task List after bounded discovery",
                 "tracking preserves multiple deliverables after initial discovery");
-            AssertContains(defaults.AgentToolsPrompt, "Reuse successful reads and completed mutations; repeat only to obtain missing coverage or after relevant state changes",
+            AssertContains(defaults.AgentToolsPrompt, "missing or invalidated source; reuse included current after-state",
                 "planning does not force repeated loading or duplicate artifacts");
-            AssertContains(taskTracking, "Revise the goal and stages as understanding or user direction changes",
+            AssertContains(taskTracking, "Revise goal/stages as understanding or user direction changes",
                 "tool policy permits reasoned replanning");
-            AssertContains(defaults.ContextCompactionPrompt, "compaction does not require another capabilities_read or admission",
-                "compaction guidance agrees with durable tool admission");
-            AssertContains(defaults.SystemPrompt, "If feasible authorized work remains, perform the next tool step or deliver the requested content in this response",
+            AssertContains(defaults.ContextCompactionPrompt, "Callable schemas and selected skill bodies are supplied separately",
+                "compaction does not copy instructions or teach a redundant reload");
+            AssertContains(defaults.SystemPrompt, "Use action=tool with nonempty tool_calls when a needed, authorized tool step remains",
                 "unfinished work continues instead of forcing a terminal decision");
-            AssertContains(taskTracking, "use blocked only for a concrete obstacle and needs_input only for an indispensable user answer",
-                "task tracking does not treat every unfinished stage as a blocker");
-            AssertContains(defaults.AgentToolsPrompt, "exact callable operation, root arguments, and returned evidence",
+            AssertContains(defaults.SystemPrompt, "Unfinished work alone is not a blocker",
+                "the shared action contract does not treat every unfinished stage as a blocker");
+            AssertContains(defaults.AgentToolsPrompt, "exact operations, root arguments and result semantics",
                 "tool arguments are supplied at the schema root");
-            AssertContains(defaults.AgentToolsPrompt, "Skills define domain workflow and quality criteria",
+            AssertContains(defaults.AgentToolsPrompt, "Skills own domain workflow",
                 "tool policy defines authority between skill guidance and schemas");
-            AssertContains(defaults.AgentSkillsPrompt, "For a clearly applicable or explicitly named skill, use common.skills_load",
+            AssertContains(defaults.AgentSkillsPrompt, "Select a missing skill by exact id",
                 "Agent selects and loads applicable skills before domain mutation");
         }
 

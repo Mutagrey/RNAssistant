@@ -32,7 +32,7 @@ namespace RNAssistant.Core.Tools
         public static ToolCatalogEntry Entry()
         {
             return new ToolCatalogEntry { Id = ToolId, Name = "Подключить навык", Host = "Common", Scope = "session",
-                Description = "Select a missing published skill for this chat, or replace a selection runtime reports unavailable. Reuse instructions already included as SELECTED_SKILL. Selection persists across user turns and restart; remove it when no longer relevant. Call alone, one skill per response. The next request includes its complete instructions and compatible tools. Resource reads and viewing SKILL.md do not select skills. Loading grants no mutation permission.",
+                Description = "Select or remove one published skill for this chat. Call alone; complete instructions and compatible tools take effect next request. Reuse current SELECTED_SKILL; load grants no mutation permission.",
                 ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"Exact published skill id.\",\"maxLength\":128},\"action\":{\"type\":\"string\",\"description\":\"Load a compatible procedure, or remove a selection to resolve a conflict. Takes effect next request.\",\"enum\":[\"load\",\"remove\"],\"default\":\"load\"}},\"required\":[\"id\"],\"additionalProperties\":false}",
                 BuiltIn = true, Policy = new ToolPolicy(ToolEffect.Read, ToolVerification.None, false, false, new[] { "agent", "plan" }),
                 Binding = Binding };

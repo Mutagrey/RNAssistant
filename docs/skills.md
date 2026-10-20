@@ -118,9 +118,10 @@ history or count as execution facts; preflight performs no LLM call or compactio
 Actual dispatch still recompiles against its own frozen authority.
 
 The [32K admission defect](stabilization/RISK_REGISTER.md#architecture-and-regression-review--2026-10-15)
-is contained for new selections: the 32K Excel case now refuses the load and permits
-the next request and restored user turn; a separate 64K control still executes the
-patch. Product defaults are unchanged. No automatic deselection, larger-budget
+is contained for new selections. With schema 51 guidance, the default 32K Excel
+case selects the VBA skill and executes its patch. A separate 32K case with extra
+required input refuses the load and permits the next request and restored user
+turn. Product context defaults are unchanged. No automatic deselection, larger-budget
 fallback or truncation of active instructions exists. Previously persisted
 oversized selections are not silently rewritten; explicit reset/profile correction
 remains necessary for that old state.
@@ -296,10 +297,19 @@ The system prompt owns the universal Understand → Prepare → Inspect → Exec
 → Verify → Finish lifecycle, including when to select Task Tracking and the final
 completion assessment. `common.task_tracking` owns list maintenance and durable
 step notes. The tool prompt owns catalog discovery/admission; the shared response
-contract owns the call envelope. The current loaded tool description and strict
+contract owns the call envelope, batching and outcome interpretation. The current loaded tool description and strict
 schema remain authoritative for the exact operation, root arguments and returned evidence. If a
 skill and schema disagree, the model follows the higher-priority runtime prompt and
 schema and reports the inconsistency rather than inventing compatibility fields.
+
+Schema 51 removes repeated universal rules from domain skills and tool descriptions.
+Model guidance keeps decisions the model must make: selecting capabilities, choosing
+source coverage, constructing edits and interpreting uncertain results. Journal,
+guard, storage and restoration implementation details remain runtime documentation.
+Selected skills are instructions under the shared policy in both Agent and Plan;
+merely inspected skill source remains data. Current delivered reads or verified
+after-source can support a later edit without a ritual reread; missing or insufficient
+source still requires inspection. Selected bodies remain complete, never truncated.
 
 VBA guidance distinguishes component names, procedure names and semantic resource
 targets. Complete current source may be reused after mutation or compaction when
@@ -331,6 +341,9 @@ empty built-ins and prevents retired `TOOL_RESULT ok=true` guidance from returni
 - Schema 48 retains selection across user turns and asks the model to remove
   irrelevant procedures explicitly. Exact revision, policy and budget checks remain
   mandatory; retained selection never grants mutation permission.
+- Schema 51 reduces duplicated guidance across Agent/Plan, workspace, skills and
+  tool descriptions, using the same archived default migration. The compaction
+  helper preserves claims; current skill bodies and schemas arrive separately.
 - The current `Discuss skill` UI copies Markdown into custom chat context; that copy
   does not create a selection or grant any tool access.
 - Host filtering uses the selected execution endpoint, not the containing window.

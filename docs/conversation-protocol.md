@@ -183,6 +183,13 @@ or treat earlier assistant wording as evidence.
 They do not request private reasoning or turn narrative into execution evidence. The current settings
 migration selects built-in defaults for an older schema and archives the prior
 prompt texts on save; see [prompt migration](skills.md#continuity-after-compaction--2026-10-01).
+Schema 51 consolidates repeated guidance: the shared contract owns action, message,
+call and outcome rules; selected skills own domain workflows; tool descriptions
+and schemas own exact arguments. Prompts omit runtime journal/storage/restoration
+mechanics and the tool-result envelope the model does not produce. Plan respects
+selected skill instructions while treating document and inspected source content
+as data. Current delivered source may be reused within its observed coverage.
+Runtime authority, confirmation and unknown-effect guards are unchanged.
 Resource descriptions/snippets aid discovery but do not prove complete content.
 Compaction guidance preserves findings, decisions, constraints, open questions and
 next actions without upgrading intentions/interpretations to facts. Its

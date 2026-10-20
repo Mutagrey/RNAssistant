@@ -554,7 +554,7 @@ namespace RNAssistant.Harness
             AssertContains(prompt, "\"kind\":\"skill\"", "skill kind is explicit in compact catalog");
             AssertContains(prompt, "metadata only", "catalog is not mistaken for loaded skill instructions");
             AssertContains(prompt, "SELECTED_SKILL", "task selection in the next request is explicit");
-            AssertContains(prompt, "Return several calls", "multi-tool guidance present");
+            AssertContains(prompt, "Batch only independent local reads", "shared multi-tool guidance present");
             AssertContains(prompt, "data.truncated=true", "bounded tool-result guidance present");
             AssertTrue(prompt.IndexOf("ROUTE:", StringComparison.OrdinalIgnoreCase) < 0, "no route wrapper");
             AssertTrue(prompt.IndexOf("NEXT_ACTION_POLICY", StringComparison.OrdinalIgnoreCase) < 0, "no action heuristic");
@@ -2364,13 +2364,18 @@ namespace RNAssistant.Harness
                     }
                     return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
                 };
+                var requestSettings = new AppSettings { AutoConfirmToolActions = true, ContextWindowOverrideTokens = 32768 };
+                // The default 32K request now fits. Retain a deliberate full-request admission refusal
+                // independently of how much prose the built-in prompts happen to contain.
+                var userRequest = "Исправь незакрытый If в UniLoader." +
+                    (tightBudget ? "\nRequired fixture context: " + new string('x', 8000) : "");
                 var result = CreateConversationRunService(adapter, executor, complete).ExecuteAsync(
-                    ChatModes.Agent, "Исправь незакрытый If в UniLoader.", session, NewContext(adapter),
-                    new AppSettings { AutoConfirmToolActions = true, ContextWindowOverrideTokens = tightBudget ? 32768 : 65536 },
+                    ChatModes.Agent, userRequest, session, NewContext(adapter),
+                    requestSettings,
                     OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null)
                     .GetAwaiter().GetResult();
                 AssertEqual(tightBudget ? 5 : 7, requests, "discovery/load reaches a usable next request: " + result.AssistantText);
-                AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "patch run completes");
+                AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "patch run completes: " + result.AssistantText);
                 AssertEqual(tightBudget ? before : after, adapter.GetVbaModuleCode("UniLoader"), "only admitted patch can change source");
                 AssertEqual(tightBudget ? 0 : 1, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "no invented dispatch or retry");
                 AssertEqual(tightBudget ? 1 : 0, session.LastRun.KernelState.Summary.ToolCounts.ReadError, "only the actual admission refusal is counted");
