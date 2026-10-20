@@ -21,7 +21,8 @@
         target.querySelectorAll('details').forEach(function (details, i) {
           var key = 'changes-' + (message.id || index) + '-' + i;
           details.dataset.disclosure = key;
-          details.open = !!(chat.activityExpanded && chat.activityExpanded[key]);
+          if (chat.activityExpanded && Object.prototype.hasOwnProperty.call(chat.activityExpanded, key))
+            details.open = !!chat.activityExpanded[key];
         });
       });
     }

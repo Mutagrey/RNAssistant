@@ -60,6 +60,9 @@ async function serve() {
       answer: PrototypeFixtures.chat.assistant
     })));
     assert.equal(await normal.evaluate(() => state.activeRunViewState.lifecycle), "completed");
+    assert.equal(await normal.evaluate(() => state.activeRunViewState.reason), "model_done");
+    assert.equal(await normal.locator("#messages .message-outcome, #messages .agent-result-card").count(), 0,
+      "a real model_done projection does not add a technical completion card");
     assert.equal(await normal.locator("#messages .chat-artifact-card").count(), 1);
     assert.deepEqual(await normal.evaluate(() => send("getRunChanges", {
       chatId: "preview-chat", runId: "preview-run-initial"
@@ -362,8 +365,10 @@ async function serve() {
     await normal.locator('.section-rail [data-section="chat"]').click();
     await normal.locator("#chatScopeSwitcher summary").click();
     await normal.locator('#chatScopeSwitcher [data-workspace-scope="projects"]').click();
-    assert.equal(await normal.locator('#projectChatTree [data-tree-key^="project:"]').count(), 2,
-      'the workspace tree lists connected projects');
+    assert.deepEqual(await normal.locator('#projectChatTree [data-tree-key^="project:"]').evaluateAll(nodes =>
+      nodes.map(node => node.dataset.treeKey).sort()),
+    ['project:preview-data-workspace', 'project:preview-plan-workspace', 'project:preview-plugin-workspace'],
+      'the workspace tree includes the plugin source workspace opened earlier');
     await normal.locator('#projectChatTree [data-tree-key="project:preview-plan-workspace"] > .navigation-tree-row > .navigation-tree-label').click();
     await normal.locator('#projectChatTitle').getByText('План запуска').waitFor();
     await normal.locator('#projectChatSearch').fill('Подготовка');
@@ -387,11 +392,11 @@ async function serve() {
     await normal.locator('#projectChatConnectionPath').fill('C:\\Projects\\Archive');
     await normal.waitForFunction(() => !document.querySelector('#projectChatConnectionSubmit').disabled);
     await normal.locator('#projectChatConnectionSubmit').click();
-    await normal.locator('#projectChatTree [data-tree-key="project:preview-workspace-3"]').waitFor();
+    await normal.locator('#projectChatTree .navigation-tree-label').getByText('Archive', { exact: true }).waitFor();
     await normal.locator('#projectChatCreate').click();
     await normal.locator('#projectChatConnectionPath').fill('C:\\Projects\\NewWorkspace');
     await normal.locator('#projectChatConnectionSubmit').click();
-    await normal.locator('#projectChatTree [data-tree-key="project:preview-workspace-4"]').waitFor();
+    await normal.locator('#projectChatTree .navigation-tree-label').getByText('NewWorkspace', { exact: true }).waitFor();
     const workspaceIsolation = await normal.evaluate(async () => {
       const second = await send('createProjectChat', { workspaceId: 'preview-plan-workspace', title: 'Другой проект' });
       let crossWorkspace = false;
@@ -413,6 +418,7 @@ async function serve() {
     assert.equal(reconnected.selectedWorkspaceId, 'preview-plan-workspace', 'reconnecting keeps the workspace identity');
     assert.equal(reconnected.projects.find(p => p.workspaceId === 'preview-plan-workspace').chats.length, 0);
     const mockProjectCycle = await normal.evaluate(async () => {
+      const before = (await send("getProjectChats", {})).projects.map(p => p.workspaceId).sort();
       await send("disablePlugin", { pluginId: "data-templates" });
       const disabled = await send("getProjectChats", {});
       const candidate = await send("checkPlugin", { pluginId: "data-templates" });
@@ -420,11 +426,12 @@ async function serve() {
       const unpublishedProject = await send("getProjectChats", {});
       await send("openPlugin", { pluginId: "data-templates" });
       const reopened = await send("getProjectChats", {});
-      return { disabled: disabled.projects.length, unpublishedProject: unpublishedProject.projects.length,
+      return { disabledPreserves: JSON.stringify(disabled.projects.map(p => p.workspaceId).sort()) === JSON.stringify(before),
+        unpublishedPreserves: JSON.stringify(unpublishedProject.projects.map(p => p.workspaceId).sort()) === JSON.stringify(before),
         reopened: reopened.projects.find(p => p.workspaceId === 'preview-data-workspace').name,
         count: reopened.projects.find(p => p.workspaceId === 'preview-data-workspace').chats.length };
     });
-    assert.deepEqual(mockProjectCycle, { disabled: 4, unpublishedProject: 4,
+    assert.deepEqual(mockProjectCycle, { disabledPreserves: true, unpublishedPreserves: true,
       reopened: "Управленческая отчётность", count: 3 });
     await normal.locator('#pluginAdd').click();
     await normal.locator('#pluginCreateForm').waitFor({ state: 'visible' });
@@ -438,7 +445,7 @@ async function serve() {
     const drawnIcons = await normal.evaluate(() => send('getPluginIcons', {}));
     assert.equal(drawnIcons.items.length, 1, 'preview saves a simulated drawing immediately');
     await normal.locator('#pluginCreateSubmit').click();
-    await normal.locator('#pluginChatMessages').getByText(/запрос на исходники принят/).waitFor();
+    await normal.locator('#pluginChatMessages .message.assistant').getByText('Изменение исходников смоделировано в preview. Файлы плагина не менялись.', { exact: true }).waitFor();
     assert.match(await normal.locator('#pluginSource').textContent(), /plugin-workspaces[\\/]Сводка продаж-/, 'preview uses the default source folder');
     await normal.locator('#pluginPreview').click();
     await normal.frameLocator('#pluginPreviewMount iframe').getByRole('heading', { name: 'Сводка продаж' }).waitFor();
@@ -457,11 +464,13 @@ async function serve() {
     await normal.locator('#pluginAdd').hover();
     await normal.locator('.rail-hover-card').getByRole('button', { name: 'Сводка продаж' }).click();
     await normal.locator('#pluginRail [data-plugin-id="preview-plugin-1"]').waitFor();
+    const connectedBeforeRemoval = await normal.evaluate(async () =>
+      (await send('getProjectChats', {})).projects.map(p => p.workspaceId).sort());
     await normal.locator('#pluginRail [data-plugin-id="data-templates"]').hover();
     normal.once('dialog', dialog => dialog.accept());
     await normal.locator('.rail-hover-card').getByRole('button', { name: 'Удалить с панели' }).click();
     await normal.locator('#pluginRail [data-plugin-id="data-templates"]').waitFor({ state: 'detached' });
-    assert.equal((await normal.evaluate(() => send('getProjectChats', {}))).projects.length, 4,
+    assert.deepEqual(await normal.evaluate(async () => (await send('getProjectChats', {})).projects.map(p => p.workspaceId).sort()), connectedBeforeRemoval,
       'removing the shipped plugin preserves connected workspaces');
     await normal.locator('#pluginAdd').hover();
     await normal.locator('.rail-hover-card').getByRole('button', { name: 'Данные и шаблоны' }).click();
@@ -476,6 +485,17 @@ async function serve() {
       report: Prototype.fixtures.report,
       chat: Prototype.fixtures.chat
     })), previewExamples);
+    assert.deepEqual(await demo.evaluate(() => {
+      const host = document.createElement('div');
+      host.innerHTML = Prototype.renderAgentMessage({ id: 'notice-regression', done: true, blocks: [
+        { type: 'text', phase: 'commentary', text: 'Проверяю источники.' },
+        { type: 'notice', title: 'Нет данных за август', text: 'Сравнение недоступно.' },
+        { type: 'text', phase: 'final', text: 'Доступен только сентябрь.' }
+      ] });
+      return { notices: host.querySelectorAll('.timeline-notice').length,
+        hiddenInHistory: !!host.querySelector('.run-history .timeline-notice'),
+        history: host.querySelectorAll('.run-history').length };
+    }), { notices: 1, hiddenInHistory: false, history: 1 }, 'demo limitations remain visible outside completed history');
     await demo.locator("#main .rna-skill-fields").waitFor({ state: "attached" });
     assert.equal(await demo.locator("#main .rna-editor-tabs.tabs").count(), 1);
     assert.equal(await demo.locator("#main .rna-action-menu").count(), 1);

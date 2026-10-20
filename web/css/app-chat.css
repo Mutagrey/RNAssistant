@@ -469,9 +469,7 @@
 }
 
 .message-outcome {
-  margin-top: 14px;
-  padding-left: 12px;
-  border-left: 2px solid var(--line);
+  margin: 8px 0;
   font-size: .9286rem;
   font-weight: 400;
   line-height: 1.55;
@@ -481,14 +479,13 @@
 .message-outcome.status-history { color: var(--muted); }
 
 .message-outcome.status-waiting {
-  color: #b54708;
+  color: var(--warning);
 }
 
 .message-outcome.status-failed { color: var(--danger); }
 
 .message-outcome.status-warning {
-  color: #8a5500;
-  border-color: #b98630;
+  color: var(--warning);
 }
 
 .message-outcome.status-cancelled {
@@ -496,7 +493,7 @@
 }
 
 .message-outcome.status-unknown {
-  color: var(--muted);
+  color: var(--warning);
   font-weight: 500;
 }
 
@@ -658,9 +655,11 @@
 .chat-notice-copy { min-width: 0; flex: 1; }
 .chat-notice-copy strong { display: block; font-weight: 500; }
 .chat-notice-copy p { margin: 3px 0 0; font-size: 11px; }
-.messages .message-outcome { padding: 11px 13px; margin: 8px 0; border-radius: var(--radius-sm, 10px); background: var(--surface-subtle); font-size: 12px; line-height: 1.5; }
-.messages .message-outcome:is(.status-warning, .status-unknown) { background: var(--warning-soft); color: var(--warning); }
-.messages .message-outcome.status-failed { background: var(--danger-soft); color: var(--danger); }
+.agent-run-notice { display: flex; align-items: flex-start; gap: 6px; font-size: 12px; line-height: 1.5; }
+.agent-run-notice-icon { display: flex; flex: 0 0 14px; margin-top: 2px; }
+.agent-run-notice-icon svg { width: 14px; height: 14px; }
+.agent-run-notice-copy { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; min-width: 0; }
+.agent-run-notice .agent-details-link { display: inline; margin: 0; padding: 0; font: inherit; }
 @media (max-width: 620px) { .chat-run-notice { width: calc(100% - 16px); } }
 
 .chat-toast { position: fixed; z-index: 100; bottom: 24px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; max-width: calc(100% - 32px); padding: 12px 19px; border-radius: 8px; background: var(--ink); color: var(--surface); box-shadow: var(--shadow); font-size: 12px; overflow-wrap: anywhere; }

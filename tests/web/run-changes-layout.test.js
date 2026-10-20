@@ -94,6 +94,8 @@ const read = file => fs.readFileSync(path.join(__dirname, '../../web', file), 'u
     });
     await page.locator('.run-changes-summary').waitFor();
     assert.equal(await page.locator('.run-changes > .run-changes-caption').count(), 0, 'confirmed complete results have no header notices');
+    assert.equal(await page.locator('.run-changes').evaluate(node => node.open), false,
+      'confirmed changes start as a compact disclosure, matching the demo');
     await page.evaluate(() => {
       document.getElementById('output').textContent = '';
       window.state.chatProjectionRevisions.chat = 4;
@@ -111,6 +113,7 @@ const read = file => fs.readFileSync(path.join(__dirname, '../../web', file), 'u
           before:'slow(slow(value))',after:'fast(value)'}]}]};
       window.appendRunChanges(document.getElementById('output'), 'chat', 'run');
     });
+    await page.locator('.run-changes-summary').click();
     await page.locator('.run-change-file-summary').click();
     await page.waitForFunction(() => document.querySelector('.run-change-diff').textContent.includes('fast(value)'));
     assert.match(await page.locator('.run-change-file-summary').textContent(), /Проверенные фрагменты/);

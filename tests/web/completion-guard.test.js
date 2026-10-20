@@ -77,20 +77,22 @@ function assertVisibleEvidence(node, health) {
 }
 
 const tests = [
-  ["model completion keeps effect counts separate from goal verification", () => {
-    const node = renderFinal(view("clean", { reason: "model_done", goalVerification: "not_assessed", verified: 1 }));
-    const note = assertVisibleEvidence(node, "clean");
-    assert.match(note.textContent, /Подтверждённые записи: 1/);
-    assert.match(note.textContent, /Соответствие всем требованиям автоматически не проверено/);
-    assert.doesNotMatch(note.textContent, /завершила задачу/, "turn completion does not certify the goal");
-    assert.equal(walk(node).find(item => item.className === "agent-final-step").textContent,
-      "Все изменения применены.", "model wording stays separate from runtime evidence");
+  ["clean model completion adds no technical card, including a greeting", () => {
+    for (const counts of [{}, { reads: 2 }, { verified: 1, noChange: 2 }]) {
+      const source = view("clean", { reason: "model_done", goalVerification: "not_assessed", ...counts });
+      const node = renderFinal(source, "Привет! Чем могу помочь?");
+      assert.equal(walk(node).some(item => item.attributes["data-runtime-health"]), false);
+      assert.equal(walk(node).find(item => item.className === "agent-final-step").textContent, "Привет! Чем могу помочь?");
+      assert.doesNotMatch(node.textContent, /Модель завершила|Подтверждённые записи|Соответствие всем требованиям/);
+      assert.equal(context.RNAssistantRunViewState.normalize(source).goalVerification, "not_assessed",
+        "removing the notice does not certify the goal or alter the runtime state");
+    }
   }],
   ["model done keeps failed attempts visible before optimistic prose", () => {
     const node = renderFinal(view("errors", { reason: "model_done", goalVerification: "not_assessed", verified: 5, failed: 2 }));
     const note = assertVisibleEvidence(node, "errors");
     assert.match(note.textContent, /неудачные попытки: 2/);
-    assert.match(note.textContent, /Подтверждённые записи: 5/);
+    assert.doesNotMatch(note.textContent, /Подтверждённые записи|Соответствие всем требованиям/);
     assert.doesNotMatch(note.textContent, /завершила задачу/);
   }],
   ["progress comments keep their chronological boundaries", () => {
@@ -112,8 +114,8 @@ const tests = [
   ["older run views also leave goal verification unassessed", () => {
     const older = view("clean", { reason: "model_done" });
     delete older.GoalVerification;
-    const note = assertVisibleEvidence(renderFinal(older), "clean");
-    assert.match(note.textContent, /Соответствие всем требованиям автоматически не проверено/);
+    assert.equal(context.RNAssistantRunViewState.normalize(older).goalVerification, "not_assessed");
+    assert.equal(walk(renderFinal(older)).some(item => item.attributes["data-runtime-health"]), false);
   }],
   ["completed run adds no counter summary to the model answer", () => {
     const node = renderFinal(view("clean", { verified: 1, noChange: 2 }));
@@ -121,15 +123,16 @@ const tests = [
     assert.doesNotMatch(node.textContent, /Ответ завершён|Подтверждено изменений|Подтверждено без изменений/);
     assert.equal(walk(node).find(item => item.className === "agent-final-step").textContent, "Все изменения применены.");
   }],
-  ["model question and blocker each keep their explanation in one card", () => {
+  ["model question and blocker keep one explanation without a surrounding card", () => {
     for (const [lifecycle, reason, title, text] of [
       ["completed", "model_blocked", "Работа заблокирована", "Нет доступа к исходному файлу."],
       ["awaiting_user", "model_needs_input", "Нужен ваш ответ", "Какой размер частей выбрать?"]
     ]) {
       const node = renderFinal(view("clean", { lifecycle, reason, verified: 1 }), text);
-      const cards = walk(node).filter(item => item.attributes["data-run-result-card"]);
-      assert.equal(cards.length, 1);
-      assert.equal(cards[0].textContent, title + text);
+      const interactions = walk(node).filter(item => item.attributes["data-run-interaction"]);
+      assert.equal(interactions.length, 1);
+      assert.equal(interactions[0].textContent, title + text);
+      assert.equal(walk(node).some(item => item.attributes["data-run-result-card"]), false);
       assert.equal(node.textContent.split(text).length - 1, 1);
       assert.doesNotMatch(node.textContent, /Последний шаг|Подтверждено изменений/);
     }

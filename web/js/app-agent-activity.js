@@ -71,9 +71,11 @@ function renderQuestionCards(node, data, source) {
     var legend = document.createElement("legend");
     legend.textContent = question.header || question.prompt || "Вопрос";
     fieldset.appendChild(legend);
-    var prompt = document.createElement("p");
-    prompt.textContent = question.prompt || "";
-    fieldset.appendChild(prompt);
+    if (question.prompt && question.prompt !== legend.textContent) {
+      var prompt = document.createElement("p");
+      prompt.textContent = question.prompt;
+      fieldset.appendChild(prompt);
+    }
     (question.options || []).forEach(function (option) {
       var label = document.createElement("label");
       var input = document.createElement("input");

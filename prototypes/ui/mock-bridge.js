@@ -133,7 +133,7 @@
     return { RunId: runId, TurnId: runId, Narrative: "Сравнить продажи за сентябрь и август",
       Lifecycle: "completed", ExecutionHealth: "clean", GoalVerification: "not_assessed",
       SuccessfulReads: 2, VerifiedWrites: 0, NoChangeWrites: 0, UnverifiedWrites: 0,
-      FailedCalls: 0, UnknownEffects: 0, PendingConfirmation: null, Reason: "", CurrentAction: "",
+      FailedCalls: 0, UnknownEffects: 0, PendingConfirmation: null, Reason: "model_done", CurrentAction: "",
       StartedUtc: startedUtc };
   }
   function bytes(value) { return value instanceof Uint8Array ? value : new TextEncoder().encode(value); }

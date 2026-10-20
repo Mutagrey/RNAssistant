@@ -72,6 +72,11 @@
   P.renderAgentMessage = function (message) {
     var items = project(message);
     var finalIndex = message.done ? items.findIndex(function (item) { return item.block && item.block.type === "text" && item.block.phase === "final"; }) : -1;
-    return finalIndex > 0 ? completedHistory(message, items.slice(0, finalIndex)) + renderItems(message, items.slice(finalIndex)) : renderItems(message, items);
+    if (finalIndex <= 0) return renderItems(message, items);
+    var preceding = items.slice(0, finalIndex);
+    // Limitations still affect the answer after the work history has collapsed.
+    return completedHistory(message, preceding.filter(function (item) { return item.type !== "notice"; })) +
+      renderItems(message, preceding.filter(function (item) { return item.type === "notice"; })) +
+      renderItems(message, items.slice(finalIndex));
   };
 }());

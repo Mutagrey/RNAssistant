@@ -503,24 +503,8 @@ html[data-theme="dark"] .agent-activity-tool-id {
 html[data-theme="dark"] .agent-activity-caption.status-unknown,
 html[data-theme="dark"] .agent-activity-caption.status-warning,
 html[data-theme="dark"] .agent-activity-caption.status-partial,
-html[data-theme="dark"] .agent-run-history-state.status-warning,
-html[data-theme="dark"] .message-outcome.status-warning {
+html[data-theme="dark"] .agent-run-history-state.status-warning {
   color: #fbbf24;
-}
-
-html[data-theme="dark"] .agent-approval-panel {
-  border-color: #5c4b30;
-  background: #241f17;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, .24);
-}
-
-html[data-theme="dark"] .agent-approval-title {
-  color: #ece7df;
-}
-
-html[data-theme="dark"] .agent-approval-meta,
-html[data-theme="dark"] .agent-approval-reason {
-  color: #c3a97c;
 }
 
 html[data-theme="dark"] .agent-data > summary {

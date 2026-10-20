@@ -29,7 +29,7 @@
     parent.textContent = "";
     var items = result.items || [];
     if (!items.length && result.complete) return;
-    var card = element("details", "run-changes"); card.open = true;
+    var card = element("details", "run-changes");
     var summary = element("summary", "run-changes-summary");
     summary.appendChild(element("span", "", "Изменения: " + items.length));
     var added = 0, removed = 0, compared = 0, plannedAdded = 0, plannedRemoved = 0, planned = 0, unverified = 0, uncertain = !result.complete;
@@ -45,6 +45,8 @@
       else uncertain = true;
       return { item: item, diff: diff, preview: preview };
     });
+    // Ordinary changes start as the demo's compact row. Missing evidence stays visible.
+    card.open = uncertain || unverified > 0;
     if (compared || planned) counts(summary, added + plannedAdded, removed + plannedRemoved);
     card.appendChild(summary);
     if (unverified) {

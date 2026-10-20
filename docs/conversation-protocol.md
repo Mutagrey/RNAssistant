@@ -167,11 +167,11 @@ request. `blocked` and `needs_input` remain available for a concrete obstacle or
 indispensable user decision. Inspection never clears cumulative uncertainty or
 permits replay of the uncertain call.
 `RunViewState.GoalVerification=not_assessed` records that no independent general
-goal check occurred. The UI shows this separately from verified write/no-change
-counts when the model chooses `done`; clean execution health never certifies the
-requested outcome or Office/browser behavior.
-The notice says the model finished its response, not the task. Failed-attempt
-warnings remain visible when `model_done` also has unassessed goal verification.
+goal check occurred. It remains separate from verified write/no-change counts in
+the typed state; clean execution health never certifies the requested outcome or
+Office/browser behavior. An ordinary `model_done` answer adds no completion or
+goal-verification card. Failed attempts, cancellation, failure and unknown effects
+remain visible outside collapsed history, independently of goal verification.
 `ModelProtocolWire.MessageGuidance` gives defaults, response schema and repair one
 communication policy. Visible update frequency is independent of tool-call and
 Task List note frequency: a brief initial approach, then only new relevant

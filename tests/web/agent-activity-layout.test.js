@@ -196,6 +196,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     await page.locator("#previews .tool-result-item summary").first().click();
     assert.equal(await page.locator("#previews img").count(), 0, "preview strings remain inert");
     assert.match(await page.locator("#previews").innerText(), /Показана доступная часть/);
+    await page.locator("#previews .run-changes-summary").click();
     await page.locator("#previews .run-change-file-summary").click();
     await page.locator("#previews .vba-diff-line.add").waitFor();
     assert.equal(await page.locator("#previews .vba-diff-line.add").count(), 1);

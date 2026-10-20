@@ -434,46 +434,51 @@ function appendAgentRunOverview(parent, steps, timeline, stats) {
 function appendAgentRunViewState(parent, runViewState, runId) {
   var health = runViewState ? runViewState.executionHealth : "unknown";
   var uncertain = health === "unknown";
-  var goalUnassessed = runViewState && runViewState.goalVerification === "not_assessed" &&
-    runViewState.lifecycle === "completed" && runViewState.reason === "model_done";
-  if (health === "clean" && runViewState && !goalUnassessed &&
+  // Goal verification stays in the typed state; an ordinary answer is not an alert.
+  if (health === "clean" && runViewState &&
       ["failed", "cancelled"].indexOf(runViewState.lifecycle) < 0) return;
   var cause = runViewState && runViewState.lifecycle === "failed"
     ? window.RNAssistantRunViewState.failureReasonLabel(runViewState.reason)
     : runViewState && runViewState.lifecycle === "cancelled" ? "Выполнение отменено." : "";
   var note = document.createElement("div");
-  note.className = "message-outcome " + (uncertain ? "status-warning" : runViewState && runViewState.lifecycle === "failed" ? "status-failed" :
+  note.className = "message-outcome agent-run-notice " + (uncertain ? "status-warning" : runViewState && runViewState.lifecycle === "failed" ? "status-failed" :
     health === "errors" ? "status-warning" : "status-history");
   note.setAttribute("data-runtime-health", health);
   note.setAttribute("role", uncertain ? "alert" : "status");
+  if (window.RNAssistantIcons) {
+    var icon = document.createElement("span");
+    icon.className = "agent-run-notice-icon";
+    icon.setAttribute("aria-hidden", "true");
+    icon.innerHTML = window.RNAssistantIcons.render("warning");
+    note.appendChild(icon);
+  }
+  var copy = document.createElement("div");
+  copy.className = "agent-run-notice-copy";
+  var text = document.createElement("span");
   if (!runViewState) {
-    note.textContent = "Сведения о выполнении недоступны. Результат изменений не подтверждён.";
+    text.textContent = "Сведения о выполнении недоступны. Результат изменений не подтверждён.";
   } else if (uncertain) {
-    note.textContent = (cause ? cause + " " : "") + "Есть действия с неподтверждённым результатом: " + runViewState.unknownEffects +
+    text.textContent = (cause ? cause + " " : "") + "Есть действия с неподтверждённым результатом: " + runViewState.unknownEffects +
       ". Проверьте фактическое состояние перед повторной записью.";
   } else if (cause) {
-    note.textContent = cause;
-  } else if (goalUnassessed) {
-    note.textContent = (health === "errors"
-      ? "В ходе работы были неудачные попытки: " + runViewState.failedCalls + ". "
-      : "Модель завершила ответ. ") + "Подтверждённые записи: " + runViewState.verifiedWrites +
-      "; без изменения: " + runViewState.noChangeWrites +
-      ". Соответствие всем требованиям автоматически не проверено.";
+    text.textContent = cause;
   } else {
-    note.textContent = "В ходе работы были неудачные попытки.";
+    text.textContent = "В ходе работы были неудачные попытки: " + runViewState.failedCalls + ".";
   }
+  copy.appendChild(text);
   if (runId) {
     var openJournal = document.createElement("button");
     openJournal.type = "button";
-    openJournal.className = "agent-action-button agent-details-link";
-    openJournal.textContent = uncertain ? "Что проверить" : "Причины и детали";
+    openJournal.className = "agent-details-link";
+    openJournal.textContent = uncertain ? "Что проверить" : "Подробности";
     var sourceChatId = state.activeChatId;
     openJournal.addEventListener("click", function () {
       if (state.activeChatId !== sourceChatId || typeof window.openRunJournal !== "function") return;
       window.openRunJournal({ chatId: sourceChatId, runId: runId, filter: "problems" });
     });
-    note.appendChild(openJournal);
+    copy.appendChild(openJournal);
   }
+  note.appendChild(copy);
   parent.appendChild(note);
 }
 
@@ -524,8 +529,7 @@ function renderAgentRunArticle(run) {
     if (!run.live && !run.continued && runViewState &&
         ((runViewState.lifecycle === "awaiting_user" && runViewState.reason === "model_needs_input") ||
          (runViewState.lifecycle === "completed" && runViewState.reason === "model_blocked"))) {
-      finalSection.className += " agent-result-card";
-      finalSection.setAttribute("data-run-result-card", "true");
+      finalSection.setAttribute("data-run-interaction", "true");
       var title = document.createElement("strong");
       title.className = "agent-result-title";
       title.textContent = window.RNAssistantRunViewState.outcomeLabel(runViewState);
