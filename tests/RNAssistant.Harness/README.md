@@ -1046,7 +1046,8 @@ and split dragging. Use the bundled Playwright through `NODE_PATH`; optionally s
 `BROWSER_EXECUTABLE` and `LAYOUT_SCREENSHOT`. This is not Office/WebView2 qualification.
 `tests/web/product-shell-parity.test.js` compares shipped palette and joined header/
 splitter geometry in all six sections with the prototype, then checks native project
-tree search/collapse and the shared demo inspector toggle. `tests/web/settings-navigation-layout.test.js` checks the
+tree search/collapse and shared panel toggles, including pointer focus after keyboard use.
+`tests/web/settings-navigation-layout.test.js` checks the
 Settings navigation and selected-model controls.
 
 `resource cutover: two chat mutations` covers three outcomes through separate

@@ -31,6 +31,11 @@
       options.setOpen(!!open);
       sync();
     }
+    button.addEventListener("pointerdown", function (event) {
+      // Chromium keeps :focus-visible on an already focused button after a click.
+      // Let the native pointer focus start afresh without suppressing keyboard focus.
+      if (event.button === 0 && document.activeElement === button) button.blur();
+    });
     button.addEventListener("click", function () { setOpen(!options.isOpen()); });
     var binding = { sync: sync, setOpen: setOpen };
     bindings.set(button, binding);

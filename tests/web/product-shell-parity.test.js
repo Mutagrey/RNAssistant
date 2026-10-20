@@ -41,6 +41,17 @@ const { chromium } = require("playwright");
     });
     assert.deepEqual(productTokens, reference.tokens, "the product uses the demo palette, borders and radii");
 
+    const navigationToggle = page.locator("#productMobileMenuButton");
+    for (const key of ["Enter", "Space"]) {
+      await navigationToggle.press(key);
+      assert.equal(await navigationToggle.evaluate(node => node.matches(":focus-visible")), true, "keyboard use shows the panel toggle focus");
+      await navigationToggle.click();
+      assert.deepEqual(await navigationToggle.evaluate(node => [node === document.activeElement,
+        node.matches(":focus-visible"), getComputedStyle(node).outlineStyle]), [true, false, "none"],
+        "a pointer click after keyboard use keeps focus without the stale keyboard outline");
+    }
+    await page.waitForFunction(() => !document.querySelector(".shell").classList.contains("navigation-transition"));
+
     const sections = [
       ['.rail-button[data-tab="chat"]', "#chatLayout", ".chat-sidebar-head", ".chatbar"],
       ['.rail-button[data-tab="artifacts"]', "#htmlWorkspaceLayout", ".artifact-catalog-toolbar", ".artifact-overview-heading"],
@@ -172,9 +183,12 @@ const { chromium } = require("playwright");
     await inspectorToggle.press("Enter");
     await demo.waitForFunction(() => document.getElementById("demoInspectorToggle").getAttribute("aria-expanded") === "true");
     assert.equal(await inspectorToggle.getAttribute("aria-expanded"), "true", "the shared toggle opens the demo inspector once");
+    assert.equal(await demo.evaluate(() => document.activeElement.matches('#demoInspectorToggle, .inspector-compact-back') &&
+      document.activeElement.matches(':focus-visible')), true, "the demo preserves keyboard focus on its visible panel control after rendering");
     await inspectorToggle.click();
     await demo.waitForFunction(() => document.getElementById("demoInspectorToggle").getAttribute("aria-expanded") === "false");
     assert.equal(await inspectorToggle.getAttribute("aria-expanded"), "false", "the shared toggle closes the demo inspector once");
+    assert.equal(await inspectorToggle.evaluate(node => getComputedStyle(node).outlineStyle), "none", "pointer reopening/rendering does not inherit a keyboard outline");
     assert.deepEqual(demoErrors, []);
     assert.deepEqual(errors, []);
     console.log("PASS product shell: demo palette, joined built-in headers and shared navigation collapse");
