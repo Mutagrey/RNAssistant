@@ -17,19 +17,28 @@ uses one cloud endpoint/profile with unchanged task bounds and acceptance.
 
 - Minimal VBA admission is [fixed and checked live](PROGRESS.md#minimal-vba-admission-and-live-check--2026-10-20)
   at `json_object` / 32K / 4096 output: controlled sequence and two live runs pass.
-  Only 120 estimated message tokens remain in the final live request; larger tasks
-  remain unqualified. The corrected [combined HTML/VBA baseline](PROGRESS.md#bound-html-and-vba-baseline--2026-10-20)
-  advertises the bound Office document but still fails: HTML/VBA admission requires
-  24,942 / 22,750 tokens against 21,375; all four files stay unchanged. Its 15 model
-  requests use 243,975 actual input tokens. Use this case to measure the smaller
-  bootstrap proposal without weakening admission, parser or final-source acceptance.
-- Repair guidance conflict, owner `ModelProtocolClient.CreateFormatRepairMessage`:
-  the specific error directs an unselected skill-only call to `common.skills_load`,
-  while the generic repair instruction directs unloaded tools to
-  `common.capabilities_read` and waits for schema admission. That read cannot admit
-  a skill-only tool. The retained combined run contains this contradiction and two
-  rejected direct VBA calls; it does not establish how much the wording caused the
-  retries. Align recovery guidance with exact exposure and preserve dispatch guards.
+  Its previous twenty-tool core left only 120 estimated message tokens at the end.
+  The [six-tool Excel bootstrap](PROGRESS.md#minimal-excel-bootstrap--2026-10-20)
+  lowers actual first-request input from 14,110 to 9201. Two combined runs now
+  complete 3/4 edits, but neither reaches full acceptance. Simultaneous HTML/VBA
+  selection can still exceed 32K; active skills and correctness checks must not
+  be silently dropped. Full live Excel report/discovery coverage also remains open:
+  the fake host's report skill body is a stub, despite complete dependency checks.
+- Repair guidance conflict is fixed in `ModelProtocolClient.CreateFormatRepairMessage`:
+  generic repair no longer overrides the parser's skill-only route with direct
+  schema discovery. Focused checks cover both routes and no execution before
+  admission. This does not prove that the model always follows recovery guidance.
+- Compaction response failure, owner `ContextCompactionRuntime`: two combined
+  runs reach the helper after three verified HTML edits and fail on fenced JSON.
+  The helper currently has one raw attempt; its failed response publishes no
+  checkpoint. An explicit no-fences wording experiment also fails on the exact
+  captured helper request and is not retained. Next: bounded response repair with
+  unchanged provenance validation and separately budgeted helper requests, then
+  repeat full acceptance. No JSON stripping, larger context or fabricated summary.
+- Initial empty model responses consume 4096 output tokens in all three new runs;
+  ordinary repair recovers each initial step. One run later exhausts its two
+  protocol attempts on mixed skill loads and an unloaded tool. The endpoint reports
+  no reasoning content; that alone does not explain the empty completions.
 - Workspace: both versions produce exact final files, then choose `done` despite
   violating the explicitly required read-after-each-edit order (0/9 sequence stages).
   Current final-file acceptance does not certify arbitrary user-prescribed ordering.
@@ -40,9 +49,10 @@ uses one cloud endpoint/profile with unchanged task bounds and acceptance.
   the available evidence. Make that boundary reachable in a representative live
   scenario without synthesizing model replies/checkpoints or weakening acceptance.
 
-Actual first-request input shrinks, but task success does not improve in these
-samples and workspace cumulative input grows. No general quality or latency gain
-is established. Local 12B/9B profiles failed the memory preflight; cloud results
+Actual first-request input shrinks and combined partial progress improves, but
+full task success remains unqualified; workspace cumulative input grows in the
+earlier comparison. No general quality or latency gain is established.
+Local 12B/9B profiles failed the memory preflight; cloud results
 do not qualify those models or real Office/COM/WebView2 delivery.
 
 ## Unified stabilization verification gap — 2026-10-20

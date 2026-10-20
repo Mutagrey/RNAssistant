@@ -32,6 +32,23 @@ dispatch; schema presence alone grants no mutation permission. Manual Library an
 Tools UI actions keep their existing explicit authoring/confirmation guards.
 See [manifest, selection and Arsenal](skills.md#manifest-and-task-selection).
 
+### Minimal Office bootstrap
+
+`CallableToolPack` starts Agent/Excel with six callable tools: `common.skills_load`,
+`common.resources_find/read`, `common.capabilities_search/read`, and `excel.inspect`.
+Other hosts and Plan start with the five common tools. The complete visible catalog
+remains discoverable. Other direct Excel tools use the existing exact schema
+admission through `common.capabilities_read`; independent schema reads may share
+one batch. A selected skill can supply its declared tools in the next request.
+Neither route changes confirmation, execution policy or effect verification.
+
+The `excel.analysis_reporting` package supplies inspection, sheet creation, range
+writes, tables, formatting and both workbook/chat charts. Standalone operations do
+not require selecting that skill. The Excel profile is `excel-inspect-core`;
+incompatible older direct admissions explicitly reset to the current core without
+deleting history or replaying calls. Unchanged admissions under the current profile
+retain the existing exact validation and budget checks across turns and restart.
+
 ## Status and boundary
 
 This is the current contract for tool visibility and authoring. It does not
@@ -639,9 +656,9 @@ qualification remains open.
    are a review trigger, not an unsafe automatic stripping rule.
 3. **Semantic family switches and final core-pack selection through 11O6 are done
    host-neutral:** deleted argument paths have no aliases or dual schemas. Excel
-   Agent now keeps five bootstrap (including the skill loader), host core and two routine VBA editing schemas;
-   rename/restore/delete/macro remain exact optional schemas available through
-   admission.
+   The later skill-exposure and [minimal bootstrap](#minimal-office-bootstrap)
+   contracts supersede the original eager Excel/VBA core. Exact schemas remain
+   available through direct admission or selected skill dependencies.
 4. Run deterministic model scenarios proving that calls complete without invented
    opaque values and that cursor/revision confusion is structurally impossible,
    not merely discouraged by descriptions.
@@ -793,11 +810,11 @@ Word 8, PowerPoint 8, Outlook 4. Доступный объединённый к�
 схема custom tool authoring также зависит от этой настройки. Пользовательские
 пакеты в эти числа не входят.
 
-Это не размер каждого model request. `CallableToolPack` начинает Agent/Excel
-с 5 bootstrap + 14 Excel + 2 VBA = 21 доступной схемы; Agent/Word и PowerPoint —
-с 7, Outlook — с 5, Plan — с 5. Старый Chat — только история. Direct optional
-схемы подключаются по admission; специализированные — через выбранный skill. Проверять меньший Excel core можно по trajectories,
-но считать любое большое число ID архитектурной ошибкой нельзя.
+Это историческая инвентаризация R61, не размер текущего model request.
+Текущий [bootstrap](#minimal-office-bootstrap) содержит 6 schemas в Agent/Excel
+и 5 в остальных Office profiles. Direct optional schemas подключаются по admission;
+специализированные — через выбранный skill. Само число ID в полном каталоге
+не определяет размер запроса.
 
 Во всех рассмотренных схемах описаны top-level arguments; closed object branches,
 enums и диапазоны уже используются. Критичная проблема не в отсутствии JSON Schema,

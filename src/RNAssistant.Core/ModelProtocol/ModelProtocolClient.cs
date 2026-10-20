@@ -217,9 +217,7 @@ namespace RNAssistant.Core.ModelProtocol
                     "Inside a call, arguments is already the root object described by the tool schema; never nest another arguments, parameters, schema, or wrapper inside it. If the error says $ contains unsupported property arguments, remove that undeclared property; only when declared fields exist inside it, move those fields up one level first. For any unsupported property, remove it instead of repeating the rejected object unchanged. " +
                     "Every string, including nested arguments, uses one JSON escaping layer: use \\n for a real line break and \\\\ for one literal source backslash; never drop or pre-decode a backslash. " +
                     "Batch only independent local reads. Return every mutation and other call alone, then wait for its result before proposing another mutation; unknown effects remain cumulative run evidence. " +
-                    "Follow the error action exactly. " +
-                    "If a known tool schema is not loaded, replace the rejected call with common.capabilities_read for that exact id. " +
-                    "Wait for its successful complete tool-schema result and TOOL_PACK_STATE with admitted=true, then call the tool only in a later response."
+                    "Follow the error action exactly. Use a tool only when its schema is in the current callable set."
             };
             return new ChatMessage { Role = "user", Content = "FORMAT_REPAIR:\n" + root.ToString(Formatting.None), ProtocolMessage = true };
         }

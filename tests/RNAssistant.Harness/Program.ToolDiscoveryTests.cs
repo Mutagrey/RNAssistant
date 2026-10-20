@@ -703,10 +703,71 @@ namespace RNAssistant.Harness
                     "local parser distinguishes an unloaded known tool during repair");
                 AssertContains(FlattenSimple(requests[1]), "common.skills_load",
                     "repair directs specialized tools through the skill loader");
+                var repair = requests[1].Single(message =>
+                    (message.Content ?? string.Empty).StartsWith("FORMAT_REPAIR:\n", StringComparison.Ordinal));
+                AssertTrue(!repair.Content.Contains("common.capabilities_read"),
+                    "generic repair must not contradict the skill-only recovery route");
                 AssertContains(FlattenSimple(requests[2]), "SELECTED_SKILL common.html_workspace_authoring",
                     "complete instructions reach the same request as specialized tools");
                 AssertTrue(session.LastRun.SelectedSkills.Any(skill => skill.Id == "common.html_workspace_authoring"),
                     "HTML pilot retains the task selection");
+            });
+            foreach (var mode in new[] { AgentResponseModes.JsonObject, AgentResponseModes.JsonSchema })
+                OptionalExcelToolsRequireExactAdmission(mode);
+        }
+
+        private static void OptionalExcelToolsRequireExactAdmission(string responseMode)
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                var session = NewSession(adapter);
+                session.LastRun = new ChatRunRecord { RunId = "excel-admission",
+                    DocumentRuntimeKey = adapter.RuntimeDocumentKey, StartedUtc = DateTime.UtcNow };
+                Func<string, JObject, ConversationToolCall> call = (name, arguments) =>
+                    new ConversationToolCall { Name = name, Arguments = arguments };
+                var write = ModelProtocolWire.Write("", new[] { call("excel.write_range", new JObject {
+                    ["kind"] = "value", ["sheet"] = "Data", ["address"] = "D1", ["value"] = "42" }) });
+                var script = new Queue<string>(new[] {
+                    write,
+                    ModelProtocolWire.Write("", new[] {
+                        call(CapabilityToolCatalog.ReadToolId, new JObject { ["id"] = "excel.write_range" }),
+                        call(CapabilityToolCatalog.ReadToolId, new JObject { ["id"] = "excel.format_range" }) }),
+                    write,
+                    ModelProtocolWire.Write("", new[] { call("excel.format_range", new JObject {
+                        ["sheet"] = "Data", ["address"] = "D1", ["bold"] = true }) }),
+                    ModelProtocolWire.Write("Ячейка записана и отформатирована.", new ConversationToolCall[0])
+                });
+                var requests = 0;
+                LlmCompletionDelegate complete = (config, messages, options, stream, token) =>
+                {
+                    requests++;
+                    AssertTrue(script.Count > 0, "Excel admission needs only the deliberate unloaded-call repair");
+                    var callable = session.LastContextReceipt.Arsenal.Tools.Select(tool => tool.Id).ToArray();
+                    foreach (var id in new[] { "excel.write_range", "excel.format_range" })
+                        AssertEqual(requests >= 3, callable.Contains(id), "direct Excel schema is callable only after admission: " + id);
+                    if (requests == 2)
+                    {
+                        AssertContains(FlattenSimple(messages), "Call common.capabilities_read", "direct tools retain their exact recovery route");
+                        AssertEqual(0, adapter.ExcelBackendCalls.Count(operation => operation == FakeOfficeAdapter.ExcelWriteApplyOperation),
+                            "guessed tool cannot mutate before admission");
+                    }
+                    if (requests == 3)
+                        AssertContains(FlattenSimple(messages), "\"admitted\":true", "batched discovery admits both exact schemas together");
+                    return Task.FromResult(new LlmCompletionResult { Content = script.Dequeue() });
+                };
+                var settings = new AppSettings { AgentResponseMode = responseMode, AutoConfirmToolActions = true,
+                    ContextWindowOverrideTokens = 65536, MaxAgentFormatRetries = 2 };
+                var result = CreateConversationRunService(adapter, executor, complete).ExecuteWithApprovalsAsync(
+                    ChatModes.Agent, "Запиши 42 в Data!D1 и выдели жирным.", session, NewContext(adapter), settings,
+                    OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
+                AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "direct Excel workflow completes: " + result.AssistantText);
+                AssertEqual(5, requests, "batched schema reads cost one model step for both tools");
+                AssertEqual(0, session.LastRun.SelectedSkills.Count, "standalone Excel tools need no skill");
+                AssertEqual(1, adapter.ExcelBackendCalls.Count(operation => operation == FakeOfficeAdapter.ExcelWriteApplyOperation), "write executes once");
+                AssertEqual(1, adapter.ExcelBackendCalls.Count(operation => operation == FakeOfficeAdapter.ExcelRangeMutationApplyOperation), "format executes once");
+                AssertEqual("42", adapter.ExcelCellText("Data", "D1"), "exact value reaches the fake document");
+                AssertTrue(adapter.HasExcelRangeFormat("Data", "D1"), "format reaches the fake document");
+                AssertEqual(2, session.LastRun.KernelState.Summary.ToolCounts.WriteOk, "both changes have verified results");
             });
         }
 
@@ -1017,7 +1078,12 @@ namespace RNAssistant.Harness
                     catalog);
 
                 foreach (var id in OfficeToolCatalog.ForHost(adapter.HostName).Select(tool => tool.Id))
-                    AssertTrue(toolPack.Tools.Any(tool => tool.Id == id), "Excel core includes exact built-in " + id);
+                {
+                    AssertEqual(id == "excel.inspect", toolPack.Tools.Any(tool => tool.Id == id),
+                        "only Excel inspection is callable before admission: " + id);
+                    AssertTrue(toolPack.Catalog.Any(tool => tool.Id == id),
+                        "every Excel tool remains discoverable: " + id);
+                }
                 foreach (var id in new[]
                 {
                     "common.vba_write_module", "common.vba_apply_patch",
@@ -1051,8 +1117,9 @@ namespace RNAssistant.Harness
                 var first = ReadSchemaEvidence(executor, catalog, "fixture.dynamic_1", "read_1");
                 var blockedSkill = executor.ExecuteManual(Command(CapabilityToolCatalog.ReadToolId,
                     "id", "common.vba_rename_module"), catalog, new AppSettings(), false, false);
-                AssertTrue(!blockedSkill.Success && blockedSkill.Message.Contains("selected procedure"),
-                    "direct schema read cannot admit a skill-only VBA tool");
+                AssertTrue(blockedSkill.Success && blockedSkill.DataJson.Contains("skill-tool") &&
+                    !blockedSkill.DataJson.Contains("\"descriptor\""),
+                    "skill-only schema inspection returns guidance without admitting a descriptor");
                 var second = ReadSchemaEvidence(executor, catalog, "fixture.dynamic_2", "read_2");
                 first.RunId = runId;
                 second.RunId = runId;
@@ -1313,8 +1380,7 @@ namespace RNAssistant.Harness
                             if (string.Equals(mode, ChatModes.Agent, StringComparison.Ordinal) &&
                                 string.Equals(host, "Excel", StringComparison.Ordinal))
                             {
-                                foreach (var tool in OfficeToolCatalog.ForHost(host))
-                                    expected.Add(tool.Id);
+                                expected.Add("excel.inspect");
                             }
                         }
 

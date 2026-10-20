@@ -313,6 +313,15 @@ not execute VBA. The general `--resource-workflow-live` case remains separate.
 
 Skill-package checks: after the normal host-neutral Harness build, filter by
 `skill packages:`, `tool pack:`, `skill editor:` and the two `agent:` prompt cases.
+For the six-tool Excel bootstrap, `tool pack:` checks standalone Excel write and
+format admission in both response modes, including one batched schema read and
+rejection before admission. `agent: R61 routine Excel` checks inspection without
+discovery; `skill packages: built-ins` checks the report package's complete tool
+dependencies. `unified policy: native Office approval` and
+`auto confirmation: native multistep` cover approval/restart and unknown effects
+after the sheet schema is loaded. These fake-host cases do not measure model
+discovery quality or qualify real Excel; the fake host's report skill body is a
+stub. Use the separate live combined fixture for context pressure and task results.
 The package slice covers selection, next-request exposure, exact dispatch, shared
 dependencies, version conflicts/revocation, budget, compaction-independent state,
 restart/new-turn selection, fresh authority and inert UI metadata.

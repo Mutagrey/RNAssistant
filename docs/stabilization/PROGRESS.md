@@ -1,5 +1,57 @@
 # Stabilization progress
 
+## Minimal Excel bootstrap — 2026-10-20
+
+`CallableToolPack` now starts Agent/Excel with six schemas instead of twenty:
+the five common bootstrap tools and `excel.inspect`. The other fourteen Excel
+tools remain in the same catalog and use exact direct admission or selected skill
+dependencies. `excel.analysis_reporting` now declares sheet creation, formatting
+and workbook charts in addition to its existing dependencies. The changed Excel
+profile explicitly invalidates incompatible prior admissions to the new core;
+it does not delete history or replay calls. No new loader or registry was added.
+
+`ModelProtocolClient` removes generic repair advice that contradicted the parser's
+skill-only recovery route. The parser still supplies the exact skill/direct route;
+admission, policy, confirmation, source and effect checks remain unchanged.
+
+The same bound HTML/VBA task, sources, `gemma4:cloud` route and 32K/4096 profile
+produce 9201 actual initial input tokens instead of 14,110 (34.8% less).
+Two live runs complete all three HTML edits with exact preserved surrounding bytes,
+then fail when the compaction helper returns fenced JSON. VBA remains unchanged.
+The first run also refuses simultaneous HTML/VBA selection at 24,044 estimated
+message tokens against 21,421. No unknown effect or false completion occurs.
+
+| Run | Provider requests / actual input tokens | Exact requested edits | Outcome |
+|---|---:|---:|---|
+| Bound baseline | 15 / 243,975 | 0/4 | `model_blocked` |
+| Minimal bootstrap 1 | 10 / 139,498 | 3/4 | Invalid compaction JSON |
+| Minimal bootstrap 2 | 11 / 149,529 | 3/4 | Invalid compaction JSON |
+| Helper-wording candidate | 5 / 51,559 | 0/4 | Protocol exhausted before helper |
+
+All three new runs initially return empty content with 4096 API output tokens;
+the bounded ordinary repair recovers that step. The helper-wording candidate fails
+earlier on mixed skill loads and an unloaded HTML call, so it does not test the
+helper. Replaying the exact failing helper request with only an explicit raw-JSON
+instruction still returns fenced JSON. That ineffective wording change is removed.
+These samples establish lower initial cost and partial task progress, not reliable
+end-to-end success or a general total-token improvement.
+
+Validation: 21 focused cases cover tool packs/discovery, both schema modes,
+standalone Excel write/format with batched schema admission, built-in dependencies,
+inspection without discovery, approval/restart, unknown effects and skill budgets.
+Four existing structured-compaction checks also pass. The overflow fixture retains
+an actual refusal with 32,000 padding characters after the smaller bootstrap.
+Builds use isolated `eb21416c` plus scoped patches; concurrent workspace changes
+are excluded. Only the two existing PDF platform warnings remain.
+
+Evidence is in the existing local evaluation directory: `excel-bootstrap.patch`,
+`excel-bootstrap-results.json`, `office-bootstrap-1/`, `office-bootstrap-2/`,
+`office-bootstrap-helper-1/` and `compaction-format-replay/`. Exact wire profiles,
+task/source hashes and final bytes are independently checked. Next priority is
+bounded compaction-response recovery and full scenario completion, followed by
+live Excel report/discovery coverage with production skill text. The fake report
+skill remains a stub; no Office/COM qualification is claimed.
+
 ## Bound HTML and VBA baseline — 2026-10-20
 
 The original four-file task was rerun before changing the bootstrap tool set,

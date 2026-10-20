@@ -154,7 +154,9 @@ namespace RNAssistant.Office.Services
                         "common.html_workspace_write_file", "common.html_workspace_apply_patch", "common.html_workspace_delete",
                         "common.html_data_write", "common.html_data_bind", "common.html_data_refresh", "common.html_data_freeze",
                         "common.html_assets_list", "common.html_assets_import", "common.html_assets_publish" }); break;
-                    case "excel.analysis_reporting": ids.AddRange(new[] { "excel.inspect", "excel.write_range", "excel.add_table", "excel.create_chat_chart" }); break;
+                    case "excel.analysis_reporting": ids.AddRange(new[] {
+                        "excel.inspect", "excel.add_sheet", "excel.write_range", "excel.add_table",
+                        "excel.format_range", "excel.upsert_chart", "excel.create_chat_chart" }); break;
                     case "word.document_editing": ids.AddRange(new[] { "word.find_text", "word.replace_text" }); break;
                     case "powerpoint.deck_building": ids.AddRange(new[] { "powerpoint.search_text", "powerpoint.replace_text" }); break;
                     case "outlook.email_assistant": ids.Add("outlook.search_mail"); break;

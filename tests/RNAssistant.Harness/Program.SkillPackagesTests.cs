@@ -50,6 +50,16 @@ namespace RNAssistant.Harness
                     AssertEqual(skill.Id, selected.Id, host + " can select its advertised skill " + skill.Id);
                     AssertTrue(selected.Tools.All(id => tools.Any(tool => tool.Id == id)),
                         host + " selection binds only its published tools: " + skill.Id);
+                    if (skill.Id == "excel.analysis_reporting")
+                    {
+                        var initial = CallableToolPack.Create(ChatModes.Agent, host, "host-skill", tools);
+                        var surface = SkillTaskService.Compile(session, skills, pack, tools, initial.Tools,
+                            "report-step", settings);
+                        foreach (var id in new[] { "excel.add_sheet", "excel.write_range", "excel.add_table",
+                            "excel.format_range", "excel.upsert_chart", "excel.create_chat_chart" })
+                            AssertTrue(surface.Tools.Any(tool => tool.Id == id),
+                                "report skill supplies its workflow tools from the minimal bootstrap: " + id);
+                    }
                 }
             });
         }

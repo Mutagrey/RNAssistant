@@ -1817,14 +1817,9 @@ namespace RNAssistant.Harness
                 CapabilityCatalogService.BindReadSchema(runnable, null);
                 var currentPack = CallableToolPack.Create(
                     ChatModes.Agent, adapter.HostName, "r61-eval", runnable);
-                var legacyVbaIds = new HashSet<string>(new[]
-                {
-                    "common.vba_restore_backup", "common.vba_rename_module",
-                    "common.vba_delete_module", "common.office_run_macro"
-                }, StringComparer.Ordinal);
                 var legacyCoreIds = new HashSet<string>(
                     currentPack.Tools.Select(tool => tool.Id), StringComparer.Ordinal);
-                legacyCoreIds.UnionWith(legacyVbaIds);
+                legacyCoreIds.UnionWith(OfficeToolCatalog.ForHost(adapter.HostName).Select(tool => tool.Id));
                 var legacyCore = runnable.Where(tool => legacyCoreIds.Contains(tool.Id)).ToArray();
                 var composer = new ModelContextCompiler(projection: ModelToolResultProjection.Instance);
                 var currentMessages = composer.BuildPreview(
@@ -1847,10 +1842,10 @@ namespace RNAssistant.Harness
                     currentMessages, currentOptions, settings, repairReserve, continuationReserve);
                 var legacyTokens = ModelContextBudget.EstimateAdmittedRequestTokens(
                     legacyMessages, legacyOptions, settings, repairReserve, continuationReserve);
-                AssertEqual(19, currentPack.Tools.Count,
-                    "Excel Agent core contains five bootstrap and fourteen Excel schemas; VBA editing requires a skill");
-                AssertEqual(23, legacyCore.Length,
-                    "counterfactual Excel core retains additional direct VBA schemas");
+                AssertEqual(6, currentPack.Tools.Count,
+                    "Excel Agent core contains five bootstrap tools and inspection");
+                AssertEqual(20, legacyCore.Length,
+                    "counterfactual Excel core retains all fifteen Excel schemas");
                 AssertTrue(currentTokens < legacyTokens,
                     "R61 core lowers deterministic initial input estimate; before=" +
                     legacyTokens + ", after=" + currentTokens);
@@ -2368,7 +2363,7 @@ namespace RNAssistant.Harness
                 // The default 32K request now fits. Retain a deliberate full-request admission refusal
                 // independently of how much prose the built-in prompts happen to contain.
                 var userRequest = "Исправь незакрытый If в UniLoader." +
-                    (tightBudget ? "\nRequired fixture context: " + new string('x', 12000) : "");
+                    (tightBudget ? "\nRequired fixture context: " + new string('x', 32000) : "");
                 var result = CreateConversationRunService(adapter, executor, complete).ExecuteAsync(
                     ChatModes.Agent, userRequest, session, NewContext(adapter),
                     requestSettings,
@@ -3095,6 +3090,7 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
             {
                 var responses = new Queue<string>(new[] {
+                    LoadToolSchemaResponse("excel.add_sheet"),
                     "{\"message\":\"Add sheet\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"ApprovedSheet\"}}]}",
                     "{\"message\":\"Add another sheet\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"SecondApprovedSheet\"}}]}",
                     ModelProtocolWire.WriteAction("Done", ConversationResponse.DoneAction)
@@ -3138,7 +3134,8 @@ namespace RNAssistant.Harness
                 Func<string, string> add = name => new JObject { ["message"] = "Add sheet", ["action"] = "tool",
                     ["tool_calls"] = new JArray(new JObject { ["name"] = "excel.add_sheet", ["arguments"] = new JObject { ["name"] = name } })
                 }.ToString(Formatting.None);
-                var responses = new Queue<string>(new[] { add("AutoOne"), add(unknown ? "AutoOne" : "AutoTwo") });
+                var responses = new Queue<string>(new[] { LoadToolSchemaResponse("excel.add_sheet"),
+                    add("AutoOne"), add(unknown ? "AutoOne" : "AutoTwo") });
                 if (unknown) responses.Enqueue("{\"message\":\"Проверяю созданный лист.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.resources_read\",\"arguments\":{\"target\":\"Excel range: AutoOne!A1\",\"representation\":\"text\"}}]}");
                 responses.Enqueue(ModelProtocolWire.WriteAction("Done", ConversationResponse.DoneAction));
                 var configuration = new AppSettings { AutoConfirmToolActions = true };

@@ -918,8 +918,8 @@ or changing the accepted messages. If the generated context or schema cannot be
 matched, projection is skipped. Admission still budgets the full prompt plus the
 strict schema, so this reduction does not claim extra callable capacity.
 
-Host-neutral fixture measured from the retained exact `llm.request` UTF-8 bytes:
-Excel Agent core (20 callable schemas) plus one admitted
+Historical host-neutral fixture measured from the retained exact `llm.request` UTF-8 bytes:
+the former Excel Agent core (20 callable schemas) plus one admitted
 `common.html_workspace_write_file` extension, one short user request, no media.
 Estimated tokens use the repository's UTF-8 bytes ÷ 4 approximation, not provider
 usage. The earlier prompt preview is an estimate; these are materialized HTTP bytes.
@@ -934,6 +934,10 @@ usage. The earlier prompt preview is an estimate; these are materialized HTTP by
 
 The strict request saves 30,176 B (≈7,544 estimated tokens) on this fixture.
 Live target-model and Windows/Office delivery checks remain open.
+
+The current [minimal Office bootstrap](tool-library.md#minimal-office-bootstrap)
+contains six Excel Agent schemas. The historical table above measures strict wire
+deduplication, not the current initial request size.
 
 Tool call (target copied from current runtime context or resource discovery):
 

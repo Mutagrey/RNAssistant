@@ -22,21 +22,7 @@ namespace RNAssistant.Office.Services
             CapabilityToolCatalog.ReadToolId);
 
         private static readonly HashSet<string> ExcelCoreToolIds = ExactIds(
-            "excel.inspect",
-            "excel.find_cells",
-            "excel.create_chat_chart",
-            "excel.replace_cells",
-            "excel.write_range",
-            "excel.add_table",
-            "excel.upsert_chart",
-            "excel.delete_chart",
-            "excel.format_range",
-            "excel.add_sheet",
-            "excel.rename_sheet",
-            "excel.clear_range",
-            "excel.delete_rows_columns",
-            "excel.sort_range",
-            "excel.filter_range");
+            "excel.inspect");
 
         private static readonly HashSet<string> VbaCoreToolIds = ExactIds(
             "common.vba_write_module",
@@ -390,7 +376,7 @@ namespace RNAssistant.Office.Services
         private string ProfileId()
         {
             if (string.Equals(_mode, ChatModes.Agent, StringComparison.Ordinal) &&
-                string.Equals(_host, "Excel", StringComparison.OrdinalIgnoreCase)) return "excel-vba-core";
+                string.Equals(_host, "Excel", StringComparison.OrdinalIgnoreCase)) return "excel-inspect-core";
             if (string.Equals(_mode, ChatModes.Agent, StringComparison.Ordinal) &&
                 (string.Equals(_host, "Word", StringComparison.OrdinalIgnoreCase) ||
                  string.Equals(_host, "PowerPoint", StringComparison.OrdinalIgnoreCase))) return "vba-core";
