@@ -132,6 +132,7 @@ namespace RNAssistant.Application
                     new ChatMessage { Role = "system", Content =
                         "Draw one clear, legible icon as a complete, self-contained SVG document. Return only SVG text. " +
                         "Use a viewBox fitting the artwork; the app sizes it to 24 pixels and preserves its aspect ratio. " +
+                        "Frame the drawing tightly with a small safety margin; avoid a large empty canvas. " +
                         "Colors, fills, strokes, gradients, transforms, local defs/references and SVG styles are supported. " +
                         "Use currentColor only when a theme-colored icon is wanted. Keep the drawing compact and legible at 20 px. " +
                         "Do not include scripts, event handlers, animation, foreignObject, external resources or raster images. " +

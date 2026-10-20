@@ -68,7 +68,8 @@
 .plugin-shell .plugin-create-mark{display:grid;place-items:center;flex:0 0 44px;width:44px;height:44px;padding:0;border:1px solid var(--line-strong,#c8d3ca);border-radius:11px;background:var(--surface-subtle,#f7f8f7);color:var(--accent,#277342);cursor:pointer}
 .plugin-shell .plugin-create-mark:hover,.plugin-shell .plugin-create-mark[aria-expanded=true]{border-color:var(--accent,#277342);background:var(--surface-hover,#eef3ed)}
 .plugin-shell .plugin-create-mark:focus-visible{outline:2px solid var(--focus,#3a8a63);outline-offset:2px}
-.plugin-create-mark svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.55;stroke-linecap:round;stroke-linejoin:round}
+.plugin-create-mark :is(svg,.plugin-icon-image){width:32px;height:32px}
+.plugin-create-mark svg{fill:none;stroke:currentColor;stroke-width:1.55;stroke-linecap:round;stroke-linejoin:round}
 .plugin-create-eyebrow{margin:0 0 2px;color:var(--ink-muted,#66736c);font-size:10px;font-weight:600}
 .plugin-create-heading h2{margin:0;font-size:17px;font-weight:650;line-height:1.25}
 .plugin-create-heading p:last-child{margin:3px 0 0;color:var(--ink-muted,#66736c);font-size:11px;line-height:1.4}
@@ -165,7 +166,6 @@
 
 .plugin-icon-image{display:inline-block;flex:none;width:20px;height:20px;object-fit:contain;vertical-align:middle}
 .plugin-icon-tint{mask-size:contain;mask-repeat:no-repeat;mask-position:center;-webkit-mask-size:contain;-webkit-mask-repeat:no-repeat;-webkit-mask-position:center}
-.plugin-create-mark .plugin-icon-image{width:24px;height:24px}
 .plugin-icon-option .plugin-icon-image{width:22px;height:22px}
 .rail-hover-body button .plugin-icon-image{width:14px;height:14px}
 .plugin-icon-color{display:flex;align-items:end;gap:10px;margin:16px 0}

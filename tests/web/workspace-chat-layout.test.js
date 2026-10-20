@@ -254,7 +254,7 @@ fs.mkdirSync(captures, {recursive:true});
     await picture.waitFor();
     const pixels=await picture.evaluate(async image=>{await image.decode();const canvas=document.createElement('canvas');canvas.width=canvas.height=24;const context=canvas.getContext('2d');context.drawImage(image,0,0,24,24);return [Array.from(context.getImageData(6,12,1,1).data),Array.from(context.getImageData(18,12,1,1).data)];});
     assert.deepEqual(pixels,[[237,51,34,255],[34,102,221,255]],'SVG image preserves both source colors and fits a non-square viewBox');
-    assert.equal(await picture.evaluate(node=>node.getBoundingClientRect().width),24,'icon preview uses a common 24px size');
+    assert.equal(await picture.evaluate(node=>node.getBoundingClientRect().width),32,'header icon preview uses a common 32px size');
     await page.screenshot({animations:'disabled',path:path.join(captures,'plugin-color-original.png')});
     await page.locator('#pluginIconColorMode').selectOption('custom');
     await page.locator('#pluginIconColor').fill('#7149c6');
