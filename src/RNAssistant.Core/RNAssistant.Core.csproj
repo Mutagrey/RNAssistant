@@ -231,6 +231,7 @@
     <Compile Include="Services\ChartArtifactBuilder.cs" />
     <Compile Include="Services\ChartArtifactPayload.cs" />
     <Compile Include="Services\ChatSettingsResolver.cs" />
+    <Compile Include="Services\ChatTitleBuilder.cs" />
     <Compile Include="Services\ChatSessionNormalizer.cs" />
     <Compile Include="Services\ChatResourceUri.cs" />
     <Compile Include="Services\ArtifactWorkingSet.cs" />

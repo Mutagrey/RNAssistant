@@ -47,7 +47,9 @@ namespace RNAssistant.Runtime
                 var continuation = AgentRunContinuation.RestoreCheckpoint(session.LastRun.KernelState, 0, RestoreAcceptedHistory(session));
                 var acceptance = session.LastRun.WorkspaceAcceptance ?? new WorkspaceRunAcceptance();
                 var ports = new WorkspacePorts(_paths, _chats, _files, _payloads, _webSnapshots, workspace,
-                    session, settings, apiKeyProvider, progress, acceptance, webHost: _webHost, extraTools: _extraTools?.Invoke(workspace));
+                    session, settings, apiKeyProvider, progress, acceptance, webHost: _webHost,
+                    extraTools: _extraTools?.Invoke(workspace),
+                    office: OfficeFor(session.LastRun.OfficeTarget, session, settings, session.LastRun.RunId));
                 _chats.CloseOpenSteps(session, request.RunId, "interrupted", "Explicit continuation after the previous invocation stopped.");
                 // The kernel's first mandatory append claims this cursor. No new
                 // input, run ID, budget or accepted tool call is manufactured.
@@ -65,6 +67,7 @@ namespace RNAssistant.Runtime
                         session.LastRun.WorkspaceAcceptance = acceptance;
                         _chats.Commit(session, new ConversationCommit());
                     }
+                    StartTitleGeneration(workspace, session, settings, apiKeyProvider, result.Summary);
                     return new WorkspaceRunResult(session.Id, result.Summary, acceptance, GetPendingQuestions(session),
                         cursor: ConversationEventFeed.Cursor(session), presentation: Presentation(workspace, session));
                 }

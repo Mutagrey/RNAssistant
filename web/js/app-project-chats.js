@@ -1,6 +1,6 @@
 (function () {
   "use strict";
-  var scope = "office", catalog = null, active = null, busy = false, serial = 0, poll = null, pendingSend = null;
+  var scope = "office", catalog = null, active = null, busy = false, serial = 0, poll = null, pendingSend = null, stopTitleWatch = null;
   var composer = null;
   var selectedWorkspaceId = null, expanded = {}, query = "", connectionMode = "connect";
   function el(id) { return document.getElementById("projectChat" + id); }
@@ -158,6 +158,7 @@
   }
   async function open(workspaceId, sessionId) {
     if (!workspaceId || !sessionId) return;
+    if (stopTitleWatch) { stopTitleWatch(); stopTitleWatch = null; }
     if (projectId() !== workspaceId) { ++serial; selectedWorkspaceId = workspaceId; active = null; pendingSend = null; render(); }
     if (!project() || !project().available) return;
     var version = ++serial, pid = projectId();
@@ -222,7 +223,20 @@
     if (busy || !active || !project() || !project().available) return;
     busy = true; var pid = projectId(), sid = currentId(); render();
     poll = window.setInterval(function () { readCurrent(pid, sid); }, 1200);
-    try { var result = await action(pid, sid); if (projectId() === pid && currentId() === sid) { active = result; notice(statusText()); render(); } }
+    try { var result = await action(pid, sid); if (projectId() === pid && currentId() === sid) {
+      active = result; notice(statusText()); render();
+      try { var latestCatalog = await send("getProjectChats", {});
+        if (projectId() === pid && currentId() === sid) { catalog = latestCatalog; render(); }
+      } catch (_) { /* The chat result remains available. */ }
+      if (stopTitleWatch) stopTitleWatch();
+      stopTitleWatch = window.RNAssistantWorkspaceChat.watchTitle(result,
+        function () { return send("getProjectChat", { workspaceId: pid, sessionId: sid }); },
+        async function (latest) { if (projectId() !== pid || currentId() !== sid) return;
+          active = latest; render();
+          try { catalog = await send("getProjectChats", {}); if (projectId() === pid && currentId() === sid) render(); }
+          catch (_) { /* The refreshed title is still shown in the open chat. */ }
+        });
+    } }
     catch (error) { if (projectId() === pid && currentId() === sid) notice(error.detail || error.message, true); }
     finally { window.clearInterval(poll); poll = null; busy = false; render(); }
   }

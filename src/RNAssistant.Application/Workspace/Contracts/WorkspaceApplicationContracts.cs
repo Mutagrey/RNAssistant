@@ -35,6 +35,7 @@ namespace RNAssistant.Runtime.Contracts
         public string Id { get; set; }
         public string WorkspaceId { get; set; }
         public string Title { get; set; }
+        public bool TitleGenerationPending { get; set; }
         public string Model { get; set; }
         public string Mode { get; set; }
         public MutationPolicy? MutationPolicy { get; set; }
@@ -48,6 +49,7 @@ namespace RNAssistant.Runtime.Contracts
         public AgentRunLimits Limits { get; set; }
         public string ContextCheckpointId { get; set; }
         [JsonProperty("modelConfiguration")] public ModelRunMetadata ModelConfiguration { get; set; }
+        [JsonProperty("office")] public WorkspaceOfficeContext Office { get; set; }
         [JsonProperty("contextReceipt")] public ContextReceipt ContextReceipt { get; set; }
         [JsonProperty("acceptance")] public WorkspaceRunAcceptance Acceptance { get; set; }
         [JsonProperty("userInput")] public WorkspaceUserInput UserInput { get; set; }
@@ -58,6 +60,12 @@ namespace RNAssistant.Runtime.Contracts
         [JsonProperty("interruptedEffectPossible")] public bool? InterruptedEffectPossible { get; set; }
         [JsonProperty("messageCount")] public int MessageCount { get; set; }
         public WorkspaceRunPresentation Presentation { get; set; }
+    }
+
+    public sealed class WorkspaceOfficeContext
+    {
+        public string Host { get; set; }
+        public string DocumentTitle { get; set; }
     }
 
     public sealed class WorkspaceRunControlRequest

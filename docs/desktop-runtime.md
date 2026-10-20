@@ -85,6 +85,12 @@ application module retains legacy project-preparation commands for CLI/native
 consumers, without a second root workspace UI. See [Plugins](plugins.md); actual
 Windows/WebView2/Office behavior remains unqualified.
 
+Each source/project workspace run may borrow the currently bound Office document.
+The document target is captured at input acceptance and reused on confirmation;
+host tools and semantic Office reads keep the exact document guard. A later run
+captures the then-current document. Workspace files, history and prompts retain
+their workspace owner, while the Office operations use the shared local runtime.
+
 Desktop принимает `--host`, `--hwnd`, `--pid`/`--process-id`,
 `--document-path`, `--document-title`, `--selection`, `--target`,
 `--target-base64` и `--action`. Native wrappers передают window handle и target

@@ -71,7 +71,17 @@
   function bindComposer(form) {
     var input = form.querySelector("textarea"), toolbar = form.querySelector(".composer-toolbar"), actions = form.querySelector(".composer-actions");
     var drafts = new Map(), current = null, mode = "agent", reasoning = false, locked = false;
-    var note = toolbar.querySelector(".plugin-chat-context-note, .project-chat-context-note"); if (note) note.hidden = true;
+    var note = toolbar.querySelector(".plugin-chat-context-note, .project-chat-context-note");
+    function showOfficeContext(snapshot) {
+      if (!note) return;
+      var office = field(snapshot, "office"), status = String(field(snapshot, "status") || "").toLowerCase();
+      var activeRun = status === "running" || status === "awaitingconfirmation", pinned = office && activeRun;
+      note.hidden = false;
+      note.textContent = pinned ? "Office: " + field(office, "host") + " · " + (field(office, "documentTitle") || "документ") :
+        activeRun ? "Office: документ не привязан" : "Office: текущий документ при отправке, если открыт";
+      note.title = pinned ? "Документ закреплён за этим запуском, включая подтверждение действий" :
+        activeRun ? "В этом запуске Office-инструменты недоступны" : "Новый запуск будет привязан к текущему документу Office, если он открыт";
+    }
     var clear = button("Очистить ввод", "composer-clear-button", "close", function () { input.value = ""; input.dispatchEvent(new Event("input", { bubbles: true })); input.focus(); });
     input.parentNode.appendChild(clear);
     var quick = document.createElement("div"); quick.className = "composer-quick-actions";
@@ -106,6 +116,7 @@
     update();
     return {
       select: function (key, snapshot) {
+        showOfficeContext(snapshot);
         if (current === key) { update(); return; }
         if (current) drafts.set(current, { text: input.value, mode: mode, reasoning: reasoning });
         current = key; var saved = drafts.get(key);
@@ -120,6 +131,24 @@
       }
     };
   }
+  function watchTitle(snapshot, read, complete) {
+    if (!field(field(snapshot, "state"), "titleGenerationPending")) return function () {};
+    var stopped = false, timer = null, attempts = 0;
+    function stop() { stopped = true; if (timer) clearTimeout(timer); }
+    async function tick() {
+      if (stopped) return;
+      try {
+        var latest = await read();
+        if (stopped) return;
+        if (!field(field(latest, "state"), "titleGenerationPending")) { stop(); complete(latest); return; }
+      } catch (_) { /* The chat can be reopened after a transient read failure. */ }
+      if (++attempts >= 65) { stop(); return; }
+      timer = setTimeout(tick, 2000);
+    }
+    timer = setTimeout(tick, 2000);
+    return stop;
+  }
   window.RNAssistantWorkspaceChat = { renderMessages: renderMessages, renderQuestions: renderQuestions, bindComposer: bindComposer,
-    rememberSession: rememberSession, selectedSession: function (workspaceId) { return selectedSessions.get(workspaceId); } };
+    rememberSession: rememberSession, selectedSession: function (workspaceId) { return selectedSessions.get(workspaceId); },
+    watchTitle: watchTitle };
 }());

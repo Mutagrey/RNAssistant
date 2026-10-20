@@ -53,11 +53,15 @@ namespace RNAssistant.Harness
             WithPluginPaths(paths=>{
                 var wire = new ChatMessage { Role = "assistant", ProtocolMessage = true, ResponseProtocolVersion = 7,
                     Content = "{\"message\":\"Читаю исходник\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.resources_read\",\"arguments\":{\"target\":\"README.md\"}}]}",
-                    ToolCallId = "call-1", ToolName = "common.resources_read",
-                    AcceptedCallOrigin = new AcceptedToolCallOrigin("step-1", "attempt-1", 0) };
+                    ToolCalls = new System.Collections.Generic.List<LlmToolCall> { new LlmToolCall {
+                        Id = "call-1", Type = "function", Name = "common.resources_read",
+                        ArgumentsJson = "{\"target\":\"README.md\"}" } } };
                 var presented = PluginApplicationService.PresentWorkspaceMessage(wire);
                 AssertEqual("Читаю исходник", presented.Text, "source chat presents the model message, not protocol JSON");
                 AssertEqual("common.resources_read", presented.Actions.Single(), "source chat retains the action name without arguments");
+                wire.ToolCalls[0].Id = null;
+                AssertTrue(PluginApplicationService.PresentWorkspaceMessage(wire).Text.Contains("неполная"),
+                    "source chat does not present an unpaired model action as accepted history");
                 using(var service=new PluginApplicationService(paths))
                 {
                     var item=PluginFixture(service,paths);var active=PluginOpen(service,item.PluginId);

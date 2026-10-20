@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 
@@ -9,12 +10,17 @@ namespace RNAssistant.Runtime
     {
         private readonly WorkspaceTaskListObserver _tasks;
         private readonly WorkspacePlanService _plans;
+        private readonly IToolMutationObserver _office;
+        private readonly HashSet<string> _officeToolIds;
         private IToolMutationObserver _current;
-        internal WorkspacePlanningObserver(WorkspaceTaskListObserver tasks, WorkspacePlanService plans)
-        { _tasks = tasks; _plans = plans; }
+        internal WorkspacePlanningObserver(WorkspaceTaskListObserver tasks, WorkspacePlanService plans,
+            IToolMutationObserver office = null, IEnumerable<string> officeToolIds = null)
+        { _tasks = tasks; _plans = plans; _office = office;
+            _officeToolIds = new HashSet<string>(officeToolIds ?? Enumerable.Empty<string>(), System.StringComparer.Ordinal); }
         public string Prepare(ToolExecutionContext context, IDictionary<string, object> arguments, string preparedStateJson = null)
         {
-            _current = PlanDocumentToolCatalog.Owns(context.Call.Name) ? (IToolMutationObserver)_plans : _tasks;
+            _current = PlanDocumentToolCatalog.Owns(context.Call.Name) ? (IToolMutationObserver)_plans :
+                _office != null && _officeToolIds.Contains(context.Call.Name) ? _office : _tasks;
             return _current.Prepare(context, arguments, preparedStateJson);
         }
         public void MarkDispatchMayHaveOccurred(string id) { _current.MarkDispatchMayHaveOccurred(id); }

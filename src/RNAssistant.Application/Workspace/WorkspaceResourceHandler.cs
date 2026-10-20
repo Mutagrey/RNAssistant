@@ -21,10 +21,13 @@ namespace RNAssistant.Runtime
         private readonly Dictionary<string, ResourceEvidence> _observed;
         private readonly bool _find;
         private readonly WorkspacePlanService _plans;
+        private readonly IReadOnlyToolHandler _office;
 
         internal WorkspaceResourceHandler(WorkspaceFileResourceProvider files, SkillPublicationService publications,
-            Func<SkillCatalogSnapshot> skills, Dictionary<string, ResourceEvidence> observed, bool find, WorkspacePlanService plans)
-        { _files = files; _publications = publications; _skills = skills; _observed = observed; _find = find; _plans = plans; }
+            Func<SkillCatalogSnapshot> skills, Dictionary<string, ResourceEvidence> observed, bool find,
+            WorkspacePlanService plans, IReadOnlyToolHandler office = null)
+        { _files = files; _publications = publications; _skills = skills; _observed = observed; _find = find; _plans = plans;
+            _office = office; }
 
         public Task<ToolHandlerResult> ExecuteAsync(ToolHandlerContext context, CancellationToken cancellationToken)
         {
@@ -33,6 +36,12 @@ namespace RNAssistant.Runtime
             {
                 var type = Value(context, "type");
                 if (string.IsNullOrEmpty(type)) type = "file";
+                if (type == "office")
+                {
+                    if (_office == null) throw Error("No Office document is bound to this run.", "RESOURCE_PROVIDER_UNAVAILABLE");
+                    if (_find && string.IsNullOrEmpty(Value(context, "scope"))) context.Arguments["scope"] = "document";
+                    return _office.ExecuteAsync(context, cancellationToken);
+                }
                 if (type != "file" && type != "skill" && type != "plan") throw Error("Unknown resource type.", "RESOURCE_NOT_FOUND");
                 if (type == "file" && !string.IsNullOrEmpty(Value(context, "referencePath")) ||
                     type == "skill" && !string.IsNullOrEmpty(Value(context, "directory")))

@@ -4,6 +4,8 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
+using RNAssistant.Core.Agent;
+using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
@@ -14,16 +16,81 @@ namespace RNAssistant.Runtime
 {
     public sealed partial class WorkspaceConversationService
     {
+        private void StartTitleGeneration(WorkspaceDescriptor workspace, ChatSession session,
+            AppSettings settings, Func<string> apiKeyProvider, RunSummary summary)
+        {
+            var draft = session?.LastRun?.ProvisionalTitle;
+            if (settings?.SmartChatTitles != true || summary?.Lifecycle != RunLifecycle.Completed ||
+                string.IsNullOrWhiteSpace(draft) ||
+                string.IsNullOrWhiteSpace(summary.AssistantMessage) ||
+                !ChatTitleBuilder.CanReplaceAutoTitle(session, draft)) return;
+
+            var sessionId = session.Id;
+            if (!_pendingTitles.TryAdd(sessionId, 0)) return;
+            var userText = ChatTitleBuilder.ResolveUserSeed(session, string.Empty);
+            var assistantText = summary.AssistantMessage;
+            var titleSettings = settings.Clone();
+            var token = _titleLifetime.Token;
+            Task.Run(async () =>
+            {
+                try
+                {
+                    string title;
+                    try
+                    {
+                        title = await ChatTitleBuilder.GenerateLlmTitleAsync(titleSettings,
+                            userText, assistantText, new LlmClient(apiKeyProvider).CompleteAsync,
+                            null, token).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException) { return; }
+                    catch { title = ChatTitleBuilder.BuildFallbackTitle(userText, assistantText); }
+                    if (token.IsCancellationRequested || string.IsNullOrWhiteSpace(title)) return;
+
+                    // The run lease is released before the title can change metadata.
+                    // A later run or manual rename always wins over this best-effort update.
+                    for (var attempt = 0; attempt < 120 && !token.IsCancellationRequested; attempt++)
+                    {
+                        try
+                        {
+                            using (var runtimeLease = _titleApplyLease?.Invoke())
+                            using (AcquireSessionLease(sessionId))
+                            {
+                                var current = _workspaces.LoadSession(_chats, workspace, sessionId);
+                                if (!ChatTitleBuilder.CanReplaceAutoTitle(current, draft)) return;
+                                if (string.Equals(current.Title, title, StringComparison.Ordinal)) return;
+                                _chats.SetTitle(current, title);
+                                return;
+                            }
+                        }
+                        catch (ChatConcurrencyException) { }
+                        catch (IOException) { }
+                        catch { return; }
+                        try { await Task.Delay(500, token).ConfigureAwait(false); }
+                        catch (OperationCanceledException) { return; }
+                    }
+                }
+                finally
+                {
+                    byte ignored;
+                    _pendingTitles.TryRemove(sessionId, out ignored);
+                }
+            });
+        }
+
         public WorkspaceSessionSnapshot ReadState(WorkspaceDescriptor workspace, string sessionId)
         {
             var session = GetSession(workspace, sessionId);
             if (session == null) throw new ArgumentException("Session not found.");
             return new WorkspaceSessionSnapshot
             {
-                Id = session.Id, WorkspaceId = session.WorkspaceId, Title = session.Title, Model = session.Model,
+                Id = session.Id, WorkspaceId = session.WorkspaceId, Title = session.Title,
+                TitleGenerationPending = _pendingTitles.ContainsKey(session.Id), Model = session.Model,
                 Mode = session.Mode, MutationPolicy = session.MutationPolicy, Revision = session.Revision, Cursor = ConversationEventFeed.Cursor(session),
                 ConversationPolicy = session.LastRun?.ConversationPolicy,
                 Status = session.LastRun?.Status, ModelConfiguration = session.LastRun?.ModelConfiguration,
+                Office = session.LastRun?.OfficeTarget == null ? null : new WorkspaceOfficeContext {
+                    Host = session.LastRun.OfficeTarget.Host,
+                    DocumentTitle = session.LastRun.OfficeTarget.DocumentTitle },
                 RunId = session.LastRun?.RunId, IterationsUsed = session.LastRun?.KernelState?.Summary.IterationsUsed,
                 ContextCheckpointId = ContextCompactionRuntime.ActiveCheckpoint(session)?.Id,
                 ToolStepsUsed = session.LastRun?.KernelState?.Summary.ToolStepsUsed, Limits = session.LastRun?.KernelState?.Limits,

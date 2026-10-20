@@ -392,6 +392,10 @@ namespace RNAssistant.Core.Models
         public string Phase { get; set; }
         public string CurrentAction { get; set; }
         public string DocumentRuntimeKey { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public WorkspaceOfficeRunTarget OfficeTarget { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string ProvisionalTitle { get; set; }
         public int IterationsUsed { get; set; }
         public int ToolStepsUsed { get; set; }
         public DateTime StartedUtc { get; set; }
@@ -408,6 +412,17 @@ namespace RNAssistant.Core.Models
         public string InterruptedTargetPath { get; set; }
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
         public bool InterruptedEffectPossible { get; set; }
+    }
+
+    // An Office target borrowed by one workspace run. Workspace identity and chat
+    // storage remain independent; a later turn may select another live document.
+    public sealed class WorkspaceOfficeRunTarget
+    {
+        public string Host { get; set; }
+        public string DocumentKey { get; set; }
+        public string RuntimeDocumentKey { get; set; }
+        public string DocumentAuthorityId { get; set; }
+        public string DocumentTitle { get; set; }
     }
 
     // Snapshot of the selected provider profile for a single run. The model's

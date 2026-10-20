@@ -124,6 +124,9 @@ conversion and durable name/icon/color editing without changing publication.
 Source chat coverage checks independent sessions in the common project catalog,
 retained message history across creation/restart, exact workspace/session refusal,
 deletion and explicit reopening after history removal.
+`workspace: first message names the chat` checks an accepted workspace turn against
+a controlled local model endpoint: immediate shared draft title, later smart title,
+durable project header and manual rename priority.
 `node tests/web/plugins.test.js` checks creation/automatic check/preview/apply/reopen/disable,
 immediate SVG drawing, reusable rail hover menus and remove/restore,
 source chat presentation, actual Chromium Worker and native-protocol XLSX extraction

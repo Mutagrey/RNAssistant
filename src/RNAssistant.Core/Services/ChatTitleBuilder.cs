@@ -7,11 +7,11 @@ using System.Threading.Tasks;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 
-namespace RNAssistant.Office.Services
+namespace RNAssistant.Core.Services
 {
-    internal static class ChatTitleBuilder
+    public static class ChatTitleBuilder
     {
-        private static readonly string[] PlaceholderTitles = { "New chat", "Новый чат" };
+        private static readonly string[] PlaceholderTitles = { "New chat", "Новый чат", "Workspace chat" };
 
         public static void ApplyFallback(ChatSession session, string userText, string assistantText)
         {

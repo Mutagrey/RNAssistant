@@ -22,6 +22,8 @@ namespace RNAssistant.Office.Runtime
         private readonly bool _trace;
         private readonly ChatSession _session;
         private readonly HashSet<string> _ownedToolIds;
+        private readonly Dictionary<string, IToolHandler> _registeredHandlers =
+            new Dictionary<string, IToolHandler>(StringComparer.Ordinal);
         private readonly object _projectionSync = new object();
         private readonly Dictionary<string, IReadOnlyList<ChatAttachment>> _resourceReadAttachments =
             new Dictionary<string, IReadOnlyList<ChatAttachment>>(StringComparer.Ordinal);
@@ -324,6 +326,7 @@ namespace RNAssistant.Office.Runtime
                     throw new InvalidOperationException("Pinned native binding does not match its handler: " + registration.Descriptor.Id);
                 registry.Register(registration, handler);
                 _ownedToolIds.Add(registration.Descriptor.Id);
+                _registeredHandlers.Add(registration.Descriptor.Id, handler);
             }
             var policy = manualRun ? ConversationRunPolicy.For(mode) : runPolicy ?? ConversationRunPolicy.ForSession(session);
             if (!manualRun && runPolicy != null) ConversationRunPolicy.ForAcceptedRun(session).RequireSame(runPolicy);
@@ -364,6 +367,12 @@ namespace RNAssistant.Office.Runtime
         internal bool Handles(string exactToolId)
         {
             return exactToolId != null && _ownedToolIds.Contains(exactToolId);
+        }
+
+        internal IToolHandler HandlerFor(string exactToolId)
+        {
+            IToolHandler handler;
+            return exactToolId != null && _registeredHandlers.TryGetValue(exactToolId, out handler) ? handler : null;
         }
 
         private static bool OwnsRegistration(ToolRegistration registration)

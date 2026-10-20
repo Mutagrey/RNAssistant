@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
@@ -23,7 +24,7 @@ namespace RNAssistant.Runtime
 {
     // The CLI host supplies input/output only. This service uses the same kernel,
     // materialized model protocol, ToolRuntime and canonical stores as Office.
-    public sealed partial class WorkspaceConversationService
+    public sealed partial class WorkspaceConversationService : IDisposable
     {
         private readonly AppDataPaths _paths;
         private readonly ChatStore _chats;
@@ -33,17 +34,30 @@ namespace RNAssistant.Runtime
         private readonly WorkspaceWebSnapshotStore _webSnapshots;
         private readonly IWorkspaceWebVerifierFactory _webHost;
         private readonly Func<WorkspaceDescriptor, IReadOnlyList<WorkspaceToolContribution>> _extraTools;
+        private readonly IWorkspaceOfficeCapabilities _officeCapabilities;
+        private readonly Func<IDisposable> _titleApplyLease;
+        private readonly CancellationTokenSource _titleLifetime = new CancellationTokenSource();
+        private readonly ConcurrentDictionary<string, byte> _pendingTitles =
+            new ConcurrentDictionary<string, byte>(StringComparer.Ordinal);
 
         public WorkspaceConversationService(AppDataPaths paths, IWorkspaceWebVerifierFactory webHost = null,
-            Func<WorkspaceDescriptor, IReadOnlyList<WorkspaceToolContribution>> extraTools = null)
+            Func<WorkspaceDescriptor, IReadOnlyList<WorkspaceToolContribution>> extraTools = null,
+            IWorkspaceOfficeCapabilities officeCapabilities = null,
+            Func<IDisposable> titleApplyLease = null)
         {
             _paths = paths ?? throw new ArgumentNullException(nameof(paths));
-            _webHost = webHost; _extraTools = extraTools;
+            _webHost = webHost; _extraTools = extraTools; _officeCapabilities = officeCapabilities;
+            _titleApplyLease = titleApplyLease;
             _chats = new ChatStore(paths);
             _workspaces = new WorkspaceStore(paths);
             _files = new WorkspaceFileService(paths);
             _payloads = new ChatBlobStore(paths);
             _webSnapshots = new WorkspaceWebSnapshotStore(paths, _files);
+        }
+
+        public void Dispose()
+        {
+            _titleLifetime.Cancel();
         }
 
         public ChatSession GetSession(WorkspaceDescriptor workspace, string sessionId)
@@ -180,6 +194,11 @@ namespace RNAssistant.Runtime
                 throw new ArgumentException("Workspace tool results require role user, developer or tool.", nameof(settings));
         }
 
+        private WorkspaceOfficeCapabilitySet OfficeFor(WorkspaceOfficeRunTarget target,
+            ChatSession session, AppSettings settings, string runId)
+        { return target == null || _officeCapabilities == null ? null :
+            _officeCapabilities.ForTarget(target, session, settings, runId); }
+
         public async Task<WorkspaceRunResult> SubmitInputAsync(WorkspaceDescriptor workspace,
             WorkspaceSubmitInputRequest request, AppSettings settings, Func<string> apiKeyProvider,
             Action<WorkspaceRunEvent> progress = null, CancellationToken cancellationToken = default(CancellationToken),
@@ -223,7 +242,9 @@ namespace RNAssistant.Runtime
                 {
                     var pendingRun = session.LastRun.KernelState;
                     var pendingPorts = new WorkspacePorts(_paths, _chats, _files, _payloads, _webSnapshots, workspace,
-                        session, settings, apiKeyProvider, progress, session.LastRun.WorkspaceAcceptance ?? new WorkspaceRunAcceptance(), webHost: _webHost, extraTools: _extraTools?.Invoke(workspace));
+                        session, settings, apiKeyProvider, progress, session.LastRun.WorkspaceAcceptance ?? new WorkspaceRunAcceptance(),
+                        webHost: _webHost, extraTools: _extraTools?.Invoke(workspace),
+                        office: OfficeFor(session.LastRun.OfficeTarget, session, settings, session.LastRun.RunId));
                     await ConversationRunCoordinator.ResumeAsync(session.LastRun.RunId,
                         pendingRun.Summary.PendingConfirmation.PendingId,
                         AgentRunContinuation.Restore(pendingRun.Summary, pendingRun.Limits, 0, RestoreAcceptedHistory(session)),
@@ -255,9 +276,15 @@ namespace RNAssistant.Runtime
                 session.MutationPolicy = policy.MutationPolicy;
 
                 var previous = RestoreAcceptedHistory(session);
-                var ports = new WorkspacePorts(_paths, _chats, _files, _payloads, _webSnapshots, workspace, session, settings, apiKeyProvider,
-                    progress, acceptedContract, runPolicy: policy, webHost: _webHost, extraTools: _extraTools?.Invoke(workspace));
                 var runId = Guid.NewGuid().ToString("N");
+                var titleSeed = ChatTitleBuilder.ResolveUserSeed(session, message);
+                var provisionalTitle = ChatTitleBuilder.ShouldAssign(session)
+                    ? ChatTitleBuilder.BuildDraftTitle(titleSeed) : null;
+                if (!string.IsNullOrWhiteSpace(provisionalTitle)) session.Title = provisionalTitle;
+                var officeTarget = _officeCapabilities?.CaptureCurrentTarget();
+                var ports = new WorkspacePorts(_paths, _chats, _files, _payloads, _webSnapshots, workspace, session, settings, apiKeyProvider,
+                    progress, acceptedContract, runPolicy: policy, webHost: _webHost,
+                    extraTools: _extraTools?.Invoke(workspace), office: OfficeFor(officeTarget, session, settings, runId));
                 var input = new ConversationInput { Id = Guid.NewGuid().ToString("N"),
                     OperationId = request.RequestId ?? Guid.NewGuid().ToString("N"), Revision = 1, Text = message,
                     Delivery = InputDelivery.Queue, Status = ConversationInputStatus.Delivering,
@@ -269,6 +296,8 @@ namespace RNAssistant.Runtime
                 progress?.Invoke(new WorkspaceRunEvent("InputAccepted", null, null, receipt.AcceptedCursor, receipt));
                 session.LastRun = new ChatRunRecord
                 { RunId = runId, TurnId = runId, StartedUtc = DateTime.UtcNow, ConversationPolicy = policy,
+                    OfficeTarget = officeTarget,
+                    ProvisionalTitle = settings.SmartChatTitles ? provisionalTitle : null,
                     SelectedSkills = SkillTaskService.CopySelections(session.LastRun),
                     ResponseProtocolVersion = ConversationResponse.ProtocolVersion,
                     ModelConfiguration = new ModelRunMetadata
@@ -303,6 +332,7 @@ namespace RNAssistant.Runtime
                         session.LastRun.WorkspaceAcceptance = acceptedContract;
                         _chats.Commit(session, new ConversationCommit());
                     }
+                    StartTitleGeneration(workspace, session, settings, apiKeyProvider, result.Summary);
                     return new WorkspaceRunResult(session.Id, result.Summary, acceptedContract, GetPendingQuestions(session),
                         receipt, ConversationEventFeed.Cursor(session), Presentation(workspace, session));
                 }
@@ -355,7 +385,9 @@ namespace RNAssistant.Runtime
                 var continuation = AgentRunContinuation.Restore(run.Summary, run.Limits, 0, history);
                 var acceptance = session.LastRun.WorkspaceAcceptance ?? new WorkspaceRunAcceptance();
                 var ports = new WorkspacePorts(_paths, _chats, _files, _payloads, _webSnapshots, workspace, session,
-                    settings ?? new AppSettings(), apiKeyProvider, progress, acceptance, approve, webHost: _webHost, extraTools: _extraTools?.Invoke(workspace));
+                    settings ?? new AppSettings(), apiKeyProvider, progress, acceptance, approve, webHost: _webHost,
+                    extraTools: _extraTools?.Invoke(workspace),
+                    office: OfficeFor(session.LastRun.OfficeTarget, session, settings ?? new AppSettings(), session.LastRun.RunId));
                 using (var control = OpenRunControl(session, cancellationToken))
                 {
                     var result = await ConversationRunCoordinator.ResumeAsync(session.LastRun.RunId,
@@ -367,6 +399,7 @@ namespace RNAssistant.Runtime
                         session.LastRun.WorkspaceAcceptance = acceptance;
                         _chats.Commit(session, new ConversationCommit());
                     }
+                    StartTitleGeneration(workspace, session, settings, apiKeyProvider, result.Summary);
                     return new WorkspaceRunResult(session.Id, result.Summary, acceptance, GetPendingQuestions(session),
                         cursor: ConversationEventFeed.Cursor(session), presentation: Presentation(workspace, session));
                 }
@@ -703,6 +736,7 @@ namespace RNAssistant.Runtime
             private readonly Action<WorkspaceRunEvent> _progress;
             private readonly WorkspaceRunAcceptance _acceptance;
             private readonly ConversationRunPolicy _mode;
+            private readonly WorkspaceOfficeCapabilitySet _office;
             private readonly IReadOnlyList<ToolCatalogEntry> _catalog;
             private readonly ResourceProviderRouter<WorkspaceFileResourceProvider> _resources;
             private readonly ModelContextCompiler _compiler;
@@ -727,11 +761,12 @@ namespace RNAssistant.Runtime
                 WorkspaceWebSnapshotStore webSnapshots, WorkspaceDescriptor workspace,
                 ChatSession session, AppSettings settings, Func<string> apiKeyProvider,
                 Action<WorkspaceRunEvent> progress, WorkspaceRunAcceptance acceptance = null,
-                bool restorePendingObservation = true, ConversationRunPolicy runPolicy = null, IWorkspaceWebVerifierFactory webHost = null, IReadOnlyList<WorkspaceToolContribution> extraTools = null)
+                bool restorePendingObservation = true, ConversationRunPolicy runPolicy = null, IWorkspaceWebVerifierFactory webHost = null,
+                IReadOnlyList<WorkspaceToolContribution> extraTools = null, WorkspaceOfficeCapabilitySet office = null)
             {
                 _chats = chats; _files = files; _workspace = workspace; _session = session;
                 _webSnapshots = webSnapshots;
-                _settings = settings.Clone(); _progress = progress; _acceptance = acceptance;
+                _settings = settings.Clone(); _progress = progress; _acceptance = acceptance; _office = office;
                 _mode = runPolicy ?? ConversationRunPolicy.ForAcceptedRun(session);
                 _compiler = new ModelContextCompiler(payloads);
                 _taskLists = new WorkspaceTaskListObserver(paths, chats, payloads, session);
@@ -757,12 +792,16 @@ namespace RNAssistant.Runtime
                 _skillCatalog = new SkillCatalogService("Workspace", _skillPublications.Capture);
                 Register(registry, entries, SkillLoadToolHandler.Entry(),
                     new SkillLoadToolHandler(session, () => _skills, () => _toolPack, _settings, AdmitSkillSelection));
-                Register(registry, entries, "common.resources_find", _mode.AllowsSkills ? "Find workspace files (default type=file, one directory, up to 200) or enabled skills (type=skill, up to 50), or workspace Plans (type=plan, up to 50 from at most 100 heads). For workspace root omit directory or use null, never / or .; directory applies only to files. Narrow the query when incomplete." : "Find workspace files in one directory, up to 200. For workspace root omit directory or use null, never / or .; narrow the query when incomplete.",
-                    ResourceSchema(true, _mode.AllowsSkills), false,
-                    new WorkspaceResourceHandler(_resources.Select("file"), _skillPublications, () => _skills, _observed, true, _plans));
-                Register(registry, entries, "common.resources_read", _mode.AllowsSkills ? "Read a complete UTF-8 file (default type=file, target is its workspace-relative path) or published skill instructions (type=skill, target is the skill ID). referencePath belongs only to a listed skill reference. For a workspace Plan use type=plan, omit target for the selected plan or supply an exact unique title. Optional version reads history without selecting it; a current read selects its exact revision. Bounds: 16000 characters for files/skills, 32000 for Plans. For larger files supply startLine and lineCount (1–500); each slice observes the current version and authorizes only a unique patch within it. No partial skill activation." : "Read UTF-8 text by workspace-relative target. Whole reads allow 16000 characters; use startLine and lineCount (1–500) for bounded lines of larger files.",
-                    ResourceSchema(false, _mode.AllowsSkills), false,
-                    new WorkspaceResourceHandler(_resources.Select("file"), _skillPublications, () => _skills, _observed, false, _plans));
+                Register(registry, entries, "common.resources_find", (_mode.AllowsSkills ? "Find workspace files (default type=file, one directory, up to 200) or enabled skills (type=skill, up to 50), or workspace Plans (type=plan, up to 50 from at most 100 heads). For workspace root omit directory or use null, never / or .; directory applies only to files. Narrow the query when incomplete." : "Find workspace files in one directory, up to 200. For workspace root omit directory or use null, never / or .; narrow the query when incomplete.") +
+                    (office == null ? string.Empty : " Use type=office to discover resources in this run's exact Office document."),
+                    ResourceSchema(true, _mode.AllowsSkills, office != null), false,
+                    new WorkspaceResourceHandler(_resources.Select("file"), _skillPublications, () => _skills, _observed, true, _plans,
+                        office?.ResourceFind));
+                Register(registry, entries, "common.resources_read", (_mode.AllowsSkills ? "Read a complete UTF-8 file (default type=file, target is its workspace-relative path) or published skill instructions (type=skill, target is the skill ID). referencePath belongs only to a listed skill reference. For a workspace Plan use type=plan, omit target for the selected plan or supply an exact unique title. Optional version reads history without selecting it; a current read selects its exact revision. Bounds: 16000 characters for files/skills, 32000 for Plans. For larger files supply startLine and lineCount (1–500); each slice observes the current version and authorizes only a unique patch within it. No partial skill activation." : "Read UTF-8 text by workspace-relative target. Whole reads allow 16000 characters; use startLine and lineCount (1–500) for bounded lines of larger files.") +
+                    (office == null ? string.Empty : " Use type=office and a semantic target to read the pinned Office document."),
+                    ResourceSchema(false, _mode.AllowsSkills, office != null), false,
+                    new WorkspaceResourceHandler(_resources.Select("file"), _skillPublications, () => _skills, _observed, false, _plans,
+                        office?.ResourceRead));
                 if (webHost != null && webHost.IsAvailable)
                     Register(registry, entries, "web.verify", "Load an immutable local HTML/CSS/JS snapshot in an isolated browser; check asset/runtime errors and any functional checks fixed by the accepted task contract.",
                         Schema("entryPath", true), false,
@@ -796,13 +835,17 @@ namespace RNAssistant.Runtime
                 foreach (var entry in PlanDocumentToolCatalog.GetTools())
                     Register(registry, entries, entry, new PlanDocumentToolHandler(entry.Id, session));
                 if (extraTools != null) foreach (var contribution in extraTools) Register(registry, entries, contribution.Entry, contribution.Handler);
+                if (office?.Tools != null) foreach (var contribution in office.Tools)
+                    Register(registry, entries, contribution.Entry, contribution.Handler);
                 _catalog = entries;
                 _toolPack = new ToolPackSnapshot("workspace", _mode.Mode, "Workspace", entries.Select(item =>
                     ToolPackSnapshot.Capture(new ToolDescriptor(item.Id, item.Description, item.ArgumentSchemaJson,
                         item.Exposure, item.ContractVersion), item.Policy, item.Binding)));
                 _skills = VisibleSkills(_skillPublications.Capture());
                 Tools = new ToolRuntime(registry, _mode.Mode, false, _mode.AllowsConfirmation,
-                    (context, preparation) => "pending_" + Guid.NewGuid().ToString("N"), mutationObserver: new WorkspacePlanningObserver(_taskLists, _plans), runPolicy: _mode,
+                    (context, preparation) => "pending_" + Guid.NewGuid().ToString("N"),
+                    mutationObserver: new WorkspacePlanningObserver(_taskLists, _plans, office?.MutationObserver,
+                        office?.Tools?.Select(item => item.Entry.Id)), runPolicy: _mode,
                     dispatchGuard: context =>
                     {
                         var error = SkillTaskService.CheckDispatch(_session, context, _toolPack);
@@ -874,15 +917,45 @@ namespace RNAssistant.Runtime
                     ["required"] = required, ["additionalProperties"] = false }.ToString(Formatting.None);
             }
 
-            private static string ResourceSchema(bool find, bool allowSkills)
+            private static string ResourceSchema(bool find, bool allowSkills, bool allowOffice)
             {
                 var files = ResourceVariant(find, false);
-                if (!allowSkills) return files.ToString(Formatting.None);
+                if (!allowSkills && !allowOffice) return files.ToString(Formatting.None);
                 // Complete alternatives: the exact runtime gate and structured output
                 // must reject selectors belonging to the other resource kind.
+                var variants = new JArray(files);
+                if (allowSkills) { variants.Add(ResourceVariant(find, true)); variants.Add(PlanResourceVariant(find)); }
+                if (allowOffice) variants.Add(OfficeResourceVariant(find));
                 return new JObject { ["type"] = "object", ["properties"] = new JObject(),
                     ["required"] = new JArray(), ["additionalProperties"] = false,
-                    ["anyOf"] = new JArray(files, ResourceVariant(find, true), PlanResourceVariant(find)) }.ToString(Formatting.None);
+                    ["anyOf"] = variants }.ToString(Formatting.None);
+            }
+
+            private static JObject OfficeResourceVariant(bool find)
+            {
+                var schema = JObject.Parse(find ? Schema("query", false) : Schema("target", true));
+                var properties = (JObject)schema["properties"];
+                properties["type"] = new JObject { ["type"] = "string", ["enum"] = new JArray("office") };
+                ((JArray)schema["required"]).Add("type");
+                if (find)
+                {
+                    properties["scope"] = new JObject { ["type"] = "string",
+                        ["enum"] = new JArray("document", "selection", "vba") };
+                }
+                else
+                {
+                    properties["target"]["description"] = "Exact semantic target from the bound Office document or its discovery result.";
+                    properties["representation"] = new JObject { ["type"] = "string",
+                        ["enum"] = new JArray("metadata", "text", "structure", "source", "media", "formulas", "table", "records") };
+                    properties["partNumber"] = new JObject { ["type"] = "integer", ["minimum"] = 1 };
+                    properties["startLine"] = new JObject { ["type"] = "integer", ["minimum"] = 1 };
+                    properties["lineCount"] = new JObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = 500 };
+                    properties["limit"] = new JObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = 5000 };
+                    properties["offset"] = new JObject { ["type"] = "integer", ["minimum"] = 0 };
+                    properties["fields"] = new JObject { ["type"] = "array", ["maxItems"] = 128,
+                        ["items"] = new JObject { ["type"] = "string", ["maxLength"] = 128 } };
+                }
+                return schema;
             }
 
             private static JObject PlanResourceVariant(bool find)
@@ -1206,6 +1279,11 @@ namespace RNAssistant.Runtime
             private string Prompt(SkillRequestSurface surface = null)
             {
                 return "You are the RNAssistant workspace assistant. Current mode: " + _mode.Mode + ". " +
+                    (_office?.Target == null ? "No Office document is bound to this run. " :
+                        "Office document for this run: " + _office.Target.Host + " — " +
+                        (_office.Target.DocumentTitle ?? "untitled") + ". " +
+                        (_office.Available ? "Use common.resources_find/read with type=office for its live resources; host Office tools target only this exact document. " :
+                            "That Office document is unavailable; Office calls will refuse until it is reopened. ")) +
                     (_mode.Mode == ChatModes.Plan ? "Inspect and propose a plan without modifying workspace files. Save a revisioned Markdown plan and keep a durable task list when useful. " :
                      "Follow the user's task using real files in the selected workspace. ") +
                     (_acceptance?.Requested == true ? "The accepted task contract requires current files and verified tool results before done: " +

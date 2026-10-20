@@ -17,6 +17,7 @@ using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Runtime;
+using RNAssistant.Runtime.Contracts;
 
 namespace RNAssistant.Application
 {
@@ -25,6 +26,7 @@ namespace RNAssistant.Application
         private readonly AppDataPaths _paths;
         private readonly string _webRoot;
         private readonly IWorkspaceWebVerifierFactory _webHost;
+        private readonly IWorkspaceOfficeCapabilities _officeCapabilities;
         private readonly PluginStore _store;
         private readonly PluginIconLibrary _icons;
         private readonly WorkspaceStore _workspaces;
@@ -45,11 +47,14 @@ namespace RNAssistant.Application
         public IPluginProjectPicker ProjectPicker { get; set; }
         public IPluginCommandExecutor Executor { get; set; }
 
-        public PluginApplicationService(AppDataPaths paths, string webRoot = null, IWorkspaceWebVerifierFactory webHost = null)
+        public PluginApplicationService(AppDataPaths paths, string webRoot = null, IWorkspaceWebVerifierFactory webHost = null,
+            IWorkspaceOfficeCapabilities officeCapabilities = null)
         {
-            _paths = paths; _webRoot = webRoot; _webHost = webHost; _store = new PluginStore(paths); _icons = new PluginIconLibrary(paths); _workspaces = new WorkspaceStore(paths);
+            _paths = paths; _webRoot = webRoot; _webHost = webHost; _officeCapabilities = officeCapabilities;
+            _store = new PluginStore(paths); _icons = new PluginIconLibrary(paths); _workspaces = new WorkspaceStore(paths);
             Vendors = new VendorCatalog(paths, webRoot); _results = new PluginResultStore(paths);
-            Conversations = new WorkspaceConversationService(paths, webHost, CaptureTools);
+            Conversations = new WorkspaceConversationService(paths, webHost, CaptureTools, officeCapabilities,
+                () => PluginStore.AcquireRuntimeUse(paths));
         }
 
         public PluginCatalogDto List()
@@ -173,7 +178,9 @@ namespace RNAssistant.Application
                 if (_instances.Count != 0 || _calls.Count != 0) throw new PluginException("plugins_busy", "Plugin instances must drain before runtime clear.");
                 foreach (var grant in _data.Values) grant.Dispose();
                 _data.Clear(); _candidates.Clear(); _revoked.Clear();
-                Conversations = new WorkspaceConversationService(_paths, _webHost, CaptureTools);
+                Conversations.Dispose();
+                Conversations = new WorkspaceConversationService(_paths, _webHost, CaptureTools, _officeCapabilities,
+                    () => PluginStore.AcquireRuntimeUse(_paths));
             }
         }
         public PluginItemDto Connect(PluginConnectRequest request)
@@ -566,7 +573,7 @@ namespace RNAssistant.Application
                 if (workspace.WorkspaceId != registration.SourceWorkspaceId)
                     throw new PluginException("plugin_source_changed", "Source workspace identity changed.");
                 var sessionId = Conversations.ListSessions(workspace).FirstOrDefault()?.Id ??
-                    Conversations.CreateSession(workspace, "Разработка: " + (registration.Appearance?.Name ?? registration.Name)).Id;
+                    Conversations.CreateSession(workspace, "Новый чат").Id;
                 return ProjectChat(new ProjectChatRequest { WorkspaceId = workspace.WorkspaceId, SessionId = sessionId });
             }
         }
@@ -574,9 +581,17 @@ namespace RNAssistant.Application
         {
             if (message.Role == "assistant" && message.ResponseProtocolVersion == ConversationResponse.ProtocolVersion)
             {
-                var parsed = ConversationResponseHistoryReader.Read(message);
-                if (!parsed.Success)
-                    return new PluginChatMessageDto { Role = "assistant", Text = "Сообщение модели не удалось отобразить: " + parsed.Error };
+                // Workspace stores the accepted v7 envelope and its runtime IDs as
+                // one record per call. Office's native-history reader expects a
+                // different projection and rejects valid workspace records.
+                var parsed = ConversationResponseJson.Read(message.Content);
+                var saved = message.ToolCalls ?? new List<LlmToolCall>();
+                if (!parsed.Success || saved.Count != parsed.Response.ToolCalls.Count ||
+                    saved.Where((call, index) => call == null || string.IsNullOrWhiteSpace(call.Id) ||
+                        call.Type != "function" || call.Name != parsed.Response.ToolCalls[index].Name ||
+                        call.ArgumentsJson != parsed.Response.ToolCalls[index].Arguments.ToString(Formatting.None)).Any())
+                    return new PluginChatMessageDto { Role = "assistant",
+                        Text = "Сообщение модели не удалось отобразить: запись принятого вызова неполная." };
                 return new PluginChatMessageDto { Role = "assistant", Text = parsed.Response.Message,
                     Actions = parsed.Response.ToolCalls.Select(call => call.Name).ToArray() };
             }
@@ -819,6 +834,7 @@ namespace RNAssistant.Application
                 var instances = _instances.Values.ToArray(); _instances.Clear();
                 foreach (var instance in instances) instance.Dispose();
                 foreach (var data in _data.Values) data.Dispose();
+                Conversations.Dispose();
                 _results.Dispose();
                 _closing = CloseInstancesAsync(instances); return _closing;
             }

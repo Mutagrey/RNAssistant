@@ -100,6 +100,7 @@
     <Compile Include="Controller\AssistantController.QuickActions.cs" />
     <Compile Include="Controller\AssistantController.Settings.cs" />
     <Compile Include="Controller\AssistantController.Tools.cs" />
+    <Compile Include="Controller\AssistantController.WorkspaceOffice.cs" />
     <Compile Include="Controller\AssistantController.Vba.cs" />
     <Compile Include="Diagnostics\RuntimeLog.cs" />
     <Compile Include="AssistantRuntime.cs" />
@@ -247,6 +248,7 @@
     <Compile Include="Services\ResourceGatewayService.WholeRead.cs" />
     <Compile Include="Services\ResourceGatewayService.Binary.cs" />
     <Compile Include="Services\ResourceAuthorityService.cs" />
+    <Compile Include="Services\WorkspaceOfficeCapabilityService.cs" />
     <Compile Include="Services\ResourceMutationDomains.cs" />
     <Compile Include="Services\ResourceDataPlaneService.cs" />
     <Compile Include="Services\ResourceDataPlaneService.Uploads.cs" />
@@ -308,7 +310,6 @@
     <Compile Include="Services\ModelCapabilityService.cs" />
     <Compile Include="Services\ModelConnectionTestService.cs" />
     <Compile Include="Services\ModelCompatibilityService.cs" />
-    <Compile Include="Services\ChatTitleBuilder.cs" />
     <Compile Include="Services\ChatSessionService.cs" />
     <Compile Include="Services\ChatRunRegistry.cs" />
     <Compile Include="Services\RunCausalTrace.cs" />

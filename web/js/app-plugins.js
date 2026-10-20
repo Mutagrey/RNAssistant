@@ -2,7 +2,7 @@
   'use strict';
   var items=[],selected=null,candidate=null,view=null,chat=null,busy=false,chatBusy=false,poll=null,epoch=0;
   var previewBusy=false,selecting=false,sourceStamp=null,candidateStamp=null,sourceTimer=null,sourceDebounce=null;
-  var chatComposer=null,pendingChatSend=null,chatEpoch=0;
+  var chatComposer=null,pendingChatSend=null,chatEpoch=0,stopTitleWatch=null;
   var developmentOpen=false,developmentToggle=null;
   var savedIcons=[],selectedIconId='puzzle',customSource=false,editingPlugin=null;
   var frameReady=false,pendingNavigation=null;
@@ -120,6 +120,7 @@
     if(open)refreshSplitPanes();
     if(refresh&&open){if(!view||!view.preview)checkAndPreview();else pollSource();}}
   async function select(id,sessionId){selecting=true;switchTab('plugins');try{await run(async function(){epoch++;stopSourceWatch();await closeView();selected=items.find(function(item){return item.pluginId===id;});candidate=null;candidateStamp=null;chat=null;chatEpoch++;
+    if(stopTitleWatch){stopTitleWatch();stopTitleWatch=null;}
     if(sessionId){window.RNAssistantWorkspaceChat.rememberSession(selected.sourceWorkspaceId,sessionId);developmentOpen=true;}
     switchTab('plugins');el('Manager').hidden=true;el('Workbench').hidden=false;el('Title').textContent=dataPlugin()?navigation.projectName:selected.name;el('Source').textContent=selected.sourceRoot;
     el('ChatSource').textContent=selected.sourceRoot;el('ChatSource').title=selected.sourceRoot;el('ChatMessages').replaceChildren();el('ChatMessages')._chatSignature=null;
@@ -156,6 +157,7 @@
       if(remember)window.RNAssistantWorkspaceChat.rememberSession(workspaceId,value.sessionId);renderChat();}}
   async function createChat(){if(chatBusy||busy||!selected)return;
     var id=selected.pluginId,workspaceId=selected.sourceWorkspaceId,current=++chatEpoch;
+    if(stopTitleWatch){stopTitleWatch();stopTitleWatch=null;}
     chatBusy=true;controls();
     try{var value=await send('createProjectChat',{workspaceId:workspaceId,title:'Новый чат'});
       if(selected&&selected.pluginId===id&&current===chatEpoch){chat=value;pendingChatSend=null;
@@ -167,7 +169,11 @@
     function active(){return selected&&selected.pluginId===id&&chat&&chat.sessionId===sessionId&&current===chatEpoch;}
     chatBusy=true;controls();
     poll=setInterval(function(){if(active())readChat(sessionId).catch(function(error){if(active())el('ChatStatus').textContent=error.message;});},1200);
-    try{var result=await action(workspaceId,sessionId);if(active()){chat=result;renderChat();}}
+    try{var result=await action(workspaceId,sessionId);if(active()){chat=result;renderChat();
+      if(stopTitleWatch)stopTitleWatch();
+      stopTitleWatch=window.RNAssistantWorkspaceChat.watchTitle(result,
+        function(){return send('getProjectChat',{workspaceId:workspaceId,sessionId:sessionId});},
+        function(latest){if(active()){chat=latest;renderChat();}});}}
     catch(error){if(active())el('ChatStatus').textContent=error.message;}
     finally{clearInterval(poll);chatBusy=false;controls();}}
   function setIconEditor(open){el('IconEditor').hidden=!open;el('IconTrigger').setAttribute('aria-expanded',String(open));
