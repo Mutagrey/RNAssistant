@@ -8,6 +8,34 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## Live prompt qualification — 2026-10-20
+
+**Open — model-facing behavior and live eval coverage.** Owners: prompt/skill and
+capability catalog owners, model protocol diagnostics, and the existing eval
+fixtures. The [paired live comparison](PROGRESS.md#live-prompt-comparison--2026-10-20)
+uses one cloud endpoint/profile with unchanged task bounds and acceptance.
+
+- Office at 32K: two schema-50 runs refuse HTML/VBA skill admission under the
+  complete-request budget. Two schema-51 runs stop on protocol errors before a
+  valid selection. Measure current `json_object` candidate admission separately;
+  the passing 32K scripted VBA case does not qualify this combined live task.
+  Investigate mixed skill-load calls and invalid JSON through the retained repair
+  trace; keep admission and parser guards intact.
+- Workspace: both versions produce exact final files, then choose `done` despite
+  violating the explicitly required read-after-each-edit order (0/9 sequence stages).
+  Current final-file acceptance does not certify arbitrary user-prescribed ordering.
+  Review evidence-reuse guidance against explicit verification requests; the trace
+  establishes a model behavior failure, not its prompt-level cause.
+- Neither workspace run reaches compaction. The live interruption, external-edit
+  protection and resume assertions remain unexercised; controlled tests are still
+  the available evidence. Make that boundary reachable in a representative live
+  scenario without synthesizing model replies/checkpoints or weakening acceptance.
+
+Actual first-request input shrinks, but task success does not improve in these
+samples and workspace cumulative input grows. No general quality or latency gain
+is established. Local 12B/9B profiles failed the memory preflight; cloud results
+do not qualify those models or real Office/COM/WebView2 delivery.
+
 ## Unified stabilization verification gap — 2026-10-20
 
 **Harness / request inspector fixture, closed 2026-10-20.** The unchanged

@@ -289,7 +289,10 @@ set `RNA_BASE_URL`, `RNA_MODEL`, `RNA_RESPONSE_MODE` and `RNA_CONTEXT_TOKENS`, t
 `dotnet tests/RNAssistant.Harness/bin/Debug/net8.0/RNAssistant.Harness.dll --resource-workflow-live /tmp/new-evidence-directory`.
 An optional `RNA_REQUIRE_TASK_LIST=true` explicitly requests task tracking; keep it
 separate from the unprompted-selection case. `RNA_API_KEY` is optional and never
-saved. The fixture retains synthetic before/after sources, requests/responses,
+saved. `RNA_INSTRUCTION_ROLE` and `RNA_REASONING_MODE` select explicit endpoint
+profile settings (defaults: `developer`, `chat_template_kwargs`); the saved profile
+records them. Requested reasoning-off still requires verification in the actual
+response. The fixture retains synthetic before/after sources, requests/responses,
 settings, session and store, and grades HTML/CSS/JS/VBA against exact expected text.
 Capture the verified model tag/digest and endpoint profile with the evidence.
 This fixture uses automatic approval; the controller regression covers manual

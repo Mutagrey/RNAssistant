@@ -54,6 +54,8 @@ namespace RNAssistant.Harness
             var settings = new AppSettings {
                 BaseUrl = endpoint, Model = model,
                 AgentResponseMode = Environment.GetEnvironmentVariable("RNA_RESPONSE_MODE") ?? AgentResponseModes.JsonSchema,
+                SystemPromptRole = Environment.GetEnvironmentVariable("RNA_INSTRUCTION_ROLE") ?? "developer",
+                ReasoningRequestMode = Environment.GetEnvironmentVariable("RNA_REASONING_MODE") ?? ReasoningRequestModes.ChatTemplateKwargs,
                 ContextWindowOverrideTokens = int.Parse(Environment.GetEnvironmentVariable("RNA_CONTEXT_TOKENS") ?? "32768"),
                 MaxTokens = 4096, Temperature = 0,
                 AutoConfirmToolActions = true, MaxAgentIterations = 24, MaxAgentToolSteps = 32,

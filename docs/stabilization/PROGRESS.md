@@ -1,5 +1,51 @@
 # Stabilization progress
 
+## Live prompt comparison — 2026-10-20
+
+Compared `cb1537af` (schema 50) with `b87547cb` (schema 51) in isolated checkouts.
+Both use `gemma4:cloud` through Ollama 0.35.0, `json_object`, developer instructions,
+`reasoning_effort=none`, temperature 0 and 4096 output tokens. The local route
+manifest digest is `ef09f235533c96cd75e8deed88c628335cb69e2b3ce96275d0d7a67fe9887aba`;
+cloud weights are not pinned by this digest. Office uses 32K and the existing
+24-iteration/32-tool/480-second bounds; workspace uses the existing 24K/40/48/600
+profile. Sources, tasks, guards and acceptance requirements are identical within
+each pair. The same two-line fixture patch exposes instruction-role and reasoning
+profile options; it changes neither prompts nor acceptance. Actual responses have
+no reasoning content. Local Gemma 12B and Qwen 9B probes left sustained memory
+warning pressure (22% and 24% free); no task was run on those profiles. Their
+temporary server was stopped. The default `chat_template_kwargs` setting did not
+disable thinking on these local endpoints; explicit `reasoning_effort=none` did
+in the Qwen probe.
+
+| Scenario | Before: model requests / API input tokens | After: model requests / API input tokens | Independent result |
+|---|---:|---:|---|
+| HTML/CSS/JS + VBA, attempt 1 | 9 / 161,460 | 4 / 65,289 | Both fail; all four requested changes absent |
+| Same Office task, attempt 2 | 8 / 142,948 | 2 / 31,063 | Both fail; all four requested changes absent |
+| Ordered workspace edits + compaction/resume fixture | 30 / 320,586 | 33 / 361,435 | Final bytes pass 10/10 in both; prescribed read/write/read stages pass 0/9 in both |
+
+Both Office baseline runs refuse skill selection because the complete candidate
+request exceeds its 32K budget. The new runs exhaust protocol repair on fenced
+JSON, mixed/sibling skill-load calls or invalid escaping before any write. They
+do not establish whether the new skill selection fits. Office never claims success.
+The first Office request drops from 15,882 to 15,179 actual input tokens (4.4%),
+but shorter failed runs are not a task-level efficiency improvement.
+
+Both workspace runs reach `done` with exact final files but defer the user's
+required per-file read-back until later. The event/HTTP integrity audits pass;
+the independent sequence audit fails. No summary was requested, so the intended
+post-checkpoint interruption and resume boundary was not exercised. The initial
+workspace launch with an overlong `TMPDIR` failed before any provider request;
+its environment error is retained separately from the runs above. These results
+do not qualify live compaction/resume, general model quality or Windows/Office.
+
+Evidence is retained locally in `/Users/Shared/Dev/RNAssistant-prompt-eval-2026-10-20/`
+(`comparison-results.json`, profiles/digests, raw responses, exact workspace HTTP
+payloads, source snapshots and canonical stores). Both pinned CLI builds pass;
+Harness builds retain only the two existing PDF platform warnings. Current
+priority: [model protocol/admission and explicit verification order](RISK_REGISTER.md#live-prompt-qualification--2026-10-20),
+then a live scenario that actually reaches compaction/resume. Do not claim that
+schema 51 improves task success from these samples.
+
 ## Prompt and skill guidance audit — 2026-10-20
 
 Prompt schema 51 removes duplicated workflow, call/result and editing instructions
