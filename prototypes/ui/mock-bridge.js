@@ -689,6 +689,16 @@
           "/preview/mock-plugin.html?name=" + encodeURIComponent(opening.name) + "&revision=" + (pluginSourceRevision[opening.pluginId] || 0) };
     }
     if (type === "closePlugin") return {};
+    if (type === "updatePluginAppearance") {
+      var edited = [pluginItem].concat(extraPlugins).find(function (item) { return item.pluginId === payload.pluginId; });
+      if (!edited || !payload.name.trim()) fail("Укажите название плагина.");
+      edited.name = payload.name.trim();
+      if (payload.iconId) {
+        var saved = savedPluginIcons.find(function (item) { return item.id === payload.iconId; });
+        edited.icon = payload.iconId; edited.iconPaths = saved ? clone(saved.paths) : null;
+      }
+      return clone(edited);
+    }
     if (type === "getPluginChat") return pluginChatState(payload.pluginId);
     if (type === "submitPluginChat") {
       var createdPlugin = extraPlugins.find(function (item) { return item.pluginId === payload.pluginId; });

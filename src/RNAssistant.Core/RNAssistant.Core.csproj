@@ -249,6 +249,7 @@
     <Compile Include="Storage\AppDataPaths.cs" />
     <Compile Include="Storage\PluginPackageFiles.cs" />
     <Compile Include="Storage\PluginIconLibrary.cs" />
+    <Compile Include="Storage\PluginIconSvg.cs" />
     <Compile Include="Storage\PluginStore.cs" />
     <Compile Include="Storage\VendorCatalog.cs" />
     <Compile Include="Storage\WorkspaceStore.cs" />

@@ -567,7 +567,7 @@
             <div class="plugin-icon-editor" id="pluginIconEditor" hidden>
               <fieldset class="plugin-icon-picker" id="pluginIconPicker"><legend>Иконка плагина</legend>
                 <div class="plugin-icon-choices" id="pluginBuiltinIcons"></div>
-                <div class="plugin-icon-saved-heading"><strong>Сохранённые SVG</strong><span>Доступны для новых плагинов</span></div>
+                <div class="plugin-icon-saved-heading"><strong>Сохранённые SVG</strong><span>Доступны для всех плагинов</span></div>
                 <div class="plugin-icon-choices" id="pluginSavedIcons"></div>
                 <div class="plugin-icon-draw" id="pluginIconBriefField" hidden><label>Описание для модели<textarea id="pluginIconDescription" rows="2" maxlength="500" placeholder="Например, таблица с восходящей линией и выделенной ячейкой"></textarea></label><button type="button" id="pluginIconDrawButton">Нарисовать иконку</button><p id="pluginIconDrawStatus" role="status"></p></div>
                 <details class="plugin-icon-import"><summary>Добавить готовый SVG</summary><label>Название<input id="pluginIconImportName" maxlength="120" placeholder="Например, Отчёт"></label><label>SVG-код<textarea id="pluginIconImportSvg" rows="3" maxlength="4096" placeholder="&lt;svg viewBox=&quot;0 0 24 24&quot;&gt;…&lt;/svg&gt;"></textarea></label><button type="button" id="pluginIconImportButton">Сохранить в библиотеку</button></details>
@@ -582,7 +582,7 @@
               <label class="plugin-source-folder" id="pluginSourceFolder" hidden>Папка исходников<input id="pluginRoot" placeholder="Например, C:\Projects\MyPlugin" autocomplete="off"><small>Можно указать новую или пустую папку. Для готового плагина используйте «Подключить».</small></label>
               <label class="plugin-checkbox"><input type="checkbox" id="pluginConnect">Подключить папку с plugin.json</label>
               <p class="plugin-mode-hint" id="pluginModeHint">Проверка и публикация доступны в разделе «Разработка».</p>
-              <div class="plugin-create-actions"><button class="button primary" id="pluginCreateSubmit" type="submit">Создать плагин</button></div>
+              <div class="plugin-create-actions"><button class="button" id="pluginEditCancel" type="button" hidden>Отмена</button><button class="button primary" id="pluginCreateSubmit" type="submit">Создать плагин</button></div>
             </form>
             <details class="plugin-vendors"><summary>Локальные библиотеки</summary><p>Пакеты vendors: %AppData%/RNAssistant/vendors/&lt;id&gt;/&lt;version&gt;/vendor.json</p>
               <button id="pluginVendorsRefresh" type="button">Обновить каталог</button><div id="pluginVendors"></div>

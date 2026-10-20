@@ -11,7 +11,7 @@ namespace RNAssistant.Office.Contracts
     {
         ReportClientTiming,
         [BridgeOperationPolicy(false, 30)] Init,
-        GetPlugins, GetPluginIcons, SavePluginIcon, DeletePluginIcon, [BridgeOperationPolicy(true, 180)] DrawPluginIcon,
+        GetPlugins, GetPluginIcons, SavePluginIcon, DeletePluginIcon, UpdatePluginAppearance, [BridgeOperationPolicy(true, 180)] DrawPluginIcon,
         CreatePlugin, ConnectPlugin, GetPluginSourceState, CheckPlugin, ApplyPlugin, OpenPlugin, ClosePlugin, DisablePlugin,
         GetRemovedPlugins, [BridgeOperationPolicy(true, 300)] RemovePlugin, RestorePlugin,
         GetPluginChat, [BridgeOperationPolicy(true, 300)] SubmitPluginChat,

@@ -112,6 +112,13 @@ namespace RNAssistant.Core.Models
         public string PackageSha256 { get; set; }
     }
 
+    public sealed class PluginAppearance
+    {
+        public string Name { get; set; }
+        public string Icon { get; set; }
+        public string[] IconPaths { get; set; }
+    }
+
     public sealed class PluginRegistration
     {
         public string PluginId { get; set; }
@@ -122,5 +129,6 @@ namespace RNAssistant.Core.Models
         public string ActiveReleaseId { get; set; }
         public bool Enabled { get; set; }
         public bool Hidden { get; set; }
+        public PluginAppearance Appearance { get; set; }
     }
 }

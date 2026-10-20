@@ -39,6 +39,12 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("name")] public string Name { get; set; }
         [JsonProperty("svg")] public string Svg { get; set; }
     }
+    public sealed class PluginAppearanceRequest
+    {
+        [JsonProperty("pluginId", Required = Required.Always)] public string PluginId { get; set; }
+        [JsonProperty("name", Required = Required.Always)] public string Name { get; set; }
+        [JsonProperty("iconId")] public string IconId { get; set; }
+    }
     public sealed class PluginIconDrawRequest
     {
         [JsonProperty("name")] public string Name { get; set; }

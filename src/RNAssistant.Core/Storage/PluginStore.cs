@@ -189,6 +189,31 @@ namespace RNAssistant.Core.Storage
             return observed;
         }
 
+        public PluginRegistration SetAppearance(string id, PluginAppearance appearance)
+        {
+            RequireId(id);
+            var head = _authority.GetHead(Scope, RegistrationRef(id, "0").Identity);
+            if (head?.Knowledge != HeadKnowledge.Known) throw new PluginException("plugin_missing", "Plugin is not connected.");
+            var registration = Read<PluginRegistration>(head.Revision, "plugin-registration");
+            registration.Appearance = appearance;
+            var next = RegistrationRef(id, "reg_" + Guid.NewGuid().ToString("N"));
+            var expected = JsonConvert.SerializeObject(registration);
+            try { Publish(next, "plugin-registration", registration, Enumerable.Empty<PayloadRef>(), head.Revision); }
+            catch (PluginException error) when (error.Code == "plugin_selection_changed") { throw; }
+            catch (Exception error)
+            {
+                try { var recovered = Get(id); if (JsonConvert.SerializeObject(recovered) == expected) return recovered; }
+                catch { /* Uncertain publication must not be silently retried. */ }
+                throw new PluginException("effect_unknown", "Plugin appearance could not be verified. Refresh the catalog before retrying. " + error.Message);
+            }
+            PluginRegistration observed;
+            try { observed = Get(id); }
+            catch (Exception error) { throw new PluginException("effect_unknown", "Plugin appearance read-back failed. " + error.Message); }
+            if (JsonConvert.SerializeObject(observed) != expected)
+                throw new PluginException("effect_unknown", "Plugin appearance changed before read-back. Refresh the catalog.");
+            return observed;
+        }
+
         public PluginReleaseRecord ReadRelease(PluginReleaseIdentity identity)
         {
             var record = Read<PluginReleaseRecord>(ReleaseRef(identity.PluginId, identity.ReleaseId), "plugin-release");

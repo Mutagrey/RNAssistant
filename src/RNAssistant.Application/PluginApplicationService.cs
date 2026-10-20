@@ -88,44 +88,71 @@ namespace RNAssistant.Application
                 return new PluginIconCatalogDto { Items = _icons.List() };
             }
         }
-        public async Task<PluginIconRecord> DrawIconAsync(PluginIconDrawRequest request, AppSettings settings,
+        public PluginItemDto UpdateAppearance(PluginAppearanceRequest request)
+        {
+            using (PluginStore.AcquireRuntimeUse(_paths)) lock (_sync)
+            {
+                RequireOpen();
+                if (request == null || string.IsNullOrWhiteSpace(request.Name) || request.Name.Trim().Length > 120 || request.Name.Any(char.IsControl))
+                    throw new PluginException("plugin_name_invalid", "Укажите название плагина до 120 символов.");
+                var registration = RequireRegistration(request.PluginId);
+                var current = Item(registration);
+                var appearance = new PluginAppearance { Name = request.Name.Trim(), Icon = current.Icon, IconPaths = current.IconPaths };
+                if (request.IconId != null)
+                {
+                    if (request.IconId.StartsWith("icon-", StringComparison.Ordinal))
+                    { var saved = _icons.Get(request.IconId); appearance.Icon = saved.Id; appearance.IconPaths = saved.Paths.ToArray(); }
+                    else if (Regex.IsMatch(request.IconId, "^[A-Za-z][A-Za-z0-9_-]{0,63}$", RegexOptions.CultureInvariant))
+                    { appearance.Icon = request.IconId; appearance.IconPaths = null; }
+                    else throw new PluginException("plugin_icon_invalid", "Выберите значок из каталога.");
+                }
+                return Item(_store.SetAppearance(request.PluginId, appearance));
+            }
+        }
+        public Task<PluginIconRecord> DrawIconAsync(PluginIconDrawRequest request, AppSettings settings,
             Func<string> apiKeyProvider, CancellationToken token)
+        { return DrawIconAsync(request, settings, new LlmClient(apiKeyProvider).CompleteAsync, token); }
+
+        internal async Task<PluginIconRecord> DrawIconAsync(PluginIconDrawRequest request, AppSettings settings,
+            LlmCompletionDelegate complete, CancellationToken token)
         {
             if (request == null || string.IsNullOrWhiteSpace(request.Name) || request.Name.Trim().Length > 120 ||
                 string.IsNullOrWhiteSpace(request.Description) || request.Description.Trim().Length > 500)
                 throw new PluginException("plugin_icon_invalid", "Provide a plugin name and an icon description of at most 500 characters.");
             var configuration = (settings ?? new AppSettings()).Clone();
-            configuration.MaxTokens = 1000;
+            configuration.MaxTokens = 4096;
             configuration.RequestTimeoutSeconds = Math.Min(configuration.RequestTimeoutSeconds, 75);
             configuration.Temperature = 0.35;
             var messages = new List<ChatMessage> {
                     new ChatMessage { Role = "system", Content =
-                        "Draw one clear, balanced outline icon as SVG for a 24x24 viewBox. Return only the SVG document. " +
-                        "Use <svg viewBox=\"0 0 24 24\"> with 1 to 6 <path d=\"...\"/> children. " +
-                        "No other elements, attributes, fills, text, comments, XML declaration or Markdown. " +
-                        "Use only path commands and coordinates; the app applies currentColor stroke, round joins and caps." },
+                        "Draw one clear, balanced outline icon as an SVG document with viewBox=\"0 0 24 24\". " +
+                        "Use path, circle, ellipse, rect, line, polyline, polygon and g elements. " +
+                        "Use fill=\"none\" and stroke=\"currentColor\"; the app supplies themed outline styling. " +
+                        "Keep geometry within 2–22. Do not use transforms, text, scripts, style, references, images or external URLs. " +
+                        "Return only the SVG, at most 4096 UTF-8 bytes. No image-generation tool is needed." },
                     new ChatMessage { Role = "user", Content = "Plugin: " + request.Name.Trim() + "\nIcon brief: " + request.Description.Trim() }
                 };
             for (var attempt = 0; attempt < 2; attempt++)
             {
-                var completion = await new LlmClient(apiKeyProvider).CompleteAsync(configuration, messages,
+                var completion = await complete(configuration, messages,
                     new LlmRequestOptions { ResponseFormat = LlmResponseFormats.Text, ReasoningEnabled = false },
                     null, token).ConfigureAwait(false);
-                var svg = ExtractModelSvg(completion?.Content);
                 try
                 {
-                    var bytes = PluginPackageFiles.Utf8.GetBytes(svg);
-                    PluginPackageFiles.ReadIconPaths(bytes);
+                    var svg = ExtractModelSvg(completion?.Content);
+                    PluginPackageFiles.ReadIconPaths(PluginPackageFiles.Utf8.GetBytes(svg));
                     token.ThrowIfCancellationRequested();
                     return SaveIcon(new PluginIconSaveRequest { Name = request.Name.Trim(), Svg = svg });
                 }
                 catch (PluginException error) when (error.Code == "plugin_icon_invalid")
                 {
                     if (attempt == 1) throw new PluginException("plugin_icon_invalid",
-                        "Модель не смогла нарисовать корректный SVG. Сократите описание или добавьте готовый SVG.");
+                        "Модель вернула некорректный рисунок: " + error.Message);
+                    if (!string.IsNullOrWhiteSpace(completion?.Content))
+                        messages.Add(new ChatMessage { Role = "assistant", Content = completion.Content.Substring(0, Math.Min(completion.Content.Length, 8192)) });
                     messages.Add(new ChatMessage { Role = "user", Content =
                         "The previous icon was rejected: " + error.Message +
-                        " Return one complete valid SVG document only, with a 24x24 viewBox and 1–6 path elements. Keep every path d under 1024 characters." });
+                        " Return one complete outline SVG with viewBox=\"0 0 24 24\", fill=\"none\" and supported shapes. Keep it under 4096 bytes." });
                 }
             }
             throw new PluginException("plugin_icon_invalid", "Модель не смогла нарисовать корректный SVG. Сократите описание или добавьте готовый SVG.");
@@ -784,16 +811,17 @@ namespace RNAssistant.Application
         private void RequireOpen() { if (_disposed) throw new ObjectDisposedException(nameof(PluginApplicationService)); }
         private PluginItemDto Item(PluginRegistration value)
         {
-            var item = new PluginItemDto { PluginId = value.PluginId, Name = value.Name, Icon = value.Icon,
+            var item = new PluginItemDto { PluginId = value.PluginId, Name = value.Appearance?.Name ?? value.Name,
+                Icon = value.Appearance?.Icon ?? value.Icon, IconPaths = value.Appearance?.IconPaths,
                 SourceWorkspaceId = value.SourceWorkspaceId, SourceRoot = value.SourceRoot,
                 ReleaseId = value.ActiveReleaseId, Enabled = value.Enabled, Hidden = value.Hidden };
-            if (PluginPackageFiles.IconIsSvgPath(value.Icon))
+            if (item.IconPaths == null && PluginPackageFiles.IconIsSvgPath(item.Icon))
             {
                 try
                 {
                     var bytes = value.Enabled && value.ActiveReleaseId != null
-                        ? _store.ReadFile(_store.ReadRelease(new PluginReleaseIdentity(value.PluginId, value.ActiveReleaseId)), value.Icon)
-                        : PluginPackageFiles.Read(value.SourceRoot, value.Icon, 4096);
+                        ? _store.ReadFile(_store.ReadRelease(new PluginReleaseIdentity(value.PluginId, value.ActiveReleaseId)), item.Icon)
+                        : PluginPackageFiles.Read(value.SourceRoot, item.Icon, 4096);
                     item.IconPaths = PluginPackageFiles.ReadIconPaths(bytes);
                 }
                 catch (PluginException error) { item.IconError = error.Message; }

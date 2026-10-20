@@ -12,6 +12,7 @@ using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Core.Agent;
+using RNAssistant.Core.Llm;
 
 namespace RNAssistant.Harness
 {
@@ -114,6 +115,18 @@ namespace RNAssistant.Harness
                     item = PluginFixture(service, paths, false);
                     open = PluginOpen(service, item.PluginId);
                     sourceChat = service.ChatState(item.PluginId).SessionId;
+                    var sourceManifest = File.ReadAllText(Path.Combine(item.SourceRoot, "plugin.json"));
+                    var icon = service.SaveIcon(new PluginIconSaveRequest { Name = "Outline", Svg =
+                        "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\"><circle cx=\"12\" cy=\"12\" r=\"8\"/></svg>" });
+                    var edited = service.UpdateAppearance(new PluginAppearanceRequest { PluginId = item.PluginId, Name = "Мой плагин", IconId = icon.Id });
+                    AssertEqual("Мой плагин", edited.Name, "appearance changes the panel name");
+                    AssertEqual(icon.Paths.Single(), edited.IconPaths.Single(), "appearance copies the validated icon");
+                    AssertEqual(item.ReleaseId, edited.ReleaseId, "appearance does not publish draft code");
+                    AssertEqual(sourceManifest, File.ReadAllText(Path.Combine(item.SourceRoot, "plugin.json")), "appearance preserves source manifest");
+                    AssertTrue(!open.Token.IsCancellationRequested, "appearance does not revoke running plugin instances");
+                    service.DeleteIcon(new PluginIconDeleteRequest { Id = icon.Id });
+                    AssertEqual(icon.Paths.Single(), service.List().Items.Single().IconPaths.Single(), "appearance owns its icon after library deletion");
+                    PluginFailure(() => service.UpdateAppearance(new PluginAppearanceRequest { PluginId = item.PluginId, Name = " " }), "plugin_name_invalid");
                     service.RemoveAsync(item.PluginId).GetAwaiter().GetResult();
                     AssertTrue(open.Token.IsCancellationRequested, "removal revokes visible instance");
                     AssertEqual(0, service.List().Items.Count, "removed plugin disappears from panel");
@@ -125,6 +138,8 @@ namespace RNAssistant.Harness
                 {
                     AssertEqual(item.PluginId, service.ListRemoved().Items.Single().PluginId, "panel removal survives restart");
                     var restored = service.Restore(item.PluginId);
+                    AssertEqual("Мой плагин", restored.Name, "edited name survives restart and restoration");
+                    AssertEqual(1, restored.IconPaths.Length, "edited icon survives restart and restoration");
                     AssertEqual(item.ReleaseId, restored.ReleaseId, "restoration keeps published version");
                     AssertEqual(true, restored.Enabled, "restoration keeps activation state");
                     AssertEqual(item.PluginId, service.List().Items.Single().PluginId, "restored plugin returns to panel");
@@ -135,6 +150,38 @@ namespace RNAssistant.Harness
         }
         private static void PluginsSvgIcon()
         {
+            WithPluginPaths(paths => {
+                using (var service = new PluginApplicationService(paths))
+                {
+                    var standard = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><g><rect x=\"3\" y=\"3\" width=\"18\" height=\"18\" rx=\"2\"/><circle cx=\"9\" cy=\"9\" r=\"2\"/><path d=\"M4 18l5-5 4 4 3-3 4 4\"/></g></svg>";
+                    var settings = new AppSettings { MaxTokens = 1000 };
+                    var calls = 0;
+                    var result = service.DrawIconAsync(new PluginIconDrawRequest { Name = "Photo", Description = "Иконка фотографии" }, settings,
+                        (configuration, messages, options, progress, token) => {
+                            calls++; AssertEqual(4096, configuration.MaxTokens, "icon completion has room for provider reasoning and SVG");
+                            AssertEqual(LlmResponseFormats.Text, options.ResponseFormat, "model draws ordinary SVG");
+                            return Task.FromResult(new LlmCompletionResult { Content = "```svg\n" + standard + "\n```" });
+                        }, CancellationToken.None).GetAwaiter().GetResult();
+                    AssertEqual(1, calls, "standard outline SVG is accepted on the first attempt");
+                    AssertEqual(3, result.Paths.Length, "shapes retain geometry as registry paths");
+                    AssertEqual(1000, settings.MaxTokens, "drawing leaves user settings unchanged");
+                    foreach (var unsafeSvg in new[] { standard.Replace("<g>", "<g onload=\"x()\">"),
+                        standard.Replace("<g>", "<g><script>alert(1)</script>"), standard.Replace("<g>", "<g style=\"fill:url(https://invalid)\">"),
+                        standard.Replace("<g>", "<g><use href=\"https://invalid\"/>"), standard.Replace("<g>", "<g transform=\"translate(1)\">") })
+                        PluginFailure(() => PluginPackageFiles.ReadIconPaths(PluginPackageFiles.Utf8.GetBytes(unsafeSvg)), "plugin_icon_invalid");
+                    calls = 0;
+                    service.DrawIconAsync(new PluginIconDrawRequest { Name = "Retry", Description = "Исправить рисунок" }, settings,
+                        (configuration, messages, options, progress, token) => {
+                            calls++;
+                            if (calls == 2) AssertTrue(messages.Any(message => message.Role == "assistant" && message.Content.Contains("<text>")),
+                                "repair sees the rejected drawing, not just a generic error");
+                            return Task.FromResult(new LlmCompletionResult { Content = calls == 1 ?
+                                "<svg viewBox=\"0 0 24 24\"><text>bad</text></svg>" : standard });
+                        }, CancellationToken.None).GetAwaiter().GetResult();
+                    AssertEqual(2, calls, "one bounded repair attempt");
+                    AssertEqual(1, service.ListIcons().Items.Count, "invalid drawing is never saved and identical repaired geometry is deduplicated");
+                }
+            });
             var authoring = RNAssistant.Core.Services.WorkspaceSkillProvider.GetSkills()
                 .Single(skill => skill.Id == RNAssistant.Core.Services.WorkspaceSkillProvider.PluginId);
             AssertTrue(authoring.BodyMarkdown.Contains("icon.svg") && authoring.BodyMarkdown.Contains("plugins.check"),

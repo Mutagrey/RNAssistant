@@ -83,7 +83,7 @@
 .plugin-manager .plugin-checkbox{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:500;cursor:pointer}
 .plugin-checkbox input{flex:none;width:auto;margin:0}
 .plugin-mode-hint{margin:-4px 0 0;color:var(--ink-muted,#66736c);font-size:11px;line-height:1.4}
-.plugin-create-actions{display:flex;justify-content:flex-start;margin-top:2px}
+.plugin-create-actions{display:flex;gap:8px;justify-content:flex-start;margin-top:2px}
 .plugin-create-actions .button{min-width:132px;justify-content:center}
 .plugin-icon-editor{box-sizing:border-box;max-width:680px;margin:14px 0 0;padding:12px 0 0;border-top:1px solid var(--line,#e2e7e1);background:transparent}
 .plugin-icon-editor[hidden]{display:none}
