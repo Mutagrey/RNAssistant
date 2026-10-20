@@ -120,6 +120,9 @@ and runtime-owned prepared confirmation. The source-inclusion check verifies old
 project registration; no Office/VSTO build is needed.
 The same filter checks SVG generation/repair through controlled model replies,
 safe shape normalization and durable name/icon editing without changing publication.
+Source chat coverage checks independent sessions in the common project catalog,
+retained message history across creation/restart, exact workspace/session refusal,
+deletion and explicit reopening after history removal.
 `node tests/web/plugins.test.js` checks creation/automatic check/preview/apply/reopen/disable,
 immediate SVG drawing, reusable rail hover menus and remove/restore,
 source chat presentation, actual Chromium Worker and native-protocol XLSX extraction
@@ -127,6 +130,15 @@ with complete canonical result read-back. It uses a controlled bridge/file trans
 not WebView2. `RNA_PLUGIN_SCREENSHOTS` saves desktop/narrow previews; use the usual
 Playwright `BROWSER_EXECUTABLE` override. The complete Data Templates standalone
 export browser suite also passes; it does not qualify native plugin transport.
+`node tests/web/workspace-chat-layout.test.js` compares Office/workspace/plugin chat
+rendering and composer metrics, preserves drafts on failed delivery, checks retry
+identity and mode/reasoning preferences, narrow layout, the development splitter,
+the shared panel buttons (geometry, Enter/Space/Escape, pointer focus after keyboard use and draft retention),
+plugin name/icon editing, new source chats, navigation through the main history tree,
+draft restoration and late replies after switching chats.
+`RNA_CHAT_SCREENSHOTS` saves the visual review captures.
+`node tests/web/splitter-preferences.test.js` checks the shared divider interaction:
+frame coalescing, commit/cancel, capture cleanup, keyboard controls and ARIA values.
 
 `node tests/web/data-templates.test.js` checks the loader's real browser file/folder
 selection, drops and directory batches, cancellation, stale-context callbacks,

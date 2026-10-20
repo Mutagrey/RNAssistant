@@ -1,6 +1,7 @@
 (function () {
   "use strict";
   var scope = "office", catalog = null, active = null, busy = false, serial = 0, poll = null, pendingSend = null;
+  var composer = null;
   var selectedWorkspaceId = null, expanded = {}, query = "", connectionMode = "connect";
   function el(id) { return document.getElementById("projectChat" + id); }
   function node(tag, className, text) {
@@ -41,13 +42,14 @@
         return { key: "project-chat:" + entry.workspaceId + ":" + chat.Id, kind: "chat", title: chat.Title,
           selected: entry.workspaceId === projectId() && chat.Id === selected,
           status: runStatus === "running" ? "running" : runStatus === "awaitingconfirmation" ? "waiting" : "",
-          actions: [
+          actions: (entry.pluginId ? [{ title: "Открыть чат в плагине", iconHtml: window.RNAssistantNavigationTree.icon("code"),
+            disabled: !entry.available, onClick: function () { window.RNAssistantPlugins.select(entry.pluginId, chat.Id); } }] : []).concat([
             { title: "Переименовать чат «" + chat.Title + "»", iconHtml: window.RNAssistantNavigationTree.icon("edit"),
               disabled: !entry.available, onClick: function () { rename(entry, chat); } },
             { title: "Удалить чат «" + chat.Title + "»", iconHtml: window.RNAssistantNavigationTree.icon("trash"), danger: true,
               disabled: !entry.available || runStatus === "running" || runStatus === "awaitingconfirmation",
               onClick: function () { remove(entry, chat); } }
-          ], workspaceId: entry.workspaceId, sessionId: chat.Id };
+          ]), workspaceId: entry.workspaceId, sessionId: chat.Id };
       });
       if (needle && !ownMatch && !items.length) return null;
       return { key: "project:" + entry.workspaceId, kind: "parent", selectable: true,
@@ -74,56 +76,34 @@
     });
   }
   function renderQuestions(input) {
-    var form = el("Questions"), set = input && (input.questionSet || input.QuestionSet);
-    if (!set) { form.hidden = true; form.replaceChildren(); delete form.dataset.questionSet; return; }
-    if (form.dataset.questionSet === set.questionSetId) return;
-    form.hidden = false; form.replaceChildren(); form.dataset.questionSet = set.questionSetId;
-    var fields = (set.questions || []).map(function (question) {
-      var group = node("fieldset"), legend = node("legend", "", question.prompt), choices = [];
-      group.appendChild(legend);
-      (question.options || []).forEach(function (option) {
-        var label = node("label"), choice = node("input");
-        choice.type = question.selection === "multiple" ? "checkbox" : "radio";
-        choice.name = question.id; choice.value = option.id;
-        label.append(choice, document.createTextNode(option.label)); group.appendChild(label); choices.push(choice);
-      });
-      var free = node("textarea"); free.rows = 2; free.placeholder = "Ваш ответ"; free.hidden = !question.allowFreeText;
-      group.appendChild(free); form.appendChild(group); return { question: question, choices: choices, free: free };
-    });
-    var submit = node("button", "", "Ответить"); submit.type = "submit"; form.appendChild(submit);
-    form.onsubmit = function (event) {
-      event.preventDefault();
-      var answers = { runId: input.runId || input.RunId, questionSetId: set.questionSetId, answers: fields.map(function (field) {
-        return { questionId: field.question.id, optionIds: field.choices.filter(function (choice) { return choice.checked; }).map(function (choice) { return choice.value; }), freeText: field.free.value };
-      }) };
-      runChat(function (pid, sid) { return send("submitProjectChat", { workspaceId: pid, sessionId: sid,
+    window.RNAssistantWorkspaceChat.renderQuestions(el("Questions"), input, function (answers) {
+      return runChat(function (pid, sid) { return send("submitProjectChat", { workspaceId: pid, sessionId: sid,
         input: { sessionId: sid, requestId: crypto.randomUUID(), answers: answers } }); });
-    };
+    });
   }
   function render() {
+    if (composer) {
+      composer.select(currentId(), active && active.state);
+      composer.lock(busy || !active || !!active.pendingId || field(runState(), "status", "Status") === "running");
+    }
+
     el("Context").textContent = project() ? "Проекты / " + project().name : "Проект не выбран";
     el("Title").textContent = active && active.state ? field(active.state, "title", "Title") : "Чат проекта";
     el("New").disabled = busy || !project() || !project().available;
     el("Connect").disabled = busy;
     el("Create").disabled = busy;
     el("ConnectionSubmit").disabled = busy;
-    el("Send").disabled = busy || !project() || !project().available || !active || !el("Input").value.trim() || !!(active && active.pendingId);
+    el("Send").disabled = busy || !project() || !project().available || !active || !el("Input").value.trim() || !!(active && active.pendingId) || field(runState(), "status", "Status") === "running";
     el("Stop").hidden = !(active && active.state && field(active.state, "status", "Status") === "running");
     el("Control").hidden = !(active && active.pendingId);
     el("Pending").textContent = active && active.pendingId ? (active.pendingTool || "Действие") + "\n" + (active.pendingArguments || "") : "";
     renderQuestions(active && active.state && field(active.state, "userInput", "UserInput"));
     var messages = el("Messages");
-    messages.replaceChildren();
     if (!active || !(active.messages || []).length) {
-      var empty = node("div", "project-chat-empty");
-      var symbol = node("span", "project-chat-empty-symbol");
-      symbol.innerHTML = window.RNAssistantNavigationTree.icon("spark");
-      empty.append(symbol, node("h2", "", !project() ? "Проект не выбран" : !project().available ? "Папка проекта недоступна" : active ? "С чего начнём?" : "Выберите чат проекта"),
-        node("p", "", !project() ? "Подключите папку проекта или выберите проект в дереве." : !project().available ?
-          "Верните папку на прежний путь или подключите её заново." :
-          "Обсудите файлы проекта, подготовку данных или составьте план. Нужные файлы добавляйте в контекст явно."));
+      messages.replaceChildren(); messages._chatSignature = null;
+      var suggest = null;
       if (project() && active) {
-        var suggest = node("button", "accent-soft project-chat-suggest");
+        suggest = node("button", "chat-empty-suggestion project-chat-suggest");
         suggest.type = "button";
         suggest.innerHTML = window.RNAssistantNavigationTree.icon("chart") + "<span>Сравнить периоды</span>";
         suggest.addEventListener("click", function () {
@@ -131,34 +111,41 @@
           el("Input").dispatchEvent(new Event("input", { bubbles: true }));
           el("Input").focus();
         });
-        empty.appendChild(suggest);
+
       }
-      messages.appendChild(empty);
-    } else (active.messages || []).forEach(function (message) {
-      var article = node("article", "message " + (message.role === "user" ? "user" : "assistant"));
-      var body = node("div", "markdown");
-      body.innerHTML = window.markdown(message.text || "", { preserveLineBreaks: message.role === "user" });
-      article.appendChild(body); messages.appendChild(article);
-    });
+      messages.appendChild(renderChatEmptyState({
+        title: !project() ? "Проект не выбран" : !project().available ? "Папка проекта недоступна" : active ? "С чего начнём?" : "Выберите чат проекта",
+        text: !project() ? "Подключите папку проекта или выберите проект в дереве." : !project().available ?
+          "Верните папку на прежний путь или подключите её заново." : "Обсудите файлы проекта, подготовку данных или составьте план.",
+        button: suggest
+      }));
+    } else window.RNAssistantWorkspaceChat.renderMessages(messages, active);
     if (!busy && statusText()) notice(statusText());
     renderTree();
   }
-  async function refresh() {
+  async function refresh(target) {
     var version = ++serial, result;
     try { result = await send("getProjectChats", {}); }
     catch (error) { if (version === serial) notice(error.detail || error.message, true); return; }
     if (version !== serial) return;
     var previousProject = projectId(), previousChat = currentId();
     catalog = result;
-    if (result.selectedWorkspaceId) selectedWorkspaceId = result.selectedWorkspaceId;
+    if (target && target.workspaceId) selectedWorkspaceId = target.workspaceId;
+    else if (result.selectedWorkspaceId) selectedWorkspaceId = result.selectedWorkspaceId;
     else if (!projects().some(function (item) { return item.workspaceId === selectedWorkspaceId; }))
       selectedWorkspaceId = (projects().find(function (item) { return item.available; }) || projects()[0] || {}).workspaceId || null;
     if (previousProject !== projectId()) { active = null; pendingSend = null; }
     notice("");
     render();
     var chats = project() && project().chats || [];
-    var wanted = previousProject === projectId() && chats.some(function (item) { return item.Id === previousChat; })
-      ? previousChat : chats[0] && chats[0].Id;
+    var remembered = window.RNAssistantWorkspaceChat.selectedSession(projectId());
+    var wanted = target && target.sessionId || remembered || (previousProject === projectId() ? previousChat : null);
+    if (wanted && !chats.some(function (item) { return item.Id === wanted; })) {
+      window.RNAssistantWorkspaceChat.rememberSession(projectId(), null);
+      if (target && target.sessionId) { active = null; render(); notice("Чат отсутствует в этом проекте.", true); return; }
+      wanted = null;
+    }
+    wanted = wanted || chats[0] && chats[0].Id;
     if (wanted && project().available) await open(projectId(), wanted);
     else if (!wanted) { active = null; render(); }
   }
@@ -174,10 +161,13 @@
     if (projectId() !== workspaceId) { ++serial; selectedWorkspaceId = workspaceId; active = null; pendingSend = null; render(); }
     if (!project() || !project().available) return;
     var version = ++serial, pid = projectId();
+    if (currentId() !== sessionId) { active = null; render(); }
     notice("Загружаю чат…");
     try {
       var result = await send("getProjectChat", { workspaceId: pid, sessionId: sessionId });
-      if (version === serial && projectId() === pid) { active = result; notice(statusText()); render(); }
+      if (version === serial && projectId() === pid) {
+        active = result; window.RNAssistantWorkspaceChat.rememberSession(pid, result.sessionId); notice(statusText()); render();
+      }
     } catch (error) { if (version === serial) notice(error.detail || error.message, true); }
   }
   async function create() {
@@ -185,7 +175,10 @@
     ++serial; busy = true; render(); var pid = projectId();
     try {
       var result = await send("createProjectChat", { workspaceId: pid, title: "Новый чат" });
-      if (projectId() === pid) { active = result; catalog = await send("getProjectChats", {}); notice(statusText()); render(); }
+      if (projectId() === pid) {
+        active = result; window.RNAssistantWorkspaceChat.rememberSession(pid, result.sessionId);
+        catalog = await send("getProjectChats", {}); notice(statusText()); render();
+      }
     } catch (error) { notice(error.detail || error.message, true); }
     finally { busy = false; render(); }
   }
@@ -200,6 +193,8 @@
   async function remove(entry, chat) {
     if (!window.confirm("Удалить чат «" + chat.Title + "»? История этого чата будет удалена; файлы проекта останутся.")) return;
     try { catalog = await send("deleteProjectChat", { workspaceId: entry.workspaceId, sessionId: chat.Id });
+      if (window.RNAssistantWorkspaceChat.selectedSession(entry.workspaceId) === chat.Id)
+        window.RNAssistantWorkspaceChat.rememberSession(entry.workspaceId, null);
       if (projectId() === entry.workspaceId && currentId() === chat.Id) active = null;
       notice(""); render(); var selected = project();
       if (!active && selected && selected.available && selected.chats.length) open(selected.workspaceId, selected.chats[0].Id); }
@@ -208,6 +203,7 @@
   async function removeHistory(entry) {
     if (!window.confirm("Удалить историю проекта «" + entry.name + "» и убрать его из дерева? Папка и файлы останутся.")) return;
     try { catalog = await send("deleteProjectHistory", { workspaceId: entry.workspaceId });
+      window.RNAssistantWorkspaceChat.rememberSession(entry.workspaceId, null);
       if (projectId() === entry.workspaceId) {
         ++serial; active = null; pendingSend = null;
         selectedWorkspaceId = (projects().find(function (item) { return item.available; }) || projects()[0] || {}).workspaceId || null;
@@ -230,16 +226,19 @@
     catch (error) { if (projectId() === pid && currentId() === sid) notice(error.detail || error.message, true); }
     finally { window.clearInterval(poll); poll = null; busy = false; render(); }
   }
-  function setScope(next) {
+  function setScope(next, target) {
     scope = next; ++serial;
     document.getElementById("chatLayout").hidden = next === "projects";
     el("Layout").hidden = next !== "projects";
     document.querySelectorAll(".chat-scope-switcher").forEach(function (picker) { picker.open = false; });
-    if (next === "projects") refresh();
+    var loaded;
+    if (next === "projects") loaded = refresh(target);
     else if (poll) { window.clearInterval(poll); poll = null; }
     if (window.RNAssistantShellLayout) window.RNAssistantShellLayout.refresh();
+    return loaded;
   }
   function bind() {
+    composer = window.RNAssistantWorkspaceChat.bindComposer(el("Form"));
     document.querySelectorAll("[data-workspace-scope]").forEach(function (button) {
       button.addEventListener("click", function () { setScope(button.dataset.workspaceScope); });
     });
@@ -269,20 +268,18 @@
     });
     el("OpenData").addEventListener("click", function () { window.RNAssistantPlugins.select("data-templates"); });
     el("Input").addEventListener("input", function () {
-      el("Send").disabled = busy || !project() || !project().available || !active || !el("Input").value.trim() || !!active.pendingId;
-    });
-    el("Input").addEventListener("keydown", function (event) {
-      if (event.key === "Enter" && !event.shiftKey && !event.isComposing) { event.preventDefault(); el("Form").requestSubmit(); }
+      el("Send").disabled = busy || !project() || !project().available || !active || !el("Input").value.trim() || !!active.pendingId || field(runState(), "status", "Status") === "running";
     });
     el("Form").addEventListener("submit", function (event) {
       event.preventDefault(); var text = el("Input").value.trim(); if (!text || !active) return;
       var pid = projectId(), sid = currentId();
-      if (!pendingSend || pendingSend.workspaceId !== pid || pendingSend.sessionId !== sid || pendingSend.text !== text)
-        pendingSend = { workspaceId: pid, sessionId: sid, text: text, requestId: crypto.randomUUID() };
+      var preferences = composer.options();
+      if (!pendingSend || pendingSend.workspaceId !== pid || pendingSend.sessionId !== sid || pendingSend.text !== text || JSON.stringify(pendingSend.preferences) !== JSON.stringify(preferences))
+        pendingSend = { workspaceId: pid, sessionId: sid, text: text, preferences: preferences, requestId: crypto.randomUUID() };
       var request = pendingSend;
       runChat(function () { return send("submitProjectChat", { workspaceId: pid, sessionId: sid,
-        input: { sessionId: sid, requestId: request.requestId, message: text, mode: "agent" } }).then(function (result) {
-        if (pendingSend === request) { pendingSend = null; el("Input").value = ""; } return result;
+        input: Object.assign({ sessionId: sid, requestId: request.requestId, message: text }, request.preferences) }).then(function (result) {
+        composer.accepted(sid, text); if (pendingSend === request) pendingSend = null; return result;
       }); });
     });
     el("Stop").addEventListener("click", async function () {
@@ -307,5 +304,6 @@
     render();
   }
   document.addEventListener("DOMContentLoaded", bind);
-  window.RNAssistantProjectChats = { show: function () { if (scope === "projects") refresh(); }, scope: function () { return scope; }, setScope: setScope };
+  window.RNAssistantProjectChats = { show: function () { if (scope === "projects") refresh(); }, scope: function () { return scope; }, setScope: setScope,
+    open: function (workspaceId, sessionId) { switchTab("chat"); return setScope("projects", { workspaceId: workspaceId, sessionId: sessionId }); } };
 }());

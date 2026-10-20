@@ -13,6 +13,7 @@ using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.Llm;
+using RNAssistant.Core.Persistence;
 
 namespace RNAssistant.Harness
 {
@@ -104,6 +105,51 @@ namespace RNAssistant.Harness
                 }
             });
         }
+        private static void PluginsSourceChatSessions()
+        {
+            WithPluginPaths(paths => {
+                PluginItemDto item; string firstId, secondId;
+                using (var service = new PluginApplicationService(paths))
+                {
+                    item = PluginFixture(service, paths, false);
+                    var first = service.ChatState(item.PluginId); firstId = first.SessionId;
+                    AssertEqual(item.SourceWorkspaceId, first.Project.WorkspaceId, "source chat uses the common workspace identity");
+                    var workspace = new WorkspaceStore(paths).OpenConnected(item.SourceWorkspaceId);
+                    var session = service.Conversations.GetSession(workspace, firstId);
+                    var message = new ChatMessage { Role = "user", Content = "Первое обсуждение плагина" };
+                    session.Messages.Add(message);
+                    new ChatStore(paths).Commit(session, ConversationCommit.UserInput(message));
+                    var second = service.CreateProjectChat(new ProjectChatRequest { WorkspaceId = item.SourceWorkspaceId, Title = "Второе обсуждение" });
+                    secondId = second.SessionId;
+                    AssertTrue(firstId != secondId && second.Messages.Count == 0, "new chat has a distinct identity and empty history");
+                    var project = service.ProjectChats().Projects.Single(value => value.WorkspaceId == item.SourceWorkspaceId);
+                    AssertEqual(item.PluginId, project.PluginId, "common tree links source chats back to their plugin");
+                    AssertEqual(item.Name, project.Name, "common tree labels source history with the plugin name");
+                    AssertEqual(2, project.Chats.Count, "both conversations appear in the main tree");
+                    AssertEqual(message.Content, service.ProjectChat(new ProjectChatRequest { WorkspaceId = item.SourceWorkspaceId,
+                        SessionId = firstId }).Messages.Single().Text, "creating another chat preserves the first history");
+                    var other = service.CreateProjectWorkspace(new ProjectConnectionRequest { RootPath = Path.Combine(paths.Root, "other") }).SelectedWorkspaceId;
+                    PluginFailure(() => service.ProjectChat(new ProjectChatRequest { WorkspaceId = other, SessionId = secondId }), "project_chat_missing");
+                    PluginFailure(() => service.SubmitProjectChatAsync(new ProjectChatRequest { WorkspaceId = item.SourceWorkspaceId,
+                        SessionId = firstId, Input = new RNAssistant.Runtime.Contracts.WorkspaceSubmitInputRequest { SessionId = secondId, Message = "wrong chat" } },
+                        new AppSettings(), () => "", CancellationToken.None).GetAwaiter().GetResult(), "project_chat_invalid");
+                }
+                using (var reopened = new PluginApplicationService(paths))
+                {
+                    AssertEqual(2, reopened.ProjectChats().Projects.Single(value => value.WorkspaceId == item.SourceWorkspaceId).Chats.Count,
+                        "source chat history survives application restart");
+                    reopened.DeleteProjectChat(new ProjectChatRequest { WorkspaceId = item.SourceWorkspaceId, SessionId = secondId });
+                    AssertEqual(firstId, reopened.ChatState(item.PluginId).SessionId, "reopening uses an existing chat after another is deleted");
+                    PluginFailure(() => reopened.ProjectChat(new ProjectChatRequest { WorkspaceId = item.SourceWorkspaceId, SessionId = secondId }), "project_chat_missing");
+                    reopened.DeleteProjectHistory(new ProjectChatRequest { WorkspaceId = item.SourceWorkspaceId });
+                    var fresh = reopened.ChatState(item.PluginId);
+                    AssertTrue(fresh.SessionId != firstId && fresh.Messages.Count == 0, "explicit reopen after history deletion starts a fresh session");
+                    AssertEqual(1, reopened.ProjectChats().Projects.Single(value => value.WorkspaceId == item.SourceWorkspaceId).Chats.Count,
+                        "explicit source chat reopen restores its workspace in the common tree");
+                }
+            });
+        }
+
         private static void PluginsPanelVisibility()
         {
             WithPluginPaths(paths => {

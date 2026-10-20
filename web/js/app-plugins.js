@@ -2,6 +2,7 @@
   'use strict';
   var items=[],selected=null,candidate=null,view=null,chat=null,busy=false,chatBusy=false,poll=null,epoch=0;
   var previewBusy=false,selecting=false,sourceStamp=null,candidateStamp=null,sourceTimer=null,sourceDebounce=null;
+  var chatComposer=null,pendingChatSend=null,chatEpoch=0;
   var developmentOpen=false,developmentToggle=null;
   var savedIcons=[],selectedIconId='puzzle',customSource=false,editingPlugin=null;
   var frameReady=false,pendingNavigation=null;
@@ -82,7 +83,9 @@
   async function run(action){if(busy)return;busy=true;controls();try{await action();}catch(error){status(error.message,true);}finally{busy=false;controls();}}
   function controls(){['Preview','Apply','Reopen','Disable'].forEach(function(id){el(id).disabled=busy||previewBusy||!selected||
     id==='Apply'&&!candidate||(id==='Reopen'||id==='Disable')&&!selected.enabled;});
-    el('Send').disabled=chatBusy||!selected;el('CreateSubmit').disabled=busy;}
+    if(chatComposer)chatComposer.lock(chatBusy||!chat||!!chat.pendingId||!!(chat.state&&(chat.state.Status||chat.state.status)==='running'));
+    el('ChatNew').disabled=busy||chatBusy||!selected;el('ChatHistory').disabled=!chat;
+    el('Send').disabled=chatBusy||!selected||!chat||!el('Message').value.trim()||!!(chat&&chat.pendingId)||!!(chat&&chat.state&&(chat.state.Status||chat.state.status)==='running');el('CreateSubmit').disabled=busy;}
   async function refresh(){var result=await send('getPlugins',{});items=result.items;var rail=el('Rail');
     if(result.defaultSourceParent)el('DefaultSourcePath').textContent=result.defaultSourceParent;
     if(window.RNAssistantRailPopovers)window.RNAssistantRailPopovers.hide();rail.replaceChildren();items.forEach(function(item){
@@ -114,32 +117,12 @@
   function updateDevelopment(refresh){var open=developmentOpen;el('Chat').hidden=!open;el('DevelopmentSplitter').hidden=!open;
     developmentToggle.sync();
     el('Workbench').classList.toggle('plugin-developing',open);
+    if(open)refreshSplitPanes();
     if(refresh&&open){if(!view||!view.preview)checkAndPreview();else pollSource();}}
-  function bindDevelopmentSplitter(){var handle=el('DevelopmentSplitter'),body=el('Body'),key='rnassistant.plugin.development.width';
-    var ratio=0.56;try{ratio=Number(localStorage.getItem(key))||ratio;}catch(error){}
-    handle.title='Перетащите для изменения ширины. Стрелки — шаг, Enter или двойной щелчок — исходная ширина.';
-    function set(next,persist){var box=body.getBoundingClientRect(),minimum=Math.min(240,box.width/3),maximum=Math.max(minimum,box.width-300);
-      var pixels=Math.max(minimum,Math.min(maximum,next*box.width));ratio=box.width?pixels/box.width:0.56;
-      body.style.setProperty('--plugin-preview-width',(ratio*100).toFixed(2)+'%');
-      handle.setAttribute('aria-valuemin',String(box.width?Math.round(minimum/box.width*100):0));
-      handle.setAttribute('aria-valuemax',String(box.width?Math.round(maximum/box.width*100):100));
-      handle.setAttribute('aria-valuenow',String(Math.round(ratio*100)));
-      handle.setAttribute('aria-valuetext',Math.round(ratio*100)+'% предпросмотру');
-      if(persist)try{localStorage.setItem(key,String(ratio));}catch(error){}
-    }
-    set(ratio,false);new ResizeObserver(function(){if(body.getBoundingClientRect().width)set(ratio,false);}).observe(body);
-    var drag=null;handle.addEventListener('pointerdown',function(event){if(event.button!==0)return;drag={id:event.pointerId,ratio:ratio};handle.setPointerCapture(event.pointerId);handle.classList.add('dragging');event.preventDefault();});
-    handle.addEventListener('pointermove',function(event){if(!drag||event.pointerId!==drag.id)return;var box=body.getBoundingClientRect();set((event.clientX-box.left)/box.width,false);});
-    function finish(cancel){if(!drag)return;var old=drag;drag=null;handle.classList.remove('dragging');if(cancel)set(old.ratio,false);else set(ratio,true);if(handle.hasPointerCapture(old.id))handle.releasePointerCapture(old.id);}
-    handle.addEventListener('pointerup',function(){finish(false);});handle.addEventListener('pointercancel',function(){finish(true);});
-    handle.addEventListener('lostpointercapture',function(){finish(false);});handle.addEventListener('dblclick',function(){set(0.56,true);});
-    document.addEventListener('keydown',function(event){if(drag&&event.key==='Escape'){event.preventDefault();finish(true);}},true);
-    handle.addEventListener('keydown',function(event){if(event.key==='Enter'){set(0.56,true);event.preventDefault();}
-      else if(event.key==='ArrowLeft'||event.key==='ArrowRight'){set(ratio+(event.key==='ArrowLeft'?-0.03:0.03),true);event.preventDefault();}});
-  }
-  async function select(id){selecting=true;switchTab('plugins');try{await run(async function(){epoch++;stopSourceWatch();await closeView();selected=items.find(function(item){return item.pluginId===id;});candidate=null;candidateStamp=null;chat=null;
+  async function select(id,sessionId){selecting=true;switchTab('plugins');try{await run(async function(){epoch++;stopSourceWatch();await closeView();selected=items.find(function(item){return item.pluginId===id;});candidate=null;candidateStamp=null;chat=null;chatEpoch++;
+    if(sessionId){window.RNAssistantWorkspaceChat.rememberSession(selected.sourceWorkspaceId,sessionId);developmentOpen=true;}
     switchTab('plugins');el('Manager').hidden=true;el('Workbench').hidden=false;el('Title').textContent=dataPlugin()?navigation.projectName:selected.name;el('Source').textContent=selected.sourceRoot;
-    el('ChatSource').textContent=selected.sourceRoot;el('ChatSource').title=selected.sourceRoot;el('ChatMessages').replaceChildren();
+    el('ChatSource').textContent=selected.sourceRoot;el('ChatSource').title=selected.sourceRoot;el('ChatMessages').replaceChildren();el('ChatMessages')._chatSignature=null;
     el('Workbench').classList.toggle('plugin-data-templates',dataPlugin());el('Workbench').classList.toggle('split-layout',dataPlugin());el('Project').hidden=!dataPlugin();
     if(typeof refreshSplitPanes==='function')refreshSplitPanes();
     navigation={projectName:'Проект данных',view:'sources',templateId:'',templates:[],expanded:{project:true,templates:true,dictionary:true}};el('ProjectName').textContent=dataPlugin()?selected.name:'';el('Title').textContent=dataPlugin()?navigation.projectName:selected.name;renderNavigation();
@@ -150,26 +133,43 @@
     if(developmentOpen)await checkAndPreview(sourceStamp);
     startSourceWatch();await readChat();});}finally{selecting=false;
       if(selected&&!el('Workbench').hidden&&developmentOpen&&(!view||!view.preview))checkAndPreview(sourceStamp);}}
-  function renderChat(){if(!chat)return;var list=el('ChatMessages'),atBottom=list.scrollHeight-list.scrollTop-list.clientHeight<64;list.replaceChildren();
-    chat.messages.forEach(function(message){var article=document.createElement('article');article.className='message '+(message.role==='user'?'user':'assistant');
-      if(message.text){var body=document.createElement('div');body.className='markdown';body.innerHTML=window.markdown(message.text,{preserveLineBreaks:message.role==='user'});article.appendChild(body);}
-      if(message.actions&&message.actions.length){var actions=document.createElement('span');actions.className='message-actions-summary';actions.textContent='Действия: '+message.actions.join(', ');article.appendChild(actions);}
-      list.appendChild(article);});if(atBottom)list.scrollTop=list.scrollHeight;
-    var s=chat.state||{},running=(s.Status||s.status)==='running';el('ChatStatus').textContent=chat.pendingId?'Нужно подтвердить действие агента.':running?'Агент работает…':'';
-    el('Stop').hidden=!running;el('Approval').hidden=!chat.pendingId;el('ApprovalText').textContent=chat.pendingId ? chat.pendingTool+'\n'+chat.pendingArguments : '';renderQuestions(s.userInput||s.UserInput);}
-  function renderQuestions(input){var form=el('Questions'),set=input&&(input.QuestionSet||input.questionSet);
-    if(!set){form.hidden=true;form.replaceChildren();delete form.dataset.questionSet;return;}
-    if(form.dataset.questionSet===set.questionSetId)return;
-    form.replaceChildren();form.hidden=false;form.dataset.questionSet=set.questionSetId;
-    var fields=set.questions.map(function(question){var group=document.createElement('fieldset'),title=document.createElement('legend');title.textContent=question.prompt;group.appendChild(title);var choices=[];
-      (question.options||[]).forEach(function(option){var label=document.createElement('label'),choice=document.createElement('input');choice.type=question.selection==='multiple'?'checkbox':'radio';choice.name=question.id;choice.value=option.id;label.append(choice,document.createTextNode(option.label));group.appendChild(label);choices.push(choice);});
-      var text=document.createElement('textarea');text.rows=2;text.placeholder='Ваш ответ';text.hidden=!question.allowFreeText;group.appendChild(text);form.appendChild(group);return {question:question,choices:choices,text:text};});
-    var submit=button('Ответить',null);submit.type='submit';form.appendChild(submit);form.onsubmit=function(event){event.preventDefault();var answers={runId:input.RunId||input.runId,questionSetId:set.questionSetId,answers:fields.map(function(field){return {questionId:field.question.id,optionIds:field.choices.filter(function(choice){return choice.checked;}).map(function(choice){return choice.value;}),freeText:field.text.value};})};
-      chatAction(function(id){return send('submitPluginChat',{pluginId:id,input:{RequestId:crypto.randomUUID(),Answers:answers}});});};
+  function renderChat(){if(!chat)return;
+    el('ChatTitle').textContent=chat.state.title||chat.state.Title||'Чат исходников';
+    el('ChatTitle').title=el('ChatTitle').textContent;
+    window.RNAssistantWorkspaceChat.renderMessages(el('ChatMessages'),chat);
+    var s=chat.state||{},running=(s.Status||s.status)==='running';
+    el('ChatStatus').textContent=chat.pendingId?'Нужно подтвердить действие агента.':
+      s.interruptedEffectPossible?'Возможное изменение требует проверки. Не повторяйте действие автоматически.':
+      (s.Status||s.status)==='interrupted'?'Выполнение прервано. Проверьте ход работы.':running?'Агент работает…':'';
+    el('Stop').hidden=!running;el('Approval').hidden=!chat.pendingId;
+    el('ApprovalText').textContent=chat.pendingId ? chat.pendingTool+'\n'+chat.pendingArguments : '';
+    chatComposer.select(chat.sessionId,s);
+    window.RNAssistantWorkspaceChat.renderQuestions(el('Questions'),s.userInput||s.UserInput,function(answers){
+      return chatAction(function(workspaceId,sessionId){return send('submitProjectChat',{workspaceId:workspaceId,sessionId:sessionId,input:{sessionId:sessionId,requestId:crypto.randomUUID(),answers:answers}});});});
+    controls();
   }
-  async function readChat(){if(!selected)return;var id=selected.pluginId,value=await send('getPluginChat',{pluginId:id});if(selected&&id===selected.pluginId){chat=value;renderChat();}}
-  async function chatAction(action){if(chatBusy||!selected)return;chatBusy=true;controls();var id=selected.pluginId;poll=setInterval(function(){readChat().catch(function(error){el('ChatStatus').textContent=error.message;});},1200);
-    try{var result=await action(id);if(selected&&selected.pluginId===id){chat=result;renderChat();}}catch(error){el('ChatStatus').textContent=error.message;}finally{clearInterval(poll);chatBusy=false;controls();}}
+  async function readChat(sessionId){if(!selected)return;
+    var id=selected.pluginId,workspaceId=selected.sourceWorkspaceId,current=chatEpoch;
+    var remember=!sessionId;sessionId=sessionId||window.RNAssistantWorkspaceChat.selectedSession(workspaceId);
+    var value=await send(sessionId?'getProjectChat':'getPluginChat',sessionId?{workspaceId:workspaceId,sessionId:sessionId}:{pluginId:id});
+    if(selected&&id===selected.pluginId&&current===chatEpoch){chat=value;
+      if(remember)window.RNAssistantWorkspaceChat.rememberSession(workspaceId,value.sessionId);renderChat();}}
+  async function createChat(){if(chatBusy||busy||!selected)return;
+    var id=selected.pluginId,workspaceId=selected.sourceWorkspaceId,current=++chatEpoch;
+    chatBusy=true;controls();
+    try{var value=await send('createProjectChat',{workspaceId:workspaceId,title:'Новый чат'});
+      if(selected&&selected.pluginId===id&&current===chatEpoch){chat=value;pendingChatSend=null;
+        window.RNAssistantWorkspaceChat.rememberSession(workspaceId,value.sessionId);renderChat();el('Message').focus();}}
+    catch(error){if(current===chatEpoch)el('ChatStatus').textContent=error.message;}
+    finally{chatBusy=false;controls();}}
+  async function chatAction(action){if(chatBusy||!selected||!chat)return;
+    var id=selected.pluginId,workspaceId=chat.project.workspaceId,sessionId=chat.sessionId,current=chatEpoch;
+    function active(){return selected&&selected.pluginId===id&&chat&&chat.sessionId===sessionId&&current===chatEpoch;}
+    chatBusy=true;controls();
+    poll=setInterval(function(){if(active())readChat(sessionId).catch(function(error){if(active())el('ChatStatus').textContent=error.message;});},1200);
+    try{var result=await action(workspaceId,sessionId);if(active()){chat=result;renderChat();}}
+    catch(error){if(active())el('ChatStatus').textContent=error.message;}
+    finally{clearInterval(poll);chatBusy=false;controls();}}
   function setIconEditor(open){el('IconEditor').hidden=!open;el('IconTrigger').setAttribute('aria-expanded',String(open));
     if(!open&&el('IconEditor').contains(document.activeElement))el('IconTrigger').focus();}
   function updateSourceLocation(){var connecting=el('Connect').checked,manual=connecting||customSource;
@@ -249,7 +249,6 @@
   }
   function bind(){
     registerRailPopovers();
-    bindDevelopmentSplitter();
     new MutationObserver(syncAppearance).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme','data-accent']});
     el('Project').onclick=function(){var frame=el('PreviewMount').querySelector('iframe');if(frame&&frame.contentWindow)frame.contentWindow.postMessage({type:'rna.dataTemplates.project'},'*');};
     el('NavigationProject').onclick=function(){el('Project').click();};
@@ -276,7 +275,7 @@
         if(task)message+='Создай плагин по задаче: '+task+'. ';
         if(iconBrief)message+='Нарисуй SVG-иконку по описанию: '+iconBrief+'. Создай icon.svg, добавь его в files и укажи в plugin.json. ';
         message+='После изменений проверь пакет и предпросмотр; применяй только после подтверждения.';
-        el('Message').value=message;el('ChatForm').requestSubmit();}
+        el('Message').value=message;el('Message').dispatchEvent(new Event('input',{bubbles:true}));el('ChatForm').requestSubmit();}
       el('CreateForm').reset();el('IconDescription').value='';el('IconImportName').value='';el('IconImportSvg').value='';
       selectedIconId='puzzle';customSource=false;renderIconChoices();el('Connect').onchange();
     });};
@@ -301,9 +300,26 @@
       else developmentToggle.setOpen(false);
       event.preventDefault();event.stopPropagation();
     });
-    el('ChatForm').onsubmit=function(event){event.preventDefault();var message=el('Message').value.trim();if(!message)return;el('Message').value='';chatAction(function(id){return send('submitPluginChat',{pluginId:id,input:{Message:message,Mode:'agent',RequestId:crypto.randomUUID()}});});};
-    el('Stop').onclick=async function(){if(!chat||!selected)return;var s=chat.state;try{chat=await send('cancelPluginChat',{pluginId:selected.pluginId,runId:s.RunId||s.runId,cursor:s.Cursor||s.cursor});renderChat();}catch(error){el('ChatStatus').textContent=error.message;}};
-    ['Approve','Reject'].forEach(function(id){el(id).onclick=function(){var pending=chat.pendingId;chatAction(function(plugin){return send('resolvePluginChat',{pluginId:plugin,pendingId:pending,approve:id==='Approve'});});};});
+    chatComposer=window.RNAssistantWorkspaceChat.bindComposer(el('ChatForm'));
+    el('Message').addEventListener('input',controls);
+    el('ChatNew').onclick=createChat;
+    el('ChatHistory').onclick=function(){if(chat)window.RNAssistantProjectChats.open(chat.project.workspaceId,chat.sessionId);};
+    el('ChatForm').onsubmit=function(event){event.preventDefault();var message=el('Message').value.trim();
+      if(!message||el('Send').disabled||!chat)return;
+      var sessionId=chat.sessionId,options=chatComposer.options();
+      if(!pendingChatSend||pendingChatSend.sessionId!==sessionId||pendingChatSend.message!==message||JSON.stringify(pendingChatSend.options)!==JSON.stringify(options))
+        pendingChatSend={sessionId:sessionId,message:message,options:options,requestId:crypto.randomUUID()};
+      var request=pendingChatSend;
+      chatAction(function(workspaceId){return send('submitProjectChat',{workspaceId:workspaceId,sessionId:sessionId,
+        input:Object.assign({sessionId:sessionId,message:message,requestId:request.requestId},request.options)}).then(function(result){
+        chatComposer.accepted(sessionId,message);if(pendingChatSend===request)pendingChatSend=null;return result;});});};
+    el('Stop').onclick=async function(){if(!chat||!selected)return;
+      var sessionId=chat.sessionId,workspaceId=chat.project.workspaceId,current=chatEpoch,s=chat.state;
+      try{var result=await send('cancelProjectChat',{workspaceId:workspaceId,sessionId:sessionId,runId:s.RunId||s.runId,cursor:s.Cursor||s.cursor});
+        if(chat&&chat.sessionId===sessionId&&current===chatEpoch){chat=result;renderChat();}}
+      catch(error){if(current===chatEpoch)el('ChatStatus').textContent=error.message;}};
+    ['Approve','Reject'].forEach(function(id){el(id).onclick=function(){if(!chat)return;var pending=chat.pendingId;
+      chatAction(function(workspaceId,sessionId){return send('resolveProjectChat',{workspaceId:workspaceId,sessionId:sessionId,pendingId:pending,approve:id==='Approve'});});};});
     el('VendorsRefresh').onclick=function(){run(async function(){var catalog=await send('getPluginVendors',{});el('Vendors').replaceChildren();catalog.items.forEach(function(item){var row=document.createElement('p');row.textContent=item.id+' @ '+item.version+' · '+item.license;el('Vendors').appendChild(row);});status('Каталог обновлён. Проверка хешей выполняется при разрешении зависимости.');});};
     el('VendorImport').onclick=function(){run(async function(){var result=await send('importPluginVendor',{rootPath:el('VendorRoot').value});status('Добавлен '+result.id+' @ '+result.version);});};controls();
   }

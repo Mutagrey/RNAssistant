@@ -39,9 +39,6 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.RemovePlugin: return await Plugins.RemoveAsync(Payload<PluginIdRequest>(payload).PluginId);
                     case BridgeOperationId.RestorePlugin: return Plugins.Restore(Payload<PluginIdRequest>(payload).PluginId);
                     case BridgeOperationId.GetPluginChat: return Plugins.ChatState(Payload<PluginIdRequest>(payload).PluginId);
-                    case BridgeOperationId.SubmitPluginChat: return await Plugins.SubmitChatAsync(Payload<PluginChatRequest>(payload),settings.Load(),settings.LoadApiKey,token);
-                    case BridgeOperationId.ResolvePluginChat: case BridgeOperationId.CancelPluginChat:
-                        return await Plugins.ControlChatAsync(Payload<PluginChatControlRequest>(payload),operation==BridgeOperationId.CancelPluginChat,settings.Load(),settings.LoadApiKey,token);
                     case BridgeOperationId.GetPluginVendors: return new PluginVendorCatalogDto {Items=Plugins.Vendors.List()};
                     case BridgeOperationId.ImportPluginVendor: return Plugins.Vendors.Import(Payload<PluginConnectRequest>(payload).RootPath);
                     case BridgeOperationId.ResolveHtmlVendor: return Plugins.ResolveHtmlVendor(Payload<PluginVendorRequest>(payload));

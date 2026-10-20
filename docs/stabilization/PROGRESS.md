@@ -116,6 +116,35 @@ switching to another workbook while awaiting approval and a fault after possible
 write. Verify target identity, one narration, explicit unknown and no automatic replay.
 Use the same trace to distinguish actual source read-back from VBA compilation.
 
+## Plugin source chat history — 2026-10-20
+
+The plugin header now creates separate source-workspace sessions with `+` and
+opens their shared history in the main Projects tree. A tree action returns the
+chosen session to the plugin; selection and drafts remain scoped to the session,
+and late replies cannot replace another selection. `PluginApplicationService`
+only bootstraps the source chat; existing project contracts and workspace storage
+own its lifecycle. The private plugin session cache and chat-control routes are
+removed. Nested chat headers no longer reserve space for the navigation toggle.
+All 9 focused plugin Harness cases and the Chromium workspace-chat flow pass,
+including history persistence, deletion/reopening and 390/750/1360 px header
+geometry. Screenshots were visually reviewed in the local mock preview;
+Windows/Office/WebView2 delivery remains unverified.
+
+## Shared workspace chat and plugin appearance — 2026-10-20
+
+Plugin/workspace chats now reuse the Office message/Markdown/empty-state renderer,
+composer geometry and input sizing, with shared workspace questions and controls.
+Drafts survive failed delivery and stay scoped to their session. The rail hover
+menu opens the shared name/icon editor; verified registry appearance updates keep
+source, publication and live instances intact. Ordinary outline SVG shapes and
+stroke attributes now pass bounded admission and normalize to registry paths;
+generation keeps SVG output, a larger completion budget and one diagnostic repair.
+Navigation, inspector and plugin development dividers share one splitter component;
+the plugin-specific track and duplicate drag handlers are removed.
+Focused plugin Harness and Chromium checks cover admission, persisted appearance,
+drafts and visual parity. Real-provider generation and Windows/Office/WebView2
+delivery remain open evidence; screenshots use the local mock preview.
+
 ## Shared panel controls — 2026-10-20
 
 Navigation, chat inspector and plugin source chat use one panel-toggle component,

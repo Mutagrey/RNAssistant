@@ -78,8 +78,8 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
         case 'drawPluginIcon':assert.equal(payload.description,'Таблица с восходящей линией');drawCalls++;{const saved={id:'icon-drawn',name:payload.name,paths:['M3 4h18v16H3z','M3 10h18M9 4v16']};savedIcons=[saved];return saved;}
         case 'createPlugin':assert.equal(payload.name,'Example');assert.equal(payload.rootPath,null);assert.equal(payload.iconId,'icon-drawn');assert.equal(payload.iconDescription,'');return {...item};
         case 'getPluginSourceState':return {pluginId:payload.pluginId,stamp:'source-'+version};
-        case 'getPluginChat':return {messages:[{role:'assistant',text:'Исходники готовы к изменению.'}],state:{Status:'idle'}};
-        case 'submitPluginChat':iconPrompt=payload.input.Message;return {messages:[{role:'assistant',text:'SVG-иконка смоделирована.'}],state:{Status:'completed'}};
+        case 'getPluginChat':case 'getProjectChat':return {project:{workspaceId:'source-1'},sessionId:'source-chat-1',messages:[{role:'assistant',text:'Исходники готовы к изменению.'}],state:{Status:'idle'}};
+        case 'submitProjectChat':assert.equal(payload.sessionId,'source-chat-1');assert.equal(payload.input.sessionId,payload.sessionId);iconPrompt=payload.input.message;return {project:{workspaceId:'source-1'},sessionId:payload.sessionId,messages:[{role:'assistant',text:'SVG-иконка смоделирована.'}],state:{Status:'completed'}};
         case 'checkPlugin':candidate='candidate-'+version;return {candidateId:candidate,files:3,bytes:100};
         case 'applyPlugin':assert.equal(payload.candidateId,candidate);active=version;item.releaseId='release-'+version;item.enabled=true;item.icon='icon.svg';item.iconPaths=['M4 18V6h3v12M10 18v-7h3v7M16 18V4h3v14'];return {...item};
         case 'openPlugin':{const origin='https://view-'+(++sequence)+'.rnassistant-plugin.invalid';realms.set(origin,{origin,files:fixture(payload.candidateId?'preview-v'+version:'v'+active)});return {instanceId:origin,entryUrl:origin+'/index.html',releaseId:'release-'+version,preview:!!payload.candidateId};}

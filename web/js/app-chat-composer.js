@@ -254,7 +254,10 @@ function updateSendButtonAvailability(hasContent) {
 }
 
 function resizeChatInput() {
-  var input = $("chatInput");
+  resizeComposerInput($("chatInput"));
+}
+
+function resizeComposerInput(input) {
   if (!input) {
     return;
   }

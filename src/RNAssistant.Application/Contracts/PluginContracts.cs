@@ -11,14 +11,6 @@ using RNAssistant.Runtime.Contracts;
 namespace RNAssistant.Application.Contracts
 {
     public sealed class PluginCloseRequest { [JsonProperty("instanceId")] public string InstanceId { get; set; } }
-    public sealed class PluginChatControlRequest
-    {
-        [JsonProperty("pluginId")] public string PluginId { get; set; }
-        [JsonProperty("pendingId")] public string PendingId { get; set; }
-        [JsonProperty("approve")] public bool Approve { get; set; }
-        [JsonProperty("runId")] public string RunId { get; set; }
-        [JsonProperty("cursor")] public string Cursor { get; set; }
-    }
     public sealed class PluginVendorRequest
     { [JsonProperty("id")] public string Id { get; set; } [JsonProperty("version")] public string Version { get; set; } }
     public sealed class PluginVendorCatalogDto { [JsonProperty("items")] public IReadOnlyList<VendorManifestV1> Items { get; set; } }
@@ -113,21 +105,6 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("entryUrl")] public string EntryUrl { get; set; }
         [JsonProperty("preview")] public bool Preview { get; set; }
     }
-    public sealed class PluginChatRequest
-    {
-        [JsonProperty("pluginId")] public string PluginId { get; set; }
-        [JsonProperty("input")] public WorkspaceSubmitInputRequest Input { get; set; }
-    }
-    public sealed class PluginChatStateDto
-    {
-        [JsonProperty("pluginId")] public string PluginId { get; set; }
-        [JsonProperty("sessionId")] public string SessionId { get; set; }
-        [JsonProperty("state")] public WorkspaceSessionSnapshot State { get; set; }
-        [JsonProperty("pendingId")] public string PendingId { get; set; }
-        [JsonProperty("pendingTool")] public string PendingTool { get; set; }
-        [JsonProperty("pendingArguments")] public string PendingArguments { get; set; }
-        [JsonProperty("messages")] public IReadOnlyList<PluginChatMessageDto> Messages { get; set; }
-    }
     public sealed class PluginChatMessageDto
     {
         [JsonProperty("role")] public string Role { get; set; }
@@ -152,6 +129,7 @@ namespace RNAssistant.Application.Contracts
     }
     public sealed class ProjectChatProjectDto
     {
+        [JsonProperty("pluginId", NullValueHandling = NullValueHandling.Ignore)] public string PluginId { get; set; }
         [JsonProperty("workspaceId")] public string WorkspaceId { get; set; }
         [JsonProperty("name")] public string Name { get; set; }
         [JsonProperty("rootPath")] public string RootPath { get; set; }

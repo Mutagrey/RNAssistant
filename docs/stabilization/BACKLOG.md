@@ -37,6 +37,18 @@ Owner: `tests/web/skills-contract.test.js`. Выборочный запуск п
 проходит через `applyChatState`/`applyLibraryCatalogState`. Сверить assertion с
 действующим путём и сохранить negative controls в отдельной правке теста.
 
+## UI fixtures настроек модели — 2026-10-20
+
+Owner: web tests / model settings UI. В текущем рабочем дереве `plugins.test.js`
+останавливается до сценариев плагина: подпись общего меню настроек теперь содержит
+статус модели (`Настройки—`), а assertion ожидает только `Настройки`.
+`chat-composer-layout.test.js` проходит начальные проверки composer, затем fixture
+настроек не предоставляет `formModel`, используемый `renderContextWindowSummary`.
+Согласовать fixtures с текущим UI настроек отдельной правкой. Адресные
+`workspace-chat-layout.test.js`, `splitter-preferences.test.js` и
+`product-shell-parity.test.js` проходят; это не результат полного web suite.
+
+
 ## CLI smoke fixtures lag current admission contracts — 2026-10-14
 
 Owner: workspace CLI tests. On isolated `3cb0b69f` plus the explicit completion

@@ -33,7 +33,6 @@ namespace RNAssistant.Application
         private readonly Dictionary<string, PluginInstance> _instances = new Dictionary<string, PluginInstance>();
         private readonly Dictionary<string, PluginDataGrant> _data = new Dictionary<string, PluginDataGrant>();
         private readonly Dictionary<string, PluginInstance> _calls = new Dictionary<string, PluginInstance>();
-        private readonly Dictionary<string, string> _chatIds = new Dictionary<string, string>();
         private readonly HashSet<string> _revoked = new HashSet<string>();
         private bool _disposed;
         private Task _closing;
@@ -170,7 +169,7 @@ namespace RNAssistant.Application
                 RequireOpen();
                 if (_instances.Count != 0 || _calls.Count != 0) throw new PluginException("plugins_busy", "Plugin instances must drain before runtime clear.");
                 foreach (var grant in _data.Values) grant.Dispose();
-                _data.Clear(); _candidates.Clear(); _chatIds.Clear(); _revoked.Clear();
+                _data.Clear(); _candidates.Clear(); _revoked.Clear();
                 Conversations = new WorkspaceConversationService(_paths, _webHost, CaptureTools);
             }
         }
@@ -548,24 +547,20 @@ namespace RNAssistant.Application
                 return instance;
             }
         }
-        public PluginChatStateDto ChatState(string pluginId)
+        public ProjectChatStateDto ChatState(string pluginId)
         {
             using (PluginStore.AcquireRuntimeUse(_paths)) lock (_sync)
             {
-                var source = Source(RequireRegistration(pluginId)); string sessionId;
-                if (!_chatIds.TryGetValue(pluginId, out sessionId))
-                {
-                    var previous = Conversations.ListSessions(source.Workspace).FirstOrDefault();
-                    sessionId = previous?.Id ?? Conversations.CreateSession(source.Workspace, "Разработка: " + RequireRegistration(pluginId).Name).Id;
-                    _chatIds[pluginId] = sessionId;
-                }
-                var session = Conversations.GetSession(source.Workspace, sessionId);
-                return new PluginChatStateDto { PluginId = pluginId, SessionId = sessionId,
-                    PendingId = session.LastRun?.KernelState?.Summary?.PendingConfirmation?.PendingId,
-                    PendingTool = session.LastRun?.KernelState?.Summary?.PendingConfirmation?.Call?.Name,
-                    PendingArguments = session.LastRun?.KernelState?.Summary?.PendingConfirmation?.Call?.ArgumentsJson,
-                    State = Conversations.ReadState(source.Workspace, sessionId), Messages = session.Messages.Where(message => message.Role == "user" || message.Role == "assistant")
-                        .Reverse().Take(100).Reverse().Select(PresentWorkspaceMessage).ToArray() };
+                RequireOpen();
+                var registration = RequireRegistration(pluginId);
+                var source = Source(registration);
+                // Opening development explicitly restores its workspace in the common chat tree.
+                var workspace = _workspaces.ConnectProject(source.Workspace.RootPath, false);
+                if (workspace.WorkspaceId != registration.SourceWorkspaceId)
+                    throw new PluginException("plugin_source_changed", "Source workspace identity changed.");
+                var sessionId = Conversations.ListSessions(workspace).FirstOrDefault()?.Id ??
+                    Conversations.CreateSession(workspace, "Разработка: " + (registration.Appearance?.Name ?? registration.Name)).Id;
+                return ProjectChat(new ProjectChatRequest { WorkspaceId = workspace.WorkspaceId, SessionId = sessionId });
             }
         }
         internal static PluginChatMessageDto PresentWorkspaceMessage(ChatMessage message)
@@ -580,32 +575,6 @@ namespace RNAssistant.Application
             }
             return new PluginChatMessageDto { Role = message.Role, Text = message.Content };
         }
-        public async Task<PluginChatStateDto> SubmitChatAsync(PluginChatRequest request, AppSettings settings, Func<string> key, CancellationToken token)
-        {
-            using (PluginStore.AcquireRuntimeUse(_paths))
-            {
-            var state = ChatState(request.PluginId); var source = Source(RequireRegistration(request.PluginId));
-            if (request.Input == null || request.Input.SessionId != null && request.Input.SessionId != state.SessionId)
-                throw new PluginException("plugin_chat_changed", "The development chat changed.");
-            request.Input.SessionId = state.SessionId;
-            await Conversations.SubmitInputAsync(source.Workspace, request.Input, settings, key, cancellationToken: token).ConfigureAwait(false);
-            return ChatState(request.PluginId);
-            }
-        }
-
-        public async Task<PluginChatStateDto> ControlChatAsync(PluginChatControlRequest request, bool cancel, AppSettings settings, Func<string> key, CancellationToken token)
-        {
-            using (PluginStore.AcquireRuntimeUse(_paths))
-            {
-            var state = ChatState(request.PluginId); var source = Source(RequireRegistration(request.PluginId));
-            if (cancel) await Conversations.CancelRunAsync(source.Workspace, new RNAssistant.Runtime.Contracts.WorkspaceRunControlRequest {
-                SessionId = state.SessionId, RunId = request.RunId, Cursor = request.Cursor }, token).ConfigureAwait(false);
-            else await Conversations.ResolvePendingAsync(source.Workspace, state.SessionId, request.PendingId, request.Approve, settings, key,
-                cancellationToken: token, modelDigest: Conversations.GetSession(source.Workspace,state.SessionId).LastRun?.ModelConfiguration?.Digest).ConfigureAwait(false);
-            return ChatState(request.PluginId);
-            }
-        }
-
         private WorkspaceDescriptor RequireProjectWorkspace(string workspaceId)
         {
             if (string.IsNullOrWhiteSpace(workspaceId))
@@ -625,7 +594,13 @@ namespace RNAssistant.Application
         {
             using (PluginStore.AcquireRuntimeUse(_paths))
             {
-                return new ProjectChatCatalogDto { Projects = Conversations.ListConnectedWorkspaces().Select(ProjectChatProject).ToArray() };
+                var plugins = _store.List().Where(item => !item.Hidden).ToArray();
+                return new ProjectChatCatalogDto { Projects = Conversations.ListConnectedWorkspaces().Select(connection => {
+                    var project = ProjectChatProject(connection);
+                    var plugin = plugins.FirstOrDefault(item => item.SourceWorkspaceId == project.WorkspaceId);
+                    if (plugin != null) { project.PluginId = plugin.PluginId; project.Name = plugin.Appearance?.Name ?? plugin.Name; }
+                    return project;
+                }).ToArray() };
             }
         }
 

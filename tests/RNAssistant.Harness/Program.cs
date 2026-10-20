@@ -45,6 +45,7 @@ namespace RNAssistant.Harness
             {
                 Test("plugins: immutable publications and independent grants", PluginsPublishAndSeparateAuthority),
                 Test("plugins: panel removal preserves and restores publication", PluginsPanelVisibility),
+                Test("plugins: source chats share project history", PluginsSourceChatSessions),
                 Test("plugins: text-authored SVG icons stay scoped and safe", PluginsSvgIcon),
                 Test("plugins: commands pin releases and cancel", PluginsCommandsPinAndCancel),
                 Test("plugins: vendor resolution is separate from admission", PluginsVendorResolutionAndAdmission),

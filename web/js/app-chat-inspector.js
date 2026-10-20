@@ -251,48 +251,29 @@
     sync();
   }
 
-  function setWidth(value, persist) {
+  function widthBounds() {
     var layout = document.getElementById("chatLayout");
     var available = layout ? layout.clientWidth : window.innerWidth;
-    width = Math.max(220, Math.min(480, Math.min(value, available - 330)));
+    return { min: 220, max: Math.max(220, Math.min(480, available - 330)) };
+  }
+
+  function setWidth(value, persist) {
+    var layout = document.getElementById("chatLayout"), bounds = widthBounds();
+    width = Math.max(bounds.min, Math.min(bounds.max, value));
     if (layout) layout.style.setProperty("--inspector-width", width + "px");
+    window.RNAssistantSplitter.update(document.getElementById("chatInspectorSplitter"), width, bounds);
     if (persist) try { window.localStorage.setItem(widthKey, String(width)); } catch (error) { /* Optional. */ }
   }
 
   function bindResize() {
     var divider = document.getElementById("chatInspectorSplitter");
-    var drag = null;
-    if (!divider) return;
-    divider.tabIndex = 0;
-    divider.addEventListener("pointerdown", function (event) {
-      if (event.button !== 0 || !open || window.innerWidth <= 1100) return;
-      event.preventDefault();
-      divider.setPointerCapture(event.pointerId);
-      drag = { id: event.pointerId, x: event.clientX, width: width };
-      document.body.classList.add("resizing-pane");
-    });
-    divider.addEventListener("pointermove", function (event) {
-      if (drag && event.pointerId === drag.id) setWidth(drag.width + drag.x - event.clientX, false);
-    });
-    function finish() {
-      if (!drag) return;
-      drag = null;
-      document.body.classList.remove("resizing-pane");
-      setWidth(width, true);
-    }
-    divider.addEventListener("pointerup", finish);
-    divider.addEventListener("pointercancel", finish);
-    divider.addEventListener("lostpointercapture", finish);
-    divider.addEventListener("dblclick", function () { setWidth(292, true); });
-    divider.addEventListener("keydown", function (event) {
-      var step = event.shiftKey ? 40 : 12;
-      if (event.key === "ArrowLeft") setWidth(width + step, true);
-      else if (event.key === "ArrowRight") setWidth(width - step, true);
-      else if (event.key === "Home") setWidth(220, true);
-      else if (event.key === "End") setWidth(480, true);
-      else if (event.key === "Enter") setWidth(292, true);
-      else return;
-      event.preventDefault();
+    window.RNAssistantSplitter.bind(divider, {
+      getValue: function () { return width; },
+      setValue: setWidth,
+      bounds: widthBounds,
+      defaultValue: function () { return 292; },
+      direction: -1,
+      enabled: function () { return open && window.innerWidth > 1100; }
     });
   }
 

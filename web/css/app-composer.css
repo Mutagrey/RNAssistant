@@ -391,6 +391,9 @@
   max-width: min(292px, 32vw);
 }
 
+.composer .workspace-chat-model { border: 0; background: transparent; box-shadow: none; }
+.composer .workspace-chat-model:hover { background: var(--composer-control-hover); }
+
 .composer-model-picker .composer-picker-trigger {
   max-width: 100%;
 }

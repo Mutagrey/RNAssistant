@@ -218,7 +218,7 @@ function promptSuggestionButton(text) {
   return button;
 }
 
-function renderChatEmptyState() {
+function renderChatEmptyState(options) {
   var empty = document.createElement("div");
   empty.className = "chat-empty";
 
@@ -229,17 +229,22 @@ function renderChatEmptyState() {
 
   var title = document.createElement("div");
   title.className = "chat-empty-title";
-  title.textContent = state.bridgeUnavailable ? "Откройте панель из Office" :
+  title.textContent = options ? options.title : state.bridgeUnavailable ? "Откройте панель из Office" :
     "Готов к работе с документом";
   empty.appendChild(title);
 
   var text = document.createElement("div");
   text.className = "chat-empty-text";
-  text.textContent = state.bridgeUnavailable
+  text.textContent = options ? options.text : state.bridgeUnavailable
     ? "Статический UI загружен, но WebView bridge RNAssistant недоступен. Чаты, контекст и инструменты заработают внутри add-in."
     : "Выберите контекст или задайте вопрос по текущему Office-файлу.";
   empty.appendChild(text);
 
+  if (options) {
+    if (options.button) { var customSuggestions = document.createElement("div"); customSuggestions.className = "chat-empty-suggestions";
+      customSuggestions.appendChild(options.button); empty.appendChild(customSuggestions); }
+    return empty;
+  }
   if (state.bridgeUnavailable) {
     return empty;
   }
@@ -455,11 +460,20 @@ function renderCompactionArticle(message, activity) {
   return node;
 }
 
-function renderMessageArticle(message, index) {
+function renderMessageArticle(message, index, options) {
+  options = options || {};
   var node = document.createElement("article");
   node.className = "message " + messageRole(message) + (message.Pending ? " pending" : "") +
     (message.Failed ? " failed" : "");
   if (messageRole(message) === "assistant") node.setAttribute("aria-label", "Ответ агента");
+  if (options.workspace) {
+    appendChatMessageText(node, message);
+    var footer = document.createElement("div"); footer.className = "message-footer";
+    var actions = document.createElement("div"); actions.className = "message-actions";
+    actions.appendChild(smallIconButton("Копировать сообщение", "copy", function () { copyChatMessage(messageContent(message)); }));
+    footer.appendChild(actions); node.appendChild(footer);
+    return node;
+  }
   var activity = messageActivity(message);
   if (activity) {
     if (activityKind(activity) === "compaction" && activityStatus(activity) === "completed") {
@@ -495,16 +509,17 @@ function renderMessageArticle(message, index) {
 
   if (typeof appendMessageReasoning === "function") appendMessageReasoning(node, message);
 
-  var body = document.createElement("div");
-  body.className = "markdown";
+  appendChatMessageText(node, message);
+  appendMessageFooter(node, message, index, null);
+  return node;
+}
+
+function appendChatMessageText(node, message) {
+  var body = document.createElement("div"); body.className = "markdown";
   var content = messageContent(message);
   body.innerHTML = markdown(content, { preserveLineBreaks: messageRole(message) === "user" });
   node.appendChild(body);
-  appendMessageFooter(node, message, index, null);
-
   enhanceMarkdown(body, { enableJsonViewer: true, sourceText: content });
-
-  return node;
 }
 
 function liveAgentActivities() {

@@ -53,10 +53,10 @@
   var projectMessages = { "preview-project-review": [], "preview-project-clean": [] };
   if (dataProject) projectMessages["preview-plan-chat"] = [];
   var projectRuns = Object.create(null), projectRequests = Object.create(null);
-  var pluginItem = { pluginId: "data-templates", name: "Данные и шаблоны", icon: "dataTemplates",
+  var pluginItem = { pluginId: "data-templates", sourceWorkspaceId: "preview-plugin-workspace", name: "Данные и шаблоны", icon: "dataTemplates",
     sourceRoot: "Локальный демонстрационный плагин", releaseId: "preview-release-1", enabled: true,
     previewSimulated: true };
-  var extraPlugins = [], extraPluginMessages = Object.create(null), pluginCandidateOwner = null;
+  var extraPlugins = [], pluginCandidateOwner = null;
   var pluginSourceRevision = Object.create(null);
   var savedPluginIcons = [], pluginIconSequence = 0;
   function validatedPluginIconPaths(svg) {
@@ -75,7 +75,6 @@
     return paths.map(function (path) { return path.getAttribute("d"); });
   }
   var pluginCandidate = null, pluginInstanceSequence = 0;
-  var pluginMessages = [], pluginRun = null, pluginRequestIds = Object.create(null);
   var inboxRevision = 1, inputSequence = 0, inputReceipts = Object.create(null);
   var tool = null;
   var toolSourceText = "";
@@ -192,7 +191,12 @@
       items: [], receipts: [], acceptedInput: receipt || null };
   }
   function projectCatalog(selectedWorkspaceId) {
-    return { projects: clone(workspaceProjects), selectedWorkspaceId: selectedWorkspaceId || null };
+    var projects = clone(workspaceProjects);
+    projects.forEach(function (entry) {
+      var plugin = [pluginItem].concat(extraPlugins).find(function (item) { return item.sourceWorkspaceId === entry.workspaceId && !item.hidden; });
+      if (plugin) { entry.pluginId = plugin.pluginId; entry.name = plugin.name; } else delete entry.pluginId;
+    });
+    return { projects: projects, selectedWorkspaceId: selectedWorkspaceId || null };
   }
   function requireWorkspace(payload) {
     var entry = workspaceProjects.find(function (item) { return item.workspaceId === payload.workspaceId; });
@@ -214,12 +218,21 @@
       messages: clone(projectMessages[chat.Id] || []) };
   }
   function pluginChatState(pluginId) {
-    var data = !pluginId || pluginId === pluginItem.pluginId, run = data ? pluginRun : null;
-    return { pluginId: pluginId || pluginItem.pluginId, sessionId: "preview-plugin-source-chat",
-      state: { Status: run ? "running" : "completed", RunId: run && run.runId || null,
-        Cursor: run && run.cursor || "preview-plugin-cursor", userInput: null },
-      pendingId: null, pendingTool: null, pendingArguments: null,
-      messages: clone(data ? pluginMessages : extraPluginMessages[pluginId] || []) };
+    var plugin = [pluginItem].concat(extraPlugins).find(function (item) { return item.pluginId === pluginId && !item.hidden; });
+    if (!plugin) fail("Плагин примера отсутствует.");
+    var entry = workspaceProjects.find(function (item) { return item.workspaceId === plugin.sourceWorkspaceId; });
+    if (!entry) {
+      entry = hiddenWorkspaceProjects.find(function (item) { return item.workspaceId === plugin.sourceWorkspaceId; }) ||
+        { workspaceId: plugin.sourceWorkspaceId, rootPath: plugin.sourceRoot, available: true, chats: [] };
+      hiddenWorkspaceProjects = hiddenWorkspaceProjects.filter(function (item) { return item !== entry; });
+      workspaceProjects.push(entry);
+    }
+    entry.pluginId = pluginId; entry.name = plugin.name;
+    if (!entry.chats.length) {
+      var chat = { Id: "preview-project-" + (++projectChatSequence), Title: "Разработка: " + plugin.name, RunStatus: "" };
+      entry.chats.unshift(chat); projectMessages[chat.Id] = [];
+    }
+    return projectChatState({ workspaceId: entry.workspaceId, sessionId: entry.chats[0].Id });
   }
   function emit(response) { listeners.forEach(function (listener) { listener({ data: response }); }); }
   function emitChatState(chatId) {
@@ -560,7 +573,8 @@
         newPlugin.icon = selectedIcon ? "icon.svg" : payload.iconId;
         if (selectedIcon) newPlugin.iconPaths = selectedIcon.paths.slice();
       }
-      extraPlugins.push(newPlugin); extraPluginMessages[newPlugin.pluginId] = [];
+      newPlugin.sourceWorkspaceId = "source-" + newPlugin.pluginId;
+      extraPlugins.push(newPlugin);
       return clone(newPlugin);
     }
     if (type === "getProjectChats") return projectCatalog();
@@ -625,7 +639,11 @@
         projectRuns[submitting.Id] = run; submitting.RunStatus = "running";
         await new Promise(function (resolve) { setTimeout(resolve, 1800); });
         if (projectRuns[submitting.Id] === run) {
-          projectMessages[submitting.Id].push({ role: "assistant", text: "Проектный пример: план и файлы проекта можно обсудить здесь. Модель в preview не запускалась." });
+          var sourcePlugin = requireWorkspace(payload).pluginId;
+          projectMessages[submitting.Id].push({ role: "assistant", text: sourcePlugin
+            ? "Изменение исходников смоделировано в preview. Файлы плагина не менялись."
+            : "Проектный пример: план и файлы проекта можно обсудить здесь. Модель в preview не запускалась." });
+          if (sourcePlugin) pluginSourceRevision[sourcePlugin] = (pluginSourceRevision[sourcePlugin] || 0) + 1;
           delete projectRuns[submitting.Id]; submitting.RunStatus = "completed";
         }
       }
@@ -700,40 +718,6 @@
       return clone(edited);
     }
     if (type === "getPluginChat") return pluginChatState(payload.pluginId);
-    if (type === "submitPluginChat") {
-      var createdPlugin = extraPlugins.find(function (item) { return item.pluginId === payload.pluginId; });
-      if (payload.pluginId !== pluginItem.pluginId && !createdPlugin) fail("Плагин примера отсутствует.");
-      var pluginInput = payload.input || {}, requestId = pluginInput.RequestId || pluginInput.requestId;
-      var pluginText = pluginInput.Message || pluginInput.message;
-      if (!requestId || typeof pluginText !== "string" || !pluginText.trim()) fail("Сообщение примера неверно.", "preview_input_invalid");
-      if (createdPlugin) {
-        extraPluginMessages[createdPlugin.pluginId].push({ role: "user", text: pluginText },
-          { role: "assistant", text: "Пример: запрос на исходники принят. Модель и запись файлов здесь не запускаются." });
-        pluginSourceRevision[createdPlugin.pluginId] = (pluginSourceRevision[createdPlugin.pluginId] || 0) + 1;
-        return pluginChatState(createdPlugin.pluginId);
-      }
-      if (pluginRequestIds[requestId] && pluginRequestIds[requestId] !== pluginText) fail("ID сообщения уже занят.", "preview_input_invalid");
-      if (!pluginRequestIds[requestId]) {
-        if (pluginRun) fail("Дождитесь ответа примера.", "preview_run_busy");
-        pluginRequestIds[requestId] = pluginText;
-        pluginMessages.push({ role: "user", text: pluginText });
-        var sourceRun = { runId: "preview-source-" + requestId, cursor: "preview-source-cursor-" + requestId };
-        pluginRun = sourceRun;
-        await new Promise(function (resolve) { setTimeout(resolve, 1600); });
-        if (pluginRun === sourceRun) {
-          pluginMessages.push({ role: "assistant", text: "Изменение исходников смоделировано в preview. Файлы плагина не менялись." });
-          pluginSourceRevision[payload.pluginId] = (pluginSourceRevision[payload.pluginId] || 0) + 1;
-          pluginRun = null;
-        }
-      }
-      return pluginChatState(payload.pluginId);
-    }
-    if (type === "cancelPluginChat") {
-      if (!pluginRun || payload.runId !== pluginRun.runId || payload.cursor !== pluginRun.cursor)
-        fail("Запуск примера изменился.", "preview_run_changed");
-      pluginRun = null; return pluginChatState(payload.pluginId);
-    }
-    if (type === "resolvePluginChat") fail("В примере нет ожидающего подтверждения.", "preview_run_changed");
     if (type === "getPluginVendors") return { items: [] };
     if (type === "listArtifactCatalog") {
       requireChat(payload);

@@ -492,6 +492,7 @@ button.icon-btn.is-busy svg {
   width: 1px;
   min-width: 1px;
   cursor: col-resize;
+  touch-action: none;
   background: var(--line);
   transition: background-color 0.12s ease;
 }
@@ -503,9 +504,13 @@ button.icon-btn.is-busy svg {
 }
 
 .splitter:hover,
-.resizing-pane .splitter {
+.splitter:focus-visible,
+.splitter.dragging {
   background: var(--accent);
+  outline: none;
 }
+
+.splitter[hidden] { display: none; }
 
 .shell :is(
   .panel,

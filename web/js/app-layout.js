@@ -41,7 +41,7 @@
     shell.classList.toggle("navigation-closed", !open);
     var button = document.getElementById("productMobileMenuButton");
     if (navigationToggle) navigationToggle.sync();
-    shell.querySelectorAll(".split-layout > .splitter:not(.chat-inspector-splitter)").forEach(function (handle) {
+    shell.querySelectorAll(".split-layout[data-default-left] > .splitter:not(.chat-inspector-splitter)").forEach(function (handle) {
       handle.hidden = mode === "single";
     });
     var active = shell.querySelector(".panel.active .global-nav");
@@ -89,6 +89,90 @@
     return Math.max(min, Math.min(max, value));
   }
 
+  function setSplitterAria(handle, value, bounds) {
+    if (!handle) return;
+    handle.setAttribute("aria-valuemin", String(Math.round(bounds.min)));
+    handle.setAttribute("aria-valuemax", String(Math.round(bounds.max)));
+    handle.setAttribute("aria-valuenow", String(Math.round(value)));
+    handle.setAttribute("aria-valuetext", Math.round(value) + " пикселей");
+  }
+
+  // Shared interaction for navigation, inspector and local preview/chat panes.
+  // Owners supply their dimensions and persistence; the handle owns drag/keyboard state.
+  function bindSplitter(handle, options) {
+    if (!handle || handle.dataset.bound === "true") return;
+    handle.dataset.bound = "true";
+    handle.tabIndex = 0;
+    handle.title = "Перетащите или используйте стрелки. Enter или двойной щелчок — исходная ширина.";
+    var drag = null, pending = null, frame = null, direction = options.direction || 1;
+    function enabled() { return !options.enabled || options.enabled(); }
+    function apply(value, persist) {
+      options.setValue(value, persist);
+      setSplitterAria(handle, options.getValue(), options.bounds());
+    }
+    function finish(commit) {
+      if (!drag) return;
+      if (frame !== null) window.cancelAnimationFrame(frame);
+      frame = null;
+      if (commit && pending !== null) apply(pending, false);
+      pending = null;
+      var previous = drag; drag = null;
+      document.body.classList.remove("resizing-pane");
+      handle.classList.remove("dragging");
+      apply(commit ? options.getValue() : previous.value, commit);
+      if (handle.hasPointerCapture(previous.id)) handle.releasePointerCapture(previous.id);
+      if (typeof refreshCodeEditors === "function") refreshCodeEditors();
+    }
+    handle.addEventListener("pointerdown", function (event) {
+      if (event.button !== 0 || drag || !enabled()) return;
+      event.preventDefault();
+      if (document.activeElement === handle) handle.blur();
+      drag = { id: event.pointerId, x: event.clientX, value: options.getValue() };
+      handle.setPointerCapture(event.pointerId);
+      handle.classList.add("dragging");
+      document.body.classList.add("resizing-pane");
+    });
+    handle.addEventListener("pointermove", function (event) {
+      if (!drag || event.pointerId !== drag.id) return;
+      if (!event.buttons) { finish(true); return; }
+      var next = drag.value + (event.clientX - drag.x) * direction;
+      if (options.collapse && next < options.bounds().min - 12) {
+        finish(false); options.collapse(); return;
+      }
+      pending = next;
+      if (frame === null) frame = window.requestAnimationFrame(function () {
+        frame = null;
+        if (drag && pending !== null) { var value = pending; pending = null; apply(value, false); }
+      });
+    });
+    handle.addEventListener("pointerup", function () { finish(true); });
+    handle.addEventListener("pointercancel", function () { finish(false); });
+    handle.addEventListener("lostpointercapture", function () { finish(true); });
+    window.addEventListener("blur", function () { finish(true); });
+    document.addEventListener("visibilitychange", function () { if (document.hidden) finish(true); });
+    document.addEventListener("keydown", function (event) {
+      if (drag && event.key === "Escape") {
+        event.preventDefault(); event.stopImmediatePropagation(); finish(false);
+      }
+    }, true);
+    handle.addEventListener("dblclick", function () { if (enabled()) apply(options.defaultValue(), true); });
+    handle.addEventListener("keydown", function (event) {
+      if (!enabled()) return;
+      var value = options.getValue(), step = (event.shiftKey ? 40 : 12) * direction;
+      if (event.key === "Home" && options.collapse) { event.preventDefault(); options.collapse(); return; }
+      if (event.key === "Home") value = options.bounds().min;
+      else if (event.key === "End") value = options.bounds().max;
+      else if (event.key === "Enter") value = options.defaultValue();
+      else if (event.key === "ArrowLeft") value -= step;
+      else if (event.key === "ArrowRight") value += step;
+      else return;
+      event.preventDefault(); apply(value, true);
+    });
+    setSplitterAria(handle, options.getValue(), options.bounds());
+  }
+
+  window.RNAssistantSplitter = { bind: bindSplitter, update: setSplitterAria };
+
   function ratioAttr(layout, name, fallback) {
     var value = Number(layout.getAttribute(name));
     return isNaN(value) || value <= 0 ? fallback : value;
@@ -98,20 +182,26 @@
     return !!(typeof layout.closest === "function" && layout.closest(".shell") && layout.hasAttribute("data-default-left"));
   }
 
-  function setProductNavigationWidth(layout, width, persist) {
+  function navigationBounds(layout) {
     var available = layout.getBoundingClientRect().width || Math.max(0, window.innerWidth - 52);
     var minimum = Math.max(240, numberAttr(layout, "data-min-left", 180));
-    var maximum = Math.min(460, available - 280);
-    var next = Math.round(clamp(width, minimum, Math.max(minimum, maximum)));
+    return { min: minimum, max: Math.max(minimum, Math.min(460, available - 280)) };
+  }
+
+  function splitBounds(layout) {
+    var width = layout.getBoundingClientRect().width;
+    var minimum = Math.min(width / 3, Math.max(numberAttr(layout, "data-min-left", 180), ratioAttr(layout, "data-min-ratio", 0.16) * width));
+    return { min: minimum, max: Math.max(minimum, Math.min(ratioAttr(layout, "data-max-ratio", 0.44) * width,
+      width - numberAttr(layout, "data-min-right", 280))) };
+  }
+
+  function setProductNavigationWidth(layout, width, persist) {
+    var bounds = navigationBounds(layout);
+    var next = Math.round(clamp(width, bounds.min, bounds.max));
     layout.style.setProperty("--split-left", next + "px");
     document.documentElement.style.setProperty("--nav-width", next + "px");
     var handle = layout.querySelector(":scope > .splitter");
-    if (handle) {
-      handle.setAttribute("aria-valuemin", String(minimum));
-      handle.setAttribute("aria-valuemax", String(Math.max(minimum, maximum)));
-      handle.setAttribute("aria-valuenow", String(next));
-      handle.setAttribute("aria-valuetext", next + " пикселей");
-    }
+    setSplitterAria(handle, next, bounds);
     if (persist) {
       Array.prototype.slice.call(document.querySelectorAll(".shell .split-layout[data-default-left]")).forEach(function (other) {
         other.style.setProperty("--split-left", next + "px");
@@ -136,13 +226,10 @@
       return;
     }
 
-    var minPx = numberAttr(layout, "data-min-left", 180);
-    var minRatio = Math.max(ratioAttr(layout, "data-min-ratio", 0.16), minPx / box.width);
-    var maxRatio = ratioAttr(layout, "data-max-ratio", 0.44);
-    maxRatio = Math.min(maxRatio, Math.max(minRatio, (box.width - 280) / box.width));
-
-    var next = clamp(ratio, minRatio, maxRatio);
+    var bounds = splitBounds(layout);
+    var next = clamp(ratio * box.width, bounds.min, bounds.max) / box.width;
     layout.style.setProperty("--split-left", (next * 100).toFixed(3) + "%");
+    setSplitterAria(layout.querySelector(":scope > .splitter"), next * box.width, bounds);
     if (persist === false) {
       return;
     }
@@ -173,141 +260,31 @@
   }
 
   function bindSplitLayout(layout) {
-    var handle = layout.querySelector(".splitter");
-    if (!handle || handle.dataset.bound === "true") {
-      return;
-    }
-
-    handle.dataset.bound = "true";
+    var handle = layout.querySelector(":scope > .splitter");
+    if (!handle || handle.dataset.bound === "true") return;
     restoreSplitRatio(layout);
-
     if (isProductNavigation(layout)) {
-      var pane = layout.querySelector(".global-nav");
+      var pane = layout.querySelector(":scope > .global-nav");
       if (pane) {
         pane.id = pane.id || layout.id + "Navigation";
         handle.setAttribute("aria-controls", pane.id);
       }
-      handle.tabIndex = 0;
-      handle.title = "Ширина дерева. Перетащите или используйте стрелки. Двойной щелчок — исходная ширина.";
-      handle.addEventListener("keydown", function (event) {
-        var width = Number.parseFloat(getComputedStyle(layout).getPropertyValue("--split-left")) || numberAttr(layout, "data-default-left", 310);
-        var step = event.shiftKey ? 40 : 12;
-        if (event.key === "Home") { event.preventDefault(); setProductNavigationOpen(false); return; }
-        if (event.key === "Enter") { event.preventDefault(); setProductNavigationWidth(layout, numberAttr(layout, "data-default-left", 310), true); return; }
-        if (event.key === "End") width = 460;
-        else if (event.key === "ArrowLeft") width -= step;
-        else if (event.key === "ArrowRight") width += step;
-        else return;
-        event.preventDefault();
-        setProductNavigationWidth(layout, width, true);
-        handle.setAttribute("aria-valuenow", String(Number.parseFloat(getComputedStyle(layout).getPropertyValue("--split-left"))));
+      bindSplitter(handle, {
+        getValue: function () { return Number.parseFloat(getComputedStyle(layout).getPropertyValue("--split-left")) || numberAttr(layout, "data-default-left", 310); },
+        setValue: function (value, persist) { setProductNavigationWidth(layout, value, persist); },
+        bounds: function () { return navigationBounds(layout); },
+        defaultValue: function () { return numberAttr(layout, "data-default-left", 310); },
+        collapse: function () { setProductNavigationOpen(false); }
       });
-      handle.addEventListener("dblclick", function () {
-        setProductNavigationWidth(layout, numberAttr(layout, "data-default-left", 310), true);
+    } else {
+      bindSplitter(handle, {
+        getValue: function () { return Number.parseFloat(getComputedStyle(layout).getPropertyValue("--split-left")) / 100 * layout.getBoundingClientRect().width; },
+        setValue: function (value, persist) { var width = layout.getBoundingClientRect().width; if (width) setSplitRatio(layout, value / width, persist); },
+        bounds: function () { return splitBounds(layout); },
+        defaultValue: function () { return ratioAttr(layout, "data-default-ratio", 0.25) * layout.getBoundingClientRect().width; }
       });
-      var drag = null;
-      function finishProductDrag(commit) {
-        if (!drag) return;
-        var previous = drag;
-        drag = null;
-        document.body.classList.remove("resizing-pane");
-        handle.classList.remove("dragging");
-        if (!commit) setProductNavigationWidth(layout, previous.width, false);
-        else setProductNavigationWidth(layout,
-          Number.parseFloat(getComputedStyle(layout).getPropertyValue("--split-left")) || previous.width, true);
-        if (handle.hasPointerCapture(previous.id)) handle.releasePointerCapture(previous.id);
-        if (typeof refreshCodeEditors === "function") refreshCodeEditors();
-      }
-      handle.addEventListener("pointerdown", function (event) {
-        if (event.button !== 0 || drag) return;
-        event.preventDefault();
-        if (document.activeElement === handle) handle.blur();
-        drag = { id: event.pointerId, width: Number.parseFloat(getComputedStyle(layout).getPropertyValue("--split-left")) ||
-          numberAttr(layout, "data-default-left", 310) };
-        handle.setPointerCapture(event.pointerId);
-        handle.classList.add("dragging");
-        document.body.classList.add("resizing-pane");
-      });
-      handle.addEventListener("pointermove", function (event) {
-        if (!drag || event.pointerId !== drag.id) return;
-        if (!event.buttons) { finishProductDrag(true); return; }
-        var next = event.clientX - layout.getBoundingClientRect().left;
-        if (next < numberAttr(layout, "data-min-left", 240) - 12) {
-          finishProductDrag(false);
-          setProductNavigationOpen(false);
-          return;
-        }
-        setProductNavigationWidth(layout, next, false);
-      });
-      handle.addEventListener("pointerup", function () { finishProductDrag(true); });
-      handle.addEventListener("pointercancel", function () { finishProductDrag(false); });
-      handle.addEventListener("lostpointercapture", function () { finishProductDrag(true); });
-      window.addEventListener("blur", function () { finishProductDrag(true); });
-      document.addEventListener("visibilitychange", function () { if (document.hidden) finishProductDrag(true); });
-      document.addEventListener("keydown", function (event) {
-        if (drag && event.key === "Escape") {
-          event.preventDefault();
-          event.stopImmediatePropagation();
-          finishProductDrag(false);
-        }
-      }, true);
+      new ResizeObserver(function () { if (layout.getBoundingClientRect().width) restoreSplitRatio(layout); }).observe(layout);
     }
-
-    handle.addEventListener("mousedown", function (event) {
-      if (isProductNavigation(layout)) return;
-      event.preventDefault();
-      var rect = layout.getBoundingClientRect();
-      var latestRatio = null;
-      var framePending = false;
-      var dragging = true;
-      document.body.classList.add("resizing-pane");
-
-      function applyPendingRatio() {
-        framePending = false;
-        if (!dragging || latestRatio === null) {
-          return;
-        }
-        setSplitRatio(layout, latestRatio, false);
-      }
-
-      function scheduleApplyRatio() {
-        if (framePending) {
-          return;
-        }
-        framePending = true;
-        if (window.requestAnimationFrame) {
-          window.requestAnimationFrame(applyPendingRatio);
-        } else {
-          window.setTimeout(applyPendingRatio, 16);
-        }
-      }
-
-      function move(moveEvent) {
-        latestRatio = (moveEvent.clientX - rect.left) / rect.width;
-        if (isProductNavigation(layout) && moveEvent.clientX - rect.left < numberAttr(layout, "data-min-left", 240) - 12) {
-          up();
-          setProductNavigationOpen(false);
-          return;
-        }
-        scheduleApplyRatio();
-      }
-
-      function up() {
-        dragging = false;
-        document.body.classList.remove("resizing-pane");
-        document.removeEventListener("mousemove", move);
-        document.removeEventListener("mouseup", up);
-        if (latestRatio !== null) {
-          setSplitRatio(layout, latestRatio, true);
-        }
-        if (typeof refreshCodeEditors === "function") {
-          refreshCodeEditors();
-        }
-      }
-
-      document.addEventListener("mousemove", move);
-      document.addEventListener("mouseup", up);
-    });
   }
 
   window.initializeSplitPanes = function () {
