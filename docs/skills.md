@@ -305,6 +305,10 @@ schema remain authoritative for the exact operation, root arguments and returned
 skill and schema disagree, the model follows the higher-priority runtime prompt and
 schema and reports the inconsistency rather than inventing compatibility fields.
 
+The VBA skill owns operation choice, source inspection and recovery. Patch-field
+matching, positions, insertion/deletion and no-op behavior are described once in
+the supplied tool contract, rather than repeated in the skill body.
+
 Schema 51 removes repeated universal rules from domain skills and tool descriptions.
 Model guidance keeps decisions the model must make: selecting capabilities, choosing
 source coverage, constructing edits and interpreting uncertain results. Journal,

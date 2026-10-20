@@ -598,6 +598,9 @@ namespace RNAssistant.Harness
                     (string)item["id"] == "excel.synthetic_299");
                 AssertEqual(new string('d', 96) + "...[truncated]", (string)optionalTail["summary"],
                     "unloaded capability keeps a bounded summary for selection");
+                AssertTrue(optionalTail["name"] == null && optionalTail["mutatesDocument"] == null &&
+                    optionalTail["mutatesLocalState"] == null && optionalTail["requiresConfirmation"] == null,
+                    "unloaded prompt entries omit duplicate names and runtime policy metadata");
                 var htmlCatalog = CapabilityCatalogService.BuildPromptCatalog(catalog,
                     new RNAssistant.Core.Services.SkillCatalogService(adapter.HostName, executor.CapturePublishedSkills).GetVisibleSkills(), new ToolCatalogEntry[0]);
                 var htmlTool = ((JArray)htmlCatalog["items"]).OfType<JObject>().Single(item =>
@@ -627,6 +630,8 @@ namespace RNAssistant.Harness
                     "search preserves the wider metadata summary");
                 AssertTrue(tailSearch.DataJson.IndexOf("schemaLoaded", StringComparison.Ordinal) < 0,
                     "search does not claim working-set state it cannot observe");
+                AssertTrue(JObject.Parse(tailSearch.DataJson).SelectToken("items[0].requiresConfirmation") != null,
+                    "explicit capability search retains policy inspection metadata");
                 var tailRead = executor.ExecuteManual(
                     Command(CapabilityToolCatalog.ReadToolId, "id", "excel.synthetic_299"),
                     largeCatalog,

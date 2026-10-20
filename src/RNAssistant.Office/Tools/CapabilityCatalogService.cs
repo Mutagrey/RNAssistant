@@ -428,16 +428,23 @@ namespace RNAssistant.Office.Tools
                 result["schemaLoaded"] = true;
                 return result;
             }
-            result["name"] = Bound(record.Name, MaximumNameCharacters);
+            // The prompt index only chooses an exact capability. Policy belongs to
+            // the admitted descriptor/runtime; search retains inspection metadata.
+            var promptIndex = schemaLoaded.HasValue;
+            if (record.Skill != null || !promptIndex)
+                result["name"] = Bound(record.Name, MaximumNameCharacters);
             result["summary"] = Bound(record.Summary, maximumSummaryCharacters);
             if (record.Tool != null)
             {
                 if (schemaLoaded.HasValue) result["schemaLoaded"] = schemaLoaded.Value;
-                result["mutatesDocument"] = record.Tool.MutatesDocument;
-                result["mutatesLocalState"] = record.Tool.MutatesLocalState;
-                result["requiresConfirmation"] = record.Tool.RequiresConfirmation;
+                if (!promptIndex)
+                {
+                    result["mutatesDocument"] = record.Tool.MutatesDocument;
+                    result["mutatesLocalState"] = record.Tool.MutatesLocalState;
+                    result["requiresConfirmation"] = record.Tool.RequiresConfirmation;
+                }
             }
-            if (record.Skill != null)
+            if (record.Skill != null && !promptIndex)
             {
                 result["bodyChars"] = (record.Skill.BodyMarkdown ?? string.Empty).Length;
                 result["referenceCount"] = (record.Skill.References ?? new List<SkillReferenceMetadata>()).Count;

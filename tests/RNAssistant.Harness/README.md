@@ -298,6 +298,15 @@ Capture the verified model tag/digest and endpoint profile with the evidence.
 This fixture uses automatic approval; the controller regression covers manual
 approval/restart. Neither qualifies Office/COM or rendered WebView2 behavior.
 
+For a minimal VBA case, use `--vba-workflow-scripted` first, then
+`--vba-workflow-live`, each with a new evidence directory and the same environment.
+Both use 4096 output tokens and a bound fake document. The scripted variant makes
+no provider calls and must finish load → read → patch → done without compaction;
+the live variant uses the actual endpoint. Acceptance requires completion, exact
+final source, one selected VBA skill and one document write. The fixture also saves
+context estimates, budget components and exact live HTTP request bodies. It does
+not execute VBA. The general `--resource-workflow-live` case remains separate.
+
 Skill-package checks: after the normal host-neutral Harness build, filter by
 `skill packages:`, `tool pack:`, `skill editor:` and the two `agent:` prompt cases.
 The package slice covers selection, next-request exposure, exact dispatch, shared

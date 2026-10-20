@@ -213,6 +213,11 @@ schemas are admitted atomically at model-step boundaries. Chat cannot execute to
 Plan is restricted to its own read-only/Plan-local set, and Agent execution remains
 subject to source-owned policy and confirmation.
 
+The prompt discovery index keeps exact IDs, bounded summaries and selection routes.
+Tool display names, policy flags and skill size/reference counters stay out of that
+index. Explicit capability search retains inspection metadata; the full admitted
+descriptor and runtime remain the authority for execution policy.
+
 Existing custom VBA packages are stored under `%AppData%/RNAssistant/tools` and the
 current Library editor can validate, save, clone, test and delete them. The current
 flat package store is not immutable revision history. Model authoring uses separate

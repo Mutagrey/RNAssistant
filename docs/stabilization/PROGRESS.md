@@ -1,5 +1,43 @@
 # Stabilization progress
 
+## Minimal VBA admission and live check — 2026-10-20
+
+The isolated `json_object` / 32768-context / 4096-output VBA case now completes:
+load one skill, read `ReportModule`, apply one patch, finish. Before the change,
+the controlled skill candidate required 21,946 message tokens against 21,375.
+The earlier passing default-profile test reserved only 3072 output tokens.
+
+`CapabilityCatalogService` removes duplicate tool names, policy flags and skill
+size counters from the prompt discovery index. Exact IDs, summaries, selection
+routes and complete callable schemas remain; explicit search retains metadata.
+`BuiltInSkillProvider` leaves patch-field mechanics with the supplied tool schema
+instead of repeating them in the VBA skill (10,886 → 9558 characters). Budgets,
+admission, parser, dispatch and read-back guards are unchanged.
+
+The controlled sequence passes without compaction: message estimates are 15,756,
+20,703, 20,881 and 21,137. Two independent `gemma4:cloud` runs also complete with
+four requests and one verified write each; exact source and call-order checks pass.
+Actual API input totals are 69,333 / 69,335; output totals are 266 / 249, with no
+reasoning content, protocol repair or compaction. Profile: developer instructions,
+`reasoning_effort=none`, temperature 0; same route digest as the comparison below.
+The final live estimate is 21,255, only 120 below the message budget: this proves
+the minimal case, not general 32K task capacity.
+
+The fixture now binds the fake document runtime key and retains exact HTTP request
+bodies and budget components. Earlier combined Office runs advertised
+`office_tools_available=false` because that binding was missing; their failures
+are retained observations, not qualification of a correctly bound Office task.
+Recheck the combined task with the corrected fixture before drawing conclusions.
+
+Validation uses `5ee439db` plus the scoped patch in an isolated checkout because
+concurrent plugin edits temporarily broke the shared Harness build. Discovery
+passes 1/1, request-schema checks 2/2, skill packages 7/7. The deliberate overflow
+fixture uses 12,000 padding characters; its old 8000 now fit. Evidence, exact patch,
+profiles and responses are in the existing local evaluation directory under
+`minimal-vba-results.json` and `vba-minimal-*`. The stale-binary attempt is explicitly
+excluded. No Office/VSTO validation was run. Combined tasks, explicit workspace
+verification order and live compaction/resume remain open.
+
 ## Live prompt comparison — 2026-10-20
 
 Compared `cb1537af` (schema 50) with `b87547cb` (schema 51) in isolated checkouts.

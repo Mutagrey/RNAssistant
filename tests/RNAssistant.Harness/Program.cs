@@ -38,7 +38,10 @@ namespace RNAssistant.Harness
         public static int Main(string[] args)
         {
             if (args != null && args.Length == 2 && args[0] == "--resource-workflow-live")
-                return ResourceWorkflowLive(args[1]);
+                return ResourceWorkflowDiagnostic(args[1]);
+            if (args != null && args.Length == 2 &&
+                (args[0] == "--vba-workflow-live" || args[0] == "--vba-workflow-scripted"))
+                return ResourceWorkflowDiagnostic(args[1], true, args[0] == "--vba-workflow-scripted");
             if (args != null && args.Length >= 1 && args.Length <= 2 && args[0] == "--tabular-source-host")
                 return TabularSourceHost(args.Length == 2 ? args[1] : null);
             var tests = new List<HarnessTest>
