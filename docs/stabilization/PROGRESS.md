@@ -1,5 +1,17 @@
 # Stabilization progress
 
+## Repeated-read receipt after budget eviction — 2026-10-22
+
+RC-03 was reproduced host-neutral: two identical complete reads were folded, then
+the final request budget removed the sole remaining body while the earlier receipt
+still pointed to it as delivered. `ModelContextCompiler` now resolves folded-read
+links after budgeting. The earlier operation keeps its successful outcome but says
+`bodyIncluded=false` and no longer points to absent content. Durable read facts and
+write evidence are unchanged. The focused `resource cutover: correctness before
+budget` check passes for both the retained and evicted cases; build has the two
+existing PDF platform warnings. Windows/Office/WebView2 qualification remains open.
+Next limited observability work is RC-02, transport-selected parts and omissions.
+
 ## Request provenance after strict-schema projection — 2026-10-22
 
 RC-01 is fixed host-neutral. The model protocol compares visible accepted and

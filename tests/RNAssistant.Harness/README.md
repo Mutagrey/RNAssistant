@@ -1003,6 +1003,8 @@ Storage thresholds must not become separate limits on data sent to the model.
 individually affordable source reads in all three result roles. It checks exact
 retained bodies, explicit omissions with no write authority, adjacent call/result
 pairs, unchanged durable evidence and failure when required instructions overflow.
+The repeated-read case also checks that a later budget eviction removes any
+earlier receipt link claiming the identical full body was delivered.
 It also retains stale-source notices through model projection; the diagnostic
 payload fixture uses the supported `details` field of the current VBA envelope.
 The omitted-read CLI smoke checks the actual mutation refusal and preserved bytes.

@@ -1392,6 +1392,12 @@ terminal publication and the tool-result event. Uncaptured affected views become
 Unknown. Interrupted attempts are never automatically replayed/restored.
 HostRuntime/document serialization covers guard through read-back, not model/user waits.
 
+When the context compiler folds identical current reads, it checks the final
+budgeted request before describing the surviving body as delivered. If budgeting
+omits that body, earlier completed-read receipts explicitly say `bodyIncluded=false`
+and carry no pointer to a delivered result. The durable reads and exact evidence
+remain unchanged; omitted bodies confer no write authority.
+
 Session events use schema 4; incompatible streams require explicit new/reset without
 deleting user history or fallback. Large accepted arguments, activity/results and
 pending execution payloads use CAS refs. Registered revisions, views and their parts

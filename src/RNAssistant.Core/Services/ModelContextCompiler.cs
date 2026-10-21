@@ -518,7 +518,8 @@ namespace RNAssistant.Core.Services
             // Keep one full identical read and a truthful completed-operation
             // record for each earlier call. A missing/oversized/stale body cannot
             // be used as the retained copy because only hydrated Ok results enter.
-            var completeReads = new Dictionary<string, string>(StringComparer.Ordinal);
+            var completeReads = new Dictionary<string, ContextAtom>(StringComparer.Ordinal);
+            var foldedReadTargets = new List<KeyValuePair<ContextAtom, ContextAtom>>();
             foreach (var atom in atoms.AsEnumerable().Reverse().Where(item => item.Kind == "tool-interaction" && item.Messages.Count == 2))
             {
                 var result = atom.Messages[1];
@@ -530,12 +531,13 @@ namespace RNAssistant.Core.Services
                 var key = wire.Name + "\n" + wire.Result.Message + "\n" + wire.Result.DataJson + "\n" +
                     string.Join("\n", atom.Evidence.Select(e => e.Resource.Uri + "@" + e.Resource.Revision +
                         ":" + e.View + ":" + JsonConvert.SerializeObject(e.Coverage)).OrderBy(value => value, StringComparer.Ordinal));
-                string retainedCall;
-                if (!completeReads.TryGetValue(key, out retainedCall))
+                ContextAtom retainedAtom;
+                if (!completeReads.TryGetValue(key, out retainedAtom))
                 {
-                    completeReads.Add(key, wire.ToolCallId);
+                    completeReads.Add(key, atom);
                     continue;
                 }
+                var retainedCall = retainedAtom.Messages[1].ToolCallId;
                 atom.Kind = "repeated-read";
                 FoldInteraction(atom, new ChatMessage {
                     Id = result.Id, Role = "assistant", ProtocolMessage = true,
@@ -548,6 +550,7 @@ namespace RNAssistant.Core.Services
                         retained_result = new { tool_call_id = retainedCall }
                     }) });
                 atom.BodyParts.Clear();
+                foldedReadTargets.Add(new KeyValuePair<ContextAtom, ContextAtom>(atom, retainedAtom));
                 receipt.Deduplicated++;
             }
             ContextAtom workingSetNotice = null;
@@ -609,6 +612,23 @@ namespace RNAssistant.Core.Services
                     if (cost.Estimate(settings) <= budget) break;
                     if (OmitSourceBody(atom, aggregateBudget: true)) measure(atom);
                 }
+            }
+            // A later budget decision can omit the only full copy. Do not leave
+            // earlier read receipts pointing at a body absent from this request.
+            foreach (var link in foldedReadTargets)
+            {
+                var retained = link.Value;
+                if (retained.Kind == "tool-interaction" && !retained.BodyOmitted &&
+                    retained.Messages.Count == 2 && IsResourceRead(retained.Messages[1]) &&
+                    HasCompleteSource(retained.Messages[1])) continue;
+                var folded = link.Key.Messages.Single();
+                folded.CompletedOperation.Message = "Identical read body omitted from this request.";
+                folded.Content = "TOOL_INTERACTION (completed causal frame):\n" + JsonConvert.SerializeObject(new {
+                    tool_call_id = folded.ToolCallId, tool = folded.ToolName, outcome = "Ok",
+                    message = "Read completed; matching body was omitted from this request.",
+                    bodyIncluded = false
+                });
+                measure(link.Key);
             }
             var messages = atoms.SelectMany(item => item.PromptMessages).ToList();
             receipt.Messages = DescribeMessages(atoms, required, (facts ?? new ChatMessage[0])

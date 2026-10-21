@@ -2450,6 +2450,34 @@ namespace RNAssistant.Harness
                     AssertEqual("Ok", (string)prior["outcome"], "a deduplicated read remains a successful completed action");
                     AssertEqual("repeat-2", (string)prior["retained_result"]["tool_call_id"], "duplicate points to the full retained result");
                     AssertContains(identical.Messages.Last().Content, "RESULT_1", "complete evidence remains in this exact request");
+
+                    var largeBody = new string('R', 4096);
+                    var largeFacts = new List<ChatMessage>();
+                    foreach (var index in new[] { 1, 2 })
+                    {
+                        var id = "large-repeat-" + index;
+                        largeFacts.Add(new ChatMessage { Role = "assistant", ProtocolMessage = true,
+                            ToolCallId = id, ToolName = toolId });
+                        largeFacts.Add(AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation {
+                            ToolId = toolId, ToolCallId = id }, new ToolResultMaterialization(
+                                RNAssistant.Core.Tools.Contracts.ToolResult.Ok("read", new JObject {
+                                    ["target"] = "VBA module: Module1", ["text"] = largeBody }.ToString()),
+                                resourceEvidence: new[] { currentEvidence }), int.MaxValue, "tool"));
+                    }
+                    var compiler = new ModelContextCompiler(projection: ModelToolResultProjection.Instance);
+                    var roomy = compiler.Compile(authority, new ChatMessage[0], largeFacts, null,
+                        new ToolCatalogEntry[0], new AppSettings(), 4096);
+                    AssertContains(roomy.Messages.Last().Content, largeBody, "roomy request retains the repeated source once");
+                    var tight = compiler.Compile(authority, new ChatMessage[0], largeFacts, null,
+                        new ToolCatalogEntry[0], new AppSettings(), roomy.Receipt.EstimatedTokens - 1);
+                    var tightText = string.Join("\n", tight.Messages.Select(item => item.Content));
+                    AssertTrue(!tightText.Contains("retained_result") || tightText.Contains(largeBody),
+                        "dedup receipt must not point to a body evicted by the final budget");
+                    AssertContains(tightText, "\"bodyIncluded\":false", "omitted duplicate is explicit");
+                    AssertTrue(!tightText.Contains(largeBody) && tight.DeliveredObservations.Count == 0,
+                        "omitted repeated source gives no model body or write evidence");
+                    AssertTrue(largeFacts[1].Content.Contains(largeBody) && largeFacts[3].Content.Contains(largeBody),
+                        "budget repair does not alter durable read facts");
                 }
             }
 

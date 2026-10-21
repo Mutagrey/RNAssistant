@@ -22,9 +22,11 @@ records source evidence separately from pending runtime reproduction:
 - **RC-02:** transport-selected attachment parts and individual omissions have
   incomplete structured attribution. Current `Unknown` labels are intentional;
   extend the existing trace rather than infer delivery from resource availability.
-- **RC-03, unconfirmed:** a repeated-read receipt can point to a full body before
-  later budget eviction. Reproduce the combined dedup/eviction case before claiming
-  a defect; verify that omissions grant no write evidence and events remain intact.
+- **RC-03, fixed host-neutral:** two identical complete reads plus a tight request
+  budget reproduced a receipt pointing to an evicted body. Folded receipts now
+  resolve after budget admission: no stale `retained_result` pointer, explicit
+  `bodyIncluded=false`, unchanged durable reads and no delivered write evidence.
+  The focused resource compiler/budget check passes. Windows evidence remains open.
 
 The Wave 0 audit did not reproduce a live data-loss/write-effect failure.
 No new authority/store/adapter is introduced; Windows qualification remains open.
