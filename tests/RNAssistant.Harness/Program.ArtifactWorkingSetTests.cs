@@ -362,7 +362,8 @@ namespace RNAssistant.Harness
                 AssertEqual(1, chats.DocumentArtifacts.List(a).Count, "clear/unlink never deletes a document resource");
                 for (var index = 0; index < 50; index++)
                 {
-                    var duplicate = ingestion.Stage(a, "Shared specification.md", "text/markdown", Encoding.UTF8.GetBytes("# Shared original"));
+                    var title = index == 1 ? "A checklist.md" : index == 25 ? "Z summary.md" : "Shared specification.md";
+                    var duplicate = ingestion.Stage(a, title, "text/markdown", Encoding.UTF8.GetBytes("# Shared original"));
                     var nextMessage = new ChatMessage { Role = "user", Content = "Another original",
                         Attachments = ingestion.LoadDrafts(a, new[] { duplicate.Id }).ToList() };
                     a.Messages.Add(nextMessage);
@@ -373,6 +374,17 @@ namespace RNAssistant.Harness
                 var tail = WorkingSetCatalog(links).List(b, new ArtifactCatalogRequest { Scope = "document", ChatId = b.Id, Cursor = page.NextCursor });
                 AssertTrue(page.HasMore && !tail.HasMore && tail.Items.Count == 1 &&
                     !page.Items.Any(item => item.ResourceUri == tail.Items[0].ResourceUri), "continuation reaches every duplicate without repetition");
+                var alphabetical = WorkingSetCatalog(links).List(b, new ArtifactCatalogRequest { Scope = "document", ChatId = b.Id,
+                    SortBy = "title", SortDescending = false });
+                AssertEqual("A checklist.md", alphabetical.Items[0].Title, "catalog sorts globally before the first page");
+                var alphabeticalTail = WorkingSetCatalog(links).List(b, new ArtifactCatalogRequest { Scope = "document", ChatId = b.Id,
+                    SortBy = "title", SortDescending = false, Cursor = alphabetical.NextCursor });
+                AssertEqual("Z summary.md", alphabeticalTail.Items.Single().Title, "sorted continuation reaches the last title");
+                var reverse = WorkingSetCatalog(links).List(b, new ArtifactCatalogRequest { Scope = "document", ChatId = b.Id,
+                    SortBy = "title", SortDescending = true });
+                AssertEqual("Z summary.md", reverse.Items[0].Title, "catalog reverses title order");
+                RuntimeThrows<InvalidOperationException>(() => WorkingSetCatalog(links).List(b, new ArtifactCatalogRequest { Scope = "document", ChatId = b.Id,
+                    SortBy = "updated", Cursor = alphabetical.NextCursor }));
                 RuntimeThrows<InvalidOperationException>(() => WorkingSetCatalog(links).List(a, new ArtifactCatalogRequest { Scope = "document", ChatId = a.Id, Cursor = page.NextCursor }));
                 RuntimeThrows<InvalidOperationException>(() => WorkingSetCatalog(links).List(b, new ArtifactCatalogRequest { Scope = "document", ChatId = b.Id, Query = "Shared", Cursor = page.NextCursor }));
                 links.Change(b, LinkRequest(b, tail.Items[0].ResourceUri, false), chats.Save);

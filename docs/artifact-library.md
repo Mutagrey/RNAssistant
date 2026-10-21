@@ -48,7 +48,9 @@ The **Материалы** tab uses one ownership tree on the left and a catalog
 viewer/editor on the right, including narrow panes. The table lists the same typed
 `listArtifactCatalog` projection as the tree; it is not another inventory or store.
 Ownership, title search and type/document filters change both views; 50-item pages
-append to both. The selected HTML project expands into files and data. Selecting a
+append to both. The table sorts by title, displayed format, owner or modification time;
+the default is newest first. Sorting is applied before paging and bound to the
+continuation cursor. The selected HTML project expands into files and data. Selecting a
 table row or tree item opens the same viewer/editor pane, while **Все материалы**
 returns to the table and releases the preview. **Просмотр / Код** switches the right
 pane. Shared Markdown/text/JSON

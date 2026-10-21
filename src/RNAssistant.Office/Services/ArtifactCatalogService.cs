@@ -48,6 +48,10 @@ namespace RNAssistant.Office.Services
         {
             if (request.ChatId != actor.Id || request.Scope != "chat" && request.Scope != "document" && request.Scope != "all" || (request.Query?.Length ?? 0) > 200)
                 throw new InvalidOperationException("Некорректный запрос каталога.");
+            var sortBy = string.IsNullOrEmpty(request.SortBy) ? "updated" : request.SortBy;
+            if (sortBy != "updated" && sortBy != "title" && sortBy != "format" && sortBy != "owner")
+                throw new InvalidOperationException("Некорректная сортировка каталога.");
+            var descending = request.SortDescending ?? sortBy == "updated";
             var documents = Documents(actor);
             var items = new List<ArtifactCatalogItem>();
             foreach (var doc in documents.Where(d => (request.Scope == "all" || d.AuthorityId == actor.DocumentAuthorityId) &&
@@ -68,9 +72,21 @@ namespace RNAssistant.Office.Services
                         CanTransfer = CanTransfer(item), CanDelete = doc.AuthorityId == actor.DocumentAuthorityId });
                 }
             }
-            items = items.OrderByDescending(i => i.UpdatedUtc).ThenBy(i => i.ResourceUri, StringComparer.Ordinal).ToList();
+            IOrderedEnumerable<ArtifactCatalogItem> ordered;
+            if (sortBy == "updated")
+                ordered = descending ? items.OrderByDescending(i => i.UpdatedUtc) : items.OrderBy(i => i.UpdatedUtc);
+            else
+            {
+                Func<ArtifactCatalogItem, string> key;
+                if (sortBy == "title") key = i => i.Title ?? "";
+                else if (sortBy == "format") key = CatalogFormat;
+                else key = i => CatalogOwner(i, actor.DocumentAuthorityId);
+                var comparer = StringComparer.Create(CultureInfo.GetCultureInfo("ru-RU"), true);
+                ordered = descending ? items.OrderByDescending(key, comparer) : items.OrderBy(key, comparer);
+            }
+            items = ordered.ThenBy(i => i.ResourceUri, StringComparer.Ordinal).ToList();
             var stamp = TextPatternEngine.Sha256(JsonConvert.SerializeObject(new object[] { actor.Id, actor.Revision,
-                request.Scope, request.Query, request.Kind, request.DocumentId, items }));
+                request.Scope, request.Query, request.Kind, request.DocumentId, sortBy, descending, items }));
             var offset = 0;
             if (!string.IsNullOrEmpty(request.Cursor))
             {
@@ -84,6 +100,28 @@ namespace RNAssistant.Office.Services
         }
         private static bool CanTransfer(ChatArtifact item)
         { return string.IsNullOrEmpty(item.AvailabilityIssue) && (item.Kind == ChatArtifactKinds.HtmlWorkspace || item.Kind == ChatArtifactKinds.Markdown || item.Kind == ChatArtifactKinds.File || item.OriginalAttachment != null); }
+
+        private static string CatalogOwner(ArtifactCatalogItem item, string currentDocumentId)
+        { return item.Linked ? "Этот чат" : item.DocumentId == currentDocumentId ? "В документе" : string.IsNullOrEmpty(item.DocumentTitle) ? "Другой документ" : item.DocumentTitle; }
+
+        private static string CatalogFormat(ArtifactCatalogItem item)
+        {
+            if (item.Kind == "file" || item.Kind == "attachment")
+            {
+                var suffix = Path.GetExtension(item.Title ?? "").TrimStart('.').ToLowerInvariant();
+                return suffix == "json" ? "JSON" : suffix == "pdf" ? "PDF" : suffix == "txt" ? "Текст" : suffix == "md" ? "Markdown" : "Файл";
+            }
+            switch (item.Kind)
+            {
+                case "html_workspace": return "HTML";
+                case "markdown": return "Markdown";
+                case "plan_document": return "План";
+                case "task_list": return "Задачи";
+                case "image": return "Изображение";
+                case "sequence": return "Коллекция";
+                default: return item.Kind ?? "Файл";
+            }
+        }
 
         internal ArtifactTransferContent Export(ChatSession actor, ArtifactTransferRequest request)
         {

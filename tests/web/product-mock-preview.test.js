@@ -266,6 +266,19 @@ async function serve() {
     await normal.locator('.section-rail [data-section="artifacts"]').click();
     await normal.locator("#artifactCatalogOverviewRows .artifact-overview-link").first().waitFor();
     assert.equal(await normal.locator("#artifactCatalogOverviewRows tr").count(), 9);
+    assert.equal(await normal.locator('[data-artifact-sort-head="updated"]').getAttribute('aria-sort'), 'descending');
+    await normal.locator('[data-artifact-sort="title"]').click();
+    await normal.waitForFunction(() => document.querySelector('[data-artifact-sort-head="title"]').getAttribute('aria-sort') === 'ascending' &&
+      document.querySelectorAll('#artifactCatalogOverviewRows tr').length === 9);
+    assert.equal(await normal.locator('[data-artifact-sort-head="title"]').getAttribute('aria-sort'), 'ascending');
+    const sortedTitles = await normal.locator('#artifactCatalogOverviewRows tr td:first-child button span').allTextContents();
+    assert.deepEqual(sortedTitles, [...sortedTitles].sort((a, b) => a.localeCompare(b, 'ru', { sensitivity: 'base' })));
+    await normal.locator('[data-artifact-sort="updated"]').click();
+    await normal.waitForFunction(() => document.querySelector('[data-artifact-sort-head="updated"]').getAttribute('aria-sort') === 'descending' &&
+      document.querySelectorAll('#artifactCatalogOverviewRows tr').length === 9);
+    assert.equal(await normal.locator('[data-artifact-sort-head="updated"]').getAttribute('aria-sort'), 'descending');
+    assert.ok(await normal.locator('#htmlWorkspaceTree [data-tree-key^="catalog-html::"]').count() > 0,
+      'HTML projects have their own tree group');
     assert.equal(await normal.locator("#artifactCatalogAll").evaluate(node => node.closest('[role="tree"]')), null,
       "the catalog shortcut stays a button outside the tree");
     assert.equal(await normal.locator('#htmlWorkspaceTree [data-tree-key="catalog-owner::chat"] > .navigation-tree-row > .navigation-tree-icon').count(), 0,

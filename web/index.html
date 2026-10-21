@@ -653,7 +653,7 @@
                   <select id="artifactCatalogScope" aria-label="Принадлежность материалов"><option value="all">Все материалы</option><option value="chat">Этот чат</option><option value="document">В документе</option></select>
                   <select id="artifactCatalogKind" aria-label="Формат материала"><option value="">Все форматы</option><option value="html_workspace">HTML</option><option value="markdown">Markdown</option><option value="file">Файлы и JSON</option><option value="image">Изображения</option><option value="plan_document">Планы</option></select>
                 </div>
-                <div id="artifactCatalogOverviewTable" class="rna-table-wrap artifact-overview-table-wrap" hidden><table class="rna-table"><thead><tr><th>Название</th><th>Формат</th><th>Принадлежность</th><th>Изменён</th></tr></thead><tbody id="artifactCatalogOverviewRows"></tbody></table></div>
+                <div id="artifactCatalogOverviewTable" class="rna-table-wrap artifact-overview-table-wrap" hidden><table class="rna-table"><thead><tr><th data-artifact-sort-head="title"><button type="button" data-artifact-sort="title">Название</button></th><th data-artifact-sort-head="format"><button type="button" data-artifact-sort="format">Формат</button></th><th data-artifact-sort-head="owner"><button type="button" data-artifact-sort="owner">Принадлежность</button></th><th data-artifact-sort-head="updated" aria-sort="descending"><button type="button" data-artifact-sort="updated">Изменён</button></th></tr></thead><tbody id="artifactCatalogOverviewRows"></tbody></table></div>
                 <p id="artifactCatalogOverviewEmpty" class="artifact-overview-empty" role="status">Материалов пока нет.</p>
               </div>
             </section>

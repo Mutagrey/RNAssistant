@@ -10,6 +10,8 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("query")] public string Query { get; set; }
         [JsonProperty("kind")] public string Kind { get; set; }
         [JsonProperty("documentId")] public string DocumentId { get; set; }
+        [JsonProperty("sortBy")] public string SortBy { get; set; }
+        [JsonProperty("sortDescending")] public bool? SortDescending { get; set; }
         [JsonProperty("cursor")] public string Cursor { get; set; }
     }
     public sealed class ArtifactCatalogItem

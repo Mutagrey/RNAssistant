@@ -52,7 +52,14 @@
 #tab-artifacts .artifact-overview-create .html-workspace-menu-items button { width: 100%; text-align: left; }
 #tab-artifacts .artifact-overview-content { min-height: 0; overflow: auto; padding: 16px 18px; }
 #tab-artifacts .artifact-overview-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 18px; }
-#tab-artifacts .artifact-overview-toolbar select { flex: 0 1 auto; max-width: 170px; min-height: 36px; padding: 7px 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); color: var(--ink); font: 12px var(--font); }
+#tab-artifacts .artifact-overview-toolbar select { flex: 0 1 auto; max-width: 180px; min-height: 34px; padding: 7px 32px 7px 10px; border: 1px solid var(--line-strong); border-radius: 7px; background-color: var(--surface); color: var(--ink); font: 13px var(--font); cursor: pointer; }
+#tab-artifacts .artifact-overview-toolbar select:hover { border-color: var(--accent); }
+#tab-artifacts .artifact-overview-table-wrap th { padding: 0; }
+#tab-artifacts .artifact-overview-table-wrap th > button { display: inline-flex; align-items: center; justify-content: flex-start; gap: 6px; width: 100%; min-height: 36px; padding: 9px 12px; border: 0; background: transparent; color: inherit; font: inherit; font-weight: 500; text-align: left; cursor: pointer; }
+#tab-artifacts .artifact-overview-table-wrap th > button:hover { color: var(--ink); background: var(--surface-hover); }
+#tab-artifacts .artifact-overview-table-wrap th[aria-sort] > button { color: var(--ink); }
+#tab-artifacts .artifact-overview-table-wrap th[aria-sort] > button::after { content: "↓"; color: var(--accent); font-size: 12px; }
+#tab-artifacts .artifact-overview-table-wrap th[aria-sort="ascending"] > button::after { content: "↑"; }
 #tab-artifacts .artifact-overview-table-wrap th:first-child,
 #tab-artifacts .artifact-overview-table-wrap td:first-child { min-width: 180px; }
 #tab-artifacts .artifact-overview-table-wrap tbody tr { cursor: pointer; }

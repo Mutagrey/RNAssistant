@@ -6,6 +6,7 @@
   var sequencePreview = null;
   var selected = null, selectedRevision = null, collapsed = {}, searchTimer, loading = false, overviewRequested = true;
   var overviewLoading = false, overviewError = "";
+  var overviewSort = { key: "updated", descending: true };
   function el(id) { return document.getElementById("artifactCatalog" + id); }
   function node(tag, text, className) {
     var result = document.createElement(tag); result.textContent = text || "";
@@ -24,6 +25,9 @@
     if (item.kind === "file" || item.kind === "attachment") return ({ json: "JSON", pdf: "PDF", txt: "Текст", md: "Markdown" })[suffix] || "Файл";
     return ({ html_workspace: "HTML", markdown: "Markdown", plan_document: "План", task_list: "Задачи",
       image: "Изображение", sequence: "Коллекция" })[item.kind] || item.kind || "Файл";
+  }
+  function overviewOwner(item) {
+    return item.linked ? "Этот чат" : item.documentId === response.documentId ? "В документе" : item.documentTitle || "Другой документ";
   }
   function overviewDate(value) {
     var date = new Date(value);
@@ -61,6 +65,11 @@
     $("htmlWorkspaceEditor").hidden = true;
     el("Preview").hidden = true;
     rows.replaceChildren();
+    document.querySelectorAll("#artifactCatalogOverviewTable [data-artifact-sort-head]").forEach(function (head) {
+      var key = head.getAttribute("data-artifact-sort-head");
+      if (key === overviewSort.key) head.setAttribute("aria-sort", overviewSort.descending ? "descending" : "ascending");
+      else head.removeAttribute("aria-sort");
+    });
     var items = !overviewLoading && !overviewError && response && response.items || [];
     items.forEach(function (item) {
       var row = document.createElement("tr"), name = document.createElement("td"), open = node("button", "", "rna-table-link artifact-overview-link");
@@ -70,7 +79,7 @@
       name.appendChild(open); row.appendChild(name);
       row.appendChild(node("td", overviewFormat(item)));
       var ownerCell = node("td", ""); ownerCell.appendChild(node("small",
-        item.linked ? "Этот чат" : item.documentId === response.documentId ? "В документе" : item.documentTitle || "Другой документ"));
+        overviewOwner(item)));
       row.appendChild(ownerCell);
       var dateCell = node("td", ""); dateCell.appendChild(node("small", overviewDate(item.updatedUtc)));
       row.appendChild(dateCell);
@@ -234,7 +243,8 @@
     status("Загрузка…"); el("More").hidden = true; renderOverview();
     try {
       var result = await send("listArtifactCatalog", { chatId: id, scope: el("Scope").value, query: $("artifactNavSearch").value,
-        kind: el("Kind").value, documentId: "", cursor: cursor || null });
+        kind: el("Kind").value, documentId: "", sortBy: overviewSort.key, sortDescending: overviewSort.descending,
+        cursor: cursor || null });
       if (!current(id, nav) || version !== generation) return;
       if (result.chatId !== id) throw new Error("Получено дерево другого чата.");
       if (cursor && response) result.items = response.items.concat(result.items);
@@ -390,7 +400,7 @@
   }
   function tree(nodes, htmlChildren, options) {
     if (!response) return null;
-    var byId = {}, chatGroup = null, documentGroup = null, otherGroup = null;
+    var byId = {}, chatGroup = null, documentGroup = null, otherGroup = null, htmlGroups = {};
     function makeGroup(key, title) {
       return { key: key, groupKey: key, title: title, iconKind: null, expanded: !collapsed[key], children: [] };
     }
@@ -418,7 +428,16 @@
       if (item.kind === "html_workspace" && item.documentId === response.documentId && item.selected) {
         entry.children = htmlChildren; entry.groupKey = "catalog::" + item.resourceUri;
       }
-      owner(item).children.push(entry);
+      var parent = owner(item);
+      if (item.kind === "html_workspace") {
+        var htmlKey = "catalog-html::" + parent.groupKey;
+        if (!htmlGroups[htmlKey]) {
+          htmlGroups[htmlKey] = makeGroup(htmlKey, "HTML-проекты");
+          htmlGroups[htmlKey].iconKind = "folder";
+          parent.children.push(htmlGroups[htmlKey]);
+        }
+        htmlGroups[htmlKey].children.push(entry);
+      } else parent.children.push(entry);
     });
     // Preserve chat-only generated/system artifacts and a new, unsaved workspace.
     if (el("Scope").value === "chat") nodes.forEach(function (group) {
@@ -611,6 +630,13 @@
     finally { pending = false; actions(); if (lease) await send("closeArtifactTransfer", { chatId: id, leaseId: lease.leaseId }).catch(function () {}); }
   }
   ["Scope", "Kind"].forEach(function (name) { el(name).addEventListener("change", function () { show(); }); });
+  document.querySelectorAll("#artifactCatalogOverviewTable [data-artifact-sort]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var key = button.getAttribute("data-artifact-sort");
+      overviewSort = { key: key, descending: key === overviewSort.key ? !overviewSort.descending : key === "updated" };
+      load();
+    });
+  });
   $("artifactNavSearch").addEventListener("input", function () { clearTimeout(searchTimer); searchTimer = setTimeout(function () { show(); }, 200); });
   el("All").addEventListener("click", backToOverview);
   el("More").addEventListener("click", function () { load(next); });
