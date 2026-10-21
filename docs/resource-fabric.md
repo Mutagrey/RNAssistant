@@ -1404,6 +1404,11 @@ cutover unless a concrete correctness or boundedness failure requires them.
 HTML bindings hold ResourceRef, head/exact policy, view/path and optional schema/
 mapping refs, never current dataset JSON or executable tool calls. Head policy is
 resolved on open; existing handles remain exact. Static JSON is a chat resource.
+New built-in model reads, discovery and HTML/JS inputs select `table` for bounded
+rows. Historical saved bindings, v1 transfer packages and custom JS inputs may
+still carry `records`; the internal data plane reads their original view/path
+without silently rewriting them. Its removal gate is recorded in the
+[migration map](stabilization/MIGRATION_MAP.md#historical-structural-records-view--2026-10-21).
 
 `common.html_data_write` stores JSON and immediately creates a named `text`
 binding. Its result exposes the readable JSON `sourceTarget`, view and policy;
@@ -1426,8 +1431,9 @@ workspace or binding member as a data source before mutation; structured model a
 JS reads of those targets direct the caller to the source. An identical binding is
 a verified no-op. Binding metadata is not restored as raw source after compaction.
 Page stream views are fixed at binding/open: `text/source` yields `batch.text`,
-while `table/records` yields `batch.rows` and `batch.columns`. The HTML skill does
-not override a records/text binding with a hard-coded table stream view.
+while `table` and historical `records` yield `batch.rows` and `batch.columns`.
+The HTML skill does not override a saved binding's view with a hard-coded table
+stream view.
 
 `RN.resources` opens named capabilities, reads bounded batches/streams and closes
 them. `ResourceDataPlaneService`/`ResourceDataRouter` serve the internal

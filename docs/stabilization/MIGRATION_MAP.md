@@ -18,6 +18,12 @@ gates; active tool compatibility adapter отсутствует. Windows/Office 
 проверкой resource-consumer cleanup (2026-09-07). Порядок задаёт
 [Resource MASTER](resource-cutover/MASTER.md), владельцев — [Resource Fabric](../resource-fabric.md).
 
+## Historical structural `records` view — 2026-10-21
+
+| Temporary seam | Owner / current consumers | Removal gate |
+|---|---|---|
+| Internal `records` structural reader beside canonical `table` | Resource Fabric and HTML binding/transfer owners. New built-in model reads, discovery and HTML/JS input schemas offer `table` only. Saved `HtmlWorkspaceDataBinding.View=records`, v1 artifact transfer packages and previously authored custom JS inputs can still reach the internal gateway/data plane. This is an explicit legacy read path, not a new binding choice. | Define and verify an explicit upgrade for saved bindings and v1 package import/export without losing source refs, head/exact policy, view path or data. Switch HTML/JS/transfer consumers and provider capabilities together; then remove `records` from the structural reader. Check restart, exact/head, derived mapping, Excel/Outlook/JSON and transfer host-neutral; qualify Windows/Office separately. No silent alias or deletion. |
+
 ## Product UI shell transition — 2026-10-18
 
 | Temporary seam | Owner / current consumers | Removal gate |

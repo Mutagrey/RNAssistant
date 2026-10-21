@@ -25,8 +25,8 @@ namespace RNAssistant.Office.Tools
                     ["description"] = "Local name passed to RN.resources.open(name)." },
                 ["target"] = Target(),
                 ["view"] = new JObject { ["type"] = "string",
-                    ["description"] = "Choose an advertised source view explicitly. records/table both return rows and columns; text/source return text chunks. raw is inert binary. Page views require pageIndex.",
-                    ["enum"] = new JArray("text", "source", "table", "records", "raw", "image", "thumbnail", "render-page", "page-thumbnail") },
+                    ["description"] = "Choose an advertised source view explicitly. table returns rows and columns; text/source return text chunks. raw is inert binary. Page views require pageIndex.",
+                    ["enum"] = new JArray("text", "source", "table", "raw", "image", "thumbnail", "render-page", "page-thumbnail") },
                 ["path"] = RecordPath(),
                 ["pageIndex"] = new JObject { ["type"] = "integer", ["minimum"] = 0, ["maximum"] = 999999,
                     ["description"] = "Zero-based page number, only for render-page/page-thumbnail." }
@@ -46,11 +46,13 @@ namespace RNAssistant.Office.Tools
             return new JObject { ["type"] = "object", ["properties"] = properties,
                 ["required"] = new JArray("name", "target", "view"), ["additionalProperties"] = false,
                 ["anyOf"] = new JArray(branch(new[] { "text", "source", "raw", "image", "thumbnail" }, null),
-                    branch(new[] { "table", "records" }, "path"), branch(new[] { "render-page", "page-thumbnail" }, "pageIndex")) };
+                    branch(new[] { "table" }, "path"), branch(new[] { "render-page", "page-thumbnail" }, "pageIndex")) };
         }
 
         internal static string ResolvePath(ResourceIntentTarget target, string view, string path, int? pageIndex = null)
         {
+            // Historical custom JS inputs can still select records through this internal resolver.
+            // Built-in model reads and new HTML bindings reject records before calling it.
             if (view == "table" || view == "records")
             {
                 if (pageIndex.HasValue) throw Invalid("pageIndex is only valid for page views.");

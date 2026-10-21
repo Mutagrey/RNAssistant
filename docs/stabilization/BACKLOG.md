@@ -15,13 +15,16 @@
 ## Один табличный resource view — 2026-10-21
 
 Owner: Resource Fabric / HTML data binding / model contract. `table` и `records`
-сейчас дают одинаковые колонки, строки, coverage и batch-поток; для новых задач
-инструкции рекомендуют `table`. Удалять `records` только вместе с переводом
-сохранённых HTML bindings, JS/transfer consumers, provider capabilities, schemas,
-skills и result guidance. Явно обработать старые версии без потери пользовательских
-данных и без скрытого alias. Проверить exact/head binding, derived mapping,
+дают одинаковые колонки, строки, coverage и batch-поток. Новые built-in model
+reads, discovery и HTML/JS input schemas теперь предлагают только `table`;
+сохранённые HTML bindings, v1 transfer packages и старые custom JS inputs всё ещё
+читаются через внутренний `records` path. Временный seam и условие удаления — в
+[MIGRATION_MAP](MIGRATION_MAP.md#historical-structural-records-view--2026-10-21).
+Следующий этап: явно перевести сохранённые bindings и transfer/JS consumers,
+затем вместе убрать `records` из provider capabilities и internal reader без
+потери данных или скрытого alias. Проверить exact/head binding, derived mapping,
 Excel/Outlook/JSON reads, transfer и restart host-neutral. Затем сравнить выбор
-модели на тех же fixture; Windows/Office и WebView2 остаются отдельным gate.
+модели на тех же fixture; Windows/Office и WebView2 — отдельный gate.
 
 ## Устаревшая проверка ссылок built-in skills — 2026-10-21
 

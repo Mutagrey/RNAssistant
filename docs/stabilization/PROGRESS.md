@@ -1,5 +1,18 @@
 # Stabilization progress
 
+## One new structural view for model inputs — 2026-10-21
+
+New built-in resource reads, discovery and HTML/JS input schemas expose `table`
+for bounded rows; new HTML binds reject `records`. Saved HTML bindings, v1
+transfer packages and older custom JS inputs still use the internal `records`
+reader. Thirteen focused resource, HTML, Excel, JS, inventory and transfer Harness
+checks pass, including old binding read after transfer/restart. The legacy seam and its
+removal gate are in [MIGRATION_MAP](MIGRATION_MAP.md#historical-structural-records-view--2026-10-21).
+Live model choice, Windows/Office and WebView2 remain unqualified.
+
+Next: explicit saved-binding/package migration, then removal of internal
+`records` and provider advertisements with host-neutral restart/transfer checks.
+
 ## Explicit Excel chart source on creation — 2026-10-21
 
 `excel.upsert_chart` now requires a nonblank `sourceRange` when it creates a

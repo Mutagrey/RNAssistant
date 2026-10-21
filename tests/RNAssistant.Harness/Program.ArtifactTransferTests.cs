@@ -63,6 +63,16 @@ namespace RNAssistant.Harness
                 AssertEqual(copied.Id, loaded.ActiveHtmlArtifactId, "copy survives restart");
                 AssertTrue(copied.Id != first.Id, "independent logical identity");
                 AssertTrue(loaded.HtmlWorkspace.DataSources.All(d => d.Binding.Policy == "exact" && DocumentArtifactStore.Owns(target, d.Binding.Resource)), "no original authority binding survives");
+                var savedBinding = loaded.HtmlWorkspace.DataSources.Single().Binding;
+                AssertEqual("records", savedBinding.View, "old transfer retains its saved view after restart");
+                using (var plane = new ResourceDataPlaneService(executor.ResourceGateway))
+                {
+                    var opened = plane.Open(loaded, "workspace", savedBinding.Resource, savedBinding.View, savedBinding.ViewPath);
+                    var batch = Newtonsoft.Json.Linq.JObject.Parse(Encoding.UTF8.GetString(
+                        plane.Read(opened.LeaseId, 0, 500, System.Threading.CancellationToken.None)));
+                    AssertEqual(12, (int)batch["rows"][0]["amount"], "saved records binding still reads transferred data");
+                    plane.Close(loaded.Id, "workspace", opened.LeaseId);
+                }
                 var before = chats.DocumentArtifacts.List(target).Count;
                 var rejected = false;
                 try { catalog.Import(target, export.Bytes, export.FileName, export.ContentType, operation); } catch (InvalidOperationException) { rejected = true; }

@@ -17,7 +17,7 @@ namespace RNAssistant.Office.Tools
             return "Workspace: Bind a source target returned by common.resources_find or a binding's sourceTarget. " +
                 "The workspace stores only a canonical resource reference, view and head/exact policy. " +
                 "HTML workspace and HTML data targets describe the workspace/binding, not its source values; never bind them. html_data_write already creates a text binding. " +
-                "For Excel chart/report data, bind an Excel range, table, or name target with table/records; an Excel search scope is discovery output, not a tabular data source. " +
+                "For Excel chart/report data, bind an Excel range, table, or name target with table; an Excel search scope is discovery output, not a tabular data source. " +
                 "For an uploaded spreadsheet file, bind its original file target with raw and parse bounded bytes locally with the HTML skill's XLSX vendor; this does not replace live Excel range authority. " +
                 "Page code opens RN.resources.open(name) and consumes bounded read/stream batches. " +
                 "Choose view explicitly. policy=head (default) resolves current state on open; exact retains an immutable revision.";
@@ -38,9 +38,13 @@ namespace RNAssistant.Office.Tools
                     "html_data_write already binds JSON: use RN.resources.open(name). To change its view, read the HTML data target as text and bind its sourceTarget instead.",
                     "html_binding_target_invalid", false);
             var view = ToolArgumentReader.String(arguments, "view", "text");
+            if (view == "records")
+                throw new ResourceRequestException(
+                    "Use view=table for new bindings; saved records bindings remain readable.",
+                    "RESOURCE_VIEW_UNSUPPORTED", false);
             var policy = ToolArgumentReader.String(arguments, "policy", "head");
             if (policy != "head" && policy != "exact") throw new InvalidOperationException("Invalid binding policy.");
-            if (target.Type == "Excel search scope" && (view == "table" || view == "records"))
+            if (target.Type == "Excel search scope" && view == "table")
                 throw new ResourceRequestException(
                     "Excel search scopes expose search evidence, not tabular source data. Bind an Excel range, table, or name target returned by common.resources_find.",
                     "RESOURCE_VIEW_UNSUPPORTED", false);
@@ -126,6 +130,7 @@ namespace RNAssistant.Office.Tools
                 throw new InvalidOperationException("HTML_RESOURCE_BINDING_INVALID: explicit canonical head/exact binding required.");
             if (string.IsNullOrWhiteSpace(binding.View) || binding.View.Length > 64)
                 throw new InvalidOperationException("HTML_RESOURCE_VIEW_INVALID: an explicit bounded view is required.");
+            // Saved records bindings still use the historical structural reader.
             if (binding.ViewPath != null && (binding.ViewPath.Length > 256 || binding.View != "table" && binding.View != "records" &&
                 binding.View != "render-page" && binding.View != "page-thumbnail"))
                 throw new InvalidOperationException("HTML_RESOURCE_VIEW_INVALID: path belongs to a bounded structural view.");

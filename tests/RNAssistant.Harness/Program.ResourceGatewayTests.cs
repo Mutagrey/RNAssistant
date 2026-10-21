@@ -890,13 +890,17 @@ namespace RNAssistant.Harness
                 "public resource schema hides provider paging and identity properties; descriptions may forbid them");
             string pathError;
             AssertTrue(ToolSchemaSupport.ValidateArguments(new JObject {
-                ["target"] = "attachment: records.json", ["representation"] = "records",
+                ["target"] = "attachment: records.json", ["representation"] = "table",
                 ["path"] = "$.records"
             }, readSchema, false, out pathError), "resource read admits explicit object-property paths");
             AssertTrue(!ToolSchemaSupport.ValidateArguments(new JObject {
-                ["target"] = "attachment: records.json", ["representation"] = "records",
+                ["target"] = "attachment: records.json", ["representation"] = "table",
                 ["path"] = "$[*]"
             }, readSchema, false, out pathError), "resource read rejects wildcard paths before execution");
+            AssertTrue(!ToolSchemaSupport.ValidateArguments(new JObject {
+                ["target"] = "attachment: records.json", ["representation"] = "records",
+                ["path"] = "$.records"
+            }, readSchema, false, out pathError), "new model reads expose only the table view");
 
             var resolved = gateway.Resolve(session, resourceUri);
             AssertEqual(resourceUri, resolved.Resource.Reference.Uri, "resource resolve is exact");

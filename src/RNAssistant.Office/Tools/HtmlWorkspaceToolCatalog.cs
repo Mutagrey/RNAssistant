@@ -63,7 +63,7 @@ namespace RNAssistant.Office.Tools
                 HtmlWorkspaceToolService.WriteFileSchema(),
                 "html_workspace_write_file", true, 0);
             yield return Projection(WriteDataToolId,
-                "Workspace: Store exact JSON and immediately bind it under name with view=text. RN.resources.open(name) is ready; no extra html_data_bind call is needed after this write. Text stream batches contain text chunks, not parsed records: concatenate batch.text and JSON.parse once. The result supplies the JSON source target for explicit reads or a deliberate records binding. Runs bounded static preflight automatically.",
+                "Workspace: Store exact JSON and immediately bind it under name with view=text. RN.resources.open(name) is ready; no extra html_data_bind call is needed after this write. Text stream batches contain text chunks, not parsed records: concatenate batch.text and JSON.parse once. The result supplies the JSON source target for explicit reads or a deliberate table binding. Runs bounded static preflight automatically.",
                 HtmlWorkspaceToolService.WriteDataSchema(),
                 "html_data_write", true, 0);
             yield return Projection(ApplyPatchToolId,

@@ -805,7 +805,7 @@ namespace RNAssistant.Office.Services
                 ByteLength = state.Descriptor.ByteLength,
                 CreatedUtc = state.Descriptor.CreatedUtc,
                 Representations = (state.Descriptor.Representations ??
-                    new List<string>()).ToList(),
+                    new List<string>()).Where(view => view != "records").ToList(),
                 Usage = IntentUsage(state.Type, state.Descriptor),
                 MatchRepresentation = match == null ? null : match.Representation,
                 SectionTitle = match == null ? null : match.SectionTitle,
@@ -828,7 +828,7 @@ namespace RNAssistant.Office.Services
             if (type == "HTML workspace")
                 return "Read structure for member targets and binding sourceTarget metadata, then read an exact HTML file target with source. The workspace itself is not a dataset.";
             if (type == "HTML data")
-                return "Existing binding, not data values: read text for name/view/policy/sourceTarget. Page code already opens RN.resources.open(name). Do not bind this metadata or request records on it; use its sourceTarget for data reads or a deliberate rebind.";
+                return "Existing binding, not data values: read text for name/view/policy/sourceTarget. Page code already opens RN.resources.open(name). Do not bind this metadata or request table on it; use its sourceTarget for data reads or a deliberate rebind.";
             if (type == "Outlook mail")
                 return "Read structure for attachment metadata and targets without reading the mail body. Pass a copied attachment target to common.resources_find, then read its text or media.";
             if (type == "Outlook attachment")
@@ -846,7 +846,7 @@ namespace RNAssistant.Office.Services
             if (descriptor.Metadata.ContainsKey("sectionRead"))
                 return "Use representation=text and section with an exact unique ATX heading title (without leading #) to read that section and nested subsections, up to 32000 characters. Omit section to read the whole text. Discovery descriptions/snippets are not whole-read evidence.";
             if (!string.IsNullOrWhiteSpace(IntentRecordsPath(descriptor)))
-                return "For table/records omit path; runtime applies this target's canonical record view.";
+                return "For table omit path; runtime applies this target's canonical row view.";
             return null;
         }
 

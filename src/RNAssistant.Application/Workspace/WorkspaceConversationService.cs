@@ -946,7 +946,7 @@ namespace RNAssistant.Runtime
                 {
                     properties["target"]["description"] = "Exact semantic target from the bound Office document or its discovery result.";
                     properties["representation"] = new JObject { ["type"] = "string",
-                        ["enum"] = new JArray("metadata", "text", "structure", "source", "media", "formulas", "table", "records") };
+                        ["enum"] = new JArray("metadata", "text", "structure", "source", "media", "formulas", "table") };
                     properties["partNumber"] = new JObject { ["type"] = "integer", ["minimum"] = 1 };
                     properties["startLine"] = new JObject { ["type"] = "integer", ["minimum"] = 1 };
                     properties["lineCount"] = new JObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = 500 };

@@ -10,6 +10,7 @@
 # 2026-10-21: reviewed file create/copy/patch, indexed resource outline/search and selected Excel column summary as separate semantic intents; reconciled bounded partNumber and four guidance-only descriptor revisions.
 # 2026-10-21: excel.add_table sourceRange is required and nonblank; generated table name and default headers remain optional.
 # 2026-10-21: excel.upsert_chart requires an explicit nonblank sourceRange on creation; omission on update preserves the existing source; supported chartType values are explicit.
+# 2026-10-21: new built-in structural reads and HTML bindings expose table; historical records remain an internal saved-binding/transfer view.
 common.capabilities_read	Excel,Outlook,PowerPoint,Word	agent,plan	capabilities.read.intent.v1	83a5377df41216258264626ccd93d35427348bde31354a064bb27ff1355be73f	action,id,referencePath	id=semantic-capability-identity
 common.capabilities_search	Excel,Outlook,PowerPoint,Word	agent,plan	capabilities.search.intent.v1	7e647d1a4ae13887d52348b154210db01e9dd818346404a316105e88d68b5e48	kind,query	-
 common.file_copy	Excel,Outlook,PowerPoint,Word	agent	common.file_copy.intent.v1	034ef9cfe3d49557561570695666f29adbab02da1c2e2366a806a83433f8d647	name,source	-
@@ -18,10 +19,10 @@ common.file_patch	Excel,Outlook,PowerPoint,Word	agent	common.file_patch.intent.v
 common.html_assets_import	Excel,Outlook,PowerPoint,Word	agent	html.assets.import.v2	2ce47af84f2c7bb2a919bfdbbcbb88e5df88707726d898dd616b2679a19289e2	id,version	id=semantic-user-package-name
 common.html_assets_list	Excel,Outlook,PowerPoint,Word	agent	html.assets.list.v2	111262a74ed01ea92653c2904399ee8d20c5a42489be0c58dc9cfd0e9f24f200	limit,query	-
 common.html_assets_publish	Excel,Outlook,PowerPoint,Word	agent	html.assets.publish.v2	3cc79da54635a071ed66a39e1cf7f71be9e9c1201798acc45356ad4b5d07bf61	description,files,id,license,provenance,title,usage,version	id=semantic-user-package-name
-common.html_data_bind	Excel,Outlook,PowerPoint,Word	agent	html.data.bind.v2	185100fb80968b09c560a147623257d84b0833a134b1f3e5488e7d557a20d87b	name,pageIndex,path,policy,target,view	-
+common.html_data_bind	Excel,Outlook,PowerPoint,Word	agent	html.data.bind.v2	675ccd34f4ea86f1ffd51d44705629fdd56f4ff7f4e3b6cb3229657974eb8934	name,pageIndex,path,policy,target,view	-
 common.html_data_freeze	Excel,Outlook,PowerPoint,Word	agent	html.data.freeze.v2	d8a3c55874fef73de5fa0e724c2f468c01b792a3d02c4b17655f8421eb902133	name	-
 common.html_data_refresh	Excel,Outlook,PowerPoint,Word	agent	html.data.refresh.v2	8de83e7cb3b8a37b32fb7e48fa978b26f3c249b5d155c10796013f2aa8e9a4a2	name	-
-common.html_data_write	Excel,Outlook,PowerPoint,Word	agent	html.data.write.v2	9988fb78351c113b34423f65adcb6a7310979200a9ea558f5fd9ef4b3058abfc	json,name	-
+common.html_data_write	Excel,Outlook,PowerPoint,Word	agent	html.data.write.v2	9ef1ce2ca07279193c8895325a5578845ec8a3994b04fd4aff709950ae421c85	json,name	-
 common.html_workspace_apply_patch	Excel,Outlook,PowerPoint,Word	agent	html.workspace.apply.patch.v2	61fbb8be7006efd11728272be60d0c70a43f6cc030ed1d960c31d577a6c82320	patch,patch[].find,patch[].op,patch[].text,path	-
 common.html_workspace_delete	Excel,Outlook,PowerPoint,Word	agent	html.workspace.delete.v2	940955ecdfe292487031f5d8dcf248567399df6855aee77d3b794ed90d154235	target	-
 common.html_workspace_write_file	Excel,Outlook,PowerPoint,Word	agent	html.workspace.write.file.v2	b1c91988caf26e27ce9600922c962bb9762e6d60f593ed93d60f53f4d8f3bb13	content,path	-
@@ -37,7 +38,7 @@ common.resources_derive	Excel,Outlook,PowerPoint,Word	agent	common.resources_der
 common.resources_find	Excel,Outlook,PowerPoint,Word	agent,chat,plan	resources.find.v1	108b63753993f0da7b3bae39cd73be8da62c9d8610ecc3ed39371f71033925f4	query,scope	-
 common.resources_mapping_publish	Excel,Outlook,PowerPoint,Word	agent	common.resources_mapping_publish.v1	5d4b8ce29a2ec37a288089bb48757a098396fe26d1fc9a9a6ab4298a5f8e944e	mapping,mapping[].field,mapping[].sourceField,name,schema,skipRows,source	-
 common.resources_outline	Excel,Outlook,PowerPoint,Word	agent,chat,plan	resources.outline.v1	67a0cb59a6eca3940f060bcce61b28cb6c0955e0efac6ce15183473ad8300df6	fromPart,limit,target	-
-common.resources_read	Excel,Outlook,PowerPoint,Word	agent,chat,plan	resources.read.intent.v2	9f5257d7ad259f8f4c31c6b89648cced8ef32d48ecbc04326c64d3d4217db115	fields,limit,lineCount,offset,partNumber,path,representation,section,startLine,target	offset=semantic-table-records-row-selector-not-provider-cursor
+common.resources_read	Excel,Outlook,PowerPoint,Word	agent,chat,plan	resources.read.intent.v2	5f3d30293d292ae07d5c7e6ee59f2e7f9415f09760a0b5922b7b5c2b4d21d0b3	fields,limit,lineCount,offset,partNumber,path,representation,section,startLine,target	offset=semantic-table-row-selector-not-provider-cursor
 common.resources_schema_draft	Excel,Outlook,PowerPoint,Word	agent	common.resources_schema_draft.v1	689b3ab543d6b65ed5eea2e457b3b5b69b0985b41565e195144c36b5b61d12e8	fields,fields[].name,fields[].nullable,fields[].type,fields[].unit,name	-
 common.resources_schema_publish	Excel,Outlook,PowerPoint,Word	agent	common.resources_schema_publish.v1	ab3f988894797b108d8e164c8566829f3af614da7e7a95b54596754c86b9a27e	draft,mapping,mapping[].field,mapping[].sourceField,name,skipRows,source	-
 common.resources_search	Excel,Outlook,PowerPoint,Word	agent,chat,plan	resources.search.v2	21e762ee687226708a41590d576d48c87104532dbfa021cc61b10b874c0859f3	limit,matchCase,query,target	-

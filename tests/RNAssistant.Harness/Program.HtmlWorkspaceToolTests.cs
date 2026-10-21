@@ -74,12 +74,16 @@ namespace RNAssistant.Harness
                     string bindError;
                     AssertTrue(ToolSchemaSupport.ValidateArguments(new JObject {
                         ["name"] = "sales", ["target"] = "attachment: records.json",
-                        ["view"] = "records", ["path"] = "$.records"
+                        ["view"] = "table", ["path"] = "$.records"
                     }, bindSchema, false, out bindError), "HTML binding admits an explicit structural path");
                     AssertTrue(!ToolSchemaSupport.ValidateArguments(new JObject {
                         ["name"] = "sales", ["target"] = "attachment: records.json",
-                        ["view"] = "records", ["path"] = "$[*]"
+                        ["view"] = "table", ["path"] = "$[*]"
                     }, bindSchema, false, out bindError), "HTML binding rejects wildcard structural paths before execution");
+                    AssertTrue(!ToolSchemaSupport.ValidateArguments(new JObject {
+                        ["name"] = "sales", ["target"] = "attachment: records.json",
+                        ["view"] = "records", ["path"] = "$.records"
+                    }, bindSchema, false, out bindError), "new HTML bindings expose only table");
                     AssertTrue(!ToolSchemaSupport.ValidateArguments(new JObject {
                         ["name"] = "sales", ["target"] = "attachment: records.json",
                         ["view"] = "text", ["path"] = "$.records"
@@ -118,7 +122,7 @@ namespace RNAssistant.Harness
                     var searchBinding = ExecuteHtmlNative(runtime,
                         HtmlWorkspaceToolCatalog.BindDataToolId,
                         new JObject { ["name"] = "search", ["target"] = "Excel search scope: sheet 'Data'",
-                            ["view"] = "records", ["path"] = "$" });
+                            ["view"] = "table", ["path"] = "$" });
                     AssertEqual(ToolExecutionOutcome.Error, searchBinding.Outcome,
                         "Excel search evidence is not accepted as tabular source data");
                     AssertContains(searchBinding.Result.Message, "Excel range, table, or name",
@@ -132,11 +136,17 @@ namespace RNAssistant.Harness
 
                     adapter.AddExcelTableForTest(
                         "Data", "A1:B4", "Sales", true, string.Empty);
+                    var advertised = executor.ResourceGateway.Find(
+                        session, "Sales", "all").Items
+                        .First(item => item.Type == "Excel table");
+                    AssertTrue(advertised.Representations.Contains("table") &&
+                        !advertised.Representations.Contains("records"),
+                        "model discovery advertises one structural view");
                     var tableBinding = ExecuteHtmlNative(runtime,
                         HtmlWorkspaceToolCatalog.BindDataToolId,
                         new JObject { ["name"] = "table-sales",
                             ["target"] = "Excel table: Sales",
-                            ["view"] = "records" });
+                            ["view"] = "table" });
                     AssertEqual(ToolExecutionOutcome.Ok, tableBinding.Outcome,
                         "HTML binding applies an Office target's canonical record view");
                     AssertEqual("$.values", session.HtmlWorkspace.DataSources
@@ -783,14 +793,14 @@ namespace RNAssistant.Harness
                         new JObject { ["name"] = "dashboardData", ["target"] = wrongTarget, ["view"] = "text" });
                     AssertEqual(ToolExecutionOutcome.Error, wrong.Outcome, "workspace/binding metadata cannot replace source values");
                     AssertEqual(previousHead, session.ActiveHtmlArtifactId, "invalid binding retains the working data source");
-                    var records = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
-                        new JObject { ["target"] = wrongTarget, ["representation"] = "records" });
-                    AssertContains(records.Result.Message, "sourceTarget", "wrong structural read gives an actionable source route");
+                    var table = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
+                        new JObject { ["target"] = wrongTarget, ["representation"] = "table" });
+                    AssertContains(table.Result.Message, "sourceTarget", "wrong structural read gives an actionable source route");
                 }
 
-                var bindArgs = new JObject { ["name"] = "dashboardData", ["target"] = sourceTarget, ["view"] = "records" };
+                var bindArgs = new JObject { ["name"] = "dashboardData", ["target"] = sourceTarget, ["view"] = "table" };
                 var rebound = ExecuteHtmlNative(runtime, HtmlWorkspaceToolCatalog.BindDataToolId, bindArgs);
-                AssertEqual(ToolExecutionOutcome.Ok, rebound.Outcome, "explicit source can be rebound as records");
+                AssertEqual(ToolExecutionOutcome.Ok, rebound.Outcome, "explicit source can be rebound as table");
                 var historicalBinding = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
                     new JObject { ["target"] = oldMemberSnapshot, ["representation"] = "text" });
                 AssertEqual(ToolExecutionOutcome.Ok, historicalBinding.Outcome, "historical binding remains readable after rebind");

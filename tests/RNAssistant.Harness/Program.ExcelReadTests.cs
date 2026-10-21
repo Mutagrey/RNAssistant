@@ -571,13 +571,13 @@ namespace RNAssistant.Harness
                 }
                 adapter.SetExcelTableRangeForTest("Data", "Sales", "E1:F3");
                 var rows = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
-                    new JObject { ["target"] = "Excel table: Sales", ["representation"] = "records", ["limit"] = 2 });
+                    new JObject { ["target"] = "Excel table: Sales", ["representation"] = "table", ["limit"] = 2 });
                 AssertEqual(ToolExecutionOutcome.Ok, rows.Outcome,
-                    "bounded model records use the table's canonical path without model plumbing");
+                    "bounded model table rows use the canonical path without model plumbing");
                 var rangeReads = adapter.ExcelBackendCalls.Count(item =>
                     item == FakeOfficeAdapter.ExcelRangeReadOperation);
                 var wrongPath = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
-                    new JObject { ["target"] = "Excel table: Sales", ["representation"] = "records", ["path"] = "$.records" });
+                    new JObject { ["target"] = "Excel table: Sales", ["representation"] = "table", ["path"] = "$.records" });
                 AssertEqual(ToolExecutionOutcome.Error, wrongPath.Outcome,
                     "a conflicting explicit table path is rejected");
                 AssertEqual("RESOURCE_VIEW_PATH_MISMATCH",
@@ -688,10 +688,10 @@ namespace RNAssistant.Harness
                 }
                 AssertEqual(calls, adapter.ExcelBackendCalls.Count, "historical text and records perform no Office I/O");
                 adapter.ExcelNamesForTest.Add(name); name.Address = "E1:F3";
-                foreach (var view in new[] { "records", "formulas", "structure" })
+                foreach (var view in new[] { "table", "formulas", "structure" })
                 {
                     var args = new JObject { ["target"] = "Excel name: Sales", ["representation"] = view };
-                    if (view == "records") args["limit"] = 2;
+                    if (view == "table") args["limit"] = 2;
                     var read = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId, args);
                     AssertEqual(ToolExecutionOutcome.Ok, read.Outcome, "resized name supports shared " + view + " view");
                 }
