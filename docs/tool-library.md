@@ -42,6 +42,17 @@ admission through `common.capabilities_read`; independent schema reads may share
 one batch. A selected skill can supply its declared tools in the next request.
 Neither route changes confirmation, execution policy or effect verification.
 
+Once a direct tool is in the frozen callable surface, its successful schema-read
+result is projected as a compact receipt with `schemaInRequest=true`. The compiler
+passes that surface separately from the discoverable catalog; the projection must
+match both the complete descriptor and its revision before omitting the duplicate
+descriptor. The exact schema remains in the request instructions or strict response
+schema, including fallback to `json_object`. Full read evidence stays in the durable
+transcript/CAS. Admission still consumes that complete result; replay still requires
+durable tool-pack extension decisions. The compact receipt cannot grant authority.
+Missing admission/surface, incomplete reads, mismatches and
+stale/error diagnostics do not become successful compact receipts.
+
 The `excel.analysis_reporting` package supplies inspection, sheet creation, range
 writes, tables, formatting and both workbook/chat charts. Standalone operations do
 not require selecting that skill. The Excel profile is `excel-inspect-core`;

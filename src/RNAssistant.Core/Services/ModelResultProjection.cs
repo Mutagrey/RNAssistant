@@ -18,17 +18,18 @@ namespace RNAssistant.Core.Services
     {
         private const string Prefix = "TOOL_RESULT:\n";
         private readonly Func<string, ToolResultMaterialization, IEnumerable<ToolCatalogEntry>,
-            IEnumerable<SkillDefinition>, ToolResultMaterialization> _projectData;
+            IEnumerable<SkillDefinition>, IEnumerable<ToolCatalogEntry>, ToolResultMaterialization> _projectData;
 
         public ModelResultProjection(Func<string, ToolResultMaterialization, IEnumerable<ToolCatalogEntry>,
-            IEnumerable<SkillDefinition>, ToolResultMaterialization> projectData = null)
+            IEnumerable<SkillDefinition>, IEnumerable<ToolCatalogEntry>, ToolResultMaterialization> projectData = null)
         { _projectData = projectData; }
 
         public ChatMessage Project(
             ChatMessage source,
             IEnumerable<ToolCatalogEntry> tools = null,
             IEnumerable<SkillDefinition> skills = null,
-            Action<List<ContextMessagePresentation>> recordPresentation = null)
+            Action<List<ContextMessagePresentation>> recordPresentation = null,
+            IEnumerable<ToolCatalogEntry> callableTools = null)
         {
             var projected = HistoricalContextProjector.Project(source);
             if (projected == null) return null;
@@ -61,7 +62,7 @@ namespace RNAssistant.Core.Services
             // runs only for other tools; recovery is rendered once from typed facts.
             var model = IsResourceEvidence(wire.Name) || IsWorkspaceMutation(wire.Name) || _projectData == null
                 ? ProjectData(wire.Name, materialized)
-                : _projectData(wire.Name, materialized, tools, skills);
+                : _projectData(wire.Name, materialized, tools, skills, callableTools);
             var recovery = source.ExecutionProgress?.Recovery;
             if (recovery != null)
             {

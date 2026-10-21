@@ -320,8 +320,35 @@ discovery; `skill packages: built-ins` checks the report package's complete tool
 dependencies. `unified policy: native Office approval` and
 `auto confirmation: native multistep` cover approval/restart and unknown effects
 after the sheet schema is loaded. These fake-host cases do not measure model
-discovery quality or qualify real Excel; the fake host's report skill body is a
-stub. Use the separate live combined fixture for context pressure and task results.
+discovery quality or qualify real Excel.
+
+`agent: model projection compacts only callable schema` covers duplicate-schema
+removal only against the current exact callable surface, all three result roles,
+incomplete/mismatched/stale evidence and unchanged durable admission authority.
+`tool pack: optional schema requires exact admission` also verifies compact receipts
+in both response modes; the overflow and durable-replay cases retain their existing
+guards. `model context: request schema modes and fallback` checks the authoritative
+schema placement across strict transport and `json_object` fallback.
+
+For report discovery use `--excel-report-workflow-scripted`, then
+`--excel-report-workflow-live`, with the same profile variables and separate new
+evidence directories. The real adapter and fake host share the production
+`excel.analysis_reporting` definition. The task asks for numeric regional totals,
+a named sheet/table, a number format and a workbook chart, preserving source data.
+Acceptance compares the final fake workbook independently of the model's message:
+six state checks, completed runtime, at least five verified writes and no unknown
+effects. The grader regression rejects changed source, numeric strings, missing
+table/format and a wrong chart source.
+
+The default live task names no skill or tool; direct schema discovery is valid.
+Set `RNA_REQUIRE_REPORT_SKILL=true` for a separate explicit skill-load case; its
+acceptance also requires the entire selected production body in a model instruction
+message. Evidence separates `taskPassed` from `reportSkillOffered` and retains the
+exact task, skill, workbook states and wire requests. Compare identical task/profile
+cases; do not treat the explicit-load case as unprompted skill discovery. The fake
+backend verifies state and read-back contracts, not Excel calculation or visual
+rendering. Use the combined HTML/VBA fixture separately for cross-skill pressure.
+
 The package slice covers selection, next-request exposure, exact dispatch, shared
 dependencies, version conflicts/revocation, budget, compaction-independent state,
 restart/new-turn selection, fresh authority and inert UI metadata.

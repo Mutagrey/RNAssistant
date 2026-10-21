@@ -380,6 +380,69 @@ namespace RNAssistant.Harness
                 "model capability result omits package revision");
         }
 
+        private static void ModelProjectionCompactsOnlyCallableSchema()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                var catalog = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
+                var tool = catalog.Single(item => item.Id == "excel.format_range");
+                var evidence = ReadSchemaEvidence(executor, catalog, tool.Id, "schema-projection");
+                evidence.RunId = "projected-evidence";
+                var original = evidence.Content;
+                Func<ChatMessage, IEnumerable<ToolCatalogEntry>, ToolResultWireReadResult> project = (message, callable) =>
+                {
+                    var model = ModelToolResultProjection.Project(message, catalog, new SkillDefinition[0], callableTools: callable);
+                    ToolResultWireReadResult wire; string error;
+                    AssertTrue(ToolResultHistoryReader.TryRead(model, out wire, out error), "projected schema result keeps its wire contract");
+                    return wire;
+                };
+                foreach (var callable in new[] { null, new ToolCatalogEntry[0] })
+                {
+                    var pending = project(evidence, callable);
+                    AssertTrue(pending.Data["descriptor"] != null && pending.Data["schemaInRequest"] == null,
+                        "catalog visibility or a successful read alone does not permit schema compaction");
+                }
+                var compact = project(evidence, new[] { tool });
+                AssertTrue(compact.Data["descriptor"] == null && (bool?)compact.Data["schemaInRequest"] == true,
+                    "exact callable schema is replaced only in the model view");
+                AssertEqual(tool.Id, (string)compact.Data["id"], "receipt retains the public tool identity");
+                AssertEqual(RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok, compact.Result.Status, "successful evidence stays successful");
+                AssertEqual(original, evidence.Content, "full durable descriptor is never rewritten");
+                var pack = CallableToolPack.Create(ChatModes.Agent, "Excel", "projected-evidence", catalog);
+                AssertTrue(!pack.StageReadResult(ModelToolResultProjection.Project(evidence, catalog,
+                    new SkillDefinition[0], callableTools: new[] { tool })), "compact model receipt is never admission authority");
+                AssertTrue(pack.StageReadResult(evidence), "original exact evidence still admits the tool");
+
+                ToolResultWireReadResult originalWire; string readError;
+                AssertTrue(ToolResultHistoryReader.TryRead(evidence, out originalWire, out readError), "read native schema evidence");
+                foreach (var role in new[] { ToolResultRoles.User, ToolResultRoles.Developer, ToolResultRoles.Tool })
+                {
+                    foreach (var change in new Action<JObject>[] {
+                        data => data["complete"] = false,
+                        data => data["truncated"] = true,
+                        data => data["descriptor"]["function"]["parameters"] = JObject.Parse(EmptyFormalToolSchema),
+                        data => data["revision"] = "obsolete"
+                    })
+                    {
+                        var data = (JObject)originalWire.Data.DeepClone(); change(data);
+                        var command = Command(CapabilityToolCatalog.ReadToolId, "id", tool.Id); command.ToolCallId = "modified-schema";
+                        var message = AgentJsonProtocol.CreateToolResultMessage(command,
+                            TerminalToolResult.Ok("Schema read.", data.ToString()), role);
+                        var visible = project(message, new[] { tool });
+                        AssertTrue(visible.Data["schemaInRequest"] == null, "incomplete, mismatched or stale evidence cannot claim current exposure");
+                        if ((string)data["revision"] == "obsolete")
+                            AssertEqual(RNAssistant.Core.Tools.Contracts.ToolResultStatus.Error, visible.Result.Status, "stale evidence keeps its diagnostic");
+                    }
+                    var accepted = Command(CapabilityToolCatalog.ReadToolId, "id", tool.Id); accepted.ToolCallId = "exact-schema";
+                    var full = AgentJsonProtocol.CreateToolResultMessage(accepted, originalWire.Result, role);
+                    AssertTrue(project(full, new[] { tool }).Data["descriptor"] == null, "all result roles use the same compact projection");
+                }
+                var changed = tool.Clone(); changed.Description += " changed";
+                AssertTrue(project(evidence, new[] { changed }).Data["descriptor"] != null,
+                    "a different offered descriptor cannot replace the read schema");
+            });
+        }
+
         private static void ToolDiscoveryIsCompleteAndLoadsExactSchema()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
@@ -754,7 +817,20 @@ namespace RNAssistant.Harness
                             "guessed tool cannot mutate before admission");
                     }
                     if (requests == 3)
+                    {
                         AssertContains(FlattenSimple(messages), "\"admitted\":true", "batched discovery admits both exact schemas together");
+                        var receipts = 0;
+                        foreach (var message in messages)
+                        {
+                            ToolResultWireReadResult wire; string error;
+                            if (!ToolResultHistoryReader.TryRead(message, out wire, out error) ||
+                                wire.Name != CapabilityToolCatalog.ReadToolId) continue;
+                            receipts++;
+                            AssertTrue(wire.Data["descriptor"] == null && (bool?)wire.Data["schemaInRequest"] == true,
+                                "compiler omits duplicate schema history after admission in " + responseMode);
+                        }
+                        AssertEqual(2, receipts, "both schema reads remain as compact result receipts");
+                    }
                     return Task.FromResult(new LlmCompletionResult { Content = script.Dequeue() });
                 };
                 var settings = new AppSettings { AgentResponseMode = responseMode, AutoConfirmToolActions = true,

@@ -390,7 +390,7 @@ namespace RNAssistant.Harness
             {
                 return new[] { BuiltInSkill("outlook.email_assistant", "Outlook", "Outlook email assistant", "Draft, summarize, and reply to Outlook mail.") };
             }
-            return new[] { BuiltInSkill("excel.analysis_reporting", "Excel", "Excel analysis reporting", "Analyze ranges, create summaries, tables, and charts in Excel.") };
+            return RNAssistant.Office.Services.ExcelBuiltInSkillProvider.GetSkills();
         }
 
         public void QueueExcelInspectSnapshot(ExcelInspectSnapshot snapshot)
@@ -785,6 +785,24 @@ namespace RNAssistant.Harness
                 tables = s.Tables.Select(table => table.Name).ToArray(),
                 charts = s.Charts.Select(c => new { name = c.Name, title = c.Title, sourceRange = c.SourceRange, chartType = c.ChartType }).ToArray()
             }).ToArray());
+        }
+
+        internal JObject ExcelWorkbookStateForTest()
+        {
+            return JObject.FromObject(new
+            {
+                sheets = _excelSheetOrder.Select(name => new
+                {
+                    name,
+                    cells = _sheets[name].Cells,
+                    formulas = _sheets[name].FormulaCells.OrderBy(cell => cell).ToArray(),
+                    tables = _sheets[name].Tables,
+                    charts = _sheets[name].Charts
+                }).ToArray(),
+                formats = _excelRangeFormats,
+                filters = _excelRangeFilters,
+                autoFits = _excelRangeAutoFits
+            });
         }
 
         private bool TryFindChart(string sheetName, string chartName, out FakeSheet resolvedSheet, out FakeChart resolvedChart)

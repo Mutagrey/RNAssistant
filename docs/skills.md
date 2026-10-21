@@ -31,6 +31,11 @@ These files are data; loading a package executes none of them. Binary assets and
 archive installation are deferred. The core front matter contains `id`,
 `host`, `name`, `description`, human-authored `version` and `enabled`.
 
+`ExcelBuiltInSkillProvider` in Office owns the production Excel report definition;
+both the real adapter and fake host use it. The host-neutral report evaluation
+therefore exercises the complete shipped instructions and package dependencies.
+Its scripted and live cases are documented in the [Harness guide](../tests/RNAssistant.Harness/README.md).
+
 The visible catalog is built-in first, then custom, filtered to `Common` plus the
 current host (`Workspace` for the independent CLI). A custom package cannot shadow a built-in id. Tool and skill
 ids share one namespace and a collision fails request construction.

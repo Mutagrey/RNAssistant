@@ -24,8 +24,22 @@ uses one cloud endpoint/profile with unchanged task bounds and acceptance.
   passes 4/4 after explicit removal of the completed HTML skill and loading VBA.
   This is one successful trajectory, not a reliability rate. Simultaneous HTML/VBA
   selection can still exceed 32K; active skills and correctness checks must not
-  be silently dropped. Full live Excel report/discovery coverage also remains open:
-  the fake host's report skill body is a stub, despite complete dependency checks.
+  be silently dropped. The [production-text report fixture](PROGRESS.md#excel-report-discovery-with-production-skill-text--2026-10-21)
+  now passes all six workbook checks live through direct discovery and, separately,
+  explicit report-skill loading. The fake stub is removed. Each case is one
+  trajectory; unprompted report-skill/task-list selection and real Excel behavior
+  remain unqualified.
+- Excel report token overhead: the original direct/skill cases require three
+  protocol repairs each after attempted write batches, rejected before execution.
+  [Compact admitted-schema receipts](PROGRESS.md#compact-admitted-schema-receipts--2026-10-21)
+  remove duplicate model-history descriptors only against the exact current
+  callable surface. Five results shrink from 14,077 to 1561 characters; full
+  durable evidence remains. The same direct-loading task passes 6/6 again with
+  136,712 actual input tokens versus 174,451, but also takes 12 requests instead
+  of 13 and two repairs instead of three. This pair establishes neither a general
+  saving rate nor reliable format/batch compliance. Owner: capability/model-context
+  projection. Next: redundant branches within the authoritative tool schemas,
+  preserving argument validation and testing the same task/profile.
 - Repair guidance conflict is fixed in `ModelProtocolClient.CreateFormatRepairMessage`:
   generic repair no longer overrides the parser's skill-only route with direct
   schema discovery. Focused checks cover both routes and no execution before

@@ -501,7 +501,7 @@ namespace RNAssistant.Harness
                 SetContinuityCheckpoint(session, session.Messages.Last());
                 var set = ContextWorkingSet.Restore(session, new ChatMessage[0], 120);
                 var projected = 0;
-                var projection = new ModelResultProjection((tool, result, tools, skills) => { projected++; return result; });
+                var projection = new ModelResultProjection((tool, result, tools, skills, callableTools) => { projected++; return result; });
                 var compiler = new ModelContextCompiler(blobs, projection);
                 var compiled = compiler.Compile(authority, new ChatMessage[0], new ChatMessage[0], null, new ToolCatalogEntry[0],
                     new AppSettings(), externalized ? 12000 : 100000, workingSet: set);

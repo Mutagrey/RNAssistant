@@ -441,7 +441,7 @@ namespace RNAssistant.Core.Services
                         if (atom.BodyOmitted) continue;
                         if (projectionSkills == null) projectionSkills = authority.Skills.Skills;
                         atom.Messages[index] = _projection.Project(message, tools, projectionSkills,
-                            parts => atom.BodyParts[message.Id] = parts);
+                            parts => atom.BodyParts[message.Id] = parts, skillSurface?.Tools);
                     }
                     else if (message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion &&
                         string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase))

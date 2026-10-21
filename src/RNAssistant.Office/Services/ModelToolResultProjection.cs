@@ -23,8 +23,9 @@ namespace RNAssistant.Office.Services
             new RNAssistant.Core.Services.ModelResultProjection(ForModel);
 
         internal static ChatMessage Project(ChatMessage source, IEnumerable<ToolCatalogEntry> tools = null,
-            IEnumerable<SkillDefinition> skills = null, Action<List<ContextMessagePresentation>> recordPresentation = null)
-        { return Instance.Project(source, tools, skills, recordPresentation); }
+            IEnumerable<SkillDefinition> skills = null, Action<List<ContextMessagePresentation>> recordPresentation = null,
+            IEnumerable<ToolCatalogEntry> callableTools = null)
+        { return Instance.Project(source, tools, skills, recordPresentation, callableTools); }
 
         private static ToolResultMaterialization GenericForModel(string name, ToolResultMaterialization source)
         {
@@ -72,7 +73,8 @@ namespace RNAssistant.Office.Services
             string name,
             ToolResultMaterialization source,
             IEnumerable<ToolCatalogEntry> tools = null,
-            IEnumerable<SkillDefinition> skills = null)
+            IEnumerable<SkillDefinition> skills = null,
+            IEnumerable<ToolCatalogEntry> callableTools = null)
         {
             if (source == null) throw new ArgumentNullException(nameof(source));
             if (!IsCapabilityResult(name) && !IsPlanningResult(name) && !IsHtmlResult(name) &&
@@ -120,6 +122,9 @@ namespace RNAssistant.Office.Services
             }
             else
             {
+                if (name == CapabilityToolCatalog.ReadToolId && status == ToolResultStatus.Ok &&
+                    CompactCallableSchema(data, callableTools))
+                    message = "Tool schema is in the current request: " + (string)data["id"] + ".";
                 RemoveCapabilityRuntimeState(data);
             }
 
@@ -329,6 +334,27 @@ namespace RNAssistant.Office.Services
         {
             return string.Equals(name, CapabilityToolCatalog.SearchToolId, StringComparison.Ordinal) ||
                 string.Equals(name, CapabilityToolCatalog.ReadToolId, StringComparison.Ordinal);
+        }
+
+        private static bool CompactCallableSchema(JToken token, IEnumerable<ToolCatalogEntry> callableTools)
+        {
+            var data = token as JObject;
+            if (data == null || (string)data["kind"] != "tool-schema" ||
+                data["loaded"]?.Type != JTokenType.Boolean || !(bool)data["loaded"] ||
+                data["complete"]?.Type != JTokenType.Boolean || !(bool)data["complete"] ||
+                data["truncated"]?.Type != JTokenType.Boolean || (bool)data["truncated"])
+                return false;
+            var tool = callableTools?.FirstOrDefault(item => item != null &&
+                string.Equals(item.Id, (string)data["id"], StringComparison.Ordinal));
+            if (tool == null || !string.Equals((string)data["revision"],
+                    CapabilityCatalogService.Revision(tool), StringComparison.Ordinal) ||
+                !JToken.DeepEquals(data["descriptor"], CapabilityCatalogService.Descriptor(tool)))
+                return false;
+            // Only the detached model view changes. Admission/replay still consume
+            // the complete durable descriptor, and this request supplies its exact copy.
+            data.Remove("descriptor");
+            data["schemaInRequest"] = true;
+            return true;
         }
 
         private static bool IsPlanningResult(string name)

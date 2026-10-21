@@ -47,7 +47,7 @@ namespace RNAssistant.Harness
 
         // Opt-in diagnostics share the production conversation, budget and resource
         // owners with a fake document. Scripted mode makes no provider requests.
-        private static int ResourceWorkflowDiagnostic(string evidenceDirectory, bool vbaOnly = false, bool scripted = false)
+        private static int ResourceWorkflowDiagnostic(string evidenceDirectory, bool vbaOnly = false, bool scripted = false, bool excelReport = false)
         {
             var endpoint = Environment.GetEnvironmentVariable("RNA_BASE_URL");
             var model = Environment.GetEnvironmentVariable("RNA_MODEL");
@@ -56,6 +56,7 @@ namespace RNAssistant.Harness
             var evidence = Path.GetFullPath(evidenceDirectory);
             if (Directory.Exists(evidence)) throw new InvalidOperationException("Use a new evidence directory.");
             Directory.CreateDirectory(evidence);
+            var requireReportSkill = excelReport && Environment.GetEnvironmentVariable("RNA_REQUIRE_REPORT_SKILL") == "true";
             var settings = new AppSettings {
                 BaseUrl = endpoint, Model = model,
                 AgentResponseMode = Environment.GetEnvironmentVariable("RNA_RESPONSE_MODE") ?? AgentResponseModes.JsonSchema,
@@ -68,8 +69,9 @@ namespace RNAssistant.Harness
                 AutoCalibrateTokenEstimate = false
             };
             File.WriteAllText(Path.Combine(evidence, "profile.json"), JsonConvert.SerializeObject(settings, Formatting.Indented));
-            File.WriteAllText(Path.Combine(evidence, "scenario.json"), JsonConvert.SerializeObject(new { vbaOnly, scripted }));
+            File.WriteAllText(Path.Combine(evidence, "scenario.json"), JsonConvert.SerializeObject(new { vbaOnly, scripted, excelReport, requireReportSkill }));
             var passed = false;
+            var taskPassed = false;
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), settings, (executor, adapter) =>
             {
                 var session = NewSession(adapter);
@@ -81,21 +83,33 @@ namespace RNAssistant.Harness
                     new[] { "styles.css", "body { color: #112233; background: #ffffff; }\nh1 { font-size: 24px; }\n" },
                     new[] { "app.js", "let count = 0;\ndocument.getElementById('counter').onclick = function () { count += 1; this.textContent = count; };\n" }
                 };
-                foreach (var file in vbaOnly ? new string[0][] : original)
+                foreach (var file in vbaOnly || excelReport ? new string[0][] : original)
                     AssertTrue(executor.ExecuteManual(Command(HtmlWorkspaceToolCatalog.WriteFileToolId,
                         "path", file[0], "content", file[1]), tools, settings, false, false, session).Success, "seed HTML");
                 const string vba = "Option Explicit\r\nPublic Function ReportTitle() As String\r\n    ReportTitle = \"Old report\"\r\nEnd Function\r\n";
-                adapter.SetVbaModule("ReportModule", vba, "StdModule");
+                if (!excelReport) adapter.SetVbaModule("ReportModule", vba, "StdModule");
                 var task = "В существующем HTML-проекте измени заголовок Old report на Sales report, цвет текста #112233 на #225588, " +
                     "а кнопку-счётчик — чтобы каждый клик прибавлял 2 вместо 1. В существующем VBA ReportModule измени возвращаемую строку на Sales report. " +
                     "Сохрани остальные части исходников. Выполни изменения и проверь конечные исходники всех четырёх файлов. Кратко сообщи результат.";
                 if (vbaOnly) task = "В существующем VBA-модуле ReportModule замени возвращаемую строку Old report на Sales report. " +
                     "Сначала подключи только навык common.vba_code_editing, затем прочитай модуль и выполни одну точечную правку. " +
                     "Сохрани остальной исходник, проверь конечный текст и кратко сообщи результат. Выполнять VBA не нужно.";
-                var requireTaskList = !vbaOnly && Environment.GetEnvironmentVariable("RNA_REQUIRE_TASK_LIST") == "true";
+                var report = excelReport ? new ExcelReportWorkflowFixture(adapter) : null;
+                if (report != null) task = ExcelReportWorkflowFixture.Task;
+                if (requireReportSkill) task = "Сначала подключи навык excel.analysis_reporting. " + task;
+                var requireTaskList = !vbaOnly && !excelReport && Environment.GetEnvironmentVariable("RNA_REQUIRE_TASK_LIST") == "true";
                 if (requireTaskList) task = "Сначала подключи skill common.task_tracking и создай Task List с этапами; веди его до завершения задачи. " + task;
                 File.WriteAllText(Path.Combine(evidence, "task.txt"), task);
-                File.WriteAllText(Path.Combine(evidence, "before.json"), JsonConvert.SerializeObject(new {
+                var reportSkillBody = string.Empty;
+                var reportSkillOffered = false;
+                if (report != null)
+                {
+                    File.WriteAllText(Path.Combine(evidence, "before.json"), report.Before.ToString());
+                    var reportSkill = executor.CaptureSkills(executor.CaptureCatalogs()).Skills.Single(skill => skill.Id == "excel.analysis_reporting");
+                    reportSkillBody = reportSkill.BodyMarkdown;
+                    File.WriteAllText(Path.Combine(evidence, "report-skill.json"), JsonConvert.SerializeObject(reportSkill, Formatting.Indented));
+                }
+                else File.WriteAllText(Path.Combine(evidence, "before.json"), JsonConvert.SerializeObject(new {
                     html = vbaOnly ? new string[0][] : original, vba }, Formatting.Indented));
                 var client = new LlmClient(() => Environment.GetEnvironmentVariable("RNA_API_KEY"));
                 Func<string, JObject, string> call = (name, arguments) => ModelProtocolWire.Write("", new[] {
@@ -107,9 +121,14 @@ namespace RNAssistant.Harness
                         new JObject { ["find"] = "ReportTitle = \"Old report\"", ["text"] = "ReportTitle = \"Sales report\"" }) }),
                     ModelProtocolWire.Write("Исходник исправлен и проверен; выполнение VBA не проверялось.", new ConversationToolCall[0])
                 });
+                if (report != null) script = ExcelReportWorkflowFixture.Script();
                 var requests = 0;
                 LlmCompletionDelegate complete = async (config, messages, options, stream, token) => {
                     var number = ++requests;
+                    if (report != null) reportSkillOffered |=
+                        session.LastRun.SelectedSkills.Any(skill => skill.Id == "excel.analysis_reporting") &&
+                        messages.Any(message => message.Role == config.SystemPromptRole &&
+                            (message.Content ?? string.Empty).Contains(reportSkillBody));
                     File.WriteAllText(Path.Combine(evidence, "request-" + number + ".json"), JsonConvert.SerializeObject(messages, Formatting.Indented));
                     File.WriteAllText(Path.Combine(evidence, "context-" + number + ".json"), JsonConvert.SerializeObject(options.TraceContextReceipt ?? session.LastContextReceipt, Formatting.Indented));
                     var helper = options.TracePurpose == "context_compaction";
@@ -124,8 +143,8 @@ namespace RNAssistant.Harness
                     LlmCompletionResult response;
                     if (scripted)
                     {
-                        AssertTrue(options.TracePurpose != "context_compaction", "minimal VBA workflow must fit without compaction");
-                        if (number == 2) AssertEqual(1, session.LastRun.SelectedSkills.Count,
+                        AssertTrue(options.TracePurpose != "context_compaction", "scripted workflow must fit without compaction");
+                        if (!excelReport && number == 2) AssertEqual(1, session.LastRun.SelectedSkills.Count,
                             "minimal VBA skill must fit the explicit profile; see retained load result");
                         AssertTrue(script.Count > 0, "scripted workflow must not need protocol repair or compaction");
                         response = new LlmCompletionResult { Content = script.Dequeue() };
@@ -159,18 +178,28 @@ namespace RNAssistant.Harness
                     var expected = new[] { original[0][1].Replace("Old report", "Sales report"),
                         original[1][1].Replace("#112233", "#225588"), original[2][1].Replace("count += 1", "count += 2") };
                     var actual = session.HtmlWorkspace.Files;
-                    passed &= (vbaOnly || original.Select((file, index) => actual.Single(item => item.Path == file[0]).Content == expected[index]).All(value => value)) &&
+                    if (report != null) passed &= report.Checks().Values.All(value => value) &&
+                        session.LastRun.KernelState.Summary.ToolCounts.WriteUnknown == 0 &&
+                        session.LastRun.KernelState.Summary.ToolCounts.WriteOk >= 5;
+                    else passed &= (vbaOnly || original.Select((file, index) => actual.Single(item => item.Path == file[0]).Content == expected[index]).All(value => value)) &&
                         adapter.GetVbaModuleCode("ReportModule") == vba.Replace("Old report", "Sales report");
                     if (vbaOnly) passed &= adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule) == 1 &&
                         session.LastRun.SelectedSkills.Count == 1 && session.LastRun.SelectedSkills[0].Id == "common.vba_code_editing";
                     if (requireTaskList) passed &= session.LastRun.SelectedSkills.Any(skill => skill.Id == "common.task_tracking") &&
                         session.Artifacts.Any(artifact => artifact.Kind == ChatArtifactKinds.TaskList);
+                    taskPassed = passed;
+                    if (requireReportSkill) passed &= reportSkillOffered;
                 }
-                catch (Exception ex) { passed = false; File.WriteAllText(Path.Combine(evidence, "error.txt"), ex.ToString()); Console.WriteLine(ex.Message); }
+                catch (Exception ex) { taskPassed = passed = false; File.WriteAllText(Path.Combine(evidence, "error.txt"), ex.ToString()); Console.WriteLine(ex.Message); }
                 finally
                 {
                     File.WriteAllText(Path.Combine(evidence, "session.json"), JsonConvert.SerializeObject(session, Formatting.Indented));
-                    File.WriteAllText(Path.Combine(evidence, "after-vba.txt"), adapter.GetVbaModuleCode("ReportModule"));
+                    if (report != null)
+                    {
+                        File.WriteAllText(Path.Combine(evidence, "after-workbook.json"), adapter.ExcelWorkbookStateForTest().ToString());
+                        File.WriteAllText(Path.Combine(evidence, "report-checks.json"), JsonConvert.SerializeObject(report.Checks(), Formatting.Indented));
+                    }
+                    else File.WriteAllText(Path.Combine(evidence, "after-vba.txt"), adapter.GetVbaModuleCode("ReportModule"));
                     foreach (var file in session.HtmlWorkspace.Files) File.WriteAllText(Path.Combine(evidence, "after-" + file.Path), file.Content);
                     foreach (var file in Directory.EnumerateFiles(FixturePaths.Value.Root, "*", SearchOption.AllDirectories))
                     {
@@ -178,10 +207,11 @@ namespace RNAssistant.Harness
                         Directory.CreateDirectory(Path.GetDirectoryName(destination)); File.Copy(file, destination);
                     }
                     File.WriteAllText(Path.Combine(evidence, "acceptance.json"), JsonConvert.SerializeObject(new {
-                        passed, requests, scripted, vbaWrites = adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule) }));
+                        passed, taskPassed, requests, scripted, excelReport, requireReportSkill, reportSkillOffered,
+                        vbaWrites = adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule) }));
                 }
             });
-            Console.WriteLine("Exact source acceptance: " + passed);
+            Console.WriteLine("Workflow acceptance: " + passed);
             return passed ? 0 : 1;
         }
     }

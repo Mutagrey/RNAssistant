@@ -1,5 +1,97 @@
 # Stabilization progress
 
+## Compact admitted-schema receipts — 2026-10-21
+
+The frozen compiler now supplies its callable surface separately from the visible
+catalog to result projection. A successful complete direct schema read becomes a
+compact `schemaInRequest=true` receipt only when its descriptor and revision match
+an offered tool exactly. The request keeps the authoritative schema; the durable
+transcript/CAS keeps the original read. Admission, budget refusal, stale evidence,
+strict-response fallback and replay decisions retain their existing guards.
+
+The same unprompted Excel report and `gemma4:cloud` / 32K / 4096 profile were rerun
+with the production fake host. All six workbook checks pass again, with five
+verified writes, clean execution health and no unknown effects or compaction.
+
+| Same task/profile | Requests | Actual input / output tokens | Protocol repairs |
+|---|---:|---:|---:|
+| Before | 13 | 174,451 / 1014 | 3 |
+| Compact receipts | 12 | 136,712 / 1097 | 2 |
+
+Actual cumulative input falls 21.63% in this pair. Initial input stays at 9107;
+the final request drops from 16,787 to 14,107. Exact callable descriptors in the
+final requests are identical. Five schema-result bodies shrink from 14,077 to
+1561 characters (88.91%); all five complete durable descriptors and revisions
+remain present. Character reduction is not a token estimate. The model trajectory
+also changes: the new run repairs fenced JSON and an unloaded write batch, then
+executes individual writes. One pair does not establish reliability or attribute
+all cumulative savings to projection. No prompt or limit was changed.
+
+Validation: seven focused checks pass, including current-surface-only projection,
+three result roles, malformed/stale evidence, direct admission in both response
+modes, atomic overflow, durable replay, strict-schema fallback and existing
+runtime-evidence/archived-target projection. Harness build has only its two
+existing PDF platform warnings. No Office/VSTO validation.
+
+Evidence: `excel-schema-receipts-live-1/`, `schema-receipts-results.json`,
+`schema-receipts-comparison.json`, `schema-receipts.patch` and route metadata in
+the existing local eval directory. Source is `69bd97b8` plus the scoped patch;
+metadata pins patch/binary hashes. Full profile, task/source bytes, saved API usage
+and exact callable schemas were independently compared with `excel-report-live-1`.
+The old fixture's skill-coverage failure remains distinct from its passing report.
+Next: reduce remaining repetition inside the authoritative schemas without changing
+accepted arguments; use this same report baseline. Model batching/format repairs,
+live interruption/resume and real Excel calculation/rendering remain open.
+
+## Excel report discovery with production skill text — 2026-10-21
+
+The fake and real Excel adapters now share `ExcelBuiltInSkillProvider` in Office.
+The shipped 1844-character report body is unchanged; the fake 26-character stub
+is removed. The existing live workflow fixture adds a numeric regional report,
+named sheet/table, number format and workbook chart. Its six independent state
+checks also protect the original workbook. Scripted and real-model runs use the
+same production conversation, admission and mutation/read-back owners.
+
+| Live case, same gemma4:cloud / 32K / 4096 profile | Requests / actual input / output | Result |
+|---|---:|---|
+| No skill/tool hint | 13 / 174,451 / 1014 | 6/6 report checks; direct schema discovery; report skill not selected |
+| Explicit report-skill instruction | 12 / 163,612 / 1118 | 6/6 report checks; complete production skill offered |
+
+Both finish `model_done` with five verified writes, no tool errors or unknown
+effects. Each needs three protocol repair requests after attempted write batches;
+rejected calls execute nothing. Neither run needs compaction or returns an empty
+completion. Initial input is 9107/9119 tokens with six schemas. In the skill case,
+the next request carries all 14 schemas and full instructions at 13,166 actual
+input tokens. No profile limit or guard was raised.
+
+The unprompted case proves direct loading, not automatic report-skill selection.
+Its original fixture's `passed=false` records that missing skill coverage despite
+all report checks passing. The final fixture separates `taskPassed` from
+`reportSkillOffered`; `RNA_REQUIRE_REPORT_SKILL=true` adds the explicit instruction
+and requires full selected text in a model instruction message. Raw earlier
+evidence is preserved. Neither model run selects task tracking. These are one
+trajectory per distinct task, not a reliability rate or a token-saving comparison.
+
+The direct-loading trace also retains five schema results totaling 14,077
+characters in history. Their exact parameter schemas are simultaneously present
+in the instruction surface; `excel.format_range` alone contributes 7650 result
+characters. These are character measurements, separate from API token usage.
+Next optimization: remove redundant model-facing schema history after exact
+admission while preserving durable evidence and authoritative schemas, then
+compare the same task/profile. Repeated write batches remain a model-guidance risk.
+
+Validation: three focused checks (grader rejection, built-in packages, production
+project includes), scripted Excel report and existing scripted VBA pass. Harness
+build has only the two existing PDF platform warnings. Live evidence is in
+`excel-report-live-1/`, `excel-report-skill-live-1/`, `excel-report-results.json`
+and `excel-report-schema-repetition.json` in the existing local eval directory.
+Metadata pins `69bd97b8` plus `excel-report-fixture.patch` or
+`excel-report-fixture-v2.patch` and binary hashes. Saved API usage, wire settings,
+full profile equality, initial workbook and the single task-prefix difference
+were independently checked. The model route digest is unchanged. This simulates
+Excel state; calculation, chart rendering and real Windows/Office qualification
+remain open, as do live interruption/resume and repeated success.
+
 ## Live recovery through compaction and skill removal — 2026-10-21
 
 The combined HTML/VBA task now has one complete live pass at the unchanged

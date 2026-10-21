@@ -40,6 +40,10 @@ namespace RNAssistant.Harness
             if (args != null && args.Length == 2 && args[0] == "--resource-workflow-live")
                 return ResourceWorkflowDiagnostic(args[1]);
             if (args != null && args.Length == 2 &&
+                (args[0] == "--excel-report-workflow-live" || args[0] == "--excel-report-workflow-scripted"))
+                return ResourceWorkflowDiagnostic(args[1], false,
+                    args[0] == "--excel-report-workflow-scripted", true);
+            if (args != null && args.Length == 2 &&
                 (args[0] == "--vba-workflow-live" || args[0] == "--vba-workflow-scripted"))
                 return ResourceWorkflowDiagnostic(args[1], true, args[0] == "--vba-workflow-scripted");
             if (args != null && args.Length >= 1 && args.Length <= 2 && args[0] == "--tabular-source-host")
@@ -240,6 +244,7 @@ namespace RNAssistant.Harness
                 Test("agent: inspects full skill without selection", SimpleAgentInspectsFullSkillThroughTool),
                 Test("agent: new skill and tool are readable in same run", SimpleAgentPublishesNewSkillAndToolInSameRun),
                 Test("agent: model projection hides runtime evidence", ModelProjectionHidesRuntimeEvidence),
+                Test("agent: model projection compacts only callable schema", ModelProjectionCompactsOnlyCallableSchema),
                 Test("agent: model projection preserves resource table payload", ModelProjectionPreservesResourceTablePayload),
                 Test("agent: model projection preserves nested Office results", ModelProjectionPreservesNestedOfficeResults),
                 Test("agent: rejects oversized capability evidence explicitly", AgentRejectsOversizedCapabilityEvidenceExplicitly),
@@ -727,6 +732,7 @@ namespace RNAssistant.Harness
                 Test("skills: CRUD preserves omitted fields", AgentSkillCrudPreservesOmittedFields),
                 Test("skill packages: selection deduplication compaction budget and scope", SkillPackagesSelectionAndBudget),
                 Test("skill packages: built-ins load for every Office host", BuiltInSkillPackagesLoadForEveryOfficeHost),
+                Test("excel report: acceptance rejects incomplete state", ExcelReportAcceptanceRejectsIncompleteState),
                 Test("skill packages: dependencies conflicts updates and revocation", SkillPackagesDependencyFailures),
                 Test("skill packages: exact request dispatch and next-step loading", SkillPackagesExactDispatch),
                 Test("skill packages: VBA schema inspection does not loop", () => SimpleAgentVbaSchemaInspectionDoesNotLoop(false)),
