@@ -42,7 +42,9 @@ uses one cloud endpoint/profile with unchanged task bounds and acceptance.
   removes repeated field definitions while preserving arguments and strict output.
   The same task passes 6/6, but cumulative input rises to 153,363 across 14 requests
   with four repairs. Reduced schema size does not yet establish overall savings
-  or reliable batching. Next: capability-result semantics and model choice.
+  or reliable batching. [Capability source-read semantics](PROGRESS.md#capability-source-reads-do-not-claim-selection--2026-10-21)
+  now omit the ambiguous model-facing `loaded` field with local admission/replay
+  checks; live model-choice improvement remains unmeasured.
 - Repair guidance conflict is fixed in `ModelProtocolClient.CreateFormatRepairMessage`:
   generic repair no longer overrides the parser's skill-only route with direct
   schema discovery. Focused checks cover both routes and no execution before

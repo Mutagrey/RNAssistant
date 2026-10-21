@@ -908,7 +908,6 @@ namespace RNAssistant.Core.Services
             {
                 data["kind"] = Copy(original, "kind");
                 data["id"] = Copy(original, "id");
-                data["loaded"] = false;
                 data["truncated"] = true;
             }
             else
@@ -916,7 +915,7 @@ namespace RNAssistant.Core.Services
                 data["target"] = Copy(original, "target");
             }
             var message = capability
-                ? "Capability evidence did not fit the reserved model context and was not loaded."
+                ? "Capability content did not fit the reserved model context and was not included."
                 : "Resource evidence did not fit the reserved model context and was not loaded.";
             var projected = RNAssistant.Core.Tools.Contracts.ToolResult.Error(
                 message, data.ToString(Formatting.None));

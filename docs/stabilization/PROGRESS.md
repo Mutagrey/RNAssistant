@@ -1,5 +1,26 @@
 # Stabilization progress
 
+## Capability source reads do not claim selection — 2026-10-21
+
+Formatting-schema compression is committed as `c9c3b33d`. The next bounded
+semantic fix removes the root `loaded` flag from model-facing capability
+search/read results, including stale evidence and the compiler's oversized-content
+refusal. Read completeness, exact source bodies, error codes and skill-selection
+guidance remain. `schemaInRequest` still requires the exact current offered tool.
+The source result/CAS, revision checks, selection, admission and replay owners
+are unchanged; no field is renamed into another model-owned activation state.
+
+Seven focused Harness checks pass: full skill inspection without selection,
+current-surface-only schema receipts across three result roles, stale evidence,
+oversized content, direct tool admission in both response modes, durable admission
+replay and exact discovery. Source metadata stays intact and original schema
+evidence still admits the tool; projected receipts do not. Build retains only the
+two existing PDF warnings. No new live-model run or Office/VSTO validation: this
+closes the result ambiguity locally, not the open model batching/choice risk.
+
+Next: review explicit destinations for Excel mutations, followed by the
+`table`/`records` consumer audit in the canonical Tool Library review.
+
 ## Compact Excel formatting schema — 2026-10-21
 
 `excel.format_range` now declares its nine fields once, with seven required-only

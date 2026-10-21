@@ -32,6 +32,14 @@ dispatch; schema presence alone grants no mutation permission. Manual Library an
 Tools UI actions keep their existing explicit authoring/confirmation guards.
 See [manifest, selection and Arsenal](skills.md#manifest-and-task-selection).
 
+Model-facing capability search/read results omit the root `loaded` field: a
+complete source read is not skill selection or callable admission. `complete`,
+`truncated`, source text and selection guidance retain their meaning. Only an
+exact offered tool can receive `schemaInRequest=true`. Stale and oversized
+model-context results likewise report their error and incomplete content without
+a selection flag. Original durable read metadata, including `loaded`, stays
+available to its existing runtime consumers; no admission rule changes.
+
 ### Minimal Office bootstrap
 
 `CallableToolPack` starts Agent/Excel with six callable tools: `common.skills_load`,
@@ -807,7 +815,7 @@ The older audit below remains historical evidence, not a current defect list.
 
 | Area | Current code / evidence | Decision |
 |---|---|---|
-| Capability read versus selection | `CapabilityCatalogService.ReadSkill` sets `loaded=complete` for inspected source; only `common.skills_load` selects the skill. The model projection still retains `loaded`. A direct schema read also returns `loaded=true` before callable-state evaluation. | Remove the ambiguous read-status field from model results in a bounded follow-up. Keep completeness, source content and guidance; `schemaInRequest` must still require the exact offered descriptor. Durable admission evidence keeps its existing owner. This is a naming ambiguity, not a demonstrated cause of model failure. |
+| Capability read versus selection | Native source-read metadata uses `loaded` for completeness, while only `common.skills_load` selects a skill. | Fixed in the model view: omit the root flag, retain completeness/content/guidance and exact `schemaInRequest` checks. Durable admission evidence is unchanged. Local checks establish the distinction; improved live model behavior has not been measured. |
 | Excel write target | `excel.write_range.address` defaults to `A1` in the schema and adapter. Omitted sheet means the active sheet. | Review an explicit destination contract for mutations. Test omitted versus deliberately selected targets before changing it; no wrong-target incident is established here. This changes accepted arguments and is separate from schema compression. |
 | Structural views | `ResourceStructuredViewService` produces `ResourceTableBatch` for both `table` and `records`; the read schema exposes both names. | Candidate for one canonical representation, after checking every provider, HTML/JS consumer and saved contract. Shared materialization alone does not prove that every consumer treats the names identically. |
 | Discovery, content and search | `excel.inspect` supplies metadata, `excel.find_cells` finds cell matches, `resources_read` supplies values/source, and `resources_search` searches a text/source target. | Keep these purposes distinct; review descriptions and supported representations together. A known range needs no discovery call. Do not merge them into an unconstrained action switch. |
@@ -817,9 +825,10 @@ The older audit below remains historical evidence, not a current defect list.
 
 ### Review sequence and acceptance
 
-1. Clarify capability read results first; retain discovery, selection, admission
-   and permission as distinct runtime facts. Verify model projection and original
-   durable evidence independently.
+1. Done locally: clarify capability read results while retaining discovery,
+   selection, admission and permission as distinct runtime facts. Model projection
+   and original durable evidence are checked independently; live model-choice
+   improvement remains unmeasured.
 2. Review Excel mutation destinations and the resource representation vocabulary.
    For each proposed rename, merge, split or removal, identify the user intent,
    competing operation, actual consumer, effect/confirmation boundary and owner.

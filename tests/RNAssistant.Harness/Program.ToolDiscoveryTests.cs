@@ -375,6 +375,9 @@ namespace RNAssistant.Harness
                 "runtime invalidates stale capability evidence");
             AssertContains(projectedCapabilityWire.Result.DataJson,
                 "capability_evidence_stale", "stale capability has an explicit code");
+            AssertTrue(projectedCapabilityWire.Data["loaded"] == null &&
+                (bool?)projectedCapabilityWire.Data["complete"] == false,
+                "stale source read reports incomplete evidence without a selection flag");
             AssertTrue(projectedCapability.Content.IndexOf(
                 SkillRevision.Compute(staleSkill), StringComparison.Ordinal) < 0,
                 "model capability result omits package revision");
@@ -401,11 +404,14 @@ namespace RNAssistant.Harness
                     var pending = project(evidence, callable);
                     AssertTrue(pending.Data["descriptor"] != null && pending.Data["schemaInRequest"] == null,
                         "catalog visibility or a successful read alone does not permit schema compaction");
+                    AssertTrue(pending.Data["loaded"] == null && (bool?)pending.Data["complete"] == true,
+                        "complete source read does not claim callable admission");
                 }
                 var compact = project(evidence, new[] { tool });
                 AssertTrue(compact.Data["descriptor"] == null && (bool?)compact.Data["schemaInRequest"] == true,
                     "exact callable schema is replaced only in the model view");
                 AssertEqual(tool.Id, (string)compact.Data["id"], "receipt retains the public tool identity");
+                AssertTrue(compact.Data["loaded"] == null, "schemaInRequest is the exact exposure fact, without an ambiguous loaded flag");
                 AssertEqual(RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok, compact.Result.Status, "successful evidence stays successful");
                 AssertEqual(original, evidence.Content, "full durable descriptor is never rewritten");
                 var pack = CallableToolPack.Create(ChatModes.Agent, "Excel", "projected-evidence", catalog);
@@ -415,6 +421,7 @@ namespace RNAssistant.Harness
 
                 ToolResultWireReadResult originalWire; string readError;
                 AssertTrue(ToolResultHistoryReader.TryRead(evidence, out originalWire, out readError), "read native schema evidence");
+                AssertEqual(true, (bool)originalWire.Data["loaded"], "runtime keeps its original read evidence");
                 foreach (var role in new[] { ToolResultRoles.User, ToolResultRoles.Developer, ToolResultRoles.Tool })
                 {
                     foreach (var change in new Action<JObject>[] {
@@ -430,12 +437,15 @@ namespace RNAssistant.Harness
                             TerminalToolResult.Ok("Schema read.", data.ToString()), role);
                         var visible = project(message, new[] { tool });
                         AssertTrue(visible.Data["schemaInRequest"] == null, "incomplete, mismatched or stale evidence cannot claim current exposure");
+                        AssertTrue(visible.Data["loaded"] == null, "every result role omits the source-read flag");
                         if ((string)data["revision"] == "obsolete")
                             AssertEqual(RNAssistant.Core.Tools.Contracts.ToolResultStatus.Error, visible.Result.Status, "stale evidence keeps its diagnostic");
                     }
                     var accepted = Command(CapabilityToolCatalog.ReadToolId, "id", tool.Id); accepted.ToolCallId = "exact-schema";
                     var full = AgentJsonProtocol.CreateToolResultMessage(accepted, originalWire.Result, role);
-                    AssertTrue(project(full, new[] { tool }).Data["descriptor"] == null, "all result roles use the same compact projection");
+                    var receipt = project(full, new[] { tool });
+                    AssertTrue(receipt.Data["descriptor"] == null && receipt.Data["loaded"] == null,
+                        "all result roles use the same unambiguous compact projection");
                 }
                 var changed = tool.Clone(); changed.Description += " changed";
                 AssertTrue(project(evidence, new[] { changed }).Data["descriptor"] != null,
@@ -948,8 +958,8 @@ namespace RNAssistant.Harness
                         "oversized capability cannot remain a successful partial result");
                     AssertEqual("capability_evidence_context_too_large", (string)wire.SelectToken("data.code"),
                         "oversized capability reports the exact admission error");
-                    AssertEqual(false, (bool)wire.SelectToken("data.loaded"),
-                        "oversized capability never claims loaded evidence");
+                    AssertTrue(wire.SelectToken("data.loaded") == null && (bool?)wire.SelectToken("data.complete") == false,
+                        "oversized capability reports missing content without a selection flag");
                     AssertTrue(FlattenSimple(request.AcceptedMessages).IndexOf(bodyMarker, StringComparison.Ordinal) < 0,
                         "oversized body is not partially copied into model history");
                     var durableMessage = session.Messages.Last(item =>

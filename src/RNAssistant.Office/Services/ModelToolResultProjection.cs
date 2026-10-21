@@ -388,7 +388,7 @@ namespace RNAssistant.Office.Services
             if (root == null) return;
             RemoveProperties(root,
                 "catalogRevision", "revision", "skillRevision", "snapshotRevision",
-                "previousSnapshotRevision", "admission", "progressCharacters");
+                "previousSnapshotRevision", "admission", "progressCharacters", "loaded");
             var items = root["items"] as JArray;
             if (items != null)
             {
@@ -619,7 +619,6 @@ namespace RNAssistant.Office.Services
                 ["path"] = original == null || original["path"] == null
                     ? JValue.CreateNull() : original["path"].DeepClone(),
                 ["code"] = "capability_evidence_stale",
-                ["loaded"] = false,
                 ["complete"] = false
             };
         }

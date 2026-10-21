@@ -704,7 +704,12 @@ namespace RNAssistant.Harness
                 AssertContains(replay, "\"version\":\"2.0.0\"", "loaded skill version");
                 AssertTrue(replay.IndexOf(revision, StringComparison.Ordinal) < 0,
                     "model result hides skill revision");
-                AssertContains(replay, "\"loaded\":true", "loaded skill result is explicit");
+                var inspected = LastToolResult(calls.Last(), CapabilityToolCatalog.ReadToolId);
+                AssertTrue(inspected.SelectToken("data.loaded") == null,
+                    "reading skill source must not claim selection");
+                AssertEqual(true, (bool)inspected.SelectToken("data.complete"), "source read completeness remains explicit");
+                AssertEqual(skill.BodyMarkdown, (string)inspected.SelectToken("data.bodyMarkdown"), "complete skill source is preserved exactly");
+                AssertContains((string)inspected["message"], "common.skills_load", "source read directs explicit skill selection");
                 AssertContains(replay, "\"complete\":true", "loaded skill body is complete");
                 AssertContains(replay, "common.skills_load",
                     "source read directs selection through the canonical loader");
@@ -726,6 +731,7 @@ namespace RNAssistant.Harness
                     "exact CAS skill result remains readable");
                 AssertContains(durable.Result.DataJson, "\"revision\":\"" + revision + "\"",
                     "durable skill result retains exact revision");
+                AssertEqual(true, (bool)durable.Data["loaded"], "durable read metadata is unchanged");
                 var exactSkill = SkillPublicationService.SkillResource(skill);
                 AssertTrue(durableMessage.ResourceEvidence.Any(evidence => evidence.Resource.Uri == exactSkill.Uri &&
                     evidence.Resource.Revision == exactSkill.Revision),
