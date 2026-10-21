@@ -40,12 +40,14 @@ namespace RNAssistant.Core.ModelProtocol
         public string Message { get; private set; }
         public bool ProviderRefusal { get; private set; }
         public bool CompletionRejected { get; private set; }
+        public string SourceModelAttemptId { get; private set; }
 
         private AgentModelResult() { }
 
-        public static AgentModelResult Accepted(AgentResponseDraft response)
+        public static AgentModelResult Accepted(AgentResponseDraft response, string sourceModelAttemptId = null)
         {
-            return new AgentModelResult { Response = response ?? throw new ArgumentNullException(nameof(response)) };
+            return new AgentModelResult { Response = response ?? throw new ArgumentNullException(nameof(response)),
+                SourceModelAttemptId = sourceModelAttemptId };
         }
 
         // A valid done failed explicit application-owned postconditions. This is

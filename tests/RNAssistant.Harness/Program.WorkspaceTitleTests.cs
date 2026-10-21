@@ -1,11 +1,13 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
+using RNAssistant.Application;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
@@ -17,6 +19,106 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void WorkspaceAcceptedCallHistory()
+        {
+            WithTempPaths(paths =>
+            {
+                var probe = new TcpListener(IPAddress.Loopback, 0);
+                probe.Start();
+                var port = ((IPEndPoint)probe.LocalEndpoint).Port;
+                probe.Stop();
+                using (var listener = new HttpListener())
+                {
+                    listener.Prefixes.Add("http://127.0.0.1:" + port + "/");
+                    listener.Start();
+                    var served = 0;
+                    var server = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            while (served < 3)
+                            {
+                                var context = await listener.GetContextAsync().ConfigureAwait(false);
+                                var number = Interlocked.Increment(ref served);
+                                using (var reader = new StreamReader(context.Request.InputStream))
+                                    await reader.ReadToEndAsync().ConfigureAwait(false);
+                                var content = number == 1
+                                    ? "{\"message\":\"Смотрю ресурсы.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.resources_find\",\"arguments\":{}},{\"name\":\"common.resources_find\",\"arguments\":{\"query\":\"missing\"}}]}"
+                                    : number == 2
+                                        ? "{\"message\":\"Первый ответ.\",\"action\":\"done\",\"tool_calls\":[]}"
+                                        : "{\"message\":\"История читается.\",\"action\":\"done\",\"tool_calls\":[]}";
+                                var response = new JObject { ["choices"] = new JArray(new JObject {
+                                    ["message"] = new JObject { ["content"] = content } }) }.ToString(Newtonsoft.Json.Formatting.None);
+                                var bytes = Encoding.UTF8.GetBytes(response);
+                                context.Response.ContentType = "application/json";
+                                context.Response.ContentLength64 = bytes.Length;
+                                await context.Response.OutputStream.WriteAsync(bytes, 0, bytes.Length).ConfigureAwait(false);
+                                context.Response.Close();
+                            }
+                        }
+                        catch (HttpListenerException) { }
+                    });
+                    try
+                    {
+                        var workspace = new WorkspaceStore(paths).Open(Path.Combine(paths.Root, "history"));
+                        var settings = new AppSettings { BaseUrl = "http://127.0.0.1:" + port,
+                            Model = "test-model", StreamResponses = false, AutoCompressContext = false,
+                            SmartChatTitles = false };
+                        string sessionId;
+                        using (var service = new WorkspaceConversationService(paths))
+                        {
+                            sessionId = service.CreateSession(workspace, "История").Id;
+                            var first = service.SubmitInputAsync(workspace, new WorkspaceSubmitInputRequest {
+                                SessionId = sessionId, Message = "Посмотри ресурсы", Mode = ChatModes.Agent
+                            }, settings, () => "test-key").GetAwaiter().GetResult();
+                            AssertEqual(RunLifecycle.Completed, first.Summary.Lifecycle, "first workspace turn completes");
+                            var calls = service.GetSession(workspace, sessionId).Messages.Where(message =>
+                                message.Role == "assistant" && message.ToolCalls != null && message.ToolCalls.Count > 0).ToArray();
+                            AssertEqual(2, calls.Length, "accepted read batch has two durable per-call records");
+                            AssertTrue(calls.All(call => call.ToolCalls.Single().Id == call.ToolCallId &&
+                                call.ToolCalls.Single().Name == call.ToolName), "each durable call keeps its runtime identity");
+                            AssertTrue(calls.All(call => call.AcceptedCallOrigin != null &&
+                                !string.IsNullOrWhiteSpace(call.AcceptedCallOrigin.ModelAttemptId)) &&
+                                calls[0].AcceptedCallOrigin.ModelAttemptId == calls[1].AcceptedCallOrigin.ModelAttemptId &&
+                                calls.Select(call => call.AcceptedCallOrigin.CallIndex).SequenceEqual(new[] { 0, 1 }),
+                                "batch calls keep one exact model attempt and their original positions");
+                            AssertEqual("Смотрю ресурсы.", PluginApplicationService.PresentWorkspaceMessage(calls[0]).Text,
+                                "plugin chat presents the accepted narration after a tool call");
+                        }
+                        using (var reopened = new WorkspaceConversationService(paths))
+                        {
+                            var next = reopened.SubmitInputAsync(workspace, new WorkspaceSubmitInputRequest {
+                                SessionId = sessionId, Message = "Продолжай", Mode = ChatModes.Agent
+                            }, settings, () => "test-key").GetAwaiter().GetResult();
+                            AssertEqual(RunLifecycle.Completed, next.Summary.Lifecycle, "next turn reads durable call history");
+                            AssertEqual("История читается.", next.Summary.AssistantMessage, "next turn receives model answer");
+                            var legacy = reopened.GetSession(workspace, sessionId);
+                            var oldCall = legacy.Messages.First(message => message.Role == "assistant" &&
+                                message.ToolCalls != null && message.ToolCalls.Count > 0);
+                            oldCall.ToolCallId = null; oldCall.ToolName = null; oldCall.AcceptedCallOrigin = null;
+                            AssertEqual("Смотрю ресурсы.", PluginApplicationService.PresentWorkspaceMessage(oldCall).Text,
+                                "old workspace records still display their accepted narration");
+                            new ChatStore(paths).Commit(legacy,
+                                new RNAssistant.Core.Persistence.ConversationCommit(new[] { oldCall }));
+                        }
+                        server.GetAwaiter().GetResult();
+                        using (var legacyService = new WorkspaceConversationService(paths))
+                        {
+                            var legacy = legacyService.SubmitInputAsync(workspace, new WorkspaceSubmitInputRequest {
+                                SessionId = sessionId, Message = "Ещё раз", Mode = ChatModes.Agent
+                            }, settings, () => "test-key", cancellationToken: new CancellationTokenSource(3000).Token)
+                                .GetAwaiter().GetResult();
+                            AssertEqual(RunLifecycle.Failed, legacy.Summary.Lifecycle,
+                                "incomplete old call history cannot silently enter model context");
+                            AssertTrue(legacy.Summary.AssistantMessage.Contains("Создайте новый чат"),
+                                "incompatible history gives an explicit recovery action");
+                        }
+                    }
+                    finally { listener.Stop(); }
+                }
+            });
+        }
+
         private static void WorkspaceChatAutoTitle()
         {
             WithTempPaths(paths =>

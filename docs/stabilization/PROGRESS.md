@@ -1,5 +1,13 @@
 # Stabilization progress
 
+## Plugin source-chat call history — 2026-10-21
+
+Workspace accepted calls now persist exact runtime ID, canonical tool name and
+successful model-attempt origin per call. A controlled two-call read batch survives
+restart and the next turn; old origin-less records still display but explicitly
+require a new chat. The user-reported Windows `Native history...` screen and
+Data Templates style state still need exact-build Windows/WebView2 verification.
+
 ## One new structural view for model inputs — 2026-10-21
 
 New built-in resource reads, discovery and HTML/JS input schemas expose `table`

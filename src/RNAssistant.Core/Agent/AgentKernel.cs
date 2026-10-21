@@ -171,7 +171,8 @@ namespace RNAssistant.Core.Agent
                 foreach (var call in response.ToolCalls) state.AcceptedIds.Add(call.Id);
                 state.Messages.Add(AgentMessage.Assistant(response));
                 await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.ResponseAccepted,
-                    state.Summary(), stepId, response: response)).ConfigureAwait(false);
+                    state.Summary(), stepId, response: response,
+                    sourceModelAttemptId: model.SourceModelAttemptId)).ConfigureAwait(false);
                 state.Progress.BeginStep();
                 if (response.Final)
                 {

@@ -117,6 +117,7 @@ namespace RNAssistant.Harness
                 Test("workspace: create reopen session and relocate", WorkspaceCreatesAndRelocates),
                 Test("workspace: Office target stays pinned across document and host switches", WorkspaceOfficeTargetStaysPinned),
                 Test("workspace: first message names the chat and smart title updates it", WorkspaceChatAutoTitle),
+                Test("workspace: accepted call history survives a new turn", WorkspaceAcceptedCallHistory),
                 Test("workspace: copy identity conflict and read-only association", WorkspaceRejectsCopyConflict),
                 Test("tabular project: create reopen read-only and relocate", TabularProjectsCreateReopenAndRelocate),
                 Test("tabular project: closed manifest and path refusals", TabularProjectsRejectInvalidManifests),

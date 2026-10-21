@@ -127,6 +127,9 @@ deletion and explicit reopening after history removal.
 `workspace: first message names the chat` checks an accepted workspace turn against
 a controlled local model endpoint: immediate shared draft title, later smart title,
 durable project header and manual rename priority.
+`workspace: accepted call history survives a new turn` checks a two-call read
+batch, exact runtime/model-attempt origins after restart, the next model turn,
+legacy narration display and explicit refusal of an origin-less old record.
 `node tests/web/plugins.test.js` checks creation/automatic check/preview/apply/reopen/disable,
 immediate SVG drawing, reusable rail hover menus and remove/restore,
 source chat presentation, actual Chromium Worker and native-protocol XLSX extraction

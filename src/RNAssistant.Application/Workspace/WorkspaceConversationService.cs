@@ -1077,7 +1077,8 @@ namespace RNAssistant.Runtime
                 }
                 return AgentModelResult.Accepted(new AgentResponseDraft(result.Response.Message,
                     result.Response.ToolCalls.Select(call => new ToolCallDraft(call.Name,
-                        call.Arguments.ToString(Formatting.None))), result.Response.Action));
+                        call.Arguments.ToString(Formatting.None))), result.Response.Action),
+                    result.SourceModelAttemptId);
             }
 
             private ModelAuthoritySnapshot CaptureModelAuthority(CancellationToken cancellationToken)
@@ -1235,11 +1236,16 @@ namespace RNAssistant.Runtime
                             if (string.IsNullOrEmpty(call.Id) || call.Name != parsed.Response.ToolCalls[index].Name ||
                                 call.ArgumentsJson != parsed.Response.ToolCalls[index].Arguments.ToString(Formatting.None))
                                 throw new InvalidOperationException("Stored workspace accepted call differs from response.");
+                            if (calls.Count != 1 || item.ToolCallId != call.Id || item.ToolName != call.Name ||
+                                item.AcceptedCallOrigin == null)
+                                throw new InvalidOperationException(
+                                    "История чата содержит неполную запись вызова. Создайте новый чат; старая история сохранена.");
                             facts.Add(new ChatMessage { Id = calls.Count == 1 ? item.Id : item.Id + ":" + index,
                                 RunId = item.RunId, Role = "assistant", ProtocolMessage = true,
                                 ResponseProtocolVersion = ConversationResponse.ProtocolVersion,
                                 ToolResultProtocolVersion = ToolResultWire.CurrentVersion, ToolResultRole = role,
                                 ToolCallId = call.Id, ToolName = call.Name,
+                                AcceptedCallOrigin = item.AcceptedCallOrigin,
                                 ToolCalls = role == ToolResultRoles.Tool ? new List<LlmToolCall> { new LlmToolCall {
                                     Id = call.Id, Type = "function", Name = call.Name, ArgumentsJson = call.ArgumentsJson } } : new List<LlmToolCall>(),
                                 Content = role == ToolResultRoles.Tool ? parsed.Response.Message : new ConversationResponse(parsed.Response.Message,
@@ -1322,6 +1328,9 @@ namespace RNAssistant.Runtime
             public Task<long> AppendAsync(AgentRunEvent fact, long expectedRevision, CancellationToken cancellationToken)
             {
                 if (expectedRevision != _cursor) throw new InvalidOperationException("Stale workspace run cursor.");
+                if (fact.Kind == AgentRunEventKind.ResponseAccepted && fact.Response.ToolCalls.Count > 0 &&
+                    (string.IsNullOrWhiteSpace(fact.StepId) || string.IsNullOrWhiteSpace(fact.SourceModelAttemptId)))
+                    throw new InvalidOperationException("Accepted workspace call has no exact model-attempt origin.");
                 var firstMessage = _session.Messages.Count;
                 _session.LastRun.KernelState = AgentRunState.Apply(_session.LastRun.KernelState, fact);
                 _session.LastRun.Status = fact.Summary.Lifecycle.ToString().ToLowerInvariant();
@@ -1345,6 +1354,10 @@ namespace RNAssistant.Runtime
                                 { Name = call.Name, Arguments = JObject.Parse(call.ArgumentsJson) }).ToArray(), fact.Response.Action).ToJson(),
                             ToolCalls = group.Select(call => new LlmToolCall
                             { Id = call.Id, Type = "function", Name = call.Name, ArgumentsJson = call.ArgumentsJson }).ToList(),
+                            ToolCallId = group.Length == 1 ? group[0].Id : null,
+                            ToolName = group.Length == 1 ? group[0].Name : null,
+                            AcceptedCallOrigin = group.Length == 1
+                                ? new AcceptedToolCallOrigin(fact.StepId, fact.SourceModelAttemptId, index) : null,
                             RunId = fact.Summary.RunId
                         });
                     }

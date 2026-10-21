@@ -142,6 +142,13 @@ batch with that one narration and retains each call/result identity. Catalog met
 substitute for this contract when `json_object` has no provider-enforced schema.
 The parser and captured tool authority remain unchanged.
 
+For each accepted workspace call, the kernel carries the exact successful model
+attempt ID into the durable per-call record with its runtime call ID, canonical
+tool name, step ID and original batch index. Context projection verifies this
+metadata before the next turn and preserves it through compaction. Old records
+without the origin remain visible as chat text but cannot be replayed as an
+accepted call: the run explicitly asks for a new chat and retains the old history.
+
 Prompt schema 30 requires one mutation per model response; only independent local
 reads may share a batch. The next mutation is proposed after the previous result
 reaches the model. Reuse its included complete current after-state; read again only

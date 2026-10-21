@@ -8,6 +8,19 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## Plugin source-chat accepted history — 2026-10-21
+
+The user's Windows screenshot showed `Native history needs one matching runtime ID`
+while a Data Templates source chat tried to fix styles. Host-neutral reproduction
+confirmed one matching defect: `WorkspaceConversationService` saved accepted
+calls with a runtime ID only inside `ToolCalls`, omitting per-call `ToolCallId`,
+`ToolName` and the exact
+model-attempt origin. New calls now retain all three, including batch index; a
+controlled two-call run, restart and next turn pass. Existing records lack the
+successful attempt ID and cannot be repaired by inference. They remain visible;
+the next turn fails explicitly with guidance to create a new chat. Windows/WebView2
+delivery of this exact build remains open.
+
 ## Live prompt qualification — 2026-10-20
 
 **Open — model-facing behavior and live eval coverage.** Owners: prompt/skill and
