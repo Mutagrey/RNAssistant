@@ -299,6 +299,12 @@ namespace RNAssistant.Core.Services
                 if (omittedTargets.Count < 12 && atom.ArchivedTarget != null && !atom.ArchivedTarget.Contains("://"))
                     omittedTargets.Add(atom.ArchivedTarget);
             };
+            Action<ContextAtom, ContextExclusionKind> omitArchivedOperation = (atom, reason) =>
+            {
+                RecordExclusion(exclusions, atom.ArchivedCall?.Id, reason);
+                RecordExclusion(exclusions, atom, reason);
+                atom.Messages.Clear(); atom.BodyParts.Clear();
+            };
             var optionalReceipts = 0;
             var optionalCandidates = 0;
             var optionalBytes = Math.Min(MaximumOptionalOperationBytes, maximumPayloadBytes);
@@ -341,11 +347,14 @@ namespace RNAssistant.Core.Services
                 if (atom.ArchivedOperation && !atom.MustKeep)
                 {
                     receiptBudget = Math.Min(2048, receiptBudget);
-                    if (receiptBudget <= 0 || optionalReceipts >= 24 || optionalCandidates >= MaximumOptionalOperationCandidates)
-                    { atom.Messages.Clear(); continue; }
+                    if (receiptBudget <= 0)
+                    { omitArchivedOperation(atom, ContextExclusionKind.OperationBudget); continue; }
+                    if (optionalReceipts >= 24 || optionalCandidates >= MaximumOptionalOperationCandidates)
+                    { omitArchivedOperation(atom, ContextExclusionKind.OperationSelectionLimit); continue; }
                     optionalCandidates++;
                     var bytes = MaterializationBytes(atom.ArchivedCall) + MaterializationBytes(atom.Messages.Single());
-                    if (bytes > optionalBytes) { atom.Messages.Clear(); continue; }
+                    if (bytes > optionalBytes)
+                    { omitArchivedOperation(atom, ContextExclusionKind.OperationSelectionLimit); continue; }
                     // Rejected receipts still consumed work. Charge the whole pair
                     // before any CAS read, independently of the final token budget.
                     optionalBytes -= bytes;
@@ -359,7 +368,7 @@ namespace RNAssistant.Core.Services
                         {
                             if (atom.MustKeep) throw new PromptBudgetExceededException(
                                 "A required archived operation call exceeds this request budget. Use a larger context window.", false);
-                            atom.Messages.Clear(); continue;
+                            omitArchivedOperation(atom, ContextExclusionKind.OperationSelectionLimit); continue;
                         }
                         call = AcceptedCallPayloadService.Hydrate(call, _payloads);
                         receipt.HydratedPayloads++;
@@ -407,7 +416,7 @@ namespace RNAssistant.Core.Services
                             {
                                 if (atom.MustKeep)
                                     throw new PromptBudgetExceededException("A required archived operation exceeds this request budget. Use a larger context window.", false);
-                                atom.Messages.Clear(); break;
+                                omitArchivedOperation(atom, ContextExclusionKind.OperationSelectionLimit); break;
                             }
                             if (OmitSourceBody(atom)) break;
                             if (message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion &&
@@ -513,10 +522,12 @@ namespace RNAssistant.Core.Services
                         new ResourceObservationNotice { BodyIncluded = false, State = EvidenceState.Unknown,
                             Reason = "Historical operation; body not included." }, call: atom.ArchivedCall);
                     var receiptCost = ModelContextBudget.EstimateMessagesTokens(new[] { completed }, settings);
+                    if (!atom.MustKeep && receiptCost > receiptBudget)
+                    { omitArchivedOperation(atom, ContextExclusionKind.OperationBudget); continue; }
                     atom.Messages.Clear();
-                    if (!atom.MustKeep && receiptCost > receiptBudget) continue;
                     atom.Messages.Add(completed);
                     atom.BodyParts.Clear();
+                    RecordExclusion(exclusions, atom.ArchivedCall?.Id, ContextExclusionKind.OperationReceipt);
                     receiptBudget = Math.Max(0, receiptBudget - receiptCost);
                     if (!atom.MustKeep) optionalReceipts++;
                 }
@@ -1005,6 +1016,12 @@ namespace RNAssistant.Core.Services
             ContextAtom atom, ContextExclusionKind reason)
         {
             var sourceId = atom.ArchivedSourceMessageId ?? atom.Messages.LastOrDefault()?.Id;
+            RecordExclusion(exclusions, sourceId, reason);
+        }
+
+        private static void RecordExclusion(Dictionary<string, ContextExclusionKind> exclusions,
+            string sourceId, ContextExclusionKind reason)
+        {
             if (!string.IsNullOrEmpty(sourceId) && !exclusions.ContainsKey(sourceId))
                 exclusions.Add(sourceId, reason);
         }
@@ -1020,6 +1037,9 @@ namespace RNAssistant.Core.Services
                 case ContextExclusionKind.DuplicateBody: return "Отдельная копия удалена при дедупликации; итоговую доставку тела показывает запрос.";
                 case ContextExclusionKind.Budget: return "Тело источника не вошло в бюджет этого запроса.";
                 case ContextExclusionKind.SelectionLimit: return "Тело источника не прошло ограниченный отбор архивных источников.";
+                case ContextExclusionKind.OperationBudget: return "Архивная квитанция операции не вошла в бюджет этого запроса.";
+                case ContextExclusionKind.OperationSelectionLimit: return "Архивная квитанция операции не прошла ограниченный отбор.";
+                case ContextExclusionKind.OperationReceipt: return "Архивный вызов представлен квитанцией завершённой операции.";
                 default: return "Причина отсутствия отдельного сообщения не установлена.";
             }
         }

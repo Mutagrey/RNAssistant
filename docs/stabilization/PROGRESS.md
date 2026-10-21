@@ -1,5 +1,15 @@
 # Stabilization progress
 
+## Archived operation decisions in context trace — 2026-10-22
+
+The next RC-02 slice is fixed host-neutral. The compiler now attributes both
+source call and result when an optional archived operation is skipped by receipt
+budget or bounded candidate admission. When a receipt is kept, its original call
+is marked as represented by that receipt. Mandatory unresolved receipts remain
+selected with zero optional budget. Focused archive materialization and working-
+set checks pass; the two existing PDF platform warnings remain. Other compiler
+transformations and Windows/Office/WebView2 qualification remain open.
+
 ## Compiler exclusion reasons in context trace — 2026-10-22
 
 The next RC-02 slice is fixed host-neutral. Excluded source entries now carry a

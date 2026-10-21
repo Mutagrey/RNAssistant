@@ -506,6 +506,16 @@ namespace RNAssistant.Harness
                 var compiled = compiler.Compile(authority, new ChatMessage[0], new ChatMessage[0], null, new ToolCatalogEntry[0],
                     new AppSettings(), externalized ? 12000 : 100000, workingSet: set);
                 AssertEqual(0, compiled.Receipt.OperationReceipts, "oversized receipts do not fit the optional token budget");
+                var budgetOmission = compiled.Receipt.Messages.First(item => item.Role == "tool" &&
+                    item.ExclusionKind == ContextExclusionKind.OperationBudget);
+                var skippedCall = session.Messages.First(item => item.Role == "assistant" &&
+                    item.ToolCallId == budgetOmission.ToolCallId);
+                AssertEqual(ContextExclusionKind.OperationBudget,
+                    compiled.Receipt.Messages.Single(item => item.SourceMessageId == skippedCall.Id).ExclusionKind.Value,
+                    "a skipped archived call and result share their actual budget decision");
+                AssertTrue(compiled.Receipt.Messages.Any(item => item.Role == "tool" &&
+                    item.ExclusionKind == ContextExclusionKind.OperationSelectionLimit),
+                    "bounded candidate admission has a distinct trace reason");
                 AssertTrue(projected > 0 && projected <= 64, "rejected optional candidates count toward the work limit");
                 if (externalized)
                 {
@@ -524,6 +534,9 @@ namespace RNAssistant.Harness
                     new AppSettings(), 12000, workingSet: set);
                 AssertEqual("unresolved", required.Messages.Single(item => item.CompletedOperation != null).CompletedOperation.ToolCallId,
                     "unresolved effects remain mandatory with no optional work budget");
+                AssertEqual(ContextExclusionKind.OperationReceipt,
+                    required.Receipt.Messages.Single(item => item.SourceMessageId == session.Messages[session.Messages.Count - 2].Id)
+                        .ExclusionKind.Value, "mandatory archived call is represented by its retained receipt");
                 AssertEqual(1, required.Receipt.HydratedPayloads, "zero optional budget reads only the mandatory exact body");
             });
         }
@@ -955,6 +968,9 @@ namespace RNAssistant.Harness
                 workingSet: restored);
             AssertTrue(compiled.Messages.Any(m => m.CompletedOperation?.ToolCallId == "write_done" &&
                 m.CompletedOperation.Status == ToolResultStatus.Ok), "mutation receipt survives independently of LLM summary");
+            AssertEqual(ContextExclusionKind.OperationReceipt,
+                compiled.Receipt.Messages.Single(item => item.SourceMessageId == session.Messages[4].Id).ExclusionKind.Value,
+                "retained archived operation explains why its original call is not a separate message");
             Func<ContextWorkingSet, IReadOnlyList<ChatMessage>> compileSet = set => new ModelContextCompiler().Compile(authority,
                 new ChatMessage[0], active, null, new ToolCatalogEntry[0], new AppSettings(),
                 6000, workingSet: set).Messages;

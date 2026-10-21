@@ -73,7 +73,8 @@ namespace RNAssistant.Core.Models
     public enum ContextExclusionKind
     {
         Unknown, Explicit, SupersededEvidence, UnknownEvidence, UnavailableEvidence,
-        DuplicateBody, Budget, SelectionLimit
+        DuplicateBody, Budget, SelectionLimit, OperationBudget, OperationSelectionLimit,
+        OperationReceipt
     }
 
     // Observed coverage belongs to the source evidence. The nullable body flag
