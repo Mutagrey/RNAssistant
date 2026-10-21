@@ -1,11 +1,14 @@
 using System;
 using System.Linq;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Agent;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office;
+using RNAssistant.Office.Domains;
 using RNAssistant.Office.Domains.Excel;
 using RNAssistant.Office.Runtime;
 using RNAssistant.Office.Tools;
@@ -70,16 +73,84 @@ namespace RNAssistant.Harness
                 delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
                 {
                     var runtime = ExcelTableRuntime(executor, adapter);
+                    var definition = OfficeToolCatalog.ForHost("Excel")
+                        .Single(tool => tool.Id == ExcelTableToolIds.AddTable);
+                    JObject schema;
+                    string error;
+                    AssertTrue(ToolSchemaSupport.TryParse(definition, out schema, out error),
+                        "table schema parses: " + error);
+                    var schemas = new[] { schema, ToolSchemaSupport.ForPrompt(schema),
+                        ToolSchemaSupport.ForStructuredOutput(schema) };
+                    var parser = new ConversationResponseParser();
+                    var context = new ModelProtocolCallContext(new string[0]);
+                    var direct = new ExcelTableToolAdapter(adapter);
+                    var valid = JObject.Parse("{sheet:'Data',sourceRange:'A1:B2'}");
+                    var complete = JObject.Parse("{sheet:'Data',sourceRange:'A1:B2',name:'',hasHeaders:true,style:''}");
+                    foreach (var absent in new JToken[] { null, JValue.CreateNull(),
+                        new JValue(""), new JValue(" \t\r\n") })
+                    {
+                        var arguments = (JObject)complete.DeepClone();
+                        if (absent == null) arguments.Remove("sourceRange");
+                        else arguments["sourceRange"] = absent.DeepClone();
+                        foreach (var contract in schemas)
+                        foreach (var applyDefaults in new[] { false, true })
+                            AssertTrue(!ToolSchemaSupport.ValidateArguments(
+                                (JObject)arguments.DeepClone(), contract,
+                                applyDefaults, out error),
+                                "every schema rejects omitted/null/blank table source");
+                        var wire = ModelProtocolWire.Write("", new[] {
+                            new ConversationToolCall { Name = definition.Id,
+                                Arguments = arguments } });
+                        AssertTrue(!parser.Parse(wire, new[] { definition },
+                            new[] { definition }, context).Success,
+                            "parser cannot supply a default table source");
+
+                        var calls = adapter.ExcelBackendCalls.Count;
+                        var call = new ToolCall("table-source-missing", definition.Id,
+                            arguments.ToString(Formatting.None));
+                        var rejected = ExecuteNative(runtime, call,
+                            runtime.Describe(call));
+                        AssertEqual(ToolExecutionOutcome.Error, rejected.Outcome,
+                            "incomplete table source is rejected");
+                        AssertEqual(ToolDispatchEvidence.NotDispatched,
+                            rejected.Evidence.Dispatch,
+                            "missing source never dispatches");
+                        AssertEqual(ToolEffectEvidence.None,
+                            rejected.Evidence.Effect,
+                            "missing source has no write effect");
+                        AssertEqual(calls, adapter.ExcelBackendCalls.Count,
+                            "missing source never reaches Excel");
+
+                        var dispatched = false;
+                        var directResult = direct.Add(
+                            arguments.ToObject<System.Collections.Generic.Dictionary<string, object>>(),
+                            () => dispatched = true,
+                            System.Threading.CancellationToken.None);
+                        AssertEqual(DomainOutcomeStatus.Error, directResult.Status,
+                            "domain rejects an incomplete source without schema validation");
+                        AssertEqual("excel_table_source_required", directResult.ErrorCode,
+                            "domain reports the missing source");
+                        AssertTrue(!dispatched && calls == adapter.ExcelBackendCalls.Count,
+                            "domain never invents a table source or touches Excel");
+                    }
+                    foreach (var contract in schemas.Take(2))
+                        AssertTrue(ToolSchemaSupport.ValidateArguments(
+                            (JObject)valid.DeepClone(), contract, true, out error),
+                            "explicit table source is valid: " + error);
+                    AssertTrue(ToolSchemaSupport.ValidateArguments(
+                        (JObject)complete.DeepClone(), schemas[2], true, out error),
+                        "strict schema accepts an explicit table source: " + error);
                     var defaults = new ToolCall(
-                        "table-default", ExcelTableToolIds.AddTable, "{}");
+                        "table-default", ExcelTableToolIds.AddTable,
+                        valid.ToString(Formatting.None));
                     var added = ExecuteNativeConfirmed(
                         runtime, defaults, runtime.Describe(defaults));
                     AssertEqual(ToolExecutionOutcome.Ok, added.Outcome,
-                        "default table creation succeeds");
+                        "explicit table source with generated name succeeds");
                     var generated = adapter.ExcelTableForTest("Data", "Table1");
                     AssertTrue(generated != null &&
                         generated.Range == "A1:B2" && generated.HasHeaders,
-                        "default range, generated name, and headers are preserved");
+                        "explicit range, generated name, and default headers are preserved");
 
                     var addCalls = adapter.ExcelBackendCalls.Count(operation =>
                         operation == FakeOfficeAdapter.ExcelTableAddOperation);

@@ -1,7 +1,9 @@
 using System;
 using System.Linq;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Agent;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
@@ -66,7 +68,8 @@ namespace RNAssistant.Harness
                         operation == FakeOfficeAdapter.ExcelChartApplyOperation);
                     var dryRun = executor.ExecuteManual(Command(
                         ExcelChartToolIds.UpsertChart,
-                        "sheet", "Data", "chartName", "DryChart"),
+                        "sheet", "Data", "chartName", "DryChart",
+                        "sourceRange", "A1:B4"),
                         tools, new AppSettings(), true, true, session);
                     AssertTrue(dryRun.Success &&
                         adapter.ExcelChartForTest("Data", "DryChart") == null,
@@ -87,12 +90,105 @@ namespace RNAssistant.Harness
                 delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
                 {
                     var runtime = ExcelChartRuntime(executor, adapter);
+                    var definition = OfficeToolCatalog.ForHost("Excel")
+                        .Single(tool => tool.Id == ExcelChartToolIds.UpsertChart);
+                    JObject schema;
+                    string error;
+                    AssertTrue(ToolSchemaSupport.TryParse(definition, out schema, out error),
+                        "chart schema parses: " + error);
+                    foreach (var contract in new[] { schema,
+                        ToolSchemaSupport.ForPrompt(schema) })
+                    foreach (var invalid in new[] { "", " \t" })
+                        AssertTrue(!ToolSchemaSupport.ValidateArguments(
+                            new JObject { ["sourceRange"] = invalid },
+                            contract, true, out error),
+                            "present blank chart source is rejected by schema");
+                    AssertTrue(!ToolSchemaSupport.ValidateArguments(
+                        new JObject { ["sourceRange"] = "A1:B6",
+                            ["chartType"] = "scatter" },
+                        schema, true, out error),
+                        "schema rejects unsupported chart types");
+                    var strict = ToolSchemaSupport.ForStructuredOutput(schema);
+                    var strictUpdate = new JObject();
+                    foreach (var property in ((JObject)schema["properties"]).Properties())
+                        strictUpdate[property.Name] = JValue.CreateNull();
+                    strictUpdate["sheet"] = "Data";
+                    strictUpdate["chartName"] = "Chart 1";
+                    strictUpdate["left"] = 16;
+                    strictUpdate["sourceRange"] = " \t";
+                    AssertTrue(!ToolSchemaSupport.ValidateArguments(
+                        (JObject)strictUpdate.DeepClone(), strict, false, out error),
+                        "strict schema rejects a present blank chart source");
+                    strictUpdate["sourceRange"] = JValue.CreateNull();
+                    strictUpdate["chartType"] = "scatter";
+                    AssertTrue(!ToolSchemaSupport.ValidateArguments(
+                        (JObject)strictUpdate.DeepClone(), strict, false, out error),
+                        "strict schema rejects unsupported chart types");
+                    strictUpdate["chartType"] = JValue.CreateNull();
+                    AssertTrue(ToolSchemaSupport.ValidateArguments(
+                        (JObject)strictUpdate.DeepClone(), strict, false, out error),
+                        "strict update may omit the source via null: " + error);
+
+                    var initialApplyCalls = adapter.ExcelBackendCalls.Count(operation =>
+                        operation == FakeOfficeAdapter.ExcelChartApplyOperation);
+                    var marked = false;
+                    var badType = new ExcelChartService(adapter).Mutate(
+                        new ExcelChartMutationRequest
+                        {
+                            ToolId = ExcelChartToolIds.UpsertChart,
+                            Sheet = "Data",
+                            ChartName = "BadType",
+                            HasSourceRange = true,
+                            SourceRange = "A1:B6",
+                            HasChartType = true,
+                            ChartType = "scatter"
+                        }, () => marked = true,
+                        System.Threading.CancellationToken.None);
+                    AssertEqual("excel_chart_type_invalid", badType.ErrorCode,
+                        "domain refuses an unsupported chart type");
+                    AssertTrue(!marked &&
+                        adapter.ExcelChartForTest("Data", "BadType") == null,
+                        "unsupported chart type never creates a line chart");
+                    foreach (var source in new[] { "{}",
+                        "{\"mode\":\"createOnly\",\"sheet\":\"Data\",\"chartName\":\"NoSource\"}",
+                        "{\"sourceRange\":null}",
+                        "{\"sourceRange\":\"\"}",
+                        "{\"sourceRange\":\" \"}" })
+                    {
+                        var missing = new ToolCall(
+                            "chart-source-missing", ExcelChartToolIds.UpsertChart,
+                            source);
+                        var rejected = ExecuteNativeConfirmed(
+                            runtime, missing, runtime.Describe(missing));
+                        AssertEqual(ToolExecutionOutcome.Error, rejected.Outcome,
+                            "chart creation requires an explicit source");
+                        AssertEqual(ToolDispatchEvidence.NotDispatched,
+                            rejected.Evidence.Dispatch,
+                            "missing chart source never dispatches");
+                        AssertEqual(ToolEffectEvidence.None,
+                            rejected.Evidence.Effect,
+                            "missing chart source has no effect");
+                        AssertEqual(initialApplyCalls,
+                            adapter.ExcelBackendCalls.Count(operation =>
+                                operation == FakeOfficeAdapter.ExcelChartApplyOperation),
+                            "missing chart source never reaches apply");
+                    }
+                    var missingSource = new ToolCall(
+                        "chart-source-domain", ExcelChartToolIds.UpsertChart,
+                        "{\"chartName\":\"NoSource\"}");
+                    var domainError = ExecuteNativeConfirmed(
+                        runtime, missingSource, runtime.Describe(missingSource));
+                    AssertEqual("excel_chart_source_required",
+                        (string)JObject.Parse(domainError.Result.DataJson)["code"],
+                        "upsert creation reports the missing source");
+
                     var create = new ToolCall(
-                        "chart-default", ExcelChartToolIds.UpsertChart, "{}");
+                        "chart-default", ExcelChartToolIds.UpsertChart,
+                        "{\"sourceRange\":\"A1:B6\"}");
                     var created = ExecuteNativeConfirmed(
                         runtime, create, runtime.Describe(create));
                     AssertEqual(ToolExecutionOutcome.Ok, created.Outcome,
-                        "default chart creation succeeds");
+                        "chart creation with an explicit source succeeds");
                     var chart = adapter.ExcelChartForTest("Data", "Chart 1");
                     AssertTrue(chart != null && chart.ChartType == "line" &&
                         chart.HasTitle && chart.Title == "Chart" &&
@@ -131,6 +227,30 @@ namespace RNAssistant.Harness
                         adapter.ExcelBackendCalls.Count(operation =>
                             operation == FakeOfficeAdapter.ExcelChartApplyOperation),
                         "verified no-change skips chart dispatch");
+
+                    var wire = ModelProtocolWire.Write("", new[] {
+                        new ConversationToolCall { Name = definition.Id,
+                            Arguments = (JObject)strictUpdate.DeepClone() } });
+                    var parsed = new ConversationResponseParser().Parse(
+                        wire, new[] { definition }, new[] { definition },
+                        new ModelProtocolCallContext(new string[0]));
+                    AssertTrue(parsed.Success,
+                        "strict update with null source parses: " + parsed.Error);
+                    var preservedArguments = parsed.Response.ToolCalls.Single().Arguments;
+                    AssertTrue(preservedArguments.Property("sourceRange") == null,
+                        "parser removes the optional null source");
+                    var sourceFormula = chart.Series[0].Formula;
+                    var preserve = new ToolCall(
+                        "chart-preserve-source", ExcelChartToolIds.UpsertChart,
+                        preservedArguments.ToString(Formatting.None));
+                    var preserved = ExecuteNativeConfirmed(
+                        runtime, preserve, runtime.Describe(preserve));
+                    AssertEqual(ToolExecutionOutcome.Ok, preserved.Outcome,
+                        "geometry-only update preserves source");
+                    chart = adapter.ExcelChartForTest("Data", "Chart 1");
+                    AssertTrue(chart.ChartType == "bar" && chart.Left == 16 &&
+                        chart.Series[0].Formula == sourceFormula,
+                        "omitted source, type and labels remain unchanged");
 
                     var createOnly = new ToolCall(
                         "chart-create-only", ExcelChartToolIds.UpsertChart,
@@ -232,7 +352,7 @@ namespace RNAssistant.Harness
                     };
                     var call = new ToolCall(
                         "chart-stale", ExcelChartToolIds.UpsertChart,
-                        "{\"sheet\":\"Data\",\"chartName\":\"StaleChart\"}");
+                        "{\"sheet\":\"Data\",\"chartName\":\"StaleChart\",\"sourceRange\":\"A1:B6\"}");
                     var stale = ExecuteNativeConfirmed(
                         runtime, call, runtime.Describe(call));
                     AssertEqual(ToolExecutionOutcome.Error, stale.Outcome,
@@ -252,7 +372,7 @@ namespace RNAssistant.Harness
                     var runtime = ExcelChartRuntime(executor, adapter);
                     var call = new ToolCall(
                         "chart-throw", ExcelChartToolIds.UpsertChart,
-                        "{\"sheet\":\"Data\",\"chartName\":\"MaybeChart\"}");
+                        "{\"sheet\":\"Data\",\"chartName\":\"MaybeChart\",\"sourceRange\":\"A1:B6\"}");
                     var unknown = ExecuteNativeConfirmed(
                         runtime, call, runtime.Describe(call));
                     AssertEqual(ToolExecutionOutcome.Unknown, unknown.Outcome,
@@ -285,7 +405,7 @@ namespace RNAssistant.Harness
                     };
                     var call = new ToolCall(
                         "chart-diverged", ExcelChartToolIds.UpsertChart,
-                        "{\"sheet\":\"Data\",\"chartName\":\"DivergedChart\"}");
+                        "{\"sheet\":\"Data\",\"chartName\":\"DivergedChart\",\"sourceRange\":\"A1:B6\"}");
                     var unknown = ExecuteNativeConfirmed(
                         runtime, call, runtime.Describe(call));
                     AssertEqual(ToolExecutionOutcome.Unknown, unknown.Outcome,
@@ -330,7 +450,8 @@ namespace RNAssistant.Harness
                         .Concat(executor.GetControllerTools()).ToList();
                     var result = executor.ExecuteManual(Command(
                         ExcelChartToolIds.UpsertChart,
-                        "sheet", "Data", "chartName", "BoundChart"),
+                        "sheet", "Data", "chartName", "BoundChart",
+                        "sourceRange", "A1:B6"),
                         tools, new AppSettings(), false, true, chat);
                     AssertTrue(result.Success && ownerSta,
                         "chart mutation stays on the bound document owner STA");

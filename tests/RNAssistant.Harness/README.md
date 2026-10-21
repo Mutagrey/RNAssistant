@@ -1451,7 +1451,7 @@ protected ranges and partial COM effects remain WQ-EXCEL gates. See
 
 ## Typed Excel table owner (Phase 11T4)
 
-`excel table:` covers exact native ownership, existing defaults, generated and
+`excel table:` covers exact native ownership, explicit source, generated and
 explicit names, style/header projection, source and workbook-collection bounds,
 case-insensitive collision, exact pre-dispatch drift, post-dispatch failure,
 read-back divergence and closed bound-document refusal. The fake generic host rejects
@@ -1463,7 +1463,9 @@ remain WQ-EXCEL gates. See
 ## Typed Excel chart owner (Phase 11T5)
 
 `excel chart:` covers exact native ownership for `create_chat_chart`, `upsert_chart`
-and `delete_chart`, chat-artifact source reads, create/update/delete/default/strict-mode
+and `delete_chart`, chat-artifact source reads, explicit creation source,
+omitted-source update preservation, unsupported type rejection,
+create/update/delete/default/strict-mode
 semantics, ambiguous names, collection/range bounds, verified no-change/change,
 pre-dispatch drift, unknown-after-dispatch/read-back divergence, dry-run and bound
 owner-STA/closed-workbook behavior. The fake generic chart route fails closed. These

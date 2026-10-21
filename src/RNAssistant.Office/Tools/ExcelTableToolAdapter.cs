@@ -28,7 +28,7 @@ namespace RNAssistant.Office.Tools
                 Sheet = ToolArgumentReader.String(
                     arguments, "sheet", string.Empty),
                 SourceRange = ToolArgumentReader.String(
-                    arguments, "sourceRange", "A1:B2"),
+                    arguments, "sourceRange", string.Empty),
                 Name = ToolArgumentReader.String(
                     arguments, "name", string.Empty),
                 HasHeaders = ToolArgumentReader.Boolean(

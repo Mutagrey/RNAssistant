@@ -302,6 +302,29 @@ namespace RNAssistant.Office.Domains.Excel
                     "chart_not_found", false);
                 return null;
             }
+            if (request.HasSourceRange &&
+                string.IsNullOrWhiteSpace(request.SourceRange))
+            {
+                failure = Failure(
+                    "sourceRange must be a nonblank Excel chart range.",
+                    "excel_chart_source_invalid", false);
+                return null;
+            }
+            if (existing == null && !request.HasSourceRange)
+            {
+                failure = Failure(
+                    "An explicit sourceRange is required to create an Excel chart.",
+                    "excel_chart_source_required", false);
+                return null;
+            }
+            if (request.HasChartType &&
+                NormalizeChartType(request.ChartType) == null)
+            {
+                failure = Failure(
+                    "chartType must be line, column, col, bar, or pie.",
+                    "excel_chart_type_invalid", false);
+                return null;
+            }
             return existing == null
                 ? CreatePlan(request, snapshot.ActiveSheet)
                 : UpdatePlan(request, existing);
@@ -320,8 +343,7 @@ namespace RNAssistant.Office.Domains.Excel
                     ? activeSheet : request.Sheet,
                 ChartName = request.ChartName ?? string.Empty,
                 HasSourceRange = true,
-                SourceRange = request.HasSourceRange
-                    ? request.SourceRange ?? string.Empty : "A1:B6",
+                SourceRange = request.SourceRange.Trim(),
                 HasChartType = true,
                 ChartType = NormalizeChartType(request.HasChartType
                     ? request.ChartType : "line"),
@@ -565,11 +587,12 @@ namespace RNAssistant.Office.Domains.Excel
         {
             switch ((value ?? string.Empty).Trim().ToLowerInvariant())
             {
+                case "line": return "line";
                 case "column":
                 case "col": return "column";
                 case "bar": return "bar";
                 case "pie": return "pie";
-                default: return "line";
+                default: return null;
             }
         }
 

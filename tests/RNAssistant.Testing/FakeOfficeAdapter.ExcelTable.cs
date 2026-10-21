@@ -140,6 +140,9 @@ namespace RNAssistant.Harness
             ExcelTableReadRequest request)
         {
             if (request == null) throw new ArgumentNullException(nameof(request));
+            if (string.IsNullOrWhiteSpace(request.SourceRange))
+                throw TableFailure("an explicit table source is required",
+                    "excel_table_source_required");
             if (request.MaxCells < 1 ||
                 request.MaxCells > ExcelTableService.MaxTableCells ||
                 request.MaxTables < 1 ||
@@ -147,8 +150,7 @@ namespace RNAssistant.Harness
                 throw TableFailure(
                     "invalid table bound", "excel_table_bound_invalid");
             var sheet = ResolveFakeTableSheet(request.Sheet);
-            var range = ParseRange(string.IsNullOrWhiteSpace(request.SourceRange)
-                ? "A1:B2" : request.SourceRange);
+            var range = ParseRange(request.SourceRange);
             var rows = range.End.Row - range.Start.Row + 1;
             var columns = range.End.Column - range.Start.Column + 1;
             var cells = (long)rows * columns;

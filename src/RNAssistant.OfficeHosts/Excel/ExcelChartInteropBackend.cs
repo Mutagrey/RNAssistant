@@ -119,6 +119,12 @@ namespace RNAssistant.OfficeHosts
                         "excel_chart_target_changed", false);
                 var workbook = RequireWorkbook();
                 var plan = request.Plan;
+                if (plan.Kind == ExcelChartMutationKind.Create &&
+                    (!plan.HasSourceRange ||
+                     string.IsNullOrWhiteSpace(plan.SourceRange)))
+                    throw Failure(
+                        "An explicit sourceRange is required to create an Excel chart.",
+                        "excel_chart_source_required", false);
                 if (plan.Kind == ExcelChartMutationKind.Delete)
                 {
                     Excel.Worksheet ignored;

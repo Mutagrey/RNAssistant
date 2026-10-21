@@ -25,8 +25,8 @@ namespace RNAssistant.Office.Domains.Excel
             CancellationToken cancellationToken)
         {
             request = request ?? new ExcelAddTableRequest();
-            var sourceRange = string.IsNullOrWhiteSpace(request.SourceRange)
-                ? "A1:B2" : request.SourceRange.Trim();
+            var sourceRange = request.SourceRange == null
+                ? string.Empty : request.SourceRange.Trim();
             var name = request.Name == null ? string.Empty : request.Name.Trim();
             var style = request.Style == null ? string.Empty : request.Style.Trim();
             var dispatched = false;
@@ -39,6 +39,9 @@ namespace RNAssistant.Office.Domains.Excel
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                if (string.IsNullOrWhiteSpace(sourceRange))
+                    return Failure("An explicit Excel table sourceRange is required.",
+                        "excel_table_source_required", false);
                 var before = _backend.Read(ReadRequest(
                     request.Sheet, sourceRange, 0, 0));
                 ValidateSnapshot(before, null);

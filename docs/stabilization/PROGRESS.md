@@ -1,5 +1,34 @@
 # Stabilization progress
 
+## Explicit Excel chart source on creation — 2026-10-21
+
+`excel.upsert_chart` now requires a nonblank `sourceRange` when it creates a
+workbook chart, including the missing-target branch of `upsert`; it no longer
+substitutes `A1:B6`. Omitted source on an existing chart still preserves its
+series, including `updateOnly`. Explicit blank sources fail. Generated names and
+the other creation defaults remain. Unsupported explicit `chartType` values now
+fail instead of silently becoming `line`. The chart schema and built-in skill
+describe this split; domain and backends refuse a source-less create before dispatch.
+Four focused `excel chart:` checks and the exact R61 inventory pass. Live
+Windows/Excel chart behavior remains unqualified; no Office/VSTO validation ran.
+
+Next: isolated `table`/`records` migration and live model-choice measurement.
+Exact large-range selector pushdown remains a separate resource task.
+
+## Explicit Excel table source — 2026-10-21
+
+`excel.add_table` now requires a nonblank `sourceRange`. Schema, adapter, domain,
+COM backend and fake backend no longer substitute `A1:B2`; omitted/null/blank
+sources fail before backend read or possible document mutation. An explicit
+`A1:B2` retains generated table names and default headers. Four focused
+`excel table:` checks pass, including ordinary/prompt/strict schema rejection,
+model parser rejection and direct domain refusal without schema validation.
+The exact R61 descriptor inventory is updated. Changed COM behavior requires
+Windows/Excel qualification; no Office/VSTO validation ran here.
+
+Next: the isolated `table`/`records` migration. Large-range selector pushdown
+and live model-choice measurement remain separate.
+
 ## Tool contract and inventory review — 2026-10-21
 
 Static review of Common resource/authoring, HTML/VBA, Excel, Word, PowerPoint and
@@ -15,9 +44,9 @@ bindings and transfer consumers require a separate atomic migration before
 removal. Static review does not establish model-choice quality or Office behavior.
 No Office/VSTO validation ran on this machine.
 
-Next: explicit Excel table/chart creation destinations and the isolated tabular
-view migration; compare changed model choices in existing live fixtures when
-available. Exact large-range selector pushdown remains a separate resource task.
+Next: the isolated tabular-view migration; compare changed model choices in
+existing live fixtures when available. Exact large-range selector pushdown
+remains a separate resource task.
 
 ## Large Excel ranges: bounded selected-column analysis — 2026-10-21
 

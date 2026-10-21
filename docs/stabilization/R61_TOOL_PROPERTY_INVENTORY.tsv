@@ -8,6 +8,8 @@
 # 2026-10-02: reviewed on-demand local HTML asset catalog/import/publish; package id is a user-chosen semantic name, while the content revision remains runtime-only.
 # 2026-10-14: reconciled current skill-loading, package dependency and resource/tool guidance descriptors; reviewed new package identity fields.
 # 2026-10-21: reviewed file create/copy/patch, indexed resource outline/search and selected Excel column summary as separate semantic intents; reconciled bounded partNumber and four guidance-only descriptor revisions.
+# 2026-10-21: excel.add_table sourceRange is required and nonblank; generated table name and default headers remain optional.
+# 2026-10-21: excel.upsert_chart requires an explicit nonblank sourceRange on creation; omission on update preserves the existing source; supported chartType values are explicit.
 common.capabilities_read	Excel,Outlook,PowerPoint,Word	agent,plan	capabilities.read.intent.v1	83a5377df41216258264626ccd93d35427348bde31354a064bb27ff1355be73f	action,id,referencePath	id=semantic-capability-identity
 common.capabilities_search	Excel,Outlook,PowerPoint,Word	agent,plan	capabilities.search.intent.v1	7e647d1a4ae13887d52348b154210db01e9dd818346404a316105e88d68b5e48	kind,query	-
 common.file_copy	Excel,Outlook,PowerPoint,Word	agent	common.file_copy.intent.v1	034ef9cfe3d49557561570695666f29adbab02da1c2e2366a806a83433f8d647	name,source	-
@@ -53,7 +55,7 @@ common.vba_rename_module	Excel,PowerPoint,Word	agent	vba.public.vba.rename.modul
 common.vba_restore_backup	Excel,PowerPoint,Word	agent	vba.public.vba.restore.backup.intent.v2	ea47cf72bffda8b5d20c4140997354ab44aac17daf738d6666b8884515f24878	moduleName,target	-
 common.vba_write_module	Excel,PowerPoint,Word	agent	vba.public.vba.write.module.intent.v2	3d6045631316a1a9eefad58f0243dcf185166711eb3cc5f7c253fa260ee1e8da	code,componentType,mode,moduleName	-
 excel.add_sheet	Excel	agent	excel.sheet.add.v1	99d883fd3b627f9ce92f8bd3b765f210719c7deed42c1ceade44176371e7e7d1	name	-
-excel.add_table	Excel	agent	excel.table.add.v1	1397379d5db933b10b9acb2c3a86dd8ebcf401ca1ed408986ae6b3e6913b3ea1	hasHeaders,name,sheet,sourceRange,style	-
+excel.add_table	Excel	agent	excel.table.add.v1	4b9ac7c6368e099d53177ea39a0fc1ee823d1406051e4b5da5c1fbbc5ed1cc7a	hasHeaders,name,sheet,sourceRange,style	-
 excel.clear_range	Excel	agent	excel.range.clear.v1	8c550ea3d0177ba16b6118f1b7446bc3b940c3ce2dd25934697c0db636ac6a56	address,clearWhat,sheet	-
 excel.create_chat_chart	Excel	agent	excel.chart.chat.v1	57c8e9eb8da1336e1e899f9fc3a44326fef58c149852d2f74fda9e5336ec3ff9	address,chartType,sheet,title	-
 excel.delete_chart	Excel	agent	excel.chart.delete.v1	711829110840a72c7d0cc5de140d8f8d01c0aad9ae83a8fdc7d8f51000ce461c	chartName,sheet	-
@@ -66,7 +68,7 @@ excel.rename_sheet	Excel	agent	excel.sheet.rename.v1	dec016294e52d2b9d7879ef2526
 excel.replace_cells	Excel	agent	excel.replace.cells.v1	16da257948c3a4cb489961e6e85d7eb047fd9e598322b934f37ee1783105fbbf	address,find,lookIn,matchCase,maxReplacements,mode,replace,replaceAll,scope,sheet,wholeWord	-
 excel.sort_range	Excel	agent	excel.range.sort.v1	1fc8d16e2e09d2ed6f374aaabbea3f59e10c7b29193085f1a988717cea2b35eb	address,descending,hasHeaders,keyColumn,sheet	-
 excel.summarize_columns	Excel	agent	excel.read.summarize-columns.v1	ee7e6e62f04601d7306c91238446340fc5d6f7fbd1fb6ecc3ce8abaeba818812	address,columns,sheet	-
-excel.upsert_chart	Excel	agent	excel.chart.upsert.v1	9f5a0fc8ff5860242435e124e7929dc1dedb4617d959cbd55efcaef588bcdc3c	categoryLabelsRange,chartName,chartType,height,left,mode,sheet,sourceRange,title,top,width,xAxisTitle,yAxisTitle	-
+excel.upsert_chart	Excel	agent	excel.chart.upsert.v1	8136569c45fb96d401cd8c5764a46de9404f724049b997d93e5d67f284e5ffa6	categoryLabelsRange,chartName,chartType,height,left,mode,sheet,sourceRange,title,top,width,xAxisTitle,yAxisTitle	-
 excel.write_range	Excel	agent	excel.write.range.v1	e224224fa9b19dab02ed18ad69d68565c9d4b3696b03f27ced593931682a5230	address,formula,kind,sheet,value,values	-
 outlook.create_draft	Outlook	agent	outlook.create.draft.v1	8e5df76b96c516a4ae9de013868c352138ab761091ebc39f70a31149b50da2e2	bcc,body,cc,kind,subject,to	-
 outlook.index_archive	Outlook	agent	outlook.index.archive.v1	0d625225324795eeb0a83dc2c36beff5b6bad2df98bfb779ee07b1376533bdfa	fromDate,includePst,maxBatches,refresh,throughDate	-

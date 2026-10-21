@@ -153,14 +153,16 @@ namespace RNAssistant.OfficeHosts
             int maxCells,
             out Excel.Worksheet sheet)
         {
+            if (string.IsNullOrWhiteSpace(sourceRange))
+                throw Failure("An explicit Excel table sourceRange is required.",
+                    "excel_table_source_required", false);
             var workbook = RequireWorkbook();
             if (maxCells < 1 || maxCells > ExcelTableService.MaxTableCells)
                 throw Failure(
                     "Excel table cell ceiling is invalid.",
                     "excel_table_bound_invalid", false);
             sheet = ResolveSheet(workbook, sheetName);
-            var range = sheet.Range[string.IsNullOrWhiteSpace(sourceRange)
-                ? "A1:B2" : sourceRange];
+            var range = sheet.Range[sourceRange];
             if (range == null || range.Areas.Count != 1)
                 throw Failure(
                     "Excel table source must be one contiguous range.",

@@ -75,6 +75,12 @@ namespace RNAssistant.Harness
                     "excel_chart_target_changed");
 
             var plan = request.Plan;
+            if (plan.Kind == ExcelChartMutationKind.Create &&
+                (!plan.HasSourceRange ||
+                 string.IsNullOrWhiteSpace(plan.SourceRange)))
+                throw ChartFailure(
+                    "an explicit chart source is required",
+                    "excel_chart_source_required");
             FakeSheet sheet;
             FakeChart chart;
             if (plan.Kind == ExcelChartMutationKind.Delete)
