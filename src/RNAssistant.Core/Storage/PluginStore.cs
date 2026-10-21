@@ -223,6 +223,81 @@ namespace RNAssistant.Core.Storage
             return record;
         }
 
+        public PluginPublishedReleasePage ListPublishedReleases(string id, string cursor)
+        {
+            RequireId(id);
+            var registration = Get(id) ?? throw new PluginException("plugin_missing", "Plugin is not connected.");
+            var stamp = _authority.GetHead(Scope, RegistrationRef(id, "0").Identity)?.Revision?.Revision;
+            var offset = 0;
+            if (!string.IsNullOrEmpty(cursor))
+            {
+                var parts = cursor.Split('.');
+                if (parts.Length != 2 || parts[0] != stamp ||
+                    !int.TryParse(parts[1], out offset) || offset < 1 || offset > int.MaxValue - 13 || offset % 12 != 0)
+                    throw new PluginException("plugin_history_changed", "История версий изменилась. Откройте список заново.");
+            }
+            // One extra metadata entry determines whether another page exists.
+            // Package file payloads remain in CAS and are never read for the menu.
+            var published = PublishedReleaseIds(id).Take(offset + 13).ToArray();
+            if (offset >= published.Length && offset != 0)
+                throw new PluginException("plugin_history_changed", "История версий изменилась. Откройте список заново.");
+            var entries = published.Skip(offset).Take(12).Select(releaseId =>
+            {
+                var reference = ReleaseRef(id, releaseId);
+                var record = ReadRelease(new PluginReleaseIdentity(id, releaseId));
+                var manifest = PluginPackageFiles.ParseManifest(record.ManifestJson);
+                var revision = _authority.GetRevision(Scope, reference);
+                return new PluginPublishedRelease { ReleaseId = releaseId, Name = manifest.Name,
+                    Version = manifest.Version, CapturedUtc = revision?.CreatedUtc ?? DateTime.MinValue,
+                    Active = registration.ActiveReleaseId == releaseId && registration.Enabled };
+            }).ToArray();
+            return new PluginPublishedReleasePage { Items = entries,
+                NextCursor = published.Length > offset + entries.Length ? stamp + "." + (offset + entries.Length) : null };
+        }
+
+        public PluginRegistration RestorePublishedRelease(string id, string releaseId, string expectedActiveReleaseId)
+        {
+            var current = Get(id) ?? throw new PluginException("plugin_missing", "Plugin is not connected.");
+            if (current.ActiveReleaseId != expectedActiveReleaseId)
+                throw new PluginException("plugin_selection_changed", "Активная версия изменилась. Обновите список.");
+            if (!PublishedReleaseIds(id).Contains(releaseId))
+                throw new PluginException("plugin_release_missing", "Выбранная версия не была опубликована.");
+            var release = ReadRelease(new PluginReleaseIdentity(id, releaseId));
+            if (release.SourceWorkspaceId != current.SourceWorkspaceId)
+                throw new PluginException("plugin_selection_changed", "Версия принадлежит другому workspace.");
+            // Verify the one selected package without retaining all its files in memory.
+            foreach (var file in release.Files)
+                if (!_blobs.HasVerifiedReference(file.Payload.ToBlobReference()))
+                    throw new PluginException("plugin_release_invalid", "Файл выбранной версии недоступен: " + file.Path);
+            return Apply(release, expectedActiveReleaseId);
+        }
+
+        public PluginReleaseRecord ReadPublishedRelease(string id, string releaseId)
+        {
+            if (!PublishedReleaseIds(id).Contains(releaseId))
+                throw new PluginException("plugin_release_missing", "Выбранная версия не была опубликована.");
+            return ReadRelease(new PluginReleaseIdentity(id, releaseId));
+        }
+
+        private IEnumerable<string> PublishedReleaseIds(string id)
+        {
+            // Follow the registration's immutable parent chain. Checked candidates
+            // have release heads too, but no registration revision points to them.
+            var head = _authority.GetHead(Scope, RegistrationRef(id, "0").Identity);
+            if (head?.Knowledge != HeadKnowledge.Known) yield break;
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            var reference = head.Revision;
+            while (reference != null)
+            {
+                var revision = _authority.GetRevision(Scope, reference);
+                if (revision == null) throw new PluginException("plugin_history_invalid", "История регистрации неполная.");
+                var historic = Read<PluginRegistration>(reference, "plugin-registration", false);
+                if (!string.IsNullOrEmpty(historic.ActiveReleaseId) && seen.Add(historic.ActiveReleaseId))
+                    yield return historic.ActiveReleaseId;
+                reference = revision.Parent;
+            }
+        }
+
         public byte[] ReadFile(PluginReleaseRecord release, string path)
         {
             var file = release.Files.SingleOrDefault(item => item.Path == path);
@@ -255,10 +330,15 @@ namespace RNAssistant.Core.Storage
                 AuthorityCommitReason.CatalogResourcePublication));
         }
 
-        private T Read<T>(ResourceRef reference, string view)
+        private T Read<T>(ResourceRef reference, string view, bool requireHead = true)
         {
-            var published = _authority.GetHead(Scope, reference.Identity);
-            if (published?.Knowledge != HeadKnowledge.Known || published.Revision.Revision != reference.Revision)
+            if (requireHead)
+            {
+                var published = _authority.GetHead(Scope, reference.Identity);
+                if (published?.Knowledge != HeadKnowledge.Known || published.Revision.Revision != reference.Revision)
+                    throw new PluginException("plugin_release_missing", "The exact publication is not available.");
+            }
+            else if (_authority.GetRevision(Scope, reference) == null)
                 throw new PluginException("plugin_release_missing", "The exact publication is not available.");
             var data = _authority.GetView(Scope, reference, view);
             if (data?.Payload == null || data.Payload.ByteLength > 1024 * 1024)

@@ -51,6 +51,7 @@ namespace RNAssistant.Harness
             var tests = new List<HarnessTest>
             {
                 Test("plugins: immutable publications and independent grants", PluginsPublishAndSeparateAuthority),
+                Test("plugins: paged published history and guarded restore", PluginsPublishedHistoryAndRestore),
                 Test("plugins: panel removal preserves and restores publication", PluginsPanelVisibility),
                 Test("plugins: source chats share project history", PluginsSourceChatSessions),
                 Test("plugins: text-authored SVG icons stay scoped and safe", PluginsSvgIcon),
@@ -58,6 +59,7 @@ namespace RNAssistant.Harness
                 Test("plugins: vendor resolution is separate from admission", PluginsVendorResolutionAndAdmission),
                 Test("plugins: binary unknown effects require explicit inspection", PluginsBinaryUnknownAndRecovery),
                 Test("plugins: Data Templates ordinary package and shipped vendors", PluginsDataTemplatesPackage),
+                Test("plugins: project chat file upload", PluginsProjectChatFileUpload),
                 Test("plugins: results and prepared authority stay scoped", PluginsResultsAndPreparedAuthority),
                 Test("harness: native async execution", HarnessRunsNativeAsync),
                 Test("harness: production projects include all source files", ProductionProjectsIncludeAllSourceFiles),

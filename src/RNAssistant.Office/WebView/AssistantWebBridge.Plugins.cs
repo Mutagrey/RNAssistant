@@ -31,6 +31,8 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.GetPluginSourceState: return Plugins.SourceState(Payload<PluginIdRequest>(payload).PluginId);
                     case BridgeOperationId.CheckPlugin: return Plugins.Check(Payload<PluginIdRequest>(payload).PluginId);
                     case BridgeOperationId.ApplyPlugin: return Plugins.Apply(Payload<PluginApplyRequest>(payload));
+                    case BridgeOperationId.GetPluginVersions: return Plugins.ReleaseHistory(Payload<PluginReleaseHistoryRequest>(payload));
+                    case BridgeOperationId.RestorePluginVersion: return Plugins.RestoreVersion(Payload<PluginRestoreVersionRequest>(payload));
                     case BridgeOperationId.OpenPlugin:
                         if(Plugins.Executor==null)throw new PluginException("plugins_unavailable",Plugins.StartupError ?? "Plugin browser host is unavailable.");
                         return Plugins.Open(Payload<PluginOpenRequest>(payload));
@@ -51,6 +53,10 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.DeleteProjectChat: return Plugins.DeleteProjectChat(Payload<ProjectChatRequest>(payload));
                     case BridgeOperationId.DeleteProjectHistory: return Plugins.DeleteProjectHistory(Payload<ProjectChatRequest>(payload));
                     case BridgeOperationId.SubmitProjectChat: return await Plugins.SubmitProjectChatAsync(Payload<ProjectChatRequest>(payload),settings.Load(),settings.LoadApiKey,token);
+                    case BridgeOperationId.BeginProjectChatFileUpload: return Plugins.BeginProjectChatFileUpload(Payload<ProjectChatUploadOpenRequest>(payload));
+                    case BridgeOperationId.WriteProjectChatFileChunk: return Plugins.WriteProjectChatFileChunk(Payload<ProjectChatUploadChunkRequest>(payload));
+                    case BridgeOperationId.CompleteProjectChatFileUpload: return Plugins.CompleteProjectChatFileUpload(Payload<ProjectChatUploadLeaseRequest>(payload),token);
+                    case BridgeOperationId.CancelProjectChatFileUpload: return Plugins.CancelProjectChatFileUpload(Payload<ProjectChatUploadLeaseRequest>(payload));
                     case BridgeOperationId.ResolveProjectChat: case BridgeOperationId.CancelProjectChat:
                         return await Plugins.ControlProjectChatAsync(Payload<ProjectChatRequest>(payload),operation==BridgeOperationId.CancelProjectChat,settings.Load(),settings.LoadApiKey,token);
                     default:throw new InvalidOperationException("Unknown plugin bridge operation.");

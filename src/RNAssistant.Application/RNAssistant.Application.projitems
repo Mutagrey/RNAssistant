@@ -5,6 +5,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)Workspace\Contracts\WorkspaceToolContribution.cs" Link="Application\Workspace\Contracts\WorkspaceToolContribution.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Contracts\PluginContracts.cs" Link="Application\Contracts\PluginContracts.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)PluginApplicationService.cs" Link="Application\PluginApplicationService.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)PluginApplicationService.ProjectFiles.cs" Link="Application\PluginApplicationService.ProjectFiles.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)PluginInstance.cs" Link="Application\PluginInstance.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)WorkspaceApplicationService.cs" Link="Application\WorkspaceApplicationService.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Contracts\WorkspaceProjectContracts.cs" Link="Application\Contracts\WorkspaceProjectContracts.cs" />

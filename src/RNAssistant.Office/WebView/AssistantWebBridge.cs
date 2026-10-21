@@ -166,7 +166,8 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.GetPlugins: case BridgeOperationId.GetPluginIcons: case BridgeOperationId.SavePluginIcon:
                     case BridgeOperationId.DeletePluginIcon: case BridgeOperationId.DrawPluginIcon: case BridgeOperationId.UpdatePluginAppearance:
                     case BridgeOperationId.CreatePlugin: case BridgeOperationId.ConnectPlugin:
-                    case BridgeOperationId.GetPluginSourceState: case BridgeOperationId.CheckPlugin: case BridgeOperationId.ApplyPlugin: case BridgeOperationId.OpenPlugin:
+                    case BridgeOperationId.GetPluginSourceState: case BridgeOperationId.CheckPlugin: case BridgeOperationId.ApplyPlugin:
+                    case BridgeOperationId.GetPluginVersions: case BridgeOperationId.RestorePluginVersion: case BridgeOperationId.OpenPlugin:
                     case BridgeOperationId.ClosePlugin: case BridgeOperationId.DisablePlugin:
                     case BridgeOperationId.GetRemovedPlugins: case BridgeOperationId.RemovePlugin: case BridgeOperationId.RestorePlugin:
                     case BridgeOperationId.GetPluginChat:
@@ -176,6 +177,8 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.RenameProjectChat: case BridgeOperationId.DeleteProjectChat: case BridgeOperationId.DeleteProjectHistory:
                     case BridgeOperationId.SubmitProjectChat:
                     case BridgeOperationId.ResolveProjectChat: case BridgeOperationId.CancelProjectChat:
+                    case BridgeOperationId.BeginProjectChatFileUpload: case BridgeOperationId.WriteProjectChatFileChunk:
+                    case BridgeOperationId.CompleteProjectChatFileUpload: case BridgeOperationId.CancelProjectChatFileUpload:
                         responsePayload = await HandlePluginAsync(type, payload, cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.GetWorkspaceState:

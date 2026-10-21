@@ -61,6 +61,31 @@ namespace RNAssistant.Application.Contracts
     {
         [JsonProperty("pluginId")] public string PluginId { get; set; }
         [JsonProperty("candidateId")] public string CandidateId { get; set; }
+        [JsonProperty("releaseId")] public string ReleaseId { get; set; }
+    }
+    public sealed class PluginReleaseHistoryRequest
+    {
+        [JsonProperty("pluginId", Required = Required.Always)] public string PluginId { get; set; }
+        [JsonProperty("cursor")] public string Cursor { get; set; }
+    }
+    public sealed class PluginPublishedVersionDto
+    {
+        [JsonProperty("releaseId")] public string ReleaseId { get; set; }
+        [JsonProperty("name")] public string Name { get; set; }
+        [JsonProperty("version")] public string Version { get; set; }
+        [JsonProperty("capturedUtc")] public DateTime CapturedUtc { get; set; }
+        [JsonProperty("active")] public bool Active { get; set; }
+    }
+    public sealed class PluginReleaseHistoryDto
+    {
+        [JsonProperty("items")] public IReadOnlyList<PluginPublishedVersionDto> Items { get; set; }
+        [JsonProperty("nextCursor")] public string NextCursor { get; set; }
+    }
+    public sealed class PluginRestoreVersionRequest
+    {
+        [JsonProperty("pluginId", Required = Required.Always)] public string PluginId { get; set; }
+        [JsonProperty("releaseId", Required = Required.Always)] public string ReleaseId { get; set; }
+        [JsonProperty("expectedActiveReleaseId")] public string ExpectedActiveReleaseId { get; set; }
     }
     public sealed class PluginCatalogDto
     {
@@ -86,6 +111,7 @@ namespace RNAssistant.Application.Contracts
     {
         [JsonProperty("pluginId")] public string PluginId { get; set; }
         [JsonProperty("candidateId")] public string CandidateId { get; set; }
+        [JsonProperty("hasChanges")] public bool HasChanges { get; set; }
         [JsonProperty("files")] public int Files { get; set; }
         [JsonProperty("bytes")] public long Bytes { get; set; }
         [JsonProperty("checks")] public string[] Checks { get; set; }
@@ -130,6 +156,43 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("cursor")] public string Cursor { get; set; }
         [JsonProperty("pendingId")] public string PendingId { get; set; }
         [JsonProperty("approve")] public bool Approve { get; set; }
+    }
+    public sealed class ProjectChatUploadOpenRequest
+    {
+        [JsonProperty("workspaceId", Required = Required.Always)] public string WorkspaceId { get; set; }
+        [JsonProperty("sessionId", Required = Required.Always)] public string SessionId { get; set; }
+        [JsonProperty("fileName", Required = Required.Always)] public string FileName { get; set; }
+        [JsonProperty("byteLength", Required = Required.Always)] public long ByteLength { get; set; }
+    }
+    public sealed class ProjectChatUploadChunkRequest
+    {
+        [JsonProperty("workspaceId", Required = Required.Always)] public string WorkspaceId { get; set; }
+        [JsonProperty("sessionId", Required = Required.Always)] public string SessionId { get; set; }
+        [JsonProperty("leaseId", Required = Required.Always)] public string LeaseId { get; set; }
+        [JsonProperty("offset", Required = Required.Always)] public long Offset { get; set; }
+        [JsonProperty("base64", Required = Required.Always)] public string Base64 { get; set; }
+    }
+    public sealed class ProjectChatUploadLeaseRequest
+    {
+        [JsonProperty("workspaceId", Required = Required.Always)] public string WorkspaceId { get; set; }
+        [JsonProperty("sessionId", Required = Required.Always)] public string SessionId { get; set; }
+        [JsonProperty("leaseId", Required = Required.Always)] public string LeaseId { get; set; }
+    }
+    public sealed class ProjectChatUploadOpenDto
+    {
+        [JsonProperty("leaseId")] public string LeaseId { get; set; }
+        [JsonProperty("maxChunkBytes")] public int MaxChunkBytes { get; set; }
+        [JsonProperty("relativePath")] public string RelativePath { get; set; }
+    }
+    public sealed class ProjectChatUploadProgressDto
+    {
+        [JsonProperty("nextOffset")] public long NextOffset { get; set; }
+    }
+    public sealed class ProjectChatImportedFileDto
+    {
+        [JsonProperty("relativePath")] public string RelativePath { get; set; }
+        [JsonProperty("byteLength")] public long ByteLength { get; set; }
+        [JsonProperty("modelReadable")] public bool ModelReadable { get; set; }
     }
     public sealed class ProjectChatProjectDto
     {

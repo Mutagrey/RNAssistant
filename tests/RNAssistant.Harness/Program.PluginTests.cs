@@ -39,7 +39,8 @@ namespace RNAssistant.Harness
         {
             var item=service.Create(new PluginCreateRequest{Name="Test plugin",RootPath=Path.Combine(paths.Root,"source"),Description="Test"});
             if(data){var file=Path.Combine(item.SourceRoot,"plugin.json");var json=JObject.Parse(File.ReadAllText(file));json["capabilities"]=new JArray("project.read","project.write");File.WriteAllText(file,json.ToString());}
-            var candidate=service.Check(item.PluginId);return service.Apply(new PluginApplyRequest{PluginId=item.PluginId,CandidateId=candidate.CandidateId});
+            var candidate=service.Check(item.PluginId);AssertTrue(candidate.HasChanges,"unpublished plugin has changes to apply");
+            return service.Apply(new PluginApplyRequest{PluginId=item.PluginId,CandidateId=candidate.CandidateId});
         }
         private static PluginInstance PluginOpen(PluginApplicationService service,string id,string candidate=null)
         {var view=service.Open(new PluginOpenRequest{PluginId=id,CandidateId=candidate});return service.FindInstance(new Uri(view.EntryUrl).GetLeftPart(UriPartial.Authority));}
@@ -47,6 +48,125 @@ namespace RNAssistant.Harness
         {return service.DispatchAsync(instance,new PluginFrameRequest{Version=1,RequestId=Guid.NewGuid().ToString("N"),Method=method,Path=path,ProjectId=project,Handle=handle},CancellationToken.None);}
         private static void PluginFailure(Action action,string code)
         {try{action();throw new Exception("Expected "+code);}catch(PluginException error){AssertEqual(code,error.Code,"plugin refusal");}}
+
+        private static void PluginsProjectChatFileUpload()
+        {
+            WithPluginPaths(paths => {
+                using (var service = new PluginApplicationService(paths))
+                {
+                    var root = Path.Combine(paths.Root, "upload-project"); Directory.CreateDirectory(root);
+                    var workspaceId = service.ConnectProjectWorkspace(new ProjectConnectionRequest { RootPath = root }).SelectedWorkspaceId;
+                    var sessionId = service.CreateProjectChat(new ProjectChatRequest { WorkspaceId = workspaceId }).SessionId;
+                    var source = Encoding.UTF8.GetBytes("Отчёт проекта\nСтрока 2");
+                    PluginFailure(() => service.BeginProjectChatFileUpload(new ProjectChatUploadOpenRequest {
+                        WorkspaceId = workspaceId, SessionId = sessionId, FileName = "../escape.txt", ByteLength = 1 }),
+                        "project_file_invalid");
+                    PluginFailure(() => service.BeginProjectChatFileUpload(new ProjectChatUploadOpenRequest {
+                        WorkspaceId = workspaceId, SessionId = "foreign", FileName = "notes.txt", ByteLength = 1 }),
+                        "project_chat_missing");
+                    var opened = service.BeginProjectChatFileUpload(new ProjectChatUploadOpenRequest {
+                        WorkspaceId = workspaceId, SessionId = sessionId, FileName = "notes.txt", ByteLength = source.Length });
+                    AssertTrue(opened.RelativePath.StartsWith("chat-files/", StringComparison.Ordinal), "upload target stays inside project chat-files");
+                    PluginFailure(() => service.WriteProjectChatFileChunk(new ProjectChatUploadChunkRequest {
+                        WorkspaceId = "other", SessionId = sessionId, LeaseId = opened.LeaseId, Offset = 0,
+                        Base64 = Convert.ToBase64String(source) }), "project_file_lease_missing");
+                    PluginFailure(() => service.WriteProjectChatFileChunk(new ProjectChatUploadChunkRequest {
+                        WorkspaceId = workspaceId, SessionId = sessionId, LeaseId = opened.LeaseId, Offset = 1,
+                        Base64 = Convert.ToBase64String(source) }), "project_file_offset_invalid");
+                    var first = service.WriteProjectChatFileChunk(new ProjectChatUploadChunkRequest {
+                        WorkspaceId = workspaceId, SessionId = sessionId, LeaseId = opened.LeaseId, Offset = 0,
+                        Base64 = Convert.ToBase64String(source, 0, 4) });
+                    AssertEqual(4L, first.NextOffset, "first chunk acknowledges its exact byte offset");
+                    PluginFailure(() => service.CompleteProjectChatFileUpload(new ProjectChatUploadLeaseRequest {
+                        WorkspaceId = workspaceId, SessionId = sessionId, LeaseId = opened.LeaseId }), "project_file_incomplete");
+                    service.WriteProjectChatFileChunk(new ProjectChatUploadChunkRequest {
+                        WorkspaceId = workspaceId, SessionId = sessionId, LeaseId = opened.LeaseId, Offset = 4,
+                        Base64 = Convert.ToBase64String(source, 4, source.Length - 4) });
+                    var result = service.CompleteProjectChatFileUpload(new ProjectChatUploadLeaseRequest {
+                        WorkspaceId = workspaceId, SessionId = sessionId, LeaseId = opened.LeaseId });
+                    AssertEqual(opened.RelativePath, result.RelativePath, "published path matches the announced target");
+                    AssertTrue(result.ModelReadable, "bounded UTF-8 file is readable by project model resources");
+                    AssertTrue(source.SequenceEqual(File.ReadAllBytes(Path.Combine(root, result.RelativePath.Replace('/', Path.DirectorySeparatorChar)))),
+                        "exact uploaded bytes are published in the selected project");
+                    PluginFailure(() => service.CompleteProjectChatFileUpload(new ProjectChatUploadLeaseRequest {
+                        WorkspaceId = workspaceId, SessionId = sessionId, LeaseId = opened.LeaseId }), "project_file_lease_missing");
+                    var files = new WorkspaceFileService(paths).ListPage(new WorkspaceStore(paths).OpenConnected(workspaceId), "chat-files");
+                    AssertTrue(files.Names.Contains(Path.GetFileName(result.RelativePath)), "uploaded file is discoverable in the project resource tree");
+                    var binary = new byte[] { 0x00, 0xff, 0x31 };
+                    var binaryLease = service.BeginProjectChatFileUpload(new ProjectChatUploadOpenRequest {
+                        WorkspaceId = workspaceId, SessionId = sessionId, FileName = "sample.bin", ByteLength = binary.Length });
+                    service.WriteProjectChatFileChunk(new ProjectChatUploadChunkRequest {
+                        WorkspaceId = workspaceId, SessionId = sessionId, LeaseId = binaryLease.LeaseId,
+                        Offset = 0, Base64 = Convert.ToBase64String(binary) });
+                    var binaryResult = service.CompleteProjectChatFileUpload(new ProjectChatUploadLeaseRequest {
+                        WorkspaceId = workspaceId, SessionId = sessionId, LeaseId = binaryLease.LeaseId });
+                    AssertTrue(!binaryResult.ModelReadable &&
+                        binary.SequenceEqual(File.ReadAllBytes(Path.Combine(root, binaryResult.RelativePath.Replace('/', Path.DirectorySeparatorChar)))),
+                        "binary file is retained exactly without claiming model text access");
+                    var cancelled = service.BeginProjectChatFileUpload(new ProjectChatUploadOpenRequest {
+                        WorkspaceId = workspaceId, SessionId = sessionId, FileName = "cancel.txt", ByteLength = 3 });
+                    service.CancelProjectChatFileUpload(new ProjectChatUploadLeaseRequest {
+                        WorkspaceId = workspaceId, SessionId = sessionId, LeaseId = cancelled.LeaseId });
+                    AssertTrue(!File.Exists(Path.Combine(root, cancelled.RelativePath.Replace('/', Path.DirectorySeparatorChar))),
+                        "cancelled upload never publishes a project file");
+                }
+            });
+        }
+
+        private static void PluginsPublishedHistoryAndRestore()
+        {
+            WithPluginPaths(paths => {
+                using (var service = new PluginApplicationService(paths))
+                {
+                    var item = PluginFixture(service, paths, false);
+                    var firstRelease = item.ReleaseId;
+                    var sourceFile = Path.Combine(item.SourceRoot, "app.js");
+                    var original = File.ReadAllText(sourceFile);
+                    File.WriteAllText(sourceFile, "revision 2");
+                    var unpublished = service.Check(item.PluginId);
+                    AssertEqual(1, service.ReleaseHistory(new PluginReleaseHistoryRequest { PluginId = item.PluginId }).Items.Count,
+                        "checked candidate does not appear among published versions");
+                    var preview = service.Open(new PluginOpenRequest { PluginId = item.PluginId, CandidateId = unpublished.CandidateId });
+                    PluginFailure(() => service.Open(new PluginOpenRequest { PluginId = item.PluginId, ReleaseId = preview.ReleaseId }),
+                        "plugin_release_missing");
+                    service.CloseInstanceAsync(preview.InstanceId).GetAwaiter().GetResult();
+                    item = service.Apply(new PluginApplyRequest { PluginId = item.PluginId, CandidateId = unpublished.CandidateId });
+                    for (var revision = 3; revision <= 14; revision++)
+                    {
+                        File.WriteAllText(sourceFile, "revision " + revision);
+                        var checkedPackage = service.Check(item.PluginId);
+                        item = service.Apply(new PluginApplyRequest { PluginId = item.PluginId, CandidateId = checkedPackage.CandidateId });
+                    }
+                    var latestSource = File.ReadAllText(sourceFile);
+                    var firstPage = service.ReleaseHistory(new PluginReleaseHistoryRequest { PluginId = item.PluginId });
+                    AssertEqual(12, firstPage.Items.Count, "history reads one bounded page of metadata");
+                    AssertTrue(!string.IsNullOrEmpty(firstPage.NextCursor), "older publications have a cursor");
+                    var secondPage = service.ReleaseHistory(new PluginReleaseHistoryRequest {
+                        PluginId = item.PluginId, Cursor = firstPage.NextCursor });
+                    AssertEqual(2, secondPage.Items.Count, "history loads only requested older metadata");
+                    AssertEqual(firstRelease, secondPage.Items.Last().ReleaseId, "oldest published version is available");
+                    AssertTrue(secondPage.NextCursor == null, "final page has no cursor");
+                    var historicalView = service.Open(new PluginOpenRequest { PluginId = item.PluginId, ReleaseId = firstRelease });
+                    AssertTrue(historicalView.Preview, "historical version uses isolated preview authority");
+                    var instance = service.FindInstance(new Uri(historicalView.EntryUrl).GetLeftPart(UriPartial.Authority));
+                    AssertEqual(original, Encoding.UTF8.GetString(service.ReadPackageFile(instance, "app.js")),
+                        "historical preview serves frozen package bytes");
+                    service.CloseInstanceAsync(historicalView.InstanceId).GetAwaiter().GetResult();
+                    PluginFailure(() => service.RestoreVersion(new PluginRestoreVersionRequest { PluginId = item.PluginId,
+                        ReleaseId = firstRelease, ExpectedActiveReleaseId = "stale" }), "plugin_selection_changed");
+                    var restored = service.RestoreVersion(new PluginRestoreVersionRequest { PluginId = item.PluginId,
+                        ReleaseId = firstRelease, ExpectedActiveReleaseId = item.ReleaseId });
+                    AssertEqual(firstRelease, restored.ReleaseId, "restore switches the active publication to the selected release");
+                    AssertEqual(latestSource, File.ReadAllText(sourceFile), "restore leaves editable source files untouched");
+                    PluginFailure(() => service.ReleaseHistory(new PluginReleaseHistoryRequest {
+                        PluginId = item.PluginId, Cursor = firstPage.NextCursor }), "plugin_history_changed");
+                    var restoredPage = service.ReleaseHistory(new PluginReleaseHistoryRequest { PluginId = item.PluginId });
+                    AssertEqual(firstRelease, restoredPage.Items.First().ReleaseId, "restored version moves to the front");
+                    AssertTrue(restoredPage.Items.First().Active, "menu marks the restored version active");
+                    AssertTrue(service.Check(item.PluginId).HasChanges, "current source still differs from restored publication");
+                }
+            });
+        }
 
         private static void PluginsPublishAndSeparateAuthority()
         {
@@ -77,7 +197,8 @@ namespace RNAssistant.Harness
                     var project=PluginRequest(service,active,PluginMethod.PickProject).Result.Result.Handle;
                     AssertEqual("project_changed",PluginRequest(service,active,PluginMethod.OpenFile,"input.txt","forged").Result.ErrorCode,"foreign project refused");
                     var read=PluginRequest(service,active,PluginMethod.OpenFile,"input.txt",project).Result.Result;
-                    var candidate=service.Check(item.PluginId);var preview=PluginOpen(service,item.PluginId,candidate.CandidateId);
+                    var candidate=service.Check(item.PluginId);AssertTrue(!candidate.HasChanges,"unchanged package does not offer Apply in the UI");
+                    var preview=PluginOpen(service,item.PluginId,candidate.CandidateId);
                     var sourceStamp=service.SourceState(item.PluginId).Stamp;
                     AssertEqual("project_required",PluginRequest(service,preview,PluginMethod.List).Result.ErrorCode,"preview inherits no production grant");
                     var scratch=PluginRequest(service,preview,PluginMethod.PickProject).Result.Result.Handle;
@@ -94,7 +215,8 @@ namespace RNAssistant.Harness
                     AssertEqual("original",Encoding.UTF8.GetString(active.ReadRangeAsync(read.Handle,0,8,CancellationToken.None).Result),"pinned bytes available");
                     var oldCode=service.ReadPackageFile(active,"app.js");File.WriteAllText(Path.Combine(item.SourceRoot,"app.js"),"changed");
                     AssertTrue(sourceStamp!=service.SourceState(item.PluginId).Stamp,"source token changes after a declared file edit");
-                    candidate=service.Check(item.PluginId);service.Apply(new PluginApplyRequest{PluginId=item.PluginId,CandidateId=candidate.CandidateId});
+                    candidate=service.Check(item.PluginId);AssertTrue(candidate.HasChanges,"changed source offers Apply in the UI");
+                    service.Apply(new PluginApplyRequest{PluginId=item.PluginId,CandidateId=candidate.CandidateId});
                     AssertTrue(oldCode.SequenceEqual(service.ReadPackageFile(active,"app.js")),"active operations retain frozen bytes");
                     var fresh=PluginOpen(service,item.PluginId);AssertEqual("project_required",PluginRequest(service,fresh,PluginMethod.List).Result.ErrorCode,"new publication receives no old data grant");
                     File.WriteAllText(Path.Combine(item.SourceRoot,"plugin.json"),"{}");PluginFailure(()=>service.Check(item.PluginId),"plugin_manifest_invalid");

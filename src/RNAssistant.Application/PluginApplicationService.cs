@@ -180,6 +180,7 @@ namespace RNAssistant.Application
                 foreach (var grant in _data.Values) grant.Dispose();
                 _data.Clear(); _candidates.Clear(); _revoked.Clear();
                 Conversations.Dispose();
+                CancelAllProjectChatFileUploads();
                 Conversations = new WorkspaceConversationService(_paths, _webHost, CaptureTools, _officeCapabilities,
                     () => PluginStore.AcquireRuntimeUse(_paths));
             }
@@ -277,13 +278,18 @@ namespace RNAssistant.Application
                 RequireOpen(); var registration = RequireRegistration(pluginId);
                 var package = _store.Capture(Source(registration), Vendors);
                 if (package.PluginId != pluginId) throw new PluginException("plugin_identity_changed", "Changing plugin.json ID requires a new connection.");
+                var active = registration.ActiveReleaseId == null ? null :
+                    _store.ReadRelease(new PluginReleaseIdentity(pluginId, registration.ActiveReleaseId));
+                var hasChanges = !registration.Enabled || active == null ||
+                    active.SourceWorkspaceId != package.SourceWorkspaceId ||
+                    active.PackageSha256 != package.PackageSha256 || active.ManifestJson != package.ManifestJson;
                 var manifest = PluginPackageFiles.ParseManifest(package.ManifestJson);
                 if (PluginPackageFiles.IconIsSvgPath(manifest.Icon))
                     _icons.Save(manifest.Name, _store.ReadFile(package, manifest.Icon));
                 var id = Guid.NewGuid().ToString("N");
                 foreach (var old in _candidates.Where(item => item.Value.Package.PluginId == pluginId).Select(item => item.Key).ToArray()) _candidates.Remove(old);
                 _candidates.Add(id, new Candidate { Package = package, ExpectedRelease = registration.ActiveReleaseId });
-                return new PluginCandidateDto { PluginId = pluginId, CandidateId = id, Files = package.Files.Count,
+                return new PluginCandidateDto { PluginId = pluginId, CandidateId = id, HasChanges = hasChanges, Files = package.Files.Count,
                     Bytes = package.Files.Sum(file => file.Payload.ByteLength), Checks = new[] { "manifest", "protocol", "file-integrity", "plugin-vendor-admission" } };
             }
         }
@@ -335,16 +341,49 @@ namespace RNAssistant.Application
             }
         }
 
+        public PluginReleaseHistoryDto ReleaseHistory(PluginReleaseHistoryRequest request)
+        {
+            using (PluginStore.AcquireRuntimeUse(_paths)) lock (_sync)
+            {
+                RequireOpen();
+                if (request == null) throw new PluginException("plugin_history_invalid", "Укажите плагин.");
+                var page = _store.ListPublishedReleases(request.PluginId, request.Cursor);
+                return new PluginReleaseHistoryDto { Items = page.Items.Select(item => new PluginPublishedVersionDto {
+                    ReleaseId = item.ReleaseId, Name = item.Name, Version = item.Version,
+                    CapturedUtc = item.CapturedUtc, Active = item.Active }).ToArray(), NextCursor = page.NextCursor };
+            }
+        }
+
+        public PluginItemDto RestoreVersion(PluginRestoreVersionRequest request)
+        {
+            using (PluginStore.AcquireRuntimeUse(_paths)) lock (_sync)
+            {
+                RequireOpen();
+                if (request == null || string.IsNullOrWhiteSpace(request.ReleaseId))
+                    throw new PluginException("plugin_history_invalid", "Выберите сохранённую версию.");
+                var restored = _store.RestorePublishedRelease(request.PluginId, request.ReleaseId, request.ExpectedActiveReleaseId);
+                foreach (var id in _candidates.Where(item => item.Value.Package.PluginId == request.PluginId).Select(item => item.Key).ToArray())
+                    _candidates.Remove(id);
+                _revoked.Remove(request.PluginId);
+                return Item(restored);
+            }
+        }
+
         public PluginViewDto Open(PluginOpenRequest request)
         {
             using (PluginStore.AcquireRuntimeUse(_paths)) lock (_sync)
             {
                 RequireOpen(); var registration = RequireRegistration(request.PluginId);
-                var preview = !string.IsNullOrEmpty(request.CandidateId);
+                if (!string.IsNullOrEmpty(request.CandidateId) && !string.IsNullOrEmpty(request.ReleaseId))
+                    throw new PluginException("plugin_history_invalid", "Выберите один источник предпросмотра.");
+                var preview = !string.IsNullOrEmpty(request.CandidateId) || !string.IsNullOrEmpty(request.ReleaseId);
                 if (!preview && _revoked.Contains(request.PluginId)) throw new PluginException("plugin_disabled", "Apply a checked version to enable this plugin again.");
                 if (!preview && (!registration.Enabled || registration.ActiveReleaseId == null)) throw new PluginException("plugin_disabled", "Apply a checked version before opening this plugin.");
-                var release = preview ? RequireCandidate(request.PluginId, request.CandidateId).Package :
+                var release = !string.IsNullOrEmpty(request.CandidateId) ? RequireCandidate(request.PluginId, request.CandidateId).Package :
+                    !string.IsNullOrEmpty(request.ReleaseId) ? _store.ReadPublishedRelease(request.PluginId, request.ReleaseId) :
                     _store.ReadRelease(new PluginReleaseIdentity(request.PluginId, registration.ActiveReleaseId));
+                if (release.SourceWorkspaceId != registration.SourceWorkspaceId)
+                    throw new PluginException("plugin_selection_changed", "Версия принадлежит другому workspace.");
                 var instance = new PluginInstance(_paths, release, preview) { Results = _results }; _instances.Add(instance.Id, instance);
                 return new PluginViewDto { InstanceId = instance.Id, PluginId = request.PluginId,
                     ReleaseId = release.ReleaseId, Preview = preview, EntryUrl = instance.EntryUrl };

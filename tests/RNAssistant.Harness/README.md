@@ -114,6 +114,8 @@ replaced root UI controllers and browser tests were removed during the plugin cu
 
 Plugin foundation: filter `plugins:` covers immutable code across update, failed
 validation preserving active publication, source/data/project substitution refusals,
+published-only paged history, exact historical preview and guarded restore without
+overwriting editable sources,
 preview scratch separation, runtime-clear exclusion/drain, command lifetime/cancel, exact vendor hashes and distinct
 HTML/plugin/export admission, binary/directory unknown-effect recovery, result scopes
 and runtime-owned prepared confirmation. The source-inclusion check verifies old-style

@@ -112,6 +112,21 @@ namespace RNAssistant.Core.Models
         public string PackageSha256 { get; set; }
     }
 
+    public sealed class PluginPublishedRelease
+    {
+        public string ReleaseId { get; set; }
+        public string Name { get; set; }
+        public string Version { get; set; }
+        public DateTime CapturedUtc { get; set; }
+        public bool Active { get; set; }
+    }
+
+    public sealed class PluginPublishedReleasePage
+    {
+        public IReadOnlyList<PluginPublishedRelease> Items { get; set; }
+        public string NextCursor { get; set; }
+    }
+
     public sealed class PluginAppearance
     {
         public string Name { get; set; }
