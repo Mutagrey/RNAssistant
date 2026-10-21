@@ -38,8 +38,11 @@ uses one cloud endpoint/profile with unchanged task bounds and acceptance.
   136,712 actual input tokens versus 174,451, but also takes 12 requests instead
   of 13 and two repairs instead of three. This pair establishes neither a general
   saving rate nor reliable format/batch compliance. Owner: capability/model-context
-  projection. Next: redundant branches within the authoritative tool schemas,
-  preserving argument validation and testing the same task/profile.
+  projection. [Compact format schema](PROGRESS.md#compact-excel-formatting-schema--2026-10-21)
+  removes repeated field definitions while preserving arguments and strict output.
+  The same task passes 6/6, but cumulative input rises to 153,363 across 14 requests
+  with four repairs. Reduced schema size does not yet establish overall savings
+  or reliable batching. Next: capability-result semantics and model choice.
 - Repair guidance conflict is fixed in `ModelProtocolClient.CreateFormatRepairMessage`:
   generic repair no longer overrides the parser's skill-only route with direct
   schema discovery. Focused checks cover both routes and no execution before
@@ -82,6 +85,17 @@ repeatable success remains unqualified. The successful run costs 19 requests and
 grows in the earlier comparison. No general token, quality or latency gain is established.
 Local 12B/9B profiles failed the memory preflight; cloud results
 do not qualify those models or real Office/COM/WebView2 delivery.
+
+## R61 inventory drift — 2026-10-21
+
+Open / Tool Library contract-inventory owner. After reviewing the changed
+`excel.format_range` descriptor, the full inventory check still differs on ten
+unrelated rows: `common.file_copy/create/patch`, `common.html_workspace_write_file`,
+`common.resources_outline/read/search`, `common.skills_load`, `common.task_list_set`
+and `common.vba_apply_patch`. Reconcile each current contract with its reviewed
+baseline separately; do not refresh all hashes as part of formatting compression.
+Exact expected/current rows are preserved in `compact-format-inventory-drift.json`
+in the local prompt-eval directory. Focused schema checks do not close this gate.
 
 ## Unified stabilization verification gap — 2026-10-20
 

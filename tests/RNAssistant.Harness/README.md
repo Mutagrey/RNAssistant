@@ -927,6 +927,15 @@ These browser checks are distinct from Windows/Office/WebView2 qualification.
 
 ## Test map
 
+`tools: compact Excel format schema preserves arguments` compares the compact
+contract with the previous full variants: all 128 formatting subsets, omitted
+targets, false/null, invalid types/enums and unknown fields. It checks parser
+normalization, common requirements/defaults, malformed schema rejection and exact
+provider-schema equality in both response modes. Prompt character counts are
+separate from live API token usage. The Tool Library form uses the same compact
+schema shape; its existing conditional/closed-object checks are in
+`node tests/web/tool-library-ux.test.js`.
+
 `html assets:` covers manual package discovery, private content pinning, atomic
 create-only import, cross-workspace publish/reuse and unsafe manifest rejection.
 `html tools: native ownership` checks exact read/write policies and bindings.

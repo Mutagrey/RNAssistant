@@ -54,7 +54,7 @@ excel.delete_chart	Excel	agent	excel.chart.delete.v1	711829110840a72c7d0cc5de140
 excel.delete_rows_columns	Excel	agent	excel.rows_columns.delete.v1	e61c3a379da2afa9f234434e49bb7bc11531a940cad01fd371f2d4056a8351ba	axis,count,scope,sheet,start,table	-
 excel.filter_range	Excel	agent	excel.range.filter.v1	0266476847ebdc848f01e527895dc451f414d25b00042cd64309773edb63124f	address,criteria,field,sheet	-
 excel.find_cells	Excel	agent	excel.find.cells.resource.v1	c94fd92ae4805bafacda6787476fe211183e21e9cd5b23309812f54f7535cf74	address,contextChars,lookIn,matchCase,maxResults,mode,query,scope,sheet,wholeWord	-
-excel.format_range	Excel	agent	excel.range.format.v1	c3eff161dea1fac728ce190d1b80c92f3c55040f5af697bcfb1ef4c7fdffcc52	address,autoFit,bold,fillColor,fontColor,horizontalAlignment,italic,numberFormat,sheet	-
+excel.format_range	Excel	agent	excel.range.format.v1	d4a565a85a7f9e201eebb870d8a3db0c38ac8e1c47f1af75d65449d1fd1de964	address,autoFit,bold,fillColor,fontColor,horizontalAlignment,italic,numberFormat,sheet	-
 excel.inspect	Excel	agent	excel.read.inspect.v1	f9ce30c364e86eec46325c3569770eb90571e631c6b82fd44f8ec1d5bd3d7e6a	chartName,kind,sheet	-
 excel.rename_sheet	Excel	agent	excel.sheet.rename.v1	dec016294e52d2b9d7879ef2526fe0dc93f4e8528658da5b25d0df9f2b044066	newName,sheet	-
 excel.replace_cells	Excel	agent	excel.replace.cells.v1	16da257948c3a4cb489961e6e85d7eb047fd9e598322b934f37ee1783105fbbf	address,find,lookIn,matchCase,maxReplacements,mode,replace,replaceAll,scope,sheet,wholeWord	-

@@ -157,7 +157,7 @@ namespace RNAssistant.Office.Tools
                     Property(schema, "field")["minimum"] = 1;
                     break;
                 case "excel.format_range":
-                    SetAtLeastOneVariants(schema, new[] { "sheet", "address", "numberFormat", "bold", "italic", "fillColor", "fontColor", "horizontalAlignment", "autoFit" },
+                    SetRequiredAlternatives(schema,
                         "numberFormat", "bold", "italic", "fillColor", "fontColor", "horizontalAlignment", "autoFit");
                     break;
                 case "word.inspect":
@@ -284,10 +284,10 @@ namespace RNAssistant.Office.Tools
             SetAnyOf(schema, alternatives.ToArray());
         }
 
-        private static void SetAtLeastOneVariants(JObject schema, string[] allowed, params string[] requiredAlternatives)
+        private static void SetRequiredAlternatives(JObject schema, params string[] requiredAlternatives)
         {
             SetAnyOf(schema, (requiredAlternatives ?? new string[0])
-                .Select(name => ObjectVariant(schema, allowed, new[] { name }))
+                .Select(name => new JObject { ["required"] = new JArray(name) })
                 .ToArray());
         }
 

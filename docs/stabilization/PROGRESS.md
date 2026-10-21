@@ -1,5 +1,72 @@
 # Stabilization progress
 
+## Compact Excel formatting schema — 2026-10-21
+
+`excel.format_range` now declares its nine fields once, with seven required-only
+alternatives. Core schema validation and optional-null normalization combine each
+alternative with the closed parent; invalid types/extra fields and all-null
+formatting still fail. The old repeating helper is removed. Strict output expands
+the same contract to its previous complete variants, without changing accepted
+arguments, execution policy, provider limits or prompts.
+
+| Schema representation | Before / after characters |
+|---|---:|
+| Runtime source | 8009 / 1191 |
+| Prompt descriptor (`json_object`) | 7021 / 1191 (−83.04%) |
+| Strict argument schema (`json_schema`) | 4250 / 4250, exact equality |
+
+The same unprompted report, workbook, full profile and model route were compared
+with `excel-schema-receipts-live-1`. The new live run passes all six workbook
+checks and five verified writes, with clean health and no unknown effects or
+compaction. It still chooses direct tool admission rather than the report skill.
+
+| Same task/profile | Requests | Actual input / output tokens | Protocol repairs |
+|---|---:|---:|---:|
+| Compact receipts baseline | 12 | 136,712 / 1097 | 2 |
+| Compact format schema | 14 | 153,363 / 1306 | 4 |
+
+Initial input remains 9107. Final input falls from 14,107 to 12,770, and the only
+changed descriptor among the same eleven final tools is `excel.format_range`.
+Cumulative input rises 12.18%: the new trajectory repairs fenced JSON, an unloaded
+write batch and two additional mixed/write batches. Rejected batches execute no
+calls. The schema is smaller, but this pair does not establish whole-task savings,
+improved model compliance or causation for the extra repairs. No repeat was selected
+to replace this result.
+
+Validation: eight focused Harness checks pass, including all 128 option subsets,
+strict output/literal preservation, direct admission in both response modes and
+fallback. The existing web Tool Library checks pass; its independent JS validator
+also agrees on 296 cases against both actual model-facing schemas. Build retains
+only the two existing PDF warnings. The changed Excel inventory row is reviewed;
+the full R61 inventory gate still has ten unrelated stale rows, recorded in
+`RISK_REGISTER`. No Office/VSTO validation.
+
+Evidence in the existing local eval directory: `excel-compact-format-live-1/`,
+`compact-format.patch`, route/metadata, `compact-format-results.json`,
+`compact-format-comparison.json`, actual schema/case exports and the independent
+UI comparison script. Source is `5e066a3a` plus the scoped patch; patch SHA-256 is
+`b91c128b30e53c6dbe0a1c0c7d4273fe5801474c355d3a8aee960003e069bdc8`, and metadata
+pins the binary. API usage, full profile, task/source bytes and callable descriptors
+were independently checked. Next: the bounded semantic review below, starting
+with ambiguous capability-read results; batching/format compliance remains open.
+
+## Tool semantics review before further schema compression — 2026-10-21
+
+Committed the report fixture and compact schema receipts as `5e066a3a`. The next
+slice now explicitly includes operation overlap, argument meaning and result
+ambiguity under stage 5 of the supplied unified plan; stage 4 owns token cost.
+The [current review](../tool-library.md#tool-contract-review--2026-10-21) separates
+confirmed code facts, candidates and unproven effects on model behavior.
+
+The first review covers Common discovery/resources and Excel report operations.
+Next: clarify the ambiguous `loaded` field on capability source reads, then review
+mutation destinations and `table`/`records` consumers. Full-family restructuring
+is not decided. Factoring `format_range` requires preserving the existing validator
+and both schema projections; deleting repeated branch fields alone is unsafe.
+This slice changes documentation only; diff and local links were checked, without
+a new build, model run or Office/VSTO validation. Other tool families and actual
+model-quality effects remain open.
+
 ## Compact admitted-schema receipts — 2026-10-21
 
 The frozen compiler now supplies its callable surface separately from the visible

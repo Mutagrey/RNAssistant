@@ -148,6 +148,11 @@ namespace RNAssistant.Core.Tools
         public static JObject ForStructuredOutput(JObject schema)
         {
             var clone = schema == null ? EmptyObjectSchema() : (JObject)schema.DeepClone();
+            VisitSchemaNodes(clone, node =>
+            {
+                if (HasRequiredOnlyAlternatives(node))
+                    node["anyOf"] = new JArray(EffectiveAlternatives(node).ToArray());
+            });
             CollapseObjectAnyOfConstraints(clone);
             MakeOptionalPropertiesNullable(clone);
             MakeObjectSchemasStrict(clone);
@@ -225,7 +230,7 @@ namespace RNAssistant.Core.Tools
             if (alternatives != null)
             {
                 JObject discriminatorMatch = null;
-                foreach (var candidate in alternatives.OfType<JObject>())
+                foreach (var candidate in EffectiveAlternatives(schema))
                 {
                     if (discriminatorMatch == null && MatchesDiscriminator(value, candidate)) discriminatorMatch = candidate;
                     var clone = value.DeepClone();
@@ -336,7 +341,7 @@ namespace RNAssistant.Core.Tools
                 string discriminatorError = null;
                 string closestError = null;
                 var closestScore = int.MinValue;
-                foreach (var candidate in anyOf.OfType<JObject>())
+                foreach (var candidate in EffectiveAlternatives(schema))
                 {
                     string candidateError;
                     var clone = value == null ? null : value.DeepClone();
@@ -696,6 +701,26 @@ namespace RNAssistant.Core.Tools
                 return false;
             }
 
+            if (HasRequiredOnlyAlternatives(node))
+            {
+                if (!ContainsType(type, "object") || properties == null ||
+                    additionalProperties == null || additionalProperties.Type != JTokenType.Boolean ||
+                    additionalProperties.Value<bool>())
+                {
+                    error = path + ".anyOf required-only alternatives need a closed parent object with properties.";
+                    return false;
+                }
+                foreach (var alternative in ((JArray)node["anyOf"]).OfType<JObject>())
+                foreach (var name in ((JArray)alternative["required"]).Values<string>())
+                {
+                    if (properties[name] == null)
+                    {
+                        error = path + ".anyOf.required references unknown parent property " + name + ".";
+                        return false;
+                    }
+                }
+            }
+
             if (ContainsType(type, "array"))
             {
                 var items = node["items"] as JObject;
@@ -881,7 +906,8 @@ namespace RNAssistant.Core.Tools
         {
             VisitSchemaNodes(schema, node =>
             {
-                if (ContainsType(node["type"], "object") && node["anyOf"] is JArray)
+                if (ContainsType(node["type"], "object") && node["anyOf"] is JArray &&
+                    !HasRequiredOnlyAlternatives(node))
                 {
                     // Runtime validation treats anyOf branches as complete alternatives. Keep the
                     // structured-output schema equivalent: a strict parent object with the union of
@@ -892,6 +918,37 @@ namespace RNAssistant.Core.Tools
                     node.Remove("additionalProperties");
                 }
             });
+        }
+
+        private static bool HasRequiredOnlyAlternatives(JObject schema)
+        {
+            var alternatives = schema["anyOf"] as JArray;
+            return alternatives != null && alternatives.Count > 0 &&
+                alternatives.All(item => item is JObject && ((JObject)item).Count == 1 &&
+                    item["required"] is JArray);
+        }
+
+        // Requirement fragments constrain the shared closed object. Complete
+        // alternatives retain their existing branch-owned properties/defaults.
+        // Both argument validation and optional-null removal use this same view.
+        private static IEnumerable<JObject> EffectiveAlternatives(JObject schema)
+        {
+            var shared = HasRequiredOnlyAlternatives(schema);
+            foreach (var alternative in ((JArray)schema["anyOf"]).OfType<JObject>())
+            {
+                if (!shared)
+                {
+                    yield return alternative;
+                    continue;
+                }
+                var expanded = (JObject)schema.DeepClone();
+                expanded.Remove("anyOf");
+                expanded["required"] = new JArray(
+                    (schema["required"] as JArray ?? new JArray()).Values<string>()
+                        .Concat(((JArray)alternative["required"]).Values<string>())
+                        .Distinct(StringComparer.Ordinal));
+                yield return expanded;
+            }
         }
 
         private static void MakeOptionalPropertiesNullable(JObject schema)

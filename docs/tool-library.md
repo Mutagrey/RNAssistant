@@ -553,6 +553,23 @@ dual schema, guessed value or compatibility fallback is added.
 
 ### Structured-output schema projection
 
+Closed object schemas may share `properties`, types, defaults and common
+`required` fields while `anyOf` contains only `{ "required": [...] }` fragments.
+Every fragment name must be declared by that parent. `ToolSchemaSupport` combines
+each fragment with the parent for validation and optional-null normalization;
+complete object variants retain their existing branch-owned contracts.
+`excel.format_range` uses this form for its seven optional formatting operations.
+At least one real option is required; `bold=false` is an option, all-null fields
+are not. Its field names, defaults, effects and accepted arguments are unchanged.
+
+`ForPrompt` retains the compact form. `ForStructuredOutput` expands these
+fragments before nullable/strict conversion so the provider receives the same
+complete variants as before. The measured saving therefore applies to the
+`json_object` prompt/descriptor, including strict-response fallback; the strict
+`json_schema` response contract itself is unchanged. Descriptor revisions still
+change with their exact serialized contents; old admission evidence cannot stand
+in for a current descriptor.
+
 `ToolSchemaSupport.ForStructuredOutput` derives the provider's strict response
 schema from the same runtime argument contract. Its transformations traverse only
 schema nodes under `properties` values, `items` and `anyOf`. Property names are
@@ -772,6 +789,55 @@ x64 tests cover actual custom-package discovery/install/run/cleanup in Excel, Wo
 and PowerPoint, target changes during an editor session and endpoint loss. UI status
 alone never proves an Office effect; install/remove require package journal/read-back,
 and arbitrary VBA macro execution remains unknown after dispatch.
+
+## Tool contract review — 2026-10-21
+
+Status: the first static review covers the current Common discovery/resource and
+Excel report paths. This is not a completed audit of every tool or evidence of
+real Office behavior. Owner: Tool Library / model-context, with the resource and
+Excel domain owners for changed operations.
+
+This continues stage 5 of the user-supplied unified stabilization plan dated
+2026-10-20: capability choice, preferred editor, instructions and results. Stage 4
+also covers request duplication and budgeting. A smaller schema does not settle
+whether the operations, argument choices and returned facts are understandable.
+The older audit below remains historical evidence, not a current defect list.
+
+### Current findings and decisions
+
+| Area | Current code / evidence | Decision |
+|---|---|---|
+| Capability read versus selection | `CapabilityCatalogService.ReadSkill` sets `loaded=complete` for inspected source; only `common.skills_load` selects the skill. The model projection still retains `loaded`. A direct schema read also returns `loaded=true` before callable-state evaluation. | Remove the ambiguous read-status field from model results in a bounded follow-up. Keep completeness, source content and guidance; `schemaInRequest` must still require the exact offered descriptor. Durable admission evidence keeps its existing owner. This is a naming ambiguity, not a demonstrated cause of model failure. |
+| Excel write target | `excel.write_range.address` defaults to `A1` in the schema and adapter. Omitted sheet means the active sheet. | Review an explicit destination contract for mutations. Test omitted versus deliberately selected targets before changing it; no wrong-target incident is established here. This changes accepted arguments and is separate from schema compression. |
+| Structural views | `ResourceStructuredViewService` produces `ResourceTableBatch` for both `table` and `records`; the read schema exposes both names. | Candidate for one canonical representation, after checking every provider, HTML/JS consumer and saved contract. Shared materialization alone does not prove that every consumer treats the names identically. |
+| Discovery, content and search | `excel.inspect` supplies metadata, `excel.find_cells` finds cell matches, `resources_read` supplies values/source, and `resources_search` searches a text/source target. | Keep these purposes distinct; review descriptions and supported representations together. A known range needs no discovery call. Do not merge them into an unconstrained action switch. |
+| Workbook and chat charts | `excel.upsert_chart` mutates the workbook; `excel.create_chat_chart` reads source data and creates a chat artifact. | Keep separate destinations and effect policies. Check that results clearly identify the destination and do not imply Excel rendering was verified. |
+| Format schema repetition | `excel.format_range` now shares field definitions with seven required-only fragments. The runtime combines each fragment with its parent; strict output expands to the previous full variants. | Implemented with argument-equivalence checks: prompt schema 7021 → 1191 characters. The first paired live run passes the report but spends more cumulative input after extra protocol repairs; no overall token-saving rate is established. See the current progress entry. |
+| Model batching | The current report runs attempt write batches; the parser rejects them and executes no writes. | Treat this as observed protocol-choice friction. It does not establish that tool duplication caused it, or justify combining five independently verified writes into a report macro. |
+
+### Review sequence and acceptance
+
+1. Clarify capability read results first; retain discovery, selection, admission
+   and permission as distinct runtime facts. Verify model projection and original
+   durable evidence independently.
+2. Review Excel mutation destinations and the resource representation vocabulary.
+   For each proposed rename, merge, split or removal, identify the user intent,
+   competing operation, actual consumer, effect/confirmation boundary and owner.
+   Remove the replaced path and update schemas, skills, prompts and results together;
+   do not add aliases or a second execution path.
+3. Review result producers with their tools: confirmed effect, exact affected
+   target, readable output, completeness and actionable errors. Preserve business
+   payload keys; exclude runtime revision/guard/admission plumbing from model text.
+   Do not equate a saved binding, static check or successful invocation with a
+   populated dashboard, rendered chart or verified document effect.
+4. Continue through HTML/VBA, then Word/PowerPoint/Outlook and authoring. These
+   families have not been re-audited in this slice. Record keep/merge/split/remove
+   decisions in this document as their consumers are checked.
+5. Compare changed choices on the existing unprompted Excel and combined HTML/VBA
+   fixtures with the same model/profile. Measure task result, wrong choices,
+   rejected arguments, repairs, calls and actual API usage separately. A single
+   passing trajectory does not establish reliability; fake Office does not qualify
+   calculation, rendering or COM delivery. Run only checks relevant to each change.
 
 ## Tool ergonomics audit — 2026-10-01
 
