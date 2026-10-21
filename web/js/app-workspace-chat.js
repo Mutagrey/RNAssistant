@@ -68,7 +68,7 @@
       finally { send.disabled = false; }
     };
   }
-  function bindComposer(form) {
+  function bindComposer(form, options) {
     var input = form.querySelector("textarea"), toolbar = form.querySelector(".composer-toolbar"), actions = form.querySelector(".composer-actions");
     var drafts = new Map(), current = null, mode = "agent", reasoning = false, locked = false;
     var note = toolbar.querySelector(".plugin-chat-context-note, .project-chat-context-note");
@@ -89,6 +89,22 @@
     var trigger = document.createElement("summary"); trigger.className = "composer-picker-trigger composer-add-trigger";
     trigger.setAttribute("aria-label", "Действия чата"); trigger.title = "Действия чата"; trigger.innerHTML = window.RNAssistantIcons.render("plus");
     var menu = document.createElement("div"); menu.className = "composer-picker-menu composer-add-menu";
+    var fileAction = null, fileInput = null, fileTarget = null;
+    if (options && options.onFiles) {
+      fileAction = document.getElementById("attachFileButton").cloneNode(true); fileAction.removeAttribute("id");
+      fileInput = document.createElement("input"); fileInput.type = "file"; fileInput.multiple = true; fileInput.hidden = true;
+      fileAction.onclick = function () { if (locked || !current) return;
+        fileTarget = options.fileTarget ? options.fileTarget() : current;
+        picker.open = false; fileInput.click(); };
+      fileInput.onchange = function () {
+        var files = Array.from(fileInput.files || []), target = fileTarget;
+        fileInput.value = "";
+        if (files.length && target) options.onFiles(files, target);
+      };
+      menu.appendChild(fileAction);
+      var divider = document.createElement("hr"); menu.appendChild(divider);
+      quick.appendChild(fileInput);
+    }
     var plan = document.getElementById("chatPlanButton").cloneNode(true); plan.removeAttribute("id");
     plan.onclick = function () { if (!locked) { mode = mode === "plan" ? "agent" : "plan"; update(); picker.open = false; } };
     menu.appendChild(plan); picker.append(trigger, menu); quick.appendChild(picker); toolbar.insertBefore(quick, toolbar.firstChild);
@@ -100,6 +116,7 @@
     function update() {
       clear.hidden = !input.value; resizeComposerInput(input);
       plan.classList.toggle("is-selected", mode === "plan"); plan.setAttribute("aria-pressed", String(mode === "plan")); plan.disabled = locked;
+      if (fileAction) fileAction.disabled = locked || !current;
       think.setAttribute("aria-pressed", String(reasoning)); think.title = reasoning ? "Reasoning включён" : "Reasoning выключен";
       think.setAttribute("aria-label", reasoning ? "Выключить reasoning" : "Включить reasoning"); think.disabled = locked;
       label.textContent = field(state.settings, "model") || "Модель";
@@ -125,6 +142,16 @@
       },
       options: function () { return { Mode: mode, ReasoningEnabled: reasoning }; },
       lock: function (value) { locked = value; update(); },
+      append: function (key, line) {
+        if (current === key) {
+          input.value = input.value.trim() ? input.value.replace(/\s*$/, "") + "\n" + line : line;
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          return;
+        }
+        var saved = drafts.get(key) || { text: "", mode: "agent", reasoning: false };
+        saved.text = saved.text.trim() ? saved.text.replace(/\s*$/, "") + "\n" + line : line;
+        drafts.set(key, saved);
+      },
       accepted: function (key, text) {
         if (current === key && input.value.trim() === text) { input.value = ""; input.dispatchEvent(new Event("input", { bubbles: true })); }
         else if (drafts.has(key) && drafts.get(key).text.trim() === text) drafts.get(key).text = "";

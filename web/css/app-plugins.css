@@ -35,7 +35,7 @@
 .plugin-navigation-tree{min-height:0;padding:8px;overflow:auto}
 .plugin-content{display:flex;flex-direction:column;min-width:0;min-height:0;flex:1;gap:10px}
 .plugin-data-templates .plugin-content{gap:0}
-.plugin-data-templates .plugin-toolbar{min-height:52px;padding:6px 16px;gap:7px;flex-wrap:nowrap;overflow-x:auto;border-bottom:1px solid var(--line,#e2e7e1)}
+.plugin-data-templates .plugin-toolbar{min-height:52px;padding:6px 16px;gap:7px;flex-wrap:nowrap;overflow:visible;border-bottom:1px solid var(--line,#e2e7e1)}
 .plugin-data-templates .plugin-title{display:flex;flex-direction:column;justify-content:center;min-width:0;max-width:none;flex:1 1 auto;white-space:nowrap;overflow:hidden}
 .plugin-data-templates .plugin-title strong,.plugin-data-templates .plugin-title span{overflow:hidden;text-overflow:ellipsis}
 .plugin-data-templates .plugin-title strong{font-size:15px;font-weight:600}
@@ -119,6 +119,31 @@
 .plugin-workbench:not(.plugin-data-templates) .plugin-navigation{display:none}
 .plugin-content{gap:0}
 .plugin-toolbar{flex-wrap:nowrap;min-height:52px;padding:6px 16px;border-bottom:1px solid var(--line)}
+.plugin-toolbar #pluginApply[hidden],.plugin-toolbar #pluginRestoreVersion[hidden]{display:none}
+.plugin-version-menu{position:relative;flex:0 0 auto}
+.plugin-version-menu>summary{list-style:none;cursor:pointer;white-space:nowrap}
+.plugin-version-menu>summary::-webkit-details-marker{display:none}
+.plugin-version-menu>summary svg:last-child{width:12px;height:12px;margin-left:1px}
+.plugin-version-menu[open]>summary{background:var(--surface-hover);color:var(--ink)}
+.plugin-version-menu:not([open])>.popover-menu{display:none}
+.plugin-version-menu>.popover-menu{display:grid;gap:4px;min-width:260px;max-width:min(310px,calc(100vw - 24px));max-height:min(440px,65vh);overflow:auto}
+.plugin-version-caption{padding:5px 8px;color:var(--ink-muted);font-size:11px}
+.plugin-version-items{display:grid;gap:2px}
+.plugin-version-items>button{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 8px;width:100%;padding:8px;border:0;border-radius:6px;background:transparent;color:var(--ink);text-align:left;cursor:pointer}
+.plugin-version-items>button:hover,.plugin-version-items>button.is-selected{background:var(--surface-hover)}
+.plugin-version-items>button.is-active{background:var(--surface-selected)}
+.plugin-version-items>button strong{font-size:12px;font-weight:600}
+.plugin-version-items>button small{grid-column:1/-1;color:var(--ink-muted);font-size:11px}
+.plugin-version-items>button em{color:var(--ink-muted);font-size:10px;font-style:normal}
+.plugin-version-menu .plugin-version-more{min-height:30px;padding:6px 8px;border:0;background:transparent;color:var(--accent);text-align:left;font-size:11px}
+.plugin-version-menu .plugin-version-more[hidden]{display:none}
+.plugin-toolbar-actions{flex:0 0 auto}
+.plugin-history-menu{position:relative;flex:0 0 auto}
+.plugin-history-menu>.popover-menu{display:grid;gap:2px;min-width:220px;max-height:min(360px,60vh);overflow:auto;color:var(--ink-muted);font-size:12px}
+.plugin-history-menu>.popover-menu[hidden]{display:none}
+.plugin-history-menu>.popover-menu>button{min-height:32px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.plugin-history-menu>.popover-menu>button.is-current{background:var(--surface-selected);color:var(--ink)}
+.plugin-history-menu>button[aria-expanded="true"]{background:var(--surface-hover);color:var(--ink)}
 .plugin-title{display:flex;flex-direction:column;justify-content:center;min-width:0;flex:1}
 .plugin-title strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:15px;font-weight:600}
 .plugin-toolbar .plugin-source{display:none}

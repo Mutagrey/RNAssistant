@@ -67,6 +67,7 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
     const page=await context.newPage();page.on('pageerror',error=>errors.push(error.message));
     await page.goto('file://'+path.join(web,'index.html'));assert.equal(await page.title(),'RN Assistant');
     let active=null,candidate=null,version=1,iconPrompt='',savedIcons=[],drawCalls=0;
+    const publishedVersions=[];
     const item={pluginId:'example',name:'Example',sourceWorkspaceId:'source-1',sourceRoot:'C:\\Plugins\\Example',releaseId:null,enabled:false};
     await page.exposeFunction('testPluginHost',async (type,payload)=>{
       switch(type){
@@ -80,9 +81,11 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
         case 'getPluginSourceState':return {pluginId:payload.pluginId,stamp:'source-'+version};
         case 'getPluginChat':case 'getProjectChat':return {project:{workspaceId:'source-1'},sessionId:'source-chat-1',messages:[{role:'assistant',text:'Исходники готовы к изменению.'}],state:{Status:'idle'}};
         case 'submitProjectChat':assert.equal(payload.sessionId,'source-chat-1');assert.equal(payload.input.sessionId,payload.sessionId);iconPrompt=payload.input.message;return {project:{workspaceId:'source-1'},sessionId:payload.sessionId,messages:[{role:'assistant',text:'SVG-иконка смоделирована.'}],state:{Status:'completed'}};
-        case 'checkPlugin':candidate='candidate-'+version;return {candidateId:candidate,files:3,bytes:100};
-        case 'applyPlugin':assert.equal(payload.candidateId,candidate);active=version;item.releaseId='release-'+version;item.enabled=true;item.icon='icon.svg';item.iconSvg='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 18V6h3v12M10 18v-7h3v7M16 18V4h3v14"/></svg>';return {...item};
-        case 'openPlugin':{const origin='https://view-'+(++sequence)+'.rnassistant-plugin.invalid';realms.set(origin,{origin,files:fixture(payload.candidateId?'preview-v'+version:'v'+active)});return {instanceId:origin,entryUrl:origin+'/index.html',releaseId:'release-'+version,preview:!!payload.candidateId};}
+        case 'checkPlugin':candidate='candidate-'+version;return {candidateId:candidate,hasChanges:!item.enabled||version!==active,files:3,bytes:100};
+        case 'applyPlugin':assert.equal(payload.candidateId,candidate);active=version;item.releaseId='release-'+version;item.enabled=true;item.icon='icon.svg';item.iconSvg='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 18V6h3v12M10 18v-7h3v7M16 18V4h3v14"/></svg>';publishedVersions.unshift({releaseId:item.releaseId,name:item.name,version:'1.0.0',capturedUtc:new Date().toISOString()});return {...item};
+        case 'getPluginVersions':{const offset=payload.cursor?Number(payload.cursor):0;return {items:publishedVersions.slice(offset,offset+12).map(saved=>({...saved,active:item.enabled&&saved.releaseId===item.releaseId})),nextCursor:publishedVersions.length>offset+12?String(offset+12):null};}
+        case 'restorePluginVersion':{assert.equal(payload.expectedActiveReleaseId,item.releaseId);const saved=publishedVersions.find(entry=>entry.releaseId===payload.releaseId);assert.ok(saved);item.releaseId=saved.releaseId;item.enabled=true;active=Number(saved.releaseId.split('-').pop());publishedVersions.splice(publishedVersions.indexOf(saved),1);publishedVersions.unshift(saved);return {...item};}
+        case 'openPlugin':{const origin='https://view-'+(++sequence)+'.rnassistant-plugin.invalid';const openedVersion=payload.releaseId?Number(payload.releaseId.split('-').pop()):active;realms.set(origin,{origin,files:fixture(payload.candidateId?'preview-v'+version:'v'+openedVersion)});return {instanceId:origin,entryUrl:origin+'/index.html',releaseId:payload.releaseId||'release-'+version,preview:!!payload.candidateId||!!payload.releaseId};}
         case 'closePlugin':realms.delete(payload.instanceId);return {};
         case 'disablePlugin':item.enabled=false;return {...item};
         case 'removePlugin':assert.equal(payload.pluginId,'example');item.hidden=true;return {pluginId:'example',hidden:true};
@@ -166,16 +169,33 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
     assert.match(iconPrompt,/Сводка продаж/);
     assert.doesNotMatch(iconPrompt,/Таблица с восходящей линией/,'created icon is already in source');
     assert.equal(drawCalls,1,'creation reuses the drawn icon');
-    await page.locator('#pluginPreview').click();
+    const refreshPreview=async()=>{const previous=await page.locator('#pluginPreviewMount iframe').getAttribute('src');
+      await page.locator('#pluginPreview').click();
+      await page.waitForFunction(value=>document.querySelector('#pluginPreviewMount iframe')?.getAttribute('src')!==value,previous);};
+    await refreshPreview();
     await page.frameLocator('#pluginPreviewMount iframe').locator('#run').click();await page.frameLocator('#pluginPreviewMount iframe').locator('#answer').filter({hasText:'hello preview-v1'}).waitFor();
-    await page.locator('#pluginApply').click();await page.locator('#pluginDevelopmentActions summary').click();await page.locator('#pluginReopen').click();
+    await page.locator('#pluginApply').click();await page.locator('.plugin-toolbar-actions summary').click();await page.locator('#pluginReopen').click();
     assert.equal(await page.locator('#pluginRail [data-plugin-id="example"] .plugin-icon-image').count(),1,'published SVG icon appears in the rail');
     await page.frameLocator('#pluginPreviewMount iframe').locator('#run').click();await page.frameLocator('#pluginPreviewMount iframe').locator('#answer').filter({hasText:'hello v1'}).waitFor();
-    version=2;await page.locator('#pluginPreview').click();await page.frameLocator('#pluginPreviewMount iframe').locator('#run').click();
+    version=2;await refreshPreview();await page.frameLocator('#pluginPreviewMount iframe').locator('#run').click();
     await page.frameLocator('#pluginPreviewMount iframe').locator('#answer').filter({hasText:'hello preview-v2'}).waitFor();
     await page.locator('#pluginApply').click();
     assert.equal(await page.frameLocator('#pluginPreviewMount iframe').locator('#answer').textContent(),'hello preview-v2','apply preserves the pinned visible instance');
-    await page.locator('#pluginDevelopmentActions summary').click();await page.locator('#pluginReopen').click();await page.frameLocator('#pluginPreviewMount iframe').locator('#run').click();await page.frameLocator('#pluginPreviewMount iframe').locator('#answer').filter({hasText:'hello v2'}).waitFor();
+    await page.locator('.plugin-toolbar-actions summary').click();await page.locator('#pluginReopen').click();await page.frameLocator('#pluginPreviewMount iframe').locator('#run').click();await page.frameLocator('#pluginPreviewMount iframe').locator('#answer').filter({hasText:'hello v2'}).waitFor();
+    await page.locator('#pluginVersions summary').click();
+    await page.screenshot({path:path.join(captures,'plugin-versions.png')});
+    await page.locator('#pluginVersionItems button').nth(1).click();
+    assert.equal(await page.locator('#pluginRestoreVersion').isVisible(),true,'historical preview offers restore');
+    assert.equal(await page.locator('#pluginApply').isVisible(),false,'historical preview hides source Apply');
+    await page.frameLocator('#pluginPreviewMount iframe').locator('#run').click();
+    await page.frameLocator('#pluginPreviewMount iframe').locator('#answer').filter({hasText:'hello v1'}).waitFor();
+    await page.locator('#pluginRestoreVersion').click();
+    await page.frameLocator('#pluginPreviewMount iframe').locator('#run').click();
+    await page.frameLocator('#pluginPreviewMount iframe').locator('#answer').filter({hasText:'hello v1'}).waitFor();
+    assert.equal(version,2,'restore leaves editable source version untouched');
+    await refreshPreview();
+    await page.frameLocator('#pluginPreviewMount iframe').locator('#run').click();
+    await page.frameLocator('#pluginPreviewMount iframe').locator('#answer').filter({hasText:'hello preview-v2'}).waitFor();
     const previousFrame=await page.locator('#pluginPreviewMount iframe').getAttribute('src');
     version=3;
     await page.waitForFunction(previous=>document.querySelector('#pluginPreviewMount iframe')?.getAttribute('src')!==previous,previousFrame);
@@ -185,7 +205,7 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
     await page.setViewportSize({width:390,height:844});await page.screenshot({path:path.join(captures,'plugins-narrow.png')});
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'no page overflow at 390px');
     assert.ok(await page.locator('#pluginChatMessages').innerText(),'development chat rendered');
-    await page.locator('#pluginDevelopmentActions summary').click();await page.locator('#pluginDisable').click();await page.waitForFunction(()=>!document.querySelector('#pluginPreviewMount iframe'));
+    await page.locator('.plugin-toolbar-actions summary').click();await page.locator('#pluginDisable').click();await page.waitForFunction(()=>!document.querySelector('#pluginPreviewMount iframe'));
     await page.setViewportSize({width:1280,height:800});
     await page.locator('#pluginRail [data-plugin-id="example"]').hover();
     assert.equal(await page.locator('.rail-hover-title').textContent(),'Example','plugin uses the same rail popover');
@@ -200,14 +220,15 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
     page.once('dialog',dialog=>dialog.accept());
     await page.locator('.rail-hover-card').getByRole('button',{name:'Удалить с панели'}).click();
     await page.locator('#pluginRail [data-plugin-id="example"]').waitFor({state:'detached'});
-    assert.equal(item.releaseId,'release-2','removal preserves publication');
+    assert.equal(item.releaseId,'release-1','removal preserves the restored publication');
     assert.equal(await page.locator('#pluginCreateTitle').textContent(),'Новый плагин','successful creation clears its form before the next plugin');
     const restoredName='Плагин сводки продаж и проверки показателей';item.name=restoredName;
     await page.locator('#pluginAdd').hover();
     await page.locator('.rail-hover-card').getByRole('button',{name:restoredName}).waitFor();
     assert.deepEqual(await page.locator('.rail-hover-body button').allTextContents(),[restoredName,'Создать плагин'],'restore choices precede create');
     assert.ok((await page.locator('.rail-hover-card').boundingBox()).width>240,'menu grows to fit a plugin name');
-    assert.ok((await page.locator('.rail-hover-card').boundingBox()).height<90,'rail menu stays compact');
+    const restoreMenuHeight=(await page.locator('.rail-hover-card').boundingBox()).height;
+    assert.ok(restoreMenuHeight<100,'rail menu stays compact: '+restoreMenuHeight);
     await page.screenshot({path:path.join(captures,'plugin-restore-menu.png')});
     await page.locator('.rail-hover-card').getByRole('button',{name:restoredName}).click();
     await page.locator('#pluginRail [data-plugin-id="example"]').waitFor();

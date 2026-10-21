@@ -247,6 +247,16 @@ async function serve() {
     assert.equal(await normal.locator("#skillForm.rna-skill-fields").count(), 1);
     await normal.locator('#instructionsList [data-tree-key="tool:0"]').click();
     assert.deepEqual(await libraryEdges(), skillEdges, "tool and skill use one full-width editor grid");
+    const selectedToolRow = normal.locator('#instructionsList [data-tree-key="tool:0"] > .navigation-tree-row');
+    const selectedBeforeHover = await selectedToolRow.evaluate(node => ({
+      background: getComputedStyle(node).backgroundColor,
+      labelWidth: node.querySelector('.navigation-tree-label').getBoundingClientRect().width
+    }));
+    await selectedToolRow.hover();
+    assert.deepEqual(await selectedToolRow.evaluate(node => ({
+      background: getComputedStyle(node).backgroundColor,
+      labelWidth: node.querySelector('.navigation-tree-label').getBoundingClientRect().width
+    })), selectedBeforeHover, 'hover keeps selected tree color and label position');
     assert.equal(await normal.locator("#toolEditorPanel .rna-editor-tabs.tool-page-tabs").count(), 1);
     assert.equal(await normal.locator("#toolActionsMenu .rna-action-menu-check #toolEnabledInput").count(), 1);
     await normal.locator('.tool-page-tabs [data-tool-page="schema"]').click();
@@ -366,6 +376,14 @@ async function serve() {
     await normal.setViewportSize({ width: 1280, height: 720 });
     await normal.waitForFunction(() => document.querySelector(".shell").classList.contains("navigation-wide"));
     await normal.waitForFunction(() => document.querySelector("#pluginPreviewMount iframe")?.contentDocument?.documentElement?.dataset.previewReady === "true");
+    await normal.locator('#pluginDevelop').click();
+    await normal.waitForFunction(() => document.querySelector('#pluginPreviewMount iframe')?.title.includes('предпросмотр'));
+    assert.equal(await normal.locator('#pluginProject').count(), 0,
+      'Data Templates has no duplicate Project button in the toolbar');
+    assert.equal(await normal.locator('#pluginNavigationProject').count(), 1,
+      'the project action remains in the tree heading');
+    assert.equal(await normal.locator('#pluginApply').isVisible(), false,
+      'an unchanged published package has no Apply action');
     await normal.locator('#pluginNavigationTree [data-tree-key="templates"] > .navigation-tree-row > .navigation-tree-label').click();
     await normal.frameLocator("#pluginPreviewMount iframe").locator("#dtViewTemplates").waitFor({ state: "visible" });
     assert.equal(await normal.frameLocator("#pluginPreviewMount iframe").locator("#dtViewTemplates").isVisible(), true);
@@ -384,15 +402,48 @@ async function serve() {
       'the workspace tree includes the plugin source workspace opened earlier');
     await normal.locator('#projectChatTree [data-tree-key="project:preview-plan-workspace"] > .navigation-tree-row > .navigation-tree-label').click();
     await normal.locator('#projectChatTitle').getByText('План запуска').waitFor();
+    await normal.locator('#projectChatSearchToggle').click();
     await normal.locator('#projectChatSearch').fill('Подготовка');
     assert.equal(await normal.locator('#projectChatTree [data-tree-key^="project:"]').count(), 1,
       'search finds a chat inside its workspace');
-    await normal.locator('#projectChatSearch').fill('');
+    await normal.locator('#projectChatSearch').press('Tab');
+    assert.equal(await normal.locator('#projectChatSearch').isHidden(), true, 'project search closes on blur');
+    assert.equal(await normal.locator('#projectChatSearch').inputValue(), 'Подготовка', 'project search preserves its filter');
+    await normal.locator('#projectChatSearchToggle').click();
+    await normal.locator('#projectChatSearch').press('Escape');
+    assert.equal(await normal.locator('#projectChatSearch').inputValue(), '', 'Escape clears project search');
     await normal.locator('#projectChatTree [data-tree-key="project:preview-data-workspace"] > .navigation-tree-row > .navigation-tree-label').click();
     await normal.locator("#projectChatTitle").getByText("Подготовка отчёта").waitFor();
-    await normal.locator("#projectChatMessages .project-chat-suggest").click();
+    assert.equal(await normal.locator("#projectChatMessages .chat-empty-suggestion").count(), 3,
+      'project chat uses the three shared empty-state suggestions');
+    assert.equal(await normal.locator("#projectChatMessages .chat-empty-mark svg").evaluate(svg => svg.outerHTML),
+      await normal.evaluate(() => renderChatEmptyState().querySelector(".chat-empty-mark svg").outerHTML),
+      'project chat uses the exact Office empty-state icon');
+    assert.equal(await normal.locator("#projectChatMessages .chat-empty-suggestion svg").count(), 0,
+      'project suggestion buttons keep the Office chip style without a chart icon');
+    assert.equal(await normal.locator('#projectChatOpenData').count(), 0,
+      'project chat no longer repeats the Data Templates button');
+    await normal.locator("#projectChatMessages .chat-empty-suggestion").first().click();
     assert.match(await normal.locator("#projectChatInput").inputValue(), /Сравни сентябрь с августом/);
     await normal.locator("#projectChatInput").fill("");
+    await normal.locator('#projectChatForm .composer-add-trigger').click();
+    assert.equal(await normal.locator('#projectChatForm .composer-add-menu').getByText('Файл с компьютера').count(), 1,
+      'project chat offers file selection beside planning');
+    await normal.locator('#projectChatForm .composer-add-menu').getByText('Файл с компьютера').click();
+    await normal.locator('#projectChatForm input[type="file"]').setInputFiles({
+      name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('Проектный файл для проверки.')
+    });
+    await normal.waitForFunction(() => document.querySelector('#projectChatInput').value.includes('chat-files/'));
+    assert.match(await normal.locator('#projectChatFileStatus').textContent(), /Файл добавлен в проект/);
+    await normal.locator("#projectChatInput").fill("");
+    await normal.locator('#projectChatForm .composer-add-trigger').click();
+    await normal.locator('#projectChatForm .composer-add-menu').getByText('Файл с компьютера').click();
+    await normal.locator('#projectChatForm input[type="file"]').setInputFiles({
+      name: 'raw.bin', mimeType: 'application/octet-stream', buffer: Buffer.from([0, 255, 1])
+    });
+    await normal.locator('#projectChatFileStatus').getByText(/недоступно для чтения моделью/).waitFor();
+    assert.equal(await normal.locator('#projectChatInput').inputValue(), '',
+      'a binary upload does not claim that the project model can read it');
     await normal.locator("#projectChatNew").click();
     await normal.waitForFunction(() => document.querySelector("#projectChatTree [aria-current='page']")?.textContent.includes("Новый чат"));
     await normal.locator("#projectChatInput").fill("Проверь источники");
@@ -401,11 +452,13 @@ async function serve() {
     await normal.locator("#projectChatStop").click();
     await normal.waitForFunction(() => document.querySelector("#projectChatNotice").textContent.includes("прервано"));
     assert.match(await normal.locator("#projectChatMessages").textContent(), /Проверь источники/);
+    await normal.locator('#projectChatWorkspaceMenu summary').click();
     await normal.locator('#projectChatConnect').click();
     await normal.locator('#projectChatConnectionPath').fill('C:\\Projects\\Archive');
     await normal.waitForFunction(() => !document.querySelector('#projectChatConnectionSubmit').disabled);
     await normal.locator('#projectChatConnectionSubmit').click();
     await normal.locator('#projectChatTree .navigation-tree-label').getByText('Archive', { exact: true }).waitFor();
+    await normal.locator('#projectChatWorkspaceMenu summary').click();
     await normal.locator('#projectChatCreate').click();
     await normal.locator('#projectChatConnectionPath').fill('C:\\Projects\\NewWorkspace');
     await normal.locator('#projectChatConnectionSubmit').click();
@@ -462,11 +515,26 @@ async function serve() {
     assert.match(await normal.locator('#pluginSource').textContent(), /plugin-workspaces[\\/]Сводка продаж-/, 'preview uses the default source folder');
     await normal.locator('#pluginPreview').click();
     await normal.frameLocator('#pluginPreviewMount iframe').getByRole('heading', { name: 'Сводка продаж' }).waitFor();
+    assert.equal(await normal.locator('#pluginApply').isVisible(), true);
+    const originalPluginSession = await normal.evaluate(() =>
+      RNAssistantWorkspaceChat.selectedSession('source-preview-plugin-1'));
+    await normal.locator('#pluginChatNew').click();
+    await normal.waitForFunction(previous =>
+      RNAssistantWorkspaceChat.selectedSession('source-preview-plugin-1') !== previous, originalPluginSession);
+    await normal.locator('#pluginChatHistory').click();
+    await normal.locator('#pluginChatHistoryList button').nth(1).waitFor();
+    assert.equal(await normal.locator('#pluginChatHistoryList').isVisible(), true,
+      'plugin chat history opens in place');
+    await normal.locator('#pluginChatHistoryList button').nth(1).click();
+    await normal.waitForFunction(previous =>
+      RNAssistantWorkspaceChat.selectedSession('source-preview-plugin-1') === previous, originalPluginSession);
     await normal.locator('#pluginApply').click();
-    assert.equal(await normal.locator('#pluginRail [data-plugin-id="preview-plugin-1"] svg path').count(), drawnIcons.items[0].paths.length,
+    assert.equal(await normal.locator('#pluginApply').isVisible(), false);
+    assert.equal(await normal.locator('#pluginStatus').textContent(), '');
+    assert.equal(await normal.locator('#pluginRail [data-plugin-id="preview-plugin-1"] .plugin-icon-image').count(), 1,
       'the simulated publication displays its vector icon');
     await normal.evaluate(id => send('deletePluginIcon', { id }), drawnIcons.items[0].id);
-    assert.equal(await normal.locator('#pluginRail [data-plugin-id="preview-plugin-1"] svg path').count(), drawnIcons.items[0].paths.length,
+    assert.equal(await normal.locator('#pluginRail [data-plugin-id="preview-plugin-1"] .plugin-icon-image').count(), 1,
       'removing a saved icon leaves the plugin drawing intact');
     assert.equal(await normal.locator('#pluginRail [data-plugin-id="data-templates"] svg path').first().getAttribute('d'),
       'M3 3v18h18M7 16v-5M12 16V7M17 16V4', 'Data Templates retains its original glyph');

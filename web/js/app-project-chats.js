@@ -1,7 +1,7 @@
 (function () {
   "use strict";
   var scope = "office", catalog = null, active = null, busy = false, serial = 0, poll = null, pendingSend = null, stopTitleWatch = null;
-  var composer = null;
+  var composer = null, uploadingFiles = false;
   var selectedWorkspaceId = null, expanded = {}, query = "", connectionMode = "connect";
   function el(id) { return document.getElementById("projectChat" + id); }
   function node(tag, className, text) {
@@ -19,6 +19,67 @@
   function notice(text, error) {
     el("Notice").textContent = text || "";
     el("Notice").dataset.error = error ? "true" : "false";
+  }
+  function fileStatus(target, message, error) {
+    if (projectId() !== target.workspaceId || currentId() !== target.sessionId) return;
+    var box = el("FileStatus");
+    box.textContent = message || ""; box.hidden = !message;
+    box.classList.toggle("is-error", !!error);
+    box.dataset.session = target.sessionId;
+  }
+  function fileChunkBase64(bytes) {
+    var binary = "";
+    for (var offset = 0; offset < bytes.length; offset += 0x8000)
+      binary += String.fromCharCode.apply(null, bytes.subarray(offset, offset + 0x8000));
+    return btoa(binary);
+  }
+  async function uploadProjectFile(target, file) {
+    var lease = null, completing = false;
+    if (!file || file.size < 1 || file.size > 20 * 1024 * 1024)
+      throw new Error("Выберите непустой файл размером не более 20 МБ.");
+    try {
+      lease = await send("beginProjectChatFileUpload", { workspaceId: target.workspaceId,
+        sessionId: target.sessionId, fileName: file.name, byteLength: file.size });
+      var limit = Math.min(256 * 1024, lease.maxChunkBytes);
+      if (!(limit > 0)) throw new Error("Приложение не сообщило допустимый размер фрагмента.");
+      for (var offset = 0; offset < file.size;) {
+        var bytes = new Uint8Array(await file.slice(offset, offset + limit).arrayBuffer());
+        var progress = await send("writeProjectChatFileChunk", { workspaceId: target.workspaceId,
+          sessionId: target.sessionId, leaseId: lease.leaseId, offset: offset, base64: fileChunkBase64(bytes) });
+        if (progress.nextOffset !== offset + bytes.length) throw new Error("Передача файла прервалась.");
+        offset = progress.nextOffset;
+        fileStatus(target, "Добавление «" + file.name + "»: " + Math.round(100 * offset / file.size) + "%");
+      }
+      completing = true;
+      var result = await send("completeProjectChatFileUpload", { workspaceId: target.workspaceId,
+        sessionId: target.sessionId, leaseId: lease.leaseId });
+      if (result.modelReadable) composer.append(target.sessionId, "Файл проекта: " + result.relativePath);
+      fileStatus(target, "Файл добавлен в проект: " + result.relativePath +
+        (result.modelReadable ? "" : ". Его содержимое пока недоступно для чтения моделью в проектном чате."));
+      return true;
+    } catch (error) {
+      if (lease && !completing) await send("cancelProjectChatFileUpload", { workspaceId: target.workspaceId,
+        sessionId: target.sessionId, leaseId: lease.leaseId }).catch(function () {});
+      var detail = error.detail || error.message || String(error);
+      if (completing) detail = "Результат добавления файла не подтверждён. Проверьте " +
+        (lease && lease.relativePath || "папку проекта") + " перед повторной загрузкой. " + detail;
+      fileStatus(target, detail, true);
+      return false;
+    }
+  }
+  async function addProjectFiles(files, target) {
+    if (uploadingFiles || !target || !files.length) return;
+    if (files.length > 10 || files.reduce(function (sum, file) { return sum + file.size; }, 0) > 50 * 1024 * 1024) {
+      fileStatus(target, "За один раз можно добавить не более 10 файлов общим размером до 50 МБ.", true);
+      return;
+    }
+    uploadingFiles = true; render();
+    try {
+      for (var index = 0; index < files.length; index++) {
+        fileStatus(target, "Подготовка файла " + (index + 1) + " из " + files.length + ": " + files[index].name + "…");
+        if (!await uploadProjectFile(target, files[index])) break;
+      }
+    } finally { uploadingFiles = false; render(); }
   }
   function statusText() {
     var state = active && active.state;
@@ -84,7 +145,7 @@
   function render() {
     if (composer) {
       composer.select(currentId(), active && active.state);
-      composer.lock(busy || !active || !!active.pendingId || field(runState(), "status", "Status") === "running");
+      composer.lock(busy || uploadingFiles || !active || !!active.pendingId || field(runState(), "status", "Status") === "running");
     }
 
     el("Context").textContent = project() ? "Проекты / " + project().name : "Проект не выбран";
@@ -93,7 +154,8 @@
     el("Connect").disabled = busy;
     el("Create").disabled = busy;
     el("ConnectionSubmit").disabled = busy;
-    el("Send").disabled = busy || !project() || !project().available || !active || !el("Input").value.trim() || !!(active && active.pendingId) || field(runState(), "status", "Status") === "running";
+    el("Send").disabled = busy || uploadingFiles || !project() || !project().available || !active || !el("Input").value.trim() || !!(active && active.pendingId) || field(runState(), "status", "Status") === "running";
+    el("FileStatus").hidden = el("FileStatus").dataset.session !== currentId() || !el("FileStatus").textContent;
     el("Stop").hidden = !(active && active.state && field(active.state, "status", "Status") === "running");
     el("Control").hidden = !(active && active.pendingId);
     el("Pending").textContent = active && active.pendingId ? (active.pendingTool || "Действие") + "\n" + (active.pendingArguments || "") : "";
@@ -101,23 +163,26 @@
     var messages = el("Messages");
     if (!active || !(active.messages || []).length) {
       messages.replaceChildren(); messages._chatSignature = null;
-      var suggest = null;
+      var suggestions = [];
       if (project() && active) {
-        suggest = node("button", "chat-empty-suggestion project-chat-suggest");
-        suggest.type = "button";
-        suggest.innerHTML = window.RNAssistantNavigationTree.icon("chart") + "<span>Сравнить периоды</span>";
-        suggest.addEventListener("click", function () {
-          el("Input").value = "Сравни сентябрь с августом и выдели главное.";
-          el("Input").dispatchEvent(new Event("input", { bubbles: true }));
-          el("Input").focus();
+        [["Сравнить периоды", "Сравни сентябрь с августом и выдели главное."],
+          ["Найти риски и слабые места", "Изучи проект и найди риски и слабые места."],
+          ["Подготовить план работы", "Изучи проект и подготовь план дальнейшей работы."]].forEach(function (entry) {
+          var suggest = node("button", "chat-empty-suggestion");
+          suggest.type = "button"; suggest.textContent = entry[0];
+          suggest.addEventListener("click", function () {
+            el("Input").value = entry[1];
+            el("Input").dispatchEvent(new Event("input", { bubbles: true }));
+            el("Input").focus();
+          });
+          suggestions.push(suggest);
         });
-
       }
       messages.appendChild(renderChatEmptyState({
         title: !project() ? "Проект не выбран" : !project().available ? "Папка проекта недоступна" : active ? "С чего начнём?" : "Выберите чат проекта",
         text: !project() ? "Подключите папку проекта или выберите проект в дереве." : !project().available ?
           "Верните папку на прежний путь или подключите её заново." : "Обсудите файлы проекта, подготовку данных или составьте план.",
-        button: suggest
+        buttons: suggestions
       }));
     } else window.RNAssistantWorkspaceChat.renderMessages(messages, active);
     if (!busy && statusText()) notice(statusText());
@@ -252,7 +317,26 @@
     return loaded;
   }
   function bind() {
-    composer = window.RNAssistantWorkspaceChat.bindComposer(el("Form"));
+    composer = window.RNAssistantWorkspaceChat.bindComposer(el("Form"), {
+      fileTarget: function () { return { workspaceId: projectId(), sessionId: currentId() }; },
+      onFiles: addProjectFiles
+    });
+    var dropZone = el("Layout").querySelector(".project-chat-main");
+    dropZone.addEventListener("dragover", function (event) {
+      if (event.dataTransfer && Array.from(event.dataTransfer.types || []).includes("Files")) {
+        event.preventDefault(); event.dataTransfer.dropEffect = active && !uploadingFiles ? "copy" : "none";
+      }
+    });
+    dropZone.addEventListener("drop", function (event) {
+      var files = Array.from(event.dataTransfer && event.dataTransfer.files || []);
+      if (files.length) { event.preventDefault(); addProjectFiles(files,
+        { workspaceId: projectId(), sessionId: currentId() }); }
+    });
+    el("Input").addEventListener("paste", function (event) {
+      var files = Array.from(event.clipboardData && event.clipboardData.files || []);
+      if (files.length) { event.preventDefault(); addProjectFiles(files,
+        { workspaceId: projectId(), sessionId: currentId() }); }
+    });
     document.querySelectorAll("[data-workspace-scope]").forEach(function (button) {
       button.addEventListener("click", function () { setScope(button.dataset.workspaceScope); });
     });
@@ -262,6 +346,7 @@
     el("Search").addEventListener("input", function () { query = this.value; renderTree(); });
     [["Connect", "connect"], ["Create", "create"]].forEach(function (entry) {
       el(entry[0]).addEventListener("click", function () {
+        el("WorkspaceMenu").open = false;
         connectionMode = entry[1]; el("Connection").hidden = false;
         el("ConnectionTitle").textContent = entry[1] === "create" ? "Создать workspace" : "Подключить папку";
         el("ConnectionSubmit").textContent = entry[1] === "create" ? "Создать" : "Подключить";
@@ -280,12 +365,11 @@
       } catch (error) { notice(error.detail || error.message, true); }
       finally { busy = false; render(); }
     });
-    el("OpenData").addEventListener("click", function () { window.RNAssistantPlugins.select("data-templates"); });
     el("Input").addEventListener("input", function () {
-      el("Send").disabled = busy || !project() || !project().available || !active || !el("Input").value.trim() || !!active.pendingId || field(runState(), "status", "Status") === "running";
+      el("Send").disabled = busy || uploadingFiles || !project() || !project().available || !active || !el("Input").value.trim() || !!active.pendingId || field(runState(), "status", "Status") === "running";
     });
     el("Form").addEventListener("submit", function (event) {
-      event.preventDefault(); var text = el("Input").value.trim(); if (!text || !active) return;
+      event.preventDefault(); var text = el("Input").value.trim(); if (!text || !active || uploadingFiles) return;
       var pid = projectId(), sid = currentId();
       var preferences = composer.options();
       if (!pendingSend || pendingSend.workspaceId !== pid || pendingSend.sessionId !== sid || pendingSend.text !== text || JSON.stringify(pendingSend.preferences) !== JSON.stringify(preferences))

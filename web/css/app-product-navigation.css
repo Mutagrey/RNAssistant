@@ -22,8 +22,8 @@
 .rail-hover-body button:hover,.rail-hover-body button:focus-visible{background:var(--surface-hover)}
 .rail-hover-body button svg{flex:none;width:14px;height:14px}
 .rail-hover-card[data-kind="settings-menu"]{min-width:210px}
-.rail-hover-card[data-kind="settings-menu"] .rail-hover-title{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:2px 10px}
-.rail-hover-version{color:var(--ink-muted);font-weight:400;white-space:nowrap}
+.rail-hover-card[data-kind="settings-menu"] .rail-hover-title{color:var(--ink-muted)}
+.rail-hover-version{display:block;padding:5px 5px 2px;color:var(--ink-muted);font-size:10px;font-weight:400;white-space:nowrap}
 .rail-hover-card[data-kind="settings-menu"] .rail-hover-body{gap:2px}
 .rail-hover-card[data-kind="settings-menu"] .rail-hover-body button{min-height:30px;font-size:12px}
 .rail-hover-body button span{flex:1;min-width:0;overflow-wrap:anywhere}

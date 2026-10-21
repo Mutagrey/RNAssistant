@@ -172,8 +172,8 @@ select:not([multiple]):not([size]) { appearance: none; padding-inline-end: 34px;
 .navigation-tree-label { flex: 1; min-width: 0; display: block; padding: 4px 0; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border: 0; background: none; font: inherit; color: var(--ink); }
 .navigation-tree-item + .navigation-tree-item > .navigation-tree-row.is-group { margin-top: 3px; }
 .navigation-tree-row.is-group .navigation-tree-label { color: var(--ink-muted); font-size: 11px; }
-.navigation-tree .tree-actions { display: flex; align-items: center; flex-shrink: 0; width: 0; overflow: hidden; gap: 0; opacity: 0; }
-.navigation-tree-row:hover > .tree-actions, .navigation-tree-row.is-focused > .tree-actions { width: auto; overflow: visible; opacity: 1; }
+.navigation-tree .tree-actions { display: flex; align-items: center; flex-shrink: 0; width: auto; gap: 0; opacity: 0; visibility: hidden; pointer-events: none; }
+.navigation-tree-row:hover > .tree-actions, .navigation-tree-row.is-focused > .tree-actions { opacity: 1; visibility: visible; pointer-events: auto; }
 .navigation-tree .tree-action { display: grid; place-items: center; width: 24px; min-width: 24px; height: 26px; padding: 5px; border: 0; border-radius: 6px; background: transparent; color: var(--ink-muted); }
 .navigation-tree .tree-action:hover { color: var(--ink); background: var(--surface-selected); }
 .navigation-tree .tree-action.is-danger:hover { color: var(--danger); }
@@ -192,7 +192,7 @@ select:not([multiple]):not([size]) { appearance: none; padding-inline-end: 34px;
 }
 @keyframes rna-surface-enter { from { opacity: 0; } to { opacity: 1; } }
 @keyframes tree-spin { to { transform: rotate(360deg); } }
-@media (hover: none) { .navigation-tree .tree-actions { width: auto; opacity: 1; } }
+@media (hover: none) { .navigation-tree .tree-actions { width: auto; opacity: 1; visibility: visible; pointer-events: auto; } }
 @media (pointer: coarse) {
   .navigation-tree-row, [data-density="compact"] .navigation-tree-row { min-height: 40px; }
   .navigation-tree .tree-action { width: 32px; min-width: 32px; height: 36px; }

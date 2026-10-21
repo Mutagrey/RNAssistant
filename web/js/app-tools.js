@@ -698,7 +698,6 @@ function renderToolEditor() {
   if ($("createToolFromBuiltinButton")) $("createToolFromBuiltinButton").hidden = !builtIn;
   $("toolEnabledInput").checked = skill ? skill.Enabled !== false : false;
   $("toolIdInput").value = skill ? (skill.Id || "") : "";
-  $("toolNameDisplay").value = $("toolIdInput").value;
   $("toolHostInput").value = skill ? (skill.Host || "Common") : "Common";
   $("toolExecutorInput").value = skill ? (skill.Executor || (builtIn ? "builtin" : "vba")) : "vba";
   Array.prototype.slice.call($("toolExecutorInput").options).forEach(function (option) {
@@ -1038,8 +1037,7 @@ function bindToolActions() {
     if (!control) return;
     control.addEventListener(control.type === "checkbox" || control.tagName === "SELECT" ? "change" : "input", function () {
       if (id === "toolIdInput") {
-        $("toolNameDisplay").value = control.value.trim();
-        $("toolEditorTitle").textContent = $("toolNameDisplay").value || "Инструмент";
+        $("toolEditorTitle").textContent = control.value.trim() || "Инструмент";
       }
       markToolLibraryDirty();
     });

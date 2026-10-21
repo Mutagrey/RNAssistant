@@ -12,6 +12,25 @@
 новая возможность требует явной задачи, scope и owner; дефекты работающей системы
 приоритетнее расширения без конкретного пользовательского результата.
 
+## История source-чата во время выполнения — 2026-10-21
+
+Owner: `web/js/app-plugins.js` и `tests/web/workspace-chat-layout.test.js`.
+Тест дважды отдельно остановился на открытии истории второго чата во время
+незавершённого run: `#pluginChatHistory` отключён правилом `chatBusy`, а тест
+ожидает переключения и проверки изоляции позднего ответа. Согласовать поведение
+навигации во время run и тест в отдельной правке; сценарии загрузки файлов
+проектного чата проходят в `product-mock-preview.test.js`.
+
+## Чтение нетекстовых файлов проектным чатом — 2026-10-21
+
+Owner: workspace resource provider и conversation input. Проектный чат теперь
+принимает файлы любого формата в папку проекта без потери байтов, но модельный
+`common.resources_read` читает только строгий UTF-8 до 1 МиБ. Для PDF,
+Office-файлов, изображений и больших текстов нужен отдельный ограниченный
+resource view либо извлечение с явным статусом полноты; до этого UI не включает
+их путь в запрос к модели и показывает ограничение. Не выдавать сохранение файла
+за выполненный анализ его содержимого.
+
 ## Один табличный resource view — 2026-10-21
 
 Owner: Resource Fabric / HTML data binding / model contract. `table` и `records`
@@ -70,8 +89,9 @@ Owner: web tests / model settings UI. В текущем рабочем дере�
 `prompt-review.test.js` также останавливается до проверок редактора: fixture не
 предоставляет `renderModelCapabilityList` для `app-settings.js`.
 Согласовать fixtures с текущим UI настроек отдельной правкой. Адресные
-`workspace-chat-layout.test.js`, `splitter-preferences.test.js` и
-`product-shell-parity.test.js` проходят; это не результат полного web suite.
+`splitter-preferences.test.js` и `product-shell-parity.test.js` проходили;
+текущий сбой `workspace-chat-layout.test.js` записан выше. Это не результат
+полного web suite.
 
 ## CLI smoke fixtures lag current admission contracts — 2026-10-14
 

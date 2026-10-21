@@ -551,13 +551,12 @@ function bindSettingsActions() {
 
   var railPopovers = window.RNAssistantRailPopovers;
   if (railPopovers) {
-    railPopovers.register("settings-menu", function (_anchor, body, _isCurrent, title) {
+    railPopovers.register("settings-menu", function (_anchor, body) {
       var version = document.createElement("span");
       var fullVersion = String(state.appVersion || "").trim();
       version.className = "rail-hover-version";
-      version.textContent = formatAppVersionLabel(fullVersion);
+      version.textContent = "Версия " + formatAppVersionLabel(fullVersion);
       if (fullVersion) version.title = "Сборка: " + fullVersion;
-      title.appendChild(version);
       navItems.forEach(function (item) {
         body.appendChild(railPopovers.action(item[1], window.RNAssistantNavigationTree.icon(item[0]), function () {
           railPopovers.hide();
@@ -565,6 +564,11 @@ function bindSettingsActions() {
           selectSettingsPage(item[0]);
         }));
       });
+      var separator = document.createElement("span");
+      separator.className = "rail-hover-separator";
+      separator.setAttribute("role", "separator");
+      body.appendChild(separator);
+      body.appendChild(version);
     });
   }
 

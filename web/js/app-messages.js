@@ -241,8 +241,9 @@ function renderChatEmptyState(options) {
   empty.appendChild(text);
 
   if (options) {
-    if (options.button) { var customSuggestions = document.createElement("div"); customSuggestions.className = "chat-empty-suggestions";
-      customSuggestions.appendChild(options.button); empty.appendChild(customSuggestions); }
+    var customButtons = options.buttons || (options.button ? [options.button] : []);
+    if (customButtons.length) { var customSuggestions = document.createElement("div"); customSuggestions.className = "chat-empty-suggestions";
+      customButtons.forEach(function (button) { customSuggestions.appendChild(button); }); empty.appendChild(customSuggestions); }
     return empty;
   }
   if (state.bridgeUnavailable) {

@@ -53,11 +53,15 @@
   var projectMessages = { "preview-project-review": [], "preview-project-clean": [] };
   if (dataProject) projectMessages["preview-plan-chat"] = [];
   var projectRuns = Object.create(null), projectRequests = Object.create(null);
+  var projectFileUploads = Object.create(null);
   var pluginItem = { pluginId: "data-templates", sourceWorkspaceId: "preview-plugin-workspace", name: "Данные и шаблоны", icon: "dataTemplates",
     sourceRoot: "Локальный демонстрационный плагин", releaseId: "preview-release-1", enabled: true,
     previewSimulated: true };
   var extraPlugins = [], pluginCandidateOwner = null;
   var pluginSourceRevision = Object.create(null);
+  var pluginPublishedSourceRevision = { "data-templates": 0 };
+  var pluginPublishedVersions = { "data-templates": [{ releaseId: "preview-release-1", name: "Данные и шаблоны",
+    version: "1.0.0", capturedUtc: "2026-10-18T09:00:00Z", sourceRevision: 0 }] };
   var savedPluginIcons = [], pluginIconSequence = 0;
   // Preview-only SVG sizing; production admission and persistence are exercised by the Harness.
   function previewIconSvg(svg) {
@@ -591,6 +595,43 @@
       return projectCatalog(connected.workspaceId);
     }
     if (type === "getProjectChat") return projectChatState(payload);
+    if (type === "beginProjectChatFileUpload") {
+      requireProjectChat(payload);
+      if (!payload.fileName || payload.byteLength < 1 || payload.byteLength > 20 * 1024 * 1024)
+        fail("Выберите непустой файл размером не более 20 МБ.", "preview_project_file_invalid");
+      var fileLease = leaseId();
+      var relativePath = "chat-files/" + fileLease + "-" + payload.fileName;
+      projectFileUploads[fileLease] = { workspaceId: payload.workspaceId, sessionId: payload.sessionId,
+        relativePath: relativePath, byteLength: payload.byteLength, chunks: [], received: 0 };
+      return { leaseId: fileLease, maxChunkBytes: 256 * 1024, relativePath: relativePath };
+    }
+    if (type === "writeProjectChatFileChunk" || type === "completeProjectChatFileUpload" ||
+        type === "cancelProjectChatFileUpload") {
+      var projectUpload = projectFileUploads[payload.leaseId];
+      if (!projectUpload || projectUpload.workspaceId !== payload.workspaceId || projectUpload.sessionId !== payload.sessionId)
+        fail("Загрузка файла не найдена.", "preview_project_file_missing");
+      if (type === "cancelProjectChatFileUpload") {
+        delete projectFileUploads[payload.leaseId]; return { nextOffset: projectUpload.received };
+      }
+      if (type === "writeProjectChatFileChunk") {
+        var data = atob(payload.base64 || "");
+        if (payload.offset !== projectUpload.received || !data.length || data.length > 256 * 1024 ||
+            projectUpload.received + data.length > projectUpload.byteLength)
+          fail("Фрагменты файла идут не подряд.", "preview_project_file_offset");
+        projectUpload.chunks.push(data); projectUpload.received += data.length;
+        return { nextOffset: projectUpload.received };
+      }
+      if (projectUpload.received !== projectUpload.byteLength)
+        fail("Файл передан не полностью.", "preview_project_file_incomplete");
+      delete projectFileUploads[payload.leaseId];
+      var projectTextReadable = projectUpload.received <= 1024 * 1024;
+      if (projectTextReadable) try {
+        var rawFile = Uint8Array.from(projectUpload.chunks.join(""), function (character) { return character.charCodeAt(0); });
+        new TextDecoder("utf-8", { fatal: true }).decode(rawFile);
+      } catch (_) { projectTextReadable = false; }
+      return { relativePath: projectUpload.relativePath, byteLength: projectUpload.received,
+        modelReadable: projectTextReadable };
+    }
     if (type === "createProjectChat") {
       var targetWorkspace = requireWorkspace(payload);
       var created = { Id: "preview-project-" + (++projectChatSequence), Title: payload.title || "Новый чат", RunStatus: "" };
@@ -661,13 +702,17 @@
       if (![pluginItem].concat(extraPlugins).some(function (item) { return item.pluginId === payload.pluginId && !item.hidden; })) fail("Плагин примера отсутствует.");
       pluginCandidate = "preview-candidate-" + (++pluginInstanceSequence);
       pluginCandidateOwner = payload.pluginId;
+      var checkedPlugin = [pluginItem].concat(extraPlugins).find(function (item) { return item.pluginId === payload.pluginId; });
       var checkedIcon = extraPlugins.find(function (item) { return item.pluginId === payload.pluginId; });
       if (checkedIcon && checkedIcon.iconDescription && checkedIcon.icon === "puzzle") {
         var drawnSvg = previewIconSvg('<svg viewBox="0 0 24 24"><path d="M4 18V7h4v11M10 18v-7h4v7M16 18V4h4v14"/></svg>');
         if (!savedPluginIcons.some(function (item) { return item.svg === drawnSvg; }))
           savedPluginIcons.push({ id: "icon-" + (++pluginIconSequence), name: checkedIcon.name, svg: drawnSvg });
       }
-      return { pluginId: payload.pluginId, candidateId: pluginCandidate, files: 1, bytes: 0,
+      return { pluginId: payload.pluginId, candidateId: pluginCandidate,
+        hasChanges: !checkedPlugin.enabled || !checkedPlugin.releaseId ||
+          (pluginSourceRevision[payload.pluginId] || 0) !== (pluginPublishedSourceRevision[payload.pluginId] || 0),
+        files: 1, bytes: 0,
         checks: ["preview-only"], previewSimulated: true };
     }
     if (type === "applyPlugin") {
@@ -675,12 +720,37 @@
         fail("Снимок примера изменился.", "preview_candidate_changed");
       var applying = [pluginItem].concat(extraPlugins).find(function (item) { return item.pluginId === payload.pluginId; });
       applying.enabled = true; applying.releaseId = "preview-release-" + (++pluginInstanceSequence);
+      pluginPublishedSourceRevision[payload.pluginId] = pluginSourceRevision[payload.pluginId] || 0;
+      if (!pluginPublishedVersions[payload.pluginId]) pluginPublishedVersions[payload.pluginId] = [];
+      pluginPublishedVersions[payload.pluginId].unshift({ releaseId: applying.releaseId, name: applying.name,
+        version: "1.0.0", capturedUtc: new Date().toISOString(), sourceRevision: pluginPublishedSourceRevision[payload.pluginId] });
       if (applying !== pluginItem && applying.iconDescription) {
         applying.icon = "icon.svg";
         applying.iconSvg = previewIconSvg('<svg viewBox="0 0 24 24"><path d="M4 18V7h4v11M10 18v-7h4v7M16 18V4h4v14"/></svg>');
       }
       if (applying === pluginItem) projectSelected = false;
       pluginCandidate = null; pluginCandidateOwner = null; return clone(applying);
+    }
+    if (type === "getPluginVersions") {
+      var historyPlugin = [pluginItem].concat(extraPlugins).find(function (item) { return item.pluginId === payload.pluginId && !item.hidden; });
+      if (!historyPlugin) fail("Плагин примера отсутствует.");
+      var versions = pluginPublishedVersions[payload.pluginId] || [], offset = payload.cursor ? Number(payload.cursor) : 0;
+      if (!Number.isInteger(offset) || offset < 0 || offset >= versions.length && offset !== 0) fail("История изменилась.", "preview_history_changed");
+      return { items: versions.slice(offset, offset + 12).map(function (item) { return {
+        releaseId: item.releaseId, name: item.name, version: item.version, capturedUtc: item.capturedUtc,
+        active: historyPlugin.enabled && historyPlugin.releaseId === item.releaseId }; }),
+        nextCursor: versions.length > offset + 12 ? String(offset + 12) : null };
+    }
+    if (type === "restorePluginVersion") {
+      var restoring = [pluginItem].concat(extraPlugins).find(function (item) { return item.pluginId === payload.pluginId && !item.hidden; });
+      if (!restoring || restoring.releaseId !== payload.expectedActiveReleaseId) fail("Активная версия изменилась.", "preview_history_changed");
+      var saved = (pluginPublishedVersions[payload.pluginId] || []).find(function (item) { return item.releaseId === payload.releaseId; });
+      if (!saved) fail("Версия не была опубликована.", "preview_release_missing");
+      restoring.releaseId = saved.releaseId; restoring.enabled = true;
+      pluginPublishedSourceRevision[payload.pluginId] = saved.sourceRevision;
+      pluginPublishedVersions[payload.pluginId] = [saved].concat(pluginPublishedVersions[payload.pluginId].filter(function (item) { return item !== saved; }));
+      pluginCandidate = null; pluginCandidateOwner = null;
+      return clone(restoring);
     }
     if (type === "disablePlugin") {
       var disabling = [pluginItem].concat(extraPlugins).find(function (item) { return item.pluginId === payload.pluginId; });
@@ -691,14 +761,15 @@
     }
     if (type === "openPlugin") {
       var opening = [pluginItem].concat(extraPlugins).find(function (item) { return item.pluginId === payload.pluginId; });
+      var historical = payload.releaseId && (pluginPublishedVersions[payload.pluginId] || []).find(function (item) { return item.releaseId === payload.releaseId; });
       if (!opening || opening.hidden || payload.candidateId && (payload.candidateId !== pluginCandidate || payload.pluginId !== pluginCandidateOwner) ||
-          !payload.candidateId && !opening.enabled) fail("Плагин примера недоступен.", "preview_plugin_changed");
-      if (opening === pluginItem && !payload.candidateId) projectSelected = !!dataProject;
+          payload.releaseId && !historical || !payload.candidateId && !payload.releaseId && !opening.enabled) fail("Плагин примера недоступен.", "preview_plugin_changed");
+      if (opening === pluginItem && !payload.candidateId && !payload.releaseId) projectSelected = !!dataProject;
       return { instanceId: "preview-plugin-instance-" + (++pluginInstanceSequence), pluginId: opening.pluginId,
-        releaseId: payload.candidateId || opening.releaseId,
-        preview: !!payload.candidateId, previewSimulated: true,
-        entryUrl: opening === pluginItem ? "/preview/web/data-templates/index.html?revision=" + (pluginSourceRevision[opening.pluginId] || 0) :
-          "/preview/mock-plugin.html?name=" + encodeURIComponent(opening.name) + "&revision=" + (pluginSourceRevision[opening.pluginId] || 0) };
+        releaseId: payload.candidateId || payload.releaseId || opening.releaseId,
+        preview: !!payload.candidateId || !!payload.releaseId, previewSimulated: true,
+        entryUrl: opening === pluginItem ? "/preview/web/data-templates/index.html?revision=" + (historical ? historical.sourceRevision : pluginSourceRevision[opening.pluginId] || 0) :
+          "/preview/mock-plugin.html?name=" + encodeURIComponent(opening.name) + "&revision=" + (historical ? historical.sourceRevision : pluginSourceRevision[opening.pluginId] || 0) };
     }
     if (type === "closePlugin") return {};
     if (type === "updatePluginAppearance") {
@@ -729,6 +800,23 @@
           resourceUri: item.resourceUri, title: item.title, kind: item.kind,
           updatedUtc: exampleDate(item), linked: linked, selected: linked,
           canTransfer: true, canDelete: !otherDocument };
+      });
+      var sortBy = payload.sortBy || "updated", descending = payload.sortDescending == null ? sortBy === "updated" : payload.sortDescending;
+      function sortValue(item) {
+        if (sortBy === "updated") return Date.parse(item.updatedUtc);
+        if (sortBy === "owner") return item.linked ? "Этот чат" : item.documentId === "preview-document" ? "В документе" : item.documentTitle;
+        if (sortBy === "format") {
+          var suffix = String(item.title || "").split(".").pop().toLowerCase();
+          if (item.kind === "file" || item.kind === "attachment") return ({ json: "JSON", pdf: "PDF", txt: "Текст", md: "Markdown" })[suffix] || "Файл";
+          return ({ html_workspace: "HTML", markdown: "Markdown", plan_document: "План", task_list: "Задачи",
+            image: "Изображение", sequence: "Коллекция" })[item.kind] || item.kind || "Файл";
+        }
+        return item.title || "";
+      }
+      items.sort(function (left, right) {
+        var a = sortValue(left), b = sortValue(right);
+        var order = typeof a === "number" ? a - b : String(a).localeCompare(String(b), "ru", { sensitivity: "base" });
+        return (descending ? -order : order) || String(left.resourceUri).localeCompare(String(right.resourceUri));
       });
       return { chatId: activeChatId, sessionRevision: revision, documentId: "preview-document",
         documents: [{ id: "preview-document", title: fixtures.document }], items: items, nextCursor: null };
