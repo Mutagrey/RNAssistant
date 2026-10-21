@@ -839,6 +839,8 @@ namespace RNAssistant.Office.Services
                 return "Read text for compact conversation groups ranked by message count. Grouping without ConversationID is approximate; samples do not prove decisions or complete issue coverage. Open cited archive pages and rows for evidence.";
             if (type == "Excel search scope")
                 return "Discovery only: use excel.find_cells with a query. Do not read this target to enumerate worksheet data; read an Excel range, table, or name target instead.";
+            if (type == "Excel range" && ExcelResourceProvider.NeedsRangeOverview(descriptor))
+                return "Read structure for dimensions and small sample targets, then read selected targets for values. Samples cannot establish whole-range totals; excel.find_cells locates text.";
             if (type == "file")
                 return "Current authored text/code file. Use resources_search and resources_outline to locate exact parts, resources_read with partNumber for bounded source, then file_patch with unique exact fragments. Download preserves the original extension and encoding.";
             if (descriptor.Metadata.ContainsKey("sectionRead"))

@@ -478,12 +478,17 @@ namespace RNAssistant.Harness
                     (string)item["id"] == "excel.add_sheet" && (string)item["kind"] == "tool"),
                     "compact catalog contains exact tool ids with kind");
                 AssertTrue(((JArray)compact["items"]).OfType<JObject>().Any(item =>
+                    (string)item["id"] == ExcelReadToolIds.SummarizeColumns && (string)item["kind"] == "tool"),
+                    "the model can discover selected-column analysis without a loaded schema");
+                AssertTrue(((JArray)compact["items"]).OfType<JObject>().Any(item =>
                     (string)item["id"] == "excel.review_workbook" && (string)item["kind"] == "skill"),
                     "compact catalog contains exact skill ids with kind");
                 AssertEqual(true, (bool)compact["idEnumEnforced"],
                     "bounded catalogs also constrain the reader schema to exact ids");
                 var reader = catalog.Single(tool => tool.Id == CapabilityToolCatalog.ReadToolId);
                 AssertContains(reader.ArgumentSchemaJson, "excel.add_sheet", "reader enum contains exact tool id");
+                AssertContains(reader.ArgumentSchemaJson, ExcelReadToolIds.SummarizeColumns,
+                    "reader enum permits loading the column-analysis schema");
                 AssertContains(reader.ArgumentSchemaJson, "excel.review_workbook", "reader enum contains exact skill id");
                 var capabilityDefinitions = catalog
                     .Where(tool => CapabilityToolCatalog.Owns(tool.Id))

@@ -214,6 +214,7 @@ namespace RNAssistant.Harness
         public int SlideCount { get { return _slides.Count; } }
         public int DocumentSnapshotReadCount { get; private set; }
         public int ExcelReadMaterializationCount { get; private set; }
+        public int MaxExcelAnalysisChunkCells { get; private set; }
         public IExcelReadBackend ExcelReadBackend
         {
             get { return string.Equals(_hostName, "Excel", StringComparison.OrdinalIgnoreCase) ? this : null; }
@@ -569,7 +570,7 @@ namespace RNAssistant.Harness
             var rows = bounds.End.Row - bounds.Start.Row + 1;
             var columns = bounds.End.Column - bounds.Start.Column + 1;
             var cellCount = rows <= 0 || columns <= 0 ? 0 : (long)rows * columns;
-            if (cellCount > maxCells)
+            if (content != "metadata" && cellCount > maxCells)
             {
                 throw new ExcelReadBackendException("range is too large", "excel_range_too_large", true,
                     JsonConvert.SerializeObject(new
@@ -577,9 +578,6 @@ namespace RNAssistant.Harness
                         address = range, cellCount = cellCount, maxCells = maxCells
                     }));
             }
-            ExcelReadMaterializationCount++;
-            var matrix = ReadRange(sheetName, range)
-                .Select(row => row.Cast<object>().ToList()).ToList();
             var snapshot = new ExcelRangeSnapshot
             {
                 Sheet = sheetName,
@@ -588,7 +586,37 @@ namespace RNAssistant.Harness
                 Columns = columns,
                 CellCount = cellCount
             };
-            if (content == "values" || content == "profile") snapshot.Values = matrix;
+            if (content == "metadata")
+            {
+                if (!_sheets.ContainsKey(sheetName))
+                    throw new ExcelReadBackendException("worksheet not found", "excel_sheet_not_found", false);
+                return snapshot;
+            }
+            if (content == "analysis-values")
+                MaxExcelAnalysisChunkCells = Math.Max(MaxExcelAnalysisChunkCells, (int)cellCount);
+            ExcelReadMaterializationCount++;
+            List<List<object>> matrix;
+            if (content == "analysis-values")
+            {
+                FakeSheet sheet;
+                if (!_sheets.TryGetValue(sheetName, out sheet))
+                    throw new ExcelReadBackendException("worksheet not found", "excel_sheet_not_found", false);
+                matrix = new List<List<object>>();
+                for (var row = bounds.Start.Row; row <= bounds.End.Row; row++)
+                {
+                    var line = new List<object>();
+                    for (var column = bounds.Start.Column; column <= bounds.End.Column; column++)
+                    {
+                        object value;
+                        sheet.Cells.TryGetValue(CellKey(row, column), out value);
+                        line.Add(value);
+                    }
+                    matrix.Add(line);
+                }
+            }
+            else matrix = ReadRange(sheetName, range)
+                .Select(row => row.Cast<object>().ToList()).ToList();
+            if (content == "values" || content == "analysis-values" || content == "profile") snapshot.Values = matrix;
             if (content == "formulas" || content == "profile") snapshot.Formulas = matrix
                 .Select(row => row.ToList()).ToList();
             return snapshot;
@@ -617,7 +645,7 @@ namespace RNAssistant.Harness
                 var items = sheets.Take(maxItems).Select(sheet => new ExcelSheetSnapshot
                 {
                     Name = sheet.Name,
-                    UsedRange = kind == "workbook" ? "A1:B4" : null
+                    UsedRange = kind == "workbook" ? FormatRange(FakeUsedRange(sheet)) : null
                 }).ToList();
                 snapshot.Sheets = kind == "sheets" ? items : null;
                 snapshot.Workbook = kind == "workbook" ? new ExcelWorkbookSnapshot

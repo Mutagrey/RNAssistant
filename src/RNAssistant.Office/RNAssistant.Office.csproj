@@ -116,6 +116,7 @@
     <Compile Include="Tools\ResourceDefinitionToolHandler.cs" />
     <Compile Include="Domains\Excel\ExcelReadContracts.cs" />
     <Compile Include="Domains\Excel\ExcelReadService.cs" />
+    <Compile Include="Domains\Excel\ExcelColumnAnalysisService.cs" />
     <Compile Include="Domains\Excel\ExcelBackendProvider.cs" />
     <Compile Include="Domains\Excel\ExcelChartContracts.cs" />
     <Compile Include="Domains\Excel\ExcelChartService.cs" />
@@ -266,6 +267,7 @@
     <Compile Include="Services\CatalogPublicationService.cs" />
     <Compile Include="Services\CatalogResourceProvider.cs" />
     <Compile Include="Services\ExcelResourceProvider.cs" />
+    <Compile Include="Services\ExcelResourceProvider.Overview.cs" />
     <Compile Include="Services\ExcelResourceProvider.Search.cs" />
     <Compile Include="Services\ExcelResourceProvider.Tables.cs" />
     <Compile Include="Services\ExcelResourceProvider.Names.cs" />

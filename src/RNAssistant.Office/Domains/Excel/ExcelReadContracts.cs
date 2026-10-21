@@ -142,6 +142,48 @@ namespace RNAssistant.Office.Domains.Excel
         [JsonProperty("formulas", NullValueHandling = NullValueHandling.Ignore)] public List<List<object>> Formulas { get; set; }
     }
 
+    internal sealed class ExcelRangeOverview
+    {
+        [JsonProperty("content")] public string Content { get { return "range-overview"; } }
+        [JsonProperty("sheet")] public string Sheet { get; set; }
+        [JsonProperty("address")] public string Address { get; set; }
+        [JsonProperty("rows")] public int Rows { get; set; }
+        [JsonProperty("columns")] public int Columns { get; set; }
+        [JsonProperty("cellCount")] public long CellCount { get; set; }
+        [JsonProperty("valuesRead")] public bool ValuesRead { get { return false; } }
+        [JsonProperty("samplePurpose")] public string SamplePurpose { get { return "orientation, not statistical coverage"; } }
+        [JsonProperty("sampleTargets")] public List<ExcelRangeSampleTarget> SampleTargets { get; set; }
+    }
+
+    internal sealed class ExcelRangeSampleTarget
+    {
+        [JsonProperty("target")] public string Target { get; set; }
+        [JsonProperty("cells")] public int Cells { get; set; }
+    }
+
+    internal sealed class ExcelColumnAnalysisResult
+    {
+        [JsonProperty("sheet")] public string Sheet { get; set; }
+        [JsonProperty("address")] public string Address { get; set; }
+        [JsonProperty("rowsScanned")] public int RowsScanned { get; set; }
+        [JsonProperty("cellsScanned")] public long CellsScanned { get; set; }
+        [JsonProperty("complete")] public bool Complete { get { return true; } }
+        [JsonProperty("consistency")] public string Consistency { get { return "sequential-observation"; } }
+        [JsonProperty("columns")] public List<ExcelColumnAnalysis> Columns { get; set; }
+    }
+
+    internal sealed class ExcelColumnAnalysis
+    {
+        [JsonProperty("column")] public string Column { get; set; }
+        [JsonProperty("numericCells")] public int NumericCells { get; set; }
+        [JsonProperty("emptyCells")] public int EmptyCells { get; set; }
+        [JsonProperty("otherCells")] public int OtherCells { get; set; }
+        [JsonProperty("sum")] public double? Sum { get; set; }
+        [JsonProperty("average")] public double? Average { get; set; }
+        [JsonProperty("min")] public double? Min { get; set; }
+        [JsonProperty("max")] public double? Max { get; set; }
+    }
+
     public sealed class ExcelReadOutcome
     {
         public bool Success { get; private set; }

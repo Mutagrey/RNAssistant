@@ -55,7 +55,7 @@ namespace RNAssistant.Office.Domains.Excel
 
         internal ExcelRangeSnapshot CaptureRange(string sheet, string address, string content)
         {
-            if (content != "values" && content != "formulas" && content != "profile")
+            if (content != "values" && content != "analysis-values" && content != "formulas" && content != "profile" && content != "metadata")
                 throw new ExcelReadBackendException("Unsupported range view.", "excel_range_content_invalid", false);
             var snapshot = _backend.ReadRange(new ExcelRangeReadRequest {
                 Sheet = sheet ?? string.Empty, Address = address ?? string.Empty,
@@ -66,7 +66,7 @@ namespace RNAssistant.Office.Domains.Excel
 
         internal ExcelInspectSnapshot CaptureStructure(string kind)
         {
-            if (kind != "sheets" && kind != "tables" && kind != "names")
+            if (kind != "workbook" && kind != "sheets" && kind != "tables" && kind != "names")
                 throw new ExcelReadBackendException("Unsupported structure view.", "excel_inspect_kind_invalid", false);
             var snapshot = _backend.Inspect(new ExcelInspectRequest { Kind = kind, MaxItems = MaxInspectItems, MaxSeries = MaxChartSeries });
             ValidateInspect(snapshot, kind, false);
@@ -154,12 +154,15 @@ namespace RNAssistant.Office.Domains.Excel
             if (snapshot == null) throw InvalidBackend("Excel range read returned no snapshot.");
             if (string.IsNullOrWhiteSpace(snapshot.Sheet) || string.IsNullOrWhiteSpace(snapshot.Address))
                 throw InvalidBackend("Excel range read returned incomplete coordinates.");
-            if (snapshot.Rows < 0 || snapshot.Columns < 0 || snapshot.CellCount < 0 || snapshot.CellCount > MaxReadCells)
+            if (snapshot.Rows < 0 || snapshot.Rows > 1048576 || snapshot.Columns < 0 || snapshot.Columns > 16384 ||
+                snapshot.CellCount < 0 || content != "metadata" && snapshot.CellCount > MaxReadCells)
                 throw InvalidBackend("Excel range read returned invalid dimensions.");
             var expected = (long)snapshot.Rows * snapshot.Columns;
             if (expected != snapshot.CellCount)
                 throw InvalidBackend("Excel range dimensions do not match the reported cell count.");
-            if ((content == "values" || content == "profile") && !MatrixMatches(snapshot.Values, snapshot.Rows, snapshot.Columns))
+            if (content == "metadata" && (snapshot.Values != null || snapshot.Formulas != null))
+                throw InvalidBackend("Excel range metadata must not materialize cell bodies.");
+            if ((content == "values" || content == "analysis-values" || content == "profile") && !MatrixMatches(snapshot.Values, snapshot.Rows, snapshot.Columns))
                 throw InvalidBackend("Excel value matrix does not match the reported dimensions.");
             if ((content == "formulas" || content == "profile") && !MatrixMatches(snapshot.Formulas, snapshot.Rows, snapshot.Columns))
                 throw InvalidBackend("Excel formula matrix does not match the reported dimensions.");

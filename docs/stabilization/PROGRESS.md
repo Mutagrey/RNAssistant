@@ -1,5 +1,76 @@
 # Stabilization progress
 
+## Large Excel ranges: bounded selected-column analysis — 2026-10-21
+
+Added read-only `excel.summarize_columns` for an explicit sheet, A1 rectangle and
+1–8 named columns. It scans all selected rows in at most 1024-cell native chunks,
+with a 2000000-selected-cell admission bound, and returns compact numeric and
+occupancy statistics plus exact scan counts. Long cell bodies never enter the
+model result. The existing raw 100000-cell and preview 2000-cell bounds remain.
+
+Host-neutral coverage confirms a 200001-row, wide sparse sheet with only two
+selected columns, typed numeric/text/boolean distinctions, compact model projection,
+early oversize refusal, later-chunk failure, coordinate drift and cancellation.
+The native tool requires its exact offered schema. The result reports a complete
+*sequential observation* of selected cells; concurrent value edits without a
+coordinate change are not detected. The changed COM read path and real Excel
+latency need Windows/Office qualification; live model choice and token cost have
+not been measured. No Office/VSTO validation ran on this machine.
+
+Next: exact row/column selector pushdown and filtering/grouping if needed, with
+explicit coverage and consistency semantics. See the
+[bounded analysis backlog](BACKLOG.md#large-excel-analysis-without-full-model-context--2026-10-21).
+Discovery and overview are part of the same large-workbook change.
+
+## Large Excel ranges: overview before values — 2026-10-21
+
+The user's large-workbook constraint takes priority over the next mutation cleanup.
+History shows that `f15af843` deliberately bounded Excel context previews to 2000
+cells per sheet. That protection is retained. The empty range-catalog filter was
+already present when the provider was introduced in `ec8b1793`; no separate
+intentional catalog-disable decision was found in the inspected history.
+
+Large explicit ranges now support `structure` as a compact `range-overview`, with
+live coordinates/dimensions and up to nine small suggested slices, not cell bodies.
+The internal metadata path validates the actual sheet/range without `Value2` or
+`Formula`. The model can choose exact existing A1 read targets; no new tool/schema
+or automatic sweep is added. Raw capture bounds and the model request budget remain.
+Current row selectors still follow whole-source capture and are not streaming.
+
+Five focused Harness checks pass: three Excel discovery checks, pre-materialization
+bounds and exact retained profiles. The full-sheet fixture has 17179869184 cells:
+the overview stays below 4096 characters with zero cell materializations; one chosen
+far-corner slice is then read exactly. It also checks 20-result discovery, missing
+sheets, quoted/offset targets and retained overview meaning. Build has only the two
+existing PDF warnings. The changed COM metadata branch needs Windows/Excel
+qualification; no Office/VSTO validation or live model/token claim is made here.
+
+The bounded selected-column analysis above is the first follow-up; exact row/column
+access and filtering remain in the
+[analysis backlog](BACKLOG.md#large-excel-analysis-without-full-model-context--2026-10-21).
+Explicit `add_table` sources and chart destinations remain queued after it.
+
+## Excel used-range discovery — 2026-10-21
+
+Committed capability source-read semantics as `ddd0c535` and explicit Excel targets
+with worksheet-name preservation as `a3d6f92c`. The next bounded fix replaces the
+range catalog's lightweight `sheets` snapshot with the existing typed `workbook`
+snapshot containing `UsedRange`. The old filter silently removed every entry;
+missing metadata now fails validation. Search scopes retain lightweight inspection,
+and range enumeration reads no cell bodies. Existing shared catalog paging now also owns
+range cursors, including invalidation when only source coverage changes.
+
+Four focused Harness checks pass: populated/blank sheet discovery, changed extents,
+missing metadata, the 200-sheet bound and coverage-only cursor invalidation;
+large unrelated catalogs still permit direct document reads; worksheet-name
+round-trips now use actual fake enumeration without an injected snapshot; exact
+range evidence remains intact. The fake inspector derives extents from populated
+cells instead of returning a fixed `A1:B4`. Build has only the two existing PDF
+warnings. No Office/VSTO validation or live-model quality/token claim.
+
+Next: explicit `add_table` sources, then chart-creation destinations. Reserved
+worksheet-name validation and the `table`/`records` review remain open.
+
 ## Explicit Excel write destinations and worksheet references — 2026-10-21
 
 `excel.write_range` requires nonblank `sheet` and `address` for value, formula and

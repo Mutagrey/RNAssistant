@@ -41,23 +41,21 @@ namespace RNAssistant.Office.Services
             {
                 if (kind == TableKind) return ListTables(session, cursor, limit);
                 if (kind == NameKind) return ListNames(session, cursor, limit);
-                var structure = _reader.CaptureStructure("sheets");
-                var items = (structure.Sheets ?? new List<ExcelSheetSnapshot>()).Where(item => !string.IsNullOrWhiteSpace(item.UsedRange))
-                    .Select(item => Describe(session, item.Name, NormalizeAddress(item.UsedRange))).ToList();
+                var structure = _reader.CaptureStructure(kind == SearchKind ? "sheets" : "workbook");
+                List<ResourceDescriptor> items;
                 if (kind == SearchKind)
                 {
                     items = new List<ResourceDescriptor> { DescribeSearch(session, new ExcelCellScopeRequest { Scope = "workbook" }),
                         DescribeSearch(session, new ExcelCellScopeRequest { Scope = "selection" }) };
-                    items.AddRange((structure.Sheets ?? new List<ExcelSheetSnapshot>()).Select(item =>
+                    items.AddRange(structure.Sheets.Select(item =>
                         DescribeSearch(session, new ExcelCellScopeRequest { Scope = "sheet", Sheet = item.Name })));
                 }
-                var binding = ResourceReadCursor.ListBinding(Id, kind);
-                var position = ResourceReadCursor.ParseRevisionBound(cursor, binding);
-                var revision = ResourceReadCursor.CollectionRevision(items);
-                ResourceReadCursor.ValidateContinuation(position, revision);
-                var selected = items.Skip(position.Offset).Take(Math.Max(1, Math.Min(50, limit))).ToList();
-                return new ResourceListPage { Items = selected, Total = items.Count, Truncated = structure.Truncated || position.Offset + selected.Count < items.Count,
-                    NextCursor = position.Offset + selected.Count < items.Count ? ResourceReadCursor.CreateRevisionBound(position.Offset + selected.Count, revision, binding) : null };
+                else
+                {
+                    items = structure.Workbook.Sheets.Select(item =>
+                        Describe(session, item.Name, NormalizeAddress(item.UsedRange))).ToList();
+                }
+                return PageNamedResources(items, kind, cursor, limit, structure.Truncated);
             });
         }
 
@@ -95,7 +93,10 @@ namespace RNAssistant.Office.Services
                 if (view != "text" && view != "formulas" && view != "structure") throw Error("RESOURCE_VIEW_UNSUPPORTED", "This range supports text, formulas, structure (profile), table and records views.");
                 var range = parsed.Segments[3];
                 if (CellCount(range) > ExcelReadService.MaxReadCells)
-                    throw Error("RESOURCE_SNAPSHOT_TOO_LARGE", "Choose a narrower range; the bounded snapshot permits at most 100000 cells.");
+                {
+                    if (view == "structure") return ReadRangeOverview(session, request, parsed.Segments[2], range);
+                    throw Error("RESOURCE_SNAPSHOT_TOO_LARGE", "Read structure for a compact range overview and sample targets, or choose a smaller explicit range (at most 100000 cells).");
+                }
                 var snapshot = _reader.CaptureRange(parsed.Segments[2], range, view == "structure" ? "profile" : view == "formulas" ? "formulas" : "values");
                 var text = view == "structure" ? ExcelReadService.ProfileOutput(snapshot).ToString(Formatting.None) :
                     JsonConvert.SerializeObject(view == "formulas" ? snapshot.Formulas : snapshot.Values);
@@ -184,6 +185,13 @@ namespace RNAssistant.Office.Services
 
         private static long CellCount(string value)
         {
+            var cells = RangeCorners(value);
+            var first = cells[0]; var last = cells[cells.Length - 1];
+            return (long)(last[0] - first[0] + 1) * (last[1] - first[1] + 1);
+        }
+
+        private static int[][] RangeCorners(string value)
+        {
             var parts = value.Split(':');
             var cells = parts.Select(part => {
                 var match = Regex.Match(part, @"\A(?<column>[A-Z]+)(?<row>[0-9]+)\z");
@@ -195,7 +203,7 @@ namespace RNAssistant.Office.Services
             }).ToArray();
             var first = cells[0]; var last = cells[cells.Length - 1];
             if (last[0] < first[0] || last[1] < first[1]) throw Error("RESOURCE_TARGET_INVALID", "Reversed A1 rectangles are not supported.");
-            return (long)(last[0] - first[0] + 1) * (last[1] - first[1] + 1);
+            return cells;
         }
         private static ResourceRequestException Error(string code, string message) { return new ResourceRequestException(message, code, false); }
     }

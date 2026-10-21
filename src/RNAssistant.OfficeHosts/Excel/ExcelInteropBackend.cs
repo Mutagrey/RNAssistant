@@ -69,8 +69,8 @@ namespace RNAssistant.OfficeHosts
                 if (request.MaxCells < 1 || request.MaxCells > ExcelReadService.MaxReadCells)
                     throw ReadFailure("Excel range ceiling is invalid.",
                         "excel_range_bound_invalid", false);
-                if (content != "values" && content != "formulas" && content != "profile")
-                    throw ReadFailure("content must be values, formulas, or profile.",
+                if (content != "values" && content != "analysis-values" && content != "formulas" && content != "profile" && content != "metadata")
+                    throw ReadFailure("Unsupported Excel range content.",
                         "excel_range_content_invalid", false);
 
                 var sheet = ResolveSheet(workbook, request.Sheet);
@@ -88,7 +88,7 @@ namespace RNAssistant.OfficeHosts
                         "Non-contiguous Excel ranges are not supported; read each area separately.",
                         "excel_range_non_contiguous", false);
                 var cellCount = RangeCellCount(range);
-                if (cellCount > request.MaxCells)
+                if (content != "metadata" && cellCount > request.MaxCells)
                     throw ReadFailure(
                         "Excel range is too large: " + cellCount + " cells. Limit is " +
                         request.MaxCells + "; split the request into smaller ranges.",
@@ -110,7 +110,7 @@ namespace RNAssistant.OfficeHosts
                     Columns = columns,
                     CellCount = (long)rows * columns
                 };
-                if (content == "values" || content == "profile")
+                if (content == "values" || content == "analysis-values" || content == "profile")
                     snapshot.Values = RangeToRows(range);
                 if (content == "formulas" || content == "profile")
                     snapshot.Formulas = RangeToFormulaRows(range);

@@ -103,13 +103,26 @@ the local prompt-eval directory. Focused checks do not close this gate.
 
 ## Excel discovery and name-validation follow-ups — 2026-10-21
 
-- Open / Excel resource owner: range enumeration calls `CaptureStructure("sheets")`
-  and keeps only entries with `UsedRange`, while real `ListSheets` and the fake
-  inspector omit that field. Static inspection therefore identifies an empty,
-  potentially complete range catalog despite populated worksheets. Explicit range
-  lookup/read still works. Fix the bounded metadata source before claiming complete
-  range discovery; the quoting regression uses an explicit typed snapshot to check
-  name preservation and does not close this discovery gap.
+- Fixed host-neutral / Excel resource owner: range enumeration now requests the
+  existing `workbook` metadata snapshot containing `UsedRange`. Missing metadata
+  fails explicitly; populated ranges reach semantic discovery without cell reads.
+  Shared paging retains truncation and invalidates changed coverage. Four focused
+  checks include actual fake enumeration in the worksheet-name regression, with
+  its injected snapshot removed. Real Excel delivery remains unqualified.
+- Contained host-neutral / Excel resource owner: very large ranges now expose a
+  compact structure overview and bounded sample targets without capturing cells.
+  Raw reads still refuse oversize capture, including `table/records` with a small
+  row limit. Five focused checks cover full-sheet metadata and selected slice reads.
+  The COM metadata branch, latency on large workbooks and actual model choices
+  remain unqualified.
+- Contained host-neutral / Excel read owner: `excel.summarize_columns` scans up to
+  2000000 explicitly selected cells in 1024-cell chunks and returns only coverage
+  and typed counts/numeric aggregates. A failed chunk or changed coordinates fails;
+  cancellation stops the scan. A concurrent value edit with unchanged coordinates
+  is not detectable, so results are marked `sequential-observation`, not an atomic
+  workbook snapshot. Windows/Excel COM latency and live model/tool token effects
+  remain open. Exact row selectors, filtering and grouping remain in the
+  [bounded analysis backlog](BACKLOG.md#large-excel-analysis-without-full-model-context--2026-10-21).
 - Open / Excel sheet-domain owner: `ExcelWorksheetNameRules.IsValid` does not reject
   the reserved `History` name listed in [Microsoft's rules](https://support.microsoft.com/en-gb/excel/rename-a-worksheet).
   Align add/rename validation separately; the current write-target work does not

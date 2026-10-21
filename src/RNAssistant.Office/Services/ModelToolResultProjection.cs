@@ -445,7 +445,7 @@ namespace RNAssistant.Office.Services
         private static JToken ProjectExcelData(JToken data)
         {
             var result = ModelResultProjection.SelectFields(data, "sheet", "address", "target", "kind", "operation",
-                "rows", "columns", "cellCount", "name", "displayName", "range", "hasHeaders", "style", "verification",
+                "rows", "columns", "cellCount", "rowsScanned", "cellsScanned", "consistency", "name", "displayName", "range", "hasHeaders", "style", "verification",
                 "workbook", "items", "item", "content", "header", "headers", "sample", "numericColumns", "blankCells", "formulaCells",
                 "query", "mode", "scope", "matches", "matchCount", "replacements", "returnedCount", "truncated", "complete",
                 "activeSheet", "chartCount", "chartIndex", "chartName", "chartType", "title", "xAxisTitle", "yAxisTitle",

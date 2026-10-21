@@ -132,8 +132,6 @@ namespace RNAssistant.Harness
                     AssertEqual(ToolExecutionOutcome.Ok, read.Outcome, "generated reference is readable");
                     var values = JArray.Parse((string)JObject.Parse(read.Result.DataJson)["text"]);
                     AssertEqual(sheet, (string)values[0][0], "read resolves the same exact worksheet");
-                    adapter.QueueExcelInspectSnapshot(new ExcelInspectSnapshot { Kind = "sheets", ReturnedCount = 1,
-                        Sheets = new List<ExcelSheetSnapshot> { new ExcelSheetSnapshot { Name = sheet, UsedRange = "A1" } } });
                     var listed = executor.ResourceGateway.List(session, "excel", "excel-range", null, 50);
                     var listedSheet = listed.Items.Single(item => item.Metadata["sheet"] == sheet);
                     AssertEqual(reference.Substring(0, reference.Length - 2) + listedSheet.Metadata["address"],

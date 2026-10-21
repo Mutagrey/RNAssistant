@@ -18,6 +18,265 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void ExcelColumnAnalysisScansSelectedCells()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                const string sheet = "Big O'Brien";
+                adapter.AddExcelSheetForTest(sheet);
+                adapter.SetExcelCell(sheet, "A1", 10d);
+                adapter.SetExcelCell(sheet, "A1024", 20d);
+                adapter.SetExcelCell(sheet, "A1025", 30d);
+                adapter.SetExcelCell(sheet, "A200001", 40d);
+                adapter.SetExcelCell(sheet, "A500", "12");
+                adapter.SetExcelCell(sheet, "A800", true);
+                adapter.SetExcelCell(sheet, "XFD200001", 3d);
+                adapter.SetExcelCell(sheet, "XFD2", new string('z', 50000));
+                var session = NewSession(adapter);
+                var tools = OfficeToolCatalog.ForHost("Excel").Concat(executor.GetControllerTools()).ToList();
+                var result = executor.ExecuteManual(Command(ExcelReadToolIds.SummarizeColumns,
+                    "sheet", sheet, "address", "A1:XFD200001", "columns", new JArray("A", "XFD")),
+                    tools, new AppSettings(), false, false, session);
+                AssertTrue(result.Success, "large selected-column scan succeeds: " + result.Message);
+                var data = JObject.Parse(result.DataJson);
+                AssertTrue((bool)data["complete"] && (int)data["rowsScanned"] == 200001 &&
+                    (long)data["cellsScanned"] == 400002 && (string)data["consistency"] == "sequential-observation",
+                    "completion reports all selected cells and the observation semantics");
+                var columns = (JArray)data["columns"];
+                AssertEqual(2, columns.Count, "only requested columns reach the result");
+                var first = columns[0]; var far = columns[1];
+                AssertTrue((string)first["column"] == "A" && (int)first["numericCells"] == 4 &&
+                    (int)first["otherCells"] == 2 && (int)first["emptyCells"] == 199995 &&
+                    (double)first["sum"] == 100d && (double)first["average"] == 25d &&
+                    (double)first["min"] == 10d && (double)first["max"] == 40d,
+                    "numeric values are exact across chunk boundaries; numeric text and booleans are not silently coerced");
+                AssertTrue((string)far["column"] == "XFD" && (int)far["numericCells"] == 1 &&
+                    (int)far["otherCells"] == 1 && (int)far["emptyCells"] == 199999 &&
+                    (double)far["sum"] == 3d, "the far column is scanned without intervening columns");
+                AssertTrue(result.DataJson.Length < 1200 && !result.DataJson.Contains(new string('z', 20)),
+                    "long source cell text does not enter the model result");
+                var projected = ModelToolResultProjection.Project(AgentJsonProtocol.CreateToolResultMessage(
+                    new ToolInvocation { ToolCallId = "selected_column_analysis", ToolId = ExcelReadToolIds.SummarizeColumns },
+                    RNAssistant.Core.Tools.Contracts.ToolResult.Ok(result.Message, result.DataJson), ToolResultRoles.Tool));
+                AssertContains(projected.Content, "cellsScanned", "the model sees full scan coverage");
+                AssertContains(projected.Content, "numericCells", "the model sees numeric results");
+                AssertTrue(!projected.Content.Contains(new string('z', 20)), "projection keeps long cell bodies out");
+                AssertTrue(adapter.MaxExcelAnalysisChunkCells <= ExcelColumnAnalysisService.ChunkRows &&
+                    adapter.ExcelReadMaterializationCount > 2 && adapter.DocumentSnapshotReadCount == 0,
+                    "analysis uses bounded native chunks and no document preview");
+                var reads = adapter.ExcelBackendCalls.Count;
+                var tooLarge = executor.ExecuteManual(Command(ExcelReadToolIds.SummarizeColumns,
+                    "sheet", sheet, "address", "A1:XFD1048576",
+                    "columns", new JArray("A", "B", "C", "D", "E", "F", "G", "H")),
+                    tools, new AppSettings(), false, false, session);
+                AssertEqual("excel_analysis_too_large", tooLarge.ErrorCode, "requested work is bounded before Office access");
+                var duplicate = executor.ExecuteManual(Command(ExcelReadToolIds.SummarizeColumns,
+                    "sheet", sheet, "address", "A1:A200001", "columns", new JArray("A", "a")),
+                    tools, new AppSettings(), false, false, session);
+                AssertEqual("excel_analysis_columns_invalid", duplicate.ErrorCode, "duplicate columns fail explicitly");
+                AssertEqual(reads, adapter.ExcelBackendCalls.Count, "invalid scans perform no backend reads");
+            });
+
+            var metadata = new ExcelRangeSnapshot { Sheet = "Data", Address = "A1:A1025",
+                Rows = 1025, Columns = 1, CellCount = 1025 };
+            var calls = 0;
+            var failing = new StubExcelReadBackend { ReadRangeOverride = request => {
+                calls++;
+                if (request.Content == "metadata") return metadata;
+                if (request.Address == "A1:A1024") return new ExcelRangeSnapshot {
+                    Sheet = "Data", Address = request.Address, Rows = 1024, Columns = 1,
+                    CellCount = 1024, Values = Matrix(1024, 1) };
+                throw new ExcelReadBackendException("later chunk failed", "excel_analysis_chunk_failed", false);
+            } };
+            var incomplete = new ExcelColumnAnalysisService(failing).Analyze("Data", "A1:A1025",
+                new[] { "A" }, System.Threading.CancellationToken.None);
+            AssertTrue(!incomplete.Success && incomplete.ErrorCode == "excel_analysis_chunk_failed" && calls == 3 &&
+                !incomplete.DataJson.Contains("columns"), "a later capture failure publishes no partial total");
+
+            var driftChecks = 0;
+            var drift = new StubExcelReadBackend { ReadRangeOverride = request => {
+                if (request.Content == "metadata")
+                {
+                    driftChecks++;
+                    return new ExcelRangeSnapshot { Sheet = driftChecks == 1 ? "Data" : "Renamed", Address = "A1",
+                        Rows = 1, Columns = 1, CellCount = 1 };
+                }
+                return new ExcelRangeSnapshot { Sheet = "Data", Address = "A1", Rows = 1, Columns = 1,
+                    CellCount = 1, Values = Matrix(1, 1) };
+            } };
+            var changed = new ExcelColumnAnalysisService(drift).Analyze("Data", "A1", new[] { "A" },
+                System.Threading.CancellationToken.None);
+            AssertTrue(!changed.Success && changed.ErrorCode == "excel_analysis_source_changed" && driftChecks == 2,
+                "a changed bound sheet at the end cannot become a complete result");
+
+            using (var cancellation = new System.Threading.CancellationTokenSource())
+            {
+                var cancelledCalls = 0;
+                var cancelling = new StubExcelReadBackend { ReadRangeOverride = request => {
+                    cancelledCalls++;
+                    if (request.Content == "metadata") return metadata;
+                    cancellation.Cancel();
+                    return new ExcelRangeSnapshot { Sheet = "Data", Address = request.Address,
+                        Rows = 1024, Columns = 1, CellCount = 1024, Values = Matrix(1024, 1) };
+                } };
+                RuntimeThrows<OperationCanceledException>(() => new ExcelColumnAnalysisService(cancelling)
+                    .Analyze("Data", "A1:A1025", new[] { "A" }, cancellation.Token));
+                AssertEqual(2, cancelledCalls, "cancellation stops the traversal after its first chunk");
+            }
+        }
+
+        private static void ExcelLargeRangesOfferBoundedOverview()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                var session = NewSession(adapter);
+                var gateway = executor.ResourceGateway;
+                var tools = executor.GetControllerTools().ToList();
+                const string sheet = "Big O'Brien";
+                adapter.AddExcelSheetForTest(sheet);
+                adapter.SetExcelCell(sheet, "A1", "unread-body-" + new string('x', 50000));
+                var small = ResourceFindProjection.Serialize(gateway.Find(session, null, "document"));
+                adapter.SetExcelCell(sheet, "XFD1048576", "tail");
+                var found = gateway.Find(session, null, "document");
+                var large = found.Items.Single(item => item.Target == "Excel range: 'Big O''Brien'!A1:XFD1048576");
+                AssertContains(large.Usage, "structure", "large extents have a useful overview route");
+                var discovery = ResourceFindProjection.Serialize(found);
+                AssertTrue(discovery.Length < small.Length + 512 && !discovery.Contains("unread-body-"),
+                    "discovery size does not grow with the worksheet area or cell contents");
+                AssertEqual(0, adapter.DocumentSnapshotReadCount, "browse does not read a document preview");
+                AssertEqual(0, adapter.ExcelReadMaterializationCount, "browse does not read worksheet values");
+
+                var read = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                    "target", large.Target, "representation", "structure"), tools, new AppSettings(), false, false, session);
+                AssertTrue(read.Success, "full-sheet structure is readable without a full-sheet snapshot: " + read.Message);
+                var projection = JObject.Parse(read.DataJson);
+                var overviewText = (string)projection["text"];
+                var overview = JObject.Parse(overviewText);
+                AssertEqual("range-overview", (string)overview["content"], "overview is explicit, not a complete cell profile");
+                AssertTrue(!(bool)overview["valuesRead"] && overview["blankCells"] == null && overview["formulaCells"] == null,
+                    "metadata cannot imply whole-range counts or sampled data");
+                AssertEqual(17179869184L, (long)overview["cellCount"], "full Excel bounds use a 64-bit count");
+                var samples = (JArray)overview["sampleTargets"];
+                AssertEqual(9, samples.Count, "sample plan covers the beginning, middle and end of both axes");
+                AssertTrue(samples.Sum(sample => (int)sample["cells"]) <= 108 && overviewText.Length < 4096,
+                    "sample plan and model output stay small independently of the source area");
+                AssertEqual("Excel range: 'Big O''Brien'!A1:D3", (string)samples.First["target"], "first sample preserves quoted sheet names");
+                AssertEqual("Excel range: 'Big O''Brien'!XFA1048574:XFD1048576", (string)samples.Last["target"], "last sample includes the far corner");
+                AssertEqual(0, adapter.ExcelReadMaterializationCount, "overview reads range coordinates only");
+                AssertEqual(0, adapter.DocumentSnapshotReadCount, "overview does not fall back to a workbook preview");
+
+                var reference = gateway.ResolveIntentTarget(session, large.Target).Reference;
+                var exact = gateway.Resolve(session, reference.Uri).Resource.Reference;
+                var calls = adapter.ExcelBackendCalls.Count;
+                var retained = gateway.ReadWhole(session, exact, "structure").Result;
+                AssertEqual(overviewText, retained.Text, "retained overview preserves its explicit metadata-only meaning");
+                AssertEqual(calls, adapter.ExcelBackendCalls.Count, "retained overview performs no Office reads");
+                AssertTrue(gateway.Evidence(session, retained).All(item => item.View == "structure"),
+                    "overview evidence never claims a values or formulas read");
+                foreach (var view in new[] { "text", "formulas", "table", "records" })
+                {
+                    var command = view == "table" || view == "records"
+                        ? Command(ResourceToolCatalog.ReadToolId, "target", large.Target, "representation", view, "limit", 1)
+                        : Command(ResourceToolCatalog.ReadToolId, "target", large.Target, "representation", view);
+                    var refused = executor.ExecuteManual(command, tools, new AppSettings(), false, false, session);
+                    AssertEqual("RESOURCE_SNAPSHOT_TOO_LARGE", refused.ErrorCode, "raw large " + view + " remains bounded before capture");
+                    AssertContains(refused.Message, "structure", "refusal offers a useful next step");
+                }
+                AssertEqual(calls, adapter.ExcelBackendCalls.Count, "even a one-row selector cannot trigger whole-range materialization");
+                var sampleRead = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                    "target", (string)samples.Last["target"], "representation", "text"), tools, new AppSettings(), false, false, session);
+                AssertTrue(sampleRead.Success && sampleRead.DataJson.Contains("tail") && !sampleRead.DataJson.Contains("unread-body-"),
+                    "the model can read the selected far slice exactly without reading the rest");
+                AssertEqual(1, adapter.ExcelReadMaterializationCount, "only the selected small slice materializes values");
+
+                var tall = gateway.ReadWhole(session, gateway.ResolveIntentTarget(session,
+                    "Excel range: 'Big O''Brien'!C7:C200007").Reference, "structure").Result;
+                var tallSamples = (JArray)JObject.Parse(tall.Text)["sampleTargets"];
+                AssertTrue(tallSamples.Count == 3 && tallSamples.Sum(sample => (int)sample["cells"]) == 9,
+                    "a narrow offset range has three non-overlapping row windows");
+                AssertEqual("Excel range: 'Big O''Brien'!C200005:C200007", (string)tallSamples.Last["target"],
+                    "sample offsets are relative to the requested extent");
+                adapter.SeedExcelSheets(40);
+                var bounded = gateway.Find(session, null, "document");
+                AssertTrue(bounded.Items.Count == 20 && !bounded.Complete, "many sheets do not expand the model catalog unboundedly");
+                var missing = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                    "target", "Excel range: Missing!A1:XFD1048576", "representation", "structure"), tools, new AppSettings(), false, false, session);
+                AssertTrue(!missing.Success, "overview validates the live worksheet rather than only parsing an address");
+            });
+
+            var leakedBodies = RuntimeThrows<ExcelReadBackendException>(() => new ExcelReadService(new StubExcelReadBackend {
+                RangeResult = new ExcelRangeSnapshot { Sheet = "Data", Address = "A1:XFD1048576", Rows = 1048576,
+                    Columns = 16384, CellCount = 17179869184L, Values = Matrix(1, 1) }
+            }).CaptureRange("Data", "A1:XFD1048576", "metadata"));
+            AssertEqual("excel_read_snapshot_invalid", leakedBodies.ErrorCode, "metadata snapshots reject unexpected cell bodies");
+        }
+
+        private static void ExcelUsedRangeDiscoveryPreservesCoverage()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                var session = NewSession(adapter);
+                var gateway = executor.ResourceGateway;
+                adapter.AddExcelSheetForTest("Quarterly Data");
+                adapter.SetExcelCell("Quarterly Data", "C3", "first");
+                adapter.SetExcelCell("Quarterly Data", "D6", "last");
+                adapter.AddExcelSheetForTest("Blank");
+                var first = gateway.List(session, "excel", null, null, 1);
+                AssertTrue(first.Total == 3 && first.Truncated && first.NextCursor != null,
+                    "used-range metadata is discoverable and paginated");
+                var tail = gateway.List(session, "excel", null, first.NextCursor, 50);
+                AssertTrue(tail.Items.Count == 2 && !tail.Truncated && tail.NextCursor == null,
+                    "a complete workbook has a complete terminal page");
+                var report = tail.Items.Single(item => item.Metadata["sheet"] == "Quarterly Data");
+                AssertEqual("C3:D6", report.Metadata["address"], "extent comes from workbook metadata, not a default A1 range");
+                AssertEqual("'Quarterly Data'!C3:D6", report.Title, "discovered extent keeps a usable quoted reference");
+                AssertEqual("A1", tail.Items.Single(item => item.Metadata["sheet"] == "Blank").Metadata["address"],
+                    "an empty fake sheet still supplies its bounded used-range address");
+                var found = gateway.Find(session, "Quarterly Data", "document");
+                AssertTrue(found.Complete && !found.Partial && found.Items.Any(item =>
+                    item.Target == "Excel range: 'Quarterly Data'!C3:D6"),
+                    "semantic discovery exposes the actual worksheet extent");
+                AssertTrue(adapter.ExcelBackendCalls.All(operation => operation == FakeOfficeAdapter.ExcelInspectOperation),
+                    "discovery reads metadata without cell materialization or mutations");
+
+                adapter.SetExcelCell("Quarterly Data", "F8", "expanded");
+                AssertEqual("resource_revision_changed", RuntimeThrows<ResourceRequestException>(() =>
+                    gateway.List(session, "excel", null, first.NextCursor, 50)).ErrorCode,
+                    "changed extent invalidates the existing collection cursor");
+                var calls = adapter.ExcelBackendCalls.Count;
+                adapter.QueueExcelInspectSnapshot(new ExcelInspectSnapshot { Kind = "workbook", ReturnedCount = 1,
+                    Workbook = new ExcelWorkbookSnapshot { Name = "Invalid.xlsx",
+                        Sheets = new List<ExcelSheetSnapshot> { new ExcelSheetSnapshot { Name = "Data" } } } });
+                RuntimeThrows<ExcelReadBackendException>(() => gateway.List(session, "excel", null, null, 50));
+                AssertEqual(calls + 1, adapter.ExcelBackendCalls.Count,
+                    "missing UsedRange is rejected without a silent skip or fallback read");
+
+                adapter.SeedExcelSheets(ExcelReadService.MaxInspectItems);
+                var bounded = gateway.List(session, "excel", null, null, 50);
+                var page = bounded;
+                var captured = new List<ResourceDescriptor>();
+                do
+                {
+                    captured.AddRange(page.Items);
+                    if (page.NextCursor == null) break;
+                    page = gateway.List(session, "excel", null, page.NextCursor, 50);
+                } while (true);
+                AssertTrue(captured.Count == ExcelReadService.MaxInspectItems && page.Truncated && page.NextCursor == null,
+                    "terminal page retains missing coverage beyond the inspection bound");
+                var missing = gateway.Find(session, "absent-range", "document");
+                AssertTrue(!missing.Complete && !missing.Empty, "bounded discovery cannot prove that an unseen range is absent");
+                adapter.QueueExcelInspectSnapshot(new ExcelInspectSnapshot { Kind = "workbook", ReturnedCount = captured.Count,
+                    Workbook = new ExcelWorkbookSnapshot { Name = adapter.DocumentTitle,
+                        Sheets = captured.Select(item => new ExcelSheetSnapshot {
+                            Name = item.Metadata["sheet"], UsedRange = item.Metadata["address"] }).ToList() } });
+                AssertEqual("resource_revision_changed", RuntimeThrows<ResourceRequestException>(() =>
+                    gateway.List(session, "excel", null, bounded.NextCursor, 50)).ErrorCode,
+                    "coverage-only changes invalidate continuation even when the captured ranges are identical");
+                AssertTrue(adapter.ExcelBackendCalls.All(operation => operation == FakeOfficeAdapter.ExcelInspectOperation),
+                    "all discovery and failure paths remain metadata-only");
+            });
+        }
+
         private static void ExcelDiscoveryDoesNotBlockDocumentReads()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
@@ -83,9 +342,16 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var inspectDefinition = tools.Single(tool => tool.Id == ExcelReadToolIds.Inspect);
+                var summarizeDefinition = tools.Single(tool => tool.Id == ExcelReadToolIds.SummarizeColumns);
                 var runtime = executor.CreateNativeRuntime(session, new[] { inspectDefinition }, new AppSettings(), "agent", false);
                 AssertTrue(runtime.Describe(new ToolCall("inspect", ExcelReadToolIds.Inspect, "{\"kind\":\"sheets\"}")) != null,
                     "composed inspect handler is described");
+                AssertTrue(runtime.Describe(new ToolCall("summary", ExcelReadToolIds.SummarizeColumns, "{}")) == null,
+                    "column analysis is unavailable until its exact schema is offered");
+                var analysisRuntime = executor.CreateNativeRuntime(session, new[] { summarizeDefinition }, new AppSettings(), "agent", false);
+                AssertTrue(analysisRuntime.Describe(new ToolCall("summary", ExcelReadToolIds.SummarizeColumns,
+                    "{\"sheet\":\"Data\",\"address\":\"A1:A2\",\"columns\":[\"A\"]}")) != null,
+                    "exact column-analysis binding is described when offered");
                 AssertTrue(!tools.Any(tool => tool.Id == "excel.read_range") &&
                     !NativeToolRuntimeAdapter.Owns("excel.read_range") &&
                     runtime.Describe(new ToolCall("range", "excel.read_range", "{}")) == null,
@@ -727,9 +993,11 @@ namespace RNAssistant.Harness
         {
             internal ExcelInspectSnapshot InspectResult { get; set; }
             internal ExcelRangeSnapshot RangeResult { get; set; }
+            internal Func<ExcelRangeReadRequest, ExcelRangeSnapshot> ReadRangeOverride { get; set; }
 
             public ExcelInspectSnapshot Inspect(ExcelInspectRequest request) { return InspectResult; }
-            public ExcelRangeSnapshot ReadRange(ExcelRangeReadRequest request) { return RangeResult; }
+            public ExcelRangeSnapshot ReadRange(ExcelRangeReadRequest request)
+            { return ReadRangeOverride == null ? RangeResult : ReadRangeOverride(request); }
         }
     }
 }

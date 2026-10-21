@@ -825,10 +825,24 @@ Discover used ranges through `common.resources_find`; omitted active-sheet/selec
 defaults of the removed tool are not silently translated. `excel.inspect` remains
 the bounded workbook-object metadata action.
 
-`ExcelResourceProvider` is the only range-read entry over `ExcelReadService` and the
-bound backend. The 100000-cell ceiling precedes values/formulas materialization.
-The profile keeps existing counts, headers and ten-row sample; it is not a complete
-values/formulas representation. Each requested view records exact resource evidence
+Range discovery uses the existing `workbook` inspection snapshot, whose sheet
+entries include `UsedRange`. The lightweight `sheets` snapshot remains sufficient
+for search-scope discovery. Missing used-range metadata is an explicit snapshot
+error, not a reason to silently omit a worksheet. Enumeration materializes no cell
+values or formulas; a used-range address alone does not prove non-empty contents.
+The 200-item inspection bound and 50-item pages remain. Range/table/name/search
+catalogs share revision-bound paging: terminal pages preserve source truncation,
+and changes to either the descriptors or source coverage invalidate continuation.
+Semantic discovery returns at most 20 candidates. Browsing without a query reads
+no cell bodies; a query may additionally search the existing bounded document
+preview. The Excel preview's 2000-cell-per-sheet ceiling remains unchanged.
+
+Resource reads of range bodies use `ExcelResourceProvider` over `ExcelReadService`
+and the bound backend. `excel.summarize_columns` is a separate bounded local
+analysis action over selected cells. The 100000-cell raw-read ceiling precedes
+values/formulas materialization.
+For ranges within that ceiling, the profile keeps existing counts, headers and
+ten-row sample; it is not a complete values/formulas representation. Each requested view records exact resource evidence
 and complete captured bytes in the existing CAS. Internal text continuations stay
 on the first logical revision; retained historical profile reads perform no Office
 I/O. Drift observed in a fresh view uses shared authority and evidence reduction.
@@ -836,6 +850,61 @@ HTML bindings use the same Gateway/provider, not accepted direct-tool JSON.
 Old accepted `excel.read_range` calls fail explicit protocol validation; no alias,
 replay translation or public domain-output wrapper remains. Real Windows Excel/STA
 and final catalog/model qualification are still open.
+
+### Large Excel range overview
+
+Owner: Excel range provider / read domain. A `structure` read of an explicit range
+above 100000 cells returns a typed `range-overview`: the live resolved sheet/address,
+row/column/cell counts, `valuesRead=false`, and small `sampleTargets`. The internal
+metadata read validates the bound worksheet and rectangle without reading `Value2`
+or `Formula`; unexpected cell matrices fail domain validation. An absent worksheet
+is an error, not an arithmetic-only successful read.
+
+The plan contains at most nine non-overlapping rectangles, up to three rows by
+four columns each, spanning the beginning, middle and end of both axes. All targets
+are ordinary quoted `Excel range:` references. No samples are automatically loaded;
+the model chooses relevant slices or a different explicit rectangle. This is spatial
+orientation, not representative sampling or proof of whole-range totals, missing
+values or formula counts. Exact evidence and retained bytes describe the complete
+**structure view**, never a values/formulas read of the large range.
+
+Raw reads retain the 100000-cell ceiling. Current `table`/`records` selectors apply
+after source capture, so `limit=1` does not bypass it; refusal points to `structure`
+or a smaller A1 target. A small cell count is not a token guarantee either: long
+cell contents still go through the existing request budget. Internal 32000-character
+pages are assembled for complete reads and are not a model-response size limit.
+
+The overview implements orientation and exact slice access, not full large-table analysis.
+See the [large-range follow-up](stabilization/BACKLOG.md#large-excel-analysis-without-full-model-context--2026-10-21).
+The full-sheet host-neutral fixture covers 17179869184 cells without materializing
+them, then reads one selected small slice. Real Excel metadata latency/COM delivery
+and live model choice/token cost remain unqualified.
+
+### Large Excel column analysis
+
+Owner: Excel read/analysis domain. `excel.summarize_columns` takes a literal `sheet`,
+explicit A1 `address` rectangle and 1–8 distinct absolute column letters inside it.
+It scans every row of those columns locally, including empty cells, in single-column
+chunks of at most 1024 cells. At most 2000000 selected cells are admitted per call;
+the bound is checked before Office access. It returns a compact typed result with
+`rowsScanned`, `cellsScanned`, `complete=true`, and per-column numeric, empty and
+other counts plus numeric sum, minimum, maximum and average. Text such as `"12"`,
+booleans and errors are not coerced to numbers. A column with no numbers has null
+numeric statistics. The source is raw Excel `Value2`: dates are numeric serials,
+and formulas contribute their calculated values. Neither cell values nor the
+scanned matrix reach the model.
+The scan uses the existing document-bound read gate and checks cancellation between
+chunks and rows. A failed chunk or cancellation cannot publish a partial result.
+
+`complete=true` means that all selected cells were visited successfully; it does
+not mean that the entire wide rectangle was read or that the workbook was frozen.
+Coordinates and dimensions are checked before, during and after the scan. Values
+can still change concurrently without changing those coordinates. The result names
+this limit `consistency=sequential-observation`; it is not a transactional snapshot
+or a claim about unselected columns. For large ranges, use the `structure` overview
+to choose an exact rectangle, then request the needed columns explicitly. Exact
+row/column pushdown for `table`/`records`, filtering and grouping remain separate
+work. Windows/Excel latency, COM behavior and live model tool choice are unqualified.
 
 ### Named Excel tables
 
@@ -938,7 +1007,7 @@ synchronous COM call is not forcibly interrupted. Capture admits at most
 only their value, avoiding a duplicate `Formula` body. Serialized JSON has its
 own one-million-character cap. Bound range cell counts are checked before cell
 materialization. Invalid/duplicate cells and oversized sources fail explicitly.
-For these bounded scans, use `excel.inspect` with `kind=sheets` for UsedRange
+For these bounded scans, use `excel.inspect` with `kind=workbook` for UsedRange
 addresses and search smaller explicit `scope=range` slices if necessary.
 Literal native search bounds candidate cells at 100,000 and reports an error if the
 scan cannot complete; a limited match list sets `truncated=true` while preserving

@@ -237,6 +237,24 @@ Excel-quoted references, embedded apostrophes, spaces and resource round-trips.
 `resources: canonical URI roundtrip` protects significant name whitespace.
 These fake-host checks do not qualify Excel COM delivery or formula calculation.
 
+`excel discovery: used ranges preserve bounds and completeness` covers workbook
+metadata enumeration, non-A1 extents, missing `UsedRange`, bounded terminal pages
+and descriptor/coverage changes invalidating cursors. It checks semantic discovery
+without cell reads. Pair it with `excel discovery: incomplete catalogs preserve
+document reads` and the worksheet-name round-trip check for this provider route.
+`excel discovery: large ranges offer bounded overview` uses a sparse full-sheet
+extent and long cell text. It verifies small metadata-only discovery/structure,
+live worksheet validation, quoted sample targets, narrow offset extents, retained
+overview evidence and one exact slice read. Raw reads (including `limit=1` records)
+remain rejected before capture. Pair with `excel read: bounds precede materialization`
+and `excel read: exact resource evidence and retained profile`. These checks do not
+qualify the new COM metadata branch or establish whole-table analytics/model quality.
+`excel read: local selected-column analysis is bounded` checks 200001 rows and a
+far column without reading intervening cells, typed numeric/empty/other counts,
+compact model projection, late capture failure, coordinate drift, and cancellation.
+Pair with `excel read: native ownership and exact registration` for exact-schema
+admission. These checks do not qualify Excel COM throughput or atomic consistency.
+
 `storage: damaged sqlite metadata preserves startup and history` checks ten
 sidecar corruption variants through catalog, load, pagination and startup recovery,
 plus a healthy chat beside malformed JSONL. Every rebuild preserves event bytes.

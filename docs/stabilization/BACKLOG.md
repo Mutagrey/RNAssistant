@@ -428,6 +428,35 @@ continuation comparison before changing roles, prompts or budgets. See current
 Closed with the [source-inclusion guard correction](#source-inclusion-harness-guard-and-sdk-projects--2026-10-05).
 This heading is retained for links from historical evidence.
 
+## Large Excel analysis without full model context — 2026-10-21
+
+Owner: Excel read/analysis domain and Resource Fabric; stages 4/5 of the unified
+plan. Priority: before further Excel mutation-destination cleanup, per the user's
+large-range requirement. Implemented: metadata-only discovery, large-range
+`structure` overviews with exact sample targets, and bounded local selected-column
+counts/numeric aggregates through `excel.summarize_columns`. The existing 2000-cell
+context preview cap remains. The analysis covers every selected row, with at most
+2000000 selected cells per call; it is a sequential observation, not a frozen source.
+
+Next contract work must distinguish two intents: exact row/column inspection and
+local computation across all qualifying rows. Current `table/records` selectors
+capture the whole source first; pushing selectors into the Excel reader requires
+exact source/selection coverage and row/column identity, not silently sampling that
+existing result. For further analysis, evaluate reuse of the existing local tabular
+execution owner against live Excel data before adding another tool/runtime. Keep
+source capture bounded and cancellable, propagate missing chunks/drift as failure,
+and return compact typed results plus exact coverage. A sample cannot certify
+totals, uniqueness, missing values or absence of anomalies. Current selected-column
+statistics do not establish uniqueness, filtering, grouping or values in unselected
+columns. No automatic whole-workbook scan, larger raw snapshot limit or model-driven
+row-by-row sweep.
+
+Host-neutral checks cover a sparse wide extent, long cell text, bounded captures,
+numeric/text distinctions, late-chunk failure, coordinate drift and early
+cancellation. Dense long tables, changed values during traversal, representative
+Windows/Excel throughput and live-model behavior remain external evidence. Measure
+backend captures, model payload size and aggregate correctness separately.
+
 ## Large Excel search without manual range slicing — 2026-09-30
 
 Owner: Excel search / Resource Fabric. Literal queries up to 255 characters without
