@@ -1,5 +1,16 @@
 # Stabilization progress
 
+## Compiler exclusion reasons in context trace — 2026-10-22
+
+The next RC-02 slice is fixed host-neutral. Excluded source entries now carry a
+typed compiler decision for explicit exclusion, superseded/unknown/unavailable
+evidence, duplicate bodies, budget eviction and bounded archive-body admission.
+Unattributed omissions say `Unknown` instead of guessing a cause. A zero archive
+body budget now skips CAS hydration before eviction. Focused compiler,
+saved-event/inspector and web checks pass; only the two existing PDF platform
+warnings remain. Attribution for other compiler transformations and
+Windows/Office/WebView2 qualification remain open.
+
 ## Typed resource evidence links in context trace — 2026-10-22
 
 The next RC-02 slice is fixed host-neutral. Compiler receipt entries now retain
@@ -8,8 +19,9 @@ coverage. The body-delivery flag is true only after verified synthetic payload
 hydration, false for an excluded source, and unknown for unproved or later
 projected content. The saved request and inspector preserve these links without
 adding model-facing fields. Focused compiler, saved-event/inspector and web checks
-pass; the two existing PDF platform warnings remain. Specific compiler-exclusion
-reasons and Windows/Office/WebView2 qualification remain open.
+pass; the two existing PDF platform warnings remain. The known exclusion-decision
+slice is recorded above; remaining transformations and Windows/Office/WebView2
+qualification remain open.
 
 ## Transport-selected attachment manifest — 2026-10-22
 
@@ -22,8 +34,8 @@ explicit reasons for budget-skipped or analysis-replaced attachments. The exact
 request CAS body is unchanged and remains authoritative; the whole augmented
 message is still `Unknown`. Focused trace/payload and web inspector checks pass.
 Windows/Office/WebView2 qualification remains open. No new store or model-facing
-metadata was added. The typed evidence-link slice is recorded above; specific
-compiler-exclusion reasons remain open.
+metadata was added. The typed evidence-link and compiler-decision slices are
+recorded above; other compiler transformations remain open.
 
 ## Repeated-read receipt after budget eviction — 2026-10-22
 

@@ -886,6 +886,17 @@ namespace RNAssistant.Harness
                 var stale = compiler.Compile(staleAuthority, new ChatMessage[0], new ChatMessage[0], null,
                     new ToolCatalogEntry[0], new AppSettings(), 12000, workingSet: set);
                 AssertEqual(0, stale.DeliveredObservations.Count, "stale archive evidence never authorizes a write");
+                AssertEqual(ContextExclusionKind.SupersededEvidence,
+                    stale.Receipt.Messages.Single(item => item.SourceMessageId == result.Id).ExclusionKind.Value,
+                    "stale archived body reports its actual exclusion decision");
+                var removedAuthority = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new[] {
+                    new ResourceAuthoritySnapshot(scope, 2, null, 0, new[] { ResourceHeadState.Removed(exact.Identity, 2) }) }),
+                    "pack", new SkillCatalogSnapshot(null), null, 1);
+                var removed = compiler.Compile(removedAuthority, new ChatMessage[0], new ChatMessage[0], null,
+                    new ToolCatalogEntry[0], new AppSettings(), 12000, workingSet: set);
+                AssertEqual(ContextExclusionKind.UnavailableEvidence,
+                    removed.Receipt.Messages.Single(item => item.SourceMessageId == result.Id).ExclusionKind.Value,
+                    "removed resource reports unavailable evidence instead of a generic exclusion");
                 System.IO.File.Delete(blobs.PathFor(payload.Sha256));
                 var omitted = compiler.Compile(authority, new ChatMessage[0], new ChatMessage[0], null,
                     new ToolCatalogEntry[0], new AppSettings(), 12000,
@@ -893,6 +904,9 @@ namespace RNAssistant.Harness
                 AssertEqual(0, omitted.Receipt.HydratedPayloads, "zero body budget never touches missing CAS bytes");
                 AssertEqual(1, omitted.Receipt.EvictedBodies, "budget omission is observable independently of missing storage");
                 AssertEqual(0, omitted.DeliveredObservations.Count, "omitted body does not grant authority");
+                AssertEqual(ContextExclusionKind.Budget,
+                    omitted.Receipt.Messages.Single(item => item.SourceMessageId == result.Id).ExclusionKind.Value,
+                    "zero budget identifies the archived body's exclusion without reading missing CAS");
                 var activeResult = ContinuityResult("active_source", "common.resources_read", ToolResult.Ok("Read.",
                     new JObject { ["target"] = "VBA module: Review", ["representation"] = "source", ["complete"] = true, ["text"] = body }.ToString()));
                 activeResult.ResourceEvidence.Add(observation);
@@ -903,6 +917,9 @@ namespace RNAssistant.Harness
                 AssertEqual(0, deduplicated.Receipt.HydratedPayloads, "active coverage excludes the archived copy before CAS hydration");
                 AssertEqual(0, deduplicated.Receipt.RetainedBodies, "an active body is not counted as archive restoration");
                 AssertTrue(deduplicated.Receipt.Deduplicated > 0, "active and archived bodies use one deduplication policy");
+                AssertEqual(ContextExclusionKind.DuplicateBody,
+                    deduplicated.Receipt.Messages.Single(item => item.SourceMessageId == result.Id).ExclusionKind.Value,
+                    "archive copy records deduplication without claiming its body was delivered elsewhere");
                 AssertContains(string.Join("\n", deduplicated.Messages.Select(item => item.Content)), body, "the active source remains complete");
                 AssertEqual(1, deduplicated.DeliveredObservations.Count, "active and archived source share delivery rules");
             });

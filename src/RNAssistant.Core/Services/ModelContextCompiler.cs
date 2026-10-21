@@ -36,6 +36,7 @@ namespace RNAssistant.Core.Services
         internal ResourceObservationNotice HistoricalFailure;
         internal bool ArchivedOperation;
         internal bool ArchivedBody;
+        internal string ArchivedSourceMessageId;
         internal string ArchivedTarget;
         internal ChatMessage ArchivedCall;
     }
@@ -99,6 +100,7 @@ namespace RNAssistant.Core.Services
                 ResourceGenerations = authority.Resources.Snapshots.ToDictionary(item => item.Key, item => item.Value.Generation)
             };
             var atoms = new List<ContextAtom>();
+            var exclusions = new Dictionary<string, ContextExclusionKind>(StringComparer.Ordinal);
             var maximumPayloadBytes = Math.Max(4096L,
                 2L * ModelContextBudget.ApproximateTextCharacterCapacity(budget, settings));
             foreach (var message in required ?? new ChatMessage[0])
@@ -199,6 +201,7 @@ namespace RNAssistant.Core.Services
                 if (atom.Evidence.Count == 0 && atom.Messages.Any(message =>
                     message.ToolName == "common.resources_read" && message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion))
                 {
+                    RecordExclusion(exclusions, atom, ContextExclusionKind.UnavailableEvidence);
                     Mark(atom, "This historical read has no canonical observation metadata; read the resource again.",
                         "resource_evidence_unavailable");
                     receipt.ExcludedUnavailable++;
@@ -214,8 +217,13 @@ namespace RNAssistant.Core.Services
                 var invalid = states.Where(item => item.State != EvidenceState.Current).ToArray();
                 if (invalid.Length > 0)
                 {
+                    var exclusion = invalid.Any(item => item.State == EvidenceState.Unavailable)
+                        ? ContextExclusionKind.UnavailableEvidence :
+                        invalid.Any(item => item.State == EvidenceState.Unknown)
+                            ? ContextExclusionKind.UnknownEvidence : ContextExclusionKind.SupersededEvidence;
                     if (atom.ArchivedBody)
                     {
+                        RecordExclusion(exclusions, atom, exclusion);
                         atom.Kind = "omitted-source";
                         atom.Messages.Clear();
                         continue;
@@ -235,6 +243,7 @@ namespace RNAssistant.Core.Services
                     {
                         // The completed mutation frame already records the action.
                         // An obsolete after-state adds only a redundant change marker.
+                        RecordExclusion(exclusions, atom, exclusion);
                         atom.Kind = "omitted-source";
                         atom.Messages.Clear();
                         continue;
@@ -282,8 +291,9 @@ namespace RNAssistant.Core.Services
             var bodyCandidates = 0;
             var bodyBytes = maximumPayloadBytes;
             var omittedTargets = new List<string>();
-            Action<ContextAtom> omitArchivedBody = atom =>
+            Action<ContextAtom, ContextExclusionKind> omitArchivedBody = (atom, reason) =>
             {
+                RecordExclusion(exclusions, atom, reason);
                 atom.Messages.Clear(); atom.BodyParts.Clear();
                 receipt.EvictedBodies++;
                 if (omittedTargets.Count < 12 && atom.ArchivedTarget != null && !atom.ArchivedTarget.Contains("://"))
@@ -305,6 +315,7 @@ namespace RNAssistant.Core.Services
                 if (bodyKey != null && observedBodies.Contains(bodyKey) &&
                     (atom.ArchivedBody || atom.Kind == "current-source"))
                 {
+                    RecordExclusion(exclusions, atom, ContextExclusionKind.DuplicateBody);
                     atom.Messages.Clear();
                     receipt.Deduplicated++;
                     continue;
@@ -318,9 +329,13 @@ namespace RNAssistant.Core.Services
                 }
                 if (atom.ArchivedBody)
                 {
+                    // A zero working-set reservation cannot be funded by folding
+                    // active frames. Do not touch archived CAS only to evict it.
+                    if (workingSet.Budget == 0)
+                    { omitArchivedBody(atom, ContextExclusionKind.Budget); continue; }
                     var bytes = atom.Messages.Sum(MaterializationBytes);
                     if (receipt.RetainedBodies >= 32 || bodyCandidates++ >= 64 || bytes > bodyBytes)
-                    { omitArchivedBody(atom); continue; }
+                    { omitArchivedBody(atom, ContextExclusionKind.SelectionLimit); continue; }
                     bodyBytes -= bytes;
                 }
                 if (atom.ArchivedOperation && !atom.MustKeep)
@@ -379,6 +394,7 @@ namespace RNAssistant.Core.Services
                                 throw new InvalidOperationException("Exact mutation result payload reader is unavailable.");
                             if (atom.HistoricalFailure != null)
                                 throw new InvalidOperationException("Exact diagnostic result payload reader is unavailable.");
+                            RecordExclusion(exclusions, atom, ContextExclusionKind.UnavailableEvidence);
                             MarkUnavailable(atom,
                                 "Exact payload reader is unavailable.");
                             receipt.ExcludedUnavailable++;
@@ -428,6 +444,7 @@ namespace RNAssistant.Core.Services
                                 throw new InvalidOperationException("Exact mutation result payload is unavailable.", ex);
                             if (atom.HistoricalFailure != null)
                                 throw new InvalidOperationException("Exact diagnostic result payload is unavailable.", ex);
+                            RecordExclusion(exclusions, atom, ContextExclusionKind.UnavailableEvidence);
                             MarkUnavailable(atom, "Exact payload is unavailable; no newer revision was substituted.");
                             receipt.ExcludedUnavailable++;
                             break;
@@ -477,7 +494,7 @@ namespace RNAssistant.Core.Services
                         }
                     }
                     if (atom.BodyOmitted || atom.Kind == "resource-change" || atom.Kind == "observation-notice" || bodyCost > receiptBudget)
-                    { omitArchivedBody(atom); continue; }
+                    { omitArchivedBody(atom, ContextExclusionKind.Budget); continue; }
                     receiptBudget -= bodyCost;
                     retainedBodyCost += bodyCost;
                     receipt.RetainedBodies++;
@@ -595,7 +612,7 @@ namespace RNAssistant.Core.Services
                 foreach (var atom in atoms.Where(item => item.ArchivedBody && item.Messages.Count > 0))
                 {
                     if (cost.Estimate(settings) <= budget) break;
-                    omitArchivedBody(atom); receipt.RetainedBodies--; measure(atom);
+                    omitArchivedBody(atom, ContextExclusionKind.Budget); receipt.RetainedBodies--; measure(atom);
                 }
                 updateWorkingSetNotice();
                 if (workingSetNotice != null) measure(workingSetNotice);
@@ -635,7 +652,7 @@ namespace RNAssistant.Core.Services
             var messages = atoms.SelectMany(item => item.PromptMessages).ToList();
             receipt.Messages = DescribeMessages(atoms, required, (facts ?? new ChatMessage[0])
                 .Concat(workingSet == null ? Enumerable.Empty<ChatMessage>() : workingSet.Operations.Concat(workingSet.Bodies)
-                    .SelectMany(item => new[] { item.Call, item.Source })).ToArray());
+                    .SelectMany(item => new[] { item.Call, item.Source })).ToArray(), exclusions);
             receipt.OperationReceipts = messages.Count(message => message.CompletedOperation != null);
             receipt.EstimatedTokens = ModelContextBudget.EstimateMessagesTokens(messages, settings);
             receipt.AtomCounts = atoms.GroupBy(item => item.Kind).ToDictionary(group => group.Key, group => group.Count());
@@ -743,6 +760,7 @@ namespace RNAssistant.Core.Services
                 atom.Evidence = evidence.ToList();
             }
             atom.ArchivedBody = true;
+            atom.ArchivedSourceMessageId = source.Id;
             atom.ArchivedTarget = CurrentSourceLabel(source, evidence[0]) ?? (string)data?["id"];
             return atom;
         }
@@ -983,8 +1001,32 @@ namespace RNAssistant.Core.Services
                 : source[name].DeepClone();
         }
 
+        private static void RecordExclusion(Dictionary<string, ContextExclusionKind> exclusions,
+            ContextAtom atom, ContextExclusionKind reason)
+        {
+            var sourceId = atom.ArchivedSourceMessageId ?? atom.Messages.LastOrDefault()?.Id;
+            if (!string.IsNullOrEmpty(sourceId) && !exclusions.ContainsKey(sourceId))
+                exclusions.Add(sourceId, reason);
+        }
+
+        private static string ExclusionReason(ContextExclusionKind kind)
+        {
+            switch (kind)
+            {
+                case ContextExclusionKind.Explicit: return "Источник явно исключён из контекста модели.";
+                case ContextExclusionKind.SupersededEvidence: return "Наблюдение устарело относительно текущего снимка ресурсов.";
+                case ContextExclusionKind.UnknownEvidence: return "Актуальность наблюдения не подтверждена.";
+                case ContextExclusionKind.UnavailableEvidence: return "Доказательство или точное содержимое источника недоступно.";
+                case ContextExclusionKind.DuplicateBody: return "Отдельная копия удалена при дедупликации; итоговую доставку тела показывает запрос.";
+                case ContextExclusionKind.Budget: return "Тело источника не вошло в бюджет этого запроса.";
+                case ContextExclusionKind.SelectionLimit: return "Тело источника не прошло ограниченный отбор архивных источников.";
+                default: return "Причина отсутствия отдельного сообщения не установлена.";
+            }
+        }
+
         private static List<ContextMessagePresentation> DescribeMessages(List<ContextAtom> atoms,
-            IReadOnlyList<ChatMessage> required, IReadOnlyList<ChatMessage> facts)
+            IReadOnlyList<ChatMessage> required, IReadOnlyList<ChatMessage> facts,
+            IReadOnlyDictionary<string, ContextExclusionKind> exclusions)
         {
             var sources = (required ?? new ChatMessage[0]).Concat(facts ?? new ChatMessage[0])
                 .Where(m => m != null && !string.IsNullOrEmpty(m.Id)).GroupBy(m => m.Id)
@@ -1036,11 +1078,17 @@ namespace RNAssistant.Core.Services
             }
             var retained = new HashSet<string>(result.Select(m => m.SourceMessageId).Where(id => id != null));
             foreach (var source in sources.Values.Where(m => !retained.Contains(m.Id)))
+            {
+                ContextExclusionKind decision;
+                var kind = source.ExcludeFromModelContext ? ContextExclusionKind.Explicit :
+                    exclusions.TryGetValue(source.Id, out decision) ? decision : ContextExclusionKind.Unknown;
                 result.Add(new ContextMessagePresentation { SourceMessageId = source.Id, Role = source.Role,
                     Presentation = ContextPresentationKind.Excluded, OriginalPayload = source.ResultPayload,
+                    ExclusionKind = kind,
                     ToolCallId = source.CompletedOperation?.ToolCallId ?? source.ToolCallId,
                     EvidenceLinks = EvidenceLinks(source.ResourceEvidence, item => false),
-                    Reason = "Не включено отдельным сообщением: фильтрация, свёртка или замена устаревшего содержимого." });
+                    Reason = ExclusionReason(kind) });
+            }
             return result;
         }
 

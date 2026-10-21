@@ -69,6 +69,13 @@ namespace RNAssistant.Core.Models
     [JsonConverter(typeof(Newtonsoft.Json.Converters.StringEnumConverter))]
     public enum ContextPresentationKind { Unknown, Full, Fragment, Summary, Excluded }
 
+    [JsonConverter(typeof(Newtonsoft.Json.Converters.StringEnumConverter))]
+    public enum ContextExclusionKind
+    {
+        Unknown, Explicit, SupersededEvidence, UnknownEvidence, UnavailableEvidence,
+        DuplicateBody, Budget, SelectionLimit
+    }
+
     // Observed coverage belongs to the source evidence. The nullable body flag
     // describes attribution to this exact message, not delivery elsewhere.
     public sealed class ContextEvidenceLink
@@ -89,6 +96,8 @@ namespace RNAssistant.Core.Models
         public string Role { get; set; }
         public string Kind { get; set; }
         public ContextPresentationKind Presentation { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public ContextExclusionKind? ExclusionKind { get; set; }
         public string Reason { get; set; }
         public PayloadRef OriginalPayload { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]

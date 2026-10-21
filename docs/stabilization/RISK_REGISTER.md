@@ -26,8 +26,11 @@ records source evidence separately from pending runtime reproduction:
   The parent message remains `Unknown` after attachment augmentation. Focused
   payload/trace and web inspector checks pass. Typed operation/evidence/observed-
   coverage links now survive the compiler receipt and saved request; positive
-  body-delivery claims require verified synthetic hydration. Specific compiler-
-  exclusion reasons remain open; Windows/WebView2 display remains unqualified.
+  body-delivery claims require verified synthetic hydration. Known compiler
+  decisions now give typed exclusion reasons (explicit, evidence currency,
+  deduplication, budget and archive-body limits); unattributed transformations
+  remain `Unknown`. Zero archive-body budget skips CAS hydration. Other compiler
+  transformations and Windows/WebView2 display remain unqualified.
 - **RC-03, fixed host-neutral:** two identical complete reads plus a tight request
   budget reproduced a receipt pointing to an evicted body. Folded receipts now
   resolve after budget admission: no stale `retained_result` pointer, explicit

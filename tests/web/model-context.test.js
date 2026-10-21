@@ -113,7 +113,9 @@ function fixture() {
   const f = fixture(), api = f.c.RNAssistantModelContext;
   f.events[0].trace.ContextMessages = [{ MessageIndex: 1, Presentation: "Unknown", ToolCallId: "call-1",
     EvidenceLinks: [{ EvidenceId: "evidence-1", Resource: { uri: "rna://vba/module", revision: "r1" },
-      View: "source", ObservedCoverage: { kind: "line-range", start: 1, end: 2 }, BodyIncludedInMessage: null }] }];
+      View: "source", ObservedCoverage: { kind: "line-range", start: 1, end: 2 }, BodyIncludedInMessage: null }] },
+    { SourceMessageId: "archived", Presentation: "Excluded", ExclusionKind: "Budget",
+      Role: "tool", Reason: "Тело источника не вошло в бюджет этого запроса." }];
   const raw = '{"n":9007199254740993123456789,"n":2,"text":"escaped \\\" }, : [ ","nested":[{"x":true}]}';
   const parts = api.members(raw);
   assert.equal(parts[0].raw, "9007199254740993123456789");
@@ -128,6 +130,10 @@ function fixture() {
   assert.ok(userMessage.children[1].children.some(node => /evidence-1/.test(node.textContent) &&
     /доставка тела в сообщении не установлена/.test(node.textContent)),
     "observed evidence does not claim unproved body delivery");
+  const excluded = f.get("modelContextBody").children.find(node => node.tag === "details" &&
+    node.children.some(child => /Не включено отдельными сообщениями/.test(child.textContent)));
+  assert.ok(excluded && excluded.children.some(node => node.children.some(child =>
+    /не вошло в бюджет/.test(child.textContent))), "inspector shows the compiler's recorded omission reason");
   assert.equal(f.closes.length, 1, "exact download lease closes after reading");
   assert.equal(f.get("modelContextAttempt").value, "r1");
   f.get("modelContextTab").value = "json"; await f.get("modelContextTab").fire("change"); await flush();

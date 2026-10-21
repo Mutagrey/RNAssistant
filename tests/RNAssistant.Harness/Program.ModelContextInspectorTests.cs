@@ -333,7 +333,10 @@ namespace RNAssistant.Harness
                             EvidenceLinks = new System.Collections.Generic.List<ContextEvidenceLink> {
                                 new ContextEvidenceLink { EvidenceId = "evidence-1", Resource = new ResourceRef("rna://vba/source/module", "r1"),
                                     View = "source", ObservedCoverage = new ResourceCoverage(ResourceCoverageKinds.LineRange,
-                                        start: 1, end: 2), BodyIncludedInMessage = true } } } } });
+                                        start: 1, end: 2), BodyIncludedInMessage = true } } },
+                        new ContextMessagePresentation { SourceMessageId = "archived", Role = "tool",
+                            Presentation = ContextPresentationKind.Excluded, ExclusionKind = ContextExclusionKind.Budget,
+                            Reason = "Тело источника не вошло в бюджет этого запроса." } } });
                 var request = store.ReadEvents(session.Host, session.DocumentKey, session.Id).Single(e => e.Type == SessionEventTypes.LlmRequest);
                 for (var i = 0; i < 51; i++) store.AppendTrace(session, SessionEventTypes.LlmRequest,
                     new LlmTraceRecord { RequestId = "request-" + i }, "{}", "application/json", null, null, null);
@@ -352,6 +355,8 @@ namespace RNAssistant.Harness
                     AssertEqual("evidence-1", stored.EvidenceLinks.Single().EvidenceId, "evidence link survives event storage");
                     AssertEqual(ResourceCoverageKinds.LineRange, stored.EvidenceLinks.Single().ObservedCoverage.Kind,
                         "typed observed coverage survives event storage");
+                    AssertEqual(ContextExclusionKind.Budget, detail.Events[0].Trace.ContextMessages[1].ExclusionKind.Value,
+                        "typed compiler exclusion survives saved request and inspector query");
                     var download = service.Open(session, new ModelContextPayloadQuery { EventId = request.EventId, OriginalIndex = 0 }, CancellationToken.None);
                     AssertEqual(original.Sha256, download.Data.Payload.Sha256, "original source is bound to the exact request");
                     data.Close(session.Id, ModelContextInspectorService.Owner, download.Data.LeaseId);
@@ -384,6 +389,10 @@ namespace RNAssistant.Harness
                     new RNAssistant.Core.Tools.ToolCatalogEntry[0], new AppSettings(), 10000);
                 AssertEqual(ContextPresentationKind.Full, snapshot.Receipt.Messages.Single(e => e.SourceMessageId == full.Id).Presentation, "unchanged text is full");
                 AssertEqual(ContextPresentationKind.Excluded, snapshot.Receipt.Messages.Single(e => e.SourceMessageId == excluded.Id).Presentation, "excluded is outside wire positions");
+                AssertEqual(ContextExclusionKind.Explicit, snapshot.Receipt.Messages.Single(e => e.SourceMessageId == excluded.Id).ExclusionKind.Value,
+                    "explicit source exclusion keeps its compiler decision");
+                AssertContains(Newtonsoft.Json.JsonConvert.SerializeObject(snapshot.Receipt.Messages),
+                    "\"ExclusionKind\":\"Explicit\"", "the typed exclusion decision survives trace serialization");
                 AssertEqual(1, snapshot.Receipt.Messages.Single(e => e.SourceMessageId == excluded.Id).EvidenceLinks.Count,
                     "excluded source has one typed evidence link");
                 AssertEqual(false, snapshot.Receipt.Messages.Single(e => e.SourceMessageId == excluded.Id)
@@ -401,8 +410,8 @@ namespace RNAssistant.Harness
                 AssertEqual(true, link.BodyIncludedInMessage.Value, "verified synthetic payload hydration proves body delivery");
                 var wire = Newtonsoft.Json.JsonConvert.SerializeObject(
                     new LlmMessageBuilder().Build(snapshot.Messages, new AppSettings()).Messages);
-                AssertTrue(!wire.Contains("\"EvidenceLinks\"") && !wire.Contains("\"ObservedCoverage\""),
-                    "typed diagnostic links do not enter provider messages");
+                AssertTrue(!wire.Contains("\"EvidenceLinks\"") && !wire.Contains("\"ObservedCoverage\"") &&
+                    !wire.Contains("\"ExclusionKind\""), "typed diagnostics do not enter provider messages");
                 var changed = LlmClient.DescribeWireMessages(new[] { snapshot.Messages.First(m => m.Id == fragment.Id) },
                     snapshot.Receipt, new[] { true });
                 AssertTrue(!changed.Single(e => e.MessageIndex.HasValue).EvidenceLinks.Single().BodyIncludedInMessage.HasValue,

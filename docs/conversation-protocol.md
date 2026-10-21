@@ -1971,6 +1971,12 @@ Owner: Conversation/model context; совместные границы — Core 
   при повторной материализации claims. `ContextReceipt` отражает rejected claims,
   operation receipts и retained/evicted archive bodies; WORKING_SET отличает
   отсутствие тела в запросе от отсутствия ресурса.
+  Исключённые сообщения в request trace имеют typed `ExclusionKind`: явный флаг,
+  `Superseded`/`Unknown`/`Unavailable` evidence, дедупликация, бюджет или лимит
+  отбора архивных тел. Если конкретное решение компилятора не связано с исходным
+  сообщением, указывается `Unknown`, а не предполагаемая причина. Нулевой бюджет
+  архивных тел пропускает их до чтения CAS; состояние и доставку остальных тел
+  устанавливают итоговый запрос и evidence links, а не сам факт дедупликации.
 - `ResourceGatewayService.ReadWhole` — общий владелец полной сборки ресурса и core
   skill. Нет отдельного 24000-character skill path, обещающего полную загрузку.
   Для retained CAS используется одно материализованное тело на whole/line operation;
