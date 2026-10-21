@@ -1556,7 +1556,7 @@ source before create/update storage; JS source/policy checks cover explicit
 executor alternatives and rejection of mixed VBA/JS fields.
 `tools: R61 built-in contract inventory` checks
 the final reviewed [baseline](../../docs/stabilization/R61_TOOL_PROPERTY_INVENTORY.tsv)
-(66 ids/66 host variants); its pass does not qualify real Windows/model behavior.
+(currently 80 built-in ids/rows); its pass does not qualify real Windows/model behavior.
 
 For Tool Library source reads and mutation uploads, use `tool editor:` in
 `Program.ToolEditorResourceTests.cs` and

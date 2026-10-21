@@ -500,9 +500,10 @@ must switch atomically with the IDs/arguments they teach. R61 must also compare
 current core membership with a smaller relevant pack; registry count alone is not
 an optimization target.
 
-11O0 freezes the source-built-in property baseline in the machine-checked
-[R61 inventory](stabilization/R61_TOOL_PROPERTY_INVENTORY.tsv): after 11O5, 69 unique built-in
-IDs and 72 effective host variants record exact descriptor revision, allowed modes,
+11O0 established the source-built-in property baseline in the machine-checked
+[R61 inventory](stabilization/R61_TOOL_PROPERTY_INVENTORY.tsv): after 11O5 it held
+69 unique built-in IDs and 72 effective host variants. The current reviewed
+baseline has 80 rows/IDs. Each row records exact descriptor revision, allowed modes,
 direct binding and recursive property paths. Plumbing-shaped additions require an
 explicit semantic or runtime-owned decision. Dynamic installed custom-package
 schemas remain package-revision-owned. 11O4 rejects plumbing-shaped custom
@@ -800,10 +801,10 @@ and arbitrary VBA macro execution remains unknown after dispatch.
 
 ## Tool contract review — 2026-10-21
 
-Status: the first static review covers the current Common discovery/resource and
-Excel report paths. This is not a completed audit of every tool or evidence of
-real Office behavior. Owner: Tool Library / model-context, with the resource and
-Excel domain owners for changed operations.
+Status: static source review now covers the Common resource/authoring, HTML/VBA,
+Excel, Word, PowerPoint and Outlook tool families. It establishes their current
+intent and result boundaries, not model-choice reliability or real Office behavior.
+Owner: Tool Library / model-context, with each affected domain owner.
 
 This continues stage 5 of the user-supplied unified stabilization plan dated
 2026-10-20: capability choice, preferred editor, instructions and results. Stage 4
@@ -820,11 +821,34 @@ The older audit below remains historical evidence, not a current defect list.
 | Worksheet names and references | A `sheet` argument is the literal worksheet name. Composed references use the shared formatter: `Sales Report` → `'Sales Report'!A1`, `O'Brien` → `'O''Brien'!A1`. | Quote only the composed reference; retain literal names in lookup, result coordinates and resource identity. Resource reads decode Excel quoting once; host-enumerated names are not unquoted or trimmed. Double quotes are literal name characters, not alternate reference delimiters. |
 | Large Excel ranges | Discovery is metadata-only. Above 100000 cells, `structure` returns dimensions and sample targets; `excel.summarize_columns` scans explicitly selected columns locally and returns compact counts/numeric aggregates. Current `table`/`records` row selectors still apply after whole-source capture. | Keep overview, raw slice reads and selected-column aggregates distinct. The analysis is a narrow read-only tool rather than a broad `excel.inspect` action or an unbounded resource representation. Exact selector pushdown/filtering remains open; evaluate the extra descriptor's live token/tool-choice cost. See [large ranges](resource-fabric.md#large-excel-range-overview) and [column analysis](resource-fabric.md#large-excel-column-analysis). |
 | Other Excel destinations | `add_table` still defaults to `A1:B2`; chart creation defaults to `A1:B6`. Formatting and other range mutations retain their documented active-sheet/default-range behavior. | Next bounded review: explicit table source, then chart creation versus update. Preserve omission-as-keep for existing chart updates; do not apply the write contract indiscriminately to all mutations. |
-| Structural views | `ResourceStructuredViewService` produces `ResourceTableBatch` for both `table` and `records`; the read schema exposes both names. | Candidate for one canonical representation, after checking every provider, HTML/JS consumer and saved contract. Shared materialization alone does not prove that every consumer treats the names identically. |
+| Structural views | `table` and `records` use the same gateway branch, CAS index, row selectors, `ResourceTableBatch`, coverage and HTML/JS batch shape. Excel, Outlook and JSON providers advertise both; derived mappings select `table`. Persisted HTML bindings and artifact transfers can still name `records`. | Use `table` for new model-directed reads/bindings; current runtime continues to accept both. Removing `records` is a separate atomic contract/data migration, not a descriptor-only deletion. No distinct semantic use was found. |
 | Discovery, content and search | `excel.inspect` supplies metadata, `excel.find_cells` finds cell matches, `resources_read` supplies values/source, and `resources_search` searches a text/source target. | Keep these purposes distinct; review descriptions and supported representations together. A known range needs no discovery call. Do not merge them into an unconstrained action switch. |
 | Workbook and chat charts | `excel.upsert_chart` mutates the workbook; `excel.create_chat_chart` reads source data and creates a chat artifact. | Keep separate destinations and effect policies. Check that results clearly identify the destination and do not imply Excel rendering was verified. |
 | Format schema repetition | `excel.format_range` now shares field definitions with seven required-only fragments. The runtime combines each fragment with its parent; strict output expands to the previous full variants. | Implemented with argument-equivalence checks: prompt schema 7021 → 1191 characters. The first paired live run passes the report but spends more cumulative input after extra protocol repairs; no overall token-saving rate is established. See the current progress entry. |
 | Model batching | The current report runs attempt write batches; the parser rejects them and executes no writes. | Treat this as observed protocol-choice friction. It does not establish that tool duplication caused it, or justify combining five independently verified writes into a report macro. |
+
+### Other families and destinations
+
+| Family | Reviewed choice and result boundary | Decision |
+|---|---|---|
+| Authored files / Markdown / HTML | `file_create/copy/patch` publish downloadable document-owned file revisions; `markdown_save` publishes a standalone Markdown document; HTML write/patch changes a runnable workspace member. A `.html` or `.md` filename alone does not choose the destination. | Keep separate stores/effects. File tool descriptions now name their destination and point to the page/document tools; no generic file action union. |
+| Resource discovery / indexed text | `resources_find` resolves targets, `resources_search` scans one text/source target, `resources_outline` navigates indexed parts, `resources_read` returns exact content. Word/PowerPoint/Outlook search tools add host-specific scopes and coordinates; they are not substitutes for a complete source read. | Keep distinct. A search-only negative requires explicit complete coverage; outline symbols are advisory. `partNumber` is a semantic indexed-source selector, not a provider cursor. |
+| HTML / VBA | HTML whole-file write, exact patch, data write, bind, refresh and freeze have different targets or persistence effects. VBA whole write, patch, rename, delete, restore and macro execution have different guards and effect policies. | Keep separate. Refresh resolves bindings without populating a page; successful static preflight does not prove rendering. A successful macro call does not prove its external effects. |
+| Word / PowerPoint | Inspect/list and domain search return summaries or coordinates; resource reads return exact source views. Word insert/replace/format/table/comment and PowerPoint slide/object/text operations have distinct mutations. | Keep domain operations and strict discriminators. No duplicate mutation with the same target, effect and result was found in this static pass. |
+| Outlook | Folder search, mailbox archive index, draft creation and selected-mail update have different scope and effect. `index_archive` checkpoints local scan state but does not change mail; draft creation does not send. | Keep separate. Catalog descriptions now state these boundaries; incomplete scans cannot establish absence. |
+| Plans / questions / authoring | Task List progress, Plan document, Markdown document, user question, prompt/skill/tool authoring operate on different authorities. Skill selection is separate from skill source inspection or authoring. | Keep separate and optional. Runtime owns list IDs, guards, revisions and permissions; an agent need not create tracking artifacts for ordinary edits. |
+
+### R61 inventory reconciliation
+
+The current built-in inventory has 80 unique IDs/rows. Six added intents were
+reviewed individually: file create/copy/patch, indexed resource search/outline,
+and bounded Excel column summary. Five existing Common descriptors changed:
+HTML whole-file write, resource read (`partNumber` added), skill load, Task List
+notes and VBA patch. The four other changes are guidance wording; host, mode,
+binding and property paths stayed fixed. The chart-artifact, archive-index and
+file-destination description clarifications in this pass have updated exact
+descriptor revisions. The focused R61 inventory check passes. This is static
+contract evidence; exact live-model choice and Office qualification remain open.
 
 ### Review sequence and acceptance
 
@@ -833,8 +857,9 @@ The older audit below remains historical evidence, not a current defect list.
    and original durable evidence are checked independently; live model-choice
    improvement remains unmeasured.
 2. `write_range` now has an explicit destination and checked name/reference
-   round-trips. Continue through the remaining Excel mutation destinations and
-   the resource representation vocabulary.
+   round-trips. Static `table`/`records` equivalence and retained consumers are
+   recorded above. Continue through remaining Excel mutation destinations and
+   an isolated persisted-binding migration before removing `records`.
    For each proposed rename, merge, split or removal, identify the user intent,
    competing operation, actual consumer, effect/confirmation boundary and owner.
    Remove the replaced path and update schemas, skills, prompts and results together;
@@ -844,9 +869,9 @@ The older audit below remains historical evidence, not a current defect list.
    payload keys; exclude runtime revision/guard/admission plumbing from model text.
    Do not equate a saved binding, static check or successful invocation with a
    populated dashboard, rendered chart or verified document effect.
-4. Continue through HTML/VBA, then Word/PowerPoint/Outlook and authoring. These
-   families have not been re-audited in this slice. Record keep/merge/split/remove
-   decisions in this document as their consumers are checked.
+4. Static keep/merge/split decisions for HTML/VBA, Word/PowerPoint/Outlook and
+   authoring are above. Revisit any family when a concrete wrong choice, rejected
+   argument or false effect claim is reproduced; static review is not an eval.
 5. Compare changed choices on the existing unprompted Excel and combined HTML/VBA
    fixtures with the same model/profile. Measure task result, wrong choices,
    rejected arguments, repairs, calls and actual API usage separately. A single

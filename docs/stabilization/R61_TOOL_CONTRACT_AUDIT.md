@@ -107,6 +107,19 @@ Removed direct source-reader rows are absent, not aliases. The focused inventory
 check passes after this property/description/binding review; it is not Windows or
 real-model qualification.
 
+Current reconciliation (2026-10-21): the reviewed inventory contains 80 unique
+built-in IDs. New `common.file_create/copy/patch` choose a document-owned file
+destination and semantic content/source/patch; `common.resources_search/outline`
+choose one readable target plus bounded search/navigation selectors; and
+`excel.summarize_columns` chooses an explicit range and up to eight columns. These
+do not expose revisions, CAS identities or provider cursors. `resources_read`
+adds the semantic `partNumber` selector for a bounded indexed text/source part;
+the other four changed Common revisions are guidance-only. The current exact
+descriptors also distinguish chat chart creation, Outlook archive checkpointing
+and authored files from HTML/Markdown destinations. The focused inventory check
+passes. The [current family decisions](../tool-library.md#other-families-and-destinations)
+and remaining `table`/`records` migration are maintained in the Tool Library.
+
 Произвольные argument schemas установленных custom packages нельзя честно
 зафиксировать в source baseline: они package-owned и меняются только новой exact
 package revision. Их поля не удаляются автоматически по имени (`customerId` может

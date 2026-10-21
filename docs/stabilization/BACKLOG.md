@@ -12,6 +12,26 @@
 новая возможность требует явной задачи, scope и owner; дефекты работающей системы
 приоритетнее расширения без конкретного пользовательского результата.
 
+## Один табличный resource view — 2026-10-21
+
+Owner: Resource Fabric / HTML data binding / model contract. `table` и `records`
+сейчас дают одинаковые колонки, строки, coverage и batch-поток; для новых задач
+инструкции рекомендуют `table`. Удалять `records` только вместе с переводом
+сохранённых HTML bindings, JS/transfer consumers, provider capabilities, schemas,
+skills и result guidance. Явно обработать старые версии без потери пользовательских
+данных и без скрытого alias. Проверить exact/head binding, derived mapping,
+Excel/Outlook/JSON reads, transfer и restart host-neutral. Затем сравнить выбор
+модели на тех же fixture; Windows/Office и WebView2 остаются отдельным gate.
+
+## Устаревшая проверка ссылок built-in skills — 2026-10-21
+
+Owner: Harness skill-contract test. `settings: built-in skill references resolve to
+catalogs` проверяет `## Definition of done` и schema-authority текст в четырёх
+`OfficeHosts/*Adapter.cs`; действующие built-in bodies находятся в
+`BuiltInSkillProvider`. Выборочный запуск падает на неизменённом `ExcelAdapter.cs`
+до проверки этих bodies. Перенести assertion на текущего owner и сохранить
+проверку exact catalog IDs отдельно; это fixture drift, не Office regression.
+
 Сверка 2026-10-15: актуальные воспроизведения и результаты выборочных проверок —
 в [ревью](RISK_REGISTER.md#architecture-and-regression-review--2026-10-15).
 Старые counts/failures относятся к названным там ревизиям. Приоритетные

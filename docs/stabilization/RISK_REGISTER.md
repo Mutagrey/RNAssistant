@@ -92,14 +92,16 @@ do not qualify those models or real Office/COM/WebView2 delivery.
 
 ## R61 inventory drift — 2026-10-21
 
-Open / Tool Library contract-inventory owner. The current comparison after reviewing
-`excel.write_range` still differs on five unrelated Common rows:
-`common.html_workspace_write_file`, `common.resources_read`, `common.skills_load`,
-`common.task_list_set` and `common.vba_apply_patch`. Reconcile each current contract
-with its reviewed baseline separately; do not refresh all hashes with an Excel
-change. Current expected/actual rows are in `/tmp/rna-explicit-write-target-inventory.log`;
-the earlier ten-row snapshot remains in `compact-format-inventory-drift.json` in
-the local prompt-eval directory. Focused checks do not close this gate.
+Contained host-neutral / Tool Library contract-inventory owner. At `f6c3f5f0`,
+the focused comparison had 74 expected and 80 actual rows: six later tool IDs
+and five changed Common descriptors. Each ID, binding, mode, property path and
+descriptor change was reviewed against its source; `common.resources_read`
+added a semantic `partNumber`, and the other four Common differences were guidance
+wording. The [inventory](R61_TOOL_PROPERTY_INVENTORY.tsv) now has 80 exact rows;
+`tools: R61 built-in contract inventory` passes 1/1 after the destination wording
+clarifications. This closes the baseline drift, not the separate live-model and
+Office qualification gates. The earlier failing comparison remains in
+`/tmp/rna-r61-current-review.log` for local diagnosis.
 
 ## Excel discovery and name-validation follow-ups — 2026-10-21
 

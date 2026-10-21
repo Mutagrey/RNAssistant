@@ -1,5 +1,24 @@
 # Stabilization progress
 
+## Tool contract and inventory review — 2026-10-21
+
+Static review of Common resource/authoring, HTML/VBA, Excel, Word, PowerPoint and
+Outlook tool intents and result boundaries is recorded in the
+[Tool Library](../tool-library.md#tool-contract-review--2026-10-21). The R61
+inventory now covers 80 unique built-in IDs, including six later tools and five
+reviewed Common descriptor changes; its focused Harness check passes 1/1.
+Descriptors clarify chat-chart versus workbook-chart, local Outlook archive
+checkpoint versus mail mutation, and document-owned file versus runnable HTML
+workspace or Markdown document. HTML skill guidance selects `table` for new
+tabular bindings. `table` and `records` remain equivalent in runtime; saved
+bindings and transfer consumers require a separate atomic migration before
+removal. Static review does not establish model-choice quality or Office behavior.
+No Office/VSTO validation ran on this machine.
+
+Next: explicit Excel table/chart creation destinations and the isolated tabular
+view migration; compare changed model choices in existing live fixtures when
+available. Exact large-range selector pushdown remains a separate resource task.
+
 ## Large Excel ranges: bounded selected-column analysis — 2026-10-21
 
 Added read-only `excel.summarize_columns` for an explicit sheet, A1 rectangle and

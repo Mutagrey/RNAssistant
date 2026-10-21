@@ -30,7 +30,7 @@ namespace RNAssistant.Office.Tools
                     properties["content"] = new JObject { ["type"] = "string", ["maxLength"] = AuthoredFileService.MaximumInlineCharacters,
                         ["description"] = "Complete small-file content. Copy an uploaded original to create a large file." };
                     required = new JArray("name", "content");
-                    description = "Create a small document-owned text/code file with its real extension. For a large uploaded file, use file_copy instead.";
+                    description = "Create a small document-owned text/code file with its real extension. This is a downloadable file, not an HTML workspace page or managed Markdown document artifact; use html_workspace_write_file or markdown_save for those destinations. For a large uploaded file, use file_copy.";
                 }
                 else if (id == CopyToolId)
                 {
@@ -39,7 +39,7 @@ namespace RNAssistant.Office.Tools
                     properties["name"] = new JObject { ["type"] = "string", ["minLength"] = 3, ["maxLength"] = 200,
                         ["description"] = "Optional output file name with desired extension, for example large.md. Omit to preserve the source name. Bytes are copied exactly." };
                     required = new JArray("source");
-                    description = "Create an independent editable file from a complete text/code original. Optionally choose an output name and extension. Encoding, BOM, line endings and bytes remain exact; the original stays immutable.";
+                    description = "Create an independent editable document-owned file from a complete text/code original, not an HTML workspace page. Optionally choose an output name and extension. Encoding, BOM, line endings and bytes remain exact; the original stays immutable.";
                 }
                 else
                 {
@@ -52,7 +52,7 @@ namespace RNAssistant.Office.Tools
                             ["replace"] = new JObject { ["type"] = "string", ["maxLength"] = AuthoredFileService.MaximumInlineCharacters } },
                             ["required"] = new JArray("find", "replace"), ["additionalProperties"] = false } };
                     required = new JArray("target", "patches");
-                    description = "Apply bounded exact, unique, non-overlapping text replacements to one pinned authored file revision. Read the relevant parts first. Stale or ambiguous edits fail without replacing the file.";
+                    description = "Apply bounded exact, unique, non-overlapping text replacements to one pinned document-owned authored file, not an HTML workspace member. Read the relevant parts first. Stale or ambiguous edits fail without replacing the file.";
                 }
                 var schema = new JObject { ["type"] = "object", ["properties"] = properties,
                     ["required"] = required, ["additionalProperties"] = false };

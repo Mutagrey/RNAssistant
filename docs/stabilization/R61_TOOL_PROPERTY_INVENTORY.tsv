@@ -7,8 +7,12 @@
 # 2026-09-30: reviewed Plan startNew/Agent admission, resource-find guidance, VBA patch and Excel search descriptions, and default-off tool authoring fields.
 # 2026-10-02: reviewed on-demand local HTML asset catalog/import/publish; package id is a user-chosen semantic name, while the content revision remains runtime-only.
 # 2026-10-14: reconciled current skill-loading, package dependency and resource/tool guidance descriptors; reviewed new package identity fields.
+# 2026-10-21: reviewed file create/copy/patch, indexed resource outline/search and selected Excel column summary as separate semantic intents; reconciled bounded partNumber and four guidance-only descriptor revisions.
 common.capabilities_read	Excel,Outlook,PowerPoint,Word	agent,plan	capabilities.read.intent.v1	83a5377df41216258264626ccd93d35427348bde31354a064bb27ff1355be73f	action,id,referencePath	id=semantic-capability-identity
 common.capabilities_search	Excel,Outlook,PowerPoint,Word	agent,plan	capabilities.search.intent.v1	7e647d1a4ae13887d52348b154210db01e9dd818346404a316105e88d68b5e48	kind,query	-
+common.file_copy	Excel,Outlook,PowerPoint,Word	agent	common.file_copy.intent.v1	034ef9cfe3d49557561570695666f29adbab02da1c2e2366a806a83433f8d647	name,source	-
+common.file_create	Excel,Outlook,PowerPoint,Word	agent	common.file_create.intent.v1	e74bcec8bdf540e9cf69fbcd482cc2b30448639bc2ca1dbb26f60eaa51ac71f8	content,name	-
+common.file_patch	Excel,Outlook,PowerPoint,Word	agent	common.file_patch.intent.v1	cc91c16b46ce46364e7b8874bd6bc2741e5aba14ece74b122492e26859ea7a34	patches,patches[].find,patches[].replace,target	-
 common.html_assets_import	Excel,Outlook,PowerPoint,Word	agent	html.assets.import.v2	2ce47af84f2c7bb2a919bfdbbcbb88e5df88707726d898dd616b2679a19289e2	id,version	id=semantic-user-package-name
 common.html_assets_list	Excel,Outlook,PowerPoint,Word	agent	html.assets.list.v2	111262a74ed01ea92653c2904399ee8d20c5a42489be0c58dc9cfd0e9f24f200	limit,query	-
 common.html_assets_publish	Excel,Outlook,PowerPoint,Word	agent	html.assets.publish.v2	3cc79da54635a071ed66a39e1cf7f71be9e9c1201798acc45356ad4b5d07bf61	description,files,id,license,provenance,title,usage,version	id=semantic-user-package-name
@@ -18,7 +22,7 @@ common.html_data_refresh	Excel,Outlook,PowerPoint,Word	agent	html.data.refresh.v
 common.html_data_write	Excel,Outlook,PowerPoint,Word	agent	html.data.write.v2	9988fb78351c113b34423f65adcb6a7310979200a9ea558f5fd9ef4b3058abfc	json,name	-
 common.html_workspace_apply_patch	Excel,Outlook,PowerPoint,Word	agent	html.workspace.apply.patch.v2	61fbb8be7006efd11728272be60d0c70a43f6cc030ed1d960c31d577a6c82320	patch,patch[].find,patch[].op,patch[].text,path	-
 common.html_workspace_delete	Excel,Outlook,PowerPoint,Word	agent	html.workspace.delete.v2	940955ecdfe292487031f5d8dcf248567399df6855aee77d3b794ed90d154235	target	-
-common.html_workspace_write_file	Excel,Outlook,PowerPoint,Word	agent	html.workspace.write.file.v2	1a0a24bd13a3bf800004e0210f72563680860508e60a43c3b2fe2c61bc55a83a	content,path	-
+common.html_workspace_write_file	Excel,Outlook,PowerPoint,Word	agent	html.workspace.write.file.v2	b1c91988caf26e27ce9600922c962bb9762e6d60f593ed93d60f53f4d8f3bb13	content,path	-
 common.markdown_restore	Excel,Outlook,PowerPoint,Word	agent	common.markdown_restore.intent.v1	cea756e327c6fd2ec3673e6325095556e69d82f748916208337d48e34a6746ef	target,version	-
 common.markdown_save	Excel,Outlook,PowerPoint,Word	agent	common.markdown_save.intent.v1	3ce198ddecf14b47c81eb0243880d0d693c1c8098ce0fded102cc92092602324	description,markdown,target,title	-
 common.office_run_macro	Excel,PowerPoint,Word	agent	vba.public.office.run.macro.intent.v2	785bb35acd18fb394c35ffed344318d4eafe0745595175d8313b8551c0b7dee4	arguments,macroName	-
@@ -30,18 +34,20 @@ common.questions_ask	Excel,Outlook,PowerPoint,Word	agent,plan	conversation.quest
 common.resources_derive	Excel,Outlook,PowerPoint,Word	agent	common.resources_derive.v1	7400ee3a64055f46c169df39fde289851cd98ee6416437a2dc5e1a7d4e657f36	mapping,mode,name	-
 common.resources_find	Excel,Outlook,PowerPoint,Word	agent,chat,plan	resources.find.v1	108b63753993f0da7b3bae39cd73be8da62c9d8610ecc3ed39371f71033925f4	query,scope	-
 common.resources_mapping_publish	Excel,Outlook,PowerPoint,Word	agent	common.resources_mapping_publish.v1	5d4b8ce29a2ec37a288089bb48757a098396fe26d1fc9a9a6ab4298a5f8e944e	mapping,mapping[].field,mapping[].sourceField,name,schema,skipRows,source	-
-common.resources_read	Excel,Outlook,PowerPoint,Word	agent,chat,plan	resources.read.intent.v2	82ec01f496dc4e1ca1c571972f5fbdaace7e9e74d5b76dcfca35d59362fce37f	fields,limit,lineCount,offset,path,representation,section,startLine,target	offset=semantic-table-records-row-selector-not-provider-cursor
+common.resources_outline	Excel,Outlook,PowerPoint,Word	agent,chat,plan	resources.outline.v1	67a0cb59a6eca3940f060bcce61b28cb6c0955e0efac6ce15183473ad8300df6	fromPart,limit,target	-
+common.resources_read	Excel,Outlook,PowerPoint,Word	agent,chat,plan	resources.read.intent.v2	9f5257d7ad259f8f4c31c6b89648cced8ef32d48ecbc04326c64d3d4217db115	fields,limit,lineCount,offset,partNumber,path,representation,section,startLine,target	offset=semantic-table-records-row-selector-not-provider-cursor
 common.resources_schema_draft	Excel,Outlook,PowerPoint,Word	agent	common.resources_schema_draft.v1	689b3ab543d6b65ed5eea2e457b3b5b69b0985b41565e195144c36b5b61d12e8	fields,fields[].name,fields[].nullable,fields[].type,fields[].unit,name	-
 common.resources_schema_publish	Excel,Outlook,PowerPoint,Word	agent	common.resources_schema_publish.v1	ab3f988894797b108d8e164c8566829f3af614da7e7a95b54596754c86b9a27e	draft,mapping,mapping[].field,mapping[].sourceField,name,skipRows,source	-
+common.resources_search	Excel,Outlook,PowerPoint,Word	agent,chat,plan	resources.search.v2	21e762ee687226708a41590d576d48c87104532dbfa021cc61b10b874c0859f3	limit,matchCase,query,target	-
 common.skills_delete	Excel,Outlook,PowerPoint,Word	agent	skills.core-delete.intent.v1	f1ec3efa4c4879a382e8fea6a715c6f57d2a20ca85dafcadf29114b87cbf3c7b	id	id=semantic-skill-identity
-common.skills_load	Excel,Outlook,PowerPoint,Word	agent,plan	conversation.skill-load.v1	b3b25096c50def8916abf99674154fc743ef86edef5e45d362ae43ba179350b6	action,id	id=semantic-skill-identity
+common.skills_load	Excel,Outlook,PowerPoint,Word	agent,plan	conversation.skill-load.v1	770dfa517eb0ffd31e8fc5829d3c46f79ba0b47c6e2d599f35c2d676a182a78a	action,id	id=semantic-skill-identity
 common.skills_reference_delete	Excel,Outlook,PowerPoint,Word	agent	skills.reference-delete.intent.v1	ef88d694e8f8cc3ffea22aaf3e0ad15ff69e402a76d7e99fb30f6b2429027176	id,referencePath	id=semantic-skill-identity
 common.skills_reference_upsert	Excel,Outlook,PowerPoint,Word	agent	skills.reference-upsert.intent.v1	a7c7efa482e98ba212cd1882a07d78f161dd1ff48f4cc65b45ae3d569a0a3f2a	id,mode,referenceMarkdown,referencePath	id=semantic-skill-identity
 common.skills_upsert	Excel,Outlook,PowerPoint,Word	agent	skills.core-upsert.intent.v1	2d7cd15ce43731214c4b2ad9172040f8d65ef502c241b0b7c6d8e0a23cd28bc7	bodyMarkdown,description,enabled,host,id,mode,name,package,package.formatVersion,package.optionalTools,package.optionalTools[].contractVersion,package.optionalTools[].fallback,package.optionalTools[].id,package.packageId,package.requiredTools,package.requiredTools[].contractVersion,package.requiredTools[].fallback,package.requiredTools[].id,version	id=semantic-skill-identity|package.packageId=semantic-user-package-name|package.requiredTools[].id=semantic-public-capability-identity|package.optionalTools[].id=semantic-public-capability-identity
-common.task_list_set	Excel,Outlook,PowerPoint,Word	agent,plan	conversation.task-list.set.intent.v2	50cbc92121f80c7db3476d74085b6ea3c36fd246396ef9d1bc54ff2ddbd0ebdf	action,goal,outcome,reason,steps,steps[].note,steps[].status,steps[].text,updates,updates[].index,updates[].note,updates[].status	-
+common.task_list_set	Excel,Outlook,PowerPoint,Word	agent,plan	conversation.task-list.set.intent.v2	c2738c0429e9748d8d4475d103cc8a96d7d19c61f0101e014306b156f086dedc	action,goal,outcome,reason,steps,steps[].note,steps[].status,steps[].text,updates,updates[].index,updates[].note,updates[].status	-
 common.tools_delete	Excel,Outlook,PowerPoint,Word	agent	tools.delete.v1	cbd5d6cea98d691b451fc498391377bc2eb1b6c0cd266cdf71690c37c5709008	id	id=semantic-tool-identity
 common.tools_upsert	Excel,Outlook,PowerPoint,Word	agent	tools.upsert.intent.v1	4deb6d9cbd8bc76ce9ab121b471dcded01410d72873c6862d7ec36f17d72c883	components,components[].code,components[].name,components[].type,display,display.action,display.operation,display.runningAction,display.targetArguments,doNotUseWhen,id,limitations,readme,useWhen	id=semantic-tool-identity
-common.vba_apply_patch	Excel,PowerPoint,Word	agent	vba.public.vba.apply.patch.intent.v2	5ec9b1da6aef2cdf7231214edf90ef6df607a109287a65bc5b8695daaaba69a8	moduleName,patch,patch[].contextAfter,patch[].contextBefore,patch[].find,patch[].startColumn,patch[].startLine,patch[].text	-
+common.vba_apply_patch	Excel,PowerPoint,Word	agent	vba.public.vba.apply.patch.intent.v2	b02f88d5998854ab59d5277d0e18b197955a3f96bfd4ad631bc63103db0235b1	moduleName,patch,patch[].contextAfter,patch[].contextBefore,patch[].find,patch[].startColumn,patch[].startLine,patch[].text	-
 common.vba_delete_module	Excel,PowerPoint,Word	agent	vba.public.vba.delete.module.intent.v2	749c4354b6a7405b31fa38d657c38b25ee9406647148f04785c5610851b99e49	moduleName	-
 common.vba_rename_module	Excel,PowerPoint,Word	agent	vba.public.vba.rename.module.intent.v1	3550e5187387d7bf5abb062e329101ec2c4fcc24008be7a49117361d158d4a01	moduleName,newModuleName	-
 common.vba_restore_backup	Excel,PowerPoint,Word	agent	vba.public.vba.restore.backup.intent.v2	ea47cf72bffda8b5d20c4140997354ab44aac17daf738d6666b8884515f24878	moduleName,target	-
@@ -49,7 +55,7 @@ common.vba_write_module	Excel,PowerPoint,Word	agent	vba.public.vba.write.module.
 excel.add_sheet	Excel	agent	excel.sheet.add.v1	99d883fd3b627f9ce92f8bd3b765f210719c7deed42c1ceade44176371e7e7d1	name	-
 excel.add_table	Excel	agent	excel.table.add.v1	1397379d5db933b10b9acb2c3a86dd8ebcf401ca1ed408986ae6b3e6913b3ea1	hasHeaders,name,sheet,sourceRange,style	-
 excel.clear_range	Excel	agent	excel.range.clear.v1	8c550ea3d0177ba16b6118f1b7446bc3b940c3ce2dd25934697c0db636ac6a56	address,clearWhat,sheet	-
-excel.create_chat_chart	Excel	agent	excel.chart.chat.v1	37bbccbd7aceb12d4c0b3453ad389b019b0e4fe1299c9f52920b064e9ae12342	address,chartType,sheet,title	-
+excel.create_chat_chart	Excel	agent	excel.chart.chat.v1	57c8e9eb8da1336e1e899f9fc3a44326fef58c149852d2f74fda9e5336ec3ff9	address,chartType,sheet,title	-
 excel.delete_chart	Excel	agent	excel.chart.delete.v1	711829110840a72c7d0cc5de140d8f8d01c0aad9ae83a8fdc7d8f51000ce461c	chartName,sheet	-
 excel.delete_rows_columns	Excel	agent	excel.rows_columns.delete.v1	e61c3a379da2afa9f234434e49bb7bc11531a940cad01fd371f2d4056a8351ba	axis,count,scope,sheet,start,table	-
 excel.filter_range	Excel	agent	excel.range.filter.v1	0266476847ebdc848f01e527895dc451f414d25b00042cd64309773edb63124f	address,criteria,field,sheet	-
@@ -59,10 +65,11 @@ excel.inspect	Excel	agent	excel.read.inspect.v1	f9ce30c364e86eec46325c3569770eb9
 excel.rename_sheet	Excel	agent	excel.sheet.rename.v1	dec016294e52d2b9d7879ef2526fe0dc93f4e8528658da5b25d0df9f2b044066	newName,sheet	-
 excel.replace_cells	Excel	agent	excel.replace.cells.v1	16da257948c3a4cb489961e6e85d7eb047fd9e598322b934f37ee1783105fbbf	address,find,lookIn,matchCase,maxReplacements,mode,replace,replaceAll,scope,sheet,wholeWord	-
 excel.sort_range	Excel	agent	excel.range.sort.v1	1fc8d16e2e09d2ed6f374aaabbea3f59e10c7b29193085f1a988717cea2b35eb	address,descending,hasHeaders,keyColumn,sheet	-
+excel.summarize_columns	Excel	agent	excel.read.summarize-columns.v1	ee7e6e62f04601d7306c91238446340fc5d6f7fbd1fb6ecc3ce8abaeba818812	address,columns,sheet	-
 excel.upsert_chart	Excel	agent	excel.chart.upsert.v1	9f5a0fc8ff5860242435e124e7929dc1dedb4617d959cbd55efcaef588bcdc3c	categoryLabelsRange,chartName,chartType,height,left,mode,sheet,sourceRange,title,top,width,xAxisTitle,yAxisTitle	-
 excel.write_range	Excel	agent	excel.write.range.v1	e224224fa9b19dab02ed18ad69d68565c9d4b3696b03f27ced593931682a5230	address,formula,kind,sheet,value,values	-
 outlook.create_draft	Outlook	agent	outlook.create.draft.v1	8e5df76b96c516a4ae9de013868c352138ab761091ebc39f70a31149b50da2e2	bcc,body,cc,kind,subject,to	-
-outlook.index_archive	Outlook	agent	outlook.index.archive.v1	574e58c879a22ce866113654c4421bfc7934d87d7987549abdea75f7530c7344	fromDate,includePst,maxBatches,refresh,throughDate	-
+outlook.index_archive	Outlook	agent	outlook.index.archive.v1	0d625225324795eeb0a83dc2c36beff5b6bad2df98bfb779ee07b1376533bdfa	fromDate,includePst,maxBatches,refresh,throughDate	-
 outlook.search_mail	Outlook	agent	outlook.search.mail.resource.v1	63a6e88cded74da39b9f6d0a959d9a62f3cb0bca60df1005ee067e05d7bfa4a2	contextChars,fields,matchCase,maxItems,maxResults,mode,query,wholeWord	-
 outlook.update_mail	Outlook	agent	outlook.update.mail.v1	aa3f77b292a1b8131d0abc2ea32ae24a284b219550bbf32c48fa0330e62059c4	categories,kind	-
 powerpoint.add_object	PowerPoint	agent	powerpoint.add.object.v1	21295b9ccd63cb655dfc1b2492d9d22a67277f956e6cfd6030725efb3340e820	columns,fontSize,height,kind,left,path,rows,slideIndex,text,top,values,width	-

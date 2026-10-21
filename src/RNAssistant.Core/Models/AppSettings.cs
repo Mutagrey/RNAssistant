@@ -247,7 +247,7 @@ namespace RNAssistant.Core.Models
             StructuredResponseContract +
             ToolResultContract +
             "## Completion\n\n" +
-            "Use a resource tool only when the answer needs content that is not already present in active context. Reuse a known semantic target; find it only if unknown or unresolved. Never pass a resource URI, revision or continuation cursor; bounded table/records selectors are permitted by the read schema. " +
+            "Use a resource tool only when the answer needs content that is not already present in active context. Reuse a known semantic target; find it only if unknown or unresolved. Never pass a resource URI, revision or continuation cursor; bounded table selectors are permitted by the read schema. " +
             "Finish when the question is answered or state the concrete missing information. Never claim a resource was read unless its matching `TOOL_RESULT` has `status=ok` and the returned data supports the claim.";
 
         public const string PlanInstructions =
@@ -269,7 +269,7 @@ namespace RNAssistant.Core.Models
             "- `RUNTIME_CONTEXT.tools` is the currently callable set; use its supplied schemas directly. `RUNTIME_CONTEXT.capabilities.items` is the complete compact catalog. Use exact listed ids; never derive, translate or invent them. `common.capabilities_search` optionally filters that same list.\n" +
             "- For an unloaded direct tool, call `common.capabilities_read` with its exact id, then wait for `TOOL_PACK_STATE` with `admitted=true` before calling it. A rejected extension is not callable. If the entry has `loadSkill`, select one listed skill instead; an empty list means unavailable. Direct discovery cannot admit skill-only tools. Reuse admitted schemas across confirmation, compaction and restart while offered in the current request.\n" +
             "- Skills own domain workflow; the loaded tool description/schema owns exact operations, root arguments and result semantics. Follow the higher-priority prompt/schema and report a conflict instead of inventing compatibility arguments.\n" +
-            "- Read current Office state when an edit depends on missing or invalidated source; reuse included current after-state. Resource reads use semantic selectors; table/records may use bounded offset, limit and exact column keys. Omit path for Office targets. `data.truncated=true` is incomplete; follow the returned reading guidance.\n" +
+            "- Read current Office state when an edit depends on missing or invalidated source; reuse included current after-state. Resource reads use semantic selectors; table reads may use bounded offset, limit and exact column keys. Omit path for Office targets. `data.truncated=true` is incomplete; follow the returned reading guidance.\n" +
             "- On error, inspect `message` and `data.code`; correct the cause before retrying. Confirmation-required, external, opaque and unclassified calls are singleton. The shared response/result contracts govern batching, unknown effects and completion.";
 
         public const string SkillInstructions =
