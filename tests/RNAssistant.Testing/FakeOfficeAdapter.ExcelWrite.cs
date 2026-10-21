@@ -148,13 +148,17 @@ namespace RNAssistant.Harness
             out FakeRange range)
         {
             kind = (requestedKind ?? string.Empty).Trim().ToLowerInvariant();
-            sheetName = string.IsNullOrWhiteSpace(requestedSheet) ? "Sheet1" : requestedSheet;
+            sheetName = requestedSheet;
             if (kind != "value" && kind != "formula" && kind != "table")
                 throw Failure("invalid kind", "excel_write_kind_invalid");
+            if (string.IsNullOrWhiteSpace(sheetName))
+                throw Failure("sheet is required; name the destination worksheet.", "excel_write_sheet_required");
+            if (string.IsNullOrWhiteSpace(requestedAddress))
+                throw Failure("address is required; specify the destination range or top-left cell.", "excel_write_address_required");
             if (!_sheets.TryGetValue(sheetName, out sheet))
                 throw Failure("worksheet not found", "excel_write_sheet_not_found");
 
-            var requested = ParseRange(string.IsNullOrWhiteSpace(requestedAddress) ? "A1" : requestedAddress);
+            var requested = ParseRange(requestedAddress);
             var rows = kind == "table" ? expectedRows :
                 requested.End.Row - requested.Start.Row + 1;
             var columns = kind == "table" ? expectedColumns :

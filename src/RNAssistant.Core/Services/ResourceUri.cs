@@ -90,8 +90,11 @@ namespace RNAssistant.Core.Services
 
         private static string NormalizeSegment(string value)
         {
-            value = (value ?? string.Empty).Trim();
-            if (value.Length == 0 || value == "." || value == ".." || value.IndexOf('/') >= 0 || value.IndexOf('\\') >= 0)
+            // Whitespace can be part of an exact resource name, such as an Excel
+            // worksheet. Validate it without redirecting to a trimmed identity.
+            value = value ?? string.Empty;
+            var trimmed = value.Trim();
+            if (trimmed.Length == 0 || trimmed == "." || trimmed == ".." || value.IndexOf('/') >= 0 || value.IndexOf('\\') >= 0)
             {
                 throw new ArgumentException("Resource path segment is invalid.", "segments");
             }

@@ -214,7 +214,7 @@ namespace RNAssistant.Office.Domains.Excel
                 snapshot.TableHeader != null)
                 throw new ExcelRangeMutationBackendException(
                     "Cannot clear values in the header of table '" + snapshot.TableHeader.TableName +
-                    "' (" + snapshot.Sheet + "!" + snapshot.TableHeader.Address +
+                    "' (" + ExcelWorksheetNameRules.FormatRangeReference(snapshot.Sheet, snapshot.TableHeader.Address) +
                     "). Excel keeps column names; clearing a header does not remove the column. " +
                     "Clear only data rows, rename the header, or use excel.delete_rows_columns with scope=table " +
                     "if the task requires removing the table column. Nothing was dispatched.",
@@ -293,7 +293,7 @@ namespace RNAssistant.Office.Domains.Excel
             string operation,
             DomainEffect effect)
         {
-            var target = snapshot.Sheet + "!" + snapshot.Address;
+            var target = ExcelWorksheetNameRules.FormatRangeReference(snapshot.Sheet, snapshot.Address);
             if (effect == DomainEffect.VerifiedNoChange)
                 return "Excel range already matched " + operation +
                     " state: " + target + ".";

@@ -603,6 +603,8 @@ namespace RNAssistant.Harness
                 Test("excel tables: bounded unambiguous resolution", ExcelNamedTableAdmission),
                 Test("excel names: exact definition identity and retained views", ExcelDefinedNameResources),
                 Test("excel names: bound range proof and admission", ExcelDefinedNameAdmission),
+                Test("excel write: explicit target required before dispatch", ExcelWriteRequiresExplicitTarget),
+                Test("excel write: worksheet names and quoted references", ExcelWritePreservesWorksheetNames),
                 Test("excel write: native ownership and verified policy", ExcelWriteUsesExactNativeOwnership),
                 Test("excel write: kinds normalization and exact verification", ExcelWriteNormalizesAndVerifiesKinds),
                 Test("excel write: dispatch fault classification", ExcelWriteClassifiesDispatchFaults),

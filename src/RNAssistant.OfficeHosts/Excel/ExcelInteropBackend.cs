@@ -541,12 +541,16 @@ namespace RNAssistant.OfficeHosts
             int maxCells,
             out Excel.Worksheet sheet)
         {
+            if (string.IsNullOrWhiteSpace(sheetName))
+                throw WriteFailure("sheet is required; name the destination worksheet.", "excel_write_sheet_required", false);
+            if (string.IsNullOrWhiteSpace(address))
+                throw WriteFailure("address is required; specify the destination range or top-left cell.", "excel_write_address_required", false);
             var workbook = RequireWriteWorkbook();
             if (maxCells < 1 || maxCells > ExcelWriteService.MaxWriteCells)
                 throw WriteFailure(
                     "Excel write ceiling is invalid.", "excel_write_bound_invalid", false);
             sheet = ResolveSheet(workbook, sheetName);
-            var requested = sheet.Range[string.IsNullOrWhiteSpace(address) ? "A1" : address];
+            var requested = sheet.Range[address];
             if (requested == null || requested.Areas.Count != 1)
                 throw WriteFailure(
                     "Excel write target must be one contiguous range.",

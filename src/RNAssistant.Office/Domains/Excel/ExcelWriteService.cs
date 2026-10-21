@@ -100,12 +100,16 @@ namespace RNAssistant.Office.Domains.Excel
             var kind = (request.Kind ?? string.Empty).Trim().ToLowerInvariant();
             if (kind != "value" && kind != "formula" && kind != "table")
                 return Invalid("kind must be value, formula, or table.", "excel_write_kind_invalid");
+            if (string.IsNullOrWhiteSpace(request.Sheet))
+                return Invalid("sheet is required; name the destination worksheet.", "excel_write_sheet_required");
+            if (string.IsNullOrWhiteSpace(request.Address))
+                return Invalid("address is required; specify the destination range or top-left cell.", "excel_write_address_required");
 
             var normalized = new ExcelWriteRequest
             {
                 Kind = kind,
-                Sheet = request.Sheet ?? string.Empty,
-                Address = string.IsNullOrWhiteSpace(request.Address) ? "A1" : request.Address.Trim(),
+                Sheet = request.Sheet,
+                Address = request.Address.Trim(),
                 HasValue = request.HasValue,
                 Value = request.Value,
                 Formula = request.Formula
@@ -281,10 +285,11 @@ namespace RNAssistant.Office.Domains.Excel
         {
             var data = Coordinates(snapshot, kind);
             data["verification"] = effect == DomainEffect.VerifiedChange ? "changed" : "no_change";
+            var target = ExcelWorksheetNameRules.FormatRangeReference(snapshot.Sheet, snapshot.Address);
             return DomainOutcome.Verified(
                 effect == DomainEffect.VerifiedChange
-                    ? "Excel range write verified: " + snapshot.Sheet + "!" + snapshot.Address + "."
-                    : "Excel range already matched the intended state: " + snapshot.Sheet + "!" + snapshot.Address + ".",
+                    ? "Excel range write verified: " + target + "."
+                    : "Excel range already matched the intended state: " + target + ".",
                 data.ToString(Formatting.None),
                 effect);
         }

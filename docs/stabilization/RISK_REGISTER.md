@@ -44,7 +44,9 @@ uses one cloud endpoint/profile with unchanged task bounds and acceptance.
   with four repairs. Reduced schema size does not yet establish overall savings
   or reliable batching. [Capability source-read semantics](PROGRESS.md#capability-source-reads-do-not-claim-selection--2026-10-21)
   now omit the ambiguous model-facing `loaded` field with local admission/replay
-  checks; live model-choice improvement remains unmeasured.
+  checks; live model-choice improvement remains unmeasured. `write_range` now
+  requires an explicit destination, with literal worksheet names and quoted
+  references. Other mutation destinations and live model choice remain open.
 - Repair guidance conflict is fixed in `ModelProtocolClient.CreateFormatRepairMessage`:
   generic repair no longer overrides the parser's skill-only route with direct
   schema discovery. Focused checks cover both routes and no execution before
@@ -90,14 +92,28 @@ do not qualify those models or real Office/COM/WebView2 delivery.
 
 ## R61 inventory drift — 2026-10-21
 
-Open / Tool Library contract-inventory owner. After reviewing the changed
-`excel.format_range` descriptor, the full inventory check still differs on ten
-unrelated rows: `common.file_copy/create/patch`, `common.html_workspace_write_file`,
-`common.resources_outline/read/search`, `common.skills_load`, `common.task_list_set`
-and `common.vba_apply_patch`. Reconcile each current contract with its reviewed
-baseline separately; do not refresh all hashes as part of formatting compression.
-Exact expected/current rows are preserved in `compact-format-inventory-drift.json`
-in the local prompt-eval directory. Focused schema checks do not close this gate.
+Open / Tool Library contract-inventory owner. The current comparison after reviewing
+`excel.write_range` still differs on five unrelated Common rows:
+`common.html_workspace_write_file`, `common.resources_read`, `common.skills_load`,
+`common.task_list_set` and `common.vba_apply_patch`. Reconcile each current contract
+with its reviewed baseline separately; do not refresh all hashes with an Excel
+change. Current expected/actual rows are in `/tmp/rna-explicit-write-target-inventory.log`;
+the earlier ten-row snapshot remains in `compact-format-inventory-drift.json` in
+the local prompt-eval directory. Focused checks do not close this gate.
+
+## Excel discovery and name-validation follow-ups — 2026-10-21
+
+- Open / Excel resource owner: range enumeration calls `CaptureStructure("sheets")`
+  and keeps only entries with `UsedRange`, while real `ListSheets` and the fake
+  inspector omit that field. Static inspection therefore identifies an empty,
+  potentially complete range catalog despite populated worksheets. Explicit range
+  lookup/read still works. Fix the bounded metadata source before claiming complete
+  range discovery; the quoting regression uses an explicit typed snapshot to check
+  name preservation and does not close this discovery gap.
+- Open / Excel sheet-domain owner: `ExcelWorksheetNameRules.IsValid` does not reject
+  the reserved `History` name listed in [Microsoft's rules](https://support.microsoft.com/en-gb/excel/rename-a-worksheet).
+  Align add/rename validation separately; the current write-target work does not
+  change sheet creation or qualify host-specific naming behavior.
 
 ## Unified stabilization verification gap — 2026-10-20
 

@@ -59,6 +59,13 @@ namespace RNAssistant.Office.Domains.Excel
 
     public static class ExcelWorksheetNameRules
     {
+        public static string FormatRangeReference(string sheet, string address)
+        {
+            // A worksheet lookup uses its literal name. Only a composed Excel
+            // reference quotes the name and escapes embedded apostrophes.
+            return "'" + sheet.Replace("'", "''") + "'!" + address;
+        }
+
         public static bool IsValid(string name)
         {
             return !string.IsNullOrWhiteSpace(name) && name.Length <= 31 &&

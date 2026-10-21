@@ -28,7 +28,7 @@ namespace RNAssistant.Office.Tools
                 {
                     Kind = ToolArgumentReader.String(arguments, "kind", string.Empty),
                     Sheet = ToolArgumentReader.String(arguments, "sheet", string.Empty),
-                    Address = ToolArgumentReader.String(arguments, "address", "A1"),
+                    Address = ToolArgumentReader.String(arguments, "address", string.Empty),
                     HasValue = hasValue,
                     Value = value,
                     Formula = arguments.ContainsKey("formula")

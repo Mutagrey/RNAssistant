@@ -230,6 +230,13 @@ replay, protocol-context and causal-trace fixtures select the actual authoring/V
 skill before mutation. Startup recovery records a typed execution boundary;
 UI activity labels cannot manufacture one.
 
+`excel write: explicit target required before dispatch` checks missing/null/blank
+sheet/address across runtime, prompt and strict schemas and the direct adapter.
+`excel write: worksheet names and quoted references` checks literal worksheet names,
+Excel-quoted references, embedded apostrophes, spaces and resource round-trips.
+`resources: canonical URI roundtrip` protects significant name whitespace.
+These fake-host checks do not qualify Excel COM delivery or formula calculation.
+
 `storage: damaged sqlite metadata preserves startup and history` checks ten
 sidecar corruption variants through catalog, load, pagination and startup recovery,
 plus a healthy chat beside malformed JSONL. Every rebuild preserves event bytes.

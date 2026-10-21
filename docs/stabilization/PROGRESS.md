@@ -1,5 +1,34 @@
 # Stabilization progress
 
+## Explicit Excel write destinations and worksheet references — 2026-10-21
+
+`excel.write_range` requires nonblank `sheet` and `address` for value, formula and
+table writes. Defaults are removed from the schema, adapter, domain and backend;
+missing/null/blank targets fail before dispatch. The worksheet argument remains a
+literal name. A shared formatter quotes composed references and doubles embedded
+apostrophes according to Microsoft's Excel grammar. Resource targets decode this
+syntax once; enumeration no longer unquotes literal host names.
+
+A round-trip check also reproduced a resource-identity defect: URI creation trimmed
+boundary spaces from worksheet names and could read a different sheet. URI segments
+now preserve those spaces, while retaining existing empty/dot/slash rejection.
+The regression distinguishes two sheets whose names differ only in boundary spaces.
+
+Twelve focused Harness checks pass: six write checks, URI round-trip/rejection,
+exact resource evidence, HTML range binding, named-table reads and range-mutation
+semantics. Names cover spaces, apostrophes, repeated apostrophes, `!`, Unicode and
+literal double quotes. The scripted production-skill report passes all six workbook
+checks in nine requests. No new live-model run, token-saving claim or Office/VSTO
+validation; the COM backend change still needs Windows/Excel qualification.
+The Harness build retains only the two existing PDF warnings. The write inventory
+row is reviewed; the current full inventory comparison still has five unrelated
+Common differences, listed in `RISK_REGISTER`.
+
+Next priority: the separately recorded empty used-range discovery path, then
+explicit `add_table` sources and chart-creation destinations. The resource
+`table`/`records` vocabulary review remains queued. See the
+[current Tool Library review](../tool-library.md#tool-contract-review--2026-10-21).
+
 ## Capability source reads do not claim selection — 2026-10-21
 
 Formatting-schema compression is committed as `c9c3b33d`. The next bounded

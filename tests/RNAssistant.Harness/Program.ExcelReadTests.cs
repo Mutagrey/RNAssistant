@@ -212,7 +212,7 @@ namespace RNAssistant.Harness
                 var quoted = gateway.Find(session, "'новый лист (2)'!A1:A2", "document");
                 AssertTrue(quoted.Complete && !quoted.Partial && quoted.Items.Count == 1,
                     "quoted sheet names with spaces are exact point lookups");
-                AssertEqual("Excel range: новый лист (2)!A1:A2", quoted.Items.Single().Target,
+                AssertEqual("Excel range: 'новый лист (2)'!A1:A2", quoted.Items.Single().Target,
                     "range target preserves the actual sheet name");
                 adapter.SetExcelCellForTest("Data", "A1", new string('a', 20000));
                 adapter.SetExcelCellForTest("Data", "B1", new string('b', 20000));

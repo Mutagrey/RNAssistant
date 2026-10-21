@@ -6,6 +6,7 @@ using System.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Agent;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
@@ -18,6 +19,141 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void ExcelWriteRequiresExplicitTarget()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                var definition = OfficeToolCatalog.ForHost("Excel").Single(tool => tool.Id == ExcelWriteToolIds.WriteRange);
+                JObject schema;
+                string error;
+                AssertTrue(ToolSchemaSupport.TryParse(definition, out schema, out error), "write schema parses: " + error);
+                var schemas = new[] { schema, ToolSchemaSupport.ForPrompt(schema), ToolSchemaSupport.ForStructuredOutput(schema) };
+                var parser = new ConversationResponseParser();
+                var context = new ModelProtocolCallContext(new string[0]);
+                var runtime = executor.CreateNativeRuntime(NewSession(adapter), new[] { definition },
+                    new AppSettings(), "agent", false, manualRun: true);
+                var backend = new CountingExcelWriteBackend();
+                var direct = new ExcelWriteToolAdapter(backend);
+                adapter.AddExcelSheetForTest("Sheet1");
+                adapter.SetActiveExcelSheet("Sheet1");
+                adapter.SetExcelCell("Sheet1", "A1", "preserve active sheet");
+                adapter.SetExcelCell("Data", "J1", "preserve other cell");
+
+                foreach (var payload in new[] {
+                    JObject.Parse("{kind:'value',value:false}"),
+                    JObject.Parse("{kind:'formula',formula:'=1'}"),
+                    JObject.Parse("{kind:'table',values:[[42]]}") })
+                {
+                    var valid = (JObject)payload.DeepClone();
+                    valid["sheet"] = "Data";
+                    valid["address"] = "A1";
+                    foreach (var field in new[] { "sheet", "address" })
+                    foreach (var absent in new JToken[] { null, JValue.CreateNull(), new JValue(""), new JValue(" \t\r\n") })
+                    {
+                        var arguments = (JObject)valid.DeepClone();
+                        if (absent == null) arguments.Remove(field);
+                        else arguments[field] = absent.DeepClone();
+                        foreach (var contract in schemas)
+                        foreach (var defaults in new[] { false, true })
+                            AssertTrue(!ToolSchemaSupport.ValidateArguments((JObject)arguments.DeepClone(), contract, defaults, out error),
+                                "every schema rejects absent/blank " + field + " for " + payload["kind"]);
+                        var wire = ModelProtocolWire.Write("", new[] { new ConversationToolCall { Name = definition.Id, Arguments = arguments } });
+                        AssertTrue(!parser.Parse(wire, new[] { definition }, new[] { definition }, context).Success,
+                            "parser cannot normalize a missing target into a default");
+
+                        var reads = adapter.ExcelBackendCalls.Count;
+                        var call = new ToolCall("missing-target", definition.Id, arguments.ToString(Formatting.None));
+                        var rejected = ExecuteNative(runtime, call, runtime.Describe(call));
+                        AssertEqual(ToolExecutionOutcome.Error, rejected.Outcome, "native runtime rejects an incomplete target");
+                        AssertEqual(ToolDispatchEvidence.NotDispatched, rejected.Evidence.Dispatch, "rejection never dispatches");
+                        AssertEqual(ToolEffectEvidence.None, rejected.Evidence.Effect, "rejection claims no write effect");
+                        AssertEqual(reads, adapter.ExcelBackendCalls.Count, "invalid target never reaches Excel");
+
+                        var dispatched = false;
+                        var directResult = direct.Execute(arguments.ToObject<Dictionary<string, object>>(),
+                            () => dispatched = true, CancellationToken.None);
+                        AssertEqual(DomainOutcomeStatus.Error, directResult.Status, "domain rejects the target even without schema validation");
+                        AssertEqual("excel_write_" + field + "_required", directResult.ErrorCode, "missing field has an actionable error");
+                        AssertTrue(!dispatched && backend.ReadCount + backend.ApplyCount == 0,
+                            "adapter/domain never invent a target or touch the backend");
+                    }
+
+                    foreach (var contract in schemas)
+                        AssertTrue(ToolSchemaSupport.ValidateArguments((JObject)valid.DeepClone(), contract, true, out error),
+                            "an explicitly selected A1 is valid in every schema: " + error);
+                    var accepted = new ToolCall("explicit-target", definition.Id, valid.ToString(Formatting.None));
+                    var written = ExecuteNative(runtime, accepted, runtime.Describe(accepted));
+                    AssertEqual(ToolExecutionOutcome.Ok, written.Outcome, "explicit target remains writable");
+                    AssertEqual(ToolEffectEvidence.VerifiedChange, written.Evidence.Effect, "each kind is verified at the selected target");
+                    var result = JObject.Parse(written.Result.DataJson);
+                    AssertEqual("Data", (string)result["sheet"], "result identifies the selected sheet");
+                    AssertEqual("A1", (string)result["address"], "result identifies the selected cell");
+                    AssertEqual("preserve active sheet", adapter.CellValue("Sheet1", "A1"), "active sheet is untouched");
+                    AssertEqual("preserve other cell", adapter.CellValue("Data", "J1"), "other cells are untouched");
+                }
+            });
+        }
+
+        private static void ExcelWritePreservesWorksheetNames()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                var session = NewSession(adapter);
+                var tools = OfficeToolCatalog.ForHost("Excel").Concat(executor.GetControllerTools()).ToList();
+                var runtime = executor.CreateNativeRuntime(session, tools, new AppSettings(), "agent", false, manualRun: true);
+                var original = adapter.CellValue("Data", "A1");
+                foreach (var example in new[] {
+                    new[] { "Sales Report", "'Sales Report'!A1" },
+                    new[] { "O'Brien", "'O''Brien'!A1" },
+                    new[] { "Q''4", "'Q''''4'!A1" },
+                    new[] { " Продажи! 2026 ", "' Продажи! 2026 '!A1" },
+                    new[] { "\"Data\"", "'\"Data\"'!A1" } })
+                {
+                    var sheet = example[0];
+                    var reference = example[1];
+                    adapter.AddExcelSheetForTest(sheet);
+                    if (sheet != sheet.Trim())
+                    {
+                        adapter.AddExcelSheetForTest(sheet.Trim());
+                        adapter.SetExcelCell(sheet.Trim(), "A1", "distinct trimmed name");
+                    }
+                    adapter.SetActiveExcelSheet("Data");
+                    var write = ExecuteHtmlNative(runtime, ExcelWriteToolIds.WriteRange,
+                        new JObject { ["kind"] = "value", ["sheet"] = sheet, ["address"] = "A1", ["value"] = sheet });
+                    AssertEqual(ToolEffectEvidence.VerifiedChange, write.Evidence.Effect, "literal worksheet name is writable");
+                    AssertEqual(sheet, (string)JObject.Parse(write.Result.DataJson)["sheet"], "sheet field keeps its literal name");
+                    AssertContains(write.Result.Message, reference, "write result quotes the composed reference exactly once");
+
+                    var target = "Excel range: " + reference;
+                    var found = executor.ResourceGateway.Find(session, target, "document");
+                    AssertEqual(target, found.Items.Single().Target, "quoted reference round-trips through discovery");
+                    var read = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
+                        new JObject { ["target"] = target, ["representation"] = "text" });
+                    AssertEqual(ToolExecutionOutcome.Ok, read.Outcome, "generated reference is readable");
+                    var values = JArray.Parse((string)JObject.Parse(read.Result.DataJson)["text"]);
+                    AssertEqual(sheet, (string)values[0][0], "read resolves the same exact worksheet");
+                    adapter.QueueExcelInspectSnapshot(new ExcelInspectSnapshot { Kind = "sheets", ReturnedCount = 1,
+                        Sheets = new List<ExcelSheetSnapshot> { new ExcelSheetSnapshot { Name = sheet, UsedRange = "A1" } } });
+                    var listed = executor.ResourceGateway.List(session, "excel", "excel-range", null, 50);
+                    var listedSheet = listed.Items.Single(item => item.Metadata["sheet"] == sheet);
+                    AssertEqual(reference.Substring(0, reference.Length - 2) + listedSheet.Metadata["address"],
+                        listedSheet.Title, "enumeration quotes the literal sheet name and its own used range");
+                    AssertEqual(original, adapter.CellValue("Data", "A1"), "other active worksheet is untouched");
+                    if (sheet != sheet.Trim())
+                        AssertEqual("distinct trimmed name", adapter.CellValue(sheet.Trim(), "A1"), "trimmed name remains a distinct worksheet");
+                }
+
+                var malformed = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
+                    new JObject { ["target"] = "Excel range: 'O'Brien'!A1", ["representation"] = "text" });
+                AssertEqual(ToolExecutionOutcome.Error, malformed.Outcome, "undoubled internal apostrophe is not silently repaired");
+                var quotedName = ExecuteHtmlNative(runtime, ExcelWriteToolIds.WriteRange,
+                    new JObject { ["kind"] = "value", ["sheet"] = "'Sales Report'", ["address"] = "A1", ["value"] = "wrong" });
+                AssertEqual(ToolExecutionOutcome.Error, quotedName.Outcome, "reference delimiters are not part of the sheet argument");
+                AssertEqual(ToolDispatchEvidence.NotDispatched, quotedName.Evidence.Dispatch, "invalid literal sheet name never dispatches");
+                AssertEqual("Sales Report", adapter.CellValue("Sales Report", "A1"), "literal names are never silently redirected");
+            });
+        }
+
         private static void ExcelWriteUsesExactNativeOwnership()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
@@ -303,13 +439,13 @@ namespace RNAssistant.Harness
             public ExcelWriteSnapshot Read(ExcelWriteReadRequest request)
             {
                 ReadCount++;
-                throw new InvalidOperationException("Oversized input must not be read.");
+                throw new InvalidOperationException("Invalid input must not be read.");
             }
 
             public void Apply(ExcelWriteApplyRequest request, Action markDispatchPossible)
             {
                 ApplyCount++;
-                throw new InvalidOperationException("Oversized input must not be applied.");
+                throw new InvalidOperationException("Invalid input must not be applied.");
             }
         }
     }

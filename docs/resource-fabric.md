@@ -811,6 +811,16 @@ such as `Excel range: Data!A1:B4`: `text` returns values, `formulas` formulas,
 When sheet and A1 address are known, the caller can form this exact range target
 and read it directly; metadata discovery is not required first. A search tool is
 for locating text, not enumerating values from a known range.
+Generated range targets use Excel single-quote syntax, for example
+`Excel range: 'Sales Report'!A1` or `Excel range: 'O''Brien'!A1`.
+The quotes delimit the reference; doubled internal apostrophes decode to one
+literal apostrophe. Separate `sheet` fields and host-enumerated names remain
+literal, including spaces and quotes. Double quotes are not alternative reference
+delimiters. This follows Microsoft's [cell-reference grammar](https://learn.microsoft.com/en-us/openspecs/office_standards/ms-oe376/e531ebe0-a152-4978-a876-28e2a68f746e)
+and [worksheet-name rules](https://support.microsoft.com/en-gb/excel/rename-a-worksheet).
+Resource URI segments preserve significant boundary whitespace: `Sheet` and
+` Sheet ` are distinct identities, with spaces percent-encoded. Whitespace-only,
+dot and slash-containing segments remain invalid; providers own semantic names.
 Discover used ranges through `common.resources_find`; omitted active-sheet/selection
 defaults of the removed tool are not silently translated. `excel.inspect` remains
 the bounded workbook-object metadata action.

@@ -14,6 +14,11 @@ namespace RNAssistant.Harness
     {
         private static void ResourceUriRoundTripsCanonicalAddress()
         {
+            var exactSheet = ResourceUri.Create("excel", "workbook", "range", " Sales Report ", "A1");
+            AssertContains(exactSheet, "/%20Sales%20Report%20/", "significant name whitespace is escaped");
+            AssertEqual(" Sales Report ", ResourceUri.Parse(exactSheet).Segments[2], "resource names round-trip without trimming");
+            AssertTrue(exactSheet != ResourceUri.Create("excel", "workbook", "range", "Sales Report", "A1"),
+                "names differing in boundary whitespace have distinct resource identities");
             var uri = ResourceUri.Create("chat", "session 1", "artifact", "image.png");
             AssertEqual("rna://chat/session%201/artifact/image.png", uri, "canonical resource URI");
             var parsed = ResourceUri.Parse(uri);
