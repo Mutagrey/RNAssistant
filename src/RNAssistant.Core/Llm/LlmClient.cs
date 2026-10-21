@@ -118,7 +118,8 @@ namespace RNAssistant.Core.Llm
                 {
                     Type = "request",
                     Streaming = settings.StreamResponses,
-                    ContextMessages = DescribeWireMessages(messageList, requestOptions.TraceContextReceipt),
+                    ContextMessages = DescribeWireMessages(messageList, requestOptions.TraceContextReceipt,
+                        requestOptions.TraceMessageContentChanged),
                     RequestId = requestDiagnostics.RequestId,
                     Purpose = requestOptions.TracePurpose,
                     Endpoint = traceEndpoint,
@@ -640,7 +641,8 @@ namespace RNAssistant.Core.Llm
             });
         }
 
-        private static List<ContextMessagePresentation> DescribeWireMessages(IList<ChatMessage> messages, ContextReceipt receipt)
+        internal static List<ContextMessagePresentation> DescribeWireMessages(IList<ChatMessage> messages,
+            ContextReceipt receipt, bool[] changedContent = null)
         {
             var entries = new List<ContextMessagePresentation>();
             foreach (var message in messages.Where(m => m != null && !m.ExcludeFromModelContext && !string.IsNullOrWhiteSpace(m.Role)))
@@ -650,6 +652,12 @@ namespace RNAssistant.Core.Llm
                     Role = message.Role, Presentation = ContextPresentationKind.Unknown, Reason = "Нет сведений сборщика для этого сообщения." }
                     : JsonConvert.DeserializeObject<ContextMessagePresentation>(JsonConvert.SerializeObject(source));
                 entry.MessageIndex = entries.Count;
+                if (changedContent != null && entries.Count < changedContent.Length && changedContent[entries.Count])
+                {
+                    entry.Presentation = ContextPresentationKind.Unknown;
+                    entry.Reason = "Текст сообщения изменён при сборке запроса; точный переданный вариант находится в JSON запроса.";
+                    entry.Parts.Clear();
+                }
                 if ((message.Attachments?.Count ?? 0) > 0 || message.AttachmentAnalysis != null)
                 {
                     entry.Parts.Add(new ContextMessagePresentation { Kind = "message", Presentation = entry.Presentation, Reason = entry.Reason });

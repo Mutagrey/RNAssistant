@@ -67,6 +67,7 @@ namespace RNAssistant.Core.ModelProtocol
                             StringComparison.Ordinal) && request.ProjectJsonSchemaMessages != null
                             ? request.ProjectJsonSchemaMessages(attemptMessages)
                             : attemptMessages;
+                        options.TraceMessageContentChanged = ChangedWireMessages(attemptMessages, wireMessages);
                         string budgetError;
                         var repairReserve = lastError == null
                             ? EstimateFormatRepairOverheadTokens(settings)
@@ -142,7 +143,29 @@ namespace RNAssistant.Core.ModelProtocol
             {
                 return ModelProtocolResult.Failed(new ModelProtocolFailure(ModelProtocolFailureKind.Infrastructure, ex.Message, ex), contextUsage);
             }
+            finally
+            {
+                options.TraceMessageContentChanged = null;
+            }
         }
+
+        private static bool[] ChangedWireMessages(IReadOnlyList<ChatMessage> accepted,
+            IReadOnlyList<ChatMessage> wire)
+        {
+            if (ReferenceEquals(accepted, wire)) return new bool[0];
+            var sources = (accepted ?? new ChatMessage[0]).Where(VisibleMessage).ToArray();
+            var targets = (wire ?? new ChatMessage[0]).Where(VisibleMessage).ToArray();
+            var changed = new bool[targets.Length];
+            for (var index = 0; index < targets.Length; index++)
+                changed[index] = index >= sources.Length || sources.Length != targets.Length ||
+                    !string.Equals(sources[index].Id, targets[index].Id, StringComparison.Ordinal) ||
+                    !string.Equals(sources[index].Role, targets[index].Role, StringComparison.Ordinal) ||
+                    !string.Equals(sources[index].Content, targets[index].Content, StringComparison.Ordinal);
+            return changed;
+        }
+
+        private static bool VisibleMessage(ChatMessage message)
+        { return message != null && !message.ExcludeFromModelContext && !string.IsNullOrWhiteSpace(message.Role); }
 
         private async Task<LlmCompletionResult> CompleteAsync(AppSettings settings, IReadOnlyList<ChatMessage> messages,
             LlmRequestOptions options, ModelProtocolProgress progress, CancellationToken cancellationToken)

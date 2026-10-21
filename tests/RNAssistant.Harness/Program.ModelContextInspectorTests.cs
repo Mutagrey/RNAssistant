@@ -29,10 +29,14 @@ namespace RNAssistant.Harness
             var accepted = new ConversationPromptComposer().BuildRequiredMessages(ChatModes.Agent,
                 "Read the workbook.", adapter, tools, new SkillDefinition[0], new DocumentContext(),
                 settings, NewSession(adapter), null);
+            accepted[0].Id = "schema-prompt";
             var fullPrompt = accepted[0].Content;
             AssertContains(fullPrompt, "\"parameters\"", "accepted prompt retains exact fallback contracts");
             var options = ModelProtocolWire.CreateRequestOptions(AgentResponseModes.JsonSchema, tools,
                 new ModelProtocolCallContext(ConversationProtocolContext.SequentialBatchIds(tools)));
+            options.TraceContextReceipt = new ContextReceipt { Messages = new System.Collections.Generic.List<ContextMessagePresentation> {
+                new ContextMessagePresentation { SourceMessageId = accepted[0].Id, MessageIndex = 0,
+                    Role = accepted[0].Role, Presentation = ContextPresentationKind.Full } } };
             var driftedSchema = JObject.Parse(options.ResponseSchemaJson);
             driftedSchema.SelectToken("properties.tool_calls.items.anyOf[0].properties.name.const")
                 .Replace(new JValue("different.tool"));
@@ -60,6 +64,7 @@ namespace RNAssistant.Harness
             var formats = new System.Collections.Generic.List<string>();
             var wirePrompts = new System.Collections.Generic.List<string>();
             var repairMessages = new System.Collections.Generic.List<string>();
+            var presentations = new System.Collections.Generic.List<ContextPresentationKind>();
             var protocol = new ModelProtocolClient((currentSettings, messages, currentOptions, progress, token) =>
             {
                 var snapshot = messages.ToList();
@@ -70,6 +75,11 @@ namespace RNAssistant.Harness
                 formats.Add((string)exact.SelectToken("response_format.type"));
                 wirePrompts.Add((string)exact["messages"][0]["content"]);
                 repairMessages.Add(snapshot.Last().Content);
+                var provenance = LlmClient.DescribeWireMessages(snapshot, currentOptions.TraceContextReceipt,
+                    currentOptions.TraceMessageContentChanged);
+                presentations.Add(provenance[0].Presentation);
+                if (formats.Count < 3)
+                    AssertContains(provenance[0].Reason, "изменён", "strict projection is not attributed as a full source message");
                 if (formats.Count == 1)
                     return System.Threading.Tasks.Task.FromResult(new LlmCompletionResult { Content = "invalid" });
                 if (formats.Count == 2)
@@ -85,6 +95,10 @@ namespace RNAssistant.Harness
                 wirePrompts[1].IndexOf("\"parameters\"", StringComparison.Ordinal) < 0,
                 "strict attempts omit only the repeated parameter schemas");
             AssertEqual(fullPrompt, wirePrompts[2], "fallback reuses the exact accepted prompt");
+            AssertEqual("Unknown,Unknown,Full", string.Join(",", presentations),
+                "provenance follows the serialized strict, repair and fallback attempts");
+            AssertEqual(ContextPresentationKind.Full, options.TraceContextReceipt.Messages[0].Presentation,
+                "wire attribution does not mutate the frozen compiler receipt");
             AssertEqual(repairMessages[1], repairMessages[2], "fallback reuses the exact repair message");
             AssertContains(wirePrompts[0], "\"description\"", "strict prompt retains descriptions");
             AssertContains(wirePrompts[0], "\"safety\"", "strict prompt retains safety policy");
@@ -94,6 +108,7 @@ namespace RNAssistant.Harness
 
             var objectOptions = ModelProtocolWire.CreateRequestOptions(AgentResponseModes.JsonObject, tools,
                 new ModelProtocolCallContext(ConversationProtocolContext.SequentialBatchIds(tools)));
+            objectOptions.TraceContextReceipt = options.TraceContextReceipt;
             var objectRequest = new ModelProtocolRequest
             {
                 Settings = settings, AcceptedMessages = accepted, CallableTools = tools,
@@ -105,6 +120,9 @@ namespace RNAssistant.Harness
             {
                 AssertEqual(LlmResponseFormats.JsonObject, currentOptions.ResponseFormat, "direct object mode stays selected");
                 AssertEqual(fullPrompt, messages.First().Content, "direct json_object retains exact parameter contracts");
+                AssertEqual(ContextPresentationKind.Full, LlmClient.DescribeWireMessages(messages.ToList(),
+                    currentOptions.TraceContextReceipt, currentOptions.TraceMessageContentChanged)[0].Presentation,
+                    "direct object request retains Full provenance");
                 return System.Threading.Tasks.Task.FromResult(new LlmCompletionResult
                     { Content = "{\"message\":\"Done.\",\"action\":\"done\",\"tool_calls\":[]}" });
             });

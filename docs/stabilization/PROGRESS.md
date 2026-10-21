@@ -1,5 +1,19 @@
 # Stabilization progress
 
+## Request provenance after strict-schema projection — 2026-10-22
+
+RC-01 is fixed host-neutral. The model protocol compares visible accepted and
+projected messages for each request attempt. If strict-schema projection changes
+text but retains its message ID, the saved request trace uses `Unknown` rather
+than the compiler's pre-projection `Full` label. Repair and json_object fallback
+recompute the status; the exact request payload and accepted prompt stay intact.
+
+Focused `model context: request schema modes and fallback`, `model context:
+compiler presentation`, and `storage: model request trace precedes dispatch`
+checks pass. Build retains two existing PDF platform warnings. No live model or
+Windows/Office/WebView2 qualification. Next: a separate transport-part manifest
+slice (RC-02), after confirming its exact owner and needed fields.
+
 ## Resource Context audit — 2026-10-22
 
 Completed the requested Wave 0 source audit; the original

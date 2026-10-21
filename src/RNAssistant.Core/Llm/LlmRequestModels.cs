@@ -80,6 +80,10 @@ namespace RNAssistant.Core.Llm
         public string TraceRequestId { get; set; }
         [JsonIgnore]
         public ContextReceipt TraceContextReceipt { get; set; }
+        // One request attempt only: a wire projection may change a compiled message
+        // while preserving its source ID. Positions match visible provider messages.
+        [JsonIgnore]
+        internal bool[] TraceMessageContentChanged { get; set; }
 
         public LlmRequestOptions()
         {

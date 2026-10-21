@@ -978,6 +978,9 @@ serialized UTF-8 byte breakdown for `json_schema` and `json_object`. It also che
 schema-rejection fallback during repair. The optional-schema admission test checks
 the production model-loop projection. These local fixtures use a fake host; byte
 counts are exact, token counts are estimates and model quality is not assessed.
+The modes/fallback fixture also checks per-attempt provenance after strict-schema
+projection against the serialized request; the pre-dispatch trace check verifies
+that a changed message cannot inherit a `Full` compiler label.
 
 `agent continuity:` checks retained read counts above the 8192/32768-character UI
 thresholds after save/reload, exact CAS preview and missing bodies; revised plan

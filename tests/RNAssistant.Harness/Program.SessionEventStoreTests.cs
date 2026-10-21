@@ -3630,6 +3630,28 @@ namespace RNAssistant.Harness
                 "materialized message recorded");
             AssertTrue(trace.PayloadJson.IndexOf(secret, StringComparison.Ordinal) < 0,
                 "authorization secret is absent from request payload");
+
+            LlmTraceRecord changedTrace = null;
+            try
+            {
+                await client.CompleteAsync(new AppSettings { BaseUrl = "https://example.invalid",
+                        Model = "trace-model", StreamResponses = false },
+                    new[] { new ChatMessage { Id = "trace-source", Role = "user", Content = "materialized prompt" } },
+                    new LlmRequestOptions { ResponseFormat = LlmResponseFormats.JsonObject,
+                        TraceContextReceipt = new ContextReceipt { Messages = new List<ContextMessagePresentation> {
+                            new ContextMessagePresentation { SourceMessageId = "trace-source", MessageIndex = 0,
+                                Presentation = ContextPresentationKind.Full } } },
+                        TraceMessageContentChanged = new[] { true },
+                        TraceSink = record => { if (record.Type == "request") changedTrace = record;
+                            throw new InvalidOperationException("stop-after-trace"); } }, null);
+            }
+            catch (InvalidOperationException ex)
+            { AssertEqual("stop-after-trace", ex.Message, "changed trace also stops before HTTP dispatch"); }
+            AssertTrue(changedTrace != null, "changed request trace emitted");
+            AssertEqual(ContextPresentationKind.Unknown, changedTrace.ContextMessages.Single().Presentation,
+                "transport preserves changed-content provenance instead of copying Full");
+            AssertEqual("materialized prompt", (string)JObject.Parse(changedTrace.PayloadJson)
+                .SelectToken("messages[0].content"), "changed diagnostic leaves exact HTTP bytes intact");
         }
 
         private static void IncompleteEventTailRecovers()

@@ -14,10 +14,11 @@ Open; owner: model-context/LLM diagnostics. The
 [Wave 0 audit](../audits/resource-context-current-state.md#4-находки-и-воспроизведение)
 records source evidence separately from pending runtime reproduction:
 
-- **RC-01:** strict-schema projection removes duplicated tool parameter schemas
-  while retaining the message ID; transport can copy the prior compiler `Full`
-  label. Saved request bytes remain exact. Correct per-attempt provenance with a
-  focused schema/object/repair/fallback regression before expanding the Inspector.
+- **RC-01, fixed host-neutral:** strict-schema projection removes duplicated
+  parameter schemas while retaining the message ID. The transport now marks
+  changed text `Unknown` per request attempt; exact saved bytes remain authoritative.
+  Focused schema/object/repair/fallback and pre-dispatch trace checks pass.
+  Windows/WebView2 display of this build remains unqualified.
 - **RC-02:** transport-selected attachment parts and individual omissions have
   incomplete structured attribution. Current `Unknown` labels are intentional;
   extend the existing trace rather than infer delivery from resource availability.
@@ -25,7 +26,7 @@ records source evidence separately from pending runtime reproduction:
   later budget eviction. Reproduce the combined dedup/eviction case before claiming
   a defect; verify that omissions grant no write evidence and events remain intact.
 
-No live data-loss/write-effect failure was reproduced by this docs-only audit.
+The Wave 0 audit did not reproduce a live data-loss/write-effect failure.
 No new authority/store/adapter is introduced; Windows qualification remains open.
 
 ## Plugin source-chat accepted history — 2026-10-21

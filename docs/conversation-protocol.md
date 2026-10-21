@@ -739,12 +739,14 @@ and labels never enter provider JSON and do not change context selection or exec
 
 Known diagnostic limits (2026-10-22): attachment delivery is labelled `Unknown`
 because final text/media selection happens in transport; the compact manifest does
-not yet retain every selected or omitted part. Strict-schema prompt projection can
-also change content while retaining its source ID and a compiler `Full` label.
-Until that attribution is corrected, use the saved request bytes to inspect the
-exact body. The [Resource Context audit](audits/resource-context-current-state.md)
-records the reproduction and bounded follow-up; these labels grant no read/write
-authority and do not replace the retained HTTP payload.
+not yet retain every selected or omitted part. At each protocol attempt, transport
+compares visible messages with the frozen compiler messages. If strict-schema
+projection changed content while retaining its source ID, the request trace labels
+that message `Unknown` and points to the exact saved JSON; the compiler receipt
+still describes its pre-projection snapshot. Repair and json_object fallback make
+the comparison again for their own request. The
+[Resource Context audit](audits/resource-context-current-state.md) records the
+original issue and follow-up; diagnostic labels grant no read/write authority.
 
 Explicitly addressed background work (runs, context operations, diagnostics, resource staging) loads its target session without changing the user's selected chat. Only navigation actions such as select/create/activate change the active session.
 
