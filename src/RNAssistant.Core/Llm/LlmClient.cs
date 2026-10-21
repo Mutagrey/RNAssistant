@@ -119,7 +119,7 @@ namespace RNAssistant.Core.Llm
                     Type = "request",
                     Streaming = settings.StreamResponses,
                     ContextMessages = DescribeWireMessages(messageList, requestOptions.TraceContextReceipt,
-                        requestOptions.TraceMessageContentChanged),
+                        requestOptions.TraceMessageContentChanged, apiBuild.MessageParts),
                     RequestId = requestDiagnostics.RequestId,
                     Purpose = requestOptions.TracePurpose,
                     Endpoint = traceEndpoint,
@@ -642,9 +642,13 @@ namespace RNAssistant.Core.Llm
         }
 
         internal static List<ContextMessagePresentation> DescribeWireMessages(IList<ChatMessage> messages,
-            ContextReceipt receipt, bool[] changedContent = null)
+            ContextReceipt receipt, bool[] changedContent = null,
+            IList<List<ContextMessagePresentation>> wireParts = null)
         {
             var entries = new List<ContextMessagePresentation>();
+            var visibleCount = messages.Count(m => m != null && !m.ExcludeFromModelContext &&
+                !string.IsNullOrWhiteSpace(m.Role));
+            var alignedParts = wireParts != null && wireParts.Count == visibleCount;
             foreach (var message in messages.Where(m => m != null && !m.ExcludeFromModelContext && !string.IsNullOrWhiteSpace(m.Role)))
             {
                 var source = receipt?.Messages?.FirstOrDefault(m => m.SourceMessageId == message.Id && m.MessageIndex.HasValue);
@@ -652,6 +656,7 @@ namespace RNAssistant.Core.Llm
                     Role = message.Role, Presentation = ContextPresentationKind.Unknown, Reason = "Нет сведений сборщика для этого сообщения." }
                     : JsonConvert.DeserializeObject<ContextMessagePresentation>(JsonConvert.SerializeObject(source));
                 entry.MessageIndex = entries.Count;
+                if (entry.Parts == null) entry.Parts = new List<ContextMessagePresentation>();
                 if (changedContent != null && entries.Count < changedContent.Length && changedContent[entries.Count])
                 {
                     entry.Presentation = ContextPresentationKind.Unknown;
@@ -661,8 +666,11 @@ namespace RNAssistant.Core.Llm
                 if ((message.Attachments?.Count ?? 0) > 0 || message.AttachmentAnalysis != null)
                 {
                     entry.Parts.Add(new ContextMessagePresentation { Kind = "message", Presentation = entry.Presentation, Reason = entry.Reason });
-                    entry.Parts.Add(new ContextMessagePresentation { Kind = "attachments", Presentation = ContextPresentationKind.Unknown,
-                        Reason = "Текст и медиа выбраны transport; точные переданные части доступны в JSON запроса." });
+                    if (alignedParts)
+                        entry.Parts.AddRange(wireParts[entries.Count]);
+                    else
+                        entry.Parts.Add(new ContextMessagePresentation { Kind = "attachments", Presentation = ContextPresentationKind.Unknown,
+                            Reason = "Текст и медиа выбраны transport; точные переданные части доступны в JSON запроса." });
                     entry.Presentation = ContextPresentationKind.Unknown;
                 }
                 entries.Add(entry);

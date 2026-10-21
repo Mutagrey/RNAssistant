@@ -197,6 +197,8 @@ namespace RNAssistant.Core.Llm
         public string ContentType { get; set; }
         public byte[] Bytes { get; set; }
         public string Label { get; set; }
+        public int? PageNumber { get; set; }
+        public int? TotalPages { get; set; }
     }
 
 }

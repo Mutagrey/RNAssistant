@@ -72,6 +72,8 @@ namespace RNAssistant.Office.Services
                     {
                         Bytes = output.ToArray(),
                         ContentType = "image/jpeg",
+                        PageNumber = pageIndex + 1,
+                        TotalPages = pageCount,
                         Label = (attachment.FileName ?? "PDF") + " page " + (pageIndex + 1)
                     });
                 }

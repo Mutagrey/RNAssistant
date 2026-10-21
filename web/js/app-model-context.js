@@ -136,6 +136,19 @@
     return body;
   }
   function note(entry) { return labels[entry && entry.Presentation] || labels.Unknown; }
+  function partNote(part) {
+    var details = [part.Kind || "Часть", note(part)];
+    if (part.SourceAttachmentId) details.push("вложение " + part.SourceAttachmentId);
+    if (part.PartIndex != null) details.push("часть JSON " + (part.PartIndex + 1));
+    if (part.PageNumber != null) details.push("страница " + part.PageNumber);
+    if (part.OmittedCount != null) details.push("не выбрано: " + part.OmittedCount);
+    if (part.SelectedCharacters != null) details.push("символов: " + part.SelectedCharacters);
+    if (part.ByteLength != null) details.push("байт: " + part.ByteLength);
+    if (part.ContentType) details.push(part.ContentType);
+    if (part.ContentSha256) details.push("SHA-256: " + part.ContentSha256);
+    if (part.Reason) details.push(part.Reason);
+    return details.join(" · ");
+  }
   function messages(c, text, entries) {
     var root = $("modelContextBody"), fields;
     try { fields = members(text); } catch (error) { root.appendChild(el("p", error.message)); return mount(c, root, text, true); }
@@ -160,7 +173,7 @@
         detail.addEventListener("toggle", function () {
           if (!detail.open || loaded) return; loaded = true;
           if (entry && entry.Reason) body.appendChild(el("p", entry.Reason, "model-context-note"));
-          (entry && entry.Parts || []).forEach(function (part) { body.appendChild(el("p", (part.Kind || "Часть") + ": " + note(part) + " · " + (part.Reason || ""))); });
+          (entry && entry.Parts || []).forEach(function (part) { body.appendChild(el("p", partNote(part))); });
           body.appendChild(button("Копировать сообщение JSON", function () { copyTextResult(message.raw); }));
           var content = field(parts, "content"), contentValue = decoded(content);
           if (typeof contentValue === "string") { var contentNode = el("div"); body.appendChild(contentNode); mount(c, contentNode, contentValue, false); }

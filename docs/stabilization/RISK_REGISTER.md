@@ -19,9 +19,14 @@ records source evidence separately from pending runtime reproduction:
   changed text `Unknown` per request attempt; exact saved bytes remain authoritative.
   Focused schema/object/repair/fallback and pre-dispatch trace checks pass.
   Windows/WebView2 display of this build remains unqualified.
-- **RC-02:** transport-selected attachment parts and individual omissions have
-  incomplete structured attribution. Current `Unknown` labels are intentional;
-  extend the existing trace rather than infer delivery from resource availability.
+- **RC-02, attachment-selection slice fixed host-neutral:** the existing request trace records selected
+  text/image/audio parts and explicit attachment/budget omissions after transport
+  materialization, with final request positions and selected-byte digests. PDF
+  page/count claims require renderer evidence; unavailable counts stay unknown.
+  The parent message remains `Unknown` after attachment augmentation. Focused
+  payload/trace and web inspector checks pass. Typed operation/evidence/coverage
+  links for resource-derived parts and specific compiler-exclusion reasons remain
+  open; Windows/WebView2 display remains unqualified.
 - **RC-03, fixed host-neutral:** two identical complete reads plus a tight request
   budget reproduced a receipt pointing to an evicted body. Folded receipts now
   resolve after budget admission: no stale `retained_result` pointer, explicit

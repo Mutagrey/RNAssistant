@@ -79,6 +79,22 @@ namespace RNAssistant.Core.Models
         public ContextPresentationKind Presentation { get; set; }
         public string Reason { get; set; }
         public PayloadRef OriginalPayload { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public int? PartIndex { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string SourceAttachmentId { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public int? PageNumber { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public int? OmittedCount { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public int? SelectedCharacters { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public int? ByteLength { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string ContentSha256 { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string ContentType { get; set; }
         public List<ContextMessagePresentation> Parts { get; set; } = new List<ContextMessagePresentation>();
     }
 

@@ -1,5 +1,19 @@
 # Stabilization progress
 
+## Transport-selected attachment manifest — 2026-10-22
+
+The RC-02 attachment-selection slice is fixed host-neutral. The existing saved
+request trace now attributes selected attachment text, image, audio and rendered
+PDF pages to their source attachment and final JSON part. It records byte counts
+and SHA-256 for selected
+content, bounded PDF page omissions when the renderer confirms page count, and
+explicit reasons for budget-skipped or analysis-replaced attachments. The exact
+request CAS body is unchanged and remains authoritative; the whole augmented
+message is still `Unknown`. Focused trace/payload and web inspector checks pass.
+Windows/Office/WebView2 qualification remains open. No new store or model-facing
+metadata was added. Next RC-02 slice: typed operation/evidence/coverage links for
+resource-derived parts and specific compiler-exclusion reasons.
+
 ## Repeated-read receipt after budget eviction — 2026-10-22
 
 RC-03 was reproduced host-neutral: two identical complete reads were folded, then
@@ -10,7 +24,6 @@ links after budgeting. The earlier operation keeps its successful outcome but sa
 write evidence are unchanged. The focused `resource cutover: correctness before
 budget` check passes for both the retained and evicted cases; build has the two
 existing PDF platform warnings. Windows/Office/WebView2 qualification remains open.
-Next limited observability work is RC-02, transport-selected parts and omissions.
 
 ## Request provenance after strict-schema projection — 2026-10-22
 
@@ -23,8 +36,8 @@ recompute the status; the exact request payload and accepted prompt stay intact.
 Focused `model context: request schema modes and fallback`, `model context:
 compiler presentation`, and `storage: model request trace precedes dispatch`
 checks pass. Build retains two existing PDF platform warnings. No live model or
-Windows/Office/WebView2 qualification. Next: a separate transport-part manifest
-slice (RC-02), after confirming its exact owner and needed fields.
+Windows/Office/WebView2 qualification. The subsequent transport-part manifest
+slice is recorded above.
 
 ## Resource Context audit — 2026-10-22
 

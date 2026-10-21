@@ -1367,6 +1367,11 @@ namespace RNAssistant.Harness
                 var requestRecord = new LlmTraceRecord
                 {
                     Type = "request", RequestId = "request-queue", Purpose = "agent",
+                    ContextMessages = new List<ContextMessagePresentation> {
+                        new ContextMessagePresentation { MessageIndex = 0, SourceMessageId = "message-source",
+                            Parts = new List<ContextMessagePresentation> {
+                                new ContextMessagePresentation { Kind = "image_url", SourceAttachmentId = "attachment-source",
+                                    PartIndex = 1, Presentation = ContextPresentationKind.Full, ByteLength = 5 } } } },
                     PayloadUtf8Bytes = Encoding.UTF8.GetBytes("{\"request\":\"точно\"}"),
                     PayloadContentType = "application/json"
                 };
@@ -1393,6 +1398,8 @@ namespace RNAssistant.Harness
                 AssertEqual("request-queue", (string)request.Data["StepId"], "non-loop request uses its existing transport step");
                 AssertEqual("{\"request\":\"точно\"}", store.ReadEventPayload(request),
                     "request CAS preserves the exact HTTP UTF-8 payload");
+                AssertEqual("attachment-source", (string)request.Data.SelectToken("ContextMessages[0].Parts[0].SourceAttachmentId"),
+                    "selected attachment provenance persists beside the immutable payload");
                 AssertTrue(chunk.Sequence < response.Sequence, "terminal response is durable after queued chunks");
                 AssertEqual("[\"one\",\"two\"]", store.ReadEventPayload(chunk), "queued chunk payload remains exact");
                 AssertEqual(SessionEventTypes.StepEnded, events.Last().Type,
@@ -3652,6 +3659,153 @@ namespace RNAssistant.Harness
                 "transport preserves changed-content provenance instead of copying Full");
             AssertEqual("materialized prompt", (string)JObject.Parse(changedTrace.PayloadJson)
                 .SelectToken("messages[0].content"), "changed diagnostic leaves exact HTTP bytes intact");
+        }
+
+        private static async Task ModelRequestAttachmentPartsMatchPayload()
+        {
+            var imageBytes = new byte[] { 1, 2, 3, 4, 5 };
+            var pdfBytes = new byte[] { 6, 7, 8, 9 };
+            var image = new ChatAttachment { Id = "image-selected", Kind = "image", FileName = "one.png", ContentType = "image/png" };
+            var skippedImage = new ChatAttachment { Id = "image-skipped", Kind = "image", FileName = "two.png", ContentType = "image/png" };
+            var pdf = new ChatAttachment { Id = "pdf-source", Kind = "pdf", FileName = "pages.pdf", PageCount = 3,
+                PageTextLengths = new List<int> { 100, 100, 100 } };
+            var textAttachment = new ChatAttachment { Id = "text-skipped", Kind = "text", FileName = "large.txt",
+                ExtractedText = new string('x', 20000), ExtractedCharCount = 20000 };
+            var settings = new AppSettings { BaseUrl = "https://example.invalid", Model = "vision-trace",
+                StreamResponses = false };
+            settings.ModelCapabilities[settings.Model] = new ModelCapabilitySettings
+                { SupportsImages = true, MaxImagesPerPrompt = 1 };
+            var client = new LlmClient(() => "key", attachment => imageBytes,
+                null, (currentSettings, attachment, limit, token) =>
+                    attachment.Kind == "pdf" ? new[] { new ModelImagePart { ContentType = "image/jpeg",
+                        Bytes = pdfBytes, PageNumber = 2, TotalPages = 3 } } : null);
+
+            LlmTraceRecord trace = null;
+            try
+            {
+                await client.CompleteAsync(settings, new[] { new ChatMessage { Id = "source", Role = "user",
+                    Content = "inspect", Attachments = new List<ChatAttachment> { image, skippedImage, pdf } } },
+                    new LlmRequestOptions { TraceContextReceipt = new ContextReceipt { Messages = new List<ContextMessagePresentation> {
+                        new ContextMessagePresentation { SourceMessageId = "source", MessageIndex = 0,
+                            Presentation = ContextPresentationKind.Full } } },
+                        TraceSink = record => { trace = record; throw new InvalidOperationException("stop-after-trace"); } }, null);
+            }
+            catch (InvalidOperationException ex)
+            { AssertEqual("stop-after-trace", ex.Message, "image request stops after exact trace"); }
+            AssertTrue(trace != null, "image request trace exists");
+            var parts = trace.ContextMessages.Single().Parts;
+            var delivered = parts.Single(part => part.Kind == "image_url" && part.Presentation == ContextPresentationKind.Full);
+            AssertEqual(image.Id, delivered.SourceAttachmentId, "selected image keeps source attachment ID");
+            AssertEqual(1, delivered.PartIndex.Value, "selected image occupies final wire part position");
+            var request = JObject.Parse(trace.PayloadJson);
+            var imageUrl = (string)request.SelectToken("messages[0].content[1].image_url.url");
+            AssertEqual("data:image/png;base64," + Convert.ToBase64String(imageBytes), imageUrl,
+                "trace matches serialized image part");
+            AssertEqual(imageBytes.Length, delivered.ByteLength.Value, "image byte count matches sent bytes");
+            using (var sha = SHA256.Create())
+                AssertEqual(BitConverter.ToString(sha.ComputeHash(imageBytes)).Replace("-", "").ToLowerInvariant(),
+                    delivered.ContentSha256, "image digest matches sent bytes");
+            AssertTrue(parts.Any(part => part.SourceAttachmentId == skippedImage.Id &&
+                part.Presentation == ContextPresentationKind.Excluded && part.Reason.Contains("Лимит")),
+                "image skipped by final limit has explicit reason");
+            AssertTrue(parts.Any(part => part.SourceAttachmentId == pdf.Id &&
+                part.Presentation == ContextPresentationKind.Excluded && part.OmittedCount == null &&
+                part.Reason.Contains("число страниц не проверялось")),
+                "PDF skipped before conversion does not claim a confirmed page count");
+            AssertEqual(ContextPresentationKind.Unknown, trace.ContextMessages.Single().Presentation,
+                "whole message remains Unknown after transport attachment selection");
+            AssertTrue(request.SelectToken("messages[0].SourceAttachmentId") == null &&
+                !JsonConvert.SerializeObject(trace.ContextMessages).Contains(Convert.ToBase64String(imageBytes)),
+                "source diagnostic and media body stay out of each other's payloads");
+
+            trace = null;
+            try
+            {
+                await client.CompleteAsync(settings, new[] { new ChatMessage { Id = "pdf-message", Role = "user",
+                    Content = "inspect pages", Attachments = new List<ChatAttachment> { pdf } } },
+                    new LlmRequestOptions { TraceSink = record => { trace = record;
+                        throw new InvalidOperationException("stop-after-trace"); } }, null);
+            }
+            catch (InvalidOperationException ex)
+            { AssertEqual("stop-after-trace", ex.Message, "PDF request stops after exact trace"); }
+            AssertTrue(trace != null, "PDF request trace exists");
+            parts = trace.ContextMessages.Single().Parts;
+            delivered = parts.Single(part => part.Kind == "image_url" && part.Presentation == ContextPresentationKind.Full);
+            AssertEqual(pdf.Id, delivered.SourceAttachmentId, "selected PDF page keeps attachment ID");
+            AssertEqual(2, delivered.PageNumber.Value, "selected PDF page is explicit, not inferred from label");
+            AssertEqual(1, delivered.PartIndex.Value, "PDF page occupies final wire part position");
+            AssertTrue(parts.Any(part => part.SourceAttachmentId == pdf.Id &&
+                part.Presentation == ContextPresentationKind.Excluded && part.OmittedCount == 2),
+                "other PDF pages have bounded omission count");
+            AssertEqual("data:image/jpeg;base64," + Convert.ToBase64String(pdfBytes),
+                (string)JObject.Parse(trace.PayloadJson).SelectToken("messages[0].content[1].image_url.url"),
+                "PDF page manifest matches final request bytes");
+
+            var audioAttachment = new ChatAttachment { Id = "audio-source", Kind = "audio",
+                FileName = "sample.wav", ContentType = "audio/wav" };
+            var excerpt = new ChatAttachment { Id = "text-source", Kind = "text", FileName = "note.txt",
+                ExtractedText = "selected text", ExtractedCharCount = 13 };
+            trace = null;
+            try
+            {
+                await client.CompleteAsync(settings, new[] { new ChatMessage { Id = "mixed-message", Role = "user",
+                    Content = "listen", Attachments = new List<ChatAttachment> { excerpt, audioAttachment } } },
+                    new LlmRequestOptions { TraceSink = record => { trace = record;
+                        throw new InvalidOperationException("stop-after-trace"); } }, null);
+            }
+            catch (InvalidOperationException ex)
+            { AssertEqual("stop-after-trace", ex.Message, "audio request stops after exact trace"); }
+            AssertTrue(trace != null, "audio request trace exists");
+            parts = trace.ContextMessages.Single().Parts;
+            var selectedText = parts.Single(part => part.Kind == "attachment_text");
+            var selectedAudio = parts.Single(part => part.Kind == "input_audio");
+            AssertEqual(ContextPresentationKind.Full, selectedText.Presentation, "known complete text is selected");
+            AssertEqual(0, selectedText.PartIndex.Value, "text occupies first array part");
+            AssertEqual(1, selectedAudio.PartIndex.Value, "audio occupies second array part");
+            AssertEqual(audioAttachment.Id, selectedAudio.SourceAttachmentId, "audio keeps source attachment ID");
+            var mixedPayload = JObject.Parse(trace.PayloadJson);
+            AssertContains((string)mixedPayload.SelectToken("messages[0].content[0].text"), excerpt.ExtractedText,
+                "text selection appears in exact request");
+            AssertEqual(Convert.ToBase64String(imageBytes),
+                (string)mixedPayload.SelectToken("messages[0].content[1].input_audio.data"),
+                "audio bytes match exact request");
+            using (var sha = SHA256.Create())
+            {
+                AssertEqual(BitConverter.ToString(sha.ComputeHash(imageBytes)).Replace("-", "").ToLowerInvariant(),
+                    selectedAudio.ContentSha256, "audio digest matches sent bytes");
+                AssertEqual(BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(excerpt.ExtractedText)))
+                    .Replace("-", "").ToLowerInvariant(), selectedText.ContentSha256,
+                    "selected text digest matches the sent substring");
+            }
+
+            var tightSettings = new AppSettings { Model = "text-trace", ContextWindowOverrideTokens = 4096 };
+            var tightBuild = new LlmMessageBuilder().Build(new[] { new ChatMessage { Role = "user",
+                Content = new string('p', 10000), Attachments = new List<ChatAttachment> { textAttachment } } }, tightSettings);
+            AssertTrue(tightBuild.MessageParts.Single().Any(part => part.SourceAttachmentId == textAttachment.Id &&
+                part.Kind == "attachment_text" && part.Presentation == ContextPresentationKind.Excluded &&
+                part.Reason.Contains("Бюджет")), "text omitted by final attachment budget is explicit");
+
+            var analysis = new AttachmentAnalysisContext { Content = "auxiliary evidence" };
+            analysis.AttachmentIds.Add(image.Id);
+            var analyzed = new LlmMessageBuilder().Build(new[] { new ChatMessage { Role = "user", Content = "inspect",
+                Attachments = new List<ChatAttachment> { image }, AttachmentAnalysis = analysis } }, settings);
+            AssertTrue(analyzed.MessageParts.Single().Any(part => part.SourceAttachmentId == image.Id &&
+                part.Kind == "attachment_analysis" && part.Presentation == ContextPresentationKind.Summary &&
+                part.PartIndex == null), "analyzed attachment is attributed to string content without an array index");
+            AssertContains(JsonConvert.SerializeObject(analyzed.Messages), "auxiliary evidence",
+                "analysis text, rather than direct media, reaches the request");
+
+            var emptyFirst = new LlmMessageBuilder(attachment => imageBytes, null,
+                (currentSettings, attachment, limit, token) => attachment.Id == image.Id
+                    ? new[] { new ModelImagePart { ContentType = "image/png", Bytes = new byte[0] } }
+                    : null).Build(new[] { new ChatMessage { Role = "user", Content = "inspect",
+                        Attachments = new List<ChatAttachment> { image, skippedImage } } }, settings);
+            AssertTrue(emptyFirst.MessageParts.Single().Any(part => part.SourceAttachmentId == image.Id &&
+                part.Presentation == ContextPresentationKind.Excluded),
+                "empty image part is recorded as omitted");
+            AssertTrue(emptyFirst.MessageParts.Single().Any(part => part.SourceAttachmentId == skippedImage.Id &&
+                part.Presentation == ContextPresentationKind.Full && part.PartIndex == 1),
+                "empty image part does not consume a delivered-image slot");
         }
 
         private static void IncompleteEventTailRecovers()

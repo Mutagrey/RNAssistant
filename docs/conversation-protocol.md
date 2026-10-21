@@ -737,11 +737,24 @@ separately as local originals, never substituted into the displayed request. Old
 requests without provenance show unknown attribution. Diagnostic source references
 and labels never enter provider JSON and do not change context selection or execution.
 
-Known diagnostic limits (2026-10-22): attachment delivery is labelled `Unknown`
-because final text/media selection happens in transport; the compact manifest does
-not yet retain every selected or omitted part. At each protocol attempt, transport
-compares visible messages with the frozen compiler messages. If strict-schema
-projection changed content while retaining its source ID, the request trace labels
+Transport diagnostics (2026-10-22): each saved request keeps a bounded
+attachment-part manifest beside its exact JSON body. It records source attachment
+IDs, zero-based array part positions when applicable, selected text length and
+SHA-256, selected image/audio byte length and SHA-256, and PDF page numbers
+supplied by the renderer. Text and media skipped by attachment or image limits,
+and attachments replaced by auxiliary analysis, carry explicit reasons. A PDF
+omission count is recorded only when the renderer confirms the total page count;
+a PDF skipped before rendering has an unknown count. The message-level label
+remains `Unknown` when transport augments or selects attachments; individual
+parts retain their proved labels. Trace metadata never enters provider JSON,
+which remains the authority for exact sent content. Older request events without
+the manifest retain unknown attachment attribution. Typed operation/evidence/
+coverage links for resource-derived parts and specific compiler-exclusion reasons
+remain open diagnostic work.
+
+At each protocol attempt, transport compares visible messages with the frozen
+compiler messages. If strict-schema projection changed content while retaining
+its source ID, the request trace labels
 that message `Unknown` and points to the exact saved JSON; the compiler receipt
 still describes its pre-projection snapshot. Repair and json_object fallback make
 the comparison again for their own request. The
