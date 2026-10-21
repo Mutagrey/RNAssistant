@@ -136,6 +136,15 @@
     return body;
   }
   function note(entry) { return labels[entry && entry.Presentation] || labels.Unknown; }
+  function evidenceNote(link) {
+    var resource = link.Resource || {}, details = ["evidence " + (link.EvidenceId || "?")];
+    if (resource.uri) details.push(resource.uri + (resource.revision ? "@" + resource.revision : ""));
+    if (link.View) details.push("view " + link.View);
+    if (link.ObservedCoverage) details.push("наблюдение " + JSON.stringify(link.ObservedCoverage));
+    details.push(link.BodyIncludedInMessage === true ? "тело включено в сообщение" :
+      link.BodyIncludedInMessage === false ? "тело не включено в сообщение" : "доставка тела в сообщении не установлена");
+    return details.join(" · ");
+  }
   function partNote(part) {
     var details = [part.Kind || "Часть", note(part)];
     if (part.SourceAttachmentId) details.push("вложение " + part.SourceAttachmentId);
@@ -173,6 +182,8 @@
         detail.addEventListener("toggle", function () {
           if (!detail.open || loaded) return; loaded = true;
           if (entry && entry.Reason) body.appendChild(el("p", entry.Reason, "model-context-note"));
+          if (entry && entry.ToolCallId) body.appendChild(el("p", "Операция: " + entry.ToolCallId));
+          (entry && entry.EvidenceLinks || []).forEach(function (link) { if (link) body.appendChild(el("p", evidenceNote(link))); });
           (entry && entry.Parts || []).forEach(function (part) { body.appendChild(el("p", partNote(part))); });
           body.appendChild(button("Копировать сообщение JSON", function () { copyTextResult(message.raw); }));
           var content = field(parts, "content"), contentValue = decoded(content);

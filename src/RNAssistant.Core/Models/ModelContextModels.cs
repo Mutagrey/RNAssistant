@@ -69,6 +69,18 @@ namespace RNAssistant.Core.Models
     [JsonConverter(typeof(Newtonsoft.Json.Converters.StringEnumConverter))]
     public enum ContextPresentationKind { Unknown, Full, Fragment, Summary, Excluded }
 
+    // Observed coverage belongs to the source evidence. The nullable body flag
+    // describes attribution to this exact message, not delivery elsewhere.
+    public sealed class ContextEvidenceLink
+    {
+        public string EvidenceId { get; set; }
+        public ResourceRef Resource { get; set; }
+        public string View { get; set; }
+        public ResourceCoverage ObservedCoverage { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public bool? BodyIncludedInMessage { get; set; }
+    }
+
     // Diagnostic provenance only; never serialized into provider messages.
     public sealed class ContextMessagePresentation
     {
@@ -79,6 +91,9 @@ namespace RNAssistant.Core.Models
         public ContextPresentationKind Presentation { get; set; }
         public string Reason { get; set; }
         public PayloadRef OriginalPayload { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string ToolCallId { get; set; }
+        public List<ContextEvidenceLink> EvidenceLinks { get; set; } = new List<ContextEvidenceLink>();
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public int? PartIndex { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]

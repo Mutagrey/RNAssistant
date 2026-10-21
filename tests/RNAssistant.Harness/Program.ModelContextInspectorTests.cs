@@ -328,7 +328,12 @@ namespace RNAssistant.Harness
                 new ModelTracePersistenceService(new ChatEventStoreAdapter(store)).Configure(options);
                 options.TraceSink(new LlmTraceRecord { Type = "request", RequestId = "first", PayloadJson = "{}",
                     PayloadContentType = "application/json", ContextMessages = new System.Collections.Generic.List<ContextMessagePresentation> {
-                        new ContextMessagePresentation { MessageIndex = 0, Presentation = ContextPresentationKind.Summary, OriginalPayload = original } } });
+                        new ContextMessagePresentation { MessageIndex = 0, Presentation = ContextPresentationKind.Summary,
+                            OriginalPayload = original, ToolCallId = "operation-1",
+                            EvidenceLinks = new System.Collections.Generic.List<ContextEvidenceLink> {
+                                new ContextEvidenceLink { EvidenceId = "evidence-1", Resource = new ResourceRef("rna://vba/source/module", "r1"),
+                                    View = "source", ObservedCoverage = new ResourceCoverage(ResourceCoverageKinds.LineRange,
+                                        start: 1, end: 2), BodyIncludedInMessage = true } } } } });
                 var request = store.ReadEvents(session.Host, session.DocumentKey, session.Id).Single(e => e.Type == SessionEventTypes.LlmRequest);
                 for (var i = 0; i < 51; i++) store.AppendTrace(session, SessionEventTypes.LlmRequest,
                     new LlmTraceRecord { RequestId = "request-" + i }, "{}", "application/json", null, null, null);
@@ -342,6 +347,11 @@ namespace RNAssistant.Harness
                     AssertEqual(2, older.Events.Count, "older attempts retained");
                     var detail = service.Query(session, new ModelContextQuery { RequestEventId = request.EventId }, CancellationToken.None);
                     AssertEqual(ContextPresentationKind.Summary, detail.Events[0].Trace.ContextMessages[0].Presentation, "typed provenance survives trace storage");
+                    var stored = detail.Events[0].Trace.ContextMessages[0];
+                    AssertEqual("operation-1", stored.ToolCallId, "operation correlation survives event storage");
+                    AssertEqual("evidence-1", stored.EvidenceLinks.Single().EvidenceId, "evidence link survives event storage");
+                    AssertEqual(ResourceCoverageKinds.LineRange, stored.EvidenceLinks.Single().ObservedCoverage.Kind,
+                        "typed observed coverage survives event storage");
                     var download = service.Open(session, new ModelContextPayloadQuery { EventId = request.EventId, OriginalIndex = 0 }, CancellationToken.None);
                     AssertEqual(original.Sha256, download.Data.Payload.Sha256, "original source is bound to the exact request");
                     data.Close(session.Id, ModelContextInspectorService.Owner, download.Data.LeaseId);
@@ -363,24 +373,48 @@ namespace RNAssistant.Harness
                 var full = new ChatMessage { Role = "user", Content = "exact user text" };
                 var excluded = new ChatMessage { Role = "assistant", Content = "local only", ExcludeFromModelContext = true };
                 var source = PayloadRef.FromBlob(blobs.StoreText("selected lines", "text/plain"));
+                var fragmentEvidence = new ResourceEvidence("fragment", scope, reference, "source",
+                    new ResourceCoverage(ResourceCoverageKinds.LineRange, start: 1, end: 2), true, 1, source);
+                excluded.ResourceEvidence.Add(fragmentEvidence);
                 var fragment = new ChatMessage { Role = "assistant", ProtocolMessage = true, SyntheticResourceObservation = true,
                     Content = "{\"target\":\"Module1\"}", ResultPayload = source,
-                    ResourceEvidence = new System.Collections.Generic.List<ResourceEvidence> { new ResourceEvidence("fragment", scope,
-                        reference, "source", new ResourceCoverage(ResourceCoverageKinds.LineRange, start: 1, end: 2), true, 1, source) } };
+                    ResourceEvidence = new System.Collections.Generic.List<ResourceEvidence> { fragmentEvidence } };
                 var compiler = new ModelContextCompiler(blobs, projection: ModelToolResultProjection.Instance);
                 var snapshot = compiler.Compile(authority, new ChatMessage[0], new[] { full, excluded, fragment }, null,
                     new RNAssistant.Core.Tools.ToolCatalogEntry[0], new AppSettings(), 10000);
                 AssertEqual(ContextPresentationKind.Full, snapshot.Receipt.Messages.Single(e => e.SourceMessageId == full.Id).Presentation, "unchanged text is full");
                 AssertEqual(ContextPresentationKind.Excluded, snapshot.Receipt.Messages.Single(e => e.SourceMessageId == excluded.Id).Presentation, "excluded is outside wire positions");
+                AssertEqual(1, snapshot.Receipt.Messages.Single(e => e.SourceMessageId == excluded.Id).EvidenceLinks.Count,
+                    "excluded source has one typed evidence link");
+                AssertEqual(false, snapshot.Receipt.Messages.Single(e => e.SourceMessageId == excluded.Id)
+                    .EvidenceLinks[0].BodyIncludedInMessage.Value, "excluded source has typed evidence without a delivery claim");
                 var entry = snapshot.Receipt.Messages.Single(e => e.SourceMessageId == fragment.Id);
                 AssertEqual(ContextPresentationKind.Fragment, entry.Presentation, "range coverage determines fragment without text heuristics");
                 AssertEqual(source.Sha256, entry.OriginalPayload.Sha256, "original CAS binding remains diagnostic");
+                AssertEqual(1, entry.EvidenceLinks.Count, "selected source has one typed evidence link");
+                var link = entry.EvidenceLinks[0];
+                AssertEqual(fragmentEvidence.EvidenceId, link.EvidenceId, "exact observation ID reaches compiler receipt");
+                AssertEqual(reference.Uri, link.Resource.Uri, "exact resource identity is typed");
+                AssertEqual(reference.Revision, link.Resource.Revision, "exact resource revision is typed");
+                AssertEqual(ResourceCoverageKinds.LineRange, link.ObservedCoverage.Kind,
+                    "observed coverage is typed and distinct from delivery status");
+                AssertEqual(true, link.BodyIncludedInMessage.Value, "verified synthetic payload hydration proves body delivery");
+                var wire = Newtonsoft.Json.JsonConvert.SerializeObject(
+                    new LlmMessageBuilder().Build(snapshot.Messages, new AppSettings()).Messages);
+                AssertTrue(!wire.Contains("\"EvidenceLinks\"") && !wire.Contains("\"ObservedCoverage\""),
+                    "typed diagnostic links do not enter provider messages");
+                var changed = LlmClient.DescribeWireMessages(new[] { snapshot.Messages.First(m => m.Id == fragment.Id) },
+                    snapshot.Receipt, new[] { true });
+                AssertTrue(!changed.Single(e => e.MessageIndex.HasValue).EvidenceLinks.Single().BodyIncludedInMessage.HasValue,
+                    "later wire projection invalidates body-delivery proof but keeps source link");
                 var mutation = ContinuityResult("saved", "common.vba_write_module", RNAssistant.Core.Tools.Contracts.ToolResult.Ok("Saved", "{\"changed\":true}"));
                 mutation.ResourceEffect = new ResourceEffect("effect", "write", ResourceEffectOutcome.VerifiedChanged, verification: "read-back");
                 var folded = compiler.Compile(authority, new ChatMessage[0], new[] { ContinuityCall(mutation), mutation }, null,
                     new RNAssistant.Core.Tools.ToolCatalogEntry[0], new AppSettings(), 10000);
                 AssertEqual(2, folded.Messages.Count, "latest operation is a pair");
                 AssertEqual(ContextPresentationKind.Full, folded.Receipt.Messages.Single(e => e.SourceMessageId == mutation.Id).Presentation, "short recent result is complete, not a summary");
+                AssertEqual(mutation.ToolCallId, folded.Receipt.Messages.Single(e => e.SourceMessageId == mutation.Id).ToolCallId,
+                    "exact tool operation ID reaches the result receipt");
             });
         }
 

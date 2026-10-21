@@ -111,6 +111,9 @@ function fixture() {
   console.log("PASS model context: empty history and late previews retain the read-only state");
 
   const f = fixture(), api = f.c.RNAssistantModelContext;
+  f.events[0].trace.ContextMessages = [{ MessageIndex: 1, Presentation: "Unknown", ToolCallId: "call-1",
+    EvidenceLinks: [{ EvidenceId: "evidence-1", Resource: { uri: "rna://vba/module", revision: "r1" },
+      View: "source", ObservedCoverage: { kind: "line-range", start: 1, end: 2 }, BodyIncludedInMessage: null }] }];
   const raw = '{"n":9007199254740993123456789,"n":2,"text":"escaped \\\" }, : [ ","nested":[{"x":true}]}';
   const parts = api.members(raw);
   assert.equal(parts[0].raw, "9007199254740993123456789");
@@ -118,6 +121,13 @@ function fixture() {
   assert.equal(parts[3].raw, '[{"x":true}]');
   assert.equal(api.members('["a,b",{"nested":[1,2]}]').length, 2);
   api.open(); await flush();
+  const userMessage = f.get("modelContextBody").children[0].children.filter(node => node.tag === "details")[1];
+  userMessage.open = true; await userMessage.fire("toggle");
+  assert.ok(userMessage.children[1].children.some(node => /Операция: call-1/.test(node.textContent)),
+    "typed operation link appears in request details");
+  assert.ok(userMessage.children[1].children.some(node => /evidence-1/.test(node.textContent) &&
+    /доставка тела в сообщении не установлена/.test(node.textContent)),
+    "observed evidence does not claim unproved body delivery");
   assert.equal(f.closes.length, 1, "exact download lease closes after reading");
   assert.equal(f.get("modelContextAttempt").value, "r1");
   f.get("modelContextTab").value = "json"; await f.get("modelContextTab").fire("change"); await flush();

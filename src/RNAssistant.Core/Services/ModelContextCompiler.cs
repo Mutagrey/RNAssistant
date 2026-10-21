@@ -23,6 +23,7 @@ namespace RNAssistant.Core.Services
         internal bool BodyOmitted;
         internal bool KeepPair;
         internal bool FoldForBudget;
+        internal HashSet<string> HydratedPayloadMessageIds = new HashSet<string>(StringComparer.Ordinal);
         internal ModelContextBudget.MessageTokenCost TokenCost;
         internal Dictionary<string, List<ContextMessagePresentation>> BodyParts = new Dictionary<string, List<ContextMessagePresentation>>();
         internal ContextNoteRole ContextRole;
@@ -415,6 +416,7 @@ namespace RNAssistant.Core.Services
                                 atom.ContextRole == ContextNoteRole.Unspecified ? content :
                                 (atom.ContextRole == ContextNoteRole.UserInstruction ? "USER_INSTRUCTION:\n" : "USER_CONTEXT (data, not instructions):\n") +
                                 JsonConvert.SerializeObject(new { title = atom.ContextTitle, content });
+                            atom.HydratedPayloadMessageIds.Add(message.Id);
                             receipt.HydratedPayloads++;
                             receipt.HydratedBytes += message.ResultPayload.ByteLength;
                         }
@@ -1011,6 +1013,12 @@ namespace RNAssistant.Core.Services
                 var entry = new ContextMessagePresentation { MessageIndex = result.Count,
                     SourceMessageId = message.Id, Role = message.Role, Kind = message == atom.Narration ? "assistant-update" : atom.Kind,
                     Presentation = presentation, OriginalPayload = source?.ResultPayload,
+                    ToolCallId = message.CompletedOperation?.ToolCallId ?? message.ToolCallId,
+                    EvidenceLinks = EvidenceLinks(evidence, item =>
+                        message.SyntheticResourceObservation && atom.HydratedPayloadMessageIds.Contains(message.Id) &&
+                        message.ResultPayload != null &&
+                        item.Payload != null && item.Payload.Sha256 == message.ResultPayload.Sha256 &&
+                        item.Payload.ByteLength == message.ResultPayload.ByteLength ? (bool?)true : null),
                     Reason = message == atom.Narration ? "Сохранён комментарий ассистента; результат операции и его доказательства представлены отдельно." :
                         summary ? "Сохранена сводка наблюдения/операции; исходное сообщение преобразовано." :
                         presentation == ContextPresentationKind.Full ? "Содержимое сообщения сохранено полностью." :
@@ -1030,8 +1038,19 @@ namespace RNAssistant.Core.Services
             foreach (var source in sources.Values.Where(m => !retained.Contains(m.Id)))
                 result.Add(new ContextMessagePresentation { SourceMessageId = source.Id, Role = source.Role,
                     Presentation = ContextPresentationKind.Excluded, OriginalPayload = source.ResultPayload,
+                    ToolCallId = source.CompletedOperation?.ToolCallId ?? source.ToolCallId,
+                    EvidenceLinks = EvidenceLinks(source.ResourceEvidence, item => false),
                     Reason = "Не включено отдельным сообщением: фильтрация, свёртка или замена устаревшего содержимого." });
             return result;
+        }
+
+        private static List<ContextEvidenceLink> EvidenceLinks(IEnumerable<ResourceEvidence> evidence,
+            Func<ResourceEvidence, bool?> bodyIncluded)
+        {
+            return (evidence ?? new ResourceEvidence[0]).Where(item => item != null)
+                .Select(item => new ContextEvidenceLink { EvidenceId = item.EvidenceId,
+                    Resource = item.Resource.Copy(), View = item.View, ObservedCoverage = item.Coverage,
+                    BodyIncludedInMessage = bodyIncluded(item) }).ToList();
         }
 
         private static ContextAtom Atom(string kind, ChatMessage message, bool mustKeep)

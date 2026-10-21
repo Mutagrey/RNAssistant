@@ -748,9 +748,17 @@ a PDF skipped before rendering has an unknown count. The message-level label
 remains `Unknown` when transport augments or selects attachments; individual
 parts retain their proved labels. Trace metadata never enters provider JSON,
 which remains the authority for exact sent content. Older request events without
-the manifest retain unknown attachment attribution. Typed operation/evidence/
-coverage links for resource-derived parts and specific compiler-exclusion reasons
-remain open diagnostic work.
+the manifest retain unknown attachment attribution.
+
+The compiler receipt also keeps typed tool-call IDs and links to exact evidence
+ID, resource revision, view and **observed** coverage. These are source links,
+not inferred delivered coverage. `BodyIncludedInMessage=true` requires verified
+exact payload hydration into a synthetic current-resource message; an excluded
+source has `false` for that message, and transformed or otherwise unproved
+delivery stays unknown.
+Strict-schema wire projection invalidates any earlier positive body claim while
+retaining the source link. The inspector displays the distinction. Specific
+compiler-exclusion reasons remain open diagnostic work.
 
 At each protocol attempt, transport compares visible messages with the frozen
 compiler messages. If strict-schema projection changed content while retaining

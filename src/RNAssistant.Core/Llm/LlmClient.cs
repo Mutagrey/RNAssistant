@@ -662,6 +662,8 @@ namespace RNAssistant.Core.Llm
                     entry.Presentation = ContextPresentationKind.Unknown;
                     entry.Reason = "Текст сообщения изменён при сборке запроса; точный переданный вариант находится в JSON запроса.";
                     entry.Parts.Clear();
+                    foreach (var link in entry.EvidenceLinks ?? new List<ContextEvidenceLink>())
+                        link.BodyIncludedInMessage = null;
                 }
                 if ((message.Attachments?.Count ?? 0) > 0 || message.AttachmentAnalysis != null)
                 {
