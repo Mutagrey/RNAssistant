@@ -1,5 +1,20 @@
 # Stabilization progress
 
+## Resource Context audit — 2026-10-22
+
+Completed the requested Wave 0 source audit; the original
+[proposal](resource-context/PLAN.md) and
+[accept/adapt/reject decisions](../audits/resource-context-current-state.md) are indexed.
+Exact request CAS retention, the shared compiler/receipt and the model-context
+Inspector already exist. The next bounded slice is RC-01: strict-schema prompt
+projection can preserve a misleading `Full` provenance label after changing text.
+Per-part delivery metadata is a later extension of the existing trace, not a new store.
+
+This change is documentation only. Existing checks were inspected, not rerun;
+no build, Harness, live-model or Office/VSTO validation was performed. Runtime
+reproduction and Windows/Office/WebView2 qualification remain open. Shared-checkout
+commits observed during review are recorded in the audit; no code was changed here.
+
 ## Plugin source-chat call history — 2026-10-21
 
 Workspace accepted calls now persist exact runtime ID, canonical tool name and

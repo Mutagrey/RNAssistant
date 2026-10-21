@@ -8,6 +8,26 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## Resource Context provenance gaps — 2026-10-22
+
+Open; owner: model-context/LLM diagnostics. The
+[Wave 0 audit](../audits/resource-context-current-state.md#4-находки-и-воспроизведение)
+records source evidence separately from pending runtime reproduction:
+
+- **RC-01:** strict-schema projection removes duplicated tool parameter schemas
+  while retaining the message ID; transport can copy the prior compiler `Full`
+  label. Saved request bytes remain exact. Correct per-attempt provenance with a
+  focused schema/object/repair/fallback regression before expanding the Inspector.
+- **RC-02:** transport-selected attachment parts and individual omissions have
+  incomplete structured attribution. Current `Unknown` labels are intentional;
+  extend the existing trace rather than infer delivery from resource availability.
+- **RC-03, unconfirmed:** a repeated-read receipt can point to a full body before
+  later budget eviction. Reproduce the combined dedup/eviction case before claiming
+  a defect; verify that omissions grant no write evidence and events remain intact.
+
+No live data-loss/write-effect failure was reproduced by this docs-only audit.
+No new authority/store/adapter is introduced; Windows qualification remains open.
+
 ## Plugin source-chat accepted history — 2026-10-21
 
 The user's Windows screenshot showed `Native history needs one matching runtime ID`

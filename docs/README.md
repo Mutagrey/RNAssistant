@@ -59,6 +59,14 @@ Workspace-first решение и текущий срез CLI зафиксиро
 [PROGRESS](stabilization/PROGRESS.md). Граница общего Gateway/compiler для CLI
 описана в [Resource Fabric](resource-fabric.md).
 
+По отдельному запросу пользователя сохранены
+[предложение Resource Context](stabilization/resource-context/PLAN.md) и
+[аудит Wave 0](audits/resource-context-current-state.md) от 2026-10-22.
+Owner — model-context/LLM diagnostics. Это проверяемый срез и ограниченный план
+следующей правки, не новый runtime-контракт или повторный cutover. После закрытия
+этапов документы остаются историей; текущие поведение, статус и риски принадлежат
+canonical docs и существующим реестрам.
+
 ## Куда писать
 
 | Информация | Место |

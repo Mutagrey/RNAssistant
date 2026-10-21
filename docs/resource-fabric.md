@@ -1664,6 +1664,11 @@ and the remaining qualification, separately from optional improvements.
 Existing Office adapters, mutation journal, event store and CAS remain canonical
 owners, not parallel legacy/new paths.
 
+The [2026-10-22 Resource Context audit](audits/resource-context-current-state.md)
+adapts the new proposal to these existing owners. It distinguishes Office whole/
+part reads from Workspace text limits and records request-provenance gaps. It
+does not restart direct cutover or introduce another Gateway/compiler/store.
+
 ## Removed architecture
 
 Removed in touched contours: per-chat VBA observation/refresh hash dictionaries and

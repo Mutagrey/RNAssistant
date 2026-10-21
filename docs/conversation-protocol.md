@@ -737,6 +737,15 @@ separately as local originals, never substituted into the displayed request. Old
 requests without provenance show unknown attribution. Diagnostic source references
 and labels never enter provider JSON and do not change context selection or execution.
 
+Known diagnostic limits (2026-10-22): attachment delivery is labelled `Unknown`
+because final text/media selection happens in transport; the compact manifest does
+not yet retain every selected or omitted part. Strict-schema prompt projection can
+also change content while retaining its source ID and a compiler `Full` label.
+Until that attribution is corrected, use the saved request bytes to inspect the
+exact body. The [Resource Context audit](audits/resource-context-current-state.md)
+records the reproduction and bounded follow-up; these labels grant no read/write
+authority and do not replace the retained HTTP payload.
+
 Explicitly addressed background work (runs, context operations, diagnostics, resource staging) loads its target session without changing the user's selected chat. Only navigation actions such as select/create/activate change the active session.
 
 The eight built-in Markdown prompts share one settings schema version. On load,
