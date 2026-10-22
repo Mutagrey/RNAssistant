@@ -1,5 +1,41 @@
 # Stabilization progress
 
+## Resource Context plan reconciliation — 2026-10-23
+
+Сверка исходного вложения с `main` на `3b865e14`: сохранённый текст
+[предложения](resource-context/PLAN.md) совпадает с исходным MD.
+**Весь исходный план не завершён.** Завершение отдельных исправлений и старой
+архитектурной миграции не означает закрытие всех его Wave 0–6.
+Это проверка исходников, текущих contracts и существующих fixtures; новых
+build/test/Windows результатов эта запись не заявляет.
+
+| Этап исходного MD | Подтверждено | Остаток / решение |
+|---|---|---|
+| Wave 0 — Audit | Трассировка, owners, RC-01…04 и accept/adapt/reject сохранены в аудите | Аудит исходников выполнен; измерений исходного реального Office/model workflow он не содержал |
+| Wave 1 — Observability | Exact serialized request в CAS, RequestId/ContextSnapshotId, позиции messages/parts, links к evidence, причины основных exclusions, mixed-media golden fixture | Полная атрибуция всех преобразований не закрыта: strict-schema/смешанные сообщения могут иметь `Unknown`; полной стоимости каждого элемента нет. Сохранённая подготовка запроса не доказывает получение сервером |
+| Wave 2 — Coverage/visibility | Requested/actual coverage и selection/source completeness для lines/chars, Markdown sections, indexed parts и table rows; source continuation сохранён в model projection | Покрыты реализованные selectors, а не вся матрица новых views из §4; delivery остаётся свойством конкретного request |
+| Wave 3 — Adaptive materialization | Общий бюджет текстового чтения, большие источники/длинные строки, потоковые workspace mutations, Office windows, media/pageIndex; искусственные source ceilings сняты | Не реализованы общие procedure, JSON Pointer/tree, crop/bbox и семантические PDF table/figure/OCR views; единая cost/capability metadata по всей матрице не завершена |
+| Wave 4 — Compiler cleanup | Один compiler, frozen authority, causal frames, selective hydration, корректировка repeated-read links после budget eviction, restart/archive checks | Подтверждённые исправления сделаны. Деление compiler по размеру файла отклонено; новые refactor допускаются только под конкретный дефект |
+| Wave 5 — Context Explorer | Существующий inspector: attempts/messages, exact JSON, evidence/revision/coverage, omissions, оригиналы и downloads | Частично. Нет стабильных `R1@v3`/`E12`/`O8`/`Q14`, поиска по ним, общего Resource Inspector, derived graph, общего revision diff и явного reread из Explorer. Redacted trajectory export существует отдельно, но не интегрирован как этот Explorer workflow |
+| Wave 6 — Qualification | Точечные host-neutral Harness/Web и large-source проверки предыдущих срезов | Общий acceptance gate не закрыт: реальный Windows/Office/VBE/WebView2, representative PDF/visual provenance и измерения целевого model workflow остаются открыты; известный HTML restore fixture также открыт |
+
+`R/E/O/Q` — принятая с адаптацией, **ещё не реализованная UI-возможность**.
+Сейчас inspector выводит canonical URI/revision и evidence/tool-call/request IDs;
+это не короткие aliases. Они не должны становиться model API или вторым authority.
+Создание новых T/S/C/D/M/A/P сущностей, второго observation/store/compiler и
+переписывание существующего timeline с нуля отклонены в Wave 0. Позднейшие явные
+решения пользователя о размерах источников заменяют исходные советы о 16k/1 MiB;
+полная замена VBA в памяти остаётся намеренной.
+
+Следующий функциональный срез — стабильные UI aliases и Resource Inspector над
+существующим manifest; перед реализацией определить scope/restart mapping.
+Подтверждённые ошибки, включая HTML restore, имеют приоритет по обычным правилам.
+Остальные незавершённые slices и owners — в
+[BACKLOG](BACKLOG.md#resource-context--остаток-исходного-предложения--2026-10-23).
+Основание сверки: `LlmClient.DescribeWireMessages`, `ContextMessagePresentation`,
+`ResourceReadProjection`, `ResourceReadToolHandler`, `ResourceGatewayService.WholeRead`,
+`app-model-context.js` и текущие contracts Resource Fabric/Conversation protocol.
+
 ## Common source-size policy and CodeOnly form deletion — 2026-10-22
 
 The source-size audit removes fixed character/byte ceilings from the common text

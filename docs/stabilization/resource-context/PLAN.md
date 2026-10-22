@@ -3,8 +3,8 @@
 > Owner: model-context/LLM diagnostics. Wave 0 выполнена; исходные
 > решения accept/adapt/reject и последовательность ограниченных этапов — в
 > [аудите](../../audits/resource-context-current-state.md).
-> Реализованные этапы и результаты повторной проверки — в
-> [PROGRESS](../PROGRESS.md#resource-context-regression-review--2026-10-22).
+> Полная сверка этапов, реализованного и оставшегося на 2026-10-23 — в
+> [PROGRESS](../PROGRESS.md#resource-context-plan-reconciliation--2026-10-23).
 > При расхождении применять действующие canonical docs и решения аудита.
 > Документ остаётся историей предложения после закрытия или отклонения его этапов;
 > он не становится вторым backlog. Статус и риски принадлежат существующим реестрам.

@@ -1,7 +1,7 @@
 # Resource context: аудит текущего состояния
 
-> Ниже сохранён исходный срез Wave 0. Последующие реализации и повторная проверка
-> до `dae0dda8` отражены в [PROGRESS](../stabilization/PROGRESS.md#resource-context-regression-review--2026-10-22)
+> Ниже сохранён исходный срез Wave 0. Полная сверка исходного предложения с кодом
+> на `3b865e14` и незавершённые этапы отражены в [PROGRESS](../stabilization/PROGRESS.md#resource-context-plan-reconciliation--2026-10-23)
 > и [реестре результатов проверки](../stabilization/RISK_REGISTER.md#resource-context-review--2026-10-22).
 
 Дата: 2026-10-22. Статус: **Wave 0 выполнена по исходникам; runtime-проверки не запускались**.

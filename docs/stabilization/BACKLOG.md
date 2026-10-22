@@ -12,6 +12,46 @@
 новая возможность требует явной задачи, scope и owner; дефекты работающей системы
 приоритетнее расширения без конкретного пользовательского результата.
 
+## Resource Context — остаток исходного предложения — 2026-10-23
+
+Основание — повторная сверка [исходного MD](resource-context/PLAN.md) на `3b865e14`.
+Статус этапов и следующий срез принадлежат
+[PROGRESS](PROGRESS.md#resource-context-plan-reconciliation--2026-10-23).
+Это незавершённые adapted пункты, не новая архитектурная миграция:
+
+1. **Aliases и Resource Inspector.** Owner: existing model-context inspector,
+   typed bridge и Web UI. Определить immutable scope/mapping для R/E/O/Q и ordinal
+   revisions; сохранять значения после restart/compaction, различать новую revision
+   при restore прежних bytes. Затем показать head/version, observed/delivered
+   coverage, completeness, availability/currentness и provenance, добавить поиск
+   по aliases. Только производная UI projection над canonical IDs, без нового store
+   и model-facing адресации. Проверка: однозначность mapping, restart, scope isolation,
+   partial/stale/unknown states; UI не получает самостоятельного доступа к CAS.
+2. **Полнота manifest и metadata.** Owner: Core model-context/LLM diagnostics и
+   resource providers. Дополнять доказуемую атрибуцию преобразованных сообщений,
+   requested/actual coverage и cost/capabilities конкретных views. Существующий
+   `Unknown` сохранять, когда факт нельзя доказать; measured tokens не подменять
+   estimate. Проверка: точный serialized request плюс соответствующие golden fixtures.
+3. **Специализированные selectors/views.** Owner: соответствующий provider через
+   общий Gateway. Отдельные ограниченные slices для VBA procedure, JSON Pointer/tree,
+   image crop, PDF page ranges/table/figure/bbox и extractor provenance; исходная
+   таблица включает также дополнительные Word/Excel/HTML semantic views. Наличие
+   raw text/media/pageIndex не закрывает эту матрицу. Каждый slice требует своего
+   typed contract, exact revision/coverage, unsupported recovery и теста; OCR не
+   объявлять готовым по наличию PDF rendering.
+4. **Explorer graph/diff/reread/export.** Owner: existing inspector/UI и trajectory
+   exporter. Граф только из событий/refs; revision diff использует существующих
+   domain owners. Явное повторное чтение идёт через Gateway и создаёт новое
+   observation. Интегрировать существующий redacted trajectory export вместо нового
+   формата/store; сохранить различие metadata/secrets/full modes и контроль доступа.
+5. **Общий acceptance и target-host evidence.** Owner: qualification плюс владельцы
+   изменённого поведения. Сопоставить acceptance §10 MD с existing fixtures, закрыть
+   непокрытые visual/PDF и Explorer cases, измерить representative large-source/model
+   workflow и выполнить Windows x64/Office x64/VBE/WebView2 проверки. Не выдавать
+   предыдущие точечные Harness/Web прогоны за общий проход. Известный HTML restore
+   failure остаётся у fork/HTML owner в RISK_REGISTER; fixture воспроизведён до
+   снятия source limits и требует отдельной локализации.
+
 ## Исходные сбои расширенного resource harness — 2026-10-22
 
 Owner: HTML binding schema and VBA mutation guard tests. On clean `HEAD`,
