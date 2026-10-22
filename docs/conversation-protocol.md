@@ -713,7 +713,7 @@ request alone proves neither dispatch nor provider receipt. Streaming responses 
 labelled as assembled results; source SSE data frames remain separately available.
 The request download preserves the recorded UTF-8 bytes, including numeric lexemes.
 Bodies use verified chunked downloads, without the older diagnostic 512 KiB preview
-clipping. The existing shared 50 MiB transfer ceiling still applies explicitly;
+clipping. The inspector's Web downloader still has an explicit 50 MiB ceiling;
 rendering bounds do not truncate downloads. Large text has a labelled bounded
 rendering with full-source copy/download.
 
@@ -749,6 +749,24 @@ body-delivery evidence from that request. It compares the revision with the curr
 authority head only for the same chat, current document or catalog; old traces with
 no scope report unknown. Registered revision metadata is shown separately from
 head currentness: it does not verify CAS bytes or imply that the model saw the body.
+For those authorized scopes the tab also shows retained revision metadata: creation
+time, content digest, exact parent/restore origin, dependencies and registered
+payload byte length/type/digest. These are present-day authority metadata for the
+exact saved reference, not additional facts about the sent request.
+
+**Проверить сохранённое тело** explicitly verifies the selected revision's registered
+payload through the existing streaming CAS reader. The request must bind a saved
+request event and a resource alias occurring in that request; the UI cannot supply
+an arbitrary CAS reference or access another document's authority. Verification
+checks the full exact hash and length, supports cancellation, does not transfer the
+body to the UI and does not use the diagnostic download size ceiling. The result
+has a check timestamp and is not stored as permanent availability. Missing,
+corrupt and inaccessible bytes produce `Unavailable`; unregistered metadata remains
+`Unknown`, a registered revision without a payload is `NotRetained`, and an ordinary
+metadata query returns `Unchecked` for a registered payload. Views/parts, dependency
+bodies and live providers are outside this verification; absence of a revision
+payload does not imply that all views are unavailable. CAS validity does not change
+head currentness, observation completeness or model-delivery evidence.
 The inspector does not perform a live provider reread or grant mutation authority.
 
 Transport diagnostics (2026-10-22): each saved request keeps a bounded

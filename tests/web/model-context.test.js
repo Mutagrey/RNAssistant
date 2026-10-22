@@ -22,6 +22,7 @@ class Node {
 async function flush() { for (let i = 0; i < 25; i++) await new Promise(resolve => setImmediate(resolve)); }
 function fixture(withAliases = false) {
   const nodes = new Map(), mounts = [], calls = [], closes = [], timers = new Map(), leases = new Map(); let timer = 0;
+  const verification = { availability: "Verified", hold: null };
   const get = id => { if (!nodes.has(id)) nodes.set(id, new Node()); return nodes.get(id); };
   const requestText = '{"model":"test","messages":[{"role":"system","content":"rules"},{"role":"user","content":"' + "語😀".repeat(110000) + '"}],"seed":9007199254740993123456789}';
   const events = [{ eventId: "r1", sequence: 3, createdUtc: "2026-10-02T10:00:00Z", type: "llm.request", hasPayload: true, trace: { RequestId: "one", Model: "test", Streaming: true } }];
@@ -38,8 +39,20 @@ function fixture(withAliases = false) {
       if (type === "getModelContext") {
         const resources = withAliases ? [{ alias: "R1@v1", resource: { uri: "rna://vba/module", revision: "r1" },
           scope: { kind: "conversation", id: "chat" }, currentness: "Superseded", revisionRecorded: true,
+          revisionMetadata: { contentSha256: "revision-hash", createdUtc: "2026-10-02T09:00:00Z",
+            payload: { sha256: "payload-hash", byteLength: 1234, contentType: "text/plain" },
+            parent: { uri: "rna://vba/module", revision: "prior" }, restoredFrom: { uri: "rna://vba/module", revision: "original" },
+            dependencies: [{ resource: { uri: "rna://state/source", revision: "dependency" }, kind: "source", view: "text" }] },
+          payloadAvailability: "Unchecked",
           observations: [{ requestAlias: "Q1", operationAlias: "O1", evidenceAlias: "E1", view: "source",
             coverage: { kind: "line-range", start: 1, end: 2 }, observationComplete: false, bodyIncludedInMessage: null }] }] : [];
+        if (query.verifyResourceAlias) {
+          if (verification.hold) await verification.hold;
+          assert.equal(query.requestEventId, "r1");
+          assert.equal(query.verifyResourceAlias, "R1@v1");
+          resources[0].payloadAvailability = verification.availability;
+          resources[0].payloadCheckedUtc = "2026-10-02T11:00:00Z";
+        }
         if (query.alias) {
           if (!withAliases || !["Q1", "O1", "E1", "R1@v1"].includes(query.alias)) throw new Error("RESOURCE_NOT_FOUND");
           return { chatId: "chat", revision, events: [events[0]], resources,
@@ -68,7 +81,7 @@ function fixture(withAliases = false) {
   c.RNAssistantViewerRegistry = { mount(kind, node, options) { mounts.push({ kind, node, options }); }, unmount() {} };
   for (const name of ["app-resource-download.js", "app-model-context.js"]) vm.runInContext(fs.readFileSync("web/js/" + name, "utf8"), c);
   c.bindModelContextActions();
-  return { c, get, mounts, calls, closes, requestText, events, timers,
+  return { c, get, mounts, calls, closes, requestText, events, timers, verification,
     bump() { revision++; }, hold(value) { hold = value; },
     async tick() { const entry = Array.from(timers).find(([, t]) => t.ms === 2000); timers.delete(entry[0]); entry[1].fn(); await flush(); }
   };
@@ -194,6 +207,22 @@ function fixture(withAliases = false) {
   assert.match(resource.children[0].textContent, /R1@v1 · Устаревшая/);
   assert.match(resource.children[1].children.map(node => node.textContent).join(" "),
     /Q1 · O1 · E1 · source.*частичное наблюдение.*доставка неизвестна/);
+  const resourceText = () => linked.get("modelContextBody").children.find(node => node.tag === "details")
+    .children[1].children.map(node => node.textContent).join(" ");
+  const checkButton = f => f.get("modelContextBody").children.find(node => node.tag === "details")
+    .children[1].children.find(node => node.tag === "button" && node.textContent === "Проверить сохранённое тело");
+  assert.match(resourceText(), /Предыдущая ревизия:.*prior.*Восстановлена из:.*original.*Зависимость:.*dependency/);
+  assert.match(resourceText(), /1234 байт.*text\/plain.*payload-hash.*сохранённое тело не проверено/);
+  assert.equal(linked.calls.filter(call => call.query.verifyResourceAlias).length, 0, "opening resources does not start expensive verification");
+  await checkButton(linked).fire("click"); await flush();
+  assert.equal(linked.calls.at(-1).query.verifyResourceAlias, "R1@v1");
+  assert.match(resourceText(), /хеш и длина сохранённого тела проверены/);
+  assert.match(resourceText(), /доставка неизвестна/, "CAS validity never manufactures model delivery");
+  await linked.get("modelContextRefresh").fire("click"); await flush();
+  assert.match(resourceText(), /сохранённое тело не проверено/, "refresh does not leave a stale verification label on screen");
+  linked.verification.availability = "Unavailable";
+  await checkButton(linked).fire("click"); await flush();
+  assert.match(resourceText(), /отсутствует, повреждено или недоступно/);
   linked.get("modelContextAliasSearch").value = "E1";
   await linked.get("modelContextAliasFind").fire("click"); await flush();
   assert.equal(linked.calls.at(-1).query.alias, "E1", "search resolves through the typed bridge");
@@ -205,4 +234,17 @@ function fixture(withAliases = false) {
   await linked.get("modelContextAliasFind").fire("click"); await flush();
   assert.match(linked.get("modelContextStatus").textContent, /RESOURCE_NOT_FOUND/);
   console.log("PASS model context: stable aliases, resource evidence and scoped lookup");
+
+  const leaving = fixture(true);
+  leaving.c.RNAssistantModelContext.open(); await flush();
+  leaving.get("modelContextTab").value = "resources";
+  await leaving.get("modelContextTab").fire("change"); await flush();
+  let finishVerification;
+  leaving.verification.hold = new Promise(resolve => finishVerification = resolve);
+  const checking = checkButton(leaving).fire("click"); await flush();
+  leaving.c.state.activeChatId = "other-chat"; leaving.c.RNAssistantModelContext.sync();
+  finishVerification(); await checking; await flush();
+  assert.equal(leaving.get("modelContextBody").children.length, 0, "late verification cannot render into another chat");
+  assert.ok(leaving.get("modelContextDialog").classList.contains("hidden"));
+  console.log("PASS model context: explicit payload verification, refresh and late-response isolation");
 })().catch(error => { console.error(error); process.exitCode = 1; });

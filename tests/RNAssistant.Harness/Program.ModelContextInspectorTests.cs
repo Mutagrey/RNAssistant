@@ -334,7 +334,9 @@ namespace RNAssistant.Harness
                 var otherRef = new ResourceRef(other.Uri, "revision-a");
                 var body = PayloadRef.FromBlob(payloads.StoreText("same bytes", "text/plain"));
                 foreach (var reference in new[] { first, second, restored })
-                    store.RegisterRevision(scope, new ResourceRevisionMetadata(reference, body.Sha256, body));
+                    store.RegisterRevision(scope, new ResourceRevisionMetadata(reference, body.Sha256, body,
+                        parent: reference == restored ? second : null, restoredFrom: reference == restored ? first : null,
+                        dependencies: new[] { new ResourceDependency(otherRef, "text", ResourceCoverage.Whole(), "source") }));
                 store.Publish(ResourceAuthorityCommit.Create(scope, 0, null,
                     new[] { new ResourceHeadChange(identity, null, ResourceHeadState.Known(restored, 1)) },
                     AuthorityCommitReason.InitialObservation));
@@ -368,6 +370,28 @@ namespace RNAssistant.Harness
                         original.Resources[0].Observations[0].ObservationComplete == false &&
                         original.Resources[0].Observations[0].BodyIncludedInMessage == false,
                         "partial observed coverage and non-delivery remain distinct from retained revision metadata");
+                    AssertEqual(ModelContextPayloadAvailability.Unchecked, original.Resources[0].PayloadAvailability,
+                        "metadata-only inspection does not verify source bytes");
+                    AssertTrue(original.Resources[0].PayloadCheckedUtc == null, "no invented verification timestamp");
+                    Func<string, string, ModelContextResourceDto> verify = (eventId, alias) => inspector().Query(session,
+                        new ModelContextQuery { RequestEventId = eventId, VerifyResourceAlias = alias }, CancellationToken.None)
+                        .Resources.Single(row => row.Alias == alias);
+                    var verified = verify(q1.EventId, "R1@v1");
+                    AssertEqual(ModelContextPayloadAvailability.Verified, verified.PayloadAvailability, "explicit CAS verification");
+                    AssertTrue(verified.PayloadCheckedUtc.HasValue, "verification has a time rather than perpetual availability");
+                    AssertEqual(body.Sha256, verified.RevisionMetadata.Payload.Sha256, "exact authority payload supplies verification");
+                    AssertEqual(ModelContextCurrentness.Superseded, verified.Currentness, "CAS validity does not move the head");
+                    AssertTrue(verified.Observations[0].BodyIncludedInMessage == false, "CAS validity does not imply delivery");
+                    RuntimeThrows<InvalidOperationException>(() => verify(q1.EventId, "R2@v1"));
+                    RuntimeThrows<InvalidOperationException>(() => inspector().Query(session,
+                        new ModelContextQuery { VerifyResourceAlias = "R1@v1", KnownRevision = session.Revision }, CancellationToken.None));
+                    RuntimeThrows<InvalidOperationException>(() => inspector().Query(session,
+                        new ModelContextQuery { Alias = "R1@v1", VerifyResourceAlias = "R1@v1" }, CancellationToken.None));
+                    AssertEqual(ModelContextPayloadAvailability.Unknown, verify(q2.EventId, "R2@v1").PayloadAvailability,
+                        "missing revision metadata is unknown, not a missing payload");
+                    store.RegisterRevision(scope, new ResourceRevisionMetadata(otherRef));
+                    AssertEqual(ModelContextPayloadAvailability.NotRetained, verify(q2.EventId, "R2@v1").PayloadAvailability,
+                        "registered payload-free revision differs from unknown metadata");
                     var next = inspector().Query(session, new ModelContextQuery { RequestEventId = q3.EventId }, CancellationToken.None);
                     AssertEqual("Q3", next.Events[0].Alias, "request aliases survive intervening requests");
                     AssertEqual("R1@v2", next.Resources[0].Alias, "revisions are numbered within their resource");
@@ -380,6 +404,10 @@ namespace RNAssistant.Harness
                         "restoring identical bytes creates a new exact revision alias");
                     AssertEqual(ModelContextCurrentness.Current, search.Resources[0].Currentness,
                         "the current authority revision is reported without a live provider read");
+                    AssertEqual(second.Revision, search.Resources[0].RevisionMetadata.Parent.Revision, "exact predecessor provenance");
+                    AssertEqual(first.Revision, search.Resources[0].RevisionMetadata.RestoredFrom.Revision, "explicit restore origin");
+                    AssertEqual(otherRef.Uri, search.Resources[0].RevisionMetadata.Dependencies[0].Resource.Uri,
+                        "dependency provenance is retained without reading dependency bytes");
                     AssertEqual("Q1", inspector().Query(session, new ModelContextQuery { Alias = "E1" }, CancellationToken.None).Events[0].Alias,
                         "evidence lookup resolves the saved request");
                     AssertEqual("Q1", inspector().Query(session, new ModelContextQuery { Alias = "O1" }, CancellationToken.None).Events[0].Alias,
@@ -403,6 +431,13 @@ namespace RNAssistant.Harness
                     AssertEqual("R3@v1", foreignRow.Alias, "same URI in a different authority scope gets its own alias");
                     AssertEqual(ModelContextCurrentness.Unknown, foreignRow.Currentness,
                         "inspector does not consult another document's authority");
+                    store.RegisterRevision(new ResourceAuthorityScopeId("document", "other-doc"),
+                        new ResourceRevisionMetadata(first, body.Sha256, body));
+                    var foreignVerification = verify(foreign.EventId, "R3@v1");
+                    AssertEqual(ModelContextPayloadAvailability.Unknown, foreignVerification.PayloadAvailability,
+                        "a saved link cannot authorize another document's payload verification");
+                    AssertTrue(foreignVerification.RevisionMetadata == null && foreignVerification.PayloadCheckedUtc == null,
+                        "foreign metadata is not exposed by payload verification");
                     AssertEqual("R1@v1", inspector().Query(session, new ModelContextQuery {
                         Alias = "R1@v1" }, CancellationToken.None).Resources[0].Alias,
                         "new scope does not renumber an older alias");
@@ -411,6 +446,42 @@ namespace RNAssistant.Harness
                         new ModelContextQuery { Alias = "R1@v1" }, CancellationToken.None));
                     RuntimeThrows<InvalidOperationException>(() => inspector().Query(session,
                         new ModelContextQuery { Alias = "R1@v999" }, CancellationToken.None));
+                    System.IO.File.WriteAllText(payloads.PathFor(body.Sha256), "damaged CAS bytes");
+                    AssertEqual(ModelContextPayloadAvailability.Unavailable, verify(q1.EventId, "R1@v1").PayloadAvailability,
+                        "corrupt CAS never reports verified availability");
+                    System.IO.File.Delete(payloads.PathFor(body.Sha256));
+                    AssertEqual(ModelContextPayloadAvailability.Unavailable, verify(q1.EventId, "R1@v1").PayloadAvailability,
+                        "missing CAS never reports verified availability");
+                    payloads.StoreText("same bytes", "text/plain");
+                    AssertEqual(ModelContextPayloadAvailability.Verified, verify(q1.EventId, "R1@v1").PayloadAvailability,
+                        "explicit repeat verifies repaired bytes instead of caching an old failure");
+                    AssertEqual(ModelContextPayloadAvailability.Unchecked, inspector().Query(session,
+                        new ModelContextQuery { RequestEventId = q1.EventId }, CancellationToken.None).Resources[0].PayloadAvailability,
+                        "verification is not silently persisted as permanent availability");
+                    var largePath = System.IO.Path.Combine(paths.ChatBlobDirectory, "verification-source.bin");
+                    using (var source = System.IO.File.Create(largePath)) source.SetLength(51L * 1024 * 1024);
+                    var largeBody = PayloadRef.FromBlob(payloads.StoreFile(largePath, "application/octet-stream"));
+                    var largeRef = new ResourceRef(ResourceStateProvider.Identity(scope, "large").Uri, "large-revision");
+                    store.RegisterRevision(scope, new ResourceRevisionMetadata(largeRef, largeBody.Sha256, largeBody));
+                    var largeRequest = request("operation-large", "evidence-large", largeRef, true);
+                    var largeRow = inspector().Query(session, new ModelContextQuery {
+                        RequestEventId = largeRequest.EventId }, CancellationToken.None).Resources[0];
+                    AssertEqual(ModelContextPayloadAvailability.Verified, verify(largeRequest.EventId, largeRow.Alias).PayloadAvailability,
+                        "streamed verification is independent of the diagnostic download size budget");
+                    var emptyBody = PayloadRef.FromBlob(payloads.StoreText("", "text/plain"));
+                    var emptyRef = new ResourceRef(largeRef.Uri, "empty-revision");
+                    store.RegisterRevision(scope, new ResourceRevisionMetadata(emptyRef, emptyBody.Sha256, emptyBody));
+                    var emptyRequest = request("operation-empty", "evidence-empty", emptyRef, true);
+                    var emptyRow = inspector().Query(session, new ModelContextQuery {
+                        RequestEventId = emptyRequest.EventId }, CancellationToken.None).Resources[0];
+                    AssertEqual(ModelContextPayloadAvailability.Verified, verify(emptyRequest.EventId, emptyRow.Alias).PayloadAvailability,
+                        "empty retained bytes are verifiable, not absent");
+                    using (var cancelled = new CancellationTokenSource())
+                    {
+                        cancelled.Cancel();
+                        RuntimeThrows<OperationCanceledException>(() => inspector().Query(session, new ModelContextQuery {
+                            RequestEventId = q1.EventId, VerifyResourceAlias = "R1@v1" }, cancelled.Token));
+                    }
                 }
             });
         }

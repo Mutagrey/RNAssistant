@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Threading;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
@@ -24,6 +26,9 @@ namespace RNAssistant.Office.Services
         internal ModelContextResponse Query(ChatSession session, ModelContextQuery query, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
+            if (!string.IsNullOrEmpty(query.VerifyResourceAlias) &&
+                (string.IsNullOrEmpty(query.RequestEventId) || !string.IsNullOrEmpty(query.Alias) || query.BeforeSequence.HasValue))
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: payload verification requires an exact saved request and its resource alias.");
             var response = new ModelContextResponse { ChatId = session.Id, Revision = session.Revision,
                 Events = new ModelContextEventDto[0] };
             if (!query.BeforeSequence.HasValue && string.IsNullOrEmpty(query.RequestEventId) &&
@@ -56,6 +61,13 @@ namespace RNAssistant.Office.Services
                     !string.IsNullOrEmpty(trace.RequestId) && e.RunId == request.RunId && Trace(e).RequestId == trace.RequestId)
                     .Select(e => Describe(e, true, aliases.Request(e.EventId))).ToArray();
                 response.Resources = DescribeResources(session, trace, aliases, request.EventId);
+                if (!string.IsNullOrEmpty(query.VerifyResourceAlias))
+                {
+                    var resource = response.Resources.SingleOrDefault(row => row.Alias == query.VerifyResourceAlias);
+                    if (resource == null)
+                        throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: resource alias is absent from the selected request.");
+                    VerifyPayload(resource, token);
+                }
                 response.Operations = DescribeIdentities(trace, entry => new[] { entry.ToolCallId }, aliases.Operation);
                 response.Evidence = DescribeIdentities(trace, entry =>
                     (entry.EvidenceLinks ?? new List<ContextEvidenceLink>()).Select(link => link?.EvidenceId), aliases.Evidence);
@@ -155,11 +167,11 @@ namespace RNAssistant.Office.Services
                         BodyIncludedInMessage = link.BodyIncludedInMessage });
                 }
             foreach (var row in rows.Values)
-                DescribeCurrentness(session, row);
+                DescribeAuthority(session, row);
             return rows.Values.OrderBy(row => row.Alias, StringComparer.Ordinal).ToArray();
         }
 
-        private void DescribeCurrentness(ChatSession session, ModelContextResourceDto row)
+        private void DescribeAuthority(ChatSession session, ModelContextResourceDto row)
         {
             var scope = row.Scope;
             if (_authority == null || scope == null ||
@@ -167,7 +179,14 @@ namespace RNAssistant.Office.Services
                   scope.Kind == "document" && scope.Id == session.DocumentAuthorityId ||
                   scope.Equals(CatalogPublicationService.ScopeId))) return;
             var revisions = _authority.Store as IResourceRevisionStore;
-            if (revisions != null) row.RevisionRecorded = revisions.GetRevision(scope, row.Resource) != null;
+            if (revisions != null)
+            {
+                row.RevisionMetadata = revisions.GetRevision(scope, row.Resource);
+                row.RevisionRecorded = row.RevisionMetadata != null;
+                if (row.RevisionMetadata != null)
+                    row.PayloadAvailability = row.RevisionMetadata.Payload == null
+                        ? ModelContextPayloadAvailability.NotRetained : ModelContextPayloadAvailability.Unchecked;
+            }
             var head = _authority.Store.GetHead(scope, row.Resource.Identity);
             if (head == null) return;
             switch (head.Knowledge)
@@ -180,6 +199,28 @@ namespace RNAssistant.Office.Services
                 case HeadKnowledge.Removed: row.Currentness = ModelContextCurrentness.Removed; break;
                 case HeadKnowledge.Unavailable: row.Currentness = ModelContextCurrentness.Unavailable; break;
             }
+        }
+
+        private void VerifyPayload(ModelContextResourceDto row, CancellationToken token)
+        {
+            // Only metadata authorized by DescribeAuthority can supply a payload.
+            // No caller-provided CAS address, provider read or head publication.
+            var payload = row.RevisionMetadata?.Payload;
+            if (payload == null) return;
+            try
+            {
+                // OpenVerifiedRead authenticates the full pinned file before returning;
+                // disposing it does not materialize a body or create a download lease.
+                using (_payloads.OpenVerifiedRead(payload.ToBlobReference(), Math.Max(1, payload.ByteLength), token)) { }
+                row.PayloadAvailability = ModelContextPayloadAvailability.Verified;
+            }
+            catch (Exception error) when (error is IOException || error is InvalidDataException ||
+                error is UnauthorizedAccessException || error is CryptographicException)
+            {
+                row.PayloadAvailability = ModelContextPayloadAvailability.Unavailable;
+            }
+            token.ThrowIfCancellationRequested();
+            row.PayloadCheckedUtc = DateTime.UtcNow;
         }
 
         // Ordinals are derived from append-only request events in sequence order. No

@@ -256,10 +256,51 @@
     lazy(c, body, "Полный ответ · исходный JSON", function () { return text; }, true);
   }
 
+  function referenceText(ref) { return (ref.uri || "?") + (ref.revision ? " @ " + ref.revision : ""); }
+  async function verifyResource(c, row, control, note) {
+    var version = c.version, eventId = c.selected;
+    c.follow = false; control.disabled = true; note.textContent = "Проверка полного сохранённого тела…";
+    try {
+      var response = await call(c, "getModelContext", { requestEventId: eventId, verifyResourceAlias: row.alias });
+      if (!valid(c, version) || c.selected !== eventId) return;
+      var updated = (response.resources || []).find(function (item) { return item.alias === row.alias; });
+      if (response.chatId !== c.chatId || !updated || !(response.events || []).some(function (item) { return item.eventId === eventId; }))
+        throw new Error("Ответ проверки не соответствует выбранному ресурсу.");
+      c.detail.resources = c.detail.resources.map(function (item) { return item.alias === row.alias ? updated : item; });
+      if (c.mode === "actual" && c.tab === "resources") { c.focusResource = row.alias; await render(c); }
+    } catch (error) { if (valid(c, version) && note.isConnected) note.textContent = error.message || String(error); }
+    finally { control.disabled = false; }
+  }
+  function resourceMetadata(c, row, body) {
+    var metadata = row.revisionMetadata, payload = metadata && metadata.payload;
+    if (metadata) {
+      if (metadata.createdUtc) body.appendChild(el("p", "Время создания ревизии: " + new Date(metadata.createdUtc).toLocaleString()));
+      if (metadata.contentSha256) body.appendChild(el("p", "Хеш содержимого ревизии: " + metadata.contentSha256));
+      if (metadata.parent) body.appendChild(el("p", "Предыдущая ревизия: " + referenceText(metadata.parent)));
+      if (metadata.restoredFrom) body.appendChild(el("p", "Восстановлена из: " + referenceText(metadata.restoredFrom)));
+      (metadata.dependencies || []).forEach(function (dependency) {
+        body.appendChild(el("p", "Зависимость: " + referenceText(dependency.resource || {}) +
+          (dependency.kind ? " · " + dependency.kind : "") + (dependency.view ? " · " + dependency.view : "") +
+          (dependency.coverage ? " · " + JSON.stringify(dependency.coverage) : "")));
+      });
+    }
+    if (payload) body.appendChild(el("p", "Сохранённое тело: " + payload.byteLength + " байт · " +
+      (payload.contentType || "тип не указан") + " · SHA-256 " + payload.sha256));
+    var availability = { Unknown: "нет сведений о сохранённом теле", NotRetained: "у ревизии не зарегистрирован payload",
+      Unchecked: "сохранённое тело не проверено", Verified: "хеш и длина сохранённого тела проверены",
+      Unavailable: "сохранённое тело отсутствует, повреждено или недоступно" };
+    var note = el("p", "CAS: " + (availability[row.payloadAvailability] || availability.Unknown) +
+      (row.payloadCheckedUtc ? " · " + new Date(row.payloadCheckedUtc).toLocaleString() : ""));
+    body.appendChild(note);
+    if (payload) {
+      var check = button("Проверить сохранённое тело", function () { return verifyResource(c, row, check, note); });
+      body.appendChild(check);
+    }
+  }
   function resources(c, root) {
     var rows = c.detail && c.detail.resources || [];
     if (!rows.length) { root.appendChild(el("p", "У этого запроса нет сохранённых связей с ресурсами.")); return; }
-    root.appendChild(el("p", "Ревизии, наблюдавшиеся в выбранном запросе. Актуальность читается из authority; байты CAS здесь не проверяются.", "model-context-note"));
+    root.appendChild(el("p", "Ревизии из выбранного запроса. Проверка CAS проверяет только сохранённый payload ревизии. Представления, зависимости и live-источник отдельно не проверяются; доставка модели определяется наблюдениями ниже.", "model-context-note"));
     var currentness = { Current: "Текущая", Superseded: "Устаревшая", Removed: "Удалена",
       Unavailable: "Недоступна", Unknown: "Неизвестна" };
     rows.forEach(function (row) {
@@ -269,11 +310,12 @@
       if (c.focusResource === row.alias) detail.open = true;
       var body = el("div", undefined, "model-context-message-body"), ref = row.resource || {};
       detail.appendChild(body);
-      body.appendChild(el("p", (ref.uri || "?") + (ref.revision ? " @ " + ref.revision : "")));
+      body.appendChild(el("p", referenceText(ref)));
       var scope = row.scope || {};
       body.appendChild(el("p", "Scope: " + (scope.kind ? scope.kind + ":" + scope.id : "не указан в сохранённой трассе")));
-      body.appendChild(el("p", row.revisionRecorded === true ? "Ревизия есть в authority; байты CAS не проверены." :
+      body.appendChild(el("p", row.revisionRecorded === true ? "Ревизия есть в authority." :
         row.revisionRecorded === false ? "Ревизия не найдена в текущем authority." : "Наличие ревизии не проверено."));
+      resourceMetadata(c, row, body);
       (row.observations || []).forEach(function (item) {
         var details = [item.requestAlias || "Q?", item.operationAlias || "", item.evidenceAlias || "",
           item.view || "view?", item.coverage ? JSON.stringify(item.coverage) : "coverage?",
@@ -341,13 +383,14 @@
       var detail = await call(c, "getModelContext", { requestEventId: eventId });
       if (!valid(c, version)) return;
       var changed = !c.detail || JSON.stringify(c.detail.events.map(function (e) { return e.eventId; })) !== JSON.stringify(detail.events.map(function (e) { return e.eventId; }));
+      var resourcesChanged = !c.detail || JSON.stringify(c.detail.resources) !== JSON.stringify(detail.resources);
       c.detail = detail;
       var request = detail.events.find(function (e) { return e.eventId === eventId; });
       var response = detail.events.find(function (e) { return e.type === "llm.response" || e.type === "llm.failure"; });
       status(c, "Подготовлен " + (request.alias || "") + " · " + new Date(request.createdUtc).toLocaleString() + " · " + (request.trace.Model || "") +
         " · " + (response ? response.type === "llm.response" ? "ответ сохранён" : "ошибка" : "ответ пока отсутствует") +
         (request.trace.Streaming ? " · streaming" : "") + (c.follow ? " · слежение" : " · просмотр выбранного шага"));
-      if (!same || changed && c.tab === "response") await render(c);
+      if (!same || changed && c.tab === "response" || resourcesChanged && c.tab === "resources") await render(c);
     } catch (error) { if (valid(c, version)) status(c, error.message); }
   }
   function attemptPicker(c) {

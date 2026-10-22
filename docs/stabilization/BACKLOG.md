@@ -22,11 +22,17 @@
 1. **Полнота Resource Inspector.** Owner: existing model-context inspector,
    typed bridge и Web UI совместно с resource providers. Chat-local `R@v/E/O/Q`,
    scope/revision mapping, поиск и начальный read-only resource view выполнены.
+   Добавлены exact parent/restore/dependency provenance, metadata payload и явная
+   потоковая проверка CAS payload ревизии с временем проверки и scope isolation.
    Добавить доказуемые kind/views, requested/actual coverage, cost/capabilities,
-   полную availability (CAS/provider) и provenance для конкретных resources;
+   availability остальных views/parts и live providers, provenance преобразований;
    не подменять unknown предположением. При необходимости проверить старые traces
    и compaction/restart на реальном архиве. UI остаётся производной projection
    над canonical IDs без собственного CAS-доступа или model-facing адресации.
+   Отдельный остаток: diagnostic body download всё ещё ограничен Web downloader
+   50 MiB и backend `ReadPrefix`/Int32 materialization; потоковая CAS-проверка этого
+   лимита не имеет. Перевести диагностическое скачивание на существующий streaming
+   data plane, сохранив точные байты, integrity и отмену.
 2. **Полнота manifest и metadata.** Owner: Core model-context/LLM diagnostics и
    resource providers. Дополнять доказуемую атрибуцию преобразованных сообщений,
    requested/actual coverage и cost/capabilities конкретных views. Существующий

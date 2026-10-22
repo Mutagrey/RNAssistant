@@ -12,6 +12,7 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("knownRevision")] public long? KnownRevision { get; set; }
         [JsonProperty("requestEventId")] public string RequestEventId { get; set; }
         [JsonProperty("alias")] public string Alias { get; set; }
+        [JsonProperty("verifyResourceAlias")] public string VerifyResourceAlias { get; set; }
     }
     public sealed class ModelContextPayloadQuery : ChatPayload
     {
@@ -30,6 +31,9 @@ namespace RNAssistant.Office.Contracts
     }
     [JsonConverter(typeof(Newtonsoft.Json.Converters.StringEnumConverter))]
     public enum ModelContextCurrentness { Unknown, Current, Superseded, Removed, Unavailable }
+
+    [JsonConverter(typeof(Newtonsoft.Json.Converters.StringEnumConverter))]
+    public enum ModelContextPayloadAvailability { Unknown, NotRetained, Unchecked, Verified, Unavailable }
 
     public sealed class ModelContextResourceObservationDto
     {
@@ -55,6 +59,9 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("scope")] public ResourceAuthorityScopeId Scope { get; set; }
         [JsonProperty("currentness")] public ModelContextCurrentness Currentness { get; set; }
         [JsonProperty("revisionRecorded")] public bool? RevisionRecorded { get; set; }
+        [JsonProperty("revisionMetadata")] public ResourceRevisionMetadata RevisionMetadata { get; set; }
+        [JsonProperty("payloadAvailability")] public ModelContextPayloadAvailability PayloadAvailability { get; set; }
+        [JsonProperty("payloadCheckedUtc")] public DateTime? PayloadCheckedUtc { get; set; }
         [JsonProperty("observations")] public IReadOnlyList<ModelContextResourceObservationDto> Observations { get; set; }
     }
     public sealed class ModelContextResponse

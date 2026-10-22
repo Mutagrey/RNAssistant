@@ -1,5 +1,21 @@
 # Stabilization progress
 
+## Resource Inspector retained payload and lineage — 2026-10-23
+
+The Resources tab now exposes exact revision parent/restore/dependency provenance
+and registered payload metadata from the authorized authority scope. Explicit CAS
+verification streams the complete registered revision payload and reports hash/length
+validity with a timestamp. It does not change currentness, completeness or delivery,
+read live providers, verify dependency/view bodies or store a permanent availability
+flag. Missing/corrupt bytes, absent payloads and unknown metadata remain distinct.
+
+Focused Harness/Web coverage checks integrity failures and repair, scope isolation,
+empty and 51 MiB bodies, metadata refresh and late replies after changing chats.
+Windows/Office/WebView2 qualification remains open. Wave 5 is still partial:
+kind/views/capabilities, transformation provenance, broader availability and the
+graph/diff/reread/export workflow remain in BACKLOG. Diagnostic body download also
+retains its separate Web/Int32 limits; this CAS verification does not use them.
+
 ## Copied HTML workspace recovery — 2026-10-23
 
 The reproduced `resource cutover: schema mapping derived publication` failure is
@@ -44,7 +60,7 @@ build/test/Windows результатов эта запись не заявля�
 | Wave 2 — Coverage/visibility | Requested/actual coverage и selection/source completeness для lines/chars, Markdown sections, indexed parts и table rows; source continuation сохранён в model projection | Покрыты реализованные selectors, а не вся матрица новых views из §4; delivery остаётся свойством конкретного request |
 | Wave 3 — Adaptive materialization | Общий бюджет текстового чтения, большие источники/длинные строки, потоковые workspace mutations, Office windows, media/pageIndex; искусственные source ceilings сняты | Не реализованы общие procedure, JSON Pointer/tree, crop/bbox и семантические PDF table/figure/OCR views; единая cost/capability metadata по всей матрице не завершена |
 | Wave 4 — Compiler cleanup | Один compiler, frozen authority, causal frames, selective hydration, корректировка repeated-read links после budget eviction, restart/archive checks | Подтверждённые исправления сделаны. Деление compiler по размеру файла отклонено; новые refactor допускаются только под конкретный дефект |
-| Wave 5 — Context Explorer | Существующий inspector: attempts/messages, exact JSON, evidence/revision/coverage, omissions, оригиналы и downloads; добавлены стабильные chat-local `R@v/E/O/Q`, поиск и начальный resource view | Частично. Нет полной metadata/capabilities/availability и CAS verification, derived graph, общего revision diff и явного reread из Explorer. Redacted trajectory export существует отдельно, но не интегрирован как этот Explorer workflow |
+| Wave 5 — Context Explorer | Существующий inspector: attempts/messages, exact JSON, evidence/revision/coverage, omissions, оригиналы и downloads; стабильные chat-local `R@v/E/O/Q`, поиск, resource view, revision provenance и явная CAS-проверка payload ревизии | Частично. Нет полной metadata/capabilities/availability для views/providers, derived graph, общего revision diff и явного reread из Explorer. Redacted trajectory export существует отдельно, но не интегрирован как этот Explorer workflow |
 | Wave 6 — Qualification | Точечные host-neutral Harness/Web и large-source проверки предыдущих срезов; HTML restore fixture исправлен отдельно | Общий acceptance gate не закрыт: реальный Windows/Office/VBE/WebView2, representative PDF/visual provenance и измерения целевого model workflow остаются открыты |
 
 `R/E/O/Q` — принятая с адаптацией UI-возможность, теперь реализована для
