@@ -1,0 +1,26 @@
+[
+  {
+    "exchange": 1,
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "status": 200,
+    "requestBytes": 45053,
+    "responseBytes": 281
+  },
+  {
+    "exchange": 2,
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "status": 200,
+    "requestBytes": 46517,
+    "responseBytes": 240
+  },
+  {
+    "exchange": 3,
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "status": 200,
+    "requestBytes": 46897,
+    "responseBytes": 250
+  }
+]

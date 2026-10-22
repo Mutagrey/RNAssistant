@@ -1,0 +1,65 @@
+[
+  {
+    "phase": "thinking",
+    "message": "Модель выбирает следующий шаг...",
+    "tool": null,
+    "callId": null,
+    "status": null
+  },
+  {
+    "phase": "acting",
+    "message": "Загружаю схему инструмента.",
+    "tool": null,
+    "callId": null,
+    "status": "running"
+  },
+  {
+    "phase": "tool_running",
+    "message": "Загружаю схему инструмента.",
+    "tool": "common.capabilities_read",
+    "callId": "call_28ee641da3944d5ba060345637a38a0e",
+    "status": "running"
+  },
+  {
+    "phase": "tool_result",
+    "message": "Tool schema returned for callable-state evaluation: excel.add_sheet",
+    "tool": "common.capabilities_read",
+    "callId": "call_28ee641da3944d5ba060345637a38a0e",
+    "status": "completed"
+  },
+  {
+    "phase": "thinking",
+    "message": "Модель выбирает следующий шаг...",
+    "tool": null,
+    "callId": null,
+    "status": null
+  },
+  {
+    "phase": "acting",
+    "message": "Добавляю лист.",
+    "tool": null,
+    "callId": null,
+    "status": "running"
+  },
+  {
+    "phase": "tool_running",
+    "message": "Добавляю лист.",
+    "tool": "excel.add_sheet",
+    "callId": "call_dc9f3c090f7143e49286ceb4f6f3733b",
+    "status": "running"
+  },
+  {
+    "phase": "tool_result",
+    "message": "Added sheet: Report",
+    "tool": "excel.add_sheet",
+    "callId": "call_dc9f3c090f7143e49286ceb4f6f3733b",
+    "status": "completed"
+  },
+  {
+    "phase": "thinking",
+    "message": "Модель выбирает следующий шаг...",
+    "tool": null,
+    "callId": null,
+    "status": null
+  }
+]

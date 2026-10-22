@@ -1,0 +1,1 @@
+{"choices":[{"index":0,"message":{"role":"assistant","content":"{\"message\":\"Загружаю схему инструмента.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.capabilities_read\",\"arguments\":{\"id\":\"excel.add_sheet\"}}]}"},"finish_reason":"stop"}]}

@@ -1,5 +1,22 @@
 # Stabilization progress
 
+## Conversation v8.1 admission audit — 2026-10-23
+
+Phase 0 reproduces premature v7 `done` through real loopback HTTP and the
+production Office-neutral kernel/store with fake Excel: one verified sheet write,
+no requested data/chart, then `Completed / model_done`. The existing UI correctly
+retains `GoalVerification=not_assessed`; it does not independently verify the goal.
+The explicit red regression saves exact wire bodies, event export and replayed UI
+state. Existing completion-rejection checks pass 3/3. See
+[audit/evidence](conversation-v8/AUDIT.md) and
+[proposed ADR-0016](../decisions/ADR-0016-conversation-v8-admission.md).
+
+Owner: Core ModelProtocol / AgentKernel, with Office/Workspace adapters. Production
+remains v7; protocol/kernel/adapters/persistence/UI implementation and real-model
+comparison are still pending. This scripted reproduction does not attribute the
+historical DeepSeek incident or qualify Windows/Office/WebView2. Next slice is
+schema/parser/writer/repair parity and endpoint probes before an atomic cutover.
+
 ## Resource Context requested coverage and completeness — 2026-10-23
 
 Wave 2 / Wave 1 diagnostics now carry accepted read metadata from the common

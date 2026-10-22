@@ -1,0 +1,1 @@
+{"choices":[{"index":0,"message":{"role":"assistant","content":"{\"message\":\"Лист Report создан. Теперь заполню данные и построю график.\",\"action\":\"done\",\"tool_calls\":[]}"},"finish_reason":"stop"}]}

@@ -67,6 +67,12 @@ Owner — model-context/LLM diagnostics. Это проверяемый срез 
 этапов документы остаются историей; текущие поведение, статус и риски принадлежат
 canonical docs и существующим реестрам.
 
+По спецификации пользователя начат [аудит Conversation v8.1](stabilization/conversation-v8/AUDIT.md)
+и подготовлен [ADR-0016](decisions/ADR-0016-conversation-v8-admission.md).
+Owner — Core ModelProtocol / AgentKernel. Это evidence фазы 0 и предложение
+следующего cutover; действующий контракт остаётся v7. После переключения аудит
+становится историей, текущие правила переходят в canonical protocol docs.
+
 ## Куда писать
 
 | Информация | Место |

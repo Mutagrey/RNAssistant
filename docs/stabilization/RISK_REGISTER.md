@@ -1197,6 +1197,17 @@ they are not evidence of deleted CSS or a qualified Windows/Office fix.
 
 ## Premature terminal narration — 2026-10-13
 
+**2026-10-23 update:** [Conversation v8.1 phase-0 audit](conversation-v8/AUDIT.md)
+now reproduces the mechanism using scripted HTTP responses and fake Excel on
+`523ec66e2c3a6cf2b1829c51b669f3623e443523`: one verified sheet write, no requested
+data/chart, valid `done`, then `Completed / model_done`. Exact wire and event
+evidence are retained. The red admission regression fails as expected; existing
+completion-rejection checks pass 3/3. UI still reports `not_assessed` for the goal.
+[ADR-0016](../decisions/ADR-0016-conversation-v8-admission.md) proposes a shared
+kernel finish gate and bounded reflection; production is unchanged. The specific
+DeepSeek incident and real-model effectiveness remain open. Valid terminal
+references alone will not prove semantic task completeness.
+
 **Prompt contradictions corrected; incident attribution and real-model behavior
 remain open / Core ModelProtocol and prompt owners.** The supplied Excel photo
 shows an HTML/CSS redesign request ending with “Сейчас подготовлю современный

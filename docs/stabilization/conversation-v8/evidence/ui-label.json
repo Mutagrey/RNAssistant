@@ -1,0 +1,22 @@
+{
+  "harness": "Node VM, actual app-run-view-state.js from isolated HEAD; no browser or WebView2",
+  "label": "Ответ завершён",
+  "normalized": {
+    "runId": "bc1ef61256d64f62be2428ccbec2a2fd",
+    "turnId": "bc1ef61256d64f62be2428ccbec2a2fd",
+    "narrative": "Лист Report создан. Теперь заполню данные и построю график.",
+    "lifecycle": "completed",
+    "executionHealth": "clean",
+    "goalVerification": "not_assessed",
+    "successfulReads": 1,
+    "verifiedWrites": 1,
+    "noChangeWrites": 0,
+    "unverifiedWrites": 0,
+    "failedCalls": 0,
+    "unknownEffects": 0,
+    "pendingConfirmation": null,
+    "reason": "model_done",
+    "currentAction": "Лист Report создан. Теперь заполню данные и построю график.",
+    "startedUtc": "2026-10-22T22:16:48.8439Z"
+  }
+}

@@ -1,0 +1,110 @@
+{
+  "auditDate": "2026-10-23",
+  "sourceHead": "523ec66e2c3a6cf2b1829c51b669f3623e443523",
+  "sourceTree": "Isolated git archive of sourceHead; only the new audit fixture and its Program.Main route were overlaid. Concurrent Resource Context workspace edits are excluded.",
+  "specification": {
+    "name": "RNAssistant_v8_1_implementation_spec.md",
+    "sha256": "6a795dce7fd4ddf5ba3ffa6e7da2ab4281eb9f0cf3e3b391966a575c3bb724d5"
+  },
+  "environment": {
+    "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
+    "dotnetSdk": "10.0.203",
+    "node": "v26.0.0"
+  },
+  "endpoint": {
+    "kind": "loopback scripted HTTP",
+    "path": "/v1/chat/completions",
+    "model": "scripted-v7-premature-done",
+    "realModel": false,
+    "responseMode": "json_object",
+    "toolResultRole": "user",
+    "stream": false,
+    "authentication": false
+  },
+  "harnessSourceHashes": {
+    "tests/RNAssistant.Harness/Program.cs": "b6b6ed0a74afc6ca509484203759448926c513dd0a1199affea050c5a030d9b1",
+    "tests/RNAssistant.Harness/Program.ConversationV8Audit.cs": "5fee51c2cf764e0c008bf1239bc1268c319045bf8d1ebaadc5ce3f8d9484170c",
+    "tests/RNAssistant.Harness/RNAssistant.Harness.csproj": "0b215ac1b71df77ba2dd758dccc438648e3de70776b4ff5b12d11d0373860a02",
+    "web/js/app-run-view-state.js": "5ee8fd3d4722785fe285a562cabf56186ce2d5011cec29c1da5acf6e26dac145"
+  },
+  "harnessAssemblySha256": "8aa7ad9c7c05087bca778c35d969be2e47ef7c7d001eb555fae3ec79f02e4b69",
+  "checks": [
+    {
+      "command": "dotnet run --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj -- --conversation-v8-audit artifacts/conversation-v8-evidence",
+      "exitCode": 1,
+      "result": "expected red admission regression; all fixture preconditions and durable replay checks passed",
+      "output": "FAIL conversation v8 admission: terminal response without results/evidence ended a run after accepted calls"
+    },
+    {
+      "command": "dotnet run --no-build --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj -- \"kernel: completion rejection\"",
+      "exitCode": 0,
+      "passed": 3,
+      "failed": 0,
+      "tests": [
+        "kernel: completion rejection continues within the run",
+        "kernel: completion rejection stops at existing boundaries",
+        "kernel: completion rejection preserves unknown-effect guard"
+      ]
+    },
+    {
+      "command": "Node VM: evaluate frozen web/js/app-run-view-state.js, normalize(trace.uiProjection), outcomeLabel; assert label and goalVerification",
+      "exitCode": 0,
+      "label": "Ответ завершён",
+      "goalVerification": "not_assessed"
+    }
+  ],
+  "eventCount": 33,
+  "casExport": "Not a standalone restorable chat backup: event payload references remain; exact HTTP request/response bodies are exported separately. Replay was verified in the original temporary ChatStore.",
+  "qualificationGaps": [
+    "real model and original DeepSeek incident",
+    "json_schema endpoint capabilities",
+    "v8 streaming and restart",
+    "Windows/Office/COM/WebView2"
+  ],
+  "artifacts": {
+    "events.export.jsonl.gz": {
+      "bytes": 21738,
+      "sha256": "1e4d7c002491c652e5aa17d8a6038568d1ad98e599f1f1cfaa1b791d0665bce9"
+    },
+    "http-01.request.json": {
+      "bytes": 45053,
+      "sha256": "4b0503cba6069312aa6e2b4cf38d145eb499f00bb7c89695751341f36a1d8920"
+    },
+    "http-01.response.json": {
+      "bytes": 281,
+      "sha256": "4f162e54ca683ad6f4c1643434630f0e4a972cb444013f561206848d33f18b37"
+    },
+    "http-02.request.json": {
+      "bytes": 46517,
+      "sha256": "b2b84f0ed0dc94cd9f84f0110614c91c319fc9f8628e7ef5d984ff194743ed2e"
+    },
+    "http-02.response.json": {
+      "bytes": 240,
+      "sha256": "92d65df9ae52faebcb39fb158ecd39f66478b823a807715803dc58048d680c32"
+    },
+    "http-03.request.json": {
+      "bytes": 46897,
+      "sha256": "7e2d890673e33fdf328a9563389587f6fc599f92e4ddd3b52f3a658c04d47aa3"
+    },
+    "http-03.response.json": {
+      "bytes": 250,
+      "sha256": "93c9092e03651c6423ade928c6242324f947e0de73f689b49a158a4360d00eba"
+    },
+    "http.json": {
+      "bytes": 473,
+      "sha256": "4d944b2e511724555907406a34e0268dc7c282fb95866c12282d113cf28381d4"
+    },
+    "progress.json": {
+      "bytes": 1660,
+      "sha256": "a853372d5f38b7f53c8e7db6f314db3164909f1bb8f75c12e506e02c693fc5e7"
+    },
+    "trace.json": {
+      "bytes": 2513,
+      "sha256": "bd0a0b6fcc783d2c70a08b45e6f3138a837ff5fd7f69f840a7432ae09c10c00b"
+    },
+    "ui-label.json": {
+      "bytes": 873,
+      "sha256": "9a00953cb4132bf5bd7944a7e9ee1f7f17e262dc74149f2043f8f3e3e9e48dcb"
+    }
+  }
+}

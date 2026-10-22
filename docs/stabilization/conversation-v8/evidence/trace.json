@@ -1,0 +1,79 @@
+{
+  "kind": "scripted_http_fake_office",
+  "protocolVersion": 7,
+  "responseMode": "json_object",
+  "toolResultRole": "user",
+  "model": "scripted-v7-premature-done",
+  "stream": false,
+  "httpExchanges": 3,
+  "parser": {
+    "success": true,
+    "error": null,
+    "action": "done",
+    "final": true
+  },
+  "acceptedCalls": [
+    {
+      "ToolCallId": "call_28ee641da3944d5ba060345637a38a0e",
+      "ToolName": "common.capabilities_read",
+      "AcceptedCallOrigin": {
+        "StepId": "bc1ef61256d64f62be2428ccbec2a2fd:1",
+        "ModelAttemptId": "3dcc0c7958bc4d3d9042da9b764623e3",
+        "CallIndex": 0
+      }
+    },
+    {
+      "ToolCallId": "call_dc9f3c090f7143e49286ceb4f6f3733b",
+      "ToolName": "excel.add_sheet",
+      "AcceptedCallOrigin": {
+        "StepId": "bc1ef61256d64f62be2428ccbec2a2fd:2",
+        "ModelAttemptId": "5aa400e12bb849d6affc811af1622b4c",
+        "CallIndex": 0
+      }
+    }
+  ],
+  "kernelSummary": {
+    "RunId": "bc1ef61256d64f62be2428ccbec2a2fd",
+    "TurnId": "bc1ef61256d64f62be2428ccbec2a2fd",
+    "Lifecycle": "Completed",
+    "ExecutionHealth": "Clean",
+    "ToolCounts": {
+      "ReadOk": 1,
+      "ReadError": 0,
+      "WriteOk": 1,
+      "WriteError": 0,
+      "WriteUnknown": 0
+    },
+    "IterationsUsed": 3,
+    "ToolStepsUsed": 2,
+    "AssistantMessage": "Лист Report создан. Теперь заполню данные и построю график.",
+    "Reason": "model_done",
+    "PendingConfirmation": null
+  },
+  "uiProjection": {
+    "RunId": "bc1ef61256d64f62be2428ccbec2a2fd",
+    "TurnId": "bc1ef61256d64f62be2428ccbec2a2fd",
+    "Narrative": "Лист Report создан. Теперь заполню данные и построю график.",
+    "Lifecycle": "completed",
+    "ExecutionHealth": "clean",
+    "GoalVerification": "not_assessed",
+    "SuccessfulReads": 1,
+    "VerifiedWrites": 1,
+    "NoChangeWrites": 0,
+    "UnverifiedWrites": 0,
+    "FailedCalls": 0,
+    "UnknownEffects": 0,
+    "PendingConfirmation": null,
+    "Reason": "model_done",
+    "CurrentAction": "Лист Report создан. Теперь заполню данные и построю график.",
+    "StartedUtc": "2026-10-22T22:16:48.8439Z"
+  },
+  "responseStatus": "completed",
+  "sheetCreated": true,
+  "sheetDispatches": 1,
+  "rangeDispatches": 0,
+  "chartDispatches": 0,
+  "repairRejections": 0,
+  "targetInvariant": "A terminal proposal after accepted calls must present results/evidence before admission.",
+  "targetInvariantMet": false
+}

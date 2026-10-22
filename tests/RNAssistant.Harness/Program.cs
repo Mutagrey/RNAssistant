@@ -37,6 +37,8 @@ namespace RNAssistant.Harness
 
         public static int Main(string[] args)
         {
+            if (args != null && args.Length == 2 && args[0] == "--conversation-v8-audit")
+                return ConversationV8Audit(args[1]);
             if (args != null && args.Length == 2 && args[0] == "--resource-workflow-live")
                 return ResourceWorkflowDiagnostic(args[1]);
             if (args != null && args.Length == 2 &&

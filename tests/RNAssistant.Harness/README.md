@@ -906,6 +906,24 @@ dotnet run --no-build --project tests/RNAssistant.Harness/RNAssistant.Harness.cs
 
 Filtering limits executed tests. The harness source-links Core and Office-neutral production files, so a normal run still compiles that full linked source set. Compilation does not require reading every test file into agent context.
 
+Conversation v8 phase-0 red regression runs separately from the default suite:
+
+```bash
+dotnet run --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj -- \
+  --conversation-v8-audit artifacts/conversation-v8-repro
+```
+
+Use a new or empty output directory. The fixture sends scripted responses through
+real loopback HTTP and the production parser/kernel/store with fake Excel. It saves
+exact request/response bodies, decoded event export and the replayed UI projection.
+Expected current result is exit **1** with `FAIL conversation v8 admission`: v7
+accepts `done` after a verified sheet write, without creating requested data/chart
+or presenting results/evidence. Exit **2** is a fixture/precondition failure, not
+proof of this defect. At the atomic v8 cutover, replace the script with v8 responses
+and assert rejection/continuation without repeated mutation. This does not call a
+real model or qualify Office/COM. Scope and retained evidence:
+[Conversation v8 audit](../../docs/stabilization/conversation-v8/AUDIT.md).
+
 For large-chat storage profiling, run
 `RNA_CHAT_PERF=1 dotnet run --no-build --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj -- "storage perf:"`
 after a successful build. It creates temporary 30/50 MiB JSONL fixtures with 6,000
