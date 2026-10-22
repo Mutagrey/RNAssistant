@@ -203,11 +203,13 @@ longer have a one-MiB bound. Large `files.create`/`files.replace` stage text and
 verify read-back. The internal materialized `ReadText` path and some retained web
 snapshots still have separate one-MiB bounds; neither limits selected file reads.
 Word, VBA and PowerPoint slide/notes text now use the same model read selectors, selected
-source coverage and first-window continuation. Whole Office capture still has an
+source coverage and first-window continuation. Resource-provider whole Office capture still has an
 internal bound, and large sources require multiple selected reads. Other Office
 representations (including large PowerPoint `source` JSON), imported artifact
-index/transfer bounds, the whole-module prerequisite of typed VBA patching, and
-Windows Word/VBA/PowerPoint validation remain separate work. Workspace
+index/transfer bounds and Windows Word/VBA/PowerPoint validation remain separate work.
+VBA mutation snapshots no longer have a configured size ceiling. Whole-module
+processing and replacement remain intentional for patch validation and recovery;
+they do not require a whole-source model read or a partial COM write redesign. Workspace
 copy/move/delete and managed restore now stream large UTF-8 sources from exact
 selected reads; do not claim host qualification from the host-neutral checks.
 Repeated indexed reads of strongly compressed sources now reuse one verified

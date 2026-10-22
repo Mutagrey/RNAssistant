@@ -103,7 +103,7 @@ namespace RNAssistant.OfficeHosts.Vba
 
             var componentType = (int)component.Type;
             var fullCode = ReadComponentCode(component);
-            var code = Trim(fullCode, Math.Max(1, Math.Min(1000000, maxChars)));
+            var code = Trim(fullCode, Math.Max(1, maxChars));
             return new VbaModuleSnapshot
             {
                 Name = (string)component.Name,

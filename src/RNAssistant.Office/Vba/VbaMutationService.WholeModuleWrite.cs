@@ -25,7 +25,7 @@ namespace RNAssistant.Office.Vba
             }
 
             var correlation = request.Correlation ?? new VbaMutationCorrelation();
-            var read = _reader.ReadModule(requestedName, 1000000);
+            var read = _reader.ReadCompleteModule(requestedName);
             if (read == null)
             {
                 return WholeModuleWriteGuardFailure(ReadFailure(null));
@@ -52,7 +52,7 @@ namespace RNAssistant.Office.Vba
                     normalizedName,
                     StringComparison.OrdinalIgnoreCase))
             {
-                read = _reader.ReadModule(normalizedName, 1000000);
+                read = _reader.ReadCompleteModule(normalizedName);
                 if (read == null)
                 {
                     return WholeModuleWriteGuardFailure(ReadFailure(null));
@@ -127,7 +127,7 @@ namespace RNAssistant.Office.Vba
             var componentType = string.IsNullOrWhiteSpace(request.ComponentType)
                 ? "StdModule"
                 : request.ComponentType;
-            var read = _reader.ReadModule(moduleName, 1000000);
+            var read = _reader.ReadCompleteModule(moduleName);
             if (read == null) return ReadFailure(null);
             var exists = read.Success;
             if (!exists && !read.IsNotFound) return ReadFailure(read);

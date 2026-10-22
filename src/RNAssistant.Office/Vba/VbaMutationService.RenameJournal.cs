@@ -325,7 +325,7 @@ namespace RNAssistant.Office.Vba
             VbaMutationReadResult read;
             try
             {
-                read = _reader.ReadModule(expected.ModuleName, 1000000);
+                read = _reader.ReadCompleteModule(expected.ModuleName);
             }
             catch (Exception ex)
             {

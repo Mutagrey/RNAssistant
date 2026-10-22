@@ -26,7 +26,7 @@ namespace RNAssistant.Office.Vba
             var expectedHash = VbaTextCanonicalizer.LiveCodeSha256(expectedCode);
             var expectedComparableHash = VbaTextCanonicalizer.VbeComparableCodeSha256(expectedCode);
             var expectedLineCount = VbaTextCanonicalizer.LiveCodeLineCount(expectedCode);
-            var read = _reader.ReadModule(moduleName, 1000000);
+            var read = _reader.ReadCompleteModule(moduleName);
             if (read == null)
             {
                 return VbaMutationActionResult.Unknown(
@@ -105,7 +105,7 @@ namespace RNAssistant.Office.Vba
             VbaMutationReadResult read;
             try
             {
-                read = _reader.ReadModule(prepared.ModuleName, 1000000);
+                read = _reader.ReadCompleteModule(prepared.ModuleName);
             }
             catch (Exception ex)
             {
@@ -231,7 +231,7 @@ namespace RNAssistant.Office.Vba
             JObject successData,
             string sessionId)
         {
-            var read = _reader.ReadModule(moduleName, 1000000);
+            var read = _reader.ReadCompleteModule(moduleName);
             if (read == null)
             {
                 return VbaMutationActionResult.Unknown(

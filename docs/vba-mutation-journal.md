@@ -156,6 +156,16 @@ one bounded resource chunk does not satisfy it. Exact patch is different: runtim
 reads and binds current live source under the document gate, then validates every
 exact hunk before confirmation/dispatch. Sequential patches therefore do not need a
 redundant whole-source read, while stale or ambiguous hunks fail with no effect.
+
+Internal mutation snapshots have no configured character ceiling. Preparation,
+verification, retained after-source, restore and restart reconciliation all request
+the complete module; incomplete snapshots still fail explicitly. Full
+in-memory candidate construction and whole-module backend replacement are deliberate:
+all hunks are validated together before any COM write, and the journal retains the
+complete before/intended source. Removing the former one-million-character ceiling
+does not introduce partial COM edits or require sending the whole module to the
+model. Resource read windows and model context admission remain separate.
+
 A whole-write conflict returns complete current source up to 16,384 characters
 and a changed-span diff in typed recovery. This diagnostic text is not a published
 resource-read observation. Whole-source conflicts for an existing module declare `RefreshRequired`

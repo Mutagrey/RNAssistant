@@ -83,7 +83,7 @@ namespace RNAssistant.Office.Vba
                     true);
             }
 
-            var read = _reader.ReadModule(moduleName, 1000000);
+            var read = _reader.ReadCompleteModule(moduleName);
             if (read == null) return ReadFailure(null);
             if (!read.Success) return ReadFailure(read);
             var module = read.Module;

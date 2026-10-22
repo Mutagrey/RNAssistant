@@ -511,7 +511,7 @@ namespace RNAssistant.Office.Tools
             foreach (var name in names)
             {
                 var identity = RNAssistant.Office.Services.VbaResourceProvider.ComponentIdentity(session.DocumentAuthorityId, name);
-                var read = reader.ReadModule(name, 1000000);
+                var read = reader.ReadCompleteModule(name);
                 if (read == null) continue;
                 if (read.IsNotFound) result.Add(new RNAssistant.Core.Models.ResourceMutationReadBack(identity, false));
                 else if (read.Success && read.Module != null && !read.Module.Truncated)

@@ -31,7 +31,6 @@ namespace RNAssistant.Office.Vba
     internal sealed class VbaReader
     {
         private const string TruncatedMarker = "\n...[truncated]";
-        private const int MaximumModuleCharacters = 1000000;
         private readonly IVbaHostBackend _backend;
 
         public VbaReader(IVbaHostBackend backend)
@@ -273,7 +272,8 @@ namespace RNAssistant.Office.Vba
 
             if (requireComplete && module.Truncated)
             {
-                error = ToolRunResult.Error("VBA module is too large for a safe patch.");
+                error = ToolRunResult.Error("VBA mutation requires a complete module snapshot.",
+                    null, "vba_read_incomplete", true);
                 module = null;
                 return false;
             }
@@ -291,9 +291,7 @@ namespace RNAssistant.Office.Vba
                 snapshot = _backend.ReadModule(new VbaReadModuleRequest
                 {
                     ModuleName = moduleName,
-                    MaxChars = Math.Max(
-                        1,
-                        Math.Min(MaximumModuleCharacters, maxChars))
+                    MaxChars = Math.Max(1, maxChars)
                 });
                 error = null;
                 return true;

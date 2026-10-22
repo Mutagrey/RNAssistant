@@ -49,7 +49,7 @@ namespace RNAssistant.Office.Vba
             requestedModuleName = (requestedModuleName ?? string.Empty).Trim();
             resolvedModuleName = requestedModuleName;
             module = null;
-            var result = _reader.ReadModule(requestedModuleName, 1000000);
+            var result = _reader.ReadCompleteModule(requestedModuleName);
             if (result == null) return ReadFailure(null);
             if (result.Success)
             {
@@ -62,7 +62,7 @@ namespace RNAssistant.Office.Vba
             var normalizedName = VbaReader.NormalizeModuleName(requestedModuleName);
             if (!string.Equals(requestedModuleName, normalizedName, StringComparison.OrdinalIgnoreCase))
             {
-                result = _reader.ReadModule(normalizedName, 1000000);
+                result = _reader.ReadCompleteModule(normalizedName);
                 if (result == null) return ReadFailure(null);
                 if (result.Success)
                 {

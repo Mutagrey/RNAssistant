@@ -38,7 +38,7 @@ namespace RNAssistant.Office.Vba
             var validationError = ValidateBackup(backup);
             if (validationError != null) return RestoreGuardFailure(validationError);
 
-            var currentRead = _reader.ReadModule(backup.ModuleName, 1000000);
+            var currentRead = _reader.ReadCompleteModule(backup.ModuleName);
             var moduleExists = currentRead != null && currentRead.Success;
             var current = moduleExists ? currentRead.Module : null;
             if (!moduleExists && (currentRead == null || !currentRead.IsNotFound))
@@ -102,7 +102,7 @@ namespace RNAssistant.Office.Vba
             var identityError = ValidateBoundBackup(request.Guard, backup);
             if (identityError != null) return identityError;
 
-            var currentRead = _reader.ReadModule(moduleName, 1000000);
+            var currentRead = _reader.ReadCompleteModule(moduleName);
             var moduleExists = currentRead != null && currentRead.Success;
             var current = moduleExists ? currentRead.Module : null;
             if (!moduleExists && (currentRead == null || !currentRead.IsNotFound))

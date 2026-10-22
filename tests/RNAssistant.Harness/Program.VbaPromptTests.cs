@@ -75,6 +75,8 @@ namespace RNAssistant.Harness
             });
             AssertTrue(!reader.TryReadModule("ReaderModule", 1000000, out module, out error),
                 "mutation snapshot rejects truncated source");
+            AssertEqual("vba_read_incomplete", error.ErrorCode,
+                "incomplete source remains an explicit refusal without a size-limit claim");
 
             IReadOnlyList<VbaModuleState> project;
             foreach (var malformed in new[]
@@ -484,6 +486,95 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void VbaLargeModulePatchPreservesWholeSourceSafety()
+        {
+            WithTempPaths(paths =>
+            {
+                var source = "Option Explicit\n" + string.Concat(Enumerable.Repeat(
+                    "' padding " + new string('x', 90) + "\n", 12000)) +
+                    "Public Sub Main()\nDebug.Print \"before\"\nEnd Sub";
+                AssertTrue(source.Length > 1000000, "fixture exceeds the former module ceiling");
+                var document = new FakeVbaDocumentObject();
+                document.VBProject.VBComponents.Seed("Module1", source);
+                var full = VbaProjectSupport.ReadModule(document, "Module1", int.MaxValue);
+                AssertTrue(!full.Truncated && full.Code == source,
+                    "bound backend honors a complete internal source request");
+                var bounded = VbaProjectSupport.ReadModule(document, "Module1", 128);
+                AssertTrue(bounded.Truncated && bounded.Code.StartsWith(source.Substring(0, 128)),
+                    "explicit bounded resource reads remain bounded");
+
+                var adapter = new FakeOfficeAdapter { VbaModuleCode = source };
+                var store = new VbaJournalStore(paths);
+                var executor = new OfficeToolExecutor(adapter, store, new SkillStore(paths));
+                var session = NewSession(adapter);
+                var patch = Command(VbaToolCatalog.ApplyPatch, "moduleName", "Module1",
+                    "patch", new JArray(new JObject { ["find"] = "\"before\"", ["text"] = "\"after\"" }));
+                var pending = PrepareVbaNative(executor, session, patch);
+                AssertEqual(ToolExecutionOutcome.AwaitingConfirmation, pending.Record.Outcome,
+                    "large-module patch validates before confirmation without a whole model read");
+                AssertEqual(0, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule),
+                    "preparation never dispatches a partial edit");
+                var completed = ConfirmVbaNative(pending);
+                AssertEqual(ToolExecutionOutcome.Ok, completed.Outcome, "large-module patch verifies successfully");
+                AssertEqual(ToolEffectEvidence.VerifiedChange, completed.Evidence.Effect,
+                    "complete read-back certifies the mutation");
+                AssertEqual(source.Replace("\"before\"", "\"after\""), adapter.VbaModuleCode,
+                    "the in-memory candidate preserves every unselected character");
+                var scope = executor.ResourceAuthority.Scope(session, true);
+                var head = executor.ResourceAuthority.Store.GetHead(scope,
+                    VbaResourceProvider.ComponentIdentity(session.DocumentAuthorityId, "Module1"));
+                var view = ((IResourceRevisionStore)executor.ResourceAuthority.Store).GetView(
+                    scope, head.Revision, ResourceRepresentations.Source);
+                AssertTrue(view?.Payload?.ByteLength > 1000000 && view.Coverage.Kind == ResourceCoverageKinds.Whole,
+                    "authority retains the complete after-source without the former capture ceiling");
+                AssertEqual(VbaTextCanonicalizer.LiveCodeSha256(adapter.VbaModuleCode), view.ContentSha256,
+                    "the retained source matches the verified full module");
+                AssertTrue(!completed.Result.DataJson.Contains("' padding"),
+                    "the internal whole source is not embedded in the model tool result");
+                var committed = store.ListMutations(adapter.HostName, adapter.DocumentKey).Single();
+                AssertEqual(VbaMutationStatuses.Committed, committed.Terminal.Status,
+                    "large-module effect has a durable terminal record");
+                AssertEqual(source, store.Find(adapter.HostName, adapter.DocumentKey,
+                    committed.Prepared.BackupId, null).Code, "the full rollback source is retained");
+
+                var stale = PrepareVbaNative(executor, session, Command(VbaToolCatalog.ApplyPatch,
+                    "moduleName", "Module1", "patch", new JArray(new JObject {
+                        ["find"] = "\"after\"", ["text"] = "\"stale\"" })));
+                adapter.VbaModuleCode += "\n' external edit";
+                var rejected = ToolRunResultFactory.Create(ConfirmVbaNative(stale));
+                AssertEqual("stale_vba_module", rejected.ErrorCode, "late drift still refuses a large patch");
+                AssertEqual(1, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule),
+                    "stale confirmation never reaches the backend");
+                AssertEqual(1, store.ListMutations(adapter.HostName, adapter.DocumentKey).Count,
+                    "stale confirmation creates no prepared mutation");
+
+                var restored = ConfirmVbaNative(PrepareVbaNative(executor, session,
+                    Command(VbaToolCatalog.RestoreBackup, "moduleName", "Module1")));
+                AssertEqual(ToolExecutionOutcome.Ok, restored.Outcome, "large backup restore verifies complete source");
+                AssertEqual(source, adapter.VbaModuleCode, "explicit restore recovers the complete original");
+
+                var interruptedJournal = new FaultingVbaMutationJournal(store) { FailComplete = true };
+                var service = CreateTypedMutationService(adapter, interruptedJournal,
+                    new VbaMutationHostBackend(adapter.VbaHostBackend));
+                var interrupted = service.ApplyPatch(PrepareTypedPatch(service, "large-interrupted",
+                    "\"before\"", "\"recovered\""), CancellationToken.None);
+                AssertEqual(VbaMutationOutcomeStatus.Unknown, interrupted.Status,
+                    "terminal persistence failure remains unknown for a large module");
+                var writes = adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule);
+                var restarted = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths));
+                AssertTrue(ListVbaComponents(restarted, session).Items.Count > 0,
+                    "restart reconciles the full large module on safe resource access");
+                AssertEqual(writes, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule),
+                    "reconciliation never replays the patch");
+                AssertEqual(0, new VbaJournalStore(paths).ListOpenMutations(adapter.HostName,
+                    adapter.DocumentKey).Count, "large-module reconciliation records a terminal");
+                AssertEqual(VbaMutationStatuses.Committed,
+                    new VbaJournalStore(paths).ListMutations(adapter.HostName, adapter.DocumentKey)
+                        .Single(item => item.Prepared.MutationId == (string)interrupted.Data["mutationId"]).Terminal.Status,
+                    "complete read-back confirms the interrupted intended state");
+            });
+        }
+
         private static void VbaWholeModuleWriteServiceOwnsWorkflow()
         {
             WithTempPaths(paths =>
@@ -746,7 +837,7 @@ namespace RNAssistant.Harness
                     deleteRequest.ExpectedCodeSha256,
                     "typed backend receives the exact live-state compare-and-swap hash");
                 var finalRead = new VbaMutationHostReader(reader)
-                    .ReadModule(moduleName, 1000000);
+                    .ReadCompleteModule(moduleName);
                 AssertTrue(!finalRead.Success && finalRead.IsNotFound,
                     "typed delete workflow verifies the module is absent");
                 var record = store.ListMutations(adapter.HostName, adapter.DocumentKey).Single();

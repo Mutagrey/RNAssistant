@@ -1,5 +1,15 @@
 # Stabilization progress
 
+## VBA internal mutation reads without a size ceiling — 2026-10-22
+
+The former one-million-character ceiling is removed from internal VBA mutation
+snapshots, including preparation, verification, retained after-source, restore and
+restart reconciliation. Full in-memory patch validation and whole-module backend
+replacement remain intentional; model resource windows keep their separate budget.
+A focused host-neutral fixture patches a larger module, rejects late drift, restores
+its complete backup and reconciles interrupted terminal persistence without replay.
+Real Windows/VBE qualification remains open.
+
 ## Large workspace copy, move and delete — 2026-10-22
 
 `files.copy/move/delete` now accept a delivered exact text window for a large

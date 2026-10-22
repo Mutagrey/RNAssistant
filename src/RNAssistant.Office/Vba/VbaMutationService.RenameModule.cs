@@ -62,7 +62,7 @@ namespace RNAssistant.Office.Vba
                     true));
             }
 
-            var target = _reader.ReadModule(targetName, 1000000);
+            var target = _reader.ReadCompleteModule(targetName);
             if (target == null) return RenameGuardFailure(ReadFailure(null));
             if (target.Success)
             {
@@ -134,13 +134,13 @@ namespace RNAssistant.Office.Vba
                     true);
             }
 
-            var sourceRead = _reader.ReadModule(sourceName, 1000000);
+            var sourceRead = _reader.ReadCompleteModule(sourceName);
             if (sourceRead == null) return ReadFailure(null);
             var sourceExists = sourceRead.Success;
             if (!sourceExists && !sourceRead.IsNotFound) return ReadFailure(sourceRead);
             var source = sourceExists ? sourceRead.Module : null;
 
-            var targetRead = _reader.ReadModule(targetName, 1000000);
+            var targetRead = _reader.ReadCompleteModule(targetName);
             if (targetRead == null) return ReadFailure(null);
             var targetExists = targetRead.Success;
             if (!targetExists && !targetRead.IsNotFound) return ReadFailure(targetRead);

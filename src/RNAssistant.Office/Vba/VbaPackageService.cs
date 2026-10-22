@@ -201,7 +201,7 @@ namespace RNAssistant.Office.Vba
         {
             try
             {
-                return _reader.ReadModule(moduleName, 1000000);
+                return _reader.ReadCompleteModule(moduleName);
             }
             catch (Exception ex)
             {

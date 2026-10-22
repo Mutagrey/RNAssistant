@@ -325,7 +325,9 @@ namespace RNAssistant.Office.Vba
 
     internal interface IVbaMutationReader
     {
-        VbaMutationReadResult ReadModule(string moduleName, int maxChars);
+        // Mutation guards, read-back and recovery always need a complete snapshot.
+        // Model delivery budgets belong to resource reads, not this internal path.
+        VbaMutationReadResult ReadCompleteModule(string moduleName);
     }
 
     internal static class VbaMutationData

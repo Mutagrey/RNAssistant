@@ -327,6 +327,12 @@ explicit historical targets, sibling/no-op/delete/recreate and restart.
 `resource cutover: HTML write publishes current member sources` checks per-file
 evidence, including equal-byte restore. `vba: large stale patch recovers from
 relevant lines` checks the typed recovery route.
+`vba: large module patch preserves whole-source safety` covers a module beyond the
+former one-million-character internal ceiling: complete read-back and retained
+source, stale confirmation refusal, explicit restore and restart reconciliation
+without replay. The fake bound backend also checks that explicit bounded reads
+remain bounded; `vba: reader validates typed snapshots` retains incomplete-source
+refusal. These do not qualify real VBE delivery.
 `tools: manual read-only run skips chat lease` checks that a read in another
 session does not authorize stale delete/rename or alter exact patch matching.
 

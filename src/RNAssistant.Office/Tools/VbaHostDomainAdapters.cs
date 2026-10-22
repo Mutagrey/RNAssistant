@@ -209,11 +209,11 @@ namespace RNAssistant.Office.Tools
             _reader = reader ?? throw new ArgumentNullException(nameof(reader));
         }
 
-        public VbaMutationReadResult ReadModule(string moduleName, int maxChars)
+        public VbaMutationReadResult ReadCompleteModule(string moduleName)
         {
             VbaModuleState state;
             ToolRunResult error;
-            if (_reader.TryReadModule(moduleName, maxChars, out state, out error))
+            if (_reader.TryReadModule(moduleName, int.MaxValue, out state, out error))
                 return VbaMutationReadResult.Found(state);
             if (error == null)
                 return VbaMutationReadResult.Failure(
