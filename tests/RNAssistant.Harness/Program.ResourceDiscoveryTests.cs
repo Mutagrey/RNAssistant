@@ -203,12 +203,28 @@ namespace RNAssistant.Harness
                         Representation = "text", PartNumber = number }).Result;
                     AssertTrue(part.Coverage.Kind == ResourceCoverageKinds.CharacterRange && !part.Complete,
                         "a part is exact excerpt evidence, not whole-source authority");
+                    var partProjection = ResourceReadProjection.FromPart(part, markdown.Title,
+                        "file", "document", number);
+                    AssertTrue(partProjection.SelectionComplete == true && !partProjection.Complete &&
+                        partProjection.PartNumber == number && partProjection.PartCount == part.PartCount,
+                        "each indexed part is complete only within its own selection");
                     parts.Add(part.Text);
                     if (number == part.PartCount) break;
                 }
                 AssertEqual(text, string.Concat(parts), "parts reconstruct a long single-line source without gaps");
                 var semanticTarget = new ResourceGatewayService(new[] { provider }).Find(other, "Reference.md", "document")
                     .Items.Single(item => item.Title == "Reference.md").Target;
+                var partRead = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                    "target", semanticTarget, "representation", "text", "partNumber", 2),
+                    executor.GetControllerTools().ToList(), new AppSettings(), false, false, other);
+                AssertTrue(partRead.Success, "second indexed part is model-readable");
+                var partData = ModelResultProjection.ProjectResourceData(ResourceToolCatalog.ReadToolId,
+                    Newtonsoft.Json.Linq.JObject.Parse(partRead.DataJson));
+                AssertTrue((bool)partData["selectionComplete"] && !(bool)partData["complete"] &&
+                    (int)partData["partNumber"] == 2 && (int)partData["partCount"] >= 2 &&
+                    (string)partData["coverage"]["kind"] == ResourceCoverageKinds.CharacterRange,
+                    "model receives selected-part completeness and actual partial coverage");
+                AssertEqual(parts[1], (string)partData["text"], "model receives the exact selected part");
                 var searched = new ResourceGatewayService(new[] { provider }).SearchWithin(other,
                     semanticTarget, "uploaded-late-marker", 20, false, CancellationToken.None);
                 AssertTrue(searched.ScanComplete && searched.SourceComplete && searched.TotalMatches == 1 &&
@@ -416,6 +432,10 @@ namespace RNAssistant.Harness
                     AssertTrue(found.ScanTruncated && found.Matches.Count == 1, "explicit truncation or omitted PDF pages remain partial even on a hit");
                     var part = owner.ReadIndexedTextPart(session, reference, 1);
                     AssertEqual(false, part.SourceComplete, "complete retained extraction does not prove the PDF source complete");
+                    var projectedPart = ResourceReadProjection.FromPart(part, "Extracted.pdf", "file", "document", 1);
+                    AssertTrue(projectedPart.SelectionComplete == true && !projectedPart.Complete &&
+                        projectedPart.SourceComplete == false,
+                        "complete extracted part does not claim complete original PDF source");
                     AssertEqual(ResourceCoverageKinds.CharacterRange, part.Coverage.Kind,
                         "part read does not publish whole PDF authority");
                     AssertEqual(null, found.Matches.Single().SectionTitle, "PDF extraction does not invent Markdown section semantics");

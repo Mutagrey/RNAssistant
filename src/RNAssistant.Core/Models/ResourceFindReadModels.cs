@@ -134,6 +134,18 @@ namespace RNAssistant.Core.Models
             return projection;
         }
 
+        public static ResourceReadProjection FromPart(ResourceReadResult result, string target,
+            string type, string scope, int partNumber)
+        {
+            if (partNumber < 1 || result?.PartNumber != partNumber ||
+                !result.PartCount.HasValue || result.PartCount.Value < partNumber ||
+                result.Complete || !HasExactSelectedText(result))
+                throw new System.InvalidOperationException("A complete text part requires matching part metadata and exact excerpt coverage.");
+            var projection = From(result, target, type, scope);
+            projection.SelectionComplete = true;
+            return projection;
+        }
+
         private static bool HasExactSelectedText(ResourceReadResult result)
         {
             return result?.Text != null && result.Coverage?.Kind == ResourceCoverageKinds.CharacterRange &&

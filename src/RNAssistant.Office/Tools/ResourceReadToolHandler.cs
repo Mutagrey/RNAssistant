@@ -93,6 +93,10 @@ namespace RNAssistant.Office.Tools
                     selected.Target, selected.Type, selected.Scope,
                     ToolArgumentReader.Int32(context.Arguments, "startLine", 1),
                     ToolArgumentReader.Int32(context.Arguments, "lineCount", 100))
+                : parts
+                ? ResourceReadProjection.FromPart(observation.Result,
+                    selected.Target, selected.Type, selected.Scope,
+                    ToolArgumentReader.Int32(context.Arguments, "partNumber", 1))
                 : section != null
                 ? ResourceReadProjection.FromSection(observation.Result,
                     selected.Target, selected.Type, selected.Scope, section)

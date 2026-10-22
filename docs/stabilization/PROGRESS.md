@@ -1,5 +1,14 @@
 # Stabilization progress
 
+## Indexed text-part completeness in model results — 2026-10-22
+
+The next Wave 2 RC-04 slice marks a successful `partNumber` read as
+`selectionComplete=true` while retaining `complete=false`, `partCount`, actual
+character-range coverage and the source-completeness signal. Projection checks
+the returned part number, count and exact text range before making that claim.
+The focused host-neutral indexed-part check passes. Other selectors, derived
+views and Windows/Office/WebView2 qualification remain open.
+
 ## Markdown section completeness in model results — 2026-10-22
 
 The next Wave 2 RC-04 slice separates a complete selected Markdown section

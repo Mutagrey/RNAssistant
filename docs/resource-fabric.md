@@ -478,8 +478,11 @@ Markdown heading names and code declarations are navigation hints. The code
 symbol grammar is deliberately partial (`symbolsComplete=false`), including
 minified/very long lines. `common.resources_read` accepts `partNumber` for indexed
 artifact text/source and returns at most 32,000 characters with `partCount` and
-character-range evidence. Neither a part nor a search/outline result grants
-whole-source mutation authority. Other provider families retain their own bounds;
+character-range evidence. A successful selected part reports
+`selectionComplete=true` and `complete=false` in the model result; its exact
+coverage and `sourceComplete` remain separate. Neither a part nor a
+search/outline result grants whole-source mutation authority. Other provider
+families retain their own bounds;
 this contract does not claim 20 MiB Office live, HTML-member or CLI file reads.
 
 Within-target search requires an advertised `text` or `source` representation.
