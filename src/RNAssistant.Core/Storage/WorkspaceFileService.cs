@@ -240,8 +240,28 @@ namespace RNAssistant.Core.Storage
             var next = Math.Min((long)starts.Count, (long)startLine - 1 + lineCount);
             var end = next < starts.Count ? starts[(int)next] : source.Text.Length;
             if (end - start > 16000)
-                throw new WorkspaceFileException("read_too_large", "Selected lines exceed 16000 characters; reduce lineCount.");
+                throw new WorkspaceFileException("read_too_large", "Selected lines exceed 16000 characters; reduce lineCount or use startChar/charCount for a long line.");
             return SelectTextRange(source, start, end - start);
+        }
+
+        public WorkspaceFileObservation ReadTextCharacters(WorkspaceDescriptor workspace, string relativePath,
+            int startChar, int charCount)
+        {
+            if (startChar < 0 || startChar > MaximumTextBytes || charCount < 1 || charCount > 16000)
+                throw new WorkspaceFileException("resource_chars_invalid",
+                    "Use zero-based startChar and charCount from 1 to 16000.");
+            var source = ReadText(workspace, relativePath);
+            if (startChar > source.Text.Length)
+                throw new WorkspaceFileException("resource_chars_invalid",
+                    "startChar exceeds the current source's " + source.Text.Length + " characters.");
+            var end = (int)Math.Min((long)source.Text.Length, (long)startChar + charCount);
+            if ((startChar > 0 && startChar < source.Text.Length &&
+                char.IsLowSurrogate(source.Text[startChar]) && char.IsHighSurrogate(source.Text[startChar - 1])) ||
+                (end > 0 && end < source.Text.Length &&
+                char.IsHighSurrogate(source.Text[end - 1]) && char.IsLowSurrogate(source.Text[end])))
+                throw new WorkspaceFileException("resource_chars_invalid",
+                    "The selected character range splits a UTF-16 surrogate pair. Adjust startChar or charCount by one.");
+            return SelectTextRange(source, startChar, end - startChar);
         }
 
         // Slice a captured/read-back source, never a candidate or a new live read.

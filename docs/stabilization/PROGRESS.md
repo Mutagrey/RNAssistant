@@ -1,5 +1,15 @@
 # Stabilization progress
 
+## Workspace character windows for long lines — 2026-10-22
+
+Workspace/CLI model reads now accept paired `startChar`/`charCount` for one long
+UTF-8 file line within the existing 1-MiB source and 16,000-character delivery
+bounds. The file owner pins the current revision, rejects split UTF-16 surrogate
+pairs and retains only partial observation evidence. Model projection reports
+requested/actual coverage and `selectionComplete=true`, `complete=false`.
+The focused host-neutral handler check passes; larger-source streaming and
+Windows/Office qualification remain open.
+
 ## Bounded character selection for long lines — 2026-10-22
 
 The next Resource Context slice adds `startChar`/`charCount` to model-facing

@@ -14,12 +14,14 @@ using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
 using RNAssistant.Core.Storage;
+using RNAssistant.Core.Tools.Contracts;
 using RNAssistant.Office;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
 using RNAssistant.Office.WebView;
 using RNAssistant.Desktop;
 using RNAssistant.OfficeHosts;
+using RNAssistant.Runtime;
 using RuntimeToolResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Harness
@@ -250,6 +252,66 @@ namespace RNAssistant.Harness
                 try { files.ListPage(workspace, query: "bad\nquery"); }
                 catch (WorkspaceFileException ex) { rejected = ex.Code == "invalid_find_query"; }
                 AssertTrue(rejected, "control characters are rejected in filename query");
+            });
+        }
+
+        private static void WorkspaceFilesReadCharacterWindows()
+        {
+            WithTempPaths(paths =>
+            {
+                var workspace = new WorkspaceStore(paths).Open(Path.Combine(paths.Root, "project"));
+                var files = new WorkspaceFileService(paths);
+                var body = "A\uD83D\uDE00" + new string('x', 20000) + "END";
+                files.CreateText(workspace, "long.txt", body);
+                var provider = new WorkspaceFileResourceProvider(files, workspace);
+                AssertEqual("read_too_large", RuntimeThrows<WorkspaceFileException>(() =>
+                    provider.Read("long.txt", 1, 1)).Code,
+                    "one long line cannot fit a bounded line read");
+                var start = 16003;
+                var selected = provider.ReadCharacters("long.txt", start, 16000);
+                AssertEqual(new string('x', 4000) + "END", selected.Result.Text,
+                    "character window reads the exact tail of a long line");
+                var projection = ResourceReadProjection.FromCharacters(selected.Result,
+                    "long.txt", "file", "workspace", start, 16000);
+                AssertTrue(projection.SelectionComplete == true && !projection.Complete &&
+                    projection.Coverage.Start == start && projection.Coverage.End == body.Length &&
+                    !selected.Evidence.Single().Complete,
+                    "EOF completes the requested window but not whole-source evidence");
+                AssertEqual("resource_chars_invalid", RuntimeThrows<WorkspaceFileException>(() =>
+                    provider.ReadCharacters("long.txt", 1, 1)).Code,
+                    "character window cannot end inside a surrogate pair");
+                AssertEqual("resource_chars_invalid", RuntimeThrows<WorkspaceFileException>(() =>
+                    provider.ReadCharacters("long.txt", 2, 1)).Code,
+                    "character window cannot start inside a surrogate pair");
+                var observed = new Dictionary<string, ResourceEvidence>();
+                var handler = new WorkspaceResourceHandler(provider, null, () => null, observed, false, null);
+                var execution = new ToolRuntimeFixture().Context(toolId: "common.resources_read");
+                var whole = handler.ExecuteAsync(new ToolHandlerContext(execution,
+                    new Dictionary<string, object> { ["target"] = "long.txt" }), CancellationToken.None)
+                    .GetAwaiter().GetResult();
+                AssertEqual("read_too_large", (string)JObject.Parse(whole.Result.DataJson)["code"],
+                    "model tool refuses whole delivery before a bounded character recovery");
+                var result = handler.ExecuteAsync(new ToolHandlerContext(execution,
+                    new Dictionary<string, object> { ["target"] = "long.txt",
+                        ["startChar"] = start, ["charCount"] = 16000 }), CancellationToken.None)
+                    .GetAwaiter().GetResult();
+                AssertEqual(ToolResultStatus.Ok, result.Result.Status,
+                    "model resource handler accepts a bounded character window");
+                var visible = ModelResultProjection.ProjectResourceData("common.resources_read",
+                    JObject.Parse(result.Result.DataJson));
+                AssertTrue((bool)visible["selectionComplete"] && !(bool)visible["complete"] &&
+                    (int)visible["startChar"] == start && (int)visible["requestedCharacters"] == 16000 &&
+                    (int)visible["coverage"]["end"] == body.Length &&
+                    observed["long.txt"].Coverage.Kind == ResourceCoverageKinds.CharacterRange,
+                    "model sees requested/actual coverage while runtime retains partial evidence");
+                var mixed = handler.ExecuteAsync(new ToolHandlerContext(execution,
+                    new Dictionary<string, object> { ["target"] = "long.txt", ["startChar"] = 0,
+                        ["charCount"] = 10, ["startLine"] = 1, ["lineCount"] = 1 }), CancellationToken.None)
+                    .GetAwaiter().GetResult();
+                AssertEqual(ToolResultStatus.Error, mixed.Result.Status,
+                    "line and character selectors cannot be combined");
+                AssertEqual("resource_chars_invalid", (string)JObject.Parse(mixed.Result.DataJson)["code"],
+                    "mixed selectors fail with a closed error code");
             });
         }
 

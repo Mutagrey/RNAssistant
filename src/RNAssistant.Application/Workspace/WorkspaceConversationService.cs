@@ -797,7 +797,7 @@ namespace RNAssistant.Runtime
                     ResourceSchema(true, _mode.AllowsSkills, office != null), false,
                     new WorkspaceResourceHandler(_resources.Select("file"), _skillPublications, () => _skills, _observed, true, _plans,
                         office?.ResourceFind));
-                Register(registry, entries, "common.resources_read", (_mode.AllowsSkills ? "Read a complete UTF-8 file (default type=file, target is its workspace-relative path) or published skill instructions (type=skill, target is the skill ID). referencePath belongs only to a listed skill reference. For a workspace Plan use type=plan, omit target for the selected plan or supply an exact unique title. Optional version reads history without selecting it; a current read selects its exact revision. Bounds: 16000 characters for files/skills, 32000 for Plans. For larger files supply startLine and lineCount (1–500); each slice observes the current version and authorizes only a unique patch within it. No partial skill activation." : "Read UTF-8 text by workspace-relative target. Whole reads allow 16000 characters; use startLine and lineCount (1–500) for bounded lines of larger files.") +
+                Register(registry, entries, "common.resources_read", (_mode.AllowsSkills ? "Read a complete UTF-8 file (default type=file, target is its workspace-relative path) or published skill instructions (type=skill, target is the skill ID). referencePath belongs only to a listed skill reference. For a workspace Plan use type=plan, omit target for the selected plan or supply an exact unique title. Optional version reads history without selecting it; a current read selects its exact revision. Bounds: 16000 characters for files/skills, 32000 for Plans. For larger files supply startLine and lineCount (1–500), or zero-based UTF-16 startChar and charCount (1–16000) for a long single line; each slice observes the current version and authorizes only a unique patch within it. No partial skill activation." : "Read UTF-8 text by workspace-relative target. Whole reads allow 16000 characters; use startLine/lineCount (1–500) or zero-based UTF-16 startChar/charCount (1–16000) for bounded excerpts of larger files.") +
                     (office == null ? string.Empty : " Use type=office and a semantic target to read the pinned Office document."),
                     ResourceSchema(false, _mode.AllowsSkills, office != null), false,
                     new WorkspaceResourceHandler(_resources.Select("file"), _skillPublications, () => _skills, _observed, false, _plans,
@@ -950,6 +950,8 @@ namespace RNAssistant.Runtime
                     properties["partNumber"] = new JObject { ["type"] = "integer", ["minimum"] = 1 };
                     properties["startLine"] = new JObject { ["type"] = "integer", ["minimum"] = 1 };
                     properties["lineCount"] = new JObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = 500 };
+                    properties["startChar"] = new JObject { ["type"] = "integer", ["minimum"] = 0 };
+                    properties["charCount"] = new JObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = 32000 };
                     properties["limit"] = new JObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = 5000 };
                     properties["offset"] = new JObject { ["type"] = "integer", ["minimum"] = 0 };
                     properties["fields"] = new JObject { ["type"] = "array", ["maxItems"] = 128,
@@ -997,6 +999,11 @@ namespace RNAssistant.Runtime
                             ["description"] = "First line, 1-based. Supply together with lineCount; omitted means whole file." };
                         properties["lineCount"] = new JObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = 500,
                             ["description"] = "Number of lines, with a 16000-character excerpt bound. Each read checks the current version." };
+                        properties["startChar"] = new JObject { ["type"] = "integer", ["minimum"] = 0,
+                            ["maximum"] = WorkspaceFileService.MaximumTextBytes,
+                            ["description"] = "Zero-based UTF-16 character offset. Supply together with charCount, without line selectors." };
+                        properties["charCount"] = new JObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = 16000,
+                            ["description"] = "Maximum UTF-16 characters in this excerpt. Each read checks the current version." };
                     }
                 }
                 return schema;

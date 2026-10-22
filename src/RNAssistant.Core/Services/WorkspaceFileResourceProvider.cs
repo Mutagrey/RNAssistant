@@ -66,6 +66,9 @@ namespace RNAssistant.Core.Services
                 : _files.ReadText(_workspace, relativePath), false);
         }
 
+        public ResourceReadObservation ReadCharacters(string relativePath, int startChar, int charCount)
+        { return Project(_files.ReadTextCharacters(_workspace, relativePath, startChar, charCount), false); }
+
         public ResourceReadObservation ReadBytes(string relativePath)
         { return ProjectBytes(_files.ReadBytes(_workspace, relativePath), false); }
 

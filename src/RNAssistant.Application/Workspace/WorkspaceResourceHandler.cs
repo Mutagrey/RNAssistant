@@ -65,12 +65,19 @@ namespace RNAssistant.Runtime
                 ResourceReadObservation read;
                 SkillDefinition skill = null;
                 var referencePath = Value(context, "referencePath");
-                int? startLine = null, lineCount = null;
+                int? startLine = null, lineCount = null, startChar = null, charCount = null;
                 if (type == "file")
                 {
                     startLine = Number(context, "startLine");
                     lineCount = Number(context, "lineCount");
-                    read = _files.Read(target, startLine, lineCount);
+                    startChar = Number(context, "startChar");
+                    charCount = Number(context, "charCount");
+                    if (startChar.HasValue != charCount.HasValue ||
+                        (startChar.HasValue && (startLine.HasValue || lineCount.HasValue)))
+                        throw Error("Supply startChar and charCount together, without line selectors.", "resource_chars_invalid");
+                    read = startChar.HasValue
+                        ? _files.ReadCharacters(target, startChar.Value, charCount.Value)
+                        : _files.Read(target, startLine, lineCount);
                 }
                 else if (type == "plan")
                 {
@@ -88,10 +95,12 @@ namespace RNAssistant.Runtime
                         string.IsNullOrEmpty(referencePath) ? null : referencePath));
                 }
                 if (read.Result.Text.Length > (type == "plan" ? PlanDocumentService.MaximumMarkdownCharacters : 16000))
-                    throw Error("The source exceeds the model read bound. For files, use startLine and lineCount (1–500) to read a bounded region.", "read_too_large");
+                    throw Error("The source exceeds the model read bound. For files, use startLine/lineCount or startChar/charCount to read a bounded region.", "read_too_large");
                 if (type != "file" || read.Result.Complete) read.RequireCompleteExactText();
                 if (type == "file") _observed[target] = read.Evidence.Single();
-                var projection = startLine.HasValue
+                var projection = startChar.HasValue
+                    ? ResourceReadProjection.FromCharacters(read.Result, target, type, "workspace", startChar.Value, charCount.Value)
+                    : startLine.HasValue
                     ? ResourceReadProjection.FromLines(read.Result, target, type, "workspace", startLine.Value, lineCount.Value)
                     : ResourceReadProjection.From(read.Result, target, type, type == "skill" ? "catalog" : "workspace");
                 if (type == "plan")
@@ -106,7 +115,7 @@ namespace RNAssistant.Runtime
                         .Select(item => new SkillReferenceProjection { Path = item.Path, ByteLength = item.ByteLength }).ToArray();
                 }
                 return Return(ToolResult.Ok(read.Result.Complete ? "Complete resource representation read." :
-                    "Exact lines read from the current version; other regions are not observed. Read another line range as needed; each read rechecks the current source.", JsonConvert.SerializeObject(projection),
+                    "Exact text excerpt read from the current version; other regions are not observed. Read another bounded range as needed; each read rechecks the current source.", JsonConvert.SerializeObject(projection),
                     new[] { read.Result.Resource.Reference }), read.Evidence);
             }
             catch (ResourceRequestException error)

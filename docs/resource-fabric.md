@@ -108,12 +108,15 @@ selectors fail before dispatch rather than being silently ignored. Chat exposes
 only the file branch. Existing nullable optional arguments preserve their defaults.
 CLI `common.resources_read(target)` returns complete whole UTF-8 text up to 16000
 characters with matching retained payload, coverage and exact evidence. File reads
-also accept paired `startLine` (1-based) and `lineCount` (1–500), with the same
-16000-character excerpt bound. Each call captures the current revision; ranges
-from different revisions are never combined into a whole observation. Line slicing
+also accept paired `startLine` (1-based) and `lineCount` (1–500), or `startChar`
+(zero-based UTF-16) and `charCount` (1–16000), with the same 16000-character
+excerpt bound. A range that splits a surrogate pair is rejected. Each call
+captures the current revision; ranges from different revisions are never combined
+into a whole observation. Line and character slicing
 preserves CR/LF/CRLF and Unicode; exact character coverage uses UTF-16 offsets.
 The existing text owner still limits the captured UTF-8 file to 1 MiB. Longer
-single lines and larger text files require a separate bounded-view extension.
+single lines within that captured file can use character windows; files beyond
+the source bound require a separate bounded-view extension.
 CLI prepares fresh current-run
 authority through the same file owner, then passes the frozen tuple and accepted
 kernel facts to the existing `ModelContextCompiler`, now in Core. The compiler owns
