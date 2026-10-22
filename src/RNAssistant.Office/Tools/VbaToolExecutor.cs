@@ -86,6 +86,19 @@ namespace RNAssistant.Office.Tools
             return result;
         }
 
+        VbaModuleLineSnapshot IVbaResourceSource.ReadResourceModuleLines(ChatSession session,
+            string moduleName, int startLine, int lineCount, int maxChars)
+        {
+            var reconciliationError = ReconcilePendingMutations();
+            if (reconciliationError != null)
+                throw new ResourceRequestException(reconciliationError.Message,
+                    reconciliationError.ErrorCode ?? "vba_journal_unavailable",
+                    reconciliationError.Retryable == true);
+            try { return _reader.ReadResourceModuleLines(moduleName, startLine, lineCount, maxChars); }
+            catch (VbaBackendException error)
+            { throw new ResourceRequestException(error.Message, error.ErrorCode, error.Retryable); }
+        }
+
         private static IReadOnlyList<VbaPatchOperationRequest> ParsePatchOperations(JArray patch)
         {
             var operations = new List<VbaPatchOperationRequest>();

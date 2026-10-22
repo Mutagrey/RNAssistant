@@ -117,6 +117,31 @@ namespace RNAssistant.OfficeHosts.Vba
             };
         }
 
+        public static VbaModuleLineSnapshot ReadModuleLines(object documentObject,
+            VbaReadModuleLineRequest request)
+        {
+            if (request == null || request.StartLine < 1 || request.LineCount < 1 ||
+                request.LineCount > 500 || request.MaxChars < 1)
+                throw new VbaBackendException("Invalid bounded VBA line request.", "resource_lines_invalid", false);
+            dynamic component = FindComponent(GetVbaProject(documentObject), request.ModuleName);
+            if (component == null)
+                throw new VbaBackendException("VBA module not found: " + request.ModuleName,
+                    "vba_module_not_found", true);
+            dynamic module = component.CodeModule;
+            var total = (int)module.CountOfLines;
+            if (request.StartLine > (long)total + 1)
+                throw new VbaBackendException("startLine is past the end of this VBA module.",
+                    "resource_lines_invalid", false);
+            var end = (int)Math.Min((long)total + 1, (long)request.StartLine + request.LineCount);
+            var code = end == request.StartLine ? string.Empty :
+                (string)module.Lines[request.StartLine, end - request.StartLine];
+            if (code == null || code.Length > request.MaxChars)
+                throw new VbaBackendException("Selected VBA lines exceed the model read budget. Choose fewer lines.",
+                    "resource_lines_too_large", false);
+            return new VbaModuleLineSnapshot { ModuleName = (string)component.Name,
+                StartLine = request.StartLine, EndLine = end, TotalLines = total, Code = code };
+        }
+
         public static VbaBackendActionResult ReplaceModule(
             object documentObject,
             string moduleName,

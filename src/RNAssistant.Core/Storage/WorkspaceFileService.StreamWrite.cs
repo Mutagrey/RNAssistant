@@ -1,21 +1,119 @@
 using System;
 using System.IO;
 using System.Threading;
+using System.Text;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 
 namespace RNAssistant.Core.Storage
 {
     public sealed partial class WorkspaceFileService
     {
+        private static int TextByteLength(string text)
+        {
+            try { return StrictUtf8.GetByteCount(text ?? string.Empty); }
+            catch (EncoderFallbackException)
+            { throw new WorkspaceFileException("encoding_ambiguous", "Only strict UTF-8 text is supported."); }
+        }
+
+        private bool IsLargeExpected(ResourceRef expected)
+        {
+            if (expected?.IsExact != true) return false;
+            var address = ResourceUri.Parse(expected.Uri);
+            return address.Provider == "file" && address.Segments.Count == 1 &&
+                _authority.GetRevision(Scope(address.Segments[0]), expected)?.Payload?.ByteLength > MaximumTextBytes;
+        }
+
+        private WorkspaceFileObservation WriteStagedText(WorkspaceDescriptor workspace,
+            string relativePath, string text, ResourceRef expected, Action onDispatch)
+        {
+            RequireWritable(workspace);
+            text = text ?? string.Empty;
+            if (expected != null)
+            {
+                bool bom, crlfOnly;
+                InspectTextFormat(ResolvePath(workspace, relativePath, false), out bom, out crlfOnly);
+                if (crlfOnly) text = text.Replace("\r\n", "\n").Replace("\n", "\r\n");
+                if (bom && !text.StartsWith("\uFEFF", StringComparison.Ordinal)) text = "\uFEFF" + text;
+            }
+            var stagedPath = Path.Combine(Path.GetTempPath(), "rna-text-" + Guid.NewGuid().ToString("N") + ".tmp");
+            try
+            {
+                using (var staged = new FileStream(stagedPath, FileMode.CreateNew, FileAccess.Write,
+                    FileShare.None, 81920, FileOptions.SequentialScan))
+                {
+                    using (var writer = new StreamWriter(staged, StrictUtf8, 81920, true))
+                        writer.Write(text);
+                    staged.Flush(true);
+                }
+                var saved = CommitStagedFileCore(workspace, relativePath, stagedPath, expected,
+                    long.MaxValue, onDispatch, default(CancellationToken), true);
+                return new WorkspaceFileObservation { RelativePath = relativePath,
+                    Reference = saved.Reference, ContentSha256 = saved.ContentSha256,
+                    SourceByteLength = saved.ByteLength, AuthorityCommit = saved.AuthorityCommit };
+            }
+            catch (EncoderFallbackException)
+            { throw new WorkspaceFileException("encoding_ambiguous", "Only strict UTF-8 text is supported."); }
+            finally
+            {
+                try { if (File.Exists(stagedPath)) File.Delete(stagedPath); }
+                catch (IOException) { /* Preserve the write outcome; scratch cleanup is separate. */ }
+                catch (UnauthorizedAccessException) { /* The journal still owns any uncertain effect. */ }
+            }
+        }
+
+        private static void InspectTextFormat(string path, out bool bom, out bool crlfOnly)
+        {
+            var decoder = StrictUtf8.GetDecoder();
+            var bytes = new byte[81920];
+            var chars = new char[81922];
+            var first = true;
+            var previousCr = false;
+            var foundCrLf = false;
+            var bareLf = false;
+            bom = false;
+            using (var input = new FileStream(path, FileMode.Open, FileAccess.Read,
+                FileShare.Read, 81920, FileOptions.SequentialScan))
+            {
+                try
+                {
+                    int count;
+                    while ((count = input.Read(bytes, 0, bytes.Length)) != 0)
+                    {
+                        var length = decoder.GetChars(bytes, 0, count, chars, 0, false);
+                        for (var i = 0; i < length; i++)
+                        {
+                            var value = chars[i];
+                            if (first) { bom = value == '\uFEFF'; first = false; }
+                            if (value == '\n')
+                            { if (previousCr) foundCrLf = true; else bareLf = true; }
+                            previousCr = value == '\r';
+                        }
+                    }
+                    decoder.GetChars(Array.Empty<byte>(), 0, 0, chars, 0, true);
+                }
+                catch (DecoderFallbackException)
+                { throw new WorkspaceFileException("encoding_ambiguous", "Only strict UTF-8 text is supported."); }
+            }
+            crlfOnly = foundCrLf && !bareLf;
+        }
+
         // Bounded binary publication for plugin result streams. Staging is private to
         // the caller; all target mutation, journal and read-back remain in this owner.
         public WorkspaceFileSnapshot CommitStagedFile(WorkspaceDescriptor workspace, string relativePath,
             string stagedPath, ResourceRef expected, long maximumBytes, Action onDispatch = null,
             CancellationToken token = default(CancellationToken))
+        { return CommitStagedFileCore(workspace, relativePath, stagedPath, expected,
+            maximumBytes, onDispatch, token, false); }
+
+        private WorkspaceFileSnapshot CommitStagedFileCore(WorkspaceDescriptor workspace,
+            string relativePath, string stagedPath, ResourceRef expected, long maximumBytes,
+            Action onDispatch, CancellationToken token, bool textSource)
         {
             RequireWritable(workspace);
             var path = ResolvePath(workspace, relativePath, false, true);
-            if (maximumBytes < 1 || maximumBytes > 256L * 1024 * 1024) throw new ArgumentOutOfRangeException(nameof(maximumBytes));
+            if (maximumBytes < 1 || !textSource && maximumBytes > 256L * 1024 * 1024)
+                throw new ArgumentOutOfRangeException(nameof(maximumBytes));
             if (StorageFileSystem.IsReparsePoint(stagedPath)) throw new WorkspaceFileException("invalid_staging", "Staging cannot be a link.");
             using (AcquireFileScope(path, out var id, out var scope, token))
             {
@@ -42,8 +140,13 @@ namespace RNAssistant.Core.Storage
                 {
                     if (staged.Length > maximumBytes) throw new WorkspaceFileException("file_too_large", "Staged file exceeds its budget.");
                     long length; var hash = ChatBlobStore.HashFile(staged, out length, token, null);
-                    payload = PayloadRef.FromBlob(_blobs.StoreHashedFile(staged, hash, length, "application/octet-stream", token, null));
+                    payload = PayloadRef.FromBlob(_blobs.StoreHashedFile(staged, hash, length,
+                        textSource ? "text/plain; charset=utf-8" : "application/octet-stream", token, null));
                 }
+                if (textSource && expected != null &&
+                    payload.Sha256 == _authority.GetRevision(scope, expected).ContentSha256)
+                    return new WorkspaceFileSnapshot(relativePath,
+                        PublishedEvidence(expected, ResourceRepresentations.Raw));
                 var attempt = _journal.Prepare(scope, expected == null ? "files.create" : "files.replace", Identity(id), expected?.Revision, payload);
                 var dispatched = false;
                 var temporary = path + ".rna-" + Guid.NewGuid().ToString("N") + ".tmp";
@@ -83,14 +186,20 @@ namespace RNAssistant.Core.Storage
                     var commit = ResourceAuthorityCommit.Create(scope, frozen.Generation, effect,
                         new[] { new ResourceHeadChange(Identity(id), head, ResourceHeadState.Known(exact, frozen.Generation + 1)) }, AuthorityCommitReason.MutationEffect, attempt.AttemptId);
                     _authority.Publish(commit); _journal.Resolve(attempt.AttemptId, commit.CommitId);
-                    return new WorkspaceFileSnapshot(relativePath, PublishedEvidence(exact, ResourceRepresentations.Raw));
+                    return new WorkspaceFileSnapshot(relativePath, PublishedEvidence(exact, ResourceRepresentations.Raw))
+                    { AuthorityCommit = commit };
                 }
                 catch (Exception error)
                 {
                     if (!dispatched) { _journal.AbandonBeforeDispatch(attempt.AttemptId); throw; }
                     throw new WorkspaceFileException("effect_unknown", "File publication is uncertain; inspect before retrying. " + error.Message);
                 }
-                finally { if (File.Exists(temporary)) File.Delete(temporary); }
+                finally
+                {
+                    try { if (File.Exists(temporary)) File.Delete(temporary); }
+                    catch (IOException) { /* Do not hide a journaled uncertain effect. */ }
+                    catch (UnauthorizedAccessException) { /* Cleanup can be retried separately. */ }
+                }
             }
         }
 

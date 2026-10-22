@@ -13,6 +13,117 @@ namespace RNAssistant.Office.Services
         private const int MaximumWholeReadCharacters = ChatArtifactLimits.MaximumTextCharacters;
         private const int MaximumWholeReadPages = 128;
 
+        // A model's unqualified text read returns a complete representation when
+        // available; an oversized live source returns one exact selected window.
+        internal ResourceReadSelection ReadAdaptiveText(ChatSession session, ResourceRef reference,
+            ResourceDescriptor descriptor, string representation, int maximumCharacters,
+            System.Threading.CancellationToken cancellationToken)
+        {
+            if (maximumCharacters < 1) throw new ArgumentOutOfRangeException(nameof(maximumCharacters));
+            var provider = ProviderFor(reference.Uri);
+            if (descriptor == null) throw new ArgumentNullException(nameof(descriptor));
+            var view = representation == "auto" || string.IsNullOrWhiteSpace(representation)
+                ? descriptor.Representations.Contains(ResourceRepresentations.Text)
+                    ? ResourceRepresentations.Text : ResourceRepresentations.Source
+                : representation;
+            if (view != ResourceRepresentations.Text && view != ResourceRepresentations.Source)
+                return ReadWhole(session, reference, representation, cancellationToken);
+            if ((view == ResourceRepresentations.Text &&
+                 !(provider is IResourceCharacterWindowProvider)) ||
+                (view == ResourceRepresentations.Source &&
+                 !(provider is IResourceLineWindowProvider)))
+                return ReadWhole(session, reference, representation, cancellationToken);
+            var firstCharacter = 0;
+            if (view == ResourceRepresentations.Text &&
+                provider is IResourceTextBoundsProvider boundedText)
+            {
+                var bounds = WithProvider(provider, session, () =>
+                    boundedText.ReadTextBounds(session, reference, view, cancellationToken));
+                if (bounds != null)
+                {
+                    if (bounds.StartChar < 0 || bounds.EndChar < bounds.StartChar)
+                        throw new ResourceRequestException("Provider returned invalid text bounds.",
+                            "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
+                    firstCharacter = bounds.StartChar;
+                    if ((long)bounds.EndChar - bounds.StartChar > maximumCharacters)
+                    {
+                        var firstWindow = ReadInitialCharacterWindow(provider, session, reference,
+                            view, firstCharacter, maximumCharacters, cancellationToken);
+                        if (firstWindow != null) return firstWindow;
+                    }
+                }
+            }
+            // VBA must select bounded lines before attempting a whole capture:
+            // CodeModule.Lines for an entire large module materializes the source.
+            if (view == ResourceRepresentations.Source &&
+                provider is IResourceLineWindowProvider lines)
+            {
+                for (var count = 500; count >= 1; count /= 2)
+                {
+                    try
+                    {
+                        var selected = WithProvider(provider, session, () =>
+                            lines.ReadLineWindow(session, reference, view, 1, count,
+                                cancellationToken));
+                        if (selected == null) break;
+                        if (selected.Result.Text.Length > maximumCharacters) continue;
+                        if (selected.Result.SourceTotalLines.HasValue &&
+                            selected.Result.SourceCoverage.End ==
+                                (long)selected.Result.SourceTotalLines.Value + 1)
+                        {
+                            var whole = ReadWhole(session, reference, representation, cancellationToken);
+                            if (whole.Result.Text == null || whole.Result.Text.Length <= maximumCharacters)
+                                return whole;
+                        }
+                        return _authority == null ? selected : _authority.PublishRead(session,
+                            selected, null, provider is ILiveOfficeResourceProvider);
+                    }
+                    catch (ResourceRequestException tooWide) when (
+                        tooWide.ErrorCode == "resource_lines_too_large" && count > 1) { }
+                }
+            }
+            ResourceReadSelection materialized = null;
+            try
+            {
+                materialized = ReadWhole(session, reference, representation, cancellationToken);
+                if (materialized.Result.Text == null ||
+                    materialized.Result.Text.Length <= maximumCharacters)
+                    return materialized;
+            }
+            catch (ResourceRequestException error) when (
+                view == ResourceRepresentations.Text &&
+                provider is IResourceCharacterWindowProvider &&
+                (error.ErrorCode == "RESOURCE_SNAPSHOT_TOO_LARGE" ||
+                 error.ErrorCode == "RESOURCE_BATCH_TOO_LARGE" ||
+                 error.ErrorCode == "resource_whole_read_too_large" ||
+                 error.ErrorCode == "resource_whole_read_incomplete")) { }
+            if (view == ResourceRepresentations.Text &&
+                provider is IResourceCharacterWindowProvider)
+            {
+                var selected = ReadInitialCharacterWindow(provider, session, reference,
+                    view, firstCharacter, maximumCharacters, cancellationToken);
+                if (selected != null)
+                    return selected;
+            }
+            if (materialized != null) return materialized;
+            throw new ResourceRequestException("Choose a bounded text target or selector for this source.",
+                "RESOURCE_SNAPSHOT_TOO_LARGE", false);
+        }
+
+        private ResourceReadSelection ReadInitialCharacterWindow(IResourceProvider provider,
+            ChatSession session, ResourceRef reference, string representation, int startChar,
+            int maximumCharacters, System.Threading.CancellationToken cancellationToken)
+        {
+            var characters = provider as IResourceCharacterWindowProvider;
+            if (characters == null) return null;
+            var selected = WithProvider(provider, session, () =>
+                characters.ReadCharacterWindow(session, reference, representation, startChar,
+                    Math.Min(maximumCharacters, InternalReadCharacters), cancellationToken));
+            return selected == null || _authority == null ? selected :
+                _authority.PublishRead(session, selected, null,
+                    provider is ILiveOfficeResourceProvider);
+        }
+
         // A semantic line selection pins the same whole snapshot used by the
         // gateway. Only its exact excerpt becomes model observation evidence.
         internal ResourceReadSelection ReadLines(ChatSession session, ResourceRef reference,
@@ -20,6 +131,20 @@ namespace RNAssistant.Office.Services
         {
             if ((representation != "source" && representation != "text") || startLine < 1 || lineCount < 1 || lineCount > 500)
                 throw new ResourceRequestException("Use source/text with 1-based startLine and lineCount between 1 and 500.", "resource_lines_invalid", false);
+            var lineProvider = ProviderFor(reference.Uri);
+            if (lineProvider is IResourceLineWindowProvider boundedLines)
+            {
+                if (reference.IsExact)
+                    throw new ResourceRequestException("Live line windows require a current semantic target.", "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
+                var pushed = WithProvider(lineProvider, session, () =>
+                {
+                    var selected = boundedLines.ReadLineWindow(session, reference, representation,
+                        startLine, lineCount, cancellationToken);
+                    return selected == null || _authority == null ? selected : _authority.PublishRead(session, selected, null,
+                        lineProvider is ILiveOfficeResourceProvider);
+                });
+                if (pushed != null) return pushed;
+            }
             var selection = ReadWhole(session, reference, representation, cancellationToken);
             var result = selection.Result;
             var text = result.Text;
@@ -59,6 +184,20 @@ namespace RNAssistant.Office.Services
                 startChar < 0 || charCount < 1 || charCount > InternalReadCharacters)
                 throw new ResourceRequestException("Use source/text with zero-based startChar and charCount from 1 to 32000.",
                     "resource_chars_invalid", false);
+            var characterProvider = ProviderFor(reference.Uri);
+            if (characterProvider is IResourceCharacterWindowProvider boundedCharacters)
+            {
+                if (reference.IsExact)
+                    throw new ResourceRequestException("Live character windows require a current semantic target.", "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
+                var pushed = WithProvider(characterProvider, session, () =>
+                {
+                    var selected = boundedCharacters.ReadCharacterWindow(session, reference,
+                        representation, startChar, charCount, cancellationToken);
+                    return selected == null || _authority == null ? selected : _authority.PublishRead(session, selected, null,
+                        characterProvider is ILiveOfficeResourceProvider);
+                });
+                if (pushed != null) return pushed;
+            }
             var selection = ReadWhole(session, reference, representation, cancellationToken);
             var result = selection.Result;
             var text = result.Text;
@@ -228,6 +367,9 @@ namespace RNAssistant.Office.Services
                     Complete = true,
                     Truncated = false,
                     SourceComplete = first.SourceComplete,
+                    SourceCoverage = first.SourceCoverage,
+                    SourceEndChar = first.SourceEndChar,
+                    SourceTotalLines = first.SourceTotalLines,
                     HydratedForNextModelStep = hydratedForNextModelStep,
                     RawContentIncluded = rawContentIncluded,
                     Related = related

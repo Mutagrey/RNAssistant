@@ -4,6 +4,7 @@ using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 
@@ -15,6 +16,51 @@ namespace RNAssistant.Office.Services
         private const int MaximumSearchCharacters = 1000000;
         private const int MaximumSearchCharactersPerResource = 128000;
         private const string TruncatedMarker = "\n...[truncated]";
+
+        public ResourceReadSelection ReadLineWindow(ChatSession session, ResourceRef reference,
+            string representation, int startLine, int lineCount,
+            System.Threading.CancellationToken cancellationToken)
+        {
+            if (representation != ResourceRepresentations.Source) return null;
+            cancellationToken.ThrowIfCancellationRequested();
+            return _scope.Read(session, () =>
+            {
+                VbaResourceTarget target;
+                if (!TryResolveTarget(session, reference?.Uri, out target) || target.Module == null)
+                    return null;
+                var window = _source.ReadResourceModuleLines(session, target.Module.Name,
+                    startLine, lineCount, ResourceReadRequest.MaximumCharacters);
+                cancellationToken.ThrowIfCancellationRequested();
+                var code = window.Code;
+                var hash = TextPatternEngine.Sha256(code);
+                var uri = ResourceUri.Create(ProviderName, _scope.DocumentToken(session),
+                    "module-lines", target.Module.Name,
+                    startLine.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    window.EndLine.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                var descriptor = new ResourceDescriptor {
+                    Reference = new ResourceRef(uri), Provider = ProviderName,
+                    Kind = ComponentKind, Title = target.Module.Name,
+                    MimeType = "text/x-vba; charset=utf-8", Mutable = true,
+                    Parent = new ResourceRef(ComponentUri(session, target.Module.Name)),
+                    ContentSha256 = hash
+                };
+                descriptor.Representations.Add(ResourceRepresentations.Source);
+                return new ResourceReadSelection {
+                    Result = new ResourceReadResult {
+                        Resource = descriptor, Representation = ResourceRepresentations.Source,
+                        Text = code, ContentSha256 = hash, Offset = 0,
+                        ReturnedCharacters = code.Length, TotalCharacters = code.Length,
+                        Coverage = ResourceCoverage.Whole(),
+                        SourceCoverage = new ResourceCoverage(ResourceCoverageKinds.LineRange,
+                            start: startLine, end: window.EndLine),
+                        SourceTotalLines = window.TotalLines,
+                        Complete = true, SourceComplete = false,
+                        RawContentIncluded = true
+                    },
+                    ResourceRefs = new[] { new ResourceRef(uri) }
+                };
+            });
+        }
 
         public ResourceReadSelection Read(ChatSession session, ResourceReadRequest request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {

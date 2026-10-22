@@ -12,6 +12,16 @@
 новая возможность требует явной задачи, scope и owner; дефекты работающей системы
 приоритетнее расширения без конкретного пользовательского результата.
 
+## Исходные сбои расширенного resource harness — 2026-10-22
+
+Owner: HTML binding schema and VBA mutation guard tests. On clean `HEAD`,
+`outlook resources: exact folder collection and HTML records` fails because
+`common.html_bind_data` rejects `path`; `resources: live Office and VBA are bounded
+and guarded` fails to rename after its external-drift setup with
+`stale_vba_module`. Both failures are unchanged by the large-text read/write work.
+Resolve them separately with their contract owners. The two Markdown section
+failures below also reproduce on clean `HEAD`.
+
 ## CLI resource-preview scripted write fixture — 2026-10-22
 
 Owner: `tests/cli/resource_preview_smoke.py` / scripted `Scenario`. The existing
@@ -186,18 +196,20 @@ Neither a verified byte-level patch nor a syntax pass proves semantic equivalenc
 or that all unnecessary operations were removed. The 128,000-character whole-file
 comparison cap remains; large files show verified bounded hunks instead.
 
-Owner: CLI `WorkspaceFileService`/provider and Office live providers. The CLI file
-owner still has a 1 MiB whole-read bound; model file delivery now follows the
-configured input budget. Selected model/application text windows stream sources
-up to 80 MiB. `files.patch` now streams exact-revision source/result up to 80 MiB,
-verifies unique anchors, journals the intended result and requires explicit
-reconciliation after an uncertain effect. Other whole-body file mutations retain
-the 1-MiB bound. Live Word/VBA/PowerPoint captures remain independently bounded near
-1 MiB. Extend these providers through semantic selectors and exact bounded
-windows before advertising 20 MiB support or large one-line editing there.
-Word document `structure` now exposes main-story bounds without text capture,
-and explicit range reads report document-relative selected coverage. Live VBA and
-PowerPoint provider parity, plus Windows Word validation, remain open.
+Owner: CLI `WorkspaceFileService`/provider and Office live providers. Model file
+delivery follows the configured input budget; current files beyond the old 80-MiB
+cap support exact selected windows and streamed `files.patch`. Patch fragments no
+longer have a one-MiB bound. Large `files.create`/`files.replace` stage text and
+verify read-back. The internal materialized `ReadText` path and some retained web
+snapshots still have separate one-MiB bounds; neither limits selected file reads.
+Word, VBA and PowerPoint slide text now use the same model read selectors, selected
+source coverage and first-window continuation. Whole Office capture still has an
+internal bound, and large sources require multiple selected reads. Other Office
+representations (including large PowerPoint notes/source), imported artifact
+index/transfer bounds, the whole-module prerequisite of typed VBA patching, and
+Windows Word/VBA/PowerPoint validation remain separate work. Workspace
+copy/move/delete retain their existing whole-source bounds; do not claim host
+qualification from the host-neutral checks.
 Repeated indexed reads of strongly compressed sources now reuse one verified
 encoding fingerprint; every call still hashes all current stored bytes. The local
 >10 MiB/329-part fixture is about 40% faster. Larger/weakly compressed encodings

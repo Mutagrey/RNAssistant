@@ -2277,6 +2277,42 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void VbaLargeModuleLineWindow()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                var lines = Enumerable.Repeat(new string('x', 120), 9000).ToArray();
+                lines[8998] = "TAIL_SENTINEL";
+                adapter.SetVbaModule("LargeModule", string.Join("\n", lines), "StdModule");
+                var session = NewSession(adapter);
+                executor.BindResourceAuthority(session);
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName)
+                    .Concat(executor.GetControllerTools()).ToList();
+                var first = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                    "target", "VBA module: LargeModule", "representation", "source"),
+                    tools, new AppSettings(), false, false, session);
+                AssertTrue(first.Success, "ordinary large VBA read returns its first bounded lines");
+                var firstVisible = JObject.Parse(first.DataJson);
+                AssertTrue(!(bool)firstVisible["sourceComplete"] &&
+                    (int)firstVisible["sourceCoverage"]["start"] == 1 &&
+                    (int)firstVisible["sourceTotalLines"] == 9000,
+                    "large VBA read exposes continuation coordinates");
+                var selected = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                    "target", "VBA module: LargeModule", "representation", "source",
+                    "startLine", 8999, "lineCount", 2),
+                    tools, new AppSettings(), false, false, session);
+                AssertTrue(selected.Success, "large VBA module supports bounded lines without whole capture");
+                var visible = JObject.Parse(selected.DataJson);
+                AssertContains((string)visible["text"], "TAIL_SENTINEL", "selected tail is exact");
+                AssertTrue((bool)visible["selectionComplete"] &&
+                    (string)visible["sourceCoverage"]["kind"] == ResourceCoverageKinds.LineRange &&
+                    (int)visible["sourceCoverage"]["start"] == 8999 &&
+                    (int)visible["sourceCoverage"]["end"] == 9001 &&
+                    !(bool)visible["sourceComplete"],
+                    "shared projection marks only the selected VBA lines complete");
+            });
+        }
+
         private static void ArtifactPromptUsesBoundedWorkingSet()
         {
             var session = new ChatSession();

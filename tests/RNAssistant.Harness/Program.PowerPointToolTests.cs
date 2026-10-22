@@ -17,6 +17,50 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void PowerPointLargeSlideTextWindow()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("PowerPoint"), (executor, adapter) =>
+            {
+                adapter.SetText(new PowerPointSetTextRequest { HasSlideIndex = true,
+                    SlideIndex = 1, ShapeName = "Content Placeholder 2",
+                    Text = new string('p', PowerPointService.MaximumTextCharacters + 1) }, () => { });
+                var session = NewSession(adapter);
+                executor.BindResourceAuthority(session);
+                var tools = OfficeToolCatalog.ForHost("PowerPoint")
+                    .Concat(executor.GetControllerTools()).ToList();
+                var structure = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                    "target", "PowerPoint slide: 1", "representation", "structure"),
+                    tools, new AppSettings(), false, false, session);
+                AssertTrue(structure.Success, "large slide exposes text bounds without source capture");
+                var bounds = JObject.Parse((string)JObject.Parse(structure.DataJson)["text"]);
+                var start = (int)bounds["textEnd"] - 25;
+                var materializations = adapter.PowerPointSourceMaterializationCount;
+                var first = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                    "target", "PowerPoint slide: 1", "representation", "text"),
+                    tools, new AppSettings(), false, false, session);
+                AssertTrue(first.Success, "ordinary large slide read returns a bounded first window");
+                var firstVisible = JObject.Parse(first.DataJson);
+                AssertTrue(!(bool)firstVisible["sourceComplete"] &&
+                    (int)firstVisible["sourceCoverage"]["start"] == 0 &&
+                    (int)firstVisible["sourceEndChar"] == (int)bounds["textEnd"],
+                    "ordinary slide read exposes continuation coordinates");
+                var selected = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                    "target", "PowerPoint slide: 1", "representation", "text",
+                    "startChar", start, "charCount", 24),
+                    tools, new AppSettings(), false, false, session);
+                AssertTrue(selected.Success, "large slide tail is readable through the common selector");
+                var visible = JObject.Parse(selected.DataJson);
+                AssertEqual(new string('p', 24), (string)visible["text"],
+                    "slide window contains exactly the selected body text");
+                AssertTrue((bool)visible["selectionComplete"] &&
+                    (int)visible["sourceCoverage"]["start"] == start &&
+                    !(bool)visible["sourceComplete"],
+                    "shared projection reports only the selected slide span");
+                AssertEqual(materializations, adapter.PowerPointSourceMaterializationCount,
+                    "bounded window never captures the oversized slide source");
+            });
+        }
+
         private static void PowerPointSearchRetainsExactSnapshots()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("PowerPoint"), (executor, adapter) =>
@@ -261,8 +305,14 @@ namespace RNAssistant.Harness
                     Text = new string('x', PowerPointService.MaximumTextCharacters + 1) }, () => { });
                 var large = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId, "target", "PowerPoint slide: 1"),
                     tools, new AppSettings(), false, false, session);
-                AssertEqual("RESOURCE_SNAPSHOT_TOO_LARGE", large.ErrorCode, "oversized slide never returns clipped success");
-                AssertEqual(count, adapter.PowerPointSourceMaterializationCount, "character bound precedes materialization");
+                AssertTrue(large.Success, "oversized slide returns an exact bounded first window");
+                var firstWindow = JObject.Parse(large.DataJson);
+                AssertTrue(!(bool)firstWindow["sourceComplete"] &&
+                    (int)firstWindow["sourceCoverage"]["start"] == 0 &&
+                    (int)firstWindow["sourceEndChar"] > PowerPointService.MaximumTextCharacters,
+                    "large slide never presents a clipped window as the whole source");
+                AssertEqual(count, adapter.PowerPointSourceMaterializationCount,
+                    "first window avoids whole-slide materialization");
                 var small = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId, "target", "PowerPoint slide: 2"),
                     tools, new AppSettings(), false, false, session);
                 AssertTrue(small.Success, "explicit small slide is still readable");

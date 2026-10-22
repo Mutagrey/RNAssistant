@@ -792,7 +792,7 @@ namespace RNAssistant.Runtime
                 _skillCatalog = new SkillCatalogService("Workspace", _skillPublications.Capture);
                 Register(registry, entries, SkillLoadToolHandler.Entry(),
                     new SkillLoadToolHandler(session, () => _skills, () => _toolPack, _settings, AdmitSkillSelection));
-                var maximumFileReadCharacters = Math.Min(WorkspaceFileService.MaximumWindowTextSourceBytes,
+                var maximumFileReadCharacters = Math.Min(WorkspaceFileService.MaximumWindowTextCharacters,
                     ModelContextBudget.ApproximateTextCharacterCapacity(
                         ModelContextBudget.InputBudgetTokens(_settings), _settings));
                 Register(registry, entries, "common.resources_find", (_mode.AllowsSkills ? "Find workspace files (default type=file, one directory, up to 200) or enabled skills (type=skill, up to 50), or workspace Plans (type=plan, up to 50 from at most 100 heads). For workspace root omit directory or use null, never / or .; directory applies only to files. Narrow the query when incomplete." : "Find workspace files in one directory, up to 200. For workspace root omit directory or use null, never / or .; narrow the query when incomplete.") +
@@ -801,7 +801,7 @@ namespace RNAssistant.Runtime
                     new WorkspaceResourceHandler(_resources.Select("file"), _skillPublications, () => _skills, _observed, true, _plans,
                         maximumFileReadCharacters,
                         office?.ResourceFind));
-                Register(registry, entries, "common.resources_read", (_mode.AllowsSkills ? "Read a complete UTF-8 file (default type=file, target is its workspace-relative path) or published skill instructions (type=skill, target is the skill ID). referencePath belongs only to a listed skill reference. For a workspace Plan use type=plan, omit target for the selected plan or supply an exact unique title. Optional version reads history without selecting it; a current read selects its exact revision. File text delivery follows this run's model input budget; skill instructions retain their separate publication bound, and Plans allow 32000 characters. For files up to 80 MiB use startLine and lineCount (1–500), or zero-based UTF-16 startChar and charCount for a long single line; each slice observes the current version. files.patch accepts a unique anchor from an observed excerpt of a UTF-8 source up to 80 MiB. No partial skill activation." : "Read UTF-8 text by workspace-relative target. File text delivery follows this run's model input budget; use startLine/lineCount (1–500) or zero-based UTF-16 startChar/charCount for bounded excerpts of files up to 80 MiB.") +
+                Register(registry, entries, "common.resources_read", (_mode.AllowsSkills ? "Read a UTF-8 file (default type=file, target is its workspace-relative path) or published skill instructions (type=skill, target is the skill ID). referencePath belongs only to a listed skill reference. For a workspace Plan use type=plan, omit target for the selected plan or supply an exact unique title. Optional version reads history without selecting it; a current read selects its exact revision. File text delivery follows this run's model input budget; skill instructions retain their separate publication bound, and Plans allow 32000 characters. For large files use startLine and lineCount (1–500), or zero-based UTF-16 startChar and charCount for a long single line; each slice observes the current version. files.patch accepts a unique anchor from an observed excerpt of a UTF-8 source. No partial skill activation." : "Read UTF-8 text by workspace-relative target. File text delivery follows this run's model input budget; use startLine/lineCount (1–500) or zero-based UTF-16 startChar/charCount for bounded excerpts of files.") +
                     (office == null ? string.Empty : " Use type=office and a semantic target to read the pinned Office document."),
                     ResourceSchema(false, _mode.AllowsSkills, office != null, maximumFileReadCharacters), false,
                     new WorkspaceResourceHandler(_resources.Select("file"), _skillPublications, () => _skills, _observed, false, _plans,
@@ -822,7 +822,7 @@ namespace RNAssistant.Runtime
                     Register(registry, entries, "files.move", "Move a previously read complete UTF-8 file to a new path; preserve file identity and never overwrite.",
                         Schema("relativePath", true, "targetPath", true), true,
                         new FileHandler(files, workspace, _observed, "move", payloads), true);
-                    Register(registry, entries, "files.patch", "Replace one exact unique observed text anchor in a UTF-8 file up to 80 MiB; anchor and replacement each fit one MiB.",
+                    Register(registry, entries, "files.patch", "Replace one exact unique observed text anchor in a UTF-8 file. The model context bounds each supplied fragment; large sources and results are streamed.",
                         Schema("relativePath", true, "oldText", true, "newText", true), true,
                         new FileHandler(files, workspace, _observed, "patch", payloads));
                     Register(registry, entries, "files.replace", "Replace a previously read whole UTF-8 file.",
@@ -1006,7 +1006,7 @@ namespace RNAssistant.Runtime
                         properties["lineCount"] = new JObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = 500,
                             ["description"] = "Number of lines. Selected text must fit this run's model input budget; each read checks the current version." };
                         properties["startChar"] = new JObject { ["type"] = "integer", ["minimum"] = 0,
-                            ["maximum"] = WorkspaceFileService.MaximumWindowTextSourceBytes,
+                            ["maximum"] = WorkspaceFileService.MaximumWindowTextCharacters,
                             ["description"] = "Zero-based UTF-16 character offset. Supply together with charCount, without line selectors." };
                         properties["charCount"] = new JObject { ["type"] = "integer", ["minimum"] = 1,
                             ["maximum"] = maximumFileReadCharacters,
@@ -1198,7 +1198,7 @@ namespace RNAssistant.Runtime
                 foreach (var path in paths)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    try { _files.CaptureFile(_workspace, path, WorkspaceFileService.MaximumWindowTextSourceBytes,
+                    try { _files.CaptureFile(_workspace, path, long.MaxValue,
                         cancellationToken, markUnknownOnSizeRefusal: true); }
                     catch (FileNotFoundException) { /* The file owner marked the old head unavailable. */ }
                     catch (DirectoryNotFoundException) { /* The file owner marked the old head unavailable. */ }

@@ -40,6 +40,7 @@ namespace RNAssistant.Core.Storage
         public ResourceRef Reference { get { return Evidence.Resource.Copy(); } }
         public long ByteLength { get { return Evidence.Payload.ByteLength; } }
         public string ContentSha256 { get { return Evidence.ContentSha256; } }
+        internal ResourceAuthorityCommit AuthorityCommit { get; set; }
 
         internal WorkspaceFileSnapshot(string relativePath, ResourceEvidence evidence)
         { RelativePath = relativePath; Evidence = evidence; }
@@ -89,7 +90,9 @@ namespace RNAssistant.Core.Storage
     public sealed partial class WorkspaceFileService
     {
         internal const int MaximumTextBytes = 1024 * 1024;
-        public const int MaximumWindowTextSourceBytes = 80 * 1024 * 1024;
+        // UTF-16 offsets and totals in the current resource wire are Int32.
+        // Source bytes are streamed independently of this coordinate boundary.
+        public const int MaximumWindowTextCharacters = int.MaxValue;
         private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
         private readonly AppDataPaths _paths;
         private readonly ChatBlobStore _blobs;
@@ -223,22 +226,44 @@ namespace RNAssistant.Core.Storage
             CancellationToken token = default(CancellationToken))
         { return ReadContent(workspace, relativePath, false, token); }
 
+        // A model read admits only the selected text into memory. A source that
+        // fits the delivery budget can still become a complete text observation.
+        public WorkspaceFileObservation ReadModelText(WorkspaceDescriptor workspace, string relativePath,
+            int maximumCharacters, CancellationToken token = default(CancellationToken))
+        {
+            if (maximumCharacters < 1 || maximumCharacters > MaximumWindowTextCharacters)
+                throw new ArgumentOutOfRangeException(nameof(maximumCharacters));
+            if (maximumCharacters < MaximumTextBytes)
+                return ReadTextWindow(workspace, relativePath,
+                    new TextWindow(0, maximumCharacters, false, maximumCharacters, true), token,
+                    promoteCompleteText: true);
+            try
+            {
+                var whole = ReadText(workspace, relativePath, token);
+                if (whole.Text.Length <= maximumCharacters) return whole;
+            }
+            catch (WorkspaceFileException error) when (error.Code == "file_too_large") { }
+            return ReadTextWindow(workspace, relativePath,
+                new TextWindow(0, maximumCharacters, false, maximumCharacters, true), token,
+                promoteCompleteText: true);
+        }
+
         public WorkspaceFileObservation ReadTextLines(WorkspaceDescriptor workspace, string relativePath,
             int startLine, int lineCount, CancellationToken token = default(CancellationToken),
-            int maximumCharacters = MaximumWindowTextSourceBytes)
+            int maximumCharacters = MaximumWindowTextCharacters)
         {
             if (startLine < 1 || lineCount < 1 || lineCount > 500 ||
-                maximumCharacters < 1 || maximumCharacters > MaximumWindowTextSourceBytes)
+                maximumCharacters < 1 || maximumCharacters > MaximumWindowTextCharacters)
                 throw new WorkspaceFileException("resource_lines_invalid", "Use startLine >= 1 and lineCount between 1 and 500.");
             return ReadTextWindow(workspace, relativePath, new TextWindow(startLine, lineCount, true, maximumCharacters), token);
         }
 
         public WorkspaceFileObservation ReadTextCharacters(WorkspaceDescriptor workspace, string relativePath,
             int startChar, int charCount, CancellationToken token = default(CancellationToken),
-            int maximumCharacters = MaximumWindowTextSourceBytes)
+            int maximumCharacters = MaximumWindowTextCharacters)
         {
-            if (startChar < 0 || startChar > MaximumWindowTextSourceBytes || charCount < 1 ||
-                maximumCharacters < 1 || maximumCharacters > MaximumWindowTextSourceBytes ||
+            if (startChar < 0 || startChar > MaximumWindowTextCharacters || charCount < 1 ||
+                maximumCharacters < 1 || maximumCharacters > MaximumWindowTextCharacters ||
                 charCount > maximumCharacters)
                 throw new WorkspaceFileException("resource_chars_invalid",
                     "Use zero-based startChar and a positive charCount within the selected read budget.");
@@ -250,7 +275,7 @@ namespace RNAssistant.Core.Storage
         public WorkspaceFileObservation ReadTextViewCharacters(WorkspaceDescriptor workspace, string relativePath,
             int startChar, int charCount, ResourceRef exact = null, CancellationToken token = default(CancellationToken))
         {
-            if (startChar < 0 || startChar > MaximumWindowTextSourceBytes ||
+            if (startChar < 0 || startChar > MaximumWindowTextCharacters ||
                 charCount < ResourceReadRequest.MinimumCharacters || charCount > ResourceReadRequest.MaximumCharacters)
                 throw new WorkspaceFileException("resource_chars_invalid",
                     "Use zero-based startChar and charCount from 128 to 32000.");
@@ -269,13 +294,14 @@ namespace RNAssistant.Core.Storage
         }
 
         private WorkspaceFileObservation ReadTextWindow(WorkspaceDescriptor workspace, string relativePath,
-            TextWindow window, CancellationToken token, WorkspaceFileSnapshot pinned = null)
+            TextWindow window, CancellationToken token, WorkspaceFileSnapshot pinned = null,
+            bool promoteCompleteText = false)
         {
             // Pin raw bytes once; decode the retained revision with fixed buffers.
             // A selected text range never claims the whole raw/text view.
-            var snapshot = pinned ?? CaptureFile(workspace, relativePath, MaximumWindowTextSourceBytes, token);
+            var snapshot = pinned ?? CaptureFile(workspace, relativePath, long.MaxValue, token);
             using (var input = OpenExactRead(workspace, relativePath, snapshot.Reference,
-                MaximumWindowTextSourceBytes, token))
+                long.MaxValue, token))
             {
                 var decoder = StrictUtf8.GetDecoder();
                 var bytes = new byte[81920];
@@ -299,13 +325,18 @@ namespace RNAssistant.Core.Storage
             var text = window.Text;
             var payload = PayloadRef.FromBlob(_blobs.StoreText(text, "text/plain; charset=utf-8"));
             var raw = snapshot.Evidence;
+            var complete = promoteCompleteText && window.Start == 0 && window.End == window.TotalCharacters;
+            var coverage = complete ? ResourceCoverage.Whole() :
+                new ResourceCoverage(ResourceCoverageKinds.CharacterRange, start: window.Start, end: window.End);
+            if (complete)
+                _authority.RegisterView(raw.ScopeId, new ResourceRevisionView(snapshot.Reference,
+                    ResourceRepresentations.Text, snapshot.ContentSha256, payload, coverage));
             return new WorkspaceFileObservation { RelativePath = relativePath, Text = text,
                 Reference = snapshot.Reference, Offset = window.Start, TotalCharacters = window.TotalCharacters,
                 SourceByteLength = snapshot.ByteLength, ContentSha256 = snapshot.ContentSha256,
                 Evidence = new ResourceEvidence("ev_" + Guid.NewGuid().ToString("N"), raw.ScopeId,
-                    raw.Resource, ResourceRepresentations.Text,
-                    new ResourceCoverage(ResourceCoverageKinds.CharacterRange, start: window.Start, end: window.End),
-                    false, raw.AuthorityGeneration, payload, raw.Dependencies, contentSha256: raw.ContentSha256) };
+                    raw.Resource, ResourceRepresentations.Text, coverage,
+                    complete, raw.AuthorityGeneration, payload, raw.Dependencies, contentSha256: raw.ContentSha256) };
         }
 
         private sealed class TextWindow
@@ -334,6 +365,9 @@ namespace RNAssistant.Core.Storage
 
             public void Accept(char value)
             {
+                if (TotalCharacters == int.MaxValue)
+                    throw new WorkspaceFileException("file_too_large",
+                        "Text exceeds the current UTF-16 coordinate range.");
                 var offset = TotalCharacters;
                 if (_lines && _pendingCr && value != '\n') AdvanceLine(offset);
                 if (!_lines && (offset == Start || offset == (long)Start + _requestedCount) &&
@@ -410,7 +444,7 @@ namespace RNAssistant.Core.Storage
         {
             if (changed?.Reference == null)
                 throw new ArgumentException("An exact patch result is required.");
-            if (start < 0 || start > MaximumWindowTextSourceBytes ||
+            if (start < 0 || start > MaximumWindowTextCharacters ||
                 length < ResourceReadRequest.MinimumCharacters || length > ResourceReadRequest.MaximumCharacters)
                 throw new ArgumentOutOfRangeException(nameof(length));
             RequireExactPath(workspace, changed.RelativePath, changed.Reference);
@@ -639,6 +673,8 @@ namespace RNAssistant.Core.Storage
         public WorkspaceFileObservation CreateText(WorkspaceDescriptor workspace, string relativePath, string text,
             Action onDispatch = null)
         {
+            if (TextByteLength(text) > MaximumTextBytes)
+                return WriteStagedText(workspace, relativePath, text, null, onDispatch);
             return CreateTextCore(workspace, relativePath, text, null, "files.create", onDispatch);
         }
 
@@ -792,7 +828,11 @@ namespace RNAssistant.Core.Storage
         public WorkspaceFileObservation ReplaceText(WorkspaceDescriptor workspace, string relativePath,
             ResourceRef expected, string text, Action onDispatch = null)
         {
-            return ReplaceTextCore(workspace, relativePath, expected, text, null, "files.replace", onDispatch);
+            if (TextByteLength(text) > MaximumTextBytes || IsLargeExpected(expected))
+                return WriteStagedText(workspace, relativePath, text, expected, onDispatch);
+            try { return ReplaceTextCore(workspace, relativePath, expected, text, null, "files.replace", onDispatch); }
+            catch (WorkspaceFileException error) when (error.Code == "file_too_large")
+            { return WriteStagedText(workspace, relativePath, text, expected, onDispatch); }
         }
 
         public WorkspaceFileObservation RestoreHistoricalText(WorkspaceDescriptor workspace, string relativePath,
@@ -984,11 +1024,13 @@ namespace RNAssistant.Core.Storage
             ResourceRef expected, string oldText, string newText, Action onDispatch = null)
         {
             if (string.IsNullOrEmpty(oldText)) throw new WorkspaceFileException("invalid_patch", "Exact patch anchor is required.");
+            var largeReplacement = TextByteLength(newText) > MaximumTextBytes;
             if (expected != null && expected.IsExact)
             {
                 var address = ResourceUri.Parse(expected.Uri);
                 if (address.Provider == "file" && address.Segments.Count == 1 &&
-                    _authority.GetRevision(Scope(address.Segments[0]), expected)?.Payload?.ByteLength > MaximumTextBytes)
+                    (largeReplacement ||
+                     _authority.GetRevision(Scope(address.Segments[0]), expected)?.Payload?.ByteLength > MaximumTextBytes))
                     return PatchLargeExact(workspace, relativePath, expected, oldText, newText, onDispatch);
             }
             var observed = ReadText(workspace, relativePath);
@@ -999,9 +1041,14 @@ namespace RNAssistant.Core.Storage
                 throw new WorkspaceFileException("patch_not_found", "Patch anchor does not match the current source; correct oldText.");
             if (observed.Text.IndexOf(oldText, first + 1, StringComparison.Ordinal) >= 0)
                 throw new WorkspaceFileException("patch_ambiguous", "Patch anchor has multiple starts; use a unique larger anchor.");
-            return ReplaceTextCore(workspace, relativePath, expected,
-                observed.Text.Substring(0, first) + (newText ?? string.Empty) + observed.Text.Substring(first + oldText.Length),
-                null, "files.patch", onDispatch);
+            try
+            {
+                return ReplaceTextCore(workspace, relativePath, expected,
+                    observed.Text.Substring(0, first) + (newText ?? string.Empty) + observed.Text.Substring(first + oldText.Length),
+                    null, "files.patch", onDispatch);
+            }
+            catch (WorkspaceFileException error) when (error.Code == "file_too_large")
+            { return PatchLargeExact(workspace, relativePath, expected, oldText, newText, onDispatch); }
         }
 
         // Resolves an interrupted attempt by inspecting current bytes. The effect
@@ -1035,7 +1082,9 @@ namespace RNAssistant.Core.Storage
                     _journal.Resolve(attempt.AttemptId, published.CommitId);
                     return new WorkspaceFileRecoveryResult
                     { Outcome = WorkspaceRecoveryOutcome.AlreadyPublished, Exists = File.Exists(path) || attempt.Operation == "files.mkdir" && Directory.Exists(path),
-                        Current = File.Exists(path) && attempt.Payload?.ContentType != "application/octet-stream" ? ReadCurrentUnderLease(scope, id, relativePath, path) : null };
+                        Current = File.Exists(path) && attempt.Payload?.ContentType != "application/octet-stream" &&
+                            new FileInfo(path).Length <= MaximumTextBytes
+                            ? ReadCurrentUnderLease(scope, id, relativePath, path) : null };
                 }
 
                 var before = snapshot.GetHead(Identity(id));
@@ -1043,14 +1092,18 @@ namespace RNAssistant.Core.Storage
                 ResourceHeadState after;
                 if (File.Exists(path) || attempt.Operation == "files.mkdir" && Directory.Exists(path))
                 {
-                    var raw = attempt.Payload?.ContentType == "application/octet-stream";
+                    var raw = attempt.Payload?.ContentType == "application/octet-stream" ||
+                        File.Exists(path) && new FileInfo(path).Length > MaximumTextBytes;
                     string text = null; PayloadRef body;
                     if (attempt.Operation == "files.mkdir") body = attempt.Payload;
                     else if (raw)
                     {
                         using (var input = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
                         {
-                            if (input.Length > 256L * 1024 * 1024) throw new WorkspaceFileException("file_too_large", "Recovery exceeds the binary file budget.");
+                            if (input.Length > 256L * 1024 * 1024 &&
+                                attempt.Operation != "files.patch" &&
+                                attempt.Payload?.ContentType != "text/plain; charset=utf-8")
+                                throw new WorkspaceFileException("file_too_large", "Recovery exceeds the binary file budget.");
                             long length; var digest = ChatBlobStore.HashFile(input, out length, CancellationToken.None, null);
                             body = PayloadRef.FromBlob(_blobs.StoreHashedFile(input, digest, length, "application/octet-stream", CancellationToken.None, null));
                         }

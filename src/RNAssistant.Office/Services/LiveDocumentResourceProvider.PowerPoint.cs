@@ -103,5 +103,68 @@ namespace RNAssistant.Office.Services
             catch (PowerPointBackendException error)
             { throw new ResourceRequestException(error.Message, error.ErrorCode, error.Retryable); }
         }
+
+        private ResourceReadSelection ReadPowerPointCharacterWindow(ChatSession session,
+            ResourceRef reference, string representation, int startChar, int charCount,
+            CancellationToken cancellationToken)
+        {
+            if (representation != ResourceRepresentations.Text) return null;
+            if (_powerPoint == null)
+                throw new ResourceRequestException("The bound PowerPoint reader is unavailable.",
+                    "RESOURCE_PROVIDER_UNAVAILABLE", false);
+            cancellationToken.ThrowIfCancellationRequested();
+            return _scope.Read(session, () =>
+            {
+                string target;
+                if (!TryParseUri(session, reference?.Uri, out target) || !IsPowerPointSlide(target))
+                    return null;
+                var slideIndex = int.Parse(target.Substring(6), CultureInfo.InvariantCulture);
+                PowerPointSlideTextWindowSnapshot window;
+                try { window = new PowerPointService(_powerPoint).CaptureSlideTextWindow(
+                    new PowerPointSlideTextWindowRequest { SlideIndex = slideIndex,
+                        StartChar = startChar, CharCount = charCount }, cancellationToken); }
+                catch (PowerPointBackendException error)
+                { throw new ResourceRequestException(error.Message, error.ErrorCode, error.Retryable); }
+                var end = startChar + window.Text.Length;
+                var selectedTarget = "slide-window-" + slideIndex.ToString(CultureInfo.InvariantCulture) +
+                    "-" + startChar.ToString(CultureInfo.InvariantCulture) +
+                    "-" + end.ToString(CultureInfo.InvariantCulture);
+                var uri = CreateUri(session, selectedTarget);
+                var hash = RNAssistant.Core.Tools.TextPatternEngine.Sha256(window.Text);
+                var descriptor = new ResourceDescriptor { Reference = new ResourceRef(uri),
+                    Provider = ProviderName, Kind = PowerPointSlideKind,
+                    Title = slideIndex.ToString(CultureInfo.InvariantCulture),
+                    MimeType = "text/plain; charset=utf-8", Mutable = true,
+                    Parent = new ResourceRef(CreateUri(session, target)), ContentSha256 = hash };
+                descriptor.Representations.Add(ResourceRepresentations.Text);
+                return new ResourceReadSelection { Result = new ResourceReadResult {
+                    Resource = descriptor, Representation = ResourceRepresentations.Text,
+                    Text = window.Text, ContentSha256 = hash,
+                    Offset = 0, ReturnedCharacters = window.Text.Length,
+                    TotalCharacters = window.Text.Length, Coverage = ResourceCoverage.Whole(),
+                    SourceCoverage = new ResourceCoverage(ResourceCoverageKinds.CharacterRange,
+                        start: startChar, end: end), Complete = true, SourceComplete = false,
+                    SourceEndChar = window.TotalCharacters,
+                    RawContentIncluded = true
+                }, ResourceRefs = new[] { new ResourceRef(uri) } };
+            });
+        }
+
+        private string ReadPowerPointStructure(string target)
+        {
+            var slideIndex = int.Parse(target.Substring(6), CultureInfo.InvariantCulture);
+            try
+            {
+                var bounds = new PowerPointService(_powerPoint).CaptureSlideTextWindow(
+                    new PowerPointSlideTextWindowRequest { SlideIndex = slideIndex,
+                        StartChar = 0, CharCount = 0 }, CancellationToken.None);
+                return new JObject { ["type"] = "rnassistant.powerPointSlide",
+                    ["slideIndex"] = slideIndex, ["slideId"] = bounds.SlideId,
+                    ["textStart"] = 0, ["textEnd"] = bounds.TotalCharacters,
+                    ["windowSelector"] = "startChar + charCount" }.ToString(Formatting.None);
+            }
+            catch (PowerPointBackendException error)
+            { throw new ResourceRequestException(error.Message, error.ErrorCode, error.Retryable); }
+        }
     }
 }

@@ -30,7 +30,7 @@ namespace RNAssistant.Runtime
             WorkspacePlanService plans, int maximumTextReadCharacters, IReadOnlyToolHandler office = null)
         { _files = files; _publications = publications; _skills = skills; _observed = observed; _find = find; _plans = plans;
             _office = office;
-            if (maximumTextReadCharacters < 1 || maximumTextReadCharacters > WorkspaceFileService.MaximumWindowTextSourceBytes)
+            if (maximumTextReadCharacters < 1 || maximumTextReadCharacters > WorkspaceFileService.MaximumWindowTextCharacters)
                 throw new ArgumentOutOfRangeException(nameof(maximumTextReadCharacters));
             _maximumTextReadCharacters = maximumTextReadCharacters; }
 
@@ -83,7 +83,9 @@ namespace RNAssistant.Runtime
                     read = startChar.HasValue
                         ? _files.ReadCharacters(target, startChar.Value, charCount.Value, cancellationToken,
                             _maximumTextReadCharacters)
-                        : _files.Read(target, startLine, lineCount, cancellationToken, _maximumTextReadCharacters);
+                        : startLine.HasValue || lineCount.HasValue
+                        ? _files.Read(target, startLine, lineCount, cancellationToken, _maximumTextReadCharacters)
+                        : _files.ReadModelText(target, _maximumTextReadCharacters, cancellationToken);
                 }
                 else if (type == "plan")
                 {
@@ -110,6 +112,21 @@ namespace RNAssistant.Runtime
                     : startLine.HasValue
                     ? ResourceReadProjection.FromLines(read.Result, target, type, "workspace", startLine.Value, lineCount.Value)
                     : ResourceReadProjection.From(read.Result, target, type, type == "skill" ? "catalog" : "workspace");
+                if (type == "file")
+                {
+                    projection.SourceComplete = read.Result.Complete;
+                    if (!read.Result.Complete)
+                    {
+                        projection.SourceCoverage = read.Result.Coverage;
+                        projection.SourceEndChar = read.Result.TotalCharacters;
+                        if (!startChar.HasValue && !startLine.HasValue)
+                        {
+                            projection.SelectionComplete = true;
+                            projection.StartChar = 0;
+                            projection.RequestedCharacters = _maximumTextReadCharacters;
+                        }
+                    }
+                }
                 if (type == "plan")
                 {
                     projection.Version = int.Parse(read.Result.Resource.Metadata["version"], System.Globalization.CultureInfo.InvariantCulture);

@@ -30,6 +30,34 @@ namespace RNAssistant.Office.Services
         ResourceReadSelection Read(ChatSession session, ResourceReadRequest request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
     }
 
+    // Optional provider pushdown. The result is an exact selected subresource;
+    // its SourceCoverage names the corresponding span in the larger live source.
+    internal interface IResourceCharacterWindowProvider
+    {
+        ResourceReadSelection ReadCharacterWindow(ChatSession session, ResourceRef reference,
+            string representation, int startChar, int charCount,
+            System.Threading.CancellationToken cancellationToken);
+    }
+
+    internal sealed class ResourceTextBounds
+    {
+        public int StartChar { get; set; }
+        public int EndChar { get; set; }
+    }
+
+    internal interface IResourceTextBoundsProvider
+    {
+        ResourceTextBounds ReadTextBounds(ChatSession session, ResourceRef reference,
+            string representation, System.Threading.CancellationToken cancellationToken);
+    }
+
+    internal interface IResourceLineWindowProvider
+    {
+        ResourceReadSelection ReadLineWindow(ChatSession session, ResourceRef reference,
+            string representation, int startLine, int lineCount,
+            System.Threading.CancellationToken cancellationToken);
+    }
+
     internal interface IResourceIdentityResolver
     {
         ResourceRef ResolveIdentity(ChatSession session, ResourceIdentity identity);

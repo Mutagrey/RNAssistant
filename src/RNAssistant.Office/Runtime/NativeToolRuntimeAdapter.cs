@@ -101,7 +101,7 @@ namespace RNAssistant.Office.Runtime
                 else if (string.Equals(registration.Descriptor.Id, ResourceToolCatalog.ReadToolId, StringComparison.Ordinal))
                 {
                     binding = ResourceReadToolHandler.Binding;
-                    handler = new ResourceReadToolHandler(gateway, session, CaptureResourceReadAttachments);
+                    handler = new ResourceReadToolHandler(gateway, session, CaptureResourceReadAttachments, settings);
                 }
                 else if (string.Equals(registration.Descriptor.Id, ResourceToolCatalog.SearchToolId, StringComparison.Ordinal))
                 {

@@ -42,6 +42,64 @@ namespace RNAssistant.OfficeHosts
             return new PowerPointSlideReadSnapshot { Slides = slides, TotalSlides = presentation.Slides.Count };
         }
 
+        public PowerPointSlideTextWindowSnapshot ReadSlideTextWindow(
+            PowerPointSlideTextWindowRequest request)
+        {
+            if (request == null || request.SlideIndex < 1 || request.StartChar < 0 || request.CharCount < 0)
+                throw Failure("Invalid slide text window.", "resource_chars_invalid", false);
+            var slide = ResolveSlide(Presentation(), request.SlideIndex);
+            var selected = new StringBuilder();
+            long offset = 0;
+            AppendLiteralWindow("Slide " + slide.SlideIndex.ToString(CultureInfo.InvariantCulture) + ":\n",
+                request, selected, ref offset);
+            foreach (PowerPoint.Shape shape in slide.Shapes)
+            {
+                if (shape.HasTextFrame != MsoTriState.msoTrue ||
+                    shape.TextFrame.HasText != MsoTriState.msoTrue) continue;
+                var range = shape.TextFrame.TextRange;
+                var length = range.Length;
+                if (length < 0 || offset + length > int.MaxValue)
+                    throw Failure("Slide text exceeds UTF-16 coordinate capacity.", "RESOURCE_SNAPSHOT_TOO_LARGE", false);
+                if (length == 0) continue;
+                var first = Math.Max(0L, (long)request.StartChar - offset);
+                var end = Math.Min((long)length,
+                    (long)request.StartChar + request.CharCount - offset);
+                if (end > first)
+                {
+                    var part = range.Characters((int)first + 1, (int)(end - first)).Text;
+                    if (part == null || part.Length != end - first)
+                        throw Failure("Slide text changed during bounded capture.",
+                            "powerpoint_read_snapshot_invalid", false);
+                    selected.Append(part);
+                }
+                offset += length;
+                AppendLiteralWindow(Environment.NewLine, request, selected, ref offset);
+            }
+            if (request.StartChar > offset || selected.Length != Math.Min((long)request.CharCount,
+                offset - request.StartChar))
+                throw Failure("Slide text window is outside the current source.",
+                    "resource_chars_invalid", false);
+            if (selected.Length > 0 &&
+                (char.IsLowSurrogate(selected[0]) || char.IsHighSurrogate(selected[selected.Length - 1])))
+                throw Failure("The selected slide text splits a UTF-16 character.",
+                    "resource_chars_invalid", false);
+            return new PowerPointSlideTextWindowSnapshot { SlideId = slide.SlideID,
+                SlideIndex = slide.SlideIndex, StartChar = request.StartChar,
+                TotalCharacters = (int)offset, Text = selected.ToString() };
+        }
+
+        private static void AppendLiteralWindow(string value, PowerPointSlideTextWindowRequest request,
+            StringBuilder selected, ref long offset)
+        {
+            if (offset + value.Length > int.MaxValue)
+                throw Failure("Slide text exceeds UTF-16 coordinate capacity.", "RESOURCE_SNAPSHOT_TOO_LARGE", false);
+            var first = Math.Max(0L, (long)request.StartChar - offset);
+            var end = Math.Min((long)value.Length,
+                (long)request.StartChar + request.CharCount - offset);
+            if (end > first) selected.Append(value, (int)first, (int)(end - first));
+            offset += value.Length;
+        }
+
         public PowerPointListSnapshot List(PowerPointListRequest request)
         {
             request = request ?? new PowerPointListRequest();

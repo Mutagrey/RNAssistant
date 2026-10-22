@@ -90,6 +90,8 @@ namespace RNAssistant.Core.Models
         [JsonProperty("table", NullValueHandling = NullValueHandling.Ignore)] public ResourceTableBatch Table { get; set; }
         [JsonProperty("coverage")] public ResourceCoverage Coverage { get; set; }
         [JsonProperty("sourceCoverage", NullValueHandling = NullValueHandling.Ignore)] public ResourceCoverage SourceCoverage { get; set; }
+        [JsonProperty("sourceEndChar", NullValueHandling = NullValueHandling.Ignore)] public int? SourceEndChar { get; set; }
+        [JsonProperty("sourceTotalLines", NullValueHandling = NullValueHandling.Ignore)] public int? SourceTotalLines { get; set; }
         [JsonProperty("offset")] public int Offset { get; set; }
         [JsonProperty("returnedCharacters")] public int ReturnedCharacters { get; set; }
         [JsonProperty("totalCharacters")] public int TotalCharacters { get; set; }
@@ -108,6 +110,7 @@ namespace RNAssistant.Core.Models
                 Coverage = result.Coverage, Offset = result.Offset,
                 ReturnedCharacters = result.ReturnedCharacters, TotalCharacters = result.TotalCharacters,
                 Complete = result.Complete, SourceComplete = result.SourceComplete,
+                SourceEndChar = result.SourceEndChar, SourceTotalLines = result.SourceTotalLines,
                 PartNumber = result.PartNumber, PartCount = result.PartCount,
                 HydratedForNextModelStep = result.HydratedForNextModelStep,
                 RawContentIncluded = result.RawContentIncluded };
@@ -129,15 +132,24 @@ namespace RNAssistant.Core.Models
         public static ResourceReadProjection FromSelectedSourceRange(ResourceReadResult result, string target,
             string type, string scope, int start, int end)
         {
-            if (start < 0 || end < start || result?.Resource?.Reference?.IsExact != true ||
-                result.Representation != ResourceRepresentations.Text || !result.Complete ||
+            return FromSelectedSourceRange(result, target, type, scope,
+                new ResourceCoverage(ResourceCoverageKinds.CharacterRange, start: start, end: end));
+        }
+
+        public static ResourceReadProjection FromSelectedSourceRange(ResourceReadResult result, string target,
+            string type, string scope, ResourceCoverage sourceCoverage)
+        {
+            if (sourceCoverage == null ||
+                (sourceCoverage.Kind != ResourceCoverageKinds.CharacterRange &&
+                 sourceCoverage.Kind != ResourceCoverageKinds.LineRange) ||
+                !sourceCoverage.Start.HasValue || !sourceCoverage.End.HasValue ||
+                result?.Resource?.Reference?.IsExact != true ||
+                (result.Representation != ResourceRepresentations.Text &&
+                 result.Representation != ResourceRepresentations.Source) || !result.Complete ||
                 result.Truncated || result.Text == null || result.ReturnedCharacters != result.Text.Length)
                 throw new System.InvalidOperationException("A source range requires a complete exact selected text view.");
             var projection = From(result, target, type, scope);
-            // The range target itself is complete; these coordinates describe only
-            // its selected span in a larger source.
-            projection.SourceCoverage = new ResourceCoverage(ResourceCoverageKinds.CharacterRange,
-                start: start, end: end);
+            projection.SourceCoverage = sourceCoverage;
             projection.SelectionComplete = true;
             projection.SourceComplete = false;
             return projection;

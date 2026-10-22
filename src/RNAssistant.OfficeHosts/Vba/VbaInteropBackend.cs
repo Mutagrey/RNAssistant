@@ -73,6 +73,14 @@ namespace RNAssistant.OfficeHosts.Vba
             }
         }
 
+        public VbaModuleLineSnapshot ReadModuleLines(VbaReadModuleLineRequest request)
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            try { return VbaProjectSupport.ReadModuleLines(RequireDocument(), request); }
+            catch (VbaBackendException) { throw; }
+            catch (Exception ex) { throw AccessFailure(ex); }
+        }
+
         public VbaBackendActionResult ReplaceModule(
             VbaReplaceModuleRequest request)
         {

@@ -87,6 +87,23 @@ namespace RNAssistant.Office.Vba
             return true;
         }
 
+        public VbaModuleLineSnapshot ReadResourceModuleLines(string moduleName,
+            int startLine, int lineCount, int maxChars)
+        {
+            if (string.IsNullOrWhiteSpace(moduleName) || startLine < 1 || lineCount < 1 ||
+                lineCount > 500 || maxChars < 1)
+                throw new VbaBackendException("Invalid bounded VBA line request.", "resource_lines_invalid", false);
+            var snapshot = _backend.ReadModuleLines(new VbaReadModuleLineRequest {
+                ModuleName = moduleName, StartLine = startLine, LineCount = lineCount, MaxChars = maxChars });
+            if (snapshot == null || !string.Equals(snapshot.ModuleName, moduleName, StringComparison.OrdinalIgnoreCase) ||
+                snapshot.StartLine != startLine || snapshot.TotalLines < 0 || snapshot.Code == null ||
+                snapshot.Code.Length > maxChars || snapshot.EndLine < startLine ||
+                snapshot.EndLine > (long)startLine + lineCount || snapshot.EndLine > (long)snapshot.TotalLines + 1 ||
+                snapshot.EndLine != Math.Min((long)snapshot.TotalLines + 1, (long)startLine + lineCount))
+                throw new VbaBackendException("VBA backend returned an incomplete line window.", "vba_read_invalid", false);
+            return snapshot;
+        }
+
         public bool TryReadProject(out IReadOnlyList<VbaModuleState> modules, out ToolRunResult error)
         {
             modules = null;

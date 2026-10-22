@@ -292,8 +292,16 @@ namespace RNAssistant.Harness
                 var whole = handler.ExecuteAsync(new ToolHandlerContext(execution,
                     new Dictionary<string, object> { ["target"] = "long.txt" }), CancellationToken.None)
                     .GetAwaiter().GetResult();
-                AssertEqual("read_too_large", (string)JObject.Parse(whole.Result.DataJson)["code"],
-                    "model tool refuses whole delivery before a bounded character recovery");
+                var first = JObject.Parse(whole.Result.DataJson);
+                AssertEqual(ToolResultStatus.Ok, whole.Result.Status,
+                    "an oversized whole request returns a context-bounded first window");
+                AssertTrue(!(bool)first["complete"] && (int)first["coverage"]["start"] == 0 &&
+                    (int)first["coverage"]["end"] == 16000 &&
+                    (int)first["sourceCoverage"]["end"] == 16000 &&
+                    (int)first["sourceEndChar"] == body.Length &&
+                    (bool)first["selectionComplete"] && !(bool)first["sourceComplete"] &&
+                    observed["long.txt"].Coverage.Kind == ResourceCoverageKinds.CharacterRange,
+                    "automatic first-window delivery never claims whole-file evidence");
                 var result = handler.ExecuteAsync(new ToolHandlerContext(execution,
                     new Dictionary<string, object> { ["target"] = "long.txt",
                         ["startChar"] = start, ["charCount"] = 16000 }), CancellationToken.None)
@@ -337,6 +345,22 @@ namespace RNAssistant.Harness
                     "the whole-file read also follows the configured model budget");
                 AssertTrue((bool)JObject.Parse(expandedWhole.Result.DataJson)["complete"],
                     "a fitting whole file keeps complete exact evidence");
+
+                var beyondOneMiB = new string('q', WorkspaceFileService.MaximumTextBytes + 1024);
+                File.WriteAllText(Path.Combine(workspace.RootPath, "beyond.txt"), beyondOneMiB,
+                    new UTF8Encoding(false, true));
+                var largeBudget = new WorkspaceResourceHandler(provider, null, () => null,
+                    new Dictionary<string, ResourceEvidence>(), false, null, beyondOneMiB.Length + 10);
+                var completeLarge = largeBudget.ExecuteAsync(new ToolHandlerContext(execution,
+                    new Dictionary<string, object> { ["target"] = "beyond.txt" }), CancellationToken.None)
+                    .GetAwaiter().GetResult();
+                AssertEqual(ToolResultStatus.Ok, completeLarge.Result.Status,
+                    "whole model delivery above one MiB follows the configured context budget");
+                var completeData = JObject.Parse(completeLarge.Result.DataJson);
+                AssertTrue((bool)completeData["complete"] &&
+                    (int)completeData["returnedCharacters"] == beyondOneMiB.Length &&
+                    completeLarge.ResourceEvidence.Single().Coverage.Kind == ResourceCoverageKinds.Whole,
+                    "a fitting streamed source has exact whole-text evidence");
 
                 files.CreateText(workspace, "breaks.txt", "\uFEFFa\rb\nc\r\nd\r");
                 var lines = new[] { "\uFEFFa\r", "b\n", "c\r\n", "d\r", "" };
@@ -398,7 +422,7 @@ namespace RNAssistant.Harness
                 AssertEqual("resource_chars_invalid", RuntimeThrows<WorkspaceFileException>(() =>
                     provider.ReadCharacters("large.txt", tailOffset + 1, 1)).Code,
                     "large character window cannot start inside a surrogate pair");
-                var current = files.CaptureFile(workspace, "large.txt", WorkspaceFileService.MaximumWindowTextSourceBytes);
+                var current = files.CaptureFile(workspace, "large.txt", WorkspaceFileService.MaximumWindowTextCharacters);
                 AssertEqual(EvidenceState.Current, new EvidenceStateReducer().Reduce(large.Evidence.Single(),
                     files.CaptureAuthority(large.Evidence)).State,
                     "revalidating the raw source preserves exact partial evidence");
@@ -411,7 +435,7 @@ namespace RNAssistant.Harness
                     "whole-read refusal does not erase an exact large-source excerpt");
                 using (var edited = new FileStream(largePath, FileMode.Open, FileAccess.Write))
                 { edited.Position = Encoding.UTF8.GetByteCount(prefix); edited.WriteByte((byte)'y'); }
-                files.CaptureFile(workspace, "large.txt", WorkspaceFileService.MaximumWindowTextSourceBytes);
+                files.CaptureFile(workspace, "large.txt", WorkspaceFileService.MaximumWindowTextCharacters);
                 AssertEqual(EvidenceState.Superseded, new EvidenceStateReducer().Reduce(large.Evidence.Single(),
                     files.CaptureAuthority(large.Evidence)).State,
                     "large source drift supersedes the old excerpt");
@@ -428,6 +452,81 @@ namespace RNAssistant.Harness
                 AssertEqual("encoding_ambiguous", RuntimeThrows<WorkspaceFileException>(() =>
                     provider.ReadCharacters("large.txt", 0, 1)).Code,
                     "invalid UTF-8 after the selected region cannot produce text evidence");
+            });
+        }
+
+        private static void WorkspaceFilesBeyondFormerSourceCap()
+        {
+            WithTempPaths(paths =>
+            {
+                var workspace = new WorkspaceStore(paths).Open(Path.Combine(paths.Root, "project"));
+                var files = new WorkspaceFileService(paths);
+                var path = Path.Combine(workspace.RootPath, "beyond-cap.txt");
+                const int anchorOffset = 80 * 1024 * 1024 + 1;
+                using (var output = new FileStream(path, FileMode.CreateNew, FileAccess.Write))
+                {
+                    output.SetLength(anchorOffset + 16);
+                    output.Position = anchorOffset;
+                    var marker = Encoding.UTF8.GetBytes("TAG_OLD");
+                    output.Write(marker, 0, marker.Length);
+                }
+                var observed = files.ReadTextCharacters(workspace, "beyond-cap.txt", anchorOffset, 16);
+                AssertTrue(observed.Text.StartsWith("TAG_OLD", StringComparison.Ordinal) &&
+                    observed.SourceByteLength > 80L * 1024 * 1024,
+                    "bounded read reaches beyond the former source cap");
+                var changed = files.PatchExact(workspace, "beyond-cap.txt", observed.Reference,
+                    "TAG_OLD", "TAG_NEW");
+                AssertTrue(changed.AuthorityCommit != null &&
+                    files.ReadTextCharacters(workspace, "beyond-cap.txt", anchorOffset, 16)
+                        .Text.StartsWith("TAG_NEW", StringComparison.Ordinal),
+                    "streamed patch verifies a source beyond the former cap");
+            });
+        }
+
+        private static void WorkspaceFilesStageLargeTextWrites()
+        {
+            WithTempPaths(paths =>
+            {
+                var workspace = new WorkspaceStore(paths).Open(Path.Combine(paths.Root, "project"));
+                var files = new WorkspaceFileService(paths);
+                var firstText = "\uFEFFfirst\r\n" + new string('a', WorkspaceFileService.MaximumTextBytes) + "\r\n";
+                var created = files.CreateText(workspace, "large-write.txt", firstText);
+                AssertTrue(created.AuthorityCommit != null && created.Text == null &&
+                    File.ReadAllBytes(Path.Combine(workspace.RootPath, "large-write.txt"))
+                        .SequenceEqual(Encoding.UTF8.GetBytes(firstText)),
+                    "large create streams exact text and publishes verified authority");
+                var complete = files.ReadModelText(workspace, "large-write.txt", firstText.Length + 1);
+                AssertTrue(complete.Evidence.Complete && complete.Text == firstText,
+                    "model can receive a complete large source when its context permits");
+                var replacement = "second\n" + new string('b', WorkspaceFileService.MaximumTextBytes + 3);
+                var changed = files.ReplaceText(workspace, "large-write.txt", complete.Reference, replacement);
+                var expected = "\uFEFF" + replacement.Replace("\n", "\r\n");
+                AssertTrue(changed.AuthorityCommit != null && changed.Reference.Revision != complete.Reference.Revision &&
+                    File.ReadAllBytes(Path.Combine(workspace.RootPath, "large-write.txt"))
+                        .SequenceEqual(Encoding.UTF8.GetBytes(expected)),
+                    "large replacement preserves BOM/CRLF and verifies exact read-back");
+                var same = files.ReplaceText(workspace, "large-write.txt", changed.Reference, replacement);
+                AssertTrue(same.AuthorityCommit == null && same.Reference.Revision == changed.Reference.Revision,
+                    "identical staged replacement does not invent a change");
+                files.CreateText(workspace, "grow.txt", "marker");
+                var seed = files.ReadModelText(workspace, "grow.txt", 128);
+                var grown = files.PatchExact(workspace, "grow.txt", seed.Reference,
+                    "marker", new string('g', WorkspaceFileService.MaximumTextBytes + 1));
+                AssertTrue(grown.AuthorityCommit != null &&
+                    files.ReadTextCharacters(workspace, "grow.txt", WorkspaceFileService.MaximumTextBytes, 1)
+                        .Text == "g", "a patch can grow a small file beyond one MiB");
+                files.FaultPoint = stage => { if (stage == "after-dispatch") throw new IOException("interrupted write"); };
+                AssertEqual("effect_unknown", RuntimeThrows<WorkspaceFileException>(() =>
+                    files.CreateText(workspace, "uncertain-large.txt", new string('u',
+                        WorkspaceFileService.MaximumTextBytes + 1))).Code,
+                    "interrupted large create reports an unknown effect");
+                var restarted = new WorkspaceFileService(paths);
+                AssertEqual("unresolved_previous_effect", RuntimeThrows<WorkspaceFileException>(() =>
+                    restarted.ReadTextCharacters(workspace, "uncertain-large.txt", 0, 128)).Code,
+                    "restart blocks reads until explicit reconciliation");
+                AssertEqual(WorkspaceRecoveryOutcome.UnknownAfterDispatch,
+                    restarted.ReconcileUncertain(workspace, "uncertain-large.txt").Outcome,
+                    "large staged create is reconciled without replay or rollback");
             });
         }
 
@@ -448,11 +547,11 @@ namespace RNAssistant.Harness
                     files.PatchExact(workspace, "large.txt", observed.Result.Resource.Reference,
                         "NOT_PRESENT", "x", () => refusedDispatch = true)).Code,
                     "an absent large-source anchor is refused before dispatch");
-                AssertEqual("invalid_patch", RuntimeThrows<WorkspaceFileException>(() =>
+                AssertEqual("encoding_ambiguous", RuntimeThrows<WorkspaceFileException>(() =>
                     files.PatchExact(workspace, "large.txt", observed.Result.Resource.Reference,
-                        "TAG_OLD", new string('z', WorkspaceFileService.MaximumTextBytes + 1),
+                        "TAG_OLD", "\uD800",
                         () => refusedDispatch = true)).Code,
-                    "replacement bytes remain independently bounded");
+                    "invalid Unicode replacement is refused before dispatch");
                 AssertTrue(!refusedDispatch, "invalid large patch arguments never dispatch");
                 var dispatched = false;
                 var changed = files.PatchExact(workspace, "large.txt", observed.Result.Resource.Reference,
@@ -484,6 +583,12 @@ namespace RNAssistant.Harness
                     "TAG_新\uD83D\uDE00", "TAG_新\uD83D\uDE00", () => noopDispatched = true);
                 AssertTrue(!noopDispatched && same.Reference.Revision == current.Result.Resource.Reference.Revision,
                     "a large no-op patch leaves the revision and file intact");
+                var expanded = new string('z', WorkspaceFileService.MaximumTextBytes + 1);
+                var expandedResult = files.PatchExact(workspace, "large.txt", current.Result.Resource.Reference,
+                    "TAG_新\uD83D\uDE00", expanded);
+                AssertTrue(expandedResult.Reference.Revision != current.Result.Resource.Reference.Revision &&
+                    File.ReadAllText(path).Contains(expanded),
+                    "a streamed patch accepts a replacement larger than one MiB");
 
                 var duplicatePath = Path.Combine(workspace.RootPath, "duplicate.txt");
                 File.WriteAllText(duplicatePath, new string('q', 2 * 1024 * 1024) + "aaaaa");

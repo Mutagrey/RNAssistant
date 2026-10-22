@@ -4,6 +4,8 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
+using RNAssistant.Office.Domains.Word;
+using RNAssistant.Office.Domains.PowerPoint;
 
 namespace RNAssistant.Office.Services
 {
@@ -12,6 +14,60 @@ namespace RNAssistant.Office.Services
         private const int MaximumMaterializedCharacters = 1000000;
         private const int MaximumSearchResults = 20;
         private const int MaximumSnippetCharacters = 2000;
+
+        public ResourceTextBounds ReadTextBounds(ChatSession session, ResourceRef reference,
+            string representation, System.Threading.CancellationToken cancellationToken)
+        {
+            if (representation != ResourceRepresentations.Text) return null;
+            return _scope.Read(session, () =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                string target;
+                if (!TryParseUri(session, reference?.Uri, out target)) return null;
+                if (IsWord && target == "root")
+                {
+                    if (_word == null)
+                        throw new ResourceRequestException("The bound Word reader is unavailable.",
+                            "RESOURCE_PROVIDER_UNAVAILABLE", false);
+                    try
+                    {
+                        var bounds = new WordService(_word).CaptureMainStoryBounds(cancellationToken);
+                        return new ResourceTextBounds { StartChar = bounds.Start, EndChar = bounds.End };
+                    }
+                    catch (WordBackendException error)
+                    { throw new ResourceRequestException(error.Message, error.ErrorCode, error.Retryable); }
+                }
+                if (IsPowerPoint && IsPowerPointSlide(target))
+                {
+                    if (_powerPoint == null)
+                        throw new ResourceRequestException("The bound PowerPoint reader is unavailable.",
+                            "RESOURCE_PROVIDER_UNAVAILABLE", false);
+                    try
+                    {
+                        var slideIndex = int.Parse(target.Substring(6),
+                            System.Globalization.CultureInfo.InvariantCulture);
+                        var bounds = new PowerPointService(_powerPoint).CaptureSlideTextWindow(
+                            new PowerPointSlideTextWindowRequest { SlideIndex = slideIndex,
+                                StartChar = 0, CharCount = 0 }, cancellationToken);
+                        return new ResourceTextBounds { StartChar = 0, EndChar = bounds.TotalCharacters };
+                    }
+                    catch (PowerPointBackendException error)
+                    { throw new ResourceRequestException(error.Message, error.ErrorCode, error.Retryable); }
+                }
+                return null;
+            });
+        }
+
+        public ResourceReadSelection ReadCharacterWindow(ChatSession session, ResourceRef reference,
+            string representation, int startChar, int charCount,
+            System.Threading.CancellationToken cancellationToken)
+        {
+            if (IsWord) return ReadWordCharacterWindow(session, reference, representation,
+                startChar, charCount, cancellationToken);
+            if (IsPowerPoint) return ReadPowerPointCharacterWindow(session, reference, representation,
+                startChar, charCount, cancellationToken);
+            return null;
+        }
 
         public ResourceReadSelection Read(ChatSession session, ResourceReadRequest request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {
@@ -63,7 +119,7 @@ namespace RNAssistant.Office.Services
                 var sourceTruncated = !IsExactSource(target) && content.Length >= MaximumMaterializedCharacters;
                 var cursorBinding = ResourceReadCursor.ReadBinding(resourceUri, representation);
                 var position = ResourceReadCursor.ParseRevisionBound(request, cursorBinding);
-                return SelectText(
+                var selected = SelectText(
                     session,
                     target,
                     representation,
@@ -72,6 +128,15 @@ namespace RNAssistant.Office.Services
                     request,
                     position,
                     cursorBinding);
+                if (IsWord && target.StartsWith("range-", StringComparison.Ordinal) &&
+                    representation == ResourceRepresentations.Text)
+                {
+                    var range = WordRange(target);
+                    selected.Result.SourceCoverage = new ResourceCoverage(
+                        ResourceCoverageKinds.CharacterRange, start: range.Start, end: range.End);
+                    selected.Result.SourceComplete = false;
+                }
+                return selected;
             });
         }
 
@@ -180,7 +245,7 @@ namespace RNAssistant.Office.Services
         {
             if (IsWord && target == "root") return ReadWordStructure();
             if (IsPowerPoint && IsPowerPointSlide(target))
-                return JsonConvert.SerializeObject(new { slideIndex = int.Parse(target.Substring(6), System.Globalization.CultureInfo.InvariantCulture) });
+                return ReadPowerPointStructure(target);
             if (IsWord && target.StartsWith("range-", StringComparison.Ordinal))
             {
                 var range = WordRange(target);

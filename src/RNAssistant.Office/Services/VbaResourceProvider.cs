@@ -12,7 +12,8 @@ using RNAssistant.Office.Contracts;
 
 namespace RNAssistant.Office.Services
 {
-    internal sealed partial class VbaResourceProvider : ILiveOfficeResourceProvider
+    internal sealed partial class VbaResourceProvider : ILiveOfficeResourceProvider,
+        IResourceLineWindowProvider
     {
         public const string ProviderName = "vba";
         public const string ProjectKind = "vba-project";

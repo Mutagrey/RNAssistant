@@ -108,27 +108,32 @@ and model wire: `directory` belongs only to file discovery, `referencePath` only
 to skill reads, and the skill branch requires explicit `type="skill"`. Wrong-kind
 selectors fail before dispatch rather than being silently ignored. Chat exposes
 only the file branch. Existing nullable optional arguments preserve their defaults.
-CLI `common.resources_read(target)` returns complete whole UTF-8 text when it fits
-the one-MiB source bound and this run's model input budget, with matching retained
-payload, coverage and exact evidence. File reads also accept paired `startLine`
+CLI `common.resources_read(target)` returns complete UTF-8 text when it fits this
+run's model input budget; otherwise it returns the first exact character window
+and can be continued by selectors. This uses the same file owner, retained payload,
+coverage and evidence as explicit windows. File reads also accept paired `startLine`
 (1-based) and `lineCount` (1–500), or `startChar` (zero-based UTF-16) and a positive
 `charCount` up to the context-derived limit in the offered tool schema. A range
 that splits a surrogate pair is rejected. Each call
 captures the current revision; ranges from different revisions are never combined
 into a whole observation. Line and character slicing
 preserves CR/LF/CRLF and Unicode; exact character coverage uses UTF-16 offsets.
-Whole text reads and non-patch writes retain the 1-MiB source bound. Streamed
-patches accept UTF-8 source and result up to 80 MiB, with an anchor and
-replacement of at most 1 MiB each. Selected line or
-UTF-16 character windows pin and stream strict UTF-8 source files up to 80 MiB,
-with fixed decode buffers. The selected result is bounded by the run's configured
+The internal materialized `ReadText` path retains a one-MiB bound; this is not a
+limit on model or application text access. Selected line and UTF-16 character
+windows pin and stream strict UTF-8 sources through fixed decode buffers.
+`files.patch` streams exact source and result, without the former 80-MiB source
+or one-MiB fragment limits. `files.create` and `files.replace` stage larger text
+and verify exact read-back; an interrupted possible effect still requires explicit
+reconciliation. The selected model result is bounded by the run's configured
 model input budget; the compiler still checks the full request and explicitly
 omits or refuses content that cannot fit alongside other context.
 The selected text payload has exact character-range evidence, `complete=false`,
-and the descriptor reports the full source byte length. Model context preparation
-revalidates these files through raw source capture; an oversized file is marked
-unknown rather than treating a prior excerpt as current. Files beyond 80 MiB
-require a different source-read budget or selector.
+`sourceCoverage` and `sourceEndChar` for continuation; the descriptor reports the
+full source byte length. Model context preparation revalidates these files through
+raw source capture; an oversized file is marked
+unknown rather than treating a prior excerpt as current. UTF-16 positions and
+selected character counts currently use `Int32`; this is the remaining coordinate
+representability boundary, not a configured whole-file size cap.
 
 CLI prepares fresh current-run
 authority through the same file owner, then passes the frozen tuple and accepted
@@ -358,7 +363,7 @@ Discovery returns descriptors, a 1–200 item bound (default 50), scanned-entry 
 and explicit incompleteness. It does not load source bodies or claim an exhaustive
 directory when truncated. `open --view metadata` can inspect directories/binary
 files without decoding them. Whole text reads retain the one-MiB UTF-8 bound.
-For larger current files, text `open` pins up to 80 MiB and decodes one bounded
+For larger current files, text `open` pins the exact source and decodes one bounded
 window from the retained revision; exact continuation reads that same raw-only
 revision after live edit or deletion. Delivery is 128–32000 UTF-16 characters,
 default 4096. A fragment may stop one character early to avoid splitting a

@@ -153,6 +153,37 @@ namespace RNAssistant.Harness
             };
         }
 
+        public VbaModuleLineSnapshot ReadModuleLines(VbaReadModuleLineRequest request)
+        {
+            request = request ?? new VbaReadModuleLineRequest();
+            FakeVbaModule module;
+            if (!_vbaModules.TryGetValue(request.ModuleName ?? string.Empty, out module))
+                throw new VbaBackendException("VBA module not found: " + request.ModuleName,
+                    "vba_module_not_found", true);
+            var code = module.Code ?? string.Empty;
+            var starts = new System.Collections.Generic.List<int> { 0 };
+            for (var index = 0; index < code.Length; index++)
+            {
+                if (code[index] == '\r' && index + 1 < code.Length && code[index + 1] == '\n') index++;
+                else if (code[index] != '\r' && code[index] != '\n') continue;
+                starts.Add(index + 1);
+            }
+            var total = LineCount(code) + VbaReportedLineCountOffset;
+            if (request.StartLine < 1 || request.LineCount < 1 ||
+                request.StartLine > (long)total + 1)
+                throw new VbaBackendException("Invalid VBA line window.", "resource_lines_invalid", false);
+            var endLine = (int)System.Math.Min((long)total + 1,
+                (long)request.StartLine + request.LineCount);
+            var start = request.StartLine <= starts.Count ? starts[request.StartLine - 1] : code.Length;
+            var end = endLine <= starts.Count ? starts[endLine - 1] : code.Length;
+            var selected = code.Substring(start, end - start);
+            if (selected.Length > request.MaxChars)
+                throw new VbaBackendException("Selected VBA lines exceed the read budget.",
+                    "resource_lines_too_large", false);
+            return new VbaModuleLineSnapshot { ModuleName = module.Name, StartLine = request.StartLine,
+                EndLine = endLine, TotalLines = total, Code = selected };
+        }
+
         public VbaBackendActionResult ReplaceModule(
             VbaReplaceModuleRequest request)
         {

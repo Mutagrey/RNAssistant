@@ -1145,6 +1145,7 @@ namespace RNAssistant.Harness
             public OfficeContext GetOfficeContext() { BeforeRead?.Invoke("context"); return _inner.GetOfficeContext(); }
             public VbaProjectSnapshot ListProjectComponents() { BeforeRead?.Invoke("vba.project.read"); return _inner.ListProjectComponents(); }
             public VbaModuleSnapshot ReadModule(VbaReadModuleRequest request) { BeforeRead?.Invoke("vba.module.read"); return _inner.ReadModule(request); }
+            public VbaModuleLineSnapshot ReadModuleLines(VbaReadModuleLineRequest request) { BeforeRead?.Invoke("vba.module.lines"); return _inner.ReadModuleLines(request); }
             public VbaBackendActionResult ReplaceModule(VbaReplaceModuleRequest request) { BeforeRead?.Invoke("vba.module.replace"); return _inner.ReplaceModule(request); }
             public VbaBackendActionResult CreateModule(VbaCreateModuleRequest request) { BeforeRead?.Invoke("vba.module.create"); return _inner.CreateModule(request); }
             public VbaBackendActionResult RenameModule(VbaRenameModuleRequest request) { BeforeRead?.Invoke("vba.module.rename"); return _inner.RenameModule(request); }
@@ -1182,6 +1183,7 @@ namespace RNAssistant.Harness
             public WordMutationBackendResult InsertPageBreak(WordPageBreakRequest request, Action markDispatchPossible) { BeforeRead?.Invoke(FakeOfficeAdapter.WordPageBreakOperation); return _inner.InsertPageBreak(request, markDispatchPossible); }
             public WordMutationBackendResult AddComment(WordCommentRequest request, Action markDispatchPossible) { BeforeRead?.Invoke(FakeOfficeAdapter.WordCommentOperation); return _inner.AddComment(request, markDispatchPossible); }
             public PowerPointSlideReadSnapshot ReadSlides(PowerPointReadSlidesRequest request) { BeforeRead?.Invoke(FakeOfficeAdapter.PowerPointReadSlidesOperation); return _inner.ReadSlides(request); }
+            public PowerPointSlideTextWindowSnapshot ReadSlideTextWindow(PowerPointSlideTextWindowRequest request) { BeforeRead?.Invoke("powerpoint.slide_window.direct"); return _inner.ReadSlideTextWindow(request); }
             public PowerPointListSnapshot List(PowerPointListRequest request) { BeforeRead?.Invoke(FakeOfficeAdapter.PowerPointListOperation); return _inner.List(request); }
             public IReadOnlyList<PowerPointTextTargetSnapshot> ReadTextTargets(PowerPointTextScopeRequest request) { BeforeRead?.Invoke(FakeOfficeAdapter.PowerPointReadTextOperation); return _inner.ReadTextTargets(request); }
             public PowerPointMutationBackendResult AddSlide(PowerPointAddSlideRequest request, Action markDispatchPossible) { BeforeRead?.Invoke(FakeOfficeAdapter.PowerPointAddSlideOperation); return _inner.AddSlide(request, markDispatchPossible); }

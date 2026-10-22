@@ -18,6 +18,7 @@ namespace RNAssistant.Office.Domains.Vba
 
         VbaProjectSnapshot ListProjectComponents();
         VbaModuleSnapshot ReadModule(VbaReadModuleRequest request);
+        VbaModuleLineSnapshot ReadModuleLines(VbaReadModuleLineRequest request);
         VbaBackendActionResult ReplaceModule(VbaReplaceModuleRequest request);
         VbaBackendActionResult CreateModule(VbaCreateModuleRequest request);
         VbaBackendActionResult RenameModule(VbaRenameModuleRequest request);
@@ -57,6 +58,23 @@ namespace RNAssistant.Office.Domains.Vba
     {
         public string ModuleName { get; set; }
         public int MaxChars { get; set; }
+    }
+
+    public sealed class VbaReadModuleLineRequest
+    {
+        public string ModuleName { get; set; }
+        public int StartLine { get; set; }
+        public int LineCount { get; set; }
+        public int MaxChars { get; set; }
+    }
+
+    public sealed class VbaModuleLineSnapshot
+    {
+        public string ModuleName { get; set; }
+        public int StartLine { get; set; }
+        public int EndLine { get; set; }
+        public int TotalLines { get; set; }
+        public string Code { get; set; }
     }
 
     public sealed class VbaReplaceModuleRequest

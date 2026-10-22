@@ -26,6 +26,22 @@ namespace RNAssistant.Office.Domains.PowerPoint
         public IReadOnlyList<PowerPointSlideContentSnapshot> Slides { get; set; }
     }
 
+    public sealed class PowerPointSlideTextWindowRequest
+    {
+        public int SlideIndex { get; set; }
+        public int StartChar { get; set; }
+        public int CharCount { get; set; }
+    }
+
+    public sealed class PowerPointSlideTextWindowSnapshot
+    {
+        public int SlideId { get; set; }
+        public int SlideIndex { get; set; }
+        public int StartChar { get; set; }
+        public int TotalCharacters { get; set; }
+        public string Text { get; set; }
+    }
+
     public sealed class PowerPointListRequest
     {
         public string Kind { get; set; }
@@ -194,6 +210,7 @@ namespace RNAssistant.Office.Domains.PowerPoint
     public interface IPowerPointBackend
     {
         PowerPointSlideReadSnapshot ReadSlides(PowerPointReadSlidesRequest request);
+        PowerPointSlideTextWindowSnapshot ReadSlideTextWindow(PowerPointSlideTextWindowRequest request);
         PowerPointListSnapshot List(PowerPointListRequest request);
         IReadOnlyList<PowerPointTextTargetSnapshot> ReadTextTargets(
             PowerPointTextScopeRequest request);

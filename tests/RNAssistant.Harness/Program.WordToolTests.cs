@@ -120,6 +120,16 @@ namespace RNAssistant.Harness
                 AssertEqual(source, (string)JObject.Parse(first.Result.DataJson)["text"], "whole source preserves BOM/CRLF/Unicode");
                 AssertEqual(materializations + 1, adapter.WordTextMaterializationCount, "internal pages share one bounded capture");
                 AssertEqual(legacyReads, adapter.DocumentSnapshotReadCount, "Word source never calls generic adapter snapshot fallback");
+                var smallContext = new AppSettings { ContextWindowOverrideTokens = 4096 };
+                var limited = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                    "target", target, "representation", "text"), tools,
+                    smallContext, false, false, session);
+                AssertTrue(limited.Success, "Word default read follows the configured model context");
+                var limitedText = JObject.Parse(limited.DataJson);
+                AssertTrue(((string)limitedText["text"]).Length < source.Length &&
+                    (int)limitedText["sourceCoverage"]["start"] == 0 &&
+                    !(bool)limitedText["sourceComplete"],
+                    "oversized model delivery returns one exact first fragment");
                 var evidence = first.ResourceEvidence.Single();
                 AssertTrue(evidence.Resource.IsExact && evidence.Payload != null && evidence.Complete, "source has complete exact CAS evidence");
                 var selection = executor.ResourceGateway.List(session, LiveDocumentResourceProvider.ProviderName,
@@ -266,8 +276,19 @@ namespace RNAssistant.Harness
                 var before = adapter.WordTextMaterializationCount;
                 var oversized = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId, "target", ResourceGatewayService.IntentTarget(document)),
                     tools, new AppSettings(), false, false, session);
-                AssertEqual("RESOURCE_SNAPSHOT_TOO_LARGE", oversized.ErrorCode, "oversized document requires explicit narrower range");
-                AssertEqual(before, adapter.WordTextMaterializationCount, "document limit precedes source materialization");
+                AssertTrue(oversized.Success, "large document returns a bounded first window");
+                var firstWindow = JObject.Parse(oversized.DataJson);
+                AssertEqual(new string('x', ResourceReadRequest.MaximumCharacters),
+                    (string)firstWindow["text"], "first window contains exact Word text");
+                AssertTrue(!(bool)firstWindow["sourceComplete"] &&
+                    (int)firstWindow["sourceCoverage"]["start"] == 0 &&
+                    (int)firstWindow["sourceCoverage"]["end"] == ResourceReadRequest.MaximumCharacters,
+                    "ordinary read advertises exact partial source coverage");
+                AssertEqual(WordService.MaximumTextCharacters + 1, (int)firstWindow["sourceEndChar"],
+                    "first window reports the document end for continuation");
+                AssertEqual(before + 1, adapter.WordTextMaterializationCount,
+                    "large document materializes only the selected window");
+                before = adapter.WordTextMaterializationCount;
                 var structure = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
                     "target", ResourceGatewayService.IntentTarget(document), "representation", "structure"),
                     tools, new AppSettings(), false, false, session);
@@ -292,6 +313,18 @@ namespace RNAssistant.Harness
                 AssertTrue((bool)visible["selectionComplete"] && (bool)visible["complete"] &&
                     !(bool)visible["sourceComplete"],
                     "complete selected range is not complete document source");
+                var commonWindow = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                    "target", ResourceGatewayService.IntentTarget(document), "representation", "text",
+                    "startChar", rangeStart, "charCount", 24),
+                    tools, new AppSettings(), false, false, session);
+                AssertTrue(commonWindow.Success, "the common character selector reaches a large Word tail");
+                var commonData = JObject.Parse(commonWindow.DataJson);
+                AssertEqual(new string('x', 24), (string)commonData["text"],
+                    "provider pushdown returns only the selected Word window");
+                AssertTrue((bool)commonData["selectionComplete"] &&
+                    (int)commonData["sourceCoverage"]["start"] == rangeStart &&
+                    !(bool)commonData["sourceComplete"],
+                    "shared projection retains document-relative partial coverage");
                 adapter.Write(new WordWriteRequest { Mode = "replaceselection", Text = "short" }, () => { });
                 var materialized = adapter.WordTextMaterializationCount;
                 var stale = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,

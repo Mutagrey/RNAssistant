@@ -63,6 +63,25 @@ namespace RNAssistant.Harness
             };
         }
 
+        public PowerPointSlideTextWindowSnapshot ReadSlideTextWindow(
+            PowerPointSlideTextWindowRequest request)
+        {
+            BeginPowerPointBackendCall("powerpoint.slide_window.direct");
+            var slide = PowerPointSlide(request.SlideIndex);
+            var full = "Slide " + request.SlideIndex.ToString(CultureInfo.InvariantCulture) + ":\n" +
+                PowerPointSlideText(slide);
+            if (request.StartChar < 0 || request.StartChar > full.Length || request.CharCount < 0)
+                throw new PowerPointBackendException("Invalid slide text window.", "resource_chars_invalid", false);
+            var length = Math.Min(request.CharCount, full.Length - request.StartChar);
+            var text = full.Substring(request.StartChar, length);
+            if (text.Length > 0 &&
+                (char.IsLowSurrogate(text[0]) || char.IsHighSurrogate(text[text.Length - 1])))
+                throw new PowerPointBackendException("Split UTF-16 character.", "resource_chars_invalid", false);
+            return new PowerPointSlideTextWindowSnapshot { SlideId = slide.Id,
+                SlideIndex = request.SlideIndex, StartChar = request.StartChar,
+                TotalCharacters = full.Length, Text = text };
+        }
+
         public PowerPointListSnapshot List(PowerPointListRequest request)
         {
             BeginPowerPointBackendCall(PowerPointListOperation);

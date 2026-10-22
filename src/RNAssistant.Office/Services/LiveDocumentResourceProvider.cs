@@ -7,7 +7,8 @@ using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Office.Services
 {
-    internal sealed partial class LiveDocumentResourceProvider : ILiveOfficeResourceProvider
+    internal sealed partial class LiveDocumentResourceProvider : ILiveOfficeResourceProvider,
+        IResourceCharacterWindowProvider, IResourceTextBoundsProvider
     {
         public const string ProviderName = "document";
         public const string DocumentKind = "office-document";

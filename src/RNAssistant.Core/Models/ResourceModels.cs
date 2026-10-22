@@ -172,6 +172,14 @@ namespace RNAssistant.Core.Models
         public PayloadRef Payload { get; set; }
         [Newtonsoft.Json.JsonProperty("coverage", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public ResourceCoverage Coverage { get; set; }
+        // Coordinates in the parent source for a complete selected subresource.
+        // The provider owns them; only the model projection exposes them.
+        [Newtonsoft.Json.JsonIgnore]
+        public ResourceCoverage SourceCoverage { get; set; }
+        [Newtonsoft.Json.JsonIgnore]
+        public int? SourceEndChar { get; set; }
+        [Newtonsoft.Json.JsonIgnore]
+        public int? SourceTotalLines { get; set; }
         [Newtonsoft.Json.JsonProperty("leaseId", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public string LeaseId { get; set; }
         [Newtonsoft.Json.JsonIgnore]

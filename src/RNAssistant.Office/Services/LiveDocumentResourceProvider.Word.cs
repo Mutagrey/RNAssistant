@@ -90,6 +90,41 @@ namespace RNAssistant.Office.Services
             { throw new ResourceRequestException(error.Message, error.ErrorCode, error.Retryable); }
         }
 
+        private ResourceReadSelection ReadWordCharacterWindow(ChatSession session, ResourceRef reference,
+            string representation, int startChar, int charCount, CancellationToken cancellationToken)
+        {
+            if (!IsWord || representation != ResourceRepresentations.Text) return null;
+            if (_word == null)
+                throw new ResourceRequestException("The bound Word reader is unavailable.", "RESOURCE_PROVIDER_UNAVAILABLE", false);
+            cancellationToken.ThrowIfCancellationRequested();
+            return _scope.Read(session, () =>
+            {
+                string target;
+                if (!TryParseUri(session, reference?.Uri, out target) || target != "root") return null;
+                WordTextBounds bounds;
+                try { bounds = new WordService(_word).CaptureMainStoryBounds(cancellationToken); }
+                catch (WordBackendException error)
+                { throw new ResourceRequestException(error.Message, error.ErrorCode, error.Retryable); }
+                if (startChar < bounds.Start || startChar > bounds.End)
+                    throw new ResourceRequestException("startChar is outside the current Word main story.",
+                        "resource_chars_invalid", false);
+                var end = (int)Math.Min((long)bounds.End, (long)startChar + charCount);
+                var selectedTarget = "range-" + startChar.ToString(CultureInfo.InvariantCulture) +
+                    "-" + end.ToString(CultureInfo.InvariantCulture);
+                var selected = Read(session, new ResourceReadRequest {
+                    Reference = new ResourceRef(CreateUri(session, selectedTarget)),
+                    Representation = ResourceRepresentations.Text, MaxChars = charCount
+                }, cancellationToken);
+                var text = selected.Result.Text;
+                selected.Result.SourceEndChar = bounds.End;
+                if (text.Length > 0 &&
+                    (char.IsLowSurrogate(text[0]) || char.IsHighSurrogate(text[text.Length - 1])))
+                    throw new ResourceRequestException("The selected Word range splits a UTF-16 character.",
+                        "resource_chars_invalid", false);
+                return selected;
+            });
+        }
+
         private string ReadWordStructure()
         {
             if (_word == null)

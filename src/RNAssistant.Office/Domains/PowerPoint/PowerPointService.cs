@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Office.Domains.PowerPoint
@@ -24,6 +25,25 @@ namespace RNAssistant.Office.Domains.PowerPoint
         }
 
         public const int MaximumTextCharacters = 1000000;
+
+        internal PowerPointSlideTextWindowSnapshot CaptureSlideTextWindow(
+            PowerPointSlideTextWindowRequest request, CancellationToken cancellationToken)
+        {
+            if (request == null || request.SlideIndex < 1 || request.StartChar < 0 ||
+                request.CharCount < 0 || request.CharCount > ResourceReadRequest.MaximumCharacters)
+                throw new PowerPointBackendException("Invalid bounded slide text request.", "resource_chars_invalid", false);
+            cancellationToken.ThrowIfCancellationRequested();
+            var snapshot = _backend.ReadSlideTextWindow(request);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (snapshot == null || snapshot.SlideId < 1 || snapshot.SlideIndex != request.SlideIndex ||
+                snapshot.StartChar != request.StartChar || snapshot.TotalCharacters < request.StartChar ||
+                snapshot.Text == null || snapshot.Text.Length > request.CharCount ||
+                snapshot.Text.Length != Math.Min((long)request.CharCount,
+                    (long)snapshot.TotalCharacters - request.StartChar))
+                throw new PowerPointBackendException("PowerPoint returned an incomplete slide text window.",
+                    "powerpoint_read_snapshot_invalid", false);
+            return snapshot;
+        }
 
         public PowerPointSlideReadSnapshot CaptureSlides(
             PowerPointReadSlidesRequest request, CancellationToken cancellationToken)

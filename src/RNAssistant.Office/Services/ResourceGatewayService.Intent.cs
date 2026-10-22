@@ -847,7 +847,7 @@ namespace RNAssistant.Office.Services
             if (type == "file")
                 return "Current authored text/code file. Use resources_search and resources_outline to locate exact parts, resources_read with partNumber for bounded source, then file_patch with unique exact fragments. Download preserves the original extension and encoding.";
             if (descriptor.Metadata.ContainsKey("sectionRead"))
-                return "Use representation=text and section with an exact unique ATX heading title (without leading #) to read that section and nested subsections, up to 32000 characters. Omit section to read the whole text. Discovery descriptions/snippets are not whole-read evidence.";
+                return "Use representation=text and section with an exact unique ATX heading title (without leading #) to read that section and nested subsections, up to 32000 characters. Omit section to read the text; a large source may return a bounded first excerpt. Discovery descriptions/snippets are not whole-read evidence.";
             if (!string.IsNullOrWhiteSpace(IntentRecordsPath(descriptor)))
                 return "For table omit path; runtime applies this target's canonical row view.";
             return null;

@@ -26,18 +26,18 @@ namespace RNAssistant.Core.Storage
                 var head = state.GetHead(Identity(id));
                 var revision = _authority.GetRevision(scope, expected);
                 if (head?.Knowledge != HeadKnowledge.Known || head.Revision.Revision != expected.Revision ||
-                    revision?.Payload == null || revision.Payload.ByteLength <= MaximumTextBytes ||
-                    revision.Payload.ByteLength > MaximumWindowTextSourceBytes)
-                    throw new WorkspaceFileException("target_conflict", "The accepted large-file revision is unavailable.");
+                    revision?.Payload == null)
+                    throw new WorkspaceFileException("target_conflict", "The accepted file revision is unavailable.");
                 VerifyLargePatchSource(path, revision);
                 long match;
-                using (var source = OpenRetainedStream(revision.Payload, MaximumWindowTextSourceBytes,
+                using (var source = OpenRetainedStream(revision.Payload, long.MaxValue,
                     CancellationToken.None, null))
                     match = FindUniqueUtf8Anchor(source, oldBytes, revision.Payload.ByteLength);
                 if (match < 0) throw new WorkspaceFileException("patch_not_found", "Patch anchor does not match the accepted source.");
-                var afterLength = revision.Payload.ByteLength - oldBytes.Length + newBytes.Length;
-                if (afterLength > MaximumWindowTextSourceBytes)
-                    throw new WorkspaceFileException("file_too_large", "Patched file exceeds the 80-MiB text source bound.");
+                long afterLength;
+                try { afterLength = checked(revision.Payload.ByteLength - oldBytes.Length + newBytes.Length); }
+                catch (OverflowException)
+                { throw new WorkspaceFileException("file_too_large", "Patched file length is not representable."); }
                 if (oldText == (newText ?? string.Empty))
                     return new WorkspaceFileObservation { RelativePath = relativePath, Reference = expected.Copy(),
                         ContentSha256 = revision.ContentSha256, SourceByteLength = revision.Payload.ByteLength };
@@ -45,7 +45,7 @@ namespace RNAssistant.Core.Storage
                 var temporary = path + ".rna-" + Guid.NewGuid().ToString("N") + ".tmp";
                 try
                 {
-                    using (var source = OpenRetainedStream(revision.Payload, MaximumWindowTextSourceBytes,
+                    using (var source = OpenRetainedStream(revision.Payload, long.MaxValue,
                         CancellationToken.None, null))
                     using (var output = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write,
                         FileShare.None, 81920, FileOptions.SequentialScan))
@@ -120,14 +120,9 @@ namespace RNAssistant.Core.Storage
 
         private static byte[] EncodePatchFragment(string value)
         {
-            if (value.Length > MaximumTextBytes)
-                throw new WorkspaceFileException("invalid_patch", "Patch fragments must fit one MiB of UTF-8 text.");
             try
             {
-                var bytes = StrictUtf8.GetBytes(value);
-                if (bytes.Length > MaximumTextBytes)
-                    throw new WorkspaceFileException("invalid_patch", "Patch fragments must fit one MiB of UTF-8 text.");
-                return bytes;
+                return StrictUtf8.GetBytes(value);
             }
             catch (EncoderFallbackException)
             { throw new WorkspaceFileException("encoding_ambiguous", "Patch fragments must be valid UTF-8 text."); }

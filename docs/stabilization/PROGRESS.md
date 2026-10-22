@@ -1,5 +1,25 @@
 # Stabilization progress
 
+## Context-sized text reads and streamed workspace writes — 2026-10-22
+
+The common model read now returns complete text when the provider can materialize
+it within the configured input budget, otherwise an exact first window with source
+coverage and continuation bounds. Word and PowerPoint slide text use character
+windows; VBA modules use line windows without first materializing a large module.
+Workspace files use the same bounded model behavior, including sources beyond the
+former 80-MiB cap. Streamed
+`files.patch` no longer limits each fragment to one MiB; large `files.create` and
+`files.replace` use staged exact read-back and the mutation journal. Internal
+materialized reads, imported artifact limits, whole-module VBA patching and other
+Office representations retain their separate contracts. Focused host-neutral checks
+pass for these paths, including an 80-MiB-plus workspace file and interrupted
+large create; real Windows/Office/WebView2 qualification remains open.
+The expanded resource harness has 34 passes and four failures also reproduced
+on clean `HEAD`; their owners are recorded in `BACKLOG.md`.
+
+The dated entries below record earlier increments; their former size limits are
+superseded by this section and the current `docs/resource-fabric.md` contract.
+
 ## Word main-story range navigation — 2026-10-22
 
 The Word document `structure` view now returns typed main-story start/end bounds
