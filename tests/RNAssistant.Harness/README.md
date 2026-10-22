@@ -140,7 +140,10 @@ SVG viewport normalization with retained colors/gradients/transparency/transform
 conversion and durable name/icon/color editing without changing publication.
 Source chat coverage checks independent sessions in the common project catalog,
 retained message history across creation/restart, exact workspace/session refusal,
-deletion and explicit reopening after history removal.
+deletion and explicit reopening after history removal. The focused
+`plugins: source chat excludes Office` check sends real model requests through the
+plugin/project chat route and checks source-only prompt/resource admission and
+Office target capture in an ordinary project chat.
 `plugins: project chat file upload` includes UTF-8 beyond 1 MiB, a surrogate pair
 at the probe boundary and invalid encoding at the end of the file; readable text
 is admitted without a source-size cutoff and every upload preserves exact bytes.

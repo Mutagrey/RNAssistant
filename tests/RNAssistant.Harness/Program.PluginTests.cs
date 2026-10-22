@@ -1,6 +1,8 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -14,6 +16,7 @@ using RNAssistant.Core.Tools;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Persistence;
+using RNAssistant.Runtime.Contracts;
 
 namespace RNAssistant.Harness
 {
@@ -34,6 +37,107 @@ namespace RNAssistant.Harness
             public Func<PluginInstance,CancellationToken,Task<string>> Execute;
             public Task<string> ExecuteAsync(PluginInstance instance,PluginCommandDefinition command,string input,CancellationToken token,Action<string> progress)
             {return Execute(instance,token);}
+        }
+        private sealed class PluginChatOfficeProbe : IWorkspaceOfficeCapabilities
+        {
+            public int Captures;
+            public int Binds;
+            public WorkspaceOfficeRunTarget CaptureCurrentTarget()
+            {
+                Interlocked.Increment(ref Captures);
+                return new WorkspaceOfficeRunTarget { Host = "Excel", DocumentTitle = "Book.xlsx",
+                    DocumentKey = "book", RuntimeDocumentKey = "runtime", DocumentAuthorityId = "authority" };
+            }
+            public WorkspaceOfficeCapabilitySet ForTarget(WorkspaceOfficeRunTarget target, ChatSession session,
+                AppSettings settings, string runId)
+            {
+                Interlocked.Increment(ref Binds);
+                return new WorkspaceOfficeCapabilitySet { Target = target, Available = false };
+            }
+        }
+
+        private static void PluginsSourceChatExcludesOffice()
+        {
+            WithPluginPaths(paths =>
+            {
+                var probe = new TcpListener(IPAddress.Loopback, 0);
+                probe.Start();
+                var port = ((IPEndPoint)probe.LocalEndpoint).Port;
+                probe.Stop();
+                using (var listener = new HttpListener())
+                {
+                    listener.Prefixes.Add("http://127.0.0.1:" + port + "/");
+                    listener.Start();
+                    var requests = new string[2];
+                    var server = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            for (var index = 0; index < requests.Length; index++)
+                            {
+                                var context = await listener.GetContextAsync().ConfigureAwait(false);
+                                using (var reader = new StreamReader(context.Request.InputStream))
+                                    requests[index] = await reader.ReadToEndAsync().ConfigureAwait(false);
+                                var response = new JObject { ["choices"] = new JArray(new JObject {
+                                    ["message"] = new JObject { ["content"] =
+                                        "{\"message\":\"Готово.\",\"action\":\"done\",\"tool_calls\":[]}" } })
+                                }.ToString(Formatting.None);
+                                var bytes = Encoding.UTF8.GetBytes(response);
+                                context.Response.ContentType = "application/json";
+                                context.Response.ContentLength64 = bytes.Length;
+                                await context.Response.OutputStream.WriteAsync(bytes, 0, bytes.Length).ConfigureAwait(false);
+                                context.Response.Close();
+                            }
+                        }
+                        catch (HttpListenerException) { }
+                    });
+                    try
+                    {
+                        var office = new PluginChatOfficeProbe();
+                        using (var service = new PluginApplicationService(paths, officeCapabilities: office))
+                        {
+                            var settings = new AppSettings { BaseUrl = "http://127.0.0.1:" + port,
+                                Model = "test-model", StreamResponses = false, AutoCompressContext = false,
+                                SmartChatTitles = false };
+                            var plugin = service.Create(new PluginCreateRequest { Name = "Source scope",
+                                RootPath = Path.Combine(paths.Root, "plugin-source"), Description = "Test" });
+                            var source = service.ChatState(plugin.PluginId);
+                            var sourceReply = service.SubmitProjectChatAsync(new ProjectChatRequest {
+                                WorkspaceId = source.Project.WorkspaceId, SessionId = source.SessionId,
+                                Input = new WorkspaceSubmitInputRequest { SessionId = source.SessionId,
+                                    Message = "Edit the plugin", Mode = ChatModes.Agent }
+                            }, settings, () => "test-key", CancellationToken.None).GetAwaiter().GetResult();
+                            AssertTrue(sourceReply.State.Office == null && office.Captures == 0 && office.Binds == 0,
+                                "plugin source run never captures or binds an Office document");
+
+                            var projectRoot = Path.Combine(paths.Root, "ordinary-project");
+                            Directory.CreateDirectory(projectRoot);
+                            var workspaceId = service.ConnectProjectWorkspace(new ProjectConnectionRequest {
+                                RootPath = projectRoot }).SelectedWorkspaceId;
+                            var project = service.CreateProjectChat(new ProjectChatRequest { WorkspaceId = workspaceId });
+                            var projectReply = service.SubmitProjectChatAsync(new ProjectChatRequest {
+                                WorkspaceId = workspaceId, SessionId = project.SessionId,
+                                Input = new WorkspaceSubmitInputRequest { SessionId = project.SessionId,
+                                    Message = "Inspect this project", Mode = ChatModes.Agent }
+                            }, settings, () => "test-key", CancellationToken.None).GetAwaiter().GetResult();
+                            AssertTrue(projectReply.State.Office != null && office.Captures == 1 && office.Binds == 1,
+                                "ordinary project chat still captures its Office target");
+                        }
+                        server.GetAwaiter().GetResult();
+                        var sourcePrompt = string.Join("\n", ((JArray)JObject.Parse(requests[0])["messages"])
+                            .Select(message => (string)message["content"]));
+                        var projectPrompt = string.Join("\n", ((JArray)JObject.Parse(requests[1])["messages"])
+                            .Select(message => (string)message["content"]));
+                        AssertTrue(sourcePrompt.Contains("This is the source chat for an RNAssistant plugin") &&
+                            !sourcePrompt.Contains("type=office") && !sourcePrompt.Contains("\"enum\":[\"office\"]"),
+                            "plugin source model request names its scope and omits Office resource admission");
+                        AssertTrue(projectPrompt.Contains("Office document for this run") &&
+                            projectPrompt.Contains("\"enum\":[\"office\"]"),
+                            "ordinary project model request retains Office resources");
+                    }
+                    finally { listener.Stop(); }
+                }
+            });
         }
         private static PluginItemDto PluginFixture(PluginApplicationService service,AppDataPaths paths,bool data=true)
         {

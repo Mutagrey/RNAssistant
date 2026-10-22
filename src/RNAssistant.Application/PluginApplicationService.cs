@@ -54,7 +54,7 @@ namespace RNAssistant.Application
             _store = new PluginStore(paths); _icons = new PluginIconLibrary(paths); _workspaces = new WorkspaceStore(paths);
             Vendors = new VendorCatalog(paths, webRoot); _results = new PluginResultStore(paths);
             Conversations = new WorkspaceConversationService(paths, webHost, CaptureTools, officeCapabilities,
-                () => PluginStore.AcquireRuntimeUse(paths));
+                () => PluginStore.AcquireRuntimeUse(paths), IsPluginSourceWorkspace);
         }
 
         public PluginCatalogDto List()
@@ -182,7 +182,7 @@ namespace RNAssistant.Application
                 Conversations.Dispose();
                 CancelAllProjectChatFileUploads();
                 Conversations = new WorkspaceConversationService(_paths, _webHost, CaptureTools, _officeCapabilities,
-                    () => PluginStore.AcquireRuntimeUse(_paths));
+                    () => PluginStore.AcquireRuntimeUse(_paths), IsPluginSourceWorkspace);
             }
         }
         public PluginItemDto Connect(PluginConnectRequest request)
@@ -642,6 +642,12 @@ namespace RNAssistant.Application
             if (string.IsNullOrWhiteSpace(workspaceId))
                 throw new PluginException("project_chat_invalid", "Select a connected workspace.");
             return _workspaces.OpenConnected(workspaceId);
+        }
+
+        private bool IsPluginSourceWorkspace(WorkspaceDescriptor workspace)
+        {
+            return workspace != null && _store.List().Any(item =>
+                string.Equals(item.SourceWorkspaceId, workspace.WorkspaceId, StringComparison.Ordinal));
         }
 
         private static ProjectChatProjectDto ProjectChatProject(WorkspaceConnection item)

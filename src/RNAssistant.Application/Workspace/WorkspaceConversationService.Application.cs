@@ -88,7 +88,7 @@ namespace RNAssistant.Runtime
                 Mode = session.Mode, MutationPolicy = session.MutationPolicy, Revision = session.Revision, Cursor = ConversationEventFeed.Cursor(session),
                 ConversationPolicy = session.LastRun?.ConversationPolicy,
                 Status = session.LastRun?.Status, ModelConfiguration = session.LastRun?.ModelConfiguration,
-                Office = session.LastRun?.OfficeTarget == null ? null : new WorkspaceOfficeContext {
+                Office = IsPluginSource(workspace) || session.LastRun?.OfficeTarget == null ? null : new WorkspaceOfficeContext {
                     Host = session.LastRun.OfficeTarget.Host,
                     DocumentTitle = session.LastRun.OfficeTarget.DocumentTitle },
                 RunId = session.LastRun?.RunId, IterationsUsed = session.LastRun?.KernelState?.Summary.IterationsUsed,

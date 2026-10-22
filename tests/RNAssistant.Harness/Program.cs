@@ -54,6 +54,7 @@ namespace RNAssistant.Harness
                 Test("plugins: paged published history and guarded restore", PluginsPublishedHistoryAndRestore),
                 Test("plugins: panel removal preserves and restores publication", PluginsPanelVisibility),
                 Test("plugins: source chats share project history", PluginsSourceChatSessions),
+                Test("plugins: source chat excludes Office", PluginsSourceChatExcludesOffice),
                 Test("plugins: project chat busy lease is typed", PluginsProjectChatBusyLeaseIsTyped),
                 Test("plugins: text-authored SVG icons stay scoped and safe", PluginsSvgIcon),
                 Test("plugins: commands pin releases and cancel", PluginsCommandsPinAndCancel),

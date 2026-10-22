@@ -41,6 +41,7 @@ namespace RNAssistant.Runtime
         private readonly IWorkspaceWebVerifierFactory _webHost;
         private readonly Func<WorkspaceDescriptor, IReadOnlyList<WorkspaceToolContribution>> _extraTools;
         private readonly IWorkspaceOfficeCapabilities _officeCapabilities;
+        private readonly Func<WorkspaceDescriptor, bool> _isPluginSourceWorkspace;
         private readonly Func<IDisposable> _titleApplyLease;
         private readonly CancellationTokenSource _titleLifetime = new CancellationTokenSource();
         private readonly ConcurrentDictionary<string, byte> _pendingTitles =
@@ -49,10 +50,12 @@ namespace RNAssistant.Runtime
         public WorkspaceConversationService(AppDataPaths paths, IWorkspaceWebVerifierFactory webHost = null,
             Func<WorkspaceDescriptor, IReadOnlyList<WorkspaceToolContribution>> extraTools = null,
             IWorkspaceOfficeCapabilities officeCapabilities = null,
-            Func<IDisposable> titleApplyLease = null)
+            Func<IDisposable> titleApplyLease = null,
+            Func<WorkspaceDescriptor, bool> isPluginSourceWorkspace = null)
         {
             _paths = paths ?? throw new ArgumentNullException(nameof(paths));
             _webHost = webHost; _extraTools = extraTools; _officeCapabilities = officeCapabilities;
+            _isPluginSourceWorkspace = isPluginSourceWorkspace;
             _titleApplyLease = titleApplyLease;
             _chats = new ChatStore(paths);
             _workspaces = new WorkspaceStore(paths);
@@ -136,9 +139,13 @@ namespace RNAssistant.Runtime
         public IReadOnlyList<string> AvailableToolIds(WorkspaceDescriptor workspace, string mode = ChatModes.Agent, MutationPolicy mutationPolicy = MutationPolicy.Ask)
         {
             return new WorkspacePorts(_paths, _chats, _files, _payloads, _webSnapshots, workspace, null, new AppSettings(), null, null,
-                runPolicy: ConversationRunPolicy.For(ChatModes.Require(mode), mutationPolicy), webHost: _webHost, extraTools: _extraTools?.Invoke(workspace))
+                runPolicy: ConversationRunPolicy.For(ChatModes.Require(mode), mutationPolicy), webHost: _webHost,
+                extraTools: _extraTools?.Invoke(workspace), pluginSource: IsPluginSource(workspace))
                 .ToolIds;
         }
+
+        private bool IsPluginSource(WorkspaceDescriptor workspace)
+        { return _isPluginSourceWorkspace?.Invoke(workspace) == true; }
 
         public WorkspacePlanState GetPlan(WorkspaceDescriptor workspace, ChatSession session)
         { return new WorkspacePlanService(_paths, _chats, _payloads, workspace, session).Inspect(); }
@@ -200,9 +207,9 @@ namespace RNAssistant.Runtime
                 throw new ArgumentException("Workspace tool results require role user, developer or tool.", nameof(settings));
         }
 
-        private WorkspaceOfficeCapabilitySet OfficeFor(WorkspaceOfficeRunTarget target,
+        private WorkspaceOfficeCapabilitySet OfficeFor(WorkspaceDescriptor workspace, WorkspaceOfficeRunTarget target,
             ChatSession session, AppSettings settings, string runId)
-        { return target == null || _officeCapabilities == null ? null :
+        { return IsPluginSource(workspace) || target == null || _officeCapabilities == null ? null :
             _officeCapabilities.ForTarget(target, session, settings, runId); }
 
         public async Task<WorkspaceRunResult> SubmitInputAsync(WorkspaceDescriptor workspace,
@@ -250,7 +257,8 @@ namespace RNAssistant.Runtime
                     var pendingPorts = new WorkspacePorts(_paths, _chats, _files, _payloads, _webSnapshots, workspace,
                         session, settings, apiKeyProvider, progress, session.LastRun.WorkspaceAcceptance ?? new WorkspaceRunAcceptance(),
                         webHost: _webHost, extraTools: _extraTools?.Invoke(workspace),
-                        office: OfficeFor(session.LastRun.OfficeTarget, session, settings, session.LastRun.RunId));
+                        office: OfficeFor(workspace, session.LastRun.OfficeTarget, session, settings, session.LastRun.RunId),
+                        pluginSource: IsPluginSource(workspace));
                     await ConversationRunCoordinator.ResumeAsync(session.LastRun.RunId,
                         pendingRun.Summary.PendingConfirmation.PendingId,
                         AgentRunContinuation.Restore(pendingRun.Summary, pendingRun.Limits, 0, RestoreAcceptedHistory(session)),
@@ -287,10 +295,12 @@ namespace RNAssistant.Runtime
                 var provisionalTitle = ChatTitleBuilder.ShouldAssign(session)
                     ? ChatTitleBuilder.BuildDraftTitle(titleSeed) : null;
                 if (!string.IsNullOrWhiteSpace(provisionalTitle)) session.Title = provisionalTitle;
-                var officeTarget = _officeCapabilities?.CaptureCurrentTarget();
+                var pluginSource = IsPluginSource(workspace);
+                var officeTarget = pluginSource ? null : _officeCapabilities?.CaptureCurrentTarget();
                 var ports = new WorkspacePorts(_paths, _chats, _files, _payloads, _webSnapshots, workspace, session, settings, apiKeyProvider,
                     progress, acceptedContract, runPolicy: policy, webHost: _webHost,
-                    extraTools: _extraTools?.Invoke(workspace), office: OfficeFor(officeTarget, session, settings, runId));
+                    extraTools: _extraTools?.Invoke(workspace), office: OfficeFor(workspace, officeTarget, session, settings, runId),
+                    pluginSource: pluginSource);
                 var input = new ConversationInput { Id = Guid.NewGuid().ToString("N"),
                     OperationId = request.RequestId ?? Guid.NewGuid().ToString("N"), Revision = 1, Text = message,
                     Delivery = InputDelivery.Queue, Status = ConversationInputStatus.Delivering,
@@ -393,7 +403,8 @@ namespace RNAssistant.Runtime
                 var ports = new WorkspacePorts(_paths, _chats, _files, _payloads, _webSnapshots, workspace, session,
                     settings ?? new AppSettings(), apiKeyProvider, progress, acceptance, approve, webHost: _webHost,
                     extraTools: _extraTools?.Invoke(workspace),
-                    office: OfficeFor(session.LastRun.OfficeTarget, session, settings ?? new AppSettings(), session.LastRun.RunId));
+                    office: OfficeFor(workspace, session.LastRun.OfficeTarget, session, settings ?? new AppSettings(), session.LastRun.RunId),
+                    pluginSource: IsPluginSource(workspace));
                 using (var control = OpenRunControl(session, cancellationToken))
                 {
                     var result = await ConversationRunCoordinator.ResumeAsync(session.LastRun.RunId,
@@ -743,6 +754,7 @@ namespace RNAssistant.Runtime
             private readonly WorkspaceRunAcceptance _acceptance;
             private readonly ConversationRunPolicy _mode;
             private readonly WorkspaceOfficeCapabilitySet _office;
+            private readonly bool _pluginSource;
             private readonly IReadOnlyList<ToolCatalogEntry> _catalog;
             private readonly ResourceProviderRouter<WorkspaceFileResourceProvider> _resources;
             private readonly ModelContextCompiler _compiler;
@@ -768,11 +780,13 @@ namespace RNAssistant.Runtime
                 ChatSession session, AppSettings settings, Func<string> apiKeyProvider,
                 Action<WorkspaceRunEvent> progress, WorkspaceRunAcceptance acceptance = null,
                 bool restorePendingObservation = true, ConversationRunPolicy runPolicy = null, IWorkspaceWebVerifierFactory webHost = null,
-                IReadOnlyList<WorkspaceToolContribution> extraTools = null, WorkspaceOfficeCapabilitySet office = null)
+                IReadOnlyList<WorkspaceToolContribution> extraTools = null, WorkspaceOfficeCapabilitySet office = null,
+                bool pluginSource = false)
             {
                 _chats = chats; _files = files; _workspace = workspace; _session = session;
                 _webSnapshots = webSnapshots;
                 _settings = settings.Clone(); _progress = progress; _acceptance = acceptance; _office = office;
+                _pluginSource = pluginSource;
                 _mode = runPolicy ?? ConversationRunPolicy.ForAcceptedRun(session);
                 _compiler = new ModelContextCompiler(payloads);
                 _taskLists = new WorkspaceTaskListObserver(paths, chats, payloads, session);
@@ -1308,7 +1322,8 @@ namespace RNAssistant.Runtime
             private string Prompt(SkillRequestSurface surface = null)
             {
                 return "You are the RNAssistant workspace assistant. Current mode: " + _mode.Mode + ". " +
-                    (_office?.Target == null ? "No Office document is bound to this run. " :
+                    (_pluginSource ? "This is the source chat for an RNAssistant plugin. Work on the user's plugin request in this source workspace, using its files and plugin tools. Office documents are outside this chat's scope. " :
+                    _office?.Target == null ? "No Office document is bound to this run. " :
                         "Office document for this run: " + _office.Target.Host + " — " +
                         (_office.Target.DocumentTitle ?? "untitled") + ". " +
                         (_office.Available ? "Use common.resources_find/read with type=office for its live resources; host Office tools target only this exact document. " :
