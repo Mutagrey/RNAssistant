@@ -37,11 +37,49 @@ namespace RNAssistant.Office.Services
             var next = Math.Min((long)starts.Count, (long)startLine - 1 + lineCount);
             var end = next < starts.Count ? starts[(int)next] : text.Length;
             if (end - start > InternalReadCharacters)
-                throw new ResourceRequestException("Selected lines exceed 32000 characters. Reduce lineCount or find a narrower snippet target.", "resource_lines_too_large", false);
+                throw new ResourceRequestException("Selected lines exceed 32000 characters. Reduce lineCount or use startChar/charCount for a long line.", "resource_lines_too_large", false);
             result.Text = text.Substring(start, end - start);
             result.Offset = start;
             result.ReturnedCharacters = end - start;
             result.Coverage = result.Resource.Coverage = new ResourceCoverage(ResourceCoverageKinds.CharacterRange, start: start, end: end);
+            result.Complete = false;
+            result.Truncated = true;
+            result.CompleteViewPayload = null;
+            result.Payload = null;
+            return selection;
+        }
+
+        // UTF-16 offsets match character-range evidence. The whole snapshot is
+        // pinned before slicing; no selected excerpt grants whole-source authority.
+        internal ResourceReadSelection ReadCharacters(ChatSession session, ResourceRef reference,
+            string representation, int startChar, int charCount,
+            System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
+        {
+            if ((representation != "source" && representation != "text") ||
+                startChar < 0 || charCount < 1 || charCount > InternalReadCharacters)
+                throw new ResourceRequestException("Use source/text with zero-based startChar and charCount from 1 to 32000.",
+                    "resource_chars_invalid", false);
+            var selection = ReadWhole(session, reference, representation, cancellationToken);
+            var result = selection.Result;
+            var text = result.Text;
+            if (text == null)
+                throw new ResourceRequestException("This representation has no character-addressable text.",
+                    "resource_chars_unsupported", false);
+            if (startChar > text.Length)
+                throw new ResourceRequestException("startChar is past the end of this text (" + text.Length + " characters).",
+                    "resource_chars_invalid", false);
+            var end = (int)System.Math.Min((long)text.Length, (long)startChar + charCount);
+            if ((startChar > 0 && startChar < text.Length &&
+                char.IsLowSurrogate(text[startChar]) && char.IsHighSurrogate(text[startChar - 1])) ||
+                (end > 0 && end < text.Length &&
+                char.IsHighSurrogate(text[end - 1]) && char.IsLowSurrogate(text[end])))
+                throw new ResourceRequestException("The selected character range splits a UTF-16 surrogate pair. Adjust startChar or charCount by one.",
+                    "resource_chars_invalid", false);
+            result.Text = text.Substring(startChar, end - startChar);
+            result.Offset = startChar;
+            result.ReturnedCharacters = end - startChar;
+            result.Coverage = result.Resource.Coverage = new ResourceCoverage(ResourceCoverageKinds.CharacterRange,
+                start: startChar, end: end);
             result.Complete = false;
             result.Truncated = true;
             result.CompleteViewPayload = null;

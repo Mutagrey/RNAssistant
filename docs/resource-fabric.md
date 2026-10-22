@@ -524,10 +524,12 @@ complete original. A clipped extraction or PDF with unextracted pages cannot
 produce whole-source evidence even when all retained text was read. Model result
 projection exposes semantic targets, typed bounded content fields and the actual
 `coverage` kind and coordinates for a read. Successful `startLine`/`lineCount`
-reads also report `selectionComplete=true`: every existing line in the requested
-interval was returned, including when it reaches EOF. Their `complete=false`
-still denies whole-representation observation; `sourceComplete` concerns the
-original source. Exact `rna://` references, revisions, cursors, source hashes and
+and zero-based UTF-16 `startChar`/`charCount` reads also report
+`selectionComplete=true`: every existing character in the requested interval was
+returned, including when it reaches EOF. A character range that splits a surrogate
+pair is rejected. `complete=false` still denies whole-representation observation;
+`sourceComplete` concerns the original source. Exact `rna://` references,
+revisions, cursors, source hashes and
 the internal `offset` remain runtime-only. Literal URI-shaped text inside source,
 snippets or headings is preserved as user content, while operational envelopes
 are sanitized.
@@ -686,13 +688,15 @@ the successful operation/effect receipt and a `bodyIncluded=false` observation
 notice with a bounded-read recovery action. Omitted bytes confer no whole-source
 write authority; they remain in local CAS. Other request/invariant budget failures
 remain explicit and do not silently trim user instructions or task state.
-`common.resources_read` accepts `startLine` (1-based) plus `lineCount` (1–500) for
-text/source, with an exact 32,000-character maximum excerpt. This uses the existing
-revision-pinned whole snapshot (still bounded to 2,000,000 characters), preserves
+Office `common.resources_read` accepts `startLine` (1-based) plus `lineCount`
+(1–500), or `startChar` (zero-based UTF-16) plus `charCount` (1–32,000), for
+text/source. Each excerpt has an exact 32,000-character maximum. This uses the
+existing revision-pinned whole snapshot (still bounded to 2,000,000 characters), preserves
 CR/LF/CRLF bytes, and emits only character-range incomplete evidence. It cannot be
-combined with section or row selectors. Semantic metadata projections such as a
-workspace root/shared-context archive cannot be bypassed with line reads. A single
-oversized line needs a narrower snippet or scope; this is not unbounded streaming.
+combined with other selectors. Semantic metadata projections such as a
+workspace root/shared-context archive cannot be bypassed with bounded text reads.
+A single oversized line can be read by character windows while the whole pinned
+representation fits its existing bound; this is not unbounded streaming.
 An exact domain target query such as `Sheet!A1:B20`, `Excel table: Sales`,
 `Excel name: Sales`, `Word range: 0:100`, or `PowerPoint slide: 2` is a point
 lookup: it resolves that target without scanning unrelated resource catalogs or

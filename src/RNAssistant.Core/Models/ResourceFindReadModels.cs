@@ -72,6 +72,8 @@ namespace RNAssistant.Core.Models
         [JsonProperty("historical", NullValueHandling = NullValueHandling.Ignore)] public bool? Historical { get; set; }
         [JsonProperty("startLine", NullValueHandling = NullValueHandling.Ignore)] public int? StartLine { get; set; }
         [JsonProperty("requestedLines", NullValueHandling = NullValueHandling.Ignore)] public int? RequestedLines { get; set; }
+        [JsonProperty("startChar", NullValueHandling = NullValueHandling.Ignore)] public int? StartChar { get; set; }
+        [JsonProperty("requestedCharacters", NullValueHandling = NullValueHandling.Ignore)] public int? RequestedCharacters { get; set; }
         [JsonProperty("requestedOffset", NullValueHandling = NullValueHandling.Ignore)] public int? RequestedOffset { get; set; }
         [JsonProperty("requestedRows", NullValueHandling = NullValueHandling.Ignore)] public int? RequestedRows { get; set; }
         [JsonProperty("selectionComplete", NullValueHandling = NullValueHandling.Ignore)] public bool? SelectionComplete { get; set; }
@@ -133,6 +135,22 @@ namespace RNAssistant.Core.Models
             projection.Section = section;
             projection.SelectionComplete = true;
             projection.Complete = false;
+            return projection;
+        }
+
+        public static ResourceReadProjection FromCharacters(ResourceReadResult result, string target,
+            string type, string scope, int startChar, int requestedCharacters)
+        {
+            if (startChar < 0 || requestedCharacters < 1 || requestedCharacters > ResourceReadRequest.MaximumCharacters ||
+                result?.Complete != false || !HasExactSelectedText(result) ||
+                result.Offset != startChar || result.TotalCharacters < startChar ||
+                result.Coverage.End != System.Math.Min((long)result.TotalCharacters,
+                    (long)startChar + requestedCharacters))
+                throw new System.InvalidOperationException("A complete character selection requires exact requested excerpt coverage.");
+            var projection = From(result, target, type, scope);
+            projection.StartChar = startChar;
+            projection.RequestedCharacters = requestedCharacters;
+            projection.SelectionComplete = true;
             return projection;
         }
 

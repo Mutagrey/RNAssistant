@@ -891,7 +891,7 @@ namespace RNAssistant.Core.Services
                 : "The read/verified source is retained locally, but its body exceeds this request budget and was not included.",
             NextAction = aggregateBudget
                 ? "Read only the next needed target, one at a time; a fresh read can replace older bodies. Do not repeat the whole batch. An omitted body cannot authorize a write; never replay a completed mutation."
-                : "Read a narrower supported view of this target. If common.resources_read advertises source/text with startLine/lineCount, use a bounded excerpt; otherwise reduce context or use a larger context window. An omitted body cannot authorize a whole-file overwrite. Do not repeat the same whole read or replay a completed mutation." }; }
+                : "Read a narrower supported view of this target. If common.resources_read advertises source/text, use its available bounded selector (startLine/lineCount, or startChar/charCount where offered); otherwise reduce context or use a larger context window. An omitted body cannot authorize a whole-file overwrite. Do not repeat the same whole read or replay a completed mutation." }; }
 
         private static ChatMessage OmittedSourceNotice(string target, bool aggregateBudget = false)
         { return new ChatMessage { Role = "user", ProtocolMessage = true,

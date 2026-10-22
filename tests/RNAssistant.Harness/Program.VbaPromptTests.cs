@@ -2823,6 +2823,15 @@ namespace RNAssistant.Harness
                     (int)lineData["startLine"] == 2 && (int)lineData["requestedLines"] == 3 &&
                     (string)lineData["coverage"]["kind"] == ResourceCoverageKinds.CharacterRange,
                     "line selection reports requested range, actual coverage and distinct completeness");
+                var chars = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                    "target", failed.Recovery.SemanticTarget, "representation", "source",
+                    "startChar", 0, "charCount", 32), tools, new AppSettings(), false, false, session);
+                var charData = JObject.Parse(chars.DataJson);
+                AssertTrue(chars.Success && ((string)charData["text"]).StartsWith("Option Explicit\nSub Main()") &&
+                    (bool)charData["selectionComplete"] && !(bool)charData["complete"] &&
+                    (int)charData["startChar"] == 0 && (int)charData["requestedCharacters"] == 32 &&
+                    (string)charData["coverage"]["kind"] == ResourceCoverageKinds.CharacterRange,
+                    "model-facing VBA character selector returns bounded partial source evidence");
                 var corrected = PrepareVbaNative(executor, session,
                     Command(VbaToolCatalog.ApplyPatch, "moduleName", "Module1",
                         "patch", new JArray(new JObject {

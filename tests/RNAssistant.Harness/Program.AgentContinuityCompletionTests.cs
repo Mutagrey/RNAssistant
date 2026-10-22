@@ -316,12 +316,50 @@ namespace RNAssistant.Harness
                     "retaining an excerpt never upgrades its evidence to a whole read");
                 AssertEqual(selected.Result.Text, payloads.ReadText(excerptEvidence.Payload.ToBlobReference()), "only excerpt bytes enter observed payload");
                 AssertEqual("resource_lines_too_large", RuntimeThrows<ResourceRequestException>(() => gateway.ReadLines(session, evidence.Resource, "text", 5, 1)).ErrorCode, "oversized line fails with actionable recovery");
+                var tailStart = body.IndexOf('z') + 32000;
+                var characters = gateway.ReadCharacters(session, evidence.Resource, "text", tailStart, 32000);
+                AssertEqual(new string('z', 8000), characters.Result.Text,
+                    "a long single line remains readable from an exact character offset");
+                var charProjection = ResourceReadProjection.FromCharacters(characters.Result,
+                    "Source lines", "file", "document", tailStart, 32000);
+                var visible = ModelResultProjection.ProjectResourceData(ResourceToolCatalog.ReadToolId,
+                    JObject.FromObject(charProjection));
+                AssertTrue((bool)visible["selectionComplete"] && !(bool)visible["complete"] &&
+                    (int)visible["startChar"] == tailStart && (int)visible["requestedCharacters"] == 32000 &&
+                    (int)visible["coverage"]["start"] == tailStart &&
+                    (int)visible["coverage"]["end"] == body.Length,
+                    "selected characters report requested window, actual EOF and no whole-source claim");
+                var charEvidence = gateway.Evidence(session, characters.Result).Single();
+                AssertTrue(!charEvidence.Complete && charEvidence.Coverage.Kind == ResourceCoverageKinds.CharacterRange,
+                    "character excerpt cannot authorize a whole-source write");
+                AssertEqual(characters.Result.Text, payloads.ReadText(charEvidence.Payload.ToBlobReference()),
+                    "only selected characters enter observed payload");
+                characters.Result.Coverage = new ResourceCoverage(ResourceCoverageKinds.CharacterRange,
+                    start: tailStart, end: body.Length - 1);
+                RuntimeThrows<InvalidOperationException>(() => ResourceReadProjection.FromCharacters(
+                    characters.Result, "Source lines", "file", "document", tailStart, 32000));
+                var unicode = PublishContinuitySource(store, payloads, scope, "unicode", "A\uD83D\uDE00B");
+                AssertEqual("\uD83D\uDE00", gateway.ReadCharacters(session, unicode.Resource, "text", 1, 2).Result.Text,
+                    "a complete surrogate pair is readable");
+                AssertEqual("resource_chars_invalid", RuntimeThrows<ResourceRequestException>(() =>
+                    gateway.ReadCharacters(session, unicode.Resource, "text", 1, 1)).ErrorCode,
+                    "selection cannot end inside a surrogate pair");
+                AssertEqual("resource_chars_invalid", RuntimeThrows<ResourceRequestException>(() =>
+                    gateway.ReadCharacters(session, unicode.Resource, "text", 2, 1)).ErrorCode,
+                    "selection cannot start inside a surrogate pair");
                 var schema = JObject.Parse(ResourceReadToolHandler.Descriptor.ParametersJson);
                 var arguments = new JObject { ["target"] = "Source lines", ["representation"] = "text", ["startLine"] = 2, ["lineCount"] = 2 };
                 string schemaError;
                 AssertTrue(ToolSchemaSupport.ValidateArguments(arguments, schema, false, out schemaError), "schema admits bounded source lines");
                 arguments["offset"] = 1;
                 AssertTrue(!ToolSchemaSupport.ValidateArguments(arguments, schema, false, out schemaError), "line and row selectors cannot mix");
+                arguments = new JObject { ["target"] = "Source lines", ["representation"] = "text",
+                    ["startChar"] = tailStart, ["charCount"] = 32000 };
+                AssertTrue(ToolSchemaSupport.ValidateArguments(arguments, schema, false, out schemaError),
+                    "schema admits bounded character selection");
+                arguments["startLine"] = 1;
+                AssertTrue(!ToolSchemaSupport.ValidateArguments(arguments, schema, false, out schemaError),
+                    "character and line selectors cannot mix");
             });
         }
 

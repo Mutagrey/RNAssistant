@@ -1,5 +1,14 @@
 # Stabilization progress
 
+## Bounded character selection for long lines — 2026-10-22
+
+The next Resource Context slice adds `startChar`/`charCount` to model-facing
+source/text reads for long single lines within the existing whole-snapshot bound.
+UTF-16 character ranges reject split surrogate pairs, retain exact partial
+evidence and expose requested/actual coverage with `selectionComplete=true` and
+`complete=false`. Focused host-neutral recovery and VBA tool checks pass; provider
+pushdown beyond the whole-read bound and Windows/Office qualification remain open.
+
 ## Structured row-selection completeness in model results — 2026-10-22
 
 The next Wave 2 RC-04 slice separates a selected `table` row window from a
