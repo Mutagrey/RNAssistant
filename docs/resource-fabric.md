@@ -519,10 +519,15 @@ page extraction must record exact offsets before PDF text pages can use it.
 `sourceComplete` distinguishes a complete retained text representation from a
 complete original. A clipped extraction or PDF with unextracted pages cannot
 produce whole-source evidence even when all retained text was read. Model result
-projection exposes semantic targets and typed bounded content fields; exact
-`rna://` references, revisions, cursors, source hashes and coverage coordinates
-remain runtime-only. Literal URI-shaped text inside source, snippets or headings
-is preserved as user content, while operational envelopes are sanitized.
+projection exposes semantic targets, typed bounded content fields and the actual
+`coverage` kind and coordinates for a read. Successful `startLine`/`lineCount`
+reads also report `selectionComplete=true`: every existing line in the requested
+interval was returned, including when it reaches EOF. Their `complete=false`
+still denies whole-representation observation; `sourceComplete` concerns the
+original source. Exact `rna://` references, revisions, cursors, source hashes and
+the internal `offset` remain runtime-only. Literal URI-shaped text inside source,
+snippets or headings is preserved as user content, while operational envelopes
+are sanitized.
 
 Model `common.resources_read` may select an exact unique ATX heading with `section`
 and `representation=text` for document Markdown/Plans and complete uploaded

@@ -65,7 +65,13 @@ namespace RNAssistant.Runtime
                 ResourceReadObservation read;
                 SkillDefinition skill = null;
                 var referencePath = Value(context, "referencePath");
-                if (type == "file") read = _files.Read(target, Number(context, "startLine"), Number(context, "lineCount"));
+                int? startLine = null, lineCount = null;
+                if (type == "file")
+                {
+                    startLine = Number(context, "startLine");
+                    lineCount = Number(context, "lineCount");
+                    read = _files.Read(target, startLine, lineCount);
+                }
                 else if (type == "plan")
                 {
                     var versionText = Value(context, "version");
@@ -85,7 +91,9 @@ namespace RNAssistant.Runtime
                     throw Error("The source exceeds the model read bound. For files, use startLine and lineCount (1–500) to read a bounded region.", "read_too_large");
                 if (type != "file" || read.Result.Complete) read.RequireCompleteExactText();
                 if (type == "file") _observed[target] = read.Evidence.Single();
-                var projection = ResourceReadProjection.From(read.Result, target, type, type == "skill" ? "catalog" : "workspace");
+                var projection = startLine.HasValue
+                    ? ResourceReadProjection.FromLines(read.Result, target, type, "workspace", startLine.Value, lineCount.Value)
+                    : ResourceReadProjection.From(read.Result, target, type, type == "skill" ? "catalog" : "workspace");
                 if (type == "plan")
                 {
                     projection.Version = int.Parse(read.Result.Resource.Metadata["version"], System.Globalization.CultureInfo.InvariantCulture);

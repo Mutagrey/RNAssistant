@@ -1983,6 +1983,12 @@ namespace RNAssistant.Harness
                 var lines = gateway.ReadLines(session, exact, "text", 3, 1);
                 AssertEqual(1, reads, "line selection also materializes the snapshot once");
                 AssertEqual("last", lines.Result.Text, "line selection crosses internal page boundaries");
+                var lineProjection = ResourceReadProjection.FromLines(lines.Result,
+                    "whole-lines", "file", "document", 3, 1);
+                AssertTrue(lineProjection.SelectionComplete == true && !lineProjection.Complete &&
+                    lineProjection.Coverage.Start == body.Length - 4 &&
+                    lineProjection.Coverage.End == body.Length,
+                    "requested last line is complete while actual coverage remains partial");
                 var evidence = gateway.Evidence(session, lines.Result).Single();
                 AssertTrue(!evidence.Complete && evidence.Coverage.Kind == ResourceCoverageKinds.CharacterRange,
                     "line selection never grants whole-read evidence");

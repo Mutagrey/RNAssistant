@@ -189,9 +189,17 @@ namespace RNAssistant.Core.Services
                 ? SelectFields(data, "target", "query", "matches", "totalMatches", "scanComplete", "sourceComplete", "code", "retryable")
                 : name == "common.resources_outline"
                 ? SelectFields(data, "target", "partCount", "totalLines", "nextPart", "sourceComplete", "symbolLanguage", "symbolsComplete", "parts", "code", "retryable")
-                : SelectFields(data, "version", "historical", "startLine", "requestedLines", "section", "partNumber", "partCount", "kind", "target", "type", "scope",
-                    "representation", "text", "table", "returnedCharacters", "totalCharacters", "complete", "sourceComplete",
+                : SelectFields(data, "version", "historical", "startLine", "requestedLines", "selectionComplete", "section", "partNumber", "partCount", "kind", "target", "type", "scope",
+                    "representation", "text", "table", "coverage", "returnedCharacters", "totalCharacters", "complete", "sourceComplete",
                     "rawContentIncluded", "references", "claims", "claimsUnavailable", "usage", "code", "retryable");
+            if (name == "common.resources_read")
+            {
+                var coverage = result["coverage"] as JObject;
+                if (coverage == null || coverage["kind"]?.Type != JTokenType.String)
+                    result.Remove("coverage");
+                else
+                    result["coverage"] = SelectFields(coverage, "kind", "address", "start", "end", "path", "fields");
+            }
             if (name == "common.resources_find" && result["items"] is JArray)
                 result["items"] = new JArray(((JArray)result["items"]).Select(item => SelectFields(item,
                     "target", "type", "title", "representations", "sectionTitle", "description", "usage", "snippet")));

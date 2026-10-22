@@ -2816,8 +2816,13 @@ namespace RNAssistant.Harness
                 var lines = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
                     "target", failed.Recovery.SemanticTarget, "representation", "source",
                     "startLine", 2, "lineCount", 3), tools, new AppSettings(), false, false, session);
-                AssertTrue(lines.Success && ((string)JObject.Parse(lines.DataJson)["text"]).Contains("\"before\""),
+                var lineData = JObject.Parse(lines.DataJson);
+                AssertTrue(lines.Success && ((string)lineData["text"]).Contains("\"before\""),
                     "recovery target reads the current anchor");
+                AssertTrue((bool)lineData["selectionComplete"] && !(bool)lineData["complete"] &&
+                    (int)lineData["startLine"] == 2 && (int)lineData["requestedLines"] == 3 &&
+                    (string)lineData["coverage"]["kind"] == ResourceCoverageKinds.CharacterRange,
+                    "line selection reports requested range, actual coverage and distinct completeness");
                 var corrected = PrepareVbaNative(executor, session,
                     Command(VbaToolCatalog.ApplyPatch, "moduleName", "Module1",
                         "patch", new JArray(new JObject {

@@ -1,5 +1,16 @@
 # Stabilization progress
 
+## Bounded line-read coverage in model results — 2026-10-22
+
+The first Wave 2 RC-04 slice now keeps the existing typed actual `coverage` in
+model-projected `common.resources_read` results. Successful Office and workspace
+file line reads report requested start/count and `selectionComplete=true`, while
+`complete=false` continues to deny whole-resource observation. Model projection
+keeps coverage in a closed field shape and removes exact references, revisions,
+cursors and internal offset. Host-neutral projection and line-read checks pass;
+other selectors, derived views and Windows/Office/WebView2 qualification remain
+open.
+
 ## Mixed-request manifest golden check — 2026-10-22
 
 The Wave 1 RC-02 golden fixture now compares a saved request's UTF-8 CAS bytes

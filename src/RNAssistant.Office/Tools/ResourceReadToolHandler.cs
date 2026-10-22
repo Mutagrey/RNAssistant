@@ -88,12 +88,15 @@ namespace RNAssistant.Office.Tools
                 Gateway.EnsureCurrentHtmlReference(Session, selected.Reference);
             var observation = new ResourceReadObservation(selection.Result,
                 Gateway.Evidence(Session, selection.Result));
-            var projection = ResourceReadProjection.From(observation.Result,
-                selected.Target, selected.Type, selected.Scope);
+            var projection = lines
+                ? ResourceReadProjection.FromLines(observation.Result,
+                    selected.Target, selected.Type, selected.Scope,
+                    ToolArgumentReader.Int32(context.Arguments, "startLine", 1),
+                    ToolArgumentReader.Int32(context.Arguments, "lineCount", 100))
+                : ResourceReadProjection.From(observation.Result,
+                    selected.Target, selected.Type, selected.Scope);
             projection.SnapshotTarget = selected.Descriptor.SnapshotTarget;
             projection.Section = section;
-            if (lines) { projection.StartLine = ToolArgumentReader.Int32(context.Arguments, "startLine", 1);
-                projection.RequestedLines = ToolArgumentReader.Int32(context.Arguments, "lineCount", 100); }
             // These bodies are runtime metadata, not user JSON/source. Publish
             // addressable semantic targets instead of opaque resource references.
             if (selected.Type == "HTML data" && selection.Result.Representation == "text")

@@ -312,6 +312,15 @@ namespace RNAssistant.Harness
                 var livePath = Path.Combine(workspace.RootPath, "app.js");
                 File.WriteAllText(livePath, "changed externally");
                 var current = provider.Read("app.js");
+                var selectedLines = provider.Read("app.js", 1, 2);
+                var lineProjection = ResourceReadProjection.FromLines(selectedLines.Result,
+                    "app.js", "file", "workspace", 1, 2);
+                AssertEqual(1, lineProjection.StartLine.Value, "workspace selection retains requested start");
+                AssertEqual(2, lineProjection.RequestedLines.Value, "workspace selection retains requested count");
+                AssertTrue(lineProjection.SelectionComplete == true && !lineProjection.Complete &&
+                    lineProjection.Coverage.Kind == ResourceCoverageKinds.CharacterRange &&
+                    lineProjection.Coverage.End == selectedLines.Result.Text.Length,
+                    "workspace line selection has exact coverage without whole-source authority");
                 var exact = provider.ReadExact("app.js", created.Reference);
                 exact.RequireCompleteExactText();
                 AssertEqual(original, exact.Result.Text, "retained text preserves BOM and CRLF after external edit");

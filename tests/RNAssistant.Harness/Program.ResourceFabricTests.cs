@@ -42,7 +42,10 @@ namespace RNAssistant.Harness
             var literal = "const example = 'rna://literal/in/source';";
             var result = RNAssistant.Core.Tools.Contracts.ToolResult.Ok("Read " + exact.Uri,
                 new JObject { ["target"] = "Source file", ["text"] = literal,
-                    ["offset"] = 32768, ["coverage"] = new JObject { ["start"] = 32768 },
+                    ["startLine"] = 40, ["requestedLines"] = 50, ["selectionComplete"] = true,
+                    ["offset"] = 32768, ["coverage"] = new JObject {
+                        ["kind"] = ResourceCoverageKinds.CharacterRange, ["start"] = 32768,
+                        ["end"] = 32780, ["revision"] = exact.Revision, ["uri"] = exact.Uri },
                     ["sourceComplete"] = true, ["complete"] = false }.ToString(), new[] { exact });
             var source = RNAssistant.Office.Services.AgentJsonProtocol.CreateToolResultMessage(
                 new ToolInvocation { ToolId = "common.resources_read", ToolCallId = "projection-source" },
@@ -54,8 +57,16 @@ namespace RNAssistant.Harness
                 AssertTrue(ToolResultHistoryReader.TryRead(projection, out wire, out error), "projected read is valid wire");
                 var data = ToolResultWire.ParseData(wire.Result.DataJson);
                 AssertEqual(literal, (string)data["text"], "literal source is never redacted");
-                AssertTrue(data["offset"] == null && data["coverage"] == null &&
-                    !wire.Result.Message.Contains(exact.Uri), "runtime coordinates and references stay private");
+                AssertEqual(40, (int)data["startLine"], "requested line start remains visible");
+                AssertEqual(50, (int)data["requestedLines"], "requested line count remains visible");
+                AssertEqual(true, (bool)data["selectionComplete"], "selected excerpt is complete");
+                AssertEqual(ResourceCoverageKinds.CharacterRange, (string)data["coverage"]["kind"],
+                    "actual coverage kind remains visible");
+                AssertEqual(32768, (int)data["coverage"]["start"], "actual range start remains visible");
+                AssertEqual(32780, (int)data["coverage"]["end"], "actual range end remains visible");
+                AssertTrue(data["offset"] == null && data["coverage"]["uri"] == null &&
+                    data["coverage"]["revision"] == null && !wire.Result.Message.Contains(exact.Uri),
+                    "runtime offset and exact references stay private");
             }
             foreach (var variant in new[] {
                 new { Name = "common.resources_search", Data = new JObject {
