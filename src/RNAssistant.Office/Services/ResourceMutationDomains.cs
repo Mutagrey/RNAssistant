@@ -97,16 +97,42 @@ namespace RNAssistant.Office.Services
         public IEnumerable<ResourceImpact> Impacts(ResourceAuthorityScopeId scope, string operation,
             IDictionary<string, object> arguments, ResourceAuthoritySnapshot snapshot)
         {
-            foreach (var module in Modules(arguments))
-                yield return new ResourceImpact(VbaResourceProvider.ComponentIdentity(scope.Id, module), ResourceImpactRelation.Exact);
+            var modules = new HashSet<string>(Modules(arguments).Select(module =>
+                VbaResourceProvider.ComponentIdentity(scope.Id, module).Uri), StringComparer.Ordinal);
+            foreach (var module in modules)
+                yield return new ResourceImpact(new ResourceIdentity(module), ResourceImpactRelation.Exact);
             yield return new ResourceImpact(new ResourceIdentity(ResourceUri.Create("vba", scope.Id, "project")),
                 ResourceImpactRelation.ContainerMembership);
-            if (!Modules(arguments).Any())
-                foreach (var head in snapshot.Heads.Values.Where(head => ResourceMutationDomains.Provider(head.Identity) == "vba" &&
-                    head.Identity.Uri.Contains("/component/")))
+            // Line windows have their own retained identities. A write to their
+            // owning module invalidates them without deleting exact history.
+            foreach (var head in snapshot.Heads.Values)
+            {
+                var module = SourceComponent(head.Identity);
+                if (module != null && (modules.Count == 0 || modules.Contains(module.Uri)))
                     yield return new ResourceImpact(head.Identity, ResourceImpactRelation.Exact);
+            }
             foreach (var head in snapshot.Heads.Values.Where(head => ResourceMutationDomains.Provider(head.Identity) == "context"))
                 yield return new ResourceImpact(head.Identity, ResourceImpactRelation.DependsOn);
+        }
+
+        internal static IEnumerable<ResourceIdentity> RelatedSources(ResourceIdentity identity,
+            ResourceAuthoritySnapshot snapshot)
+        {
+            var module = SourceComponent(identity);
+            if (module == null) yield break;
+            foreach (var head in snapshot.Heads.Values)
+                if (!head.Identity.Equals(identity) &&
+                    module.Equals(SourceComponent(head.Identity)))
+                    yield return head.Identity;
+        }
+
+        private static ResourceIdentity SourceComponent(ResourceIdentity identity)
+        {
+            ResourceAddress address;
+            if (!ResourceUri.TryParse(identity.Uri, out address) || address.Provider != "vba") return null;
+            if (address.Segments.Count == 3 && address.Segments[1] == "component") return identity;
+            return address.Segments.Count == 5 && address.Segments[1] == "module-lines"
+                ? VbaResourceProvider.ComponentIdentity(address.Segments[0], address.Segments[2]) : null;
         }
     }
 

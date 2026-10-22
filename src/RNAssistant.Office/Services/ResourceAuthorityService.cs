@@ -285,6 +285,7 @@ namespace RNAssistant.Office.Services
                 _revisions.RegisterRevision(scope, metadata);
                 var newGeneration = snapshot.Generation + 1;
                 var after = ResourceHeadState.Known(exact, newGeneration);
+                var changes = new List<ResourceHeadChange> { new ResourceHeadChange(identity, head, after) };
                 ResourceEffect effect = null;
                 var reason = AuthorityCommitReason.InitialObservation;
                 if (head != null)
@@ -292,17 +293,25 @@ namespace RNAssistant.Office.Services
                     reason = head.Knowledge == HeadKnowledge.Unknown
                         ? AuthorityCommitReason.Reconciliation
                         : AuthorityCommitReason.ExternalDrift;
-                    effect = new ResourceEffect("re_" + Guid.NewGuid().ToString("N"),
-                        "resource.read", ResourceEffectOutcome.ExternalDriftObserved,
-                        new[] { new ResourceImpact(identity, ResourceImpactRelation.Intersects,
+                    var impacts = new List<ResourceImpact> { new ResourceImpact(identity, ResourceImpactRelation.Intersects,
                             result.Coverage ?? ResourceCoverage.Whole(),
                             head.Knowledge == HeadKnowledge.Known ? head.Revision : null, exact,
-                            head.Knowledge == HeadKnowledge.Unknown ? "reconciled" : "external-drift") },
+                            head.Knowledge == HeadKnowledge.Unknown ? "reconciled" : "external-drift") };
+                    if (head.Knowledge == HeadKnowledge.Known)
+                        foreach (var related in VbaResourceMutationDomain.RelatedSources(identity, snapshot))
+                        {
+                            var prior = snapshot.GetHead(related);
+                            if (prior.Knowledge != HeadKnowledge.Known) continue;
+                            impacts.Add(new ResourceImpact(related, ResourceImpactRelation.Intersects));
+                            changes.Add(new ResourceHeadChange(related, prior,
+                                ResourceHeadState.Unknown(related, newGeneration, "related VBA source changed")));
+                        }
+                    effect = new ResourceEffect("re_" + Guid.NewGuid().ToString("N"),
+                        "resource.read", ResourceEffectOutcome.ExternalDriftObserved, impacts,
                         "provider observation");
                 }
-                var change = new ResourceHeadChange(identity, head, after);
                 var commit = ResourceAuthorityCommit.Create(scope, snapshot.Generation,
-                    effect, new[] { change }, reason);
+                    effect, changes, reason);
                 publication = commit;
             }
 

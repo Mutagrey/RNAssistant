@@ -697,6 +697,7 @@ namespace RNAssistant.Harness
                 Test("artifact viewer: exact PDF preview", ArtifactViewerReadsExactPdfPreview),
                 Test("resources: live Office and VBA are bounded and guarded", LiveOfficeAndVbaResourcesAreBoundedAndGuarded),
                 Test("resources: large VBA module line window", VbaLargeModuleLineWindow),
+                Test("resources: VBA windows invalidate with module", VbaLineWindowsInvalidateWithModule),
                 Test("powerpoint resources: large slide text window", PowerPointLargeSlideTextWindow),
                 Test("powerpoint resources: large notes text window", PowerPointLargeNotesTextWindow),
                 Test("resource search: zero-match drift and exact snapshots", GenericSearchPublishesZeroMatchScans),

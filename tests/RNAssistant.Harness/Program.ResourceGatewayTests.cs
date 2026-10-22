@@ -2277,6 +2277,54 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void VbaLineWindowsInvalidateWithModule()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                adapter.SetVbaModule("Module1", "Sub Main()\nDebug.Print \"before\"\nEnd Sub", "StdModule");
+                adapter.SetVbaModule("Module2", "Sub Other()\nEnd Sub", "StdModule");
+                var session = NewSession(adapter);
+                executor.BindResourceAuthority(session);
+                var gateway = executor.ResourceGateway;
+                var selected = gateway.ReadLines(session, new ResourceRef(
+                    VbaResourceProvider.ComponentIdentity(session.DocumentAuthorityId, "Module1").Uri),
+                    "source", 1, 3);
+                var evidence = gateway.Evidence(session, selected.Result).Single();
+                var other = gateway.ReadLines(session, new ResourceRef(
+                    VbaResourceProvider.ComponentIdentity(session.DocumentAuthorityId, "Module2").Uri),
+                    "source", 1, 2);
+                var otherEvidence = gateway.Evidence(session, other.Result).Single();
+                var writer = NewSession(adapter);
+                executor.BindResourceAuthority(writer);
+                var completed = ConfirmVbaNative(PrepareVbaNative(executor, writer,
+                    Command(VbaToolCatalog.ApplyPatch, "moduleName", "Module1", "patch",
+                        new JArray(new JObject { ["find"] = "\"before\"", ["text"] = "\"after\"" }))));
+                AssertEqual(ToolExecutionOutcome.Ok, completed.Outcome, "shared-document patch succeeds");
+                var frozen = new ResourceAuthoritySnapshotSet(new[] {
+                    executor.ResourceAuthority.Store.Capture(evidence.ScopeId) });
+                var reducer = new EvidenceStateReducer();
+                AssertTrue(reducer.Reduce(evidence, frozen).State != EvidenceState.Current,
+                    "a module mutation invalidates previously read line windows across chats");
+                AssertEqual(EvidenceState.Current, reducer.Reduce(otherEvidence, frozen).State,
+                    "an unrelated module window remains current");
+                var historical = gateway.Read(session, new ResourceReadRequest {
+                    Reference = evidence.Resource, Representation = "source", MaxChars = 32000 }).Result;
+                AssertContains(historical.Text, "\"before\"", "old window remains readable as exact history");
+                var fresh = gateway.ReadLines(session, new ResourceRef(
+                    VbaResourceProvider.ComponentIdentity(session.DocumentAuthorityId, "Module1").Uri),
+                    "source", 1, 3);
+                var freshEvidence = gateway.Evidence(session, fresh.Result).Single();
+                adapter.SetVbaModule("Module1", "Sub Main()\nDebug.Print \"external\"\nEnd Sub", "StdModule");
+                gateway.Read(session, new ResourceReadRequest { Reference = new ResourceRef(
+                    VbaResourceProvider.ComponentIdentity(session.DocumentAuthorityId, "Module1").Uri),
+                    Representation = "source", MaxChars = 32000 });
+                frozen = new ResourceAuthoritySnapshotSet(new[] {
+                    executor.ResourceAuthority.Store.Capture(evidence.ScopeId) });
+                AssertTrue(reducer.Reduce(freshEvidence, frozen).State != EvidenceState.Current,
+                    "observed whole-module drift invalidates retained line windows too");
+            });
+        }
+
         private static void VbaLargeModuleLineWindow()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
