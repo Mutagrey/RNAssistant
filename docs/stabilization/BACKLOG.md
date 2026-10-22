@@ -24,7 +24,9 @@
    scope/revision mapping, поиск и начальный read-only resource view выполнены.
    Добавлены exact parent/restore/dependency provenance, metadata payload и явная
    потоковая проверка CAS payload ревизии с временем проверки и scope isolation.
-   Добавить доказуемые kind/views, requested/actual coverage, cost/capabilities,
+   Для common reads сохранены requested/actual coverage и раздельная полнота
+   selection/representation/source от evidence до receipt и Inspector.
+   Добавить доказуемые kind/views, cost/capabilities,
    availability остальных views/parts и live providers, provenance преобразований;
    не подменять unknown предположением. При необходимости проверить старые traces
    и compaction/restart на реальном архиве. UI остаётся производной projection
@@ -35,8 +37,8 @@
    data plane, сохранив точные байты, integrity и отмену.
 2. **Полнота manifest и metadata.** Owner: Core model-context/LLM diagnostics и
    resource providers. Дополнять доказуемую атрибуцию преобразованных сообщений,
-   requested/actual coverage и cost/capabilities конкретных views. Существующий
-   `Unknown` сохранять, когда факт нельзя доказать; measured tokens не подменять
+   coverage будущих специализированных selectors и cost/capabilities конкретных
+   views. Существующий `Unknown` сохранять, когда факт нельзя доказать; measured tokens не подменять
    estimate. Проверка: точный serialized request плюс соответствующие golden fixtures.
 3. **Специализированные selectors/views.** Owner: соответствующий provider через
    общий Gateway. Отдельные ограниченные slices для VBA procedure, JSON Pointer/tree,

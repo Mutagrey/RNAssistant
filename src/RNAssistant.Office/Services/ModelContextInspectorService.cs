@@ -164,6 +164,7 @@ namespace RNAssistant.Office.Services
                         RequestAlias = aliases.Request(requestEventId), OperationAlias = aliases.Operation(entry.ToolCallId),
                         EvidenceAlias = aliases.Evidence(link.EvidenceId), View = link.View,
                         Coverage = link.ObservedCoverage, ObservationComplete = link.ObservationComplete,
+                        ReadMetadata = link.ReadMetadata,
                         BodyIncludedInMessage = link.BodyIncludedInMessage });
                 }
             foreach (var row in rows.Values)

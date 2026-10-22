@@ -84,7 +84,7 @@ namespace RNAssistant.Office.Services
                     var metadata = _copies.Values.Single(item => Key(item.Reference) == Key(copy));
                     note.Evidence = new ResourceEvidence("ev_" + Guid.NewGuid().ToString("N"), _targetScope, copy,
                         evidence.View, evidence.Coverage, evidence.Complete, 1, metadata.Payload, metadata.Dependencies,
-                        immutable: true, contentSha256: metadata.ContentSha256);
+                        immutable: true, contentSha256: metadata.ContentSha256, readMetadata: evidence.ReadMetadata);
                 }
                 var addedArtifacts = ChatCloneService.CloneArtifactsForMessages(_source.Artifacts, new ChatMessage[0], _artifactIds);
                 foreach (var artifact in addedArtifacts.Where(item => !_target.Artifacts.Any(existing => existing.Id == item.Id)))

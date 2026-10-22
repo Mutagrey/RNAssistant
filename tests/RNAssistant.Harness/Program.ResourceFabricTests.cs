@@ -123,6 +123,19 @@ namespace RNAssistant.Harness
                 (int)visible["requestedOffset"] == 1 && (int)visible["requestedRows"] == 2 &&
                 (int)visible["coverage"]["end"] == 2,
                 "a byte-limited row batch does not claim the requested selection is complete");
+            var reference = new ResourceRef("rna://chat/rows/table", "rows-1");
+            result.Resource = new ResourceDescriptor { Reference = reference };
+            var evidence = new ResourceEvidence("rows", new ResourceAuthorityScopeId("conversation", "rows"),
+                reference, "table", result.Coverage, false, 0);
+            var recorded = new ResourceReadObservation(result, new[] { evidence }).WithReadMetadata(projection,
+                new ResourceCoverage(ResourceCoverageKinds.RecordRange, start: 1, end: 3, path: "$.items", fields: new[] { "value" }))
+                .Evidence.Single();
+            AssertTrue(recorded.ReadMetadata.SelectionComplete == false && recorded.ReadMetadata.RepresentationComplete == false &&
+                recorded.ReadMetadata.SourceComplete == null && !recorded.Complete,
+                "row byte limit and unknown original completeness survive without strengthening guards");
+            AssertEqual("value", recorded.ReadMetadata.RequestedCoverage.Fields.Single(), "requested columns survive");
+            AssertEqual("$.items", recorded.ReadMetadata.RequestedCoverage.Path, "requested table path survives");
+            AssertEqual(3L, recorded.ReadMetadata.RequestedCoverage.End.Value, "requested row window is independent of actual rows");
             result.Coverage = new ResourceCoverage(ResourceCoverageKinds.RecordRange, start: 0, end: 1);
             RuntimeThrows<InvalidOperationException>(() => ResourceReadProjection.FromTable(
                 result, "Records", "file", "document", 1, 2));

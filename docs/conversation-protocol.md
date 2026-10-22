@@ -769,6 +769,18 @@ payload does not imply that all views are unavailable. CAS validity does not cha
 head currentness, observation completeness or model-delivery evidence.
 The inspector does not perform a live provider reread or grant mutation authority.
 
+Read diagnostics also retain the accepted read's requested coverage/section/part,
+actual source coordinates and independent selection, representation and source
+completeness from `ResourceEvidence.ReadMetadata`. Compiler receipt links, including
+excluded bodies, carry these immutable facts into the saved wire manifest and the
+Resources tab. A later transport rewrite can make body delivery unknown without
+changing read completeness. A requested window may extend past EOF while its actual
+coverage ends at EOF; an adaptive first window still records a whole-read request.
+Neither case changes mutation guards. Historical links without this metadata show
+unknown request/completeness details rather than deriving them from body length,
+the legacy `ObservationComplete` flag or the current resource. Diagnostic metadata
+does not enter provider message JSON or create a separate observation store.
+
 Transport diagnostics (2026-10-22): each saved request keeps a bounded
 attachment-part manifest beside its exact JSON body. It records source attachment
 IDs, zero-based array part positions when applicable, selected text length and

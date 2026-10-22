@@ -631,6 +631,23 @@ table page, including a terminal page with provider `Complete=true`: a completed
 row window is not a whole-resource observation. The table's `totalRows` and
 actual coverage give the next safe offset.
 
+Accepted `common.resources_read` results in Office and workspace/CLI retain typed
+`ReadMetadata` on the existing immutable `ResourceEvidence`. It records requested
+line/character/row coverage (with table path/fields), section or part selection,
+actual parent-source coordinates when supplied, and separate nullable
+`selectionComplete`, `representationComplete` and `sourceComplete` facts from the
+read projection. Actual target coverage stays on `ResourceEvidence.Coverage`.
+An adaptive first window retains the original whole-read intent rather than
+rewriting it to the provider's chosen window. Completeness of that chosen fragment
+does not prove completion of the original whole-read request. EOF can shorten
+actual coverage while completing an explicitly requested interval.
+
+These facts flow through saved evidence and request diagnostics; they do not alter
+the existing `Complete`/coverage/currentness checks used to authorize mutations.
+Old observations without the metadata remain unknown. Context-claim binding and
+fork copying preserve known metadata; a new sliced observation never inherits
+the completeness of its previous whole-body observation.
+
 Model `common.resources_read` may select an exact unique ATX heading with `section`
 and `representation=text` for document Markdown/Plans and complete uploaded
 Markdown. This uses the same provider/authority/evidence path and retains only

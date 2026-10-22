@@ -106,7 +106,6 @@ namespace RNAssistant.Runtime
                 if (read.Result.Text.Length > _maximumTextReadCharacters)
                     throw Error("The source exceeds the model read budget. Use startLine/lineCount or startChar/charCount to select a smaller region.", "read_too_large");
                 if (read.Result.Complete) read.RequireCompleteExactText();
-                if (type == "file") _observed[target] = read.Evidence.Single();
                 var projection = startChar.HasValue
                     ? ResourceReadProjection.FromCharacters(read.Result, target, type, type == "skill" ? "catalog" : "workspace", startChar.Value, charCount.Value)
                     : startLine.HasValue
@@ -138,6 +137,15 @@ namespace RNAssistant.Runtime
                     projection.References = (skill.References ?? new List<SkillReferenceMetadata>())
                         .Select(item => new SkillReferenceProjection { Path = item.Path, ByteLength = item.ByteLength }).ToArray();
                 }
+                var requestedCoverage = startChar.HasValue
+                    ? new ResourceCoverage(ResourceCoverageKinds.CharacterRange, start: startChar,
+                        end: (long)startChar.Value + charCount.Value)
+                    : startLine.HasValue
+                    ? new ResourceCoverage(ResourceCoverageKinds.LineRange, start: startLine,
+                        end: (long)startLine.Value + lineCount.Value)
+                    : ResourceCoverage.Whole();
+                read = read.WithReadMetadata(projection, requestedCoverage);
+                if (type == "file") _observed[target] = read.Evidence.Single();
                 var message = read.Result.Complete ? "Complete resource representation read." :
                     "Exact text excerpt read from the current version; other regions are not observed. Read another bounded range as needed; each read rechecks the current source.";
                 return Return(ToolResult.Ok(message, JsonConvert.SerializeObject(projection),

@@ -45,7 +45,10 @@ function fixture(withAliases = false) {
             dependencies: [{ resource: { uri: "rna://state/source", revision: "dependency" }, kind: "source", view: "text" }] },
           payloadAvailability: "Unchecked",
           observations: [{ requestAlias: "Q1", operationAlias: "O1", evidenceAlias: "E1", view: "source",
-            coverage: { kind: "line-range", start: 1, end: 2 }, observationComplete: false, bodyIncludedInMessage: null }] }] : [];
+            coverage: { kind: "line-range", start: 1, end: 2 }, observationComplete: false, bodyIncludedInMessage: null,
+            readMetadata: { requestedCoverage: { kind: "line-range", start: 1, end: 6 },
+              sourceCoverage: { kind: "line-range", start: 1, end: 2 }, selectionComplete: true,
+              representationComplete: false, sourceComplete: null } }] }] : [];
         if (query.verifyResourceAlias) {
           if (verification.hold) await verification.hold;
           assert.equal(query.requestEventId, "r1");
@@ -157,6 +160,8 @@ function fixture(withAliases = false) {
   assert.ok(userMessage.children[1].children.some(node => /evidence-1/.test(node.textContent) &&
     /доставка тела в сообщении не установлена/.test(node.textContent)),
     "observed evidence does not claim unproved body delivery");
+  assert.ok(userMessage.children[1].children.some(node => /раздельная полнота не сохранены/.test(node.textContent)),
+    "old traces do not infer requested selectors or completeness");
   const excluded = f.get("modelContextBody").children.find(node => node.tag === "details" &&
     node.children.some(child => /Не включено отдельными сообщениями/.test(child.textContent)));
   assert.ok(excluded && excluded.children.some(node => node.children.some(child =>
@@ -213,6 +218,8 @@ function fixture(withAliases = false) {
     .children[1].children.find(node => node.tag === "button" && node.textContent === "Проверить сохранённое тело");
   assert.match(resourceText(), /Предыдущая ревизия:.*prior.*Восстановлена из:.*original.*Зависимость:.*dependency/);
   assert.match(resourceText(), /1234 байт.*text\/plain.*payload-hash.*сохранённое тело не проверено/);
+  assert.match(resourceText(), /Запрошено:.*"end":6.*Покрытие в источнике:.*"end":2/);
+  assert.match(resourceText(), /Выбранный фрагмент: полностью.*Представление: не полностью.*Источник: неизвестно/);
   assert.equal(linked.calls.filter(call => call.query.verifyResourceAlias).length, 0, "opening resources does not start expensive verification");
   await checkButton(linked).fire("click"); await flush();
   assert.equal(linked.calls.at(-1).query.verifyResourceAlias, "R1@v1");

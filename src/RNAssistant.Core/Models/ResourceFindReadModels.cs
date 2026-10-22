@@ -292,6 +292,23 @@ namespace RNAssistant.Core.Models
             Evidence = evidence ?? new ResourceEvidence[0];
         }
 
+        // Enrich the fresh observation before recording the accepted tool result.
+        // Never reconstruct request intent from an adaptive provider's chosen window.
+        public ResourceReadObservation WithReadMetadata(ResourceReadProjection projection,
+            ResourceCoverage requestedCoverage, string requestedSection = null, int? requestedPartNumber = null)
+        {
+            if (projection == null) throw new System.ArgumentNullException(nameof(projection));
+            var metadata = new ResourceReadMetadata(requestedCoverage, requestedSection, requestedPartNumber,
+                projection.SourceCoverage, projection.SelectionComplete, projection.Complete, projection.SourceComplete);
+            return new ResourceReadObservation(Result, Evidence.Select(item =>
+                item.Resource.Uri == Result.Resource.Reference.Uri && item.Resource.Revision == Result.Resource.Reference.Revision &&
+                item.View == Result.Representation
+                    ? new ResourceEvidence(item.EvidenceId, item.ScopeId, item.Resource, item.View, item.Coverage,
+                        item.Complete, item.AuthorityGeneration, item.Payload, item.Dependencies, item.ObservedAt,
+                        item.SourceEventId, item.Immutable, item.ContentSha256, metadata)
+                    : item).ToArray());
+        }
+
         public void RequireCompleteExactText()
         {
             if (!Result.Complete || Result.Resource?.Reference?.IsExact != true ||

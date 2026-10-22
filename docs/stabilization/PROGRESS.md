@@ -1,5 +1,23 @@
 # Stabilization progress
 
+## Resource Context requested coverage and completeness — 2026-10-23
+
+Wave 2 / Wave 1 diagnostics now carry accepted read metadata from the common
+Office and workspace/CLI read handlers through immutable evidence, compiler receipt,
+saved request traces and Inspector. Requested line/character/row bounds, section/
+part selection and actual source coordinates remain separate, as do selection,
+representation and source completeness. Automatic windows preserve whole-read
+intent; EOF does not inflate actual coverage. Excluded or transport-transformed
+bodies retain read facts while delivery stays separate. Old records remain unknown.
+Existing mutation guards and authority/currentness semantics are unchanged.
+
+Seven focused Harness checks and five Web scenarios pass, covering Office/VBA and
+workspace reads, EOF, row byte limits, sections, receipt/storage round trips,
+unknown older traces and Web rendering. Windows/Office/
+WebView2 qualification remains open. This closes the metadata-loss slice for existing
+common read selectors; Wave 1 cost/transformation attribution and Wave 3 specialized
+selectors remain separate backlog items, not completed waves.
+
 ## Resource Inspector retained payload and lineage — 2026-10-23
 
 The Resources tab now exposes exact revision parent/restore/dependency provenance
@@ -57,7 +75,7 @@ build/test/Windows результатов эта запись не заявля�
 |---|---|---|
 | Wave 0 — Audit | Трассировка, owners, RC-01…04 и accept/adapt/reject сохранены в аудите | Аудит исходников выполнен; измерений исходного реального Office/model workflow он не содержал |
 | Wave 1 — Observability | Exact serialized request в CAS, RequestId/ContextSnapshotId, позиции messages/parts, links к evidence, причины основных exclusions, mixed-media golden fixture | Полная атрибуция всех преобразований не закрыта: strict-schema/смешанные сообщения могут иметь `Unknown`; полной стоимости каждого элемента нет. Сохранённая подготовка запроса не доказывает получение сервером |
-| Wave 2 — Coverage/visibility | Requested/actual coverage и selection/source completeness для lines/chars, Markdown sections, indexed parts и table rows; source continuation сохранён в model projection | Покрыты реализованные selectors, а не вся матрица новых views из §4; delivery остаётся свойством конкретного request |
+| Wave 2 — Coverage/visibility | Requested/actual coverage и selection/representation/source completeness для lines/chars, Markdown sections, indexed parts и table rows; общий путь сохраняет эти факты в evidence, receipt, trace и Inspector | Покрыты реализованные selectors, а не вся матрица новых views из §4; delivery остаётся свойством конкретного request, старые записи без metadata — unknown |
 | Wave 3 — Adaptive materialization | Общий бюджет текстового чтения, большие источники/длинные строки, потоковые workspace mutations, Office windows, media/pageIndex; искусственные source ceilings сняты | Не реализованы общие procedure, JSON Pointer/tree, crop/bbox и семантические PDF table/figure/OCR views; единая cost/capability metadata по всей матрице не завершена |
 | Wave 4 — Compiler cleanup | Один compiler, frozen authority, causal frames, selective hydration, корректировка repeated-read links после budget eviction, restart/archive checks | Подтверждённые исправления сделаны. Деление compiler по размеру файла отклонено; новые refactor допускаются только под конкретный дефект |
 | Wave 5 — Context Explorer | Существующий inspector: attempts/messages, exact JSON, evidence/revision/coverage, omissions, оригиналы и downloads; стабильные chat-local `R@v/E/O/Q`, поиск, resource view, revision provenance и явная CAS-проверка payload ревизии | Частично. Нет полной metadata/capabilities/availability для views/providers, derived graph, общего revision diff и явного reread из Explorer. Redacted trajectory export существует отдельно, но не интегрирован как этот Explorer workflow |

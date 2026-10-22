@@ -333,6 +333,10 @@ namespace RNAssistant.Harness
                     (bool)first["selectionComplete"] && !(bool)first["sourceComplete"] &&
                     observed["long.txt"].Coverage.Kind == ResourceCoverageKinds.CharacterRange,
                     "automatic first-window delivery never claims whole-file evidence");
+                AssertTrue(whole.ResourceEvidence.Single().ReadMetadata.RequestedCoverage.Kind == ResourceCoverageKinds.Whole &&
+                    whole.ResourceEvidence.Single().ReadMetadata.SelectionComplete == true &&
+                    whole.ResourceEvidence.Single().ReadMetadata.RepresentationComplete == false,
+                    "adaptive window records the whole-read intent separately from its completed first fragment");
                 var result = handler.ExecuteAsync(new ToolHandlerContext(execution,
                     new Dictionary<string, object> { ["target"] = "long.txt",
                         ["startChar"] = start, ["charCount"] = 16000 }), CancellationToken.None)
@@ -346,6 +350,12 @@ namespace RNAssistant.Harness
                     (int)visible["coverage"]["end"] == body.Length &&
                     observed["long.txt"].Coverage.Kind == ResourceCoverageKinds.CharacterRange,
                     "model sees requested/actual coverage while runtime retains partial evidence");
+                var readMetadata = result.ResourceEvidence.Single().ReadMetadata;
+                AssertTrue(readMetadata.RequestedCoverage.Start == start && readMetadata.RequestedCoverage.End == (long)start + 16000 &&
+                    readMetadata.SourceCoverage.End == body.Length && readMetadata.SelectionComplete == true &&
+                    readMetadata.RepresentationComplete == false && readMetadata.SourceComplete == false,
+                    "workspace evidence keeps the requested EOF-spanning window and actual source bounds independently");
+                AssertEqual(readMetadata, observed["long.txt"].ReadMetadata, "runtime uses the same enriched evidence without a second store");
                 var mixed = handler.ExecuteAsync(new ToolHandlerContext(execution,
                     new Dictionary<string, object> { ["target"] = "long.txt", ["startChar"] = 0,
                         ["charCount"] = 10, ["startLine"] = 1, ["lineCount"] = 1 }), CancellationToken.None)

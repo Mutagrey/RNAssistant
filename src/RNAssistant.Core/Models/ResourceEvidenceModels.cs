@@ -25,13 +25,16 @@ namespace RNAssistant.Core.Models
         public string SourceEventId { get; private set; }
         public bool Immutable { get; private set; }
         public string ContentSha256 { get; private set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public ResourceReadMetadata ReadMetadata { get; private set; }
 
         [JsonConstructor]
         public ResourceEvidence(string evidenceId, ResourceAuthorityScopeId scopeId,
             ResourceRef resource, string view, ResourceCoverage coverage, bool complete,
             long authorityGeneration, PayloadRef payload = null,
             IEnumerable<ResourceDependency> dependencies = null, DateTime? observedAt = null,
-            string sourceEventId = null, bool immutable = false, string contentSha256 = null)
+            string sourceEventId = null, bool immutable = false, string contentSha256 = null,
+            ResourceReadMetadata readMetadata = null)
         {
             if (string.IsNullOrWhiteSpace(evidenceId) || scopeId == null || resource == null || !resource.IsExact)
                 throw new ArgumentException("Evidence requires an id, authority scope and exact resource revision.");
@@ -49,6 +52,38 @@ namespace RNAssistant.Core.Models
             SourceEventId = sourceEventId;
             Immutable = immutable;
             ContentSha256 = contentSha256;
+            ReadMetadata = readMetadata;
+        }
+    }
+
+    // Diagnostic facts about an accepted read, separate from the Complete guard.
+    // Actual coverage and exact identity stay on ResourceEvidence itself.
+    public sealed class ResourceReadMetadata
+    {
+        [JsonProperty("requestedCoverage", NullValueHandling = NullValueHandling.Ignore)]
+        public ResourceCoverage RequestedCoverage { get; private set; }
+        [JsonProperty("requestedSection", NullValueHandling = NullValueHandling.Ignore)]
+        public string RequestedSection { get; private set; }
+        [JsonProperty("requestedPartNumber", NullValueHandling = NullValueHandling.Ignore)]
+        public int? RequestedPartNumber { get; private set; }
+        [JsonProperty("sourceCoverage", NullValueHandling = NullValueHandling.Ignore)]
+        public ResourceCoverage SourceCoverage { get; private set; }
+        [JsonProperty("selectionComplete", NullValueHandling = NullValueHandling.Ignore)]
+        public bool? SelectionComplete { get; private set; }
+        [JsonProperty("representationComplete", NullValueHandling = NullValueHandling.Ignore)]
+        public bool? RepresentationComplete { get; private set; }
+        [JsonProperty("sourceComplete", NullValueHandling = NullValueHandling.Ignore)]
+        public bool? SourceComplete { get; private set; }
+
+        [JsonConstructor]
+        public ResourceReadMetadata(ResourceCoverage requestedCoverage = null, string requestedSection = null,
+            int? requestedPartNumber = null, ResourceCoverage sourceCoverage = null,
+            bool? selectionComplete = null, bool? representationComplete = null, bool? sourceComplete = null)
+        {
+            RequestedCoverage = requestedCoverage; RequestedSection = requestedSection;
+            RequestedPartNumber = requestedPartNumber; SourceCoverage = sourceCoverage;
+            SelectionComplete = selectionComplete; RepresentationComplete = representationComplete;
+            SourceComplete = sourceComplete;
         }
     }
 

@@ -43,6 +43,7 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("view")] public string View { get; set; }
         [JsonProperty("coverage")] public ResourceCoverage Coverage { get; set; }
         [JsonProperty("observationComplete")] public bool? ObservationComplete { get; set; }
+        [JsonProperty("readMetadata")] public ResourceReadMetadata ReadMetadata { get; set; }
         [JsonProperty("bodyIncludedInMessage")] public bool? BodyIncludedInMessage { get; set; }
     }
 

@@ -97,6 +97,13 @@ namespace RNAssistant.Harness
                     (int)model["coverage"]["start"] == start &&
                     (int)model["coverage"]["end"] == end,
                     "model receives complete selection and partial resource coverage");
+                var runtime = executor.CreateNativeRuntime(session, tools, new AppSettings(), ChatModes.Agent, false);
+                var recorded = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
+                    new Newtonsoft.Json.Linq.JObject { ["target"] = target, ["representation"] = "text", ["section"] = "Target" });
+                var metadata = recorded.ResourceEvidence.Single().ReadMetadata;
+                AssertTrue(metadata.RequestedCoverage == null && metadata.RequestedSection == "Target" &&
+                    metadata.SelectionComplete == true && metadata.RepresentationComplete == false,
+                    "section intent and completeness survive on durable native read evidence");
                 var spanning = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
                     "target", target, "representation", "text", "section", "Intro"),
                     tools, new AppSettings(), false, false, session);

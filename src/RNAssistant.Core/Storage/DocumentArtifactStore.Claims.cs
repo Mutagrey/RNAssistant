@@ -102,7 +102,7 @@ namespace RNAssistant.Core.Storage
             return new ResourceEvidence(evidence.EvidenceId, evidence.ScopeId, evidence.Resource, evidence.View, evidence.Coverage,
                 evidence.Complete, evidence.AuthorityGeneration, evidence.Payload,
                 evidence.Dependencies.Concat(new[] { new ResourceDependency(revision, "text", ResourceCoverage.Whole(), "current-state") }),
-                evidence.ObservedAt, evidence.SourceEventId, evidence.Immutable, evidence.ContentSha256);
+                evidence.ObservedAt, evidence.SourceEventId, evidence.Immutable, evidence.ContentSha256, evidence.ReadMetadata);
         }
     }
 }

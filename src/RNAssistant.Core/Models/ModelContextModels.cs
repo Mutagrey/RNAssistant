@@ -90,6 +90,8 @@ namespace RNAssistant.Core.Models
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public bool? ObservationComplete { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public ResourceReadMetadata ReadMetadata { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public bool? BodyIncludedInMessage { get; set; }
     }
 

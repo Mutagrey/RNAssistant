@@ -151,6 +151,19 @@ namespace RNAssistant.Office.Tools
                 projection.RequestedLines = ToolArgumentReader.Int32(context.Arguments, "lineCount", 100);
             }
             projection.SnapshotTarget = selected.Descriptor.SnapshotTarget;
+            var requestedCoverage = lines
+                ? new ResourceCoverage(ResourceCoverageKinds.LineRange, start: projection.StartLine,
+                    end: (long)projection.StartLine.Value + projection.RequestedLines.Value)
+                : chars
+                ? new ResourceCoverage(ResourceCoverageKinds.CharacterRange, start: projection.StartChar,
+                    end: (long)projection.StartChar.Value + projection.RequestedCharacters.Value)
+                : structured
+                ? new ResourceCoverage(ResourceCoverageKinds.RecordRange, start: projection.RequestedOffset,
+                    end: (long)projection.RequestedOffset.Value + projection.RequestedRows.Value,
+                    path: ToolArgumentReader.String(context.Arguments, "path", null), fields: Fields(context.Arguments))
+                : section != null || parts ? null : ResourceCoverage.Whole();
+            observation = observation.WithReadMetadata(projection, requestedCoverage, section,
+                parts ? (int?)ToolArgumentReader.Int32(context.Arguments, "partNumber", 1) : null);
             // These bodies are runtime metadata, not user JSON/source. Publish
             // addressable semantic targets instead of opaque resource references.
             if (selected.Type == "HTML data" && selection.Result.Representation == "text")

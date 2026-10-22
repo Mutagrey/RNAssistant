@@ -157,7 +157,20 @@
     if (link.ObservedCoverage) details.push("наблюдение " + JSON.stringify(link.ObservedCoverage));
     details.push(link.BodyIncludedInMessage === true ? "тело включено в сообщение" :
       link.BodyIncludedInMessage === false ? "тело не включено в сообщение" : "доставка тела в сообщении не установлена");
+    details.push(readMetadataText(link.ReadMetadata));
     return details.join(" · ");
+  }
+  function readMetadataText(metadata) {
+    if (!metadata) return "Запрошенный диапазон и раздельная полнота не сохранены.";
+    var requested = metadata.requestedCoverage ? JSON.stringify(metadata.requestedCoverage) :
+      metadata.requestedSection != null ? "раздел " + metadata.requestedSection :
+      metadata.requestedPartNumber != null ? "часть " + metadata.requestedPartNumber : "неизвестно";
+    function complete(label, value) { return label + ": " + (value === true ? "полностью" : value === false ? "не полностью" : "неизвестно"); }
+    return ["Запрошено: " + requested,
+      metadata.sourceCoverage ? "Покрытие в источнике: " + JSON.stringify(metadata.sourceCoverage) : "",
+      complete("Выбранный фрагмент", metadata.selectionComplete),
+      complete("Представление", metadata.representationComplete),
+      complete("Источник", metadata.sourceComplete)].filter(Boolean).join(" · ");
   }
   function partNote(part) {
     var details = [part.Kind || "Часть", note(part)];
@@ -324,6 +337,7 @@
           item.bodyIncludedInMessage === true ? "тело включено" :
             item.bodyIncludedInMessage === false ? "тело не включено" : "доставка неизвестна"].filter(Boolean);
         body.appendChild(el("p", details.join(" · ")));
+        body.appendChild(el("p", readMetadataText(item.readMetadata)));
       });
     });
   }

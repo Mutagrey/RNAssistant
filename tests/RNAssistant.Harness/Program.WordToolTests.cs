@@ -132,6 +132,18 @@ namespace RNAssistant.Harness
                     "oversized model delivery returns one exact first fragment");
                 var evidence = first.ResourceEvidence.Single();
                 AssertTrue(evidence.Resource.IsExact && evidence.Payload != null && evidence.Complete, "source has complete exact CAS evidence");
+                AssertTrue(evidence.ReadMetadata.RequestedCoverage.Kind == ResourceCoverageKinds.Whole &&
+                    evidence.ReadMetadata.RepresentationComplete == true, "Office whole read retains its diagnostic coverage");
+                var tail = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
+                    new JObject { ["target"] = target, ["representation"] = "text",
+                        ["startChar"] = source.Length - 3, ["charCount"] = 10 });
+                AssertEqual(ToolExecutionOutcome.Ok, tail.Outcome, "native Word tail window succeeds");
+                var tailMetadata = tail.ResourceEvidence.Single().ReadMetadata;
+                AssertTrue(tailMetadata.RequestedCoverage.Start == source.Length - 3 &&
+                    tailMetadata.RequestedCoverage.End == source.Length + 7 &&
+                    tailMetadata.SourceCoverage.End == source.Length && tailMetadata.SelectionComplete == true &&
+                    tailMetadata.RepresentationComplete == true && tailMetadata.SourceComplete == false,
+                    "complete selected Word range preserves requested and actual parent coordinates without claiming a whole document");
                 var selection = executor.ResourceGateway.List(session, LiveDocumentResourceProvider.ProviderName,
                     LiveDocumentResourceProvider.SelectionKind, null, 10).Items.Single();
                 var selected = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,

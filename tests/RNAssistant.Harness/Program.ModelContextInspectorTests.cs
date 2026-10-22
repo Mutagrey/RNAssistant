@@ -525,6 +525,8 @@ namespace RNAssistant.Harness
                     AssertEqual("evidence-1", stored.EvidenceLinks.Single().EvidenceId, "evidence link survives event storage");
                     AssertEqual(ResourceCoverageKinds.LineRange, stored.EvidenceLinks.Single().ObservedCoverage.Kind,
                         "typed observed coverage survives event storage");
+                    AssertTrue(detail.Resources.Single().Observations.Single().ReadMetadata == null,
+                        "old saved traces never invent separate read-completeness facts");
                     AssertEqual(ContextExclusionKind.Budget, detail.Events[0].Trace.ContextMessages[1].ExclusionKind.Value,
                         "typed compiler exclusion survives saved request and inspector query");
                     var download = service.Open(session, new ModelContextPayloadQuery { EventId = request.EventId, OriginalIndex = 0 }, CancellationToken.None);
@@ -550,6 +552,17 @@ namespace RNAssistant.Harness
                 var source = PayloadRef.FromBlob(blobs.StoreText("selected lines", "text/plain"));
                 var fragmentEvidence = new ResourceEvidence("fragment", scope, reference, "source",
                     new ResourceCoverage(ResourceCoverageKinds.LineRange, start: 1, end: 2), true, 1, source);
+                var selectedRead = new ResourceReadResult { Resource = new ResourceDescriptor { Reference = reference },
+                    Representation = "source", Coverage = fragmentEvidence.Coverage, Complete = true };
+                var readProjection = ResourceReadProjection.From(selectedRead, "Module1", "VBA", "document");
+                readProjection.SelectionComplete = true;
+                readProjection.SourceComplete = false;
+                readProjection.SourceCoverage = fragmentEvidence.Coverage;
+                fragmentEvidence = new ResourceReadObservation(selectedRead, new[] { fragmentEvidence })
+                    .WithReadMetadata(readProjection, new ResourceCoverage(ResourceCoverageKinds.LineRange, start: 1, end: 6))
+                    .Evidence.Single();
+                fragmentEvidence = Newtonsoft.Json.JsonConvert.DeserializeObject<ResourceEvidence>(
+                    Newtonsoft.Json.JsonConvert.SerializeObject(fragmentEvidence));
                 excluded.ResourceEvidence.Add(fragmentEvidence);
                 var fragment = new ChatMessage { Role = "assistant", ProtocolMessage = true, SyntheticResourceObservation = true,
                     Content = "{\"target\":\"Module1\"}", ResultPayload = source,
@@ -579,12 +592,18 @@ namespace RNAssistant.Harness
                 AssertEqual(ResourceCoverageKinds.LineRange, link.ObservedCoverage.Kind,
                     "observed coverage is typed and distinct from delivery status");
                 AssertEqual(true, link.ObservationComplete.Value, "observation completeness remains distinct from body delivery");
+                AssertEqual(6L, link.ReadMetadata.RequestedCoverage.End.Value, "requested bounds are retained beyond actual EOF");
+                AssertEqual(2L, link.ObservedCoverage.End.Value, "actual coverage is not replaced by requested bounds");
+                AssertTrue(link.ReadMetadata.SelectionComplete == true && link.ReadMetadata.RepresentationComplete == true &&
+                    link.ReadMetadata.SourceComplete == false, "complete selection and selected target do not claim a complete source");
+                AssertTrue(snapshot.Receipt.Messages.Single(e => e.SourceMessageId == excluded.Id)
+                    .EvidenceLinks.Single().ReadMetadata.SourceComplete == false, "excluded body retains read metadata");
                 AssertEqual(true, link.BodyIncludedInMessage.Value, "verified synthetic payload hydration proves body delivery");
                 var wire = Newtonsoft.Json.JsonConvert.SerializeObject(
                     new LlmMessageBuilder().Build(snapshot.Messages, new AppSettings()).Messages);
                 AssertTrue(!wire.Contains("\"EvidenceLinks\"") && !wire.Contains("\"ObservedCoverage\"") &&
                     !wire.Contains("\"ScopeId\"") && !wire.Contains("\"ObservationComplete\"") &&
-                    !wire.Contains("\"ExclusionKind\""), "typed diagnostics do not enter provider messages");
+                    !wire.Contains("\"ExclusionKind\"") && !wire.Contains("\"ReadMetadata\""), "typed diagnostics do not enter provider messages");
                 var changed = LlmClient.DescribeWireMessages(new[] { snapshot.Messages.First(m => m.Id == fragment.Id) },
                     snapshot.Receipt, new[] { true });
                 AssertTrue(!changed.Single(e => e.MessageIndex.HasValue).EvidenceLinks.Single().BodyIncludedInMessage.HasValue,
@@ -592,6 +611,23 @@ namespace RNAssistant.Harness
                 AssertTrue(scope.Equals(changed.Single(e => e.MessageIndex.HasValue).EvidenceLinks.Single().ScopeId) &&
                     changed.Single(e => e.MessageIndex.HasValue).EvidenceLinks.Single().ObservationComplete == true,
                     "wire attribution retains scope and observation coverage when body delivery becomes unknown");
+                var changedLink = changed.Single(e => e.MessageIndex.HasValue).EvidenceLinks.Single();
+                AssertTrue(changedLink.ReadMetadata.SelectionComplete == true && changedLink.ReadMetadata.SourceComplete == false,
+                    "transport changes delivery proof without rewriting observation completeness");
+                var chats = new ChatStore(paths);
+                var session = chats.Create("Word", "read-metadata", "Metadata.docx", "Read metadata");
+                var request = chats.AppendTrace(session, SessionEventTypes.LlmRequest, new LlmTraceRecord {
+                    RequestId = "read-metadata-request", ContextMessages = changed }, "{}", "application/json", "run", "turn", "call");
+                using (var plane = new ResourceDataPlaneService(new ResourceGatewayService()))
+                {
+                    var saved = new ModelContextInspectorService(new ChatEventStoreAdapter(new ChatStore(paths)), blobs, plane)
+                        .Query(session, new ModelContextQuery { RequestEventId = request.EventId }, CancellationToken.None);
+                    var observation = saved.Resources.Single().Observations.Single(item => item.BodyIncludedInMessage == null);
+                    AssertTrue(observation.ReadMetadata.SelectionComplete == true && observation.ReadMetadata.SourceComplete == false &&
+                        observation.BodyIncludedInMessage == null, "saved trace and inspector preserve independent completeness after restart");
+                    AssertEqual(6L, observation.ReadMetadata.RequestedCoverage.End.Value, "inspector receives requested bounds");
+                    AssertEqual(2L, observation.ReadMetadata.SourceCoverage.End.Value, "inspector receives source coordinates");
+                }
                 var mutation = ContinuityResult("saved", "common.vba_write_module", RNAssistant.Core.Tools.Contracts.ToolResult.Ok("Saved", "{\"changed\":true}"));
                 mutation.ResourceEffect = new ResourceEffect("effect", "write", ResourceEffectOutcome.VerifiedChanged, verification: "read-back");
                 var folded = compiler.Compile(authority, new ChatMessage[0], new[] { ContinuityCall(mutation), mutation }, null,
