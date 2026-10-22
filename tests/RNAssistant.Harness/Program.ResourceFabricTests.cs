@@ -47,6 +47,9 @@ namespace RNAssistant.Harness
                     ["offset"] = 32768, ["coverage"] = new JObject {
                         ["kind"] = ResourceCoverageKinds.CharacterRange, ["start"] = 32768,
                         ["end"] = 32780, ["revision"] = exact.Revision, ["uri"] = exact.Uri },
+                    ["sourceCoverage"] = new JObject { ["kind"] = ResourceCoverageKinds.LineRange,
+                        ["start"] = 40, ["end"] = 90, ["uri"] = exact.Uri, ["revision"] = exact.Revision },
+                    ["sourceTotalLines"] = 240, ["sourceEndChar"] = 64000,
                     ["sourceComplete"] = true, ["complete"] = false }.ToString(), new[] { exact });
             var source = RNAssistant.Office.Services.AgentJsonProtocol.CreateToolResultMessage(
                 new ToolInvocation { ToolId = "common.resources_read", ToolCallId = "projection-source" },
@@ -65,6 +68,12 @@ namespace RNAssistant.Harness
                     "actual coverage kind remains visible");
                 AssertEqual(32768, (int)data["coverage"]["start"], "actual range start remains visible");
                 AssertEqual(32780, (int)data["coverage"]["end"], "actual range end remains visible");
+                AssertEqual(90, (int?)data["sourceCoverage"]?["end"],
+                    "source continuation survives the final model projection");
+                AssertEqual(240, (int?)data["sourceTotalLines"], "source line bounds remain visible");
+                AssertEqual(64000, (int?)data["sourceEndChar"], "source character bounds remain visible");
+                AssertTrue(data["sourceCoverage"]["uri"] == null && data["sourceCoverage"]["revision"] == null,
+                    "source coverage does not disclose runtime references");
                 AssertTrue(data["offset"] == null && data["coverage"]["uri"] == null &&
                     data["coverage"]["revision"] == null && !wire.Result.Message.Contains(exact.Uri),
                     "runtime offset and exact references stay private");

@@ -190,15 +190,19 @@ namespace RNAssistant.Core.Services
                 : name == "common.resources_outline"
                 ? SelectFields(data, "target", "partCount", "totalLines", "nextPart", "sourceComplete", "symbolLanguage", "symbolsComplete", "parts", "code", "retryable")
                 : SelectFields(data, "version", "historical", "startLine", "requestedLines", "startChar", "requestedCharacters", "requestedOffset", "requestedRows", "selectionComplete", "section", "partNumber", "partCount", "kind", "target", "type", "scope",
-                    "representation", "text", "table", "coverage", "returnedCharacters", "totalCharacters", "complete", "sourceComplete",
+                    "representation", "text", "table", "coverage", "sourceCoverage", "sourceEndChar", "sourceTotalLines",
+                    "returnedCharacters", "totalCharacters", "complete", "sourceComplete",
                     "rawContentIncluded", "references", "claims", "claimsUnavailable", "usage", "code", "retryable");
             if (name == "common.resources_read")
             {
-                var coverage = result["coverage"] as JObject;
-                if (coverage == null || coverage["kind"]?.Type != JTokenType.String)
-                    result.Remove("coverage");
-                else
-                    result["coverage"] = SelectFields(coverage, "kind", "address", "start", "end", "path", "fields");
+                foreach (var field in new[] { "coverage", "sourceCoverage" })
+                {
+                    var coverage = result[field] as JObject;
+                    if (coverage == null || coverage["kind"]?.Type != JTokenType.String)
+                        result.Remove(field);
+                    else
+                        result[field] = SelectFields(coverage, "kind", "address", "start", "end", "path", "fields");
+                }
             }
             if (name == "common.resources_find" && result["items"] is JArray)
                 result["items"] = new JArray(((JArray)result["items"]).Select(item => SelectFields(item,
