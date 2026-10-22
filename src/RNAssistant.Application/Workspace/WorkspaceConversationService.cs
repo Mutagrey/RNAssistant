@@ -801,7 +801,7 @@ namespace RNAssistant.Runtime
                     new WorkspaceResourceHandler(_resources.Select("file"), _skillPublications, () => _skills, _observed, true, _plans,
                         maximumFileReadCharacters,
                         office?.ResourceFind));
-                Register(registry, entries, "common.resources_read", (_mode.AllowsSkills ? "Read a complete UTF-8 file (default type=file, target is its workspace-relative path) or published skill instructions (type=skill, target is the skill ID). referencePath belongs only to a listed skill reference. For a workspace Plan use type=plan, omit target for the selected plan or supply an exact unique title. Optional version reads history without selecting it; a current read selects its exact revision. File text delivery follows this run's model input budget; skill instructions retain their separate publication bound, and Plans allow 32000 characters. For files up to 80 MiB use startLine and lineCount (1–500), or zero-based UTF-16 startChar and charCount for a long single line; each slice observes the current version. files.patch accepts a unique anchor from an observed excerpt only when the whole file is at most 1 MiB. No partial skill activation." : "Read UTF-8 text by workspace-relative target. File text delivery follows this run's model input budget; use startLine/lineCount (1–500) or zero-based UTF-16 startChar/charCount for bounded excerpts of files up to 80 MiB.") +
+                Register(registry, entries, "common.resources_read", (_mode.AllowsSkills ? "Read a complete UTF-8 file (default type=file, target is its workspace-relative path) or published skill instructions (type=skill, target is the skill ID). referencePath belongs only to a listed skill reference. For a workspace Plan use type=plan, omit target for the selected plan or supply an exact unique title. Optional version reads history without selecting it; a current read selects its exact revision. File text delivery follows this run's model input budget; skill instructions retain their separate publication bound, and Plans allow 32000 characters. For files up to 80 MiB use startLine and lineCount (1–500), or zero-based UTF-16 startChar and charCount for a long single line; each slice observes the current version. files.patch accepts a unique anchor from an observed excerpt of a UTF-8 source up to 80 MiB. No partial skill activation." : "Read UTF-8 text by workspace-relative target. File text delivery follows this run's model input budget; use startLine/lineCount (1–500) or zero-based UTF-16 startChar/charCount for bounded excerpts of files up to 80 MiB.") +
                     (office == null ? string.Empty : " Use type=office and a semantic target to read the pinned Office document."),
                     ResourceSchema(false, _mode.AllowsSkills, office != null, maximumFileReadCharacters), false,
                     new WorkspaceResourceHandler(_resources.Select("file"), _skillPublications, () => _skills, _observed, false, _plans,
@@ -822,7 +822,7 @@ namespace RNAssistant.Runtime
                     Register(registry, entries, "files.move", "Move a previously read complete UTF-8 file to a new path; preserve file identity and never overwrite.",
                         Schema("relativePath", true, "targetPath", true), true,
                         new FileHandler(files, workspace, _observed, "move", payloads), true);
-                    Register(registry, entries, "files.patch", "Replace one exact unique text anchor in a previously read UTF-8 file up to 1 MiB.",
+                    Register(registry, entries, "files.patch", "Replace one exact unique observed text anchor in a UTF-8 file up to 80 MiB; anchor and replacement each fit one MiB.",
                         Schema("relativePath", true, "oldText", true, "newText", true), true,
                         new FileHandler(files, workspace, _observed, "patch", payloads));
                     Register(registry, entries, "files.replace", "Replace a previously read whole UTF-8 file.",
@@ -1443,9 +1443,6 @@ namespace RNAssistant.Runtime
                 cancellationToken.ThrowIfCancellationRequested();
                 var path = Value(context, "relativePath");
                 ResourceEvidence observation = null;
-                if (_operation == "patch" && _observed.TryGetValue(path, out observation) &&
-                    _files.ExceedsTextWriteBound(observation.Resource))
-                    return Task.FromResult(new ToolPreparationResult(LargePatchRefusal()));
                 if (RequiresRead && (!_observed.TryGetValue(path, out observation) || !CanUse(observation, context)))
                 {
                     var missing = MissingRead(path);
@@ -1472,17 +1469,13 @@ namespace RNAssistant.Runtime
 
             private bool CanUse(ResourceEvidence observation, ToolHandlerContext context)
             {
-                if (_operation == "patch" && _files.ExceedsTextWriteBound(observation.Resource)) return false;
+                if (observation == null) return false;
                 if (observation.Complete && observation.Coverage.Kind == ResourceCoverageKinds.Whole) return true;
                 if (_operation != "patch" || observation.Coverage.Kind != ResourceCoverageKinds.CharacterRange || observation.Payload == null) return false;
                 var anchor = Value(context, "oldText");
                 return anchor.Length > 0 && (_payloads.ReadText(observation.Payload.ToBlobReference()) ?? string.Empty)
                     .IndexOf(anchor, StringComparison.Ordinal) >= 0;
             }
-
-            private static ToolResult LargePatchRefusal()
-            { return ToolResult.Error("The observed file exceeds the 1-MiB text mutation bound; bounded reads do not authorize files.patch for it.",
-                "{\"code\":\"file_too_large\"}"); }
 
             public Task<ToolHandlerResult> ExecuteAsync(ToolHandlerContext context, CancellationToken cancellationToken)
             {
@@ -1495,9 +1488,6 @@ namespace RNAssistant.Runtime
                     ResourceEvidence observation = null;
                     if (RequiresRead)
                     {
-                        if (_operation == "patch" && _observed.TryGetValue(path, out observation) &&
-                            _files.ExceedsTextWriteBound(observation.Resource))
-                            return Return(LargePatchRefusal(), ToolEffectEvidence.None);
                         if (!_observed.TryGetValue(path, out observation) || !CanUse(observation, context))
                             return Task.FromResult(MissingRead(path));
                         expected = observation.Resource;
@@ -1549,18 +1539,34 @@ namespace RNAssistant.Runtime
                     {
                         try
                         {
-                            changed = _files.SelectTextRange(changed, (int)observation.Coverage.Start.Value,
-                                (int)(observation.Coverage.End.Value - observation.Coverage.Start.Value) +
-                                Value(context, "newText").Length - Value(context, "oldText").Length);
+                            var start = (int)observation.Coverage.Start.Value;
+                            var length = (int)(observation.Coverage.End.Value - observation.Coverage.Start.Value) +
+                                Value(context, "newText").Length - Value(context, "oldText").Length;
+                            if (changed.Text == null)
+                            {
+                                var excerpt = _payloads.ReadText(observation.Payload.ToBlobReference()) ?? string.Empty;
+                                var index = excerpt.IndexOf(Value(context, "oldText"), StringComparison.Ordinal);
+                                if (index < 0) throw new InvalidOperationException("Accepted patch anchor is unavailable.");
+                                var preceding = Math.Min(64, index);
+                                start += index - preceding;
+                                if (preceding > 0 && char.IsLowSurrogate(excerpt[index - preceding])) start--;
+                                var count = (int)Math.Max(ResourceReadRequest.MinimumCharacters,
+                                    Math.Min(ResourceReadRequest.MaximumCharacters,
+                                        (long)Value(context, "newText").Length + 128));
+                                changed = _files.SelectPatchResultRange(_workspace, changed, start, count);
+                            }
+                            else changed = _files.SelectTextRange(changed, start, length);
                         }
-                        catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+                        catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException ||
+                            ex is ArgumentException || ex is InvalidOperationException)
                         {
                             // The owner already published verified read-back. Failure
                             // to retain an excerpt cannot erase that terminal evidence.
                             rangeDeliveryUnavailable = true;
                         }
                     }
-                    _observed[path] = changed.Evidence;
+                    if (changed.Evidence == null) _observed.Remove(path);
+                    else _observed[path] = changed.Evidence;
                     var didChange = expected == null || expected.Revision != changed.Reference.Revision;
                     var message = didChange ? "File write verified by exact read-back." : "File content already matched; no change.";
                     if (rangeDeliveryUnavailable) message += " The bounded after-source could not be retained; read the exact lines before another patch.";

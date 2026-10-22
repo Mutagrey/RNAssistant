@@ -73,6 +73,10 @@ windows from a 16-MiB UTF-8 file with bounded allocation, exact partial evidence
 BOM/CRLF and surrogate guards, drift detection and invalid-encoding refusal. It
 also checks a 40000-character model range and complete read under a larger
 configured read budget.
+`workspace files: streamed large patch and recovery` covers a unique anchor across
+a stream buffer, exact after-source, overlapping ambiguity, stale/external drift,
+no-op, read-back mismatch and explicit restart reconciliation after an interrupted
+large write.
 `storage: source streams`, `storage: file CAS` and `storage: plaintext CAS` cover
 stream ownership, cancellation, compression/encryption and envelope-prefix
 compatibility. Source-stream checks also cover explicit seek staging across all

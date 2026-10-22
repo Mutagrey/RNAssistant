@@ -117,7 +117,9 @@ that splits a surrogate pair is rejected. Each call
 captures the current revision; ranges from different revisions are never combined
 into a whole observation. Line and character slicing
 preserves CR/LF/CRLF and Unicode; exact character coverage uses UTF-16 offsets.
-Whole text reads and writes retain the 1-MiB source bound. Selected line or
+Whole text reads and non-patch writes retain the 1-MiB source bound. Streamed
+patches accept UTF-8 source and result up to 80 MiB, with an anchor and
+replacement of at most 1 MiB each. Selected line or
 UTF-16 character windows pin and stream strict UTF-8 source files up to 80 MiB,
 with fixed decode buffers. The selected result is bounded by the run's configured
 model input budget; the compiler still checks the full request and explicitly
@@ -137,19 +139,22 @@ projection through an explicit dependency. The separate CLI result projector and
 request assembler are removed. A prior-turn read without freshly admitted authority
 is unavailable. A body omitted by the compiler, or an incomplete/stale read, cannot
 authorize a CLI overwrite. A delivered current excerpt can authorize `files.patch`
-only for a source at most 1 MiB and when it contains the exact nonempty `oldText`;
-larger source excerpts are read-only with the current file mutation tools. Patch
-admission checks the retained source length, not the selected fragment length. The
-owner still requires the pinned full-file revision and one matching start across
-the complete source.
+when it contains the exact nonempty `oldText`. For a source above 1 MiB, the file
+owner scans the retained revision with fixed buffers, requires one matching
+byte/UTF-8 start, stages the result through CAS, rechecks the live source against
+the exact revision before atomic replacement, and verifies streamed read-back.
+The prepared journal retains the intended result. Interrupted possible effects
+block ordinary reads and writes until explicit reconciliation; recovery inspects
+current bytes without replay or automatic rollback.
 Overlapping starts count separately. Empty, missing and ambiguous anchors return
 `invalid_patch`, `patch_not_found` and `patch_ambiguous`; external drift returns
 `target_conflict`. Patch leaves untouched line endings intact. Replace/copy/move/
 delete retain the complete-read prerequisite.
 
 Verified mutations return exact after-source evidence through the common authority
-and context compiler. A partial patch returns the corresponding verified new
-excerpt with `complete=false`; a cache entry alone grants no subsequent write.
+and context compiler. A partial patch returns verified new text with
+`complete=false`; a large patch reads a bounded patch-centered excerpt from its
+retained after-revision. A cache entry alone grants no subsequent write.
 Prepared file mutations persist that exact observation (prepared-state version 1)
 across explicit approval/restart. Unsupported preparations fail explicitly and
 require a new read/action; execution never reconstructs authority from a nearby
@@ -191,7 +196,7 @@ overwrites a target or prior target identity. A durable two-path move intent let
 from ordinary reads until reconciliation. An uncertain move is never replayed.
 Move/delete/restore verify the retained CAS body before preparation/dispatch;
 corrupt bytes yield `snapshot_unavailable`, even when file size and envelope match.
-Cross-volume move semantics, binary mutations, large files, trash retention policy
+Cross-volume move semantics, binary mutations, large whole-body writes, trash retention policy
 and full symlink/hardlink race guarantees remain open M3–M5 work. Bounded raw and
 PNG/JPEG application views are implemented below. They and the shared compiler do
 not complete workspace-first plan §8.1: large/format-specific views, remaining preview/viewer

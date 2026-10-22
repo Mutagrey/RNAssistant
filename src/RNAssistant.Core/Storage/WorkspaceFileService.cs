@@ -245,17 +245,6 @@ namespace RNAssistant.Core.Storage
             return ReadTextWindow(workspace, relativePath, new TextWindow(startChar, charCount, false, maximumCharacters), token);
         }
 
-        // Bounded reads may publish a raw revision larger than the text mutation
-        // path can journal and verify. Use the retained revision size, not a live
-        // file stat or the much smaller excerpt payload, for patch admission.
-        public bool ExceedsTextWriteBound(ResourceRef exact)
-        {
-            if (exact == null || !exact.IsExact) return false;
-            var address = ResourceUri.Parse(exact.Uri);
-            if (address.Provider != "file" || address.Segments.Count != 1) return false;
-            return _authority.GetRevision(Scope(address.Segments[0]), exact)?.Payload?.ByteLength > MaximumTextBytes;
-        }
-
         // Application-only bounded text view. An exact continuation consumes only
         // its published raw revision; a missing/corrupt text view is not repaired.
         public WorkspaceFileObservation ReadTextViewCharacters(WorkspaceDescriptor workspace, string relativePath,
@@ -412,6 +401,25 @@ namespace RNAssistant.Core.Storage
                 Evidence = new ResourceEvidence("ev_" + Guid.NewGuid().ToString("N"), whole.ScopeId,
                     whole.Resource, whole.View, new ResourceCoverage(ResourceCoverageKinds.CharacterRange, start: start, end: start + length),
                     false, whole.AuthorityGeneration, payload, whole.Dependencies, contentSha256: whole.ContentSha256) };
+        }
+
+        // A streamed patch has no whole in-memory text. Project its verified
+        // after-revision through the retained raw source, preserving the commit.
+        public WorkspaceFileObservation SelectPatchResultRange(WorkspaceDescriptor workspace,
+            WorkspaceFileObservation changed, int start, int length)
+        {
+            if (changed?.Reference == null)
+                throw new ArgumentException("An exact patch result is required.");
+            if (start < 0 || start > MaximumWindowTextSourceBytes ||
+                length < ResourceReadRequest.MinimumCharacters || length > ResourceReadRequest.MaximumCharacters)
+                throw new ArgumentOutOfRangeException(nameof(length));
+            RequireExactPath(workspace, changed.RelativePath, changed.Reference);
+            var raw = PublishedEvidence(changed.Reference, ResourceRepresentations.Raw);
+            var selected = ReadTextWindow(workspace, changed.RelativePath,
+                new TextWindow(start, length, false, ResourceReadRequest.MaximumCharacters, true),
+                default(CancellationToken), new WorkspaceFileSnapshot(changed.RelativePath, raw));
+            selected.AuthorityCommit = changed.AuthorityCommit;
+            return selected;
         }
 
         public WorkspaceFileObservation ReadBytes(WorkspaceDescriptor workspace, string relativePath)
@@ -976,6 +984,13 @@ namespace RNAssistant.Core.Storage
             ResourceRef expected, string oldText, string newText, Action onDispatch = null)
         {
             if (string.IsNullOrEmpty(oldText)) throw new WorkspaceFileException("invalid_patch", "Exact patch anchor is required.");
+            if (expected != null && expected.IsExact)
+            {
+                var address = ResourceUri.Parse(expected.Uri);
+                if (address.Provider == "file" && address.Segments.Count == 1 &&
+                    _authority.GetRevision(Scope(address.Segments[0]), expected)?.Payload?.ByteLength > MaximumTextBytes)
+                    return PatchLargeExact(workspace, relativePath, expected, oldText, newText, onDispatch);
+            }
             var observed = ReadText(workspace, relativePath);
             if (expected == null || observed.Reference.Revision != expected.Revision)
                 throw new WorkspaceFileException("target_conflict", "File changed since the accepted read.");

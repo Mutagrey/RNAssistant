@@ -1,24 +1,35 @@
 # Stabilization progress
 
+## Streamed patch of large workspace text files — 2026-10-22
+
+`files.patch` now accepts an observed unique UTF-8 anchor in files up to 80 MiB,
+with anchor/replacement each limited to 1 MiB. The file owner streams the pinned
+revision into a staged result, journals its exact CAS payload before dispatch,
+checks live source revision and read-back hashes, then publishes a partial
+after-source. Possible effects remain unknown across interruption until explicit
+reconciliation; they are never replayed. Focused host-neutral unique/overlap,
+drift and restart recovery checks pass; Windows/Office/WebView2 qualification
+remains open. Whole-file create/replace/copy/move/delete retain their bounds.
+
 ## Workspace model file reads use the configured context budget — 2026-10-22
 
 The fixed 16000-character delivery ceiling is removed from workspace file and
 skill `common.resources_read`. The file schema and handler now derive the maximum
 selected text from this run's configured model input budget; UTF-8 source capture remains
-bounded at 80 MiB and whole-file mutation remains at 1 MiB. The compiler retains
+bounded at 80 MiB and non-patch whole-file mutation remains at 1 MiB. The compiler retains
 final request-budget admission and explicit omission/refusal semantics. A focused
 host-neutral check reads a 40000-character exact range and whole file with the
 right partial/complete coverage; Windows/Office/WebView2 qualification remains open.
 
-## Large workspace excerpts do not authorize text patch — 2026-10-22
+## Earlier large-source patch admission guard (superseded above) — 2026-10-22
 
 Workspace file reads now expose source windows up to 80 MiB, but the existing
 text mutation/read-back and recovery path remains limited to 1 MiB. Patch
 preparation and execution reject an observed larger revision before dispatch,
 using the retained source length rather than the excerpt payload length. The
 model tool and built-in file skill state the same boundary. The focused
-host-neutral file check passes; large-source mutation still needs a separate
-streaming journal/read-back/recovery design and Windows qualification remains open.
+host-neutral file check passes. The streamed patch above now closes that specific
+gap; Windows qualification remains open.
 
 ## Large CLI text-view continuation — 2026-10-22
 

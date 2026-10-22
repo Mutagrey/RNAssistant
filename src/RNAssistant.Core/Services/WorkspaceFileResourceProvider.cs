@@ -80,9 +80,6 @@ namespace RNAssistant.Core.Services
             ResourceRef exact = null, CancellationToken token = default(CancellationToken))
         { return Project(_files.ReadTextViewCharacters(_workspace, relativePath, startChar, charCount, exact, token), exact != null); }
 
-        public bool ExceedsTextWriteBound(ResourceRef exact)
-        { return _files.ExceedsTextWriteBound(exact); }
-
         public ResourceReadObservation ReadBytes(string relativePath)
         { return ProjectBytes(_files.ReadBytes(_workspace, relativePath), false); }
 

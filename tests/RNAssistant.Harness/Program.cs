@@ -154,6 +154,7 @@ namespace RNAssistant.Harness
                 Test("workspace files: paths and historical view", WorkspaceFilesRejectUnsafePaths),
                 Test("workspace files: exact provider snapshots", WorkspaceFilesRetainExactProviderSnapshots),
                 Test("workspace files: bounded character windows", WorkspaceFilesReadCharacterWindows),
+                Test("workspace files: streamed large patch and recovery", WorkspaceFilesStreamLargePatch),
                 Test("workspace files: exact raw and image views", WorkspaceBinaryViewsStayExact),
                 Test("workspace files: large source streams and historical authority", WorkspaceLargeSourcesStayExact),
                 Test("workspace files: source cancellation and retained corruption", WorkspaceSourceRefusalsAndCancellation),

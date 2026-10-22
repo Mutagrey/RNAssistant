@@ -24,13 +24,14 @@ def main():
         root = Path(folder)
         workspace = root / "workspace"
         workspace.mkdir()
-        original = "".join(f"line {i:04d} untouched\r\n" for i in range(1000)) + "TARGET_OLD\n尾😀\r\n"
+        original = ("".join(f"line {i:04d} untouched\r\n" for i in range(1000)) +
+                    ("x" * 8192 + "\r\n") * 256 + "TARGET_OLD\n尾😀\r\n")
         target = workspace / "large.txt"
         target.write_bytes(original.encode())
         for i in range(4):
             (workspace / f"small{i}.txt").write_text(f"small source {i}")
         replies = [
-            response("BATCH_NARRATION_ONCE", call("common.resources_read", target="large.txt", startLine=1001, lineCount=2),
+            response("BATCH_NARRATION_ONCE", call("common.resources_read", target="large.txt", startLine=1257, lineCount=2),
                      *(call("common.resources_read", target=f"small{i}.txt") for i in range(4))),
             response("Attempt whole replacement from a partial read.", call("files.replace", relativePath="large.txt", text="UNSAFE")),
             response("Patch only the observed anchor.", call("files.patch", relativePath="large.txt", oldText="TARGET_OLD", newText="TARGET_NEW")),
@@ -73,7 +74,9 @@ def main():
                 approvals += 1
             assert run.returncode == 0, (run.stdout, run.stderr)
             assert approvals == 2, approvals
-            assert len(requests) == 5, (len(requests), run.stdout)
+            assert len(requests) in (5, 6), (len(requests), run.stdout)
+            if len(requests) == 6:
+                assert "title" in json.dumps(requests[-1]).lower(), requests[-1]
             batch = requests[1]["messages"]
             assert sum("BATCH_NARRATION_ONCE" in str(m.get("content", "")) for m in batch) == 1, batch
             assert sum(m.get("role") == "tool" for m in batch) == 5, batch

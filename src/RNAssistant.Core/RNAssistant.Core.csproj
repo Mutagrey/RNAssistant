@@ -256,6 +256,7 @@
     <Compile Include="Storage\WorkspaceStore.cs" />
     <Compile Include="Storage\WorkspaceFileService.cs" />
     <Compile Include="Storage\WorkspaceFileService.StreamWrite.cs" />
+    <Compile Include="Storage\WorkspaceFileService.LargePatch.cs" />
     <Compile Include="Storage\TabularProjectStore.cs" />
     <Compile Include="Storage\TabularProjectStore.Catalog.cs" />
     <Compile Include="Storage\WorkspaceWebSnapshotStore.cs" />
