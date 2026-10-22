@@ -1117,7 +1117,8 @@ namespace RNAssistant.Core.Services
         {
             return (evidence ?? new ResourceEvidence[0]).Where(item => item != null)
                 .Select(item => new ContextEvidenceLink { EvidenceId = item.EvidenceId,
-                    Resource = item.Resource.Copy(), View = item.View, ObservedCoverage = item.Coverage,
+                    ScopeId = item.ScopeId, Resource = item.Resource.Copy(), View = item.View,
+                    ObservedCoverage = item.Coverage, ObservationComplete = item.Complete,
                     BodyIncludedInMessage = bodyIncluded(item) }).ToList();
         }
 

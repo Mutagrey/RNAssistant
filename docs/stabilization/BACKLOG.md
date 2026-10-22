@@ -19,14 +19,14 @@
 [PROGRESS](PROGRESS.md#resource-context-plan-reconciliation--2026-10-23).
 Это незавершённые adapted пункты, не новая архитектурная миграция:
 
-1. **Aliases и Resource Inspector.** Owner: existing model-context inspector,
-   typed bridge и Web UI. Определить immutable scope/mapping для R/E/O/Q и ordinal
-   revisions; сохранять значения после restart/compaction, различать новую revision
-   при restore прежних bytes. Затем показать head/version, observed/delivered
-   coverage, completeness, availability/currentness и provenance, добавить поиск
-   по aliases. Только производная UI projection над canonical IDs, без нового store
-   и model-facing адресации. Проверка: однозначность mapping, restart, scope isolation,
-   partial/stale/unknown states; UI не получает самостоятельного доступа к CAS.
+1. **Полнота Resource Inspector.** Owner: existing model-context inspector,
+   typed bridge и Web UI совместно с resource providers. Chat-local `R@v/E/O/Q`,
+   scope/revision mapping, поиск и начальный read-only resource view выполнены.
+   Добавить доказуемые kind/views, requested/actual coverage, cost/capabilities,
+   полную availability (CAS/provider) и provenance для конкретных resources;
+   не подменять unknown предположением. При необходимости проверить старые traces
+   и compaction/restart на реальном архиве. UI остаётся производной projection
+   над canonical IDs без собственного CAS-доступа или model-facing адресации.
 2. **Полнота manifest и metadata.** Owner: Core model-context/LLM diagnostics и
    resource providers. Дополнять доказуемую атрибуцию преобразованных сообщений,
    requested/actual coverage и cost/capabilities конкретных views. Существующий

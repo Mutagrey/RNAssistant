@@ -41,7 +41,7 @@
   <link rel="stylesheet" href="css/app-tools.css?v=theme-tokens-20261019-1">
   <link rel="stylesheet" href="css/app-vba.css?v=theme-tokens-20261019-1">
   <link rel="stylesheet" href="css/app-context-panel.css?v=json-height-20260929-1">
-  <link rel="stylesheet" href="css/app-model-context.css?v=model-context-20261002-1">
+  <link rel="stylesheet" href="css/app-model-context.css?v=resource-inspector-20261023-1">
   <link rel="stylesheet" href="css/app-context-inspector.css?v=composer-menu-20261013-1">
   <link rel="stylesheet" href="css/app-chart-artifacts.css?v=theme-tokens-20261019-1">
   <link rel="stylesheet" href="css/app-artifacts.css?v=artifact-versions-20261014-1">
@@ -237,8 +237,10 @@
             <select id="modelContextAttempt" aria-label="Попытка запроса"></select>
             <button type="button" class="secondary compact" id="modelContextLatest">К последнему</button>
             <button type="button" class="secondary compact" id="modelContextOlder">Ранее</button>
+            <input id="modelContextAliasSearch" type="search" aria-label="Найти короткую ссылку" placeholder="R1@v1, E1, O1, Q1" autocomplete="off">
+            <button type="button" class="secondary compact" id="modelContextAliasFind">Найти</button>
           </div>
-          <div class="model-context-toolbar"><select id="modelContextTab" aria-label="Представление"><option value="messages">Сообщения</option><option value="json">Запрос JSON</option><option value="response">Ответ</option></select></div>
+          <div class="model-context-toolbar"><select id="modelContextTab" aria-label="Представление"><option value="messages">Сообщения</option><option value="resources">Ресурсы</option><option value="json">Запрос JSON</option><option value="response">Ответ</option></select></div>
           <div id="modelContextStatus" class="model-context-status" role="status"></div>
           <div id="modelContextBody" class="model-context-body"></div>
         </section>
@@ -1167,7 +1169,7 @@
   <script src="js/app-html-workspace-actions.js?v=html-action-guard-20260908-1-large-chat-1-artifact-tree-20261013-1"></script>
   <script src="js/app-html-workspace.js?v=html-memory-20261002-1-vendors-1-artifact-tree-20261013-1"></script>
   <script src="js/app-context.js?v=ui-lazy-20260903-1-usage-20261002-1-inbox-20261002-1"></script>
-  <script src="js/app-model-context.js?v=history-context-20261013-1"></script>
+  <script src="js/app-model-context.js?v=resource-inspector-20261023-1"></script>
   <script src="js/app-context-inspector.js?v=composer-tooltips-20261015-1"></script>
   <script src="js/app-tool-result-preview.js?v=question-delivery-20261014-1"></script>
   <script src="js/app-agent-data.js?v=step-results-20260908-1"></script>

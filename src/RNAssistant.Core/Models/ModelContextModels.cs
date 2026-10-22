@@ -82,9 +82,13 @@ namespace RNAssistant.Core.Models
     public sealed class ContextEvidenceLink
     {
         public string EvidenceId { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public ResourceAuthorityScopeId ScopeId { get; set; }
         public ResourceRef Resource { get; set; }
         public string View { get; set; }
         public ResourceCoverage ObservedCoverage { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public bool? ObservationComplete { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public bool? BodyIncludedInMessage { get; set; }
     }

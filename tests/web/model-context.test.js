@@ -20,7 +20,7 @@ class Node {
   querySelectorAll() { return []; }
 }
 async function flush() { for (let i = 0; i < 25; i++) await new Promise(resolve => setImmediate(resolve)); }
-function fixture() {
+function fixture(withAliases = false) {
   const nodes = new Map(), mounts = [], calls = [], closes = [], timers = new Map(), leases = new Map(); let timer = 0;
   const get = id => { if (!nodes.has(id)) nodes.set(id, new Node()); return nodes.get(id); };
   const requestText = '{"model":"test","messages":[{"role":"system","content":"rules"},{"role":"user","content":"' + "語😀".repeat(110000) + '"}],"seed":9007199254740993123456789}';
@@ -36,7 +36,21 @@ function fixture() {
       calls.push({ type, query });
       if (type === "resourceDataClose") { closes.push(query); return {}; }
       if (type === "getModelContext") {
-        if (query.requestEventId) return { chatId: "chat", revision, events: events.filter(e => e.eventId === query.requestEventId || e.trace.RequestId === events.find(r => r.eventId === query.requestEventId).trace.RequestId) };
+        const resources = withAliases ? [{ alias: "R1@v1", resource: { uri: "rna://vba/module", revision: "r1" },
+          scope: { kind: "conversation", id: "chat" }, currentness: "Superseded", revisionRecorded: true,
+          observations: [{ requestAlias: "Q1", operationAlias: "O1", evidenceAlias: "E1", view: "source",
+            coverage: { kind: "line-range", start: 1, end: 2 }, observationComplete: false, bodyIncludedInMessage: null }] }] : [];
+        if (query.alias) {
+          if (!withAliases || !["Q1", "O1", "E1", "R1@v1"].includes(query.alias)) throw new Error("RESOURCE_NOT_FOUND");
+          return { chatId: "chat", revision, events: [events[0]], resources,
+            operations: [{ canonicalId: "call-1", alias: "O1" }], evidence: [{ canonicalId: "evidence-1", alias: "E1" }],
+            selectedAlias: query.alias, selectedResourceAlias: ["E1", "R1@v1"].includes(query.alias) ? "R1@v1" : null };
+        }
+        if (query.requestEventId) return { chatId: "chat", revision,
+          events: events.filter(e => e.eventId === query.requestEventId || e.trace.RequestId === events.find(r => r.eventId === query.requestEventId).trace.RequestId),
+          resources: query.requestEventId === "r1" ? resources : [],
+          operations: withAliases ? [{ canonicalId: "call-1", alias: "O1" }] : [],
+          evidence: withAliases ? [{ canonicalId: "evidence-1", alias: "E1" }] : [] };
         return query.knownRevision === revision ? { chatId: "chat", revision, unchanged: true } : { chatId: "chat", revision, events: events.filter(e => e.type === "llm.request").slice().reverse() };
       }
       if (hold) await hold;
@@ -165,4 +179,30 @@ function fixture() {
   assert.equal(late.closes.length, 1, "late payload acquisition closes its lease even after dialog closed");
   assert.equal(late.mounts.length, 0, "late payload never renders into a closed or other chat");
   console.log("PASS model context: exact JSON, full download, following, preview staleness and cancellation");
+
+  const linked = fixture(true);
+  linked.events[0].alias = "Q1";
+  linked.events[0].trace.ContextMessages = [{ MessageIndex: 0, Presentation: "Full", ToolCallId: "call-1",
+    EvidenceLinks: [{ EvidenceId: "evidence-1", ScopeId: { kind: "conversation", id: "chat" },
+      Resource: { uri: "rna://vba/module", revision: "r1" }, View: "source",
+      ObservedCoverage: { kind: "line-range", start: 1, end: 2 }, BodyIncludedInMessage: null }] }];
+  linked.c.RNAssistantModelContext.open(); await flush();
+  assert.match(linked.get("modelContextAttempt").children[0].textContent, /Q1/);
+  linked.get("modelContextTab").value = "resources";
+  await linked.get("modelContextTab").fire("change"); await flush();
+  let resource = linked.get("modelContextBody").children.find(node => node.tag === "details");
+  assert.match(resource.children[0].textContent, /R1@v1 · Устаревшая/);
+  assert.match(resource.children[1].children.map(node => node.textContent).join(" "),
+    /Q1 · O1 · E1 · source.*частичное наблюдение.*доставка неизвестна/);
+  linked.get("modelContextAliasSearch").value = "E1";
+  await linked.get("modelContextAliasFind").fire("click"); await flush();
+  assert.equal(linked.calls.at(-1).query.alias, "E1", "search resolves through the typed bridge");
+  assert.equal(linked.get("modelContextTab").value, "resources");
+  resource = linked.get("modelContextBody").children.find(node => node.tag === "details");
+  assert.equal(resource.open, true, "evidence search focuses the linked resource revision");
+  assert.match(linked.get("modelContextStatus").textContent, /Найдено E1 в Q1/);
+  linked.get("modelContextAliasSearch").value = "R1@v999";
+  await linked.get("modelContextAliasFind").fire("click"); await flush();
+  assert.match(linked.get("modelContextStatus").textContent, /RESOURCE_NOT_FOUND/);
+  console.log("PASS model context: stable aliases, resource evidence and scoped lookup");
 })().catch(error => { console.error(error); process.exitCode = 1; });

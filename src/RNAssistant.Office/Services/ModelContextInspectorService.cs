@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using RNAssistant.Core.Llm;
@@ -15,8 +16,10 @@ namespace RNAssistant.Office.Services
         private readonly IEventStore _events;
         private readonly ChatBlobStore _payloads;
         private readonly ResourceDataPlaneService _data;
-        internal ModelContextInspectorService(IEventStore events, ChatBlobStore payloads, ResourceDataPlaneService data)
-        { _events = events; _payloads = payloads; _data = data; }
+        private readonly ResourceAuthorityService _authority;
+        internal ModelContextInspectorService(IEventStore events, ChatBlobStore payloads, ResourceDataPlaneService data,
+            ResourceAuthorityService authority = null)
+        { _events = events; _payloads = payloads; _data = data; _authority = authority; }
 
         internal ModelContextResponse Query(ChatSession session, ModelContextQuery query, CancellationToken token)
         {
@@ -24,14 +27,25 @@ namespace RNAssistant.Office.Services
             var response = new ModelContextResponse { ChatId = session.Id, Revision = session.Revision,
                 Events = new ModelContextEventDto[0] };
             if (!query.BeforeSequence.HasValue && string.IsNullOrEmpty(query.RequestEventId) &&
+                string.IsNullOrEmpty(query.Alias) &&
                 query.KnownRevision == session.Revision)
             { response.Unchanged = true; return response; }
             var all = _events.Read(session, SessionEventReadMode.RequireComplete);
             token.ThrowIfCancellationRequested();
             response.Revision = all.LastOrDefault()?.Sequence ?? session.Revision;
-            if (!string.IsNullOrEmpty(query.RequestEventId))
+            var requestEventId = query.RequestEventId;
+            var aliases = new AliasIndex(all, !string.IsNullOrEmpty(requestEventId) ||
+                !string.IsNullOrEmpty(query.Alias));
+            if (!string.IsNullOrEmpty(query.Alias))
             {
-                var request = all.SingleOrDefault(e => e.EventId == query.RequestEventId && e.Type == SessionEventTypes.LlmRequest);
+                if (!string.IsNullOrEmpty(requestEventId) || !aliases.TryResolve(query.Alias, out requestEventId))
+                    throw new InvalidOperationException("RESOURCE_NOT_FOUND: the alias is absent from this chat's saved requests.");
+                response.SelectedAlias = query.Alias;
+                response.SelectedResourceAlias = aliases.ResourceFor(query.Alias);
+            }
+            if (!string.IsNullOrEmpty(requestEventId))
+            {
+                var request = all.SingleOrDefault(e => e.EventId == requestEventId && e.Type == SessionEventTypes.LlmRequest);
                 if (request == null) throw new InvalidOperationException("RESOURCE_SNAPSHOT_UNAVAILABLE: request event not found.");
                 var trace = Trace(request);
                 // Never correlate unrelated historical events with absent identifiers.
@@ -40,14 +54,18 @@ namespace RNAssistant.Office.Services
                 response.Events = all.Where(e => e.EventId == request.EventId ||
                     e.Sequence > request.Sequence && (next == null || e.Sequence < next.Sequence) && IsModelEvent(e.Type) &&
                     !string.IsNullOrEmpty(trace.RequestId) && e.RunId == request.RunId && Trace(e).RequestId == trace.RequestId)
-                    .Select(e => Describe(e, true)).ToArray();
+                    .Select(e => Describe(e, true, aliases.Request(e.EventId))).ToArray();
+                response.Resources = DescribeResources(session, trace, aliases, request.EventId);
+                response.Operations = DescribeIdentities(trace, entry => new[] { entry.ToolCallId }, aliases.Operation);
+                response.Evidence = DescribeIdentities(trace, entry =>
+                    (entry.EvidenceLinks ?? new List<ContextEvidenceLink>()).Select(link => link?.EvidenceId), aliases.Evidence);
             }
             else
             {
                 var requests = all.Where(e => e.Type == SessionEventTypes.LlmRequest &&
                     (!query.BeforeSequence.HasValue || e.Sequence < query.BeforeSequence.Value))
                     .OrderByDescending(e => e.Sequence).Take(51).ToArray();
-                response.Events = requests.Take(50).Select(e => Describe(e, false)).ToArray();
+                response.Events = requests.Take(50).Select(e => Describe(e, false, aliases.Request(e.EventId))).ToArray();
                 if (requests.Length > 50) response.NextBeforeSequence = requests[49].Sequence;
             }
             return response;
@@ -92,12 +110,152 @@ namespace RNAssistant.Office.Services
             type == SessionEventTypes.AgentResponseRejected || type == SessionEventTypes.ModelResponseAccepted; }
         private static LlmTraceRecord Trace(SessionEvent item)
         { return item.Data?.ToObject<LlmTraceRecord>() ?? new LlmTraceRecord(); }
-        private static ModelContextEventDto Describe(SessionEvent item, bool detail)
+        private static ModelContextEventDto Describe(SessionEvent item, bool detail, string alias)
         {
             var trace = Trace(item);
             if (!detail) trace.ContextMessages = null;
             return new ModelContextEventDto { EventId = item.EventId, Sequence = item.Sequence, CreatedUtc = item.CreatedUtc,
-                Type = item.Type, HasPayload = item.Payload != null, Trace = trace };
+                Type = item.Type, HasPayload = item.Payload != null, Trace = trace, Alias = alias };
+        }
+
+        private static IReadOnlyList<ModelContextIdentityDto> DescribeIdentities(LlmTraceRecord trace,
+            Func<ContextMessagePresentation, IEnumerable<string>> ids, Func<string, string> alias)
+        {
+            var values = new Dictionary<string, ModelContextIdentityDto>(StringComparer.Ordinal);
+            foreach (var entry in (trace.ContextMessages ?? new List<ContextMessagePresentation>()).Where(item => item != null))
+            {
+                foreach (var id in ids(entry).Where(id => !string.IsNullOrWhiteSpace(id)))
+                    if (!values.ContainsKey(id)) values.Add(id, new ModelContextIdentityDto { CanonicalId = id, Alias = alias(id) });
+            }
+            return values.Values.ToArray();
+        }
+
+        private IReadOnlyList<ModelContextResourceDto> DescribeResources(ChatSession session, LlmTraceRecord trace,
+            AliasIndex aliases, string requestEventId)
+        {
+            var rows = new Dictionary<string, ModelContextResourceDto>(StringComparer.Ordinal);
+            foreach (var entry in (trace.ContextMessages ?? new List<ContextMessagePresentation>()).Where(item => item != null))
+                foreach (var link in entry.EvidenceLinks ?? new List<ContextEvidenceLink>())
+                {
+                    if (link?.Resource?.IsExact != true) continue;
+                    var name = aliases.Resource(link.ScopeId, link.Resource);
+                    if (name == null) continue;
+                    ModelContextResourceDto row;
+                    if (!rows.TryGetValue(name, out row))
+                    {
+                        row = new ModelContextResourceDto { Alias = name, Resource = link.Resource.Copy(), Scope = link.ScopeId,
+                            Currentness = ModelContextCurrentness.Unknown,
+                            Observations = new List<ModelContextResourceObservationDto>() };
+                        rows.Add(name, row);
+                    }
+                    ((List<ModelContextResourceObservationDto>)row.Observations).Add(new ModelContextResourceObservationDto {
+                        RequestAlias = aliases.Request(requestEventId), OperationAlias = aliases.Operation(entry.ToolCallId),
+                        EvidenceAlias = aliases.Evidence(link.EvidenceId), View = link.View,
+                        Coverage = link.ObservedCoverage, ObservationComplete = link.ObservationComplete,
+                        BodyIncludedInMessage = link.BodyIncludedInMessage });
+                }
+            foreach (var row in rows.Values)
+                DescribeCurrentness(session, row);
+            return rows.Values.OrderBy(row => row.Alias, StringComparer.Ordinal).ToArray();
+        }
+
+        private void DescribeCurrentness(ChatSession session, ModelContextResourceDto row)
+        {
+            var scope = row.Scope;
+            if (_authority == null || scope == null ||
+                !(scope.Kind == "conversation" && scope.Id == session.Id ||
+                  scope.Kind == "document" && scope.Id == session.DocumentAuthorityId ||
+                  scope.Equals(CatalogPublicationService.ScopeId))) return;
+            var revisions = _authority.Store as IResourceRevisionStore;
+            if (revisions != null) row.RevisionRecorded = revisions.GetRevision(scope, row.Resource) != null;
+            var head = _authority.Store.GetHead(scope, row.Resource.Identity);
+            if (head == null) return;
+            switch (head.Knowledge)
+            {
+                case HeadKnowledge.Known:
+                    row.Currentness = head.Revision.Uri == row.Resource.Uri &&
+                        head.Revision.Revision == row.Resource.Revision
+                        ? ModelContextCurrentness.Current : ModelContextCurrentness.Superseded;
+                    break;
+                case HeadKnowledge.Removed: row.Currentness = ModelContextCurrentness.Removed; break;
+                case HeadKnowledge.Unavailable: row.Currentness = ModelContextCurrentness.Unavailable; break;
+            }
+        }
+
+        // Ordinals are derived from append-only request events in sequence order. No
+        // new store, mutable alias counter or dependence on paginated UI results.
+        private sealed class AliasIndex
+        {
+            private readonly Dictionary<string, string> _requests = new Dictionary<string, string>(StringComparer.Ordinal);
+            private readonly Dictionary<string, string> _operations = new Dictionary<string, string>(StringComparer.Ordinal);
+            private readonly Dictionary<string, string> _evidence = new Dictionary<string, string>(StringComparer.Ordinal);
+            private readonly Dictionary<string, string> _resourceNames = new Dictionary<string, string>(StringComparer.Ordinal);
+            private readonly Dictionary<string, string> _revisions = new Dictionary<string, string>(StringComparer.Ordinal);
+            private readonly Dictionary<string, int> _revisionCounts = new Dictionary<string, int>(StringComparer.Ordinal);
+            private readonly Dictionary<string, string> _lastRequest = new Dictionary<string, string>(StringComparer.Ordinal);
+            private readonly Dictionary<string, string> _resourceForEvidence = new Dictionary<string, string>(StringComparer.Ordinal);
+            internal AliasIndex(IEnumerable<SessionEvent> events, bool includeLinks)
+            {
+                foreach (var request in events.Where(e => e.Type == SessionEventTypes.LlmRequest).OrderBy(e => e.Sequence))
+                {
+                    var q = Register(_requests, request.EventId, "Q");
+                    _lastRequest[q] = request.EventId;
+                    if (!includeLinks) continue;
+                    foreach (var entry in (Trace(request).ContextMessages ?? new List<ContextMessagePresentation>()).Where(item => item != null))
+                    {
+                        var operation = Register(_operations, entry.ToolCallId, "O");
+                        if (operation != null) _lastRequest[operation] = request.EventId;
+                        foreach (var link in entry.EvidenceLinks ?? new List<ContextEvidenceLink>())
+                        {
+                            var resource = RegisterResource(link?.ScopeId, link?.Resource);
+                            if (resource != null) _lastRequest[resource] = request.EventId;
+                            var evidence = Register(_evidence, link?.EvidenceId, "E");
+                            if (evidence != null)
+                            {
+                                _lastRequest[evidence] = request.EventId;
+                                if (resource != null) _resourceForEvidence[evidence] = resource;
+                            }
+                        }
+                    }
+                }
+            }
+            private static string Register(Dictionary<string, string> values, string id, string prefix)
+            {
+                if (string.IsNullOrWhiteSpace(id)) return null;
+                string alias;
+                if (!values.TryGetValue(id, out alias)) values.Add(id, alias = prefix + (values.Count + 1));
+                return alias;
+            }
+            private static string ResourceKey(ResourceAuthorityScopeId scope, ResourceRef reference)
+            { return (scope == null ? "" : scope.Kind + "\0" + scope.Id) + "\0" + reference.Uri; }
+            private string RegisterResource(ResourceAuthorityScopeId scope, ResourceRef reference)
+            {
+                if (reference?.IsExact != true) return null;
+                var resourceKey = ResourceKey(scope, reference);
+                var root = Register(_resourceNames, resourceKey, "R");
+                var key = resourceKey + "\0" + reference.Revision;
+                string alias;
+                if (!_revisions.TryGetValue(key, out alias))
+                {
+                    int count;
+                    _revisionCounts.TryGetValue(resourceKey, out count);
+                    _revisionCounts[resourceKey] = ++count;
+                    _revisions.Add(key, alias = root + "@v" + count);
+                }
+                return alias;
+            }
+            internal string Request(string id) { return Find(_requests, id); }
+            internal string Operation(string id) { return Find(_operations, id); }
+            internal string Evidence(string id) { return Find(_evidence, id); }
+            internal string Resource(ResourceAuthorityScopeId scope, ResourceRef reference)
+            { return reference?.IsExact == true ? Find(_revisions, ResourceKey(scope, reference) + "\0" + reference.Revision) : null; }
+            internal bool TryResolve(string alias, out string requestEventId)
+            { return _lastRequest.TryGetValue(alias, out requestEventId); }
+            internal string ResourceFor(string alias)
+            { string value; return _resourceForEvidence.TryGetValue(alias, out value) ? value :
+                alias.StartsWith("R", StringComparison.Ordinal) && _lastRequest.ContainsKey(alias) ? alias : null; }
+            private static string Find(Dictionary<string, string> values, string id)
+            { string value; return id != null && values.TryGetValue(id, out value) ? value : null; }
         }
     }
 }

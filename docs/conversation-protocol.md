@@ -737,6 +737,20 @@ separately as local originals, never substituted into the displayed request. Old
 requests without provenance show unknown attribution. Diagnostic source references
 and labels never enter provider JSON and do not change context selection or execution.
 
+Saved request events also derive chat-local `Q`, `O`, `E` and `R@v` display aliases
+from their append-only sequence and exact trace links. The resource key includes its
+authority scope and canonical URI; `v` numbers distinct exact revisions of that
+key, including a new revision created by restoring identical bytes. Aliases remain
+stable across pagination/restart and are never model-facing resource addresses.
+The alias search resolves only within the addressed chat and opens the latest saved
+request containing the operation, evidence or resource revision. The Resources tab
+shows exact URI/revision, scope, observed coverage, observation completeness and
+body-delivery evidence from that request. It compares the revision with the current
+authority head only for the same chat, current document or catalog; old traces with
+no scope report unknown. Registered revision metadata is shown separately from
+head currentness: it does not verify CAS bytes or imply that the model saw the body.
+The inspector does not perform a live provider reread or grant mutation authority.
+
 Transport diagnostics (2026-10-22): each saved request keeps a bounded
 attachment-part manifest beside its exact JSON body. It records source attachment
 IDs, zero-based array part positions when applicable, selected text length and

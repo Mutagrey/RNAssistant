@@ -63,8 +63,10 @@ namespace RNAssistant.Office
             if (query == null || string.IsNullOrWhiteSpace(query.ChatId))
                 throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required.");
             var session = LoadAddressedSession(query.ChatId);
-            var source = new ChatSession { Id = session.Id, Host = session.Host, DocumentKey = session.DocumentKey, Revision = session.Revision };
-            return System.Threading.Tasks.Task.Run(() => new ModelContextInspectorService(_eventStore, _toolExecutor.Payloads, _resourceData)
+            var source = new ChatSession { Id = session.Id, Host = session.Host, DocumentKey = session.DocumentKey,
+                DocumentAuthorityId = session.DocumentAuthorityId, Revision = session.Revision };
+            return System.Threading.Tasks.Task.Run(() => new ModelContextInspectorService(_eventStore, _toolExecutor.Payloads,
+                _resourceData, _toolExecutor.ResourceAuthority)
                 .Query(source, query, token), token);
         }
 

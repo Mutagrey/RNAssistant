@@ -1,6 +1,7 @@
 .model-context-dialog { position: fixed; inset: 12px; z-index: 1500; display: flex; flex-direction: column; background: var(--panel, #fff); color: var(--text, #202124); border: 1px solid var(--border, #ddd); border-radius: 12px; box-shadow: 0 12px 60px #0005; overflow: hidden; }
 .model-context-dialog.hidden { display: none; }
 .model-context-head, .model-context-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 14px; border-bottom: 1px solid var(--border, #ddd); }
+.model-context-toolbar input[type="search"] { min-width: 11em; flex: 1; max-width: 22em; padding: 5px; }
 .model-context-head strong { flex: 1; }
 .model-context-toolbar select { max-width: 100%; min-width: 0; padding: 5px; }
 .model-context-status { padding: 10px 14px; font-size: 12px; color: var(--muted, #666); overflow-wrap: anywhere; }
@@ -11,6 +12,7 @@
 .model-context-message > summary::before { content: "▸"; }
 .model-context-message[open] > summary::before { content: "▾"; }
 .model-context-message-body { padding: 10px; min-width: 0; overflow-wrap: anywhere; }
+.model-context-resource[open] { border-color: var(--accent, #4b82c3); }
 .model-context-badge { font-size: 11px; border-radius: 4px; padding: 3px 6px; background: #8882; }
 .model-context-badge[data-kind="Full"] { background: #19875422; }
 .model-context-badge[data-kind="Summary"], .model-context-badge[data-kind="Fragment"] { background: #e2a02033; }

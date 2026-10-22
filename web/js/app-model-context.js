@@ -136,8 +136,22 @@
     return body;
   }
   function note(entry) { return labels[entry && entry.Presentation] || labels.Unknown; }
-  function evidenceNote(link) {
-    var resource = link.Resource || {}, details = ["evidence " + (link.EvidenceId || "?")];
+  function alias(c, group, id) {
+    var found = (c.detail && c.detail[group] || []).find(function (item) { return item.canonicalId === id; });
+    return found && found.alias;
+  }
+  function resourceFor(c, link) {
+    var reference = link && link.Resource || {}, scope = link && link.ScopeId || {};
+    return (c.detail && c.detail.resources || []).find(function (item) {
+      var value = item.resource || {}, rowScope = item.scope || {};
+      return value.uri === reference.uri && value.revision === reference.revision &&
+        rowScope.kind === scope.kind && rowScope.id === scope.id;
+    });
+  }
+  function evidenceNote(c, link) {
+    var resource = link.Resource || {}, selected = resourceFor(c, link);
+    var details = ["evidence " + (alias(c, "evidence", link.EvidenceId) || link.EvidenceId || "?")];
+    if (selected) details.push(selected.alias);
     if (resource.uri) details.push(resource.uri + (resource.revision ? "@" + resource.revision : ""));
     if (link.View) details.push("view " + link.View);
     if (link.ObservedCoverage) details.push("наблюдение " + JSON.stringify(link.ObservedCoverage));
@@ -182,8 +196,16 @@
         detail.addEventListener("toggle", function () {
           if (!detail.open || loaded) return; loaded = true;
           if (entry && entry.Reason) body.appendChild(el("p", entry.Reason, "model-context-note"));
-          if (entry && entry.ToolCallId) body.appendChild(el("p", "Операция: " + entry.ToolCallId));
-          (entry && entry.EvidenceLinks || []).forEach(function (link) { if (link) body.appendChild(el("p", evidenceNote(link))); });
+          if (entry && entry.ToolCallId) body.appendChild(el("p", "Операция: " +
+            (alias(c, "operations", entry.ToolCallId) ? alias(c, "operations", entry.ToolCallId) + " · " : "") + entry.ToolCallId));
+          (entry && entry.EvidenceLinks || []).forEach(function (link) {
+            if (!link) return;
+            body.appendChild(el("p", evidenceNote(c, link)));
+            var selected = resourceFor(c, link);
+            if (selected) body.appendChild(button("Ресурс " + selected.alias, function () {
+              c.focusResource = selected.alias; c.tab = "resources"; $("modelContextTab").value = "resources"; render(c);
+            }));
+          });
           (entry && entry.Parts || []).forEach(function (part) { body.appendChild(el("p", partNote(part))); });
           body.appendChild(button("Копировать сообщение JSON", function () { copyTextResult(message.raw); }));
           var content = field(parts, "content"), contentValue = decoded(content);
@@ -234,6 +256,36 @@
     lazy(c, body, "Полный ответ · исходный JSON", function () { return text; }, true);
   }
 
+  function resources(c, root) {
+    var rows = c.detail && c.detail.resources || [];
+    if (!rows.length) { root.appendChild(el("p", "У этого запроса нет сохранённых связей с ресурсами.")); return; }
+    root.appendChild(el("p", "Ревизии, наблюдавшиеся в выбранном запросе. Актуальность читается из authority; байты CAS здесь не проверяются.", "model-context-note"));
+    var currentness = { Current: "Текущая", Superseded: "Устаревшая", Removed: "Удалена",
+      Unavailable: "Недоступна", Unknown: "Неизвестна" };
+    rows.forEach(function (row) {
+      var detail = el("details", undefined, "model-context-message model-context-resource");
+      detail.appendChild(el("summary", row.alias + " · " + (currentness[row.currentness] || currentness.Unknown)));
+      root.appendChild(detail);
+      if (c.focusResource === row.alias) detail.open = true;
+      var body = el("div", undefined, "model-context-message-body"), ref = row.resource || {};
+      detail.appendChild(body);
+      body.appendChild(el("p", (ref.uri || "?") + (ref.revision ? " @ " + ref.revision : "")));
+      var scope = row.scope || {};
+      body.appendChild(el("p", "Scope: " + (scope.kind ? scope.kind + ":" + scope.id : "не указан в сохранённой трассе")));
+      body.appendChild(el("p", row.revisionRecorded === true ? "Ревизия есть в authority; байты CAS не проверены." :
+        row.revisionRecorded === false ? "Ревизия не найдена в текущем authority." : "Наличие ревизии не проверено."));
+      (row.observations || []).forEach(function (item) {
+        var details = [item.requestAlias || "Q?", item.operationAlias || "", item.evidenceAlias || "",
+          item.view || "view?", item.coverage ? JSON.stringify(item.coverage) : "coverage?",
+          item.observationComplete === true ? "наблюдение целиком" :
+            item.observationComplete === false ? "частичное наблюдение" : "полнота неизвестна",
+          item.bodyIncludedInMessage === true ? "тело включено" :
+            item.bodyIncludedInMessage === false ? "тело не включено" : "доставка неизвестна"].filter(Boolean);
+        body.appendChild(el("p", details.join(" · ")));
+      });
+    });
+  }
+
   async function render(c) {
     if (!live(c)) return;
     clearView(c);
@@ -241,11 +293,13 @@
     if (c.mode === "preview") {
       if (!c.preview) return;
       if (c.tab === "response") { root.textContent = "Это предпросмотр — ответа ещё нет."; return; }
+      if (c.tab === "resources") { root.textContent = "Сохранённые ревизии появятся после фактического запроса."; return; }
       if (c.tab === "json") mount(c, root, c.preview.text, true);
       else messages(c, c.preview.text, c.previewEntries);
       return;
     }
     if (!c.detail || !c.selected) { root.textContent = "Сохранённых запросов пока нет."; return; }
+    if (c.tab === "resources") { resources(c, root); return; }
     var request = c.detail.events.find(function (e) { return e.eventId === c.selected; });
     if (c.tab === "response") {
       var events = c.detail.events.filter(function (e) { return e.type !== "llm.request"; });
@@ -280,7 +334,7 @@
   }
   async function select(c, eventId) {
     var same = c.selected === eventId && c.detail;
-    if (!same) { c.version++; c.cache = {}; c.pending = {}; c.selected = eventId; c.detail = null; }
+    if (!same) { c.version++; c.cache = {}; c.pending = {}; c.selected = eventId; c.detail = null; c.focusResource = null; }
     var version = c.version;
     status(c, "Чтение сохранённого обмена…");
     try {
@@ -290,11 +344,19 @@
       c.detail = detail;
       var request = detail.events.find(function (e) { return e.eventId === eventId; });
       var response = detail.events.find(function (e) { return e.type === "llm.response" || e.type === "llm.failure"; });
-      status(c, "Подготовлен " + new Date(request.createdUtc).toLocaleString() + " · " + (request.trace.Model || "") +
+      status(c, "Подготовлен " + (request.alias || "") + " · " + new Date(request.createdUtc).toLocaleString() + " · " + (request.trace.Model || "") +
         " · " + (response ? response.type === "llm.response" ? "ответ сохранён" : "ошибка" : "ответ пока отсутствует") +
         (request.trace.Streaming ? " · streaming" : "") + (c.follow ? " · слежение" : " · просмотр выбранного шага"));
       if (!same || changed && c.tab === "response") await render(c);
     } catch (error) { if (valid(c, version)) status(c, error.message); }
+  }
+  function attemptPicker(c) {
+    var picker = $("modelContextAttempt"); picker.replaceChildren();
+    c.attempts.forEach(function (event) {
+      var option = el("option", (event.alias || "#" + event.sequence) + " · " + new Date(event.createdUtc).toLocaleTimeString() + " · " + (event.trace.Purpose || "model"));
+      option.value = event.eventId; picker.appendChild(option);
+    });
+    return picker;
   }
   async function list(c, older) {
     if (!live(c) || c.busy) return;
@@ -311,11 +373,7 @@
         if (!c.follow && selected && !c.attempts.some(function (e) { return e.eventId === selected.eventId; })) c.attempts.push(selected);
       }
       c.before = response.nextBeforeSequence;
-      var picker = $("modelContextAttempt"); picker.replaceChildren();
-      c.attempts.forEach(function (event) {
-        var option = el("option", "#" + event.sequence + " · " + new Date(event.createdUtc).toLocaleTimeString() + " · " + (event.trace.Purpose || "model"));
-        option.value = event.eventId; picker.appendChild(option);
-      });
+      var picker = attemptPicker(c);
       $("modelContextOlder").disabled = !c.before;
       var chosen = c.follow ? c.attempts[0] && c.attempts[0].eventId : c.selected;
       if (chosen) { picker.value = chosen; if (!older || chosen !== c.selected) await select(c, chosen); }
@@ -326,6 +384,28 @@
       }
     } catch (error) { status(c, error.message || String(error)); }
     finally { c.busy = false; }
+  }
+  async function findAlias(c) {
+    if (!c || !live(c) || c.mode !== "actual") return;
+    var name = $("modelContextAliasSearch").value.trim();
+    if (!name) return;
+    c.version++; var version = c.version;
+    c.cache = {}; c.pending = {}; c.follow = false;
+    status(c, "Поиск " + name + "…");
+    try {
+      var detail = await call(c, "getModelContext", { alias: name });
+      if (!valid(c, version)) return;
+      var request = (detail.events || []).find(function (event) { return event.type === "llm.request"; });
+      if (!request || detail.selectedAlias !== name) throw new Error("Короткая ссылка не найдена в этом чате.");
+      c.selected = request.eventId; c.detail = detail;
+      c.focusResource = detail.selectedResourceAlias || null;
+      c.tab = c.focusResource ? "resources" : "messages";
+      $("modelContextTab").value = c.tab;
+      if (!c.attempts.some(function (event) { return event.eventId === request.eventId; })) c.attempts.push(request);
+      attemptPicker(c).value = request.eventId;
+      status(c, "Найдено " + name + " в " + (request.alias || "сохранённом запросе") + ".");
+      await render(c);
+    } catch (error) { if (valid(c, version)) status(c, error.message || String(error)); }
   }
   function draft() { var chat = activeChatSummary(); return JSON.stringify([$("chatInput").value, promptContextResourceDraftIds(), chat && (chat.revision || chat.Revision)]); }
   function previewAvailability(c) {
@@ -383,6 +463,10 @@
     });
     $("modelContextTab").addEventListener("change", function () { var c = current; c.tab = this.value; render(c); });
     $("modelContextAttempt").addEventListener("change", function () { current.follow = false; select(current, this.value); });
+    $("modelContextAliasFind").addEventListener("click", function () { findAlias(current); });
+    $("modelContextAliasSearch").addEventListener("keydown", function (event) {
+      if (event.key === "Enter") { event.preventDefault(); findAlias(current); }
+    });
     $("modelContextLatest").addEventListener("click", function () { current.follow = true; current.revision = null; list(current, false); });
     $("modelContextOlder").addEventListener("click", function () { list(current, true); });
     $("modelContextRefresh").addEventListener("click", function () {

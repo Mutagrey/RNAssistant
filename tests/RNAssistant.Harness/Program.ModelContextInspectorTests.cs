@@ -316,6 +316,105 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void ModelContextStableAliases()
+        {
+            WithTempPaths(paths =>
+            {
+                var chats = new ChatStore(paths);
+                var session = chats.Create("Word", "context-aliases", "Aliases.docx", "Aliases");
+                var payloads = new ChatBlobStore(paths);
+                var store = new ResourceAuthorityStore(paths);
+                var authority = new ResourceAuthorityService(store, store, payloads: payloads);
+                var scope = new ResourceAuthorityScopeId("conversation", session.Id);
+                var identity = ResourceStateProvider.Identity(scope, "one");
+                var other = ResourceStateProvider.Identity(scope, "two");
+                var first = new ResourceRef(identity.Uri, "revision-a");
+                var second = new ResourceRef(identity.Uri, "revision-b");
+                var restored = new ResourceRef(identity.Uri, "revision-restored");
+                var otherRef = new ResourceRef(other.Uri, "revision-a");
+                var body = PayloadRef.FromBlob(payloads.StoreText("same bytes", "text/plain"));
+                foreach (var reference in new[] { first, second, restored })
+                    store.RegisterRevision(scope, new ResourceRevisionMetadata(reference, body.Sha256, body));
+                store.Publish(ResourceAuthorityCommit.Create(scope, 0, null,
+                    new[] { new ResourceHeadChange(identity, null, ResourceHeadState.Known(restored, 1)) },
+                    AuthorityCommitReason.InitialObservation));
+                Func<string, string, ResourceRef, bool, SessionEvent> request = (call, evidence, reference, complete) =>
+                    chats.AppendTrace(session, SessionEventTypes.LlmRequest,
+                        new LlmTraceRecord { RequestId = Guid.NewGuid().ToString("N"),
+                            ContextMessages = new System.Collections.Generic.List<ContextMessagePresentation> {
+                                new ContextMessagePresentation { Role = "tool", ToolCallId = call,
+                                    EvidenceLinks = new System.Collections.Generic.List<ContextEvidenceLink> {
+                                        new ContextEvidenceLink { EvidenceId = evidence, ScopeId = scope,
+                                            Resource = reference, View = "text",
+                                            ObservedCoverage = complete ? ResourceCoverage.Whole() :
+                                                new ResourceCoverage(ResourceCoverageKinds.CharacterRange, start: 0, end: 4),
+                                            ObservationComplete = complete, BodyIncludedInMessage = complete } } } } },
+                        "{}", "application/json", "run", "turn", call);
+                var q1 = request("operation-a", "evidence-a", first, false);
+                var q2 = request("operation-b", "evidence-b", otherRef, true);
+                var q3 = request("operation-c", "evidence-c", second, true);
+                using (var plane = new ResourceDataPlaneService(new ResourceGatewayService()))
+                {
+                    Func<ModelContextInspectorService> inspector = () =>
+                        new ModelContextInspectorService(new ChatEventStoreAdapter(chats), payloads, plane, authority);
+                    var original = inspector().Query(session, new ModelContextQuery { RequestEventId = q1.EventId }, CancellationToken.None);
+                    AssertEqual("Q1", original.Events[0].Alias, "first request alias derives from immutable order");
+                    AssertEqual("R1@v1", original.Resources[0].Alias, "first exact resource revision");
+                    AssertEqual("O1", original.Operations[0].Alias, "operation alias is separate from its runtime id");
+                    AssertEqual("E1", original.Evidence[0].Alias, "evidence alias is separate from its runtime id");
+                    AssertEqual(ModelContextCurrentness.Superseded, original.Resources[0].Currentness,
+                        "only the exact current authority head is current");
+                    AssertTrue(original.Resources[0].RevisionRecorded == true &&
+                        original.Resources[0].Observations[0].ObservationComplete == false &&
+                        original.Resources[0].Observations[0].BodyIncludedInMessage == false,
+                        "partial observed coverage and non-delivery remain distinct from retained revision metadata");
+                    var next = inspector().Query(session, new ModelContextQuery { RequestEventId = q3.EventId }, CancellationToken.None);
+                    AssertEqual("Q3", next.Events[0].Alias, "request aliases survive intervening requests");
+                    AssertEqual("R1@v2", next.Resources[0].Alias, "revisions are numbered within their resource");
+                    AssertEqual("R2@v1", inspector().Query(session, new ModelContextQuery {
+                        RequestEventId = q2.EventId }, CancellationToken.None).Resources[0].Alias,
+                        "a second resource starts at v1");
+                    var q4 = request("operation-d", "evidence-d", restored, true);
+                    var search = inspector().Query(session, new ModelContextQuery { Alias = "R1@v3" }, CancellationToken.None);
+                    AssertEqual(q4.EventId, search.Events[0].EventId,
+                        "restoring identical bytes creates a new exact revision alias");
+                    AssertEqual(ModelContextCurrentness.Current, search.Resources[0].Currentness,
+                        "the current authority revision is reported without a live provider read");
+                    AssertEqual("Q1", inspector().Query(session, new ModelContextQuery { Alias = "E1" }, CancellationToken.None).Events[0].Alias,
+                        "evidence lookup resolves the saved request");
+                    AssertEqual("Q1", inspector().Query(session, new ModelContextQuery { Alias = "O1" }, CancellationToken.None).Events[0].Alias,
+                        "operation lookup resolves the saved request");
+                    AssertEqual("Q1", inspector().Query(session, new ModelContextQuery { Alias = "Q1" }, CancellationToken.None).Events[0].Alias,
+                        "request lookup resolves itself");
+                    AssertEqual("R1@v1", inspector().Query(session, new ModelContextQuery { Alias = "R1@v1" }, CancellationToken.None).Resources[0].Alias,
+                        "older aliases stay stable after later observations");
+                    AssertEqual("Q2", inspector().Query(session, new ModelContextQuery { BeforeSequence = q3.Sequence }, CancellationToken.None)
+                        .Events[0].Alias, "pagination does not renumber aliases");
+                    var foreign = chats.AppendTrace(session, SessionEventTypes.LlmRequest,
+                        new LlmTraceRecord { RequestId = Guid.NewGuid().ToString("N"),
+                            ContextMessages = new System.Collections.Generic.List<ContextMessagePresentation> {
+                                new ContextMessagePresentation { Role = "tool",
+                                    EvidenceLinks = new System.Collections.Generic.List<ContextEvidenceLink> {
+                                        new ContextEvidenceLink { ScopeId = new ResourceAuthorityScopeId("document", "other-doc"),
+                                            EvidenceId = "foreign-evidence", Resource = first, View = "text" } } } } },
+                        "{}", "application/json", "run", "turn", "foreign");
+                    var foreignRow = inspector().Query(session, new ModelContextQuery {
+                        RequestEventId = foreign.EventId }, CancellationToken.None).Resources[0];
+                    AssertEqual("R3@v1", foreignRow.Alias, "same URI in a different authority scope gets its own alias");
+                    AssertEqual(ModelContextCurrentness.Unknown, foreignRow.Currentness,
+                        "inspector does not consult another document's authority");
+                    AssertEqual("R1@v1", inspector().Query(session, new ModelContextQuery {
+                        Alias = "R1@v1" }, CancellationToken.None).Resources[0].Alias,
+                        "new scope does not renumber an older alias");
+                    var another = chats.Create("Word", "other-alias-chat", "Other.docx", "Other");
+                    RuntimeThrows<InvalidOperationException>(() => inspector().Query(another,
+                        new ModelContextQuery { Alias = "R1@v1" }, CancellationToken.None));
+                    RuntimeThrows<InvalidOperationException>(() => inspector().Query(session,
+                        new ModelContextQuery { Alias = "R1@v999" }, CancellationToken.None));
+                }
+            });
+        }
+
         private static void ModelContextSourceAndPagination()
         {
             WithTempPaths(paths =>
@@ -403,19 +502,25 @@ namespace RNAssistant.Harness
                 AssertEqual(1, entry.EvidenceLinks.Count, "selected source has one typed evidence link");
                 var link = entry.EvidenceLinks[0];
                 AssertEqual(fragmentEvidence.EvidenceId, link.EvidenceId, "exact observation ID reaches compiler receipt");
+                AssertTrue(scope.Equals(link.ScopeId), "evidence authority scope reaches the saved receipt");
                 AssertEqual(reference.Uri, link.Resource.Uri, "exact resource identity is typed");
                 AssertEqual(reference.Revision, link.Resource.Revision, "exact resource revision is typed");
                 AssertEqual(ResourceCoverageKinds.LineRange, link.ObservedCoverage.Kind,
                     "observed coverage is typed and distinct from delivery status");
+                AssertEqual(true, link.ObservationComplete.Value, "observation completeness remains distinct from body delivery");
                 AssertEqual(true, link.BodyIncludedInMessage.Value, "verified synthetic payload hydration proves body delivery");
                 var wire = Newtonsoft.Json.JsonConvert.SerializeObject(
                     new LlmMessageBuilder().Build(snapshot.Messages, new AppSettings()).Messages);
                 AssertTrue(!wire.Contains("\"EvidenceLinks\"") && !wire.Contains("\"ObservedCoverage\"") &&
+                    !wire.Contains("\"ScopeId\"") && !wire.Contains("\"ObservationComplete\"") &&
                     !wire.Contains("\"ExclusionKind\""), "typed diagnostics do not enter provider messages");
                 var changed = LlmClient.DescribeWireMessages(new[] { snapshot.Messages.First(m => m.Id == fragment.Id) },
                     snapshot.Receipt, new[] { true });
                 AssertTrue(!changed.Single(e => e.MessageIndex.HasValue).EvidenceLinks.Single().BodyIncludedInMessage.HasValue,
                     "later wire projection invalidates body-delivery proof but keeps source link");
+                AssertTrue(scope.Equals(changed.Single(e => e.MessageIndex.HasValue).EvidenceLinks.Single().ScopeId) &&
+                    changed.Single(e => e.MessageIndex.HasValue).EvidenceLinks.Single().ObservationComplete == true,
+                    "wire attribution retains scope and observation coverage when body delivery becomes unknown");
                 var mutation = ContinuityResult("saved", "common.vba_write_module", RNAssistant.Core.Tools.Contracts.ToolResult.Ok("Saved", "{\"changed\":true}"));
                 mutation.ResourceEffect = new ResourceEffect("effect", "write", ResourceEffectOutcome.VerifiedChanged, verification: "read-back");
                 var folded = compiler.Compile(authority, new ChatMessage[0], new[] { ContinuityCall(mutation), mutation }, null,

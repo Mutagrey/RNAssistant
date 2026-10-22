@@ -1,5 +1,22 @@
 # Stabilization progress
 
+## Resource Context aliases and resource view — 2026-10-23
+
+The existing Model Context inspector now derives chat-local `Q/O/E/R@v` aliases
+from saved request events. Resource identities include authority scope; exact
+revisions receive local ordinals and keep their aliases after pagination/restart,
+including a new revision after same-byte restore. Alias lookup opens the saved
+request; the Resources tab shows exact URI/revision, scope, observed coverage,
+completeness, body-delivery evidence and read-only current-head state. Old traces
+without scope and unverified CAS bytes remain explicitly unknown. No model-facing
+address, live provider read or second store was introduced.
+
+Focused Harness and Web checks cover alias mapping, scope isolation, pagination,
+partial/delivery distinctions and UI lookup. Windows/Office/WebView2 delivery is
+still unqualified. The original Wave 5 Explorer remains partial: broader Resource
+Inspector metadata, graph, revision diff, explicit reread and integrated export
+are tracked in [BACKLOG](BACKLOG.md#resource-context--остаток-исходного-предложения--2026-10-23).
+
 ## Resource Context plan reconciliation — 2026-10-23
 
 Сверка исходного вложения с `main` на `3b865e14`: сохранённый текст
@@ -16,20 +33,20 @@ build/test/Windows результатов эта запись не заявля�
 | Wave 2 — Coverage/visibility | Requested/actual coverage и selection/source completeness для lines/chars, Markdown sections, indexed parts и table rows; source continuation сохранён в model projection | Покрыты реализованные selectors, а не вся матрица новых views из §4; delivery остаётся свойством конкретного request |
 | Wave 3 — Adaptive materialization | Общий бюджет текстового чтения, большие источники/длинные строки, потоковые workspace mutations, Office windows, media/pageIndex; искусственные source ceilings сняты | Не реализованы общие procedure, JSON Pointer/tree, crop/bbox и семантические PDF table/figure/OCR views; единая cost/capability metadata по всей матрице не завершена |
 | Wave 4 — Compiler cleanup | Один compiler, frozen authority, causal frames, selective hydration, корректировка repeated-read links после budget eviction, restart/archive checks | Подтверждённые исправления сделаны. Деление compiler по размеру файла отклонено; новые refactor допускаются только под конкретный дефект |
-| Wave 5 — Context Explorer | Существующий inspector: attempts/messages, exact JSON, evidence/revision/coverage, omissions, оригиналы и downloads | Частично. Нет стабильных `R1@v3`/`E12`/`O8`/`Q14`, поиска по ним, общего Resource Inspector, derived graph, общего revision diff и явного reread из Explorer. Redacted trajectory export существует отдельно, но не интегрирован как этот Explorer workflow |
+| Wave 5 — Context Explorer | Существующий inspector: attempts/messages, exact JSON, evidence/revision/coverage, omissions, оригиналы и downloads; добавлены стабильные chat-local `R@v/E/O/Q`, поиск и начальный resource view | Частично. Нет полной metadata/capabilities/availability и CAS verification, derived graph, общего revision diff и явного reread из Explorer. Redacted trajectory export существует отдельно, но не интегрирован как этот Explorer workflow |
 | Wave 6 — Qualification | Точечные host-neutral Harness/Web и large-source проверки предыдущих срезов | Общий acceptance gate не закрыт: реальный Windows/Office/VBE/WebView2, representative PDF/visual provenance и измерения целевого model workflow остаются открыты; известный HTML restore fixture также открыт |
 
-`R/E/O/Q` — принятая с адаптацией, **ещё не реализованная UI-возможность**.
-Сейчас inspector выводит canonical URI/revision и evidence/tool-call/request IDs;
-это не короткие aliases. Они не должны становиться model API или вторым authority.
+`R/E/O/Q` — принятая с адаптацией UI-возможность, теперь реализована для
+сохранённых request traces как производное представление. Это не model API и не
+второй authority. Подробнее — в записи о новом срезе выше.
 Создание новых T/S/C/D/M/A/P сущностей, второго observation/store/compiler и
 переписывание существующего timeline с нуля отклонены в Wave 0. Позднейшие явные
 решения пользователя о размерах источников заменяют исходные советы о 16k/1 MiB;
 полная замена VBA в памяти остаётся намеренной.
 
-Следующий функциональный срез — стабильные UI aliases и Resource Inspector над
-существующим manifest; перед реализацией определить scope/restart mapping.
-Подтверждённые ошибки, включая HTML restore, имеют приоритет по обычным правилам.
+Следующие функциональные срезы — непокрытые metadata/selectors и возможности
+Explorer из BACKLOG; подтверждённые ошибки, включая HTML restore, имеют приоритет
+по обычным правилам.
 Остальные незавершённые slices и owners — в
 [BACKLOG](BACKLOG.md#resource-context--остаток-исходного-предложения--2026-10-23).
 Основание сверки: `LlmClient.DescribeWireMessages`, `ContextMessagePresentation`,
