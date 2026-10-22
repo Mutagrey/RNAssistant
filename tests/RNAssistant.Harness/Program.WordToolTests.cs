@@ -268,6 +268,39 @@ namespace RNAssistant.Harness
                     tools, new AppSettings(), false, false, session);
                 AssertEqual("RESOURCE_SNAPSHOT_TOO_LARGE", oversized.ErrorCode, "oversized document requires explicit narrower range");
                 AssertEqual(before, adapter.WordTextMaterializationCount, "document limit precedes source materialization");
+                var structure = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                    "target", ResourceGatewayService.IntentTarget(document), "representation", "structure"),
+                    tools, new AppSettings(), false, false, session);
+                AssertTrue(structure.Success, "large Word document exposes bounded structure");
+                var bounds = JObject.Parse((string)JObject.Parse(structure.DataJson)["text"]);
+                AssertEqual(0, (int)bounds["start"], "main story starts at zero in the fake host");
+                AssertEqual(WordService.MaximumTextCharacters + 1, (int)bounds["end"],
+                    "structure reports the full main-story end");
+                AssertEqual(before, adapter.WordTextMaterializationCount,
+                    "bounds do not materialize the large document body");
+                var rangeStart = (int)bounds["end"] - 24;
+                var range = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                    "target", "Word range: " + rangeStart + ":" + bounds["end"]),
+                    tools, new AppSettings(), false, false, session);
+                AssertTrue(range.Success, "tail of large Word document is readable by exact range");
+                var visible = JObject.Parse(range.DataJson);
+                AssertEqual(new string('x', 24), (string)visible["text"], "range returns exact tail bytes");
+                AssertEqual("character-range", (string)visible["sourceCoverage"]["kind"],
+                    "model receives document-relative selected coverage");
+                AssertEqual(rangeStart, (int)visible["sourceCoverage"]["start"], "selected range starts at the requested character");
+                AssertEqual((int)bounds["end"], (int)visible["sourceCoverage"]["end"], "selected range reaches the document end");
+                AssertTrue((bool)visible["selectionComplete"] && (bool)visible["complete"] &&
+                    !(bool)visible["sourceComplete"],
+                    "complete selected range is not complete document source");
+                adapter.Write(new WordWriteRequest { Mode = "replaceselection", Text = "short" }, () => { });
+                var materialized = adapter.WordTextMaterializationCount;
+                var stale = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                    "target", "Word range: " + rangeStart + ":" + bounds["end"]),
+                    tools, new AppSettings(), false, false, session);
+                AssertEqual("RESOURCE_TARGET_INVALID", stale.ErrorCode,
+                    "a range from old structure bounds cannot be read after document shrink");
+                AssertEqual(materialized, adapter.WordTextMaterializationCount,
+                    "invalid stale range is refused before text materialization");
             });
         }
 

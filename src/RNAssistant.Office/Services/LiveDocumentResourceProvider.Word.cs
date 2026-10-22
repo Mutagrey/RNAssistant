@@ -62,7 +62,7 @@ namespace RNAssistant.Office.Services
             catch (ResourceRequestException) { return false; }
         }
 
-        private static WordTextReadRequest WordRange(string target)
+        internal static WordTextReadRequest WordRange(string target)
         {
             var parts = (target ?? string.Empty).Split('-');
             int start, end;
@@ -86,6 +86,26 @@ namespace RNAssistant.Office.Services
                 new WordTextReadRequest { Source = target == "selection" ? "selection" : "document",
                     MaxChars = WordService.MaximumTextCharacters };
             try { return new WordService(_word).CaptureText(request, CancellationToken.None).Text; }
+            catch (WordBackendException error)
+            { throw new ResourceRequestException(error.Message, error.ErrorCode, error.Retryable); }
+        }
+
+        private string ReadWordStructure()
+        {
+            if (_word == null)
+                throw new ResourceRequestException("The bound Word reader is unavailable.", "RESOURCE_PROVIDER_UNAVAILABLE", false);
+            try
+            {
+                var bounds = new WordService(_word).CaptureMainStoryBounds(CancellationToken.None);
+                return new JObject
+                {
+                    ["type"] = "rnassistant.wordMainStory",
+                    ["start"] = bounds.Start,
+                    ["end"] = bounds.End,
+                    ["rangeTargetFormat"] = "Word range: start:end",
+                    ["maxRangeCharacters"] = WordService.MaximumTextCharacters
+                }.ToString(Formatting.None);
+            }
             catch (WordBackendException error)
             { throw new ResourceRequestException(error.Message, error.ErrorCode, error.Retryable); }
         }

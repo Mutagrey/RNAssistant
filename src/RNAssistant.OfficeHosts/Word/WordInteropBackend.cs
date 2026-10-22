@@ -20,6 +20,12 @@ namespace RNAssistant.OfficeHosts
             _session = session ?? throw new ArgumentNullException(nameof(session));
         }
 
+        public WordTextBounds ReadMainStoryBounds()
+        {
+            var content = Document().Content;
+            return new WordTextBounds { Start = content.Start, End = content.End };
+        }
+
         public WordTextSnapshot ReadText(WordTextReadRequest request)
         {
             request = request ?? new WordTextReadRequest();

@@ -16,7 +16,7 @@ namespace RNAssistant.Office.Tools
         private const int InternalReadCharacters = ResourceReadRequest.MaximumCharacters;
         internal static readonly ToolDescriptor Descriptor = new ToolDescriptor(
             ResourceToolCatalog.ReadToolId,
-            "Read-only: Read a semantic target supplied by RUNTIME_CONTEXT, common.resources_find, workspace member results or binding sourceTarget. Copy supplied targets verbatim; they never contain :// and must not be constructed from display titles. For known Excel cells, use target=Excel range: Sheet!A1:B10 with representation=text directly; discovery is unnecessary. Do not read an Excel search scope to enumerate worksheet data: use excel.find_cells for text discovery or an Excel range/table/name target for values. table returns bounded row coverage with optional fields, offset and limit; omit path for Office targets because runtime applies their canonical record view. Text/source/structure read a complete representation by default. For a large artifact text/source, supply partNumber to read at most 32000 characters, including files written as one line. For smaller sources startLine and lineCount (1-500, at most 32000 characters) select an exact excerpt; a long single line can use zero-based startChar and charCount (1-32000). Excerpts cannot authorize a whole-file overwrite. For document Markdown/Plans, section with representation=text selects a unique ATX heading and its nested subsections, bounded to 32000 characters. Section coverage never proves a whole-resource read; duplicate/missing/oversized sections fail explicitly. For a project-wide VBA request, read RUNTIME_CONTEXT.document.vba_project_target with representation=structure first. Exact URI, revision, cursor and guards remain runtime-owned. Media is hydrated only for the next model step; base64 is never embedded in JSON.",
+            "Read-only: Read a semantic target supplied by RUNTIME_CONTEXT, common.resources_find, workspace member results or binding sourceTarget. Copy supplied targets verbatim; they never contain :// and must not be constructed from display titles. For known Excel cells, use target=Excel range: Sheet!A1:B10 with representation=text directly; discovery is unnecessary. Do not read an Excel search scope to enumerate worksheet data: use excel.find_cells for text discovery or an Excel range/table/name target for values. table returns bounded row coverage with optional fields, offset and limit; omit path for Office targets because runtime applies their canonical record view. Text/source/structure read a complete representation by default. For a large Word document, read its structure for main-story bounds, then use a bounded Word range: start:end target. For a large artifact text/source, supply partNumber to read at most 32000 characters, including files written as one line. For smaller sources startLine and lineCount (1-500, at most 32000 characters) select an exact excerpt; a long single line can use zero-based startChar and charCount (1-32000). Excerpts cannot authorize a whole-file overwrite. For document Markdown/Plans, section with representation=text selects a unique ATX heading and its nested subsections, bounded to 32000 characters. Section coverage never proves a whole-resource read; duplicate/missing/oversized sections fail explicitly. For a project-wide VBA request, read RUNTIME_CONTEXT.document.vba_project_target with representation=structure first. Exact URI, revision, cursor and guards remain runtime-owned. Media is hydrated only for the next model step; base64 is never embedded in JSON.",
             Parameters());
         internal static readonly ToolPolicy Policy = new ToolPolicy(ToolEffect.Read, ToolVerification.None,
             false, true, new[] { "agent", "plan", "chat" });
@@ -96,6 +96,10 @@ namespace RNAssistant.Office.Tools
                 Gateway.EnsureCurrentHtmlReference(Session, selected.Reference);
             var observation = new ResourceReadObservation(selection.Result,
                 Gateway.Evidence(Session, selection.Result));
+            var wordRange = selected.Type == "Word range" && !lines && !chars && !parts &&
+                section == null && !structured && selection.Result.Representation == ResourceRepresentations.Text
+                ? LiveDocumentResourceProvider.WordRange(selected.Descriptor.Metadata["target"])
+                : null;
             var projection = lines
                 ? ResourceReadProjection.FromLines(observation.Result,
                     selected.Target, selected.Type, selected.Scope,
@@ -118,6 +122,9 @@ namespace RNAssistant.Office.Tools
                     selected.Target, selected.Type, selected.Scope,
                     ToolArgumentReader.Int32(context.Arguments, "offset", 0),
                     ToolArgumentReader.Int32(context.Arguments, "limit", 500))
+                : wordRange != null
+                ? ResourceReadProjection.FromSelectedSourceRange(observation.Result,
+                    selected.Target, selected.Type, selected.Scope, wordRange.Start, wordRange.End)
                 : ResourceReadProjection.From(observation.Result,
                     selected.Target, selected.Type, selected.Scope);
             projection.SnapshotTarget = selected.Descriptor.SnapshotTarget;

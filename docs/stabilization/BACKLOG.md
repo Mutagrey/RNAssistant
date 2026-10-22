@@ -195,6 +195,9 @@ reconciliation after an uncertain effect. Other whole-body file mutations retain
 the 1-MiB bound. Live Word/VBA/PowerPoint captures remain independently bounded near
 1 MiB. Extend these providers through semantic selectors and exact bounded
 windows before advertising 20 MiB support or large one-line editing there.
+Word document `structure` now exposes main-story bounds without text capture,
+and explicit range reads report document-relative selected coverage. Live VBA and
+PowerPoint provider parity, plus Windows Word validation, remain open.
 Repeated indexed reads of strongly compressed sources now reuse one verified
 encoding fingerprint; every call still hashes all current stored bytes. The local
 >10 MiB/329-part fixture is about 40% faster. Larger/weakly compressed encodings

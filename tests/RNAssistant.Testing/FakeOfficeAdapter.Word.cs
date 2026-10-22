@@ -9,6 +9,7 @@ namespace RNAssistant.Harness
     internal sealed partial class FakeOfficeAdapter
     {
         internal const string WordReadTextOperation = "word.read_text.direct";
+        internal const string WordReadBoundsOperation = "word.read_bounds.direct";
         internal const string WordReadStoriesOperation = "word.read_stories.direct";
         internal const string WordInspectOperation = "word.inspect.direct";
         internal const string WordWriteOperation = "word.write.direct";
@@ -20,6 +21,12 @@ namespace RNAssistant.Harness
         internal int WordTextMaterializationCount { get; private set; }
         internal int WordStoryMaterializationCount { get; private set; }
         internal Func<WordStoryReadRequest, IReadOnlyList<WordStorySnapshot>> WordStoriesFactory { get; set; }
+
+        public WordTextBounds ReadMainStoryBounds()
+        {
+            BeginWordBackendCall(WordReadBoundsOperation);
+            return new WordTextBounds { Start = 0, End = _wordText.Length };
+        }
 
         public WordTextSnapshot ReadText(WordTextReadRequest request)
         {

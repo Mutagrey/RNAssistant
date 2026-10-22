@@ -22,6 +22,16 @@ namespace RNAssistant.Office.Domains.Word
 
         public const int MaximumTextCharacters = 1000000;
 
+        internal WordTextBounds CaptureMainStoryBounds(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var bounds = _backend.ReadMainStoryBounds();
+            cancellationToken.ThrowIfCancellationRequested();
+            if (bounds == null || bounds.Start < 0 || bounds.End < bounds.Start)
+                throw new WordBackendException("Word returned invalid main-story bounds.", "word_text_bounds_invalid", false);
+            return bounds;
+        }
+
         internal WordTextSnapshot CaptureText(WordTextReadRequest request, CancellationToken cancellationToken)
         {
             if (request == null || (request.Source != "document" && request.Source != "selection" && request.Source != "range") ||

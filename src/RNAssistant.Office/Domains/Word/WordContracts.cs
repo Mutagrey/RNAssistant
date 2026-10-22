@@ -20,6 +20,12 @@ namespace RNAssistant.Office.Domains.Word
         public string Text { get; set; }
     }
 
+    public sealed class WordTextBounds
+    {
+        public int Start { get; set; }
+        public int End { get; set; }
+    }
+
     public sealed class WordStoryReadRequest
     {
         public string Scope { get; set; }
@@ -179,6 +185,7 @@ namespace RNAssistant.Office.Domains.Word
 
     public interface IWordBackend
     {
+        WordTextBounds ReadMainStoryBounds();
         WordTextSnapshot ReadText(WordTextReadRequest request);
         IReadOnlyList<WordStorySnapshot> ReadStories(WordStoryReadRequest request);
         WordInspectionSnapshot Inspect(WordInspectRequest request);

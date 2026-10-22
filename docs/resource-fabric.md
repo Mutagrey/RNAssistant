@@ -1083,6 +1083,15 @@ authority, so internal pages and historical exact reads do not recapture live Wo
 The one-million-character capture ceiling is checked before COM `Range.Text`;
 oversized document/selection reads fail explicitly and require a narrower target,
 not clipped text presented as complete. Empty exact ranges remain readable.
+The document `structure` view reads only the main-story `start`/`end` positions
+through the bound Word backend. It does not materialize document text, so a large
+document can be navigated with explicit `Word range: start:end` targets. A range
+read reports `sourceCoverage` as the exact main-story character interval and
+`selectionComplete=true`; `complete=true` refers to that range target, while
+`sourceComplete=false` prevents treating it as the whole document. Structure
+bounds are a live observation, so a later range read resolves current Word state
+and refuses coordinates that have become invalid. This host-neutral behavior does
+not qualify COM positions on Windows.
 HTML uses this same provider. Word inspection and mutations keep their specialized
 owners. Real Word range/selection/STA and final catalog qualification remain open
 on Windows.

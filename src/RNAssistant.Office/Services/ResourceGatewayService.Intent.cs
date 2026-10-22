@@ -841,6 +841,9 @@ namespace RNAssistant.Office.Services
                 return "Discovery only: use excel.find_cells with a query. Do not read this target to enumerate worksheet data; read an Excel range, table, or name target instead.";
             if (type == "Excel range" && ExcelResourceProvider.NeedsRangeOverview(descriptor))
                 return "Read structure for dimensions and small sample targets, then read selected targets for values. Samples cannot establish whole-range totals; excel.find_cells locates text.";
+            if (descriptor.Kind == LiveDocumentResourceProvider.DocumentKind &&
+                descriptor.Metadata.TryGetValue("host", out var host) && host == "Word")
+                return "Read structure for exact main-story start/end without materializing document text. For a large document, read explicit Word range: start:end targets within those bounds; each range is a selected part, not the whole document.";
             if (type == "file")
                 return "Current authored text/code file. Use resources_search and resources_outline to locate exact parts, resources_read with partNumber for bounded source, then file_patch with unique exact fragments. Download preserves the original extension and encoding.";
             if (descriptor.Metadata.ContainsKey("sectionRead"))

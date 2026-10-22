@@ -178,6 +178,7 @@ namespace RNAssistant.Office.Services
 
         private string ReadStructure(string target)
         {
+            if (IsWord && target == "root") return ReadWordStructure();
             if (IsPowerPoint && IsPowerPointSlide(target))
                 return JsonConvert.SerializeObject(new { slideIndex = int.Parse(target.Substring(6), System.Globalization.CultureInfo.InvariantCulture) });
             if (IsWord && target.StartsWith("range-", StringComparison.Ordinal))

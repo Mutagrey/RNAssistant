@@ -1171,6 +1171,7 @@ namespace RNAssistant.Harness
             public ExcelChatChartSourceSnapshot ReadChatSource(ExcelChatChartSourceRequest request) { BeforeRead?.Invoke(FakeOfficeAdapter.ExcelChartSourceReadOperation); return _inner.ReadChatSource(request); }
             public ExcelChartCollectionSnapshot Read(ExcelChartReadRequest request) { BeforeRead?.Invoke(FakeOfficeAdapter.ExcelChartReadOperation); return _inner.Read(request); }
             public void Apply(ExcelChartApplyRequest request, Action markDispatchPossible) { BeforeRead?.Invoke(FakeOfficeAdapter.ExcelChartApplyOperation); _inner.Apply(request, markDispatchPossible); }
+            public WordTextBounds ReadMainStoryBounds() { BeforeRead?.Invoke(FakeOfficeAdapter.WordReadBoundsOperation); return _inner.ReadMainStoryBounds(); }
             public WordTextSnapshot ReadText(WordTextReadRequest request) { BeforeRead?.Invoke(FakeOfficeAdapter.WordReadTextOperation); return _inner.ReadText(request); }
             public IReadOnlyList<WordStorySnapshot> ReadStories(WordStoryReadRequest request) { BeforeRead?.Invoke(FakeOfficeAdapter.WordReadStoriesOperation); return _inner.ReadStories(request); }
             public WordInspectionSnapshot Inspect(WordInspectRequest request) { BeforeRead?.Invoke(FakeOfficeAdapter.WordInspectOperation); return _inner.Inspect(request); }

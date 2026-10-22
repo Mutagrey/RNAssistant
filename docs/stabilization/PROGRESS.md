@@ -1,5 +1,16 @@
 # Stabilization progress
 
+## Word main-story range navigation — 2026-10-22
+
+The Word document `structure` view now returns typed main-story start/end bounds
+without reading the full body. A large document can then be read through an
+explicit bounded `Word range: start:end` target. The model result names the exact
+document-relative `sourceCoverage`, marks the selected range complete and leaves
+whole-document `sourceComplete=false`. Focused host-neutral Word resource checks
+pass, including a document beyond the one-million-character whole-capture limit;
+real Windows/Word COM and WebView2 qualification remain open. VBA and PowerPoint
+large-source provider work remains separate.
+
 ## Streamed patch of large workspace text files — 2026-10-22
 
 `files.patch` now accepts an observed unique UTF-8 anchor in files up to 80 MiB,

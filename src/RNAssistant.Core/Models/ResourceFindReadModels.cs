@@ -89,6 +89,7 @@ namespace RNAssistant.Core.Models
         [JsonProperty("text")] public string Text { get; set; }
         [JsonProperty("table", NullValueHandling = NullValueHandling.Ignore)] public ResourceTableBatch Table { get; set; }
         [JsonProperty("coverage")] public ResourceCoverage Coverage { get; set; }
+        [JsonProperty("sourceCoverage", NullValueHandling = NullValueHandling.Ignore)] public ResourceCoverage SourceCoverage { get; set; }
         [JsonProperty("offset")] public int Offset { get; set; }
         [JsonProperty("returnedCharacters")] public int ReturnedCharacters { get; set; }
         [JsonProperty("totalCharacters")] public int TotalCharacters { get; set; }
@@ -122,6 +123,23 @@ namespace RNAssistant.Core.Models
             projection.StartLine = startLine;
             projection.RequestedLines = requestedLines;
             projection.SelectionComplete = true;
+            return projection;
+        }
+
+        public static ResourceReadProjection FromSelectedSourceRange(ResourceReadResult result, string target,
+            string type, string scope, int start, int end)
+        {
+            if (start < 0 || end < start || result?.Resource?.Reference?.IsExact != true ||
+                result.Representation != ResourceRepresentations.Text || !result.Complete ||
+                result.Truncated || result.Text == null || result.ReturnedCharacters != result.Text.Length)
+                throw new System.InvalidOperationException("A source range requires a complete exact selected text view.");
+            var projection = From(result, target, type, scope);
+            // The range target itself is complete; these coordinates describe only
+            // its selected span in a larger source.
+            projection.SourceCoverage = new ResourceCoverage(ResourceCoverageKinds.CharacterRange,
+                start: start, end: end);
+            projection.SelectionComplete = true;
+            projection.SourceComplete = false;
             return projection;
         }
 
