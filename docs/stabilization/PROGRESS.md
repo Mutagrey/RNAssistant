@@ -1,5 +1,24 @@
 # Stabilization progress
 
+## Resource Context regression review — 2026-10-22
+
+Review of the Resource Context plan through `dae0dda8` reproduced and fixed six
+host-neutral gaps: dropped source continuation coordinates in final model
+projection; VBA line-window currentness after module mutation/external drift;
+binary recovery budget incorrectly applied to large managed text restore;
+automatic first character windows splitting UTF-16 pairs; needless partial VBA
+reads above 500 lines; and the project upload consumer's obsolete 1-MiB text
+readability cutoff. Owners remain the existing projection, authority, resource
+gateway, workspace file and project upload services.
+Focused read/projection/authority, streamed mutation/recovery, context compiler,
+saved-request manifest, history/compaction and web inspector checks pass. A
+pre-existing compaction fixture now explicitly limits format repair attempts;
+production retry policy is unchanged. Full in-memory VBA replacement, one
+compiler/CAS/authority and explicit unknown-effect reconciliation remain intentional.
+See [review decisions and remaining evidence](RISK_REGISTER.md#resource-context-review--2026-10-22).
+No Office/VSTO validation ran; real Windows/Office/WebView2 qualification and the
+separately recorded baseline fixture failures remain open.
+
 ## VBA internal mutation reads without a size ceiling — 2026-10-22
 
 The former one-million-character ceiling is removed from internal VBA mutation

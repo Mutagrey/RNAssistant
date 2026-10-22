@@ -8,6 +8,51 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## Resource Context review — 2026-10-22
+
+Scope: the [Resource Context plan](resource-context/PLAN.md), its implemented
+provenance/context work and later shared large-source reads/writes through
+`dae0dda8`; current consumer integration was checked alongside those changes.
+Owners: existing model projection/compiler, resource gateway/authority, workspace
+file and project upload services. The review reproduced and repaired:
+
+- **Final read projection:** `sourceCoverage`, `sourceEndChar` and
+  `sourceTotalLines` were removed before model delivery. The final shared projector
+  now preserves typed continuation coordinates and still hides runtime identities.
+- **VBA currentness:** separately retained module line windows stayed current
+  after a module write or observed external drift. Both paths invalidate windows
+  belonging to that component; historical bytes and unrelated modules are retained.
+- **Managed text restore:** restart inspection of a restored source beyond
+  256 MiB inherited the binary budget from its raw payload MIME type. Text restore
+  now uses its streamed reconciliation path without that unrelated ceiling.
+- **Unicode first windows:** implicit Word/PowerPoint character windows could
+  split a UTF-16 pair and fail. The implicit read can shorten its end by one;
+  explicit invalid selectors still refuse. The notes fixture reproduces the boundary.
+- **VBA whole-read eligibility:** more than 500 lines always produced partial
+  evidence, even for a small module. Bounded size probes now allow a fresh whole
+  capture when it fits; independently captured windows do not become whole evidence.
+- **Project upload integration:** the consumer still marked text above 1 MiB
+  unreadable. A bounded model-text probe now validates the entire UTF-8 stream;
+  large valid text is admitted and invalid trailing bytes remain rejected as text.
+
+The audit keeps full in-memory VBA validation and whole-module replacement: they
+protect the existing mutation path and do not add source bytes to model context.
+The existing compiler/CAS/authority, exact revision guards, prepared-before-effect
+journal, read-back and non-replay of unknown effects remain the selected design.
+No second store/compiler, generic Office abstraction or broad rewrite is justified
+by these findings. Common semantics do not imply identical provider capabilities:
+bounded selectors, typed Office mutations and UI transfer budgets remain explicit;
+arbitrary binary editing is outside the agreed scope. A single over-budget VBA
+line still lacks a character-window route, and non-text project file views remain
+in [BACKLOG](BACKLOG.md#чтение-нетекстовых-файлов-проектным-чатом--2026-10-21).
+
+Focused host-neutral fixtures cover each repair, with existing streamed writes,
+history/compaction, compiler admission and saved-request manifest checks. A
+pre-existing narration fixture counted format-repair retries as extra compactions;
+its retry setting is now explicit without changing production policy. This is not
+a full-suite or real Office qualification. Previously recorded unrelated fixture
+failures remain open; Windows/VBE/Word/PowerPoint/WebView2 evidence is still required.
+
 ## Resource Context provenance gaps — 2026-10-22
 
 Open; owner: model-context/LLM diagnostics. The

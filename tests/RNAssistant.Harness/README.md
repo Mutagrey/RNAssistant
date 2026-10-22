@@ -80,6 +80,9 @@ large write.
 `workspace files: streamed large copy move delete` covers exact partial-source
 guards, byte-preserving copy/move, managed delete/restore, exact continuation and
 reconciliation after interrupted large copy/move/delete.
+`workspace files: large restore recovery has no binary cap` restores a managed
+text source larger than 256 MiB after interrupted terminal persistence, then
+verifies exact length/hash without replay or whole-body allocation.
 `storage: source streams`, `storage: file CAS` and `storage: plaintext CAS` cover
 stream ownership, cancellation, compression/encryption and envelope-prefix
 compatibility. Source-stream checks also cover explicit seek staging across all
@@ -138,6 +141,9 @@ conversion and durable name/icon/color editing without changing publication.
 Source chat coverage checks independent sessions in the common project catalog,
 retained message history across creation/restart, exact workspace/session refusal,
 deletion and explicit reopening after history removal.
+`plugins: project chat file upload` includes UTF-8 beyond 1 MiB, a surrogate pair
+at the probe boundary and invalid encoding at the end of the file; readable text
+is admitted without a source-size cutoff and every upload preserves exact bytes.
 `workspace: first message names the chat` checks an accepted workspace turn against
 a controlled local model endpoint: immediate shared draft title, later smart title,
 durable project header and manual rename priority.
@@ -1246,6 +1252,9 @@ Word source cutover: `word resources:` and `word tools:` cover complete exact
 document/selection/range evidence, single-capture continuation, historical no-I/O,
 removed-call refusal, pre-materialization bounds and bound-STA/closed-document
 source access. Fake checks do not qualify real Word COM text or selection semantics.
+Together with `powerpoint resources:`, these check large-source character windows;
+PowerPoint notes include automatic first-window shortening at a surrogate boundary
+and explicit split-selector refusal.
 `word search:` covers exact story-scope CAS evidence (including zero matches),
 regex/coordinates/output bounds, historical no-I/O and malformed/oversized capture
 refusal; `word tools:` also checks mutation invalidation and search bound-STA/close.
@@ -1254,6 +1263,11 @@ PowerPoint source cutover: `powerpoint resources:` and `powerpoint tools:` cover
 document/slide text and notes, exact CAS evidence, one-capture paging, historical
 no-I/O, explicit bounds, removed-call refusal, shared HTML capture and bound
 STA/closed-presentation routing. Real COM shapes/notes and selection remain unqualified.
+`resources: large VBA module line window` checks bounded large-source reads and a
+600-line module returned whole when it fits the context. `resources: VBA windows
+invalidate with module` checks cross-chat mutation and external-drift invalidation,
+unchanged unrelated modules and retained historical windows. `resources: model
+projection` checks source continuation coordinates through both final projectors.
 `powerpoint search:` adds regex/notes/coordinate/output semantics, complete evidence
 including zero matches/empty scopes, retained historical pages, missing-CAS refusal
 and malformed/oversized capture rejection. `powerpoint tools:` also checks search

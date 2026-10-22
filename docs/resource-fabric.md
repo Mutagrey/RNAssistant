@@ -130,8 +130,9 @@ omits or refuses content that cannot fit alongside other context.
 The selected text payload has exact character-range evidence, `complete=false`,
 `sourceCoverage` and `sourceEndChar` for continuation; the descriptor reports the
 full source byte length. Model context preparation revalidates these files through
-raw source capture; an oversized file is marked
-unknown rather than treating a prior excerpt as current. UTF-16 positions and
+complete streamed raw source capture, without a configured whole-file size ceiling.
+A failed revalidation cannot treat a prior excerpt as current. Explicitly bounded
+capture callers can still refuse their own byte budget. UTF-16 positions and
 selected character counts currently use `Int32`; this is the remaining coordinate
 representability boundary, not a configured whole-file size cap.
 
@@ -160,6 +161,8 @@ whole retained UTF-8 source and rechecks the live revision before dispatch.
 Large copies stage exact retained bytes, preserve source provenance through a
 whole raw dependency and publish only after streamed target read-back. Large
 move/delete read back the moved bytes without whole-body materialization.
+Managed text restore and its restart reconciliation stream the retained raw payload;
+its binary MIME type does not impose the separate binary-operation byte budget.
 
 Verified mutations publish exact after-revisions; a model-visible after-source
 is included only when a bounded text view is available. A partial patch returns verified new text with
@@ -526,6 +529,12 @@ this contract does not claim 20 MiB Office live, HTML-member or CLI file reads.
 Live VBA modules have no indexed outline or `partNumber` selector. Read the VBA
 project `structure` for module inventory; read a module's `source` and continue
 large sources with `startLine`/`lineCount` using the returned line bounds.
+More than 500 lines alone does not force a partial read: bounded probes determine
+whether the complete source fits the selected context budget and provider capture
+capacity, then an authoritative whole capture supplies the observation. Probed
+windows are never stitched into whole-source evidence. Module mutations and
+observed source drift invalidate all retained current line windows of that module;
+their exact historical bytes and unrelated modules remain available.
 
 Within-target search requires an advertised `text` or `source` representation.
 A VBA project exposes its component inventory as `structure`; search its module
@@ -565,11 +574,15 @@ page extraction must record exact offsets before PDF text pages can use it.
 complete original. A clipped extraction or PDF with unextracted pages cannot
 produce whole-source evidence even when all retained text was read. Model result
 projection exposes semantic targets, typed bounded content fields and the actual
-`coverage` kind and coordinates for a read. Successful `startLine`/`lineCount`
+`coverage` kind and coordinates for a read. Final transport projection also retains
+`sourceCoverage`, `sourceEndChar` and `sourceTotalLines`, when supplied, so source
+coordinates and continuation bounds reach the model. Successful `startLine`/`lineCount`
 and zero-based UTF-16 `startChar`/`charCount` reads also report
 `selectionComplete=true`: every existing character in the requested interval was
 returned, including when it reaches EOF. A character range that splits a surrogate
-pair is rejected. `complete=false` still denies whole-representation observation;
+pair is rejected; an automatic first character window may shorten its end by one
+to preserve the pair. `complete=false` still denies whole-representation observation;
+`complete=true` on an explicit subresource covers only that target, while
 `sourceComplete` concerns the original source. Exact `rna://` references,
 revisions, cursors, source hashes and
 the internal `offset` remain runtime-only. Literal URI-shaped text inside source,
@@ -733,12 +746,17 @@ remain explicit and do not silently trim user instructions or task state.
 Office `common.resources_read` accepts `startLine` (1-based) plus `lineCount`
 (1–500), or `startChar` (zero-based UTF-16) plus `charCount` (1–32,000), for
 text/source. Each excerpt has an exact 32,000-character maximum. This uses the
-existing revision-pinned whole snapshot (still bounded to 2,000,000 characters), preserves
-CR/LF/CRLF bytes, and emits only character-range incomplete evidence. It cannot be
+provider's bounded capture when available: Word main-story ranges and PowerPoint
+slide/notes text use character windows, while live VBA uses line windows without
+materializing the complete module. These live windows retain exact coverage and
+source continuation bounds. Other text providers use their existing revision-pinned
+whole snapshot and its materialization bounds. An excerpt selector cannot be
 combined with other selectors. Semantic metadata projections such as a
 workspace root/shared-context archive cannot be bypassed with bounded text reads.
-A single oversized line can be read by character windows while the whole pinned
-representation fits its existing bound; this is not unbounded streaming.
+Character windows can split a long line where that provider exposes them; live VBA
+currently requires a line window to fit the per-read character budget. The configured
+model input budget chooses whole text or an automatic first window; per-call
+selector bounds and provider-specific capabilities remain distinct from source size.
 An exact domain target query such as `Sheet!A1:B20`, `Excel table: Sales`,
 `Excel name: Sales`, `Word range: 0:100`, or `PowerPoint slide: 2` is a point
 lookup: it resolves that target without scanning unrelated resource catalogs or
@@ -1096,9 +1114,12 @@ The existing `LiveDocumentResourceProvider` routes all Word source reads through
 `WordService.CaptureText` and the bound `IWordBackend`; it does not call the generic
 adapter's document/selection text fallback. Complete captures use existing CAS and
 authority, so internal pages and historical exact reads do not recapture live Word.
-The one-million-character capture ceiling is checked before COM `Range.Text`;
-oversized document/selection reads fail explicitly and require a narrower target,
-not clipped text presented as complete. Empty exact ranges remain readable.
+Whole captures check their one-million-character materialization ceiling before
+COM `Range.Text`. An unqualified main-story document read uses metadata bounds to
+select a context-sized first window when needed, including documents beyond that
+capture ceiling; exact character windows continue through the source. Whole
+selection capture remains bounded and can require a narrower main-story range.
+Empty exact ranges remain readable.
 The document `structure` view reads only the main-story `start`/`end` positions
 through the bound Word backend. It does not materialize document text, so a large
 document can be navigated with explicit `Word range: start:end` targets. A range
