@@ -792,15 +792,20 @@ namespace RNAssistant.Runtime
                 _skillCatalog = new SkillCatalogService("Workspace", _skillPublications.Capture);
                 Register(registry, entries, SkillLoadToolHandler.Entry(),
                     new SkillLoadToolHandler(session, () => _skills, () => _toolPack, _settings, AdmitSkillSelection));
+                var maximumFileReadCharacters = Math.Min(WorkspaceFileService.MaximumWindowTextSourceBytes,
+                    ModelContextBudget.ApproximateTextCharacterCapacity(
+                        ModelContextBudget.InputBudgetTokens(_settings), _settings));
                 Register(registry, entries, "common.resources_find", (_mode.AllowsSkills ? "Find workspace files (default type=file, one directory, up to 200) or enabled skills (type=skill, up to 50), or workspace Plans (type=plan, up to 50 from at most 100 heads). For workspace root omit directory or use null, never / or .; directory applies only to files. Narrow the query when incomplete." : "Find workspace files in one directory, up to 200. For workspace root omit directory or use null, never / or .; narrow the query when incomplete.") +
                     (office == null ? string.Empty : " Use type=office to discover resources in this run's exact Office document."),
-                    ResourceSchema(true, _mode.AllowsSkills, office != null), false,
+                    ResourceSchema(true, _mode.AllowsSkills, office != null, maximumFileReadCharacters), false,
                     new WorkspaceResourceHandler(_resources.Select("file"), _skillPublications, () => _skills, _observed, true, _plans,
+                        maximumFileReadCharacters,
                         office?.ResourceFind));
-                Register(registry, entries, "common.resources_read", (_mode.AllowsSkills ? "Read a complete UTF-8 file (default type=file, target is its workspace-relative path) or published skill instructions (type=skill, target is the skill ID). referencePath belongs only to a listed skill reference. For a workspace Plan use type=plan, omit target for the selected plan or supply an exact unique title. Optional version reads history without selecting it; a current read selects its exact revision. Bounds: 16000 characters for files/skills, 32000 for Plans. For larger files up to 80 MiB supply startLine and lineCount (1–500), or zero-based UTF-16 startChar and charCount (1–16000) for a long single line; each slice observes the current version. files.patch accepts a unique anchor from an observed excerpt only when the whole file is at most 1 MiB. No partial skill activation." : "Read UTF-8 text by workspace-relative target. Whole reads allow 16000 characters; use startLine/lineCount (1–500) or zero-based UTF-16 startChar/charCount (1–16000) for bounded excerpts of files up to 80 MiB.") +
+                Register(registry, entries, "common.resources_read", (_mode.AllowsSkills ? "Read a complete UTF-8 file (default type=file, target is its workspace-relative path) or published skill instructions (type=skill, target is the skill ID). referencePath belongs only to a listed skill reference. For a workspace Plan use type=plan, omit target for the selected plan or supply an exact unique title. Optional version reads history without selecting it; a current read selects its exact revision. File text delivery follows this run's model input budget; skill instructions retain their separate publication bound, and Plans allow 32000 characters. For files up to 80 MiB use startLine and lineCount (1–500), or zero-based UTF-16 startChar and charCount for a long single line; each slice observes the current version. files.patch accepts a unique anchor from an observed excerpt only when the whole file is at most 1 MiB. No partial skill activation." : "Read UTF-8 text by workspace-relative target. File text delivery follows this run's model input budget; use startLine/lineCount (1–500) or zero-based UTF-16 startChar/charCount for bounded excerpts of files up to 80 MiB.") +
                     (office == null ? string.Empty : " Use type=office and a semantic target to read the pinned Office document."),
-                    ResourceSchema(false, _mode.AllowsSkills, office != null), false,
+                    ResourceSchema(false, _mode.AllowsSkills, office != null, maximumFileReadCharacters), false,
                     new WorkspaceResourceHandler(_resources.Select("file"), _skillPublications, () => _skills, _observed, false, _plans,
+                        maximumFileReadCharacters,
                         office?.ResourceRead));
                 if (webHost != null && webHost.IsAvailable)
                     Register(registry, entries, "web.verify", "Load an immutable local HTML/CSS/JS snapshot in an isolated browser; check asset/runtime errors and any functional checks fixed by the accepted task contract.",
@@ -917,14 +922,15 @@ namespace RNAssistant.Runtime
                     ["required"] = required, ["additionalProperties"] = false }.ToString(Formatting.None);
             }
 
-            private static string ResourceSchema(bool find, bool allowSkills, bool allowOffice)
+            private static string ResourceSchema(bool find, bool allowSkills, bool allowOffice,
+                int maximumFileReadCharacters)
             {
-                var files = ResourceVariant(find, false);
+                var files = ResourceVariant(find, false, maximumFileReadCharacters);
                 if (!allowSkills && !allowOffice) return files.ToString(Formatting.None);
                 // Complete alternatives: the exact runtime gate and structured output
                 // must reject selectors belonging to the other resource kind.
                 var variants = new JArray(files);
-                if (allowSkills) { variants.Add(ResourceVariant(find, true)); variants.Add(PlanResourceVariant(find)); }
+                if (allowSkills) { variants.Add(ResourceVariant(find, true, maximumFileReadCharacters)); variants.Add(PlanResourceVariant(find)); }
                 if (allowOffice) variants.Add(OfficeResourceVariant(find));
                 return new JObject { ["type"] = "object", ["properties"] = new JObject(),
                     ["required"] = new JArray(), ["additionalProperties"] = false,
@@ -975,7 +981,7 @@ namespace RNAssistant.Runtime
                 return schema;
             }
 
-            private static JObject ResourceVariant(bool find, bool skill)
+            private static JObject ResourceVariant(bool find, bool skill, int maximumFileReadCharacters)
             {
                 var schema = JObject.Parse(find
                     ? (skill ? Schema("query", false) : Schema("directory", false, "query", false))
@@ -998,12 +1004,13 @@ namespace RNAssistant.Runtime
                         properties["startLine"] = new JObject { ["type"] = "integer", ["minimum"] = 1,
                             ["description"] = "First line, 1-based. Supply together with lineCount; omitted means whole file." };
                         properties["lineCount"] = new JObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = 500,
-                            ["description"] = "Number of lines, with a 16000-character excerpt bound. Each read checks the current version." };
+                            ["description"] = "Number of lines. Selected text must fit this run's model input budget; each read checks the current version." };
                         properties["startChar"] = new JObject { ["type"] = "integer", ["minimum"] = 0,
                             ["maximum"] = WorkspaceFileService.MaximumWindowTextSourceBytes,
                             ["description"] = "Zero-based UTF-16 character offset. Supply together with charCount, without line selectors." };
-                        properties["charCount"] = new JObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = 16000,
-                            ["description"] = "Maximum UTF-16 characters in this excerpt. Each read checks the current version." };
+                        properties["charCount"] = new JObject { ["type"] = "integer", ["minimum"] = 1,
+                            ["maximum"] = maximumFileReadCharacters,
+                            ["description"] = "Maximum UTF-16 characters in this excerpt, bounded by this run's model input budget. Each read checks the current version." };
                     }
                 }
                 return schema;

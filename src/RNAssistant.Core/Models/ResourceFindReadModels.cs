@@ -141,7 +141,7 @@ namespace RNAssistant.Core.Models
         public static ResourceReadProjection FromCharacters(ResourceReadResult result, string target,
             string type, string scope, int startChar, int requestedCharacters)
         {
-            if (startChar < 0 || requestedCharacters < 1 || requestedCharacters > ResourceReadRequest.MaximumCharacters ||
+            if (startChar < 0 || requestedCharacters < 1 ||
                 result?.Complete != false || !HasExactSelectedText(result) ||
                 result.Offset != startChar || result.TotalCharacters < startChar ||
                 result.Coverage.End != System.Math.Min((long)result.TotalCharacters,

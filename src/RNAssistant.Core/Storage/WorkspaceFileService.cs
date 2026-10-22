@@ -224,20 +224,25 @@ namespace RNAssistant.Core.Storage
         { return ReadContent(workspace, relativePath, false, token); }
 
         public WorkspaceFileObservation ReadTextLines(WorkspaceDescriptor workspace, string relativePath,
-            int startLine, int lineCount, CancellationToken token = default(CancellationToken))
+            int startLine, int lineCount, CancellationToken token = default(CancellationToken),
+            int maximumCharacters = MaximumWindowTextSourceBytes)
         {
-            if (startLine < 1 || lineCount < 1 || lineCount > 500)
+            if (startLine < 1 || lineCount < 1 || lineCount > 500 ||
+                maximumCharacters < 1 || maximumCharacters > MaximumWindowTextSourceBytes)
                 throw new WorkspaceFileException("resource_lines_invalid", "Use startLine >= 1 and lineCount between 1 and 500.");
-            return ReadTextWindow(workspace, relativePath, new TextWindow(startLine, lineCount, true, 16000), token);
+            return ReadTextWindow(workspace, relativePath, new TextWindow(startLine, lineCount, true, maximumCharacters), token);
         }
 
         public WorkspaceFileObservation ReadTextCharacters(WorkspaceDescriptor workspace, string relativePath,
-            int startChar, int charCount, CancellationToken token = default(CancellationToken))
+            int startChar, int charCount, CancellationToken token = default(CancellationToken),
+            int maximumCharacters = MaximumWindowTextSourceBytes)
         {
-            if (startChar < 0 || startChar > MaximumWindowTextSourceBytes || charCount < 1 || charCount > 16000)
+            if (startChar < 0 || startChar > MaximumWindowTextSourceBytes || charCount < 1 ||
+                maximumCharacters < 1 || maximumCharacters > MaximumWindowTextSourceBytes ||
+                charCount > maximumCharacters)
                 throw new WorkspaceFileException("resource_chars_invalid",
-                    "Use zero-based startChar and charCount from 1 to 16000.");
-            return ReadTextWindow(workspace, relativePath, new TextWindow(startChar, charCount, false, 16000), token);
+                    "Use zero-based startChar and a positive charCount within the selected read budget.");
+            return ReadTextWindow(workspace, relativePath, new TextWindow(startChar, charCount, false, maximumCharacters), token);
         }
 
         // Bounded reads may publish a raw revision larger than the text mutation

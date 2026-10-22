@@ -266,8 +266,8 @@ namespace RNAssistant.Harness
                 files.CreateText(workspace, "long.txt", body);
                 var provider = new WorkspaceFileResourceProvider(files, workspace);
                 AssertEqual("read_too_large", RuntimeThrows<WorkspaceFileException>(() =>
-                    provider.Read("long.txt", 1, 1)).Code,
-                    "one long line cannot fit a bounded line read");
+                    provider.Read("long.txt", 1, 1, maximumCharacters: 16000)).Code,
+                    "one long line cannot fit a selected low context budget");
                 var start = 16003;
                 var selected = provider.ReadCharacters("long.txt", start, 16000);
                 AssertTrue(!files.ExceedsTextWriteBound(selected.Result.Resource.Reference),
@@ -287,7 +287,7 @@ namespace RNAssistant.Harness
                     provider.ReadCharacters("long.txt", 2, 1)).Code,
                     "character window cannot start inside a surrogate pair");
                 var observed = new Dictionary<string, ResourceEvidence>();
-                var handler = new WorkspaceResourceHandler(provider, null, () => null, observed, false, null);
+                var handler = new WorkspaceResourceHandler(provider, null, () => null, observed, false, null, 16000);
                 var execution = new ToolRuntimeFixture().Context(toolId: "common.resources_read");
                 var whole = handler.ExecuteAsync(new ToolHandlerContext(execution,
                     new Dictionary<string, object> { ["target"] = "long.txt" }), CancellationToken.None)
@@ -315,6 +315,28 @@ namespace RNAssistant.Harness
                     "line and character selectors cannot be combined");
                 AssertEqual("resource_chars_invalid", (string)JObject.Parse(mixed.Result.DataJson)["code"],
                     "mixed selectors fail with a closed error code");
+
+                files.CreateText(workspace, "wide.txt", new string('z', 40000));
+                var expanded = new WorkspaceResourceHandler(provider, null, () => null,
+                    new Dictionary<string, ResourceEvidence>(), false, null, 50000);
+                var expandedRead = expanded.ExecuteAsync(new ToolHandlerContext(execution,
+                    new Dictionary<string, object> { ["target"] = "wide.txt",
+                        ["startChar"] = 0, ["charCount"] = 40000 }), CancellationToken.None)
+                    .GetAwaiter().GetResult();
+                AssertEqual(ToolResultStatus.Ok, expandedRead.Result.Status,
+                    "the model file read can exceed the former 16000-character ceiling");
+                var expandedData = JObject.Parse(expandedRead.Result.DataJson);
+                AssertTrue((bool)expandedData["selectionComplete"] && !(bool)expandedData["complete"] &&
+                    (int)expandedData["returnedCharacters"] == 40000 &&
+                    (int)expandedData["coverage"]["end"] == 40000,
+                    "a larger model-budget selection retains exact partial coverage");
+                var expandedWhole = expanded.ExecuteAsync(new ToolHandlerContext(execution,
+                    new Dictionary<string, object> { ["target"] = "wide.txt" }), CancellationToken.None)
+                    .GetAwaiter().GetResult();
+                AssertEqual(ToolResultStatus.Ok, expandedWhole.Result.Status,
+                    "the whole-file read also follows the configured model budget");
+                AssertTrue((bool)JObject.Parse(expandedWhole.Result.DataJson)["complete"],
+                    "a fitting whole file keeps complete exact evidence");
 
                 files.CreateText(workspace, "breaks.txt", "\uFEFFa\rb\nc\r\nd\r");
                 var lines = new[] { "\uFEFFa\r", "b\n", "c\r\n", "d\r", "" };
@@ -374,8 +396,8 @@ namespace RNAssistant.Harness
                 AssertEqual(prefix, provider.Read("large.txt", 1, 1).Result.Text,
                     "streaming line read preserves BOM and CRLF");
                 AssertEqual("read_too_large", RuntimeThrows<WorkspaceFileException>(() =>
-                    provider.Read("large.txt", 2, 1)).Code,
-                    "oversized selected line is refused without a whole-body allocation");
+                    provider.Read("large.txt", 2, 1, maximumCharacters: 16000)).Code,
+                    "selected line over the configured context budget is refused without a whole-body allocation");
                 AssertEqual("resource_chars_invalid", RuntimeThrows<WorkspaceFileException>(() =>
                     provider.ReadCharacters("large.txt", tailOffset, 1)).Code,
                     "large character window cannot end inside a surrogate pair");

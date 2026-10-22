@@ -1,5 +1,15 @@
 # Stabilization progress
 
+## Workspace model file reads use the configured context budget — 2026-10-22
+
+The fixed 16000-character delivery ceiling is removed from workspace file and
+skill `common.resources_read`. The file schema and handler now derive the maximum
+selected text from this run's configured model input budget; UTF-8 source capture remains
+bounded at 80 MiB and whole-file mutation remains at 1 MiB. The compiler retains
+final request-budget admission and explicit omission/refusal semantics. A focused
+host-neutral check reads a 40000-character exact range and whole file with the
+right partial/complete coverage; Windows/Office/WebView2 qualification remains open.
+
 ## Large workspace excerpts do not authorize text patch — 2026-10-22
 
 Workspace file reads now expose source windows up to 80 MiB, but the existing

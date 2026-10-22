@@ -60,17 +60,21 @@ namespace RNAssistant.Core.Services
         }
 
         public ResourceReadObservation Read(string relativePath, int? startLine = null, int? lineCount = null,
-            CancellationToken token = default(CancellationToken))
+            CancellationToken token = default(CancellationToken),
+            int maximumCharacters = WorkspaceFileService.MaximumWindowTextSourceBytes)
         {
             if (startLine.HasValue != lineCount.HasValue)
                 throw new WorkspaceFileException("resource_lines_invalid", "Supply startLine and lineCount together.");
-            return Project(startLine.HasValue ? _files.ReadTextLines(_workspace, relativePath, startLine.Value, lineCount.Value, token)
+            return Project(startLine.HasValue ? _files.ReadTextLines(_workspace, relativePath, startLine.Value, lineCount.Value,
+                    token, maximumCharacters)
                 : _files.ReadText(_workspace, relativePath, token), false);
         }
 
         public ResourceReadObservation ReadCharacters(string relativePath, int startChar, int charCount,
-            CancellationToken token = default(CancellationToken))
-        { return Project(_files.ReadTextCharacters(_workspace, relativePath, startChar, charCount, token), false); }
+            CancellationToken token = default(CancellationToken),
+            int maximumCharacters = WorkspaceFileService.MaximumWindowTextSourceBytes)
+        { return Project(_files.ReadTextCharacters(_workspace, relativePath, startChar, charCount,
+            token, maximumCharacters), false); }
 
         public ResourceReadObservation ReadViewCharacters(string relativePath, int startChar, int charCount,
             ResourceRef exact = null, CancellationToken token = default(CancellationToken))

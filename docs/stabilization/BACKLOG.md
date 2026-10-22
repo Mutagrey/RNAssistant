@@ -20,6 +20,9 @@ assertion: the scripted server reports `Unexpected request after pause/terminal
 result` for a later title request. Refresh the scripted response sequence and
 retain the negative write-authority assertion separately. The new isolated
 `large_views` case passes without a model request.
+The `omitted_read_guard_smoke.py` fixture likewise reaches its blocked result
+with zero writes, then rejects an extra title request after its four scripted
+responses. Update that sequence independently while retaining the omission guard.
 
 ## Устаревшие ожидания в тестах Markdown-секций — 2026-10-22
 
@@ -184,8 +187,9 @@ or that all unnecessary operations were removed. The 128,000-character whole-fil
 comparison cap remains; large files show verified bounded hunks instead.
 
 Owner: CLI `WorkspaceFileService`/provider and Office live providers. The CLI file
-owner still has a 1 MiB whole-file bound and 16,000-character model delivery;
-selected model/application text windows now stream sources up to 80 MiB. A large
+owner still has a 1 MiB whole-file bound; model file delivery now follows the
+configured input budget. Selected model/application text windows stream sources
+up to 80 MiB. A large
 excerpt does not authorize `files.patch`: the CLI mutation journal, exact
 read-back, partial after-state and uncertain-effect reconciliation still assume
 the 1-MiB text bound. Design and verify all four before enabling large-file

@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
+using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Core.Tools.Contracts;
 
@@ -22,12 +23,16 @@ namespace RNAssistant.Runtime
         private readonly bool _find;
         private readonly WorkspacePlanService _plans;
         private readonly IReadOnlyToolHandler _office;
+        private readonly int _maximumTextReadCharacters;
 
         internal WorkspaceResourceHandler(WorkspaceFileResourceProvider files, SkillPublicationService publications,
             Func<SkillCatalogSnapshot> skills, Dictionary<string, ResourceEvidence> observed, bool find,
-            WorkspacePlanService plans, IReadOnlyToolHandler office = null)
+            WorkspacePlanService plans, int maximumTextReadCharacters, IReadOnlyToolHandler office = null)
         { _files = files; _publications = publications; _skills = skills; _observed = observed; _find = find; _plans = plans;
-            _office = office; }
+            _office = office;
+            if (maximumTextReadCharacters < 1 || maximumTextReadCharacters > WorkspaceFileService.MaximumWindowTextSourceBytes)
+                throw new ArgumentOutOfRangeException(nameof(maximumTextReadCharacters));
+            _maximumTextReadCharacters = maximumTextReadCharacters; }
 
         public Task<ToolHandlerResult> ExecuteAsync(ToolHandlerContext context, CancellationToken cancellationToken)
         {
@@ -76,8 +81,9 @@ namespace RNAssistant.Runtime
                         (startChar.HasValue && (startLine.HasValue || lineCount.HasValue)))
                         throw Error("Supply startChar and charCount together, without line selectors.", "resource_chars_invalid");
                     read = startChar.HasValue
-                        ? _files.ReadCharacters(target, startChar.Value, charCount.Value, cancellationToken)
-                        : _files.Read(target, startLine, lineCount, cancellationToken);
+                        ? _files.ReadCharacters(target, startChar.Value, charCount.Value, cancellationToken,
+                            _maximumTextReadCharacters)
+                        : _files.Read(target, startLine, lineCount, cancellationToken, _maximumTextReadCharacters);
                 }
                 else if (type == "plan")
                 {
@@ -94,7 +100,8 @@ namespace RNAssistant.Runtime
                     read = _publications.ReadSkill(SkillPublicationService.SkillResource(skill,
                         string.IsNullOrEmpty(referencePath) ? null : referencePath));
                 }
-                if (read.Result.Text.Length > (type == "plan" ? PlanDocumentService.MaximumMarkdownCharacters : 16000))
+                if (read.Result.Text.Length > (type == "plan" ? PlanDocumentService.MaximumMarkdownCharacters :
+                    _maximumTextReadCharacters))
                     throw Error("The source exceeds the model read bound. For files, use startLine/lineCount or startChar/charCount to read a bounded region.", "read_too_large");
                 if (type != "file" || read.Result.Complete) read.RequireCompleteExactText();
                 if (type == "file") _observed[target] = read.Evidence.Single();

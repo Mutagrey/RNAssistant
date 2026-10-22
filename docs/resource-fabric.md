@@ -108,17 +108,20 @@ and model wire: `directory` belongs only to file discovery, `referencePath` only
 to skill reads, and the skill branch requires explicit `type="skill"`. Wrong-kind
 selectors fail before dispatch rather than being silently ignored. Chat exposes
 only the file branch. Existing nullable optional arguments preserve their defaults.
-CLI `common.resources_read(target)` returns complete whole UTF-8 text up to 16000
-characters with matching retained payload, coverage and exact evidence. File reads
-also accept paired `startLine` (1-based) and `lineCount` (1–500), or `startChar`
-(zero-based UTF-16) and `charCount` (1–16000), with the same 16000-character
-excerpt bound. A range that splits a surrogate pair is rejected. Each call
+CLI `common.resources_read(target)` returns complete whole UTF-8 text when it fits
+the one-MiB source bound and this run's model input budget, with matching retained
+payload, coverage and exact evidence. File reads also accept paired `startLine`
+(1-based) and `lineCount` (1–500), or `startChar` (zero-based UTF-16) and a positive
+`charCount` up to the context-derived limit in the offered tool schema. A range
+that splits a surrogate pair is rejected. Each call
 captures the current revision; ranges from different revisions are never combined
 into a whole observation. Line and character slicing
 preserves CR/LF/CRLF and Unicode; exact character coverage uses UTF-16 offsets.
 Whole text reads and writes retain the 1-MiB source bound. Selected line or
 UTF-16 character windows pin and stream strict UTF-8 source files up to 80 MiB,
-with fixed decode buffers and at most 16000 characters delivered per read.
+with fixed decode buffers. The selected result is bounded by the run's configured
+model input budget; the compiler still checks the full request and explicitly
+omits or refuses content that cannot fit alongside other context.
 The selected text payload has exact character-range evidence, `complete=false`,
 and the descriptor reports the full source byte length. Model context preparation
 revalidates these files through raw source capture; an oversized file is marked
@@ -159,8 +162,8 @@ published core by skill id or a listed `referencePath`. Core
 Office's catalog provider. Its evidence depends on the committed catalog root;
 raw authoring drift is not activation. The CLI adds that catalog scope and skill
 generation to the compiler's frozen authority. Skill reads grant neither file
-write authority nor file-read acceptance. The 16000-character skill-read bound
-fails explicitly; CLI skill-reference continuation is open scope. See
+write authority nor file-read acceptance. Skill reads use this run's model input
+budget; CLI skill-reference continuation is open scope. See
 [skills](skills.md#independent-workspace-runtime) for selection and publication.
 
 Task Lists use the shared Core `TaskListPublication` owner for

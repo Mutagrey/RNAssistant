@@ -70,7 +70,9 @@ whole-body allocation, exact history after drift/deletion/restart, operation
 budgets, busy-file cancellation and missing/corrupt/unpublished source refusals.
 `workspace files: bounded character windows` also reads line and UTF-16 character
 windows from a 16-MiB UTF-8 file with bounded allocation, exact partial evidence,
-BOM/CRLF and surrogate guards, drift detection and invalid-encoding refusal.
+BOM/CRLF and surrogate guards, drift detection and invalid-encoding refusal. It
+also checks a 40000-character model range and complete read under a larger
+configured read budget.
 `storage: source streams`, `storage: file CAS` and `storage: plaintext CAS` cover
 stream ownership, cancellation, compression/encryption and envelope-prefix
 compatibility. Source-stream checks also cover explicit seek staging across all

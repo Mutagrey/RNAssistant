@@ -52,7 +52,7 @@ def main():
             workspace = root / "workspace"
             workspace.mkdir()
             # The 24K profile admits the current catalog, but not this body.
-            # Stay below the tool's 16000-character limit.
+            # The file fits the source bound; request admission must reject its text.
             source = "ORIGINAL_BODY\n" + "界" * 15000 + "\n"
             target = workspace / "large.txt"
             target.write_text(source, encoding="utf-8")
