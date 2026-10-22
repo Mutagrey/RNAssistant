@@ -1,5 +1,15 @@
 # Stabilization progress
 
+## Mixed-request manifest golden check — 2026-10-22
+
+The Wave 1 RC-02 golden fixture now compares a saved request's UTF-8 CAS bytes
+with its persisted diagnostic manifest for text, image, rendered PDF page, audio
+and a later image omitted by the shared limit. It verifies final message/part
+positions, selected-byte lengths and hashes, confirmed PDF page omissions and
+absence of diagnostic fields in provider JSON. The focused host-neutral check
+passes with the two existing PDF platform warnings. Other compiler
+transformations and Windows/Office/WebView2 qualification remain open.
+
 ## Archived operation decisions in context trace — 2026-10-22
 
 The next RC-02 slice is fixed host-neutral. The compiler now attributes both

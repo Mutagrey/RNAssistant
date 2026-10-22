@@ -31,8 +31,10 @@ records source evidence separately from pending runtime reproduction:
   deduplication, budget and archive-body limits); unattributed transformations
   remain `Unknown`. Zero archive-body budget skips CAS hydration. Optional archive-
   operation budget/selection skips and calls represented by retained receipts now
-  have separate typed reasons. Other compiler transformations and Windows/WebView2
-  display remain unqualified.
+  have separate typed reasons. A mixed-request golden check compares saved UTF-8
+  bytes and the persisted manifest for text/image/PDF/audio selection and a shared-
+  limit omission. Other compiler transformations and Windows/WebView2 display
+  remain unqualified.
 - **RC-03, fixed host-neutral:** two identical complete reads plus a tight request
   budget reproduced a receipt pointing to an evicted body. Folded receipts now
   resolve after budget admission: no stale `retained_result` pointer, explicit

@@ -537,6 +537,7 @@ namespace RNAssistant.Harness
                 Test("storage: streaming frames use exact chunks", StreamingFramesAreBufferedAsExactChunks),
                 Test("storage: model request trace precedes dispatch", ModelRequestTracePrecedesDispatch),
                 Test("storage: request attachment parts match payload", ModelRequestAttachmentPartsMatchPayload),
+                Test("storage: mixed attachment manifest matches saved request", ModelRequestAttachmentManifestGolden),
                 Test("storage: incomplete event tail recovers", IncompleteEventTailRecovers),
                 Test("storage: unterminated invalid records are not discarded", UnterminatedInvalidRecordsAreNotDiscarded),
                 Test("storage: unterminated valid tail recovers", UnterminatedValidEventTailRecovers),

@@ -3808,6 +3808,124 @@ namespace RNAssistant.Harness
                 "empty image part does not consume a delivered-image slot");
         }
 
+        private static void ModelRequestAttachmentManifestGolden()
+        {
+            WithTempPaths(paths =>
+            {
+                var store = new ChatStore(paths);
+                var session = store.Create("Word", "mixed-manifest", "Mixed.docx", "Mixed request");
+                var imageBytes = new byte[] { 1, 3, 5, 7 };
+                var pdfPageBytes = new byte[] { 2, 4, 6, 8, 10 };
+                var audioBytes = new byte[] { 9, 11, 13 };
+                var text = "unique attachment text: Ω😀";
+                var textAttachment = new ChatAttachment { Id = "golden-text", Kind = "text",
+                    FileName = "note.txt", ExtractedText = text, ExtractedCharCount = text.Length };
+                var image = new ChatAttachment { Id = "golden-image", Kind = "image",
+                    FileName = "one.png", ContentType = "image/png" };
+                var pdf = new ChatAttachment { Id = "golden-pdf", Kind = "pdf", FileName = "pages.pdf",
+                    PageCount = 3, PageTextLengths = new List<int> { 100, 100, 100 } };
+                var audio = new ChatAttachment { Id = "golden-audio", Kind = "audio",
+                    FileName = "sample.wav", ContentType = "audio/wav" };
+                var laterImage = new ChatAttachment { Id = "golden-later-image", Kind = "image",
+                    FileName = "later.png", ContentType = "image/png" };
+                var messages = new[] {
+                    new ChatMessage { Id = "golden-instruction", Role = "developer", Content = "Keep message order." },
+                    new ChatMessage { Id = "golden-mixed", Role = "user", Content = "Inspect these.",
+                        Attachments = new List<ChatAttachment> { textAttachment, image, pdf, audio } },
+                    new ChatMessage { Id = "golden-later", Role = "user", Content = "And this image.",
+                        Attachments = new List<ChatAttachment> { laterImage } }
+                };
+                var settings = new AppSettings { BaseUrl = "https://example.invalid", Model = "golden-vision",
+                    StreamResponses = false };
+                settings.ModelCapabilities[settings.Model] = new ModelCapabilitySettings {
+                    SupportsImages = true, SupportsAudio = true, MaxImagesPerPrompt = 2 };
+                var client = new LlmClient(() => "key",
+                    attachment => attachment.Kind == "audio" ? audioBytes : imageBytes,
+                    null, (currentSettings, attachment, limit, token) => attachment.Kind == "pdf"
+                        ? new[] { new ModelImagePart { ContentType = "image/jpeg", Bytes = pdfPageBytes,
+                            PageNumber = 2, TotalPages = 3 } } : null);
+                var options = new LlmRequestOptions { TraceSession = session,
+                    TraceContextReceipt = new ContextReceipt { Messages = messages.Select((message, index) =>
+                        new ContextMessagePresentation { SourceMessageId = message.Id, MessageIndex = index,
+                            Role = message.Role, Presentation = ContextPresentationKind.Full }).ToList() } };
+                new ModelTracePersistenceService(EventStore(store)).Configure(options);
+                var persist = options.TraceSink;
+                LlmTraceRecord trace = null;
+                options.TraceSink = record => { persist(record); trace = record;
+                    throw new InvalidOperationException("stop-after-saved-request"); };
+                try { client.CompleteAsync(settings, messages, options, null).GetAwaiter().GetResult(); }
+                catch (InvalidOperationException ex)
+                { AssertEqual("stop-after-saved-request", ex.Message, "golden request stops before HTTP dispatch"); }
+                AssertTrue(trace != null && trace.PayloadUtf8Bytes != null, "production serializer produced exact bytes");
+                var saved = store.ReadEvents(session.Host, session.DocumentKey, session.Id)
+                    .Single(item => item.Type == SessionEventTypes.LlmRequest);
+                var savedBytes = Encoding.UTF8.GetBytes(store.ReadEventPayload(saved));
+                AssertTrue(trace.PayloadUtf8Bytes.SequenceEqual(savedBytes),
+                    "request event CAS retains the exact bytes handed to HTTP content");
+                var request = JObject.Parse(Encoding.UTF8.GetString(savedBytes));
+                var wire = (JArray)request["messages"];
+                var entries = trace.ContextMessages.Where(item => item.MessageIndex.HasValue)
+                    .OrderBy(item => item.MessageIndex).ToArray();
+                AssertEqual(3, wire.Count, "three visible messages share one serialized request");
+                AssertEqual("golden-instruction,golden-mixed,golden-later",
+                    string.Join(",", entries.Select(item => item.SourceMessageId)),
+                    "manifest order matches the final message order");
+                AssertTrue(entries.Select((entry, index) => entry.MessageIndex == index &&
+                    entry.Role == (string)wire[index]["role"]).All(value => value),
+                    "every manifest message position and role matches saved bytes");
+                var parts = entries[1].Parts;
+                var selectedText = parts.Single(item => item.SourceAttachmentId == textAttachment.Id &&
+                    item.Kind == "attachment_text");
+                var wireParts = (JArray)wire[1]["content"];
+                AssertEqual(0, selectedText.PartIndex.Value, "attachment text points to the actual text part");
+                var wireText = (string)wireParts[0]["text"];
+                var marker = "[Attachment: note.txt]" + Environment.NewLine;
+                var start = wireText.IndexOf(marker, StringComparison.Ordinal);
+                AssertTrue(start >= 0, "serialized text contains the unique attachment boundary");
+                var selected = wireText.Substring(start + marker.Length, text.Length);
+                AssertEqual(text, selected, "selected text is extracted from saved request bytes");
+                AssertEqual(text.Length, selectedText.SelectedCharacters.Value, "selected text length matches wire text");
+                AssertEqual(ContextPresentationKind.Full, selectedText.Presentation, "complete selected text remains full");
+                using (var sha = SHA256.Create())
+                {
+                    var textBytes = Encoding.UTF8.GetBytes(selected);
+                    AssertEqual(textBytes.Length, selectedText.ByteLength.Value, "selected text byte count matches wire text");
+                    AssertEqual(BitConverter.ToString(sha.ComputeHash(textBytes)).Replace("-", "").ToLowerInvariant(),
+                        selectedText.ContentSha256, "selected text digest matches wire text");
+                    foreach (var expected in new[] {
+                        new { Id = image.Id, Kind = "image_url", Bytes = imageBytes, Position = 1 },
+                        new { Id = pdf.Id, Kind = "image_url", Bytes = pdfPageBytes, Position = 2 },
+                        new { Id = audio.Id, Kind = "input_audio", Bytes = audioBytes, Position = 3 } })
+                    {
+                        var entry = parts.Single(item => item.SourceAttachmentId == expected.Id &&
+                            item.Kind == expected.Kind && item.Presentation == ContextPresentationKind.Full);
+                        AssertEqual(expected.Position, entry.PartIndex.Value, "media position matches saved JSON part");
+                        var part = wireParts[entry.PartIndex.Value];
+                        var encoded = expected.Kind == "input_audio" ? (string)part["input_audio"]["data"] :
+                            ((string)part["image_url"]["url"]).Split(',')[1];
+                        var actual = Convert.FromBase64String(encoded);
+                        AssertTrue(expected.Bytes.SequenceEqual(actual), "selected media bytes match their exact source fixture");
+                        AssertEqual(actual.Length, entry.ByteLength.Value, "media byte count matches saved JSON bytes");
+                        AssertEqual(BitConverter.ToString(sha.ComputeHash(actual)).Replace("-", "").ToLowerInvariant(),
+                            entry.ContentSha256, "media digest matches saved JSON bytes");
+                    }
+                }
+                AssertEqual(2, parts.Single(item => item.SourceAttachmentId == pdf.Id &&
+                    item.Presentation == ContextPresentationKind.Excluded).OmittedCount.Value,
+                    "confirmed PDF page count records two omitted pages");
+                var omitted = entries[2].Parts.Single(item => item.SourceAttachmentId == laterImage.Id);
+                AssertEqual(ContextPresentationKind.Excluded, omitted.Presentation,
+                    "later image is omitted after the shared request image limit");
+                AssertTrue(!omitted.PartIndex.HasValue && wire[2]["content"].Type == JTokenType.String,
+                    "omitted image has no invented JSON part position");
+                AssertTrue(request["ContextMessages"] == null &&
+                    !Encoding.UTF8.GetString(savedBytes).Contains("SourceAttachmentId"),
+                    "diagnostic manifest is not duplicated in provider payload");
+                AssertTrue(JToken.DeepEquals(JToken.FromObject(trace.ContextMessages), saved.Data["ContextMessages"]),
+                    "saved request event keeps the complete typed manifest beside exact payload bytes");
+            });
+        }
+
         private static void IncompleteEventTailRecovers()
         {
             WithTempPaths(paths =>
