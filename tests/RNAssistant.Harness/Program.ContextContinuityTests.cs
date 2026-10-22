@@ -246,7 +246,9 @@ namespace RNAssistant.Harness
                     return Task.FromResult(new LlmCompletionResult { Content = response.ToString() });
                 };
                 var compactor = new ContextCompactionRuntime(complete);
-                var settingsForRun = new AppSettings { AgentResponseMode = AgentResponseModes.JsonSchema };
+                // This fixture counts explicit compactions, not format repair attempts.
+                var settingsForRun = new AppSettings { AgentResponseMode = AgentResponseModes.JsonSchema,
+                    MaxAgentFormatRetries = 1 };
                 foreach (var invalid in new[] { "observation", "decision" })
                 {
                     claimKind = invalid;
