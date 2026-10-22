@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
+using RNAssistant.Core.Storage;
 using RNAssistant.Runtime.Contracts;
 
 namespace RNAssistant.Runtime
@@ -60,10 +61,48 @@ namespace RNAssistant.Runtime
                 return new WorkspaceResourceView { Target = request.Target,
                     Representation = ResourceRepresentations.Metadata, Descriptor = resources.Select("file").Describe(request.Target) };
             }
-            var read = request.SnapshotId != null
-                ? resources.Select("file").ReadSnapshot(_webSnapshots.ReadSnapshot(workspace, request.SnapshotId), request.Target)
-                : request.Exact != null ? resources.ForUri(request.Exact.Uri).ReadExact(request.Target, request.Exact)
-                : resources.Select("file").Read(request.Target);
+            ResourceReadObservation read;
+            try
+            {
+                read = request.SnapshotId != null
+                    ? resources.Select("file").ReadSnapshot(_webSnapshots.ReadSnapshot(workspace, request.SnapshotId), request.Target)
+                    : request.Exact != null ? resources.ForUri(request.Exact.Uri).ReadExact(request.Target, request.Exact)
+                    : resources.Select("file").Read(request.Target);
+            }
+            catch (WorkspaceFileException error) when (request.SnapshotId == null &&
+                (request.Exact == null && error.Code == "file_too_large" ||
+                    request.Exact != null && error.Code == "snapshot_unavailable"))
+            {
+                // Raw-only large text pins are explicitly decoded from the exact
+                // retained revision. The file owner rejects substitution when a
+                // published text view exists but is unavailable or corrupt.
+                read = resources.Select("file").ReadViewCharacters(request.Target, request.Offset,
+                    request.MaxCharacters, request.Exact);
+            }
+            if (!read.Result.Complete)
+            {
+                var selected = read.Result;
+                var evidence = read.Evidence.SingleOrDefault();
+                if (selected.Text == null || selected.Resource?.Reference?.IsExact != true ||
+                    selected.Representation != ResourceRepresentations.Text ||
+                    selected.Offset != request.Offset || selected.Text.Length > request.MaxCharacters ||
+                    selected.ReturnedCharacters != selected.Text.Length ||
+                    selected.Coverage?.Kind != ResourceCoverageKinds.CharacterRange ||
+                    selected.Coverage.Start != request.Offset ||
+                    selected.Coverage.End != (long)request.Offset + selected.Text.Length ||
+                    selected.TotalCharacters < selected.Coverage.End || evidence?.Complete != false ||
+                    evidence.View != ResourceRepresentations.Text || evidence.Payload == null ||
+                    evidence.Resource.Uri != selected.Resource.Reference.Uri ||
+                    evidence.Resource.Revision != selected.Resource.Reference.Revision ||
+                    evidence.Coverage.Start != selected.Coverage.Start ||
+                    evidence.Coverage.End != selected.Coverage.End)
+                    throw new InvalidOperationException("Large text view requires an exact bounded excerpt.");
+                var excerpt = ResourceReadProjection.From(selected, request.Target, "file", "workspace");
+                var next = read.Result.Offset + read.Result.ReturnedCharacters;
+                return new WorkspaceResourceView { Target = request.Target, Descriptor = read.Result.Resource,
+                    Representation = ResourceRepresentations.Text, Retained = request.Exact != null,
+                    NextOffset = next < read.Result.TotalCharacters ? (int?)next : null, Content = excerpt };
+            }
             read.RequireCompleteExactText();
             var text = read.Result.Text;
             if (request.Offset > text.Length || request.Offset < text.Length && char.IsLowSurrogate(text[request.Offset]))

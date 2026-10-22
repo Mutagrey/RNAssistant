@@ -364,7 +364,7 @@ namespace RNAssistant.Harness
                 AssertEqual("resource_chars_invalid", RuntimeThrows<WorkspaceFileException>(() =>
                     provider.ReadCharacters("large.txt", tailOffset + 1, 1)).Code,
                     "large character window cannot start inside a surrogate pair");
-                var current = files.CaptureFile(workspace, "large.txt", WorkspaceFileService.MaximumModelTextSourceBytes);
+                var current = files.CaptureFile(workspace, "large.txt", WorkspaceFileService.MaximumWindowTextSourceBytes);
                 AssertEqual(EvidenceState.Current, new EvidenceStateReducer().Reduce(large.Evidence.Single(),
                     files.CaptureAuthority(large.Evidence)).State,
                     "revalidating the raw source preserves exact partial evidence");
@@ -377,7 +377,7 @@ namespace RNAssistant.Harness
                     "whole-read refusal does not erase an exact large-source excerpt");
                 using (var edited = new FileStream(largePath, FileMode.Open, FileAccess.Write))
                 { edited.Position = Encoding.UTF8.GetByteCount(prefix); edited.WriteByte((byte)'y'); }
-                files.CaptureFile(workspace, "large.txt", WorkspaceFileService.MaximumModelTextSourceBytes);
+                files.CaptureFile(workspace, "large.txt", WorkspaceFileService.MaximumWindowTextSourceBytes);
                 AssertEqual(EvidenceState.Superseded, new EvidenceStateReducer().Reduce(large.Evidence.Single(),
                     files.CaptureAuthority(large.Evidence)).State,
                     "large source drift supersedes the old excerpt");

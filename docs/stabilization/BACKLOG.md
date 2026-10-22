@@ -12,6 +12,15 @@
 новая возможность требует явной задачи, scope и owner; дефекты работающей системы
 приоритетнее расширения без конкретного пользовательского результата.
 
+## CLI resource-preview scripted write fixture — 2026-10-22
+
+Owner: `tests/cli/resource_preview_smoke.py` / scripted `Scenario`. The existing
+`views` case passes its resource-view checks but stops at the final model-write
+assertion: the scripted server reports `Unexpected request after pause/terminal
+result` for a later title request. Refresh the scripted response sequence and
+retain the negative write-authority assertion separately. The new isolated
+`large_views` case passes without a model request.
+
 ## Устаревшие ожидания в тестах Markdown-секций — 2026-10-22
 
 Owner: Harness / conversation-response schema and artifact ingestion tests.
@@ -37,8 +46,9 @@ Owner: `web/js/app-plugins.js` и `tests/web/workspace-chat-layout.test.js`.
 
 Owner: workspace resource provider и conversation input. Проектный чат теперь
 принимает файлы любого формата в папку проекта без потери байтов, но модельный
-`common.resources_read` читает только строгий UTF-8 до 1 МиБ. Для PDF,
-Office-файлов, изображений и больших текстов нужен отдельный ограниченный
+`common.resources_read` читает только строгий UTF-8: целиком до 1 МиБ или
+ограниченные текстовые окна до 80 МиБ. Для PDF,
+Office-файлов, изображений и текста свыше 80 МиБ нужен отдельный ограниченный
 resource view либо извлечение с явным статусом полноты; до этого UI не включает
 их путь в запрос к модели и показывает ограничение. Не выдавать сохранение файла
 за выполненный анализ его содержимого.
@@ -174,7 +184,8 @@ or that all unnecessary operations were removed. The 128,000-character whole-fil
 comparison cap remains; large files show verified bounded hunks instead.
 
 Owner: CLI `WorkspaceFileService`/provider and Office live providers. The CLI file
-owner still has a 1 MiB whole-file bound and 16,000-character model read; live
+owner still has a 1 MiB whole-file bound and 16,000-character model delivery;
+selected model/application text windows now stream sources up to 80 MiB. Live
 Word/VBA/PowerPoint captures remain independently bounded near 1 MiB. Extend
 these providers through semantic selectors and exact bounded windows before
 advertising 20 MiB support or large one-line editing there. Repeated indexed reads of strongly compressed sources now reuse one verified

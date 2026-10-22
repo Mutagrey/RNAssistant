@@ -65,6 +65,34 @@ def views(s):
     print("PASS resources: bounded metadata, exact Unicode continuation, drift, missing payload, confinement, no model read credit")
 
 
+def large_views(s):
+    large_body = "A" * 127 + "😀" + "B" * (2 * 1024 * 1024) + "TAIL"
+    (s.workspace / "large.txt").write_text(large_body)
+    large_first = s.json("open", "--path", "large.txt", "--max-chars", "128")
+    assert large_first["Content"]["text"] == "A" * 127 and large_first["NextOffset"] == 127
+    assert not large_first["Content"]["complete"] and large_first["Descriptor"]["byteLength"] == len(large_body.encode())
+    large_ref = large_first["Descriptor"]["reference"]
+    large_exact = ("--uri", large_ref["uri"], "--revision", large_ref["revision"])
+    (s.workspace / "large.txt").write_text("CHANGED")
+    large_second = s.json("open", "--path", "large.txt", "--offset", "127", "--max-chars", "128", *large_exact)
+    assert large_second["Content"]["text"] == "😀" + "B" * 126 and large_second["NextOffset"] == 255
+    wide = s.json("open", "--path", "large.txt", "--offset", "127", "--max-chars", "32000", *large_exact)
+    assert wide["Content"]["text"] == "😀" + "B" * 31998 and wide["NextOffset"] == 32127
+    tail_offset = 127 + 2 + 2 * 1024 * 1024
+    (s.workspace / "large.txt").unlink()
+    large_tail = s.json("open", "--path", "large.txt", "--offset", str(tail_offset), *large_exact)
+    assert large_tail["Content"]["text"] == "TAIL" and large_tail["NextOffset"] is None
+    assert {key: large_tail["Content"]["coverage"][key] for key in ["kind", "start", "end"]} == {
+        "kind": "character-range", "start": tail_offset, "end": tail_offset + 4}
+    assert not large_tail["Content"]["complete"] and large_tail["Retained"]
+    digest = hashlib.sha256(large_body.encode()).hexdigest()
+    (Path(s.env["RNA_STATE_ROOT"]) / "chat-blobs" / digest[:2] / (digest + ".blob")).unlink()
+    unavailable = s.cli("open", "--path", "large.txt", "--offset", str(tail_offset), *large_exact, code=5)
+    assert "snapshot_unavailable" in unavailable.stderr and not unavailable.stdout
+    assert not s.requests and not s.json("sessions")["sessions"]
+    print("PASS large text view: bounded Unicode continuation, exact history, and missing-payload refusal")
+
+
 def start_preview(s, *args):
     process = subprocess.Popen(s.command("preview", "--headless", "--jsonl", *args),
                                env=s.env, cwd=REPO, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -199,7 +227,8 @@ setTimeout(()=>{
 
 def main():
     with tempfile.TemporaryDirectory(prefix="rna-resource-preview-") as folder:
-        for name, check in [("views", views), ("preview", previews), ("isolation", isolation)]:
+        for name, check in [("views", views), ("large-views", large_views),
+                            ("preview", previews), ("isolation", isolation)]:
             scenario = Scenario(Path(folder) / name)
             try:
                 check(scenario)

@@ -1,5 +1,15 @@
 # Stabilization progress
 
+## Large CLI text-view continuation — 2026-10-22
+
+`rna open --view text` now streams 128–32000 UTF-16 characters from a pinned
+workspace source up to 80 MiB when the one-MiB whole read is unavailable. Exact
+continuation survives live edit/deletion, trims a surrogate boundary without
+skipping it, and keeps `complete=false` for a terminal fragment of a large file.
+The focused CLI view scenario passes, including missing-CAS refusal. Whole
+reads/writes, raw and retained web-snapshot views keep their existing bounds;
+Windows/Office/WebView2 qualification remains open.
+
 ## Streamed workspace text windows beyond one MiB — 2026-10-22
 
 Workspace/CLI model line and character selections now pin and stream strict UTF-8

@@ -346,13 +346,17 @@ rna preview --workspace <path> [--entry index.html | --snapshot <id>] [--timeout
 Discovery returns descriptors, a 1–200 item bound (default 50), scanned-entry count
 and explicit incompleteness. It does not load source bodies or claim an exhaustive
 directory when truncated. `open --view metadata` can inspect directories/binary
-files without decoding them. Text uses the existing one-MiB UTF-8 whole-read limit
-internally; delivery is 128–32000 UTF-16 characters, default 4096, without splitting
-surrogate pairs. Each fragment reports exact reference, coverage, returned/total
+files without decoding them. Whole text reads retain the one-MiB UTF-8 bound.
+For larger current files, text `open` pins up to 80 MiB and decodes one bounded
+window from the retained revision; exact continuation reads that same raw-only
+revision after live edit or deletion. Delivery is 128–32000 UTF-16 characters,
+default 4096. A fragment may stop one character early to avoid splitting a
+surrogate pair. Each fragment reports exact reference, coverage, returned/total
 characters and `NextOffset`. Continuation requires that exact URI/revision or a
 retained manifest, so external edits cannot silently join two versions. Only a
 whole body has `complete=true`; the last fragment alone is not whole evidence.
-Missing historical payloads fail without a current-file fallback. Retained manifest
+Missing historical payloads fail without a current-file fallback; a missing or
+corrupt published text view is never substituted with a raw view. Retained manifest
 members remain readable after live paths move or disappear. These runtime references
 are application transport metadata, not model arguments.
 

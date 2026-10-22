@@ -1000,7 +1000,7 @@ namespace RNAssistant.Runtime
                         properties["lineCount"] = new JObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = 500,
                             ["description"] = "Number of lines, with a 16000-character excerpt bound. Each read checks the current version." };
                         properties["startChar"] = new JObject { ["type"] = "integer", ["minimum"] = 0,
-                            ["maximum"] = WorkspaceFileService.MaximumModelTextSourceBytes,
+                            ["maximum"] = WorkspaceFileService.MaximumWindowTextSourceBytes,
                             ["description"] = "Zero-based UTF-16 character offset. Supply together with charCount, without line selectors." };
                         properties["charCount"] = new JObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = 16000,
                             ["description"] = "Maximum UTF-16 characters in this excerpt. Each read checks the current version." };
@@ -1191,7 +1191,7 @@ namespace RNAssistant.Runtime
                 foreach (var path in paths)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    try { _files.CaptureFile(_workspace, path, WorkspaceFileService.MaximumModelTextSourceBytes,
+                    try { _files.CaptureFile(_workspace, path, WorkspaceFileService.MaximumWindowTextSourceBytes,
                         cancellationToken, markUnknownOnSizeRefusal: true); }
                     catch (FileNotFoundException) { /* The file owner marked the old head unavailable. */ }
                     catch (DirectoryNotFoundException) { /* The file owner marked the old head unavailable. */ }

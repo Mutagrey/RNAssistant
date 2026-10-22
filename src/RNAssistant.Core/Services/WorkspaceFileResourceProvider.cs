@@ -72,6 +72,10 @@ namespace RNAssistant.Core.Services
             CancellationToken token = default(CancellationToken))
         { return Project(_files.ReadTextCharacters(_workspace, relativePath, startChar, charCount, token), false); }
 
+        public ResourceReadObservation ReadViewCharacters(string relativePath, int startChar, int charCount,
+            ResourceRef exact = null, CancellationToken token = default(CancellationToken))
+        { return Project(_files.ReadTextViewCharacters(_workspace, relativePath, startChar, charCount, exact, token), exact != null); }
+
         public ResourceReadObservation ReadBytes(string relativePath)
         { return ProjectBytes(_files.ReadBytes(_workspace, relativePath), false); }
 

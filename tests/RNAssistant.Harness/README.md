@@ -570,8 +570,11 @@ not replace the separate verify/repair/reverify acceptance scenario.
 After building the CLI, `python3 -B tests/cli/resource_preview_smoke.py` checks
 bounded descriptor discovery, metadata without decoding, inert source fragments,
 exact Unicode continuation across external edits, missing-payload refusal,
-path confinement and absence of model write authority from UI reads. Real
-Chromium checks cover immutable preview routes, historical reopen after live
+path confinement and absence of model write authority from UI reads.
+The isolated `large_views` scenario checks 2-MiB streamed text, exact Unicode
+continuation after live edit/deletion and missing retained payload refusal.
+The existing `views` scripted model-write tail is tracked in `BACKLOG.md`.
+Real Chromium checks cover immutable preview routes, historical reopen after live
 move/deletion, deadline/Ctrl+C profile/server cleanup, missing-browser reporting,
 fresh storage, absent native bridge, sandbox headers and blocked off-origin
 requests/navigation. Preview creates no run or verification record. The controlled
