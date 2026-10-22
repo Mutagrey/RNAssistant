@@ -37,10 +37,16 @@ settings-callback count assertions and the old Outlook binding `path` argument a
 Those fixtures now assert retained source/failure evidence and the current semantic
 binding contract. Stale browser asset-version assertions were aligned with the
 existing entrypoint; no product behavior was changed to satisfy them.
-The separate `resource cutover: schema mapping derived publication` fixture still
-fails at restoration of an old copied HTML workspace, identically on `43f71591`.
-It remains open under the existing fork/HTML owner; source-size work does not claim
-to repair or qualify that restoration path.
+The separate `resource cutover: schema mapping derived publication` failure was
+resolved on 2026-10-23. The fixture first created a document-owned snapshot without
+publishing it through `DocumentArtifactStore`; chat replay correctly omitted that
+metadata. After modelling the intended historical chat-owned snapshot, the test
+exposed a real fork/recovery bug: rebinding promoted the copy to document ownership,
+so its new body disappeared on chat replay, and explicit restoration was blocked
+by the degraded active pointer. The HTML owner now preserves snapshot ownership
+and re-evaluates recovery after selecting a valid historical body. The focused
+fixture and adjacent host-neutral HTML/fork checks pass; Windows/Office behavior
+is not qualified by these results.
 
 ## Resource Context review — 2026-10-22
 

@@ -48,9 +48,8 @@
    изменённого поведения. Сопоставить acceptance §10 MD с existing fixtures, закрыть
    непокрытые visual/PDF и Explorer cases, измерить representative large-source/model
    workflow и выполнить Windows x64/Office x64/VBE/WebView2 проверки. Не выдавать
-   предыдущие точечные Harness/Web прогоны за общий проход. Известный HTML restore
-   failure остаётся у fork/HTML owner в RISK_REGISTER; fixture воспроизведён до
-   снятия source limits и требует отдельной локализации.
+   предыдущие точечные Harness/Web прогоны за общий проход. Ранее открытый HTML
+   restore fixture закрыт host-neutral исправлением; target-host evidence остаётся.
 
 ## Исходные сбои расширенного resource harness — 2026-10-22
 

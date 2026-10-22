@@ -1,5 +1,16 @@
 # Stabilization progress
 
+## Copied HTML workspace recovery — 2026-10-23
+
+The reproduced `resource cutover: schema mapping derived publication` failure is
+closed host-neutrally. The fixture had created a document-owned HTML artifact
+without publishing it to the document store; with a real historical chat-owned
+snapshot it exposed a fork bug: rebound copies changed owner and vanished on chat
+replay. New revisions now retain chat ownership. An explicit restore of a valid
+older body also repairs a degraded active pointer before creating the rebound
+revision. The focused fixture plus adjacent recovery, fork and shared-HTML checks
+pass. Real Windows/Office/WebView2 behavior remains unqualified.
+
 ## Resource Context aliases and resource view — 2026-10-23
 
 The existing Model Context inspector now derives chat-local `Q/O/E/R@v` aliases
@@ -34,7 +45,7 @@ build/test/Windows результатов эта запись не заявля�
 | Wave 3 — Adaptive materialization | Общий бюджет текстового чтения, большие источники/длинные строки, потоковые workspace mutations, Office windows, media/pageIndex; искусственные source ceilings сняты | Не реализованы общие procedure, JSON Pointer/tree, crop/bbox и семантические PDF table/figure/OCR views; единая cost/capability metadata по всей матрице не завершена |
 | Wave 4 — Compiler cleanup | Один compiler, frozen authority, causal frames, selective hydration, корректировка repeated-read links после budget eviction, restart/archive checks | Подтверждённые исправления сделаны. Деление compiler по размеру файла отклонено; новые refactor допускаются только под конкретный дефект |
 | Wave 5 — Context Explorer | Существующий inspector: attempts/messages, exact JSON, evidence/revision/coverage, omissions, оригиналы и downloads; добавлены стабильные chat-local `R@v/E/O/Q`, поиск и начальный resource view | Частично. Нет полной metadata/capabilities/availability и CAS verification, derived graph, общего revision diff и явного reread из Explorer. Redacted trajectory export существует отдельно, но не интегрирован как этот Explorer workflow |
-| Wave 6 — Qualification | Точечные host-neutral Harness/Web и large-source проверки предыдущих срезов | Общий acceptance gate не закрыт: реальный Windows/Office/VBE/WebView2, representative PDF/visual provenance и измерения целевого model workflow остаются открыты; известный HTML restore fixture также открыт |
+| Wave 6 — Qualification | Точечные host-neutral Harness/Web и large-source проверки предыдущих срезов; HTML restore fixture исправлен отдельно | Общий acceptance gate не закрыт: реальный Windows/Office/VBE/WebView2, representative PDF/visual provenance и измерения целевого model workflow остаются открыты |
 
 `R/E/O/Q` — принятая с адаптацией UI-возможность, теперь реализована для
 сохранённых request traces как производное представление. Это не model API и не
@@ -45,8 +56,7 @@ build/test/Windows результатов эта запись не заявля�
 полная замена VBA в памяти остаётся намеренной.
 
 Следующие функциональные срезы — непокрытые metadata/selectors и возможности
-Explorer из BACKLOG; подтверждённые ошибки, включая HTML restore, имеют приоритет
-по обычным правилам.
+Explorer из BACKLOG; подтверждённые ошибки имеют приоритет по обычным правилам.
 Остальные незавершённые slices и owners — в
 [BACKLOG](BACKLOG.md#resource-context--остаток-исходного-предложения--2026-10-23).
 Основание сверки: `LlmClient.DescribeWireMessages`, `ContextMessagePresentation`,
@@ -68,7 +78,7 @@ VBA mutation services. See [source policy and remaining operation bounds](../res
 Focused host-neutral checks cover large sources, chunked import/export, editor
 integrity, search tails, partial evidence and CodeOnly deletion/restore. Full suite
 and real Windows/Office/WebView2 qualification are not claimed. The independently
-reproduced old copied-HTML restoration fixture remains open in the risk register.
+reproduced old copied-HTML restoration fixture was resolved in the later entry above.
 
 ## Resource Context regression review — 2026-10-22
 

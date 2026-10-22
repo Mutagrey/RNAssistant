@@ -1431,6 +1431,11 @@ blocks fresh captures; recovery records Unknown and never replays the command.
 Fork keeps the live document authority and creates child conversation resources.
 Copied artifact bindings are rebased into a new workspace snapshot, not rewritten
 inside old immutable bodies. Missing exact checkpoints fail closed.
+Historical chat-owned HTML snapshots retain chat ownership when fork rebind or
+explicit recovery creates a new revision. Selecting a readable historical body
+repairs a degraded active pointer before that revision is captured; it does not
+silently promote the snapshot into document authority. Native HTML mutation still
+requires a published document-owned workspace.
 `ResourceForkService` prepares the bounded dependency graph for schema/mapping/
 virtual and materialized derived resources plus supplied context. Required copy
 preparation retains exact CAS/revision metadata without publishing heads. One fork

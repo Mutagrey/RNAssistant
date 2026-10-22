@@ -995,7 +995,11 @@ namespace RNAssistant.Harness
                     Resource = materialized, View = "table", Policy = "exact" } });
                 HtmlWorkspaceArtifactService.CaptureCurrent(session, "Fork source");
                 var originalSnapshotId = session.ActiveHtmlArtifactId;
-                var originalSnapshotBody = session.Artifacts.Single(item => item.Id == originalSnapshotId).InlineText;
+                // This fixture exercises the retained chat-owned HTML format. A
+                // document-owned snapshot must instead be published by DocumentArtifactStore.
+                var originalSnapshot = session.Artifacts.Single(item => item.Id == originalSnapshotId);
+                originalSnapshot.DocumentAuthorityId = null;
+                var originalSnapshotBody = originalSnapshot.InlineText;
                 using (var exportData = new ResourceDataPlaneService(gateway))
                 {
                     session.HtmlWorkspace.DataSources[0].Binding.Policy = "head";
@@ -1043,8 +1047,19 @@ namespace RNAssistant.Harness
                 RuntimeThrows<ResourceRequestException>(() => gateway.Read(child, new ResourceReadRequest { Reference = derived, Representation = "table" }));
                 var replayed = chats.Load(child.Id);
                 AssertEqual(child.ResourceCopies.Count, replayed.ResourceCopies.Count, "exact copy provenance replays from conversation events");
-                chats.LoadArtifactBody(replayed, originalSnapshotId);
+                AssertTrue(replayed.Artifacts.Any(item => item.Id == originalSnapshotId), "copied historical workspace metadata survives replay");
+                AssertTrue(chats.LoadArtifactBody(replayed, originalSnapshotId), "copied historical workspace body is retained");
+                var unavailableActive = replayed.Artifacts.Single(item => item.Id == replayed.ActiveHtmlArtifactId);
+                AssertTrue(unavailableActive.Id != originalSnapshotId, "fork rebind created a child revision");
+                AssertTrue(unavailableActive.DocumentAuthorityId == null && !string.IsNullOrEmpty(unavailableActive.InlineText),
+                    "rebound chat-owned revision survives chat replay with its complete body");
+                unavailableActive.InlineText = null;
+                HtmlWorkspaceArtifactService.RebuildNavigation(replayed);
+                AssertTrue(!replayed.HtmlWorkspaceRecovery.CanMutate, "missing active body blocks mutation before explicit recovery");
                 AssertTrue(HtmlWorkspaceArtifactService.Restore(replayed, originalSnapshotId), "old copied workspace can be restored through exact copy links");
+                AssertTrue(replayed.HtmlWorkspaceRecovery.CanMutate &&
+                    replayed.Artifacts.Single(item => item.Id == replayed.ActiveHtmlArtifactId).DocumentAuthorityId == null,
+                    "explicit recovery preserves the chat-owned format and enables the selected healthy revision");
                 AssertEqual(childDerived.Revision, replayed.HtmlWorkspace.DataSources.Single(item => item.Name == "virtual").Binding.Resource.Revision,
                     "restore reuses the deliberately copied revision, never the parent head");
                 AssertEqual(childScope, replayed.Context.Notes[0].Evidence.ScopeId, "supplied context is copied into the child's evidence scope");

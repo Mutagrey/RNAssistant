@@ -49,7 +49,9 @@ namespace RNAssistant.Office.Services
             var artifact = new ChatArtifact
             {
                 Id = ChatResourceUri.CreateSnapshotId(logicalId, revision),
-                DocumentAuthorityId = session.DocumentAuthorityId,
+                // A copied chat-owned history must remain chat-owned. Promoting it
+                // to a document artifact here would lose its body on chat replay.
+                DocumentAuthorityId = current == null ? session.DocumentAuthorityId : current.DocumentAuthorityId,
                 Kind = ChatArtifactKinds.HtmlWorkspace,
                 Title = snapshot.Label,
                 MimeType = "application/vnd.rnassistant.html-workspace+json",
@@ -92,8 +94,10 @@ namespace RNAssistant.Office.Services
             var rebound = RebindForkResources(session, workspace);
             session.HtmlWorkspace = workspace;
             session.ActiveHtmlArtifactId = artifact.Id;
+            // Selecting this validated body repairs a degraded active pointer before
+            // the optional fork rebind creates a new revision from it.
+            RebuildNavigation(session);
             if (rebound) CaptureCurrent(session, "Forked workspace resources");
-            else RebuildNavigation(session);
             return true;
         }
 
