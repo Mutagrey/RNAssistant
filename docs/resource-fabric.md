@@ -68,9 +68,11 @@ per-pass byte counters (including `Staging`), coalesced to about 10 Hz plus stag
 callbacks run on the caller's thread; the application executor must schedule
 capture/open/consumption off the UI and marshal metadata updates to presentation.
 
-Existing `ReadText`/`ReadBytes`, model/preview delivery and guarded text mutations
-retain their bounded whole-body contracts. Source capture admission refusal does
-not publish a new observation. Cancellation before authority publication cannot
+Existing `ReadText`/`ReadBytes`, whole model/preview delivery and guarded text mutations
+retain their bounded whole-body contracts. Model-selected line/character windows
+use a separately bounded retained source stream. Source capture admission refusal does
+not publish a new observation by default; model-context revalidation explicitly
+marks a source beyond its 80-MiB budget unknown. Cancellation before authority publication cannot
 claim a completed source; any unreferenced fully retained CAS body is handled by
 ordinary GC. No source registry, second durable cache or queue store was added.
 The focused storage test processes an actual 80-MiB fixture with no whole-source
@@ -114,9 +116,15 @@ excerpt bound. A range that splits a surrogate pair is rejected. Each call
 captures the current revision; ranges from different revisions are never combined
 into a whole observation. Line and character slicing
 preserves CR/LF/CRLF and Unicode; exact character coverage uses UTF-16 offsets.
-The existing text owner still limits the captured UTF-8 file to 1 MiB. Longer
-single lines within that captured file can use character windows; files beyond
-the source bound require a separate bounded-view extension.
+Whole text reads and writes retain the 1-MiB source bound. Selected line or
+UTF-16 character windows pin and stream strict UTF-8 source files up to 80 MiB,
+with fixed decode buffers and at most 16000 characters delivered per read.
+The selected text payload has exact character-range evidence, `complete=false`,
+and the descriptor reports the full source byte length. Model context preparation
+revalidates these files through raw source capture; an oversized file is marked
+unknown rather than treating a prior excerpt as current. Files beyond 80 MiB
+require a different source-read budget or selector.
+
 CLI prepares fresh current-run
 authority through the same file owner, then passes the frozen tuple and accepted
 kernel facts to the existing `ModelContextCompiler`, now in Core. The compiler owns

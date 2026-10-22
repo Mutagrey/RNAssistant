@@ -76,8 +76,8 @@ namespace RNAssistant.Runtime
                         (startChar.HasValue && (startLine.HasValue || lineCount.HasValue)))
                         throw Error("Supply startChar and charCount together, without line selectors.", "resource_chars_invalid");
                     read = startChar.HasValue
-                        ? _files.ReadCharacters(target, startChar.Value, charCount.Value)
-                        : _files.Read(target, startLine, lineCount);
+                        ? _files.ReadCharacters(target, startChar.Value, charCount.Value, cancellationToken)
+                        : _files.Read(target, startLine, lineCount, cancellationToken);
                 }
                 else if (type == "plan")
                 {

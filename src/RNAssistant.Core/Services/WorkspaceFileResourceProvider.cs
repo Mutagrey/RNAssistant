@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 
@@ -58,16 +59,18 @@ namespace RNAssistant.Core.Services
             return result;
         }
 
-        public ResourceReadObservation Read(string relativePath, int? startLine = null, int? lineCount = null)
+        public ResourceReadObservation Read(string relativePath, int? startLine = null, int? lineCount = null,
+            CancellationToken token = default(CancellationToken))
         {
             if (startLine.HasValue != lineCount.HasValue)
                 throw new WorkspaceFileException("resource_lines_invalid", "Supply startLine and lineCount together.");
-            return Project(startLine.HasValue ? _files.ReadTextLines(_workspace, relativePath, startLine.Value, lineCount.Value)
-                : _files.ReadText(_workspace, relativePath), false);
+            return Project(startLine.HasValue ? _files.ReadTextLines(_workspace, relativePath, startLine.Value, lineCount.Value, token)
+                : _files.ReadText(_workspace, relativePath, token), false);
         }
 
-        public ResourceReadObservation ReadCharacters(string relativePath, int startChar, int charCount)
-        { return Project(_files.ReadTextCharacters(_workspace, relativePath, startChar, charCount), false); }
+        public ResourceReadObservation ReadCharacters(string relativePath, int startChar, int charCount,
+            CancellationToken token = default(CancellationToken))
+        { return Project(_files.ReadTextCharacters(_workspace, relativePath, startChar, charCount, token), false); }
 
         public ResourceReadObservation ReadBytes(string relativePath)
         { return ProjectBytes(_files.ReadBytes(_workspace, relativePath), false); }
@@ -112,7 +115,7 @@ namespace RNAssistant.Core.Services
             var descriptor = new ResourceDescriptor { Reference = observed.Reference,
                 Provider = Id, Kind = "file", Title = Path.GetFileName(observed.RelativePath),
                 Mutable = !retained && !_workspace.ReadOnly, Tracking = retained ? "snapshot" : "current",
-                ByteLength = observed.Evidence.Payload.ByteLength,
+                ByteLength = observed.SourceByteLength ?? observed.Evidence.Payload.ByteLength,
                 ContentSha256 = observed.ContentSha256, Coverage = ResourceCoverage.Whole() };
             descriptor.Representations.Add(ResourceRepresentations.Metadata);
             descriptor.Metadata["relativePath"] = observed.RelativePath;

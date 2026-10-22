@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.ExceptionServices;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
@@ -312,6 +313,87 @@ namespace RNAssistant.Harness
                     "line and character selectors cannot be combined");
                 AssertEqual("resource_chars_invalid", (string)JObject.Parse(mixed.Result.DataJson)["code"],
                     "mixed selectors fail with a closed error code");
+
+                files.CreateText(workspace, "breaks.txt", "\uFEFFa\rb\nc\r\nd\r");
+                var lines = new[] { "\uFEFFa\r", "b\n", "c\r\n", "d\r", "" };
+                for (var i = 0; i < lines.Length; i++)
+                    AssertEqual(lines[i], provider.Read("breaks.txt", i + 1, 1).Result.Text,
+                        "streamed line window preserves mixed breaks and terminal empty line " + i);
+                AssertEqual("resource_lines_invalid", RuntimeThrows<WorkspaceFileException>(() =>
+                    provider.Read("breaks.txt", lines.Length + 1, 1)).Code,
+                    "streamed line read rejects a start beyond the final empty line");
+
+                var largePath = Path.Combine(workspace.RootPath, "large.txt");
+                const int longLineLength = 16 * 1024 * 1024;
+                const string prefix = "\uFEFFone\r\n";
+                const string suffix = "\n\uD83D\uDE00DONE";
+                using (var writer = new StreamWriter(largePath, false, new UTF8Encoding(false, true)))
+                {
+                    writer.Write(prefix);
+                    var block = new string('x', 8192);
+                    for (var i = 0; i < longLineLength / block.Length; i++) writer.Write(block);
+                    writer.Write(suffix);
+                }
+                GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
+                var allocations = GC.GetAllocatedBytesForCurrentThread();
+                var tailOffset = prefix.Length + longLineLength + 1;
+                var large = provider.ReadCharacters("large.txt", tailOffset, 16000);
+                AssertTrue(GC.GetAllocatedBytesForCurrentThread() - allocations < 8L * 1024 * 1024,
+                    "large model text window does not allocate the 16-MiB source body");
+                AssertEqual("\uD83D\uDE00DONE", large.Result.Text, "character window reaches beyond the whole-read bound");
+                AssertEqual(tailOffset + large.Result.Text.Length, large.Result.TotalCharacters,
+                    "large read counts the full UTF-16 source");
+                AssertEqual(new FileInfo(largePath).Length, large.Result.Resource.ByteLength.Value,
+                    "descriptor reports source bytes rather than excerpt bytes");
+                AssertTrue(!large.Result.Complete && !large.Evidence.Single().Complete &&
+                    large.Evidence.Single().Coverage.Start == tailOffset &&
+                    large.Evidence.Single().Coverage.End == large.Result.TotalCharacters,
+                    "large read retains only exact partial text evidence");
+                var selectedLine = provider.Read("large.txt", 3, 1);
+                AssertEqual(large.Result.Text, selectedLine.Result.Text, "line window reaches beyond one MiB");
+                AssertEqual(prefix.Length + longLineLength + 1, selectedLine.Result.Offset,
+                    "line range accounts for BOM and CRLF");
+                AssertEqual(prefix, provider.Read("large.txt", 1, 1).Result.Text,
+                    "streaming line read preserves BOM and CRLF");
+                AssertEqual("read_too_large", RuntimeThrows<WorkspaceFileException>(() =>
+                    provider.Read("large.txt", 2, 1)).Code,
+                    "oversized selected line is refused without a whole-body allocation");
+                AssertEqual("resource_chars_invalid", RuntimeThrows<WorkspaceFileException>(() =>
+                    provider.ReadCharacters("large.txt", tailOffset, 1)).Code,
+                    "large character window cannot end inside a surrogate pair");
+                AssertEqual("resource_chars_invalid", RuntimeThrows<WorkspaceFileException>(() =>
+                    provider.ReadCharacters("large.txt", tailOffset + 1, 1)).Code,
+                    "large character window cannot start inside a surrogate pair");
+                var current = files.CaptureFile(workspace, "large.txt", WorkspaceFileService.MaximumModelTextSourceBytes);
+                AssertEqual(EvidenceState.Current, new EvidenceStateReducer().Reduce(large.Evidence.Single(),
+                    files.CaptureAuthority(large.Evidence)).State,
+                    "revalidating the raw source preserves exact partial evidence");
+                AssertEqual(large.Result.Resource.Reference.Revision, current.Reference.Revision,
+                    "revalidation reuses the same exact revision");
+                AssertEqual("file_too_large", RuntimeThrows<WorkspaceFileException>(() =>
+                    provider.Read("large.txt")).Code, "whole text remains bounded to one MiB");
+                AssertEqual(EvidenceState.Current, new EvidenceStateReducer().Reduce(large.Evidence.Single(),
+                    files.CaptureAuthority(large.Evidence)).State,
+                    "whole-read refusal does not erase an exact large-source excerpt");
+                using (var edited = new FileStream(largePath, FileMode.Open, FileAccess.Write))
+                { edited.Position = Encoding.UTF8.GetByteCount(prefix); edited.WriteByte((byte)'y'); }
+                files.CaptureFile(workspace, "large.txt", WorkspaceFileService.MaximumModelTextSourceBytes);
+                AssertEqual(EvidenceState.Superseded, new EvidenceStateReducer().Reduce(large.Evidence.Single(),
+                    files.CaptureAuthority(large.Evidence)).State,
+                    "large source drift supersedes the old excerpt");
+                var fresh = provider.ReadCharacters("large.txt", tailOffset, 16000);
+                AssertEqual("file_too_large", RuntimeThrows<WorkspaceFileException>(() =>
+                    files.CaptureFile(workspace, "large.txt", WorkspaceFileService.MaximumTextBytes,
+                        markUnknownOnSizeRefusal: true)).Code,
+                    "an oversized context refresh refuses the source");
+                AssertEqual(EvidenceState.Unknown, new EvidenceStateReducer().Reduce(fresh.Evidence.Single(),
+                    files.CaptureAuthority(fresh.Evidence)).State,
+                    "an oversized context refresh invalidates unverified prior evidence");
+                using (var invalid = new FileStream(largePath, FileMode.Open, FileAccess.Write))
+                { invalid.Position = invalid.Length - 1; invalid.WriteByte(255); }
+                AssertEqual("encoding_ambiguous", RuntimeThrows<WorkspaceFileException>(() =>
+                    provider.ReadCharacters("large.txt", 0, 1)).Code,
+                    "invalid UTF-8 after the selected region cannot produce text evidence");
             });
         }
 

@@ -1,5 +1,14 @@
 # Stabilization progress
 
+## Streamed workspace text windows beyond one MiB — 2026-10-22
+
+Workspace/CLI model line and character selections now pin and stream strict UTF-8
+files up to 80 MiB without loading the whole source. Each read still delivers at
+most 16000 characters with partial exact evidence; whole reads/writes retain the
+1-MiB bound. Context preparation revalidates large excerpts against raw source
+revisions. A focused 16-MiB allocation/Unicode/drift check covers the new path;
+Windows/Office/WebView2 qualification remains open.
+
 ## Workspace character windows for long lines — 2026-10-22
 
 Workspace/CLI model reads now accept paired `startChar`/`charCount` for one long
