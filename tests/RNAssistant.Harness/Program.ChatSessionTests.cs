@@ -530,6 +530,113 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void WorkspaceFilesStreamLargeCopyMoveDelete()
+        {
+            WithTempPaths(paths =>
+            {
+                var workspace = new WorkspaceStore(paths).Open(Path.Combine(paths.Root, "project"));
+                var files = new WorkspaceFileService(paths);
+                var text = "\uFEFFfirst\r\n" + new string('x', 2 * 1024 * 1024) + "\r\n尾😀";
+                var bytes = Encoding.UTF8.GetBytes(text);
+                files.CreateText(workspace, "source.txt", text);
+                var selected = files.ReadTextCharacters(workspace, "source.txt", 0, 128);
+                AssertTrue(!selected.Evidence.Complete && selected.Text.Length == 128,
+                    "a selected window pins a large source without whole text");
+                var copied = files.CopyText(workspace, "source.txt", selected.Reference, "copy.txt");
+                AssertTrue(copied.Text == null && copied.Evidence == null &&
+                    copied.AuthorityCommit.Effect.Operation == "files.copy" &&
+                    File.ReadAllBytes(Path.Combine(workspace.RootPath, "copy.txt")).SequenceEqual(bytes),
+                    "large copy streams the exact accepted bytes and publishes a verified effect");
+                var copiedScope = new ResourceAuthorityScopeId("file",
+                    ResourceUri.Parse(copied.Reference.Uri).Segments.Single());
+                AssertEqual(selected.Reference.Revision,
+                    new ResourceAuthorityStore(paths).GetRevision(copiedScope, copied.Reference)
+                        .Dependencies.Single().Resource.Revision,
+                    "large copy retains exact source provenance");
+                AssertEqual(ResourceRepresentations.Raw,
+                    new ResourceAuthorityStore(paths).GetRevision(copiedScope, copied.Reference)
+                        .Dependencies.Single().View,
+                    "large copy tracks the retained whole-byte source used for streaming");
+                AssertTrue(files.ReadTextViewCharacters(workspace, "source.txt", 0, 128,
+                    selected.Reference).Text.Length == 128,
+                    "large copy preserves exact source continuation");
+                File.AppendAllText(Path.Combine(workspace.RootPath, "source.txt"), "external");
+                AssertEqual("target_conflict", RuntimeThrows<WorkspaceFileException>(() =>
+                    files.CopyText(workspace, "source.txt", selected.Reference, "stale.txt")).Code,
+                    "external drift refuses a stale large copy before dispatch");
+                AssertTrue(!File.Exists(Path.Combine(workspace.RootPath, "stale.txt")),
+                    "stale large copy creates no target");
+
+                var moveRead = files.ReadTextCharacters(workspace, "copy.txt", 0, 128);
+                var moved = files.MoveText(workspace, "copy.txt", moveRead.Reference, "moved.txt");
+                AssertTrue(moved.Text == null && moved.Evidence == null &&
+                    moved.Reference.Uri == copied.Reference.Uri &&
+                    !File.Exists(Path.Combine(workspace.RootPath, "copy.txt")) &&
+                    File.ReadAllBytes(Path.Combine(workspace.RootPath, "moved.txt")).SequenceEqual(bytes),
+                    "large move preserves identity and verifies target bytes without materializing text");
+                AssertTrue(files.ReadTextViewCharacters(workspace, "moved.txt", 0, 128,
+                    moved.Reference).Text.Length == 128,
+                    "large move preserves exact target continuation");
+                var deleteRead = files.ReadTextCharacters(workspace, "moved.txt", 0, 128);
+                var deleted = files.DeleteText(workspace, "moved.txt", deleteRead.Reference);
+                AssertTrue(deleted.AuthorityCommit.Effect.Operation == "files.delete" &&
+                    !File.Exists(Path.Combine(workspace.RootPath, "moved.txt")),
+                    "large delete verifies managed trash");
+                var restored = files.RestoreDeletedText(workspace, "moved.txt");
+                AssertTrue(restored.Text == null && restored.Evidence == null &&
+                    restored.AuthorityCommit.Effect.Outcome == ResourceEffectOutcome.Restored &&
+                    File.ReadAllBytes(Path.Combine(workspace.RootPath, "moved.txt")).SequenceEqual(bytes),
+                    "large managed deletion can be restored with exact read-back");
+                AssertTrue(files.ReadTextViewCharacters(workspace, "moved.txt", 0, 128,
+                    restored.Reference).Text.Length == 128,
+                    "large restore preserves exact target continuation");
+
+                var current = files.ReadTextCharacters(workspace, "moved.txt", 0, 128);
+                files.FaultPoint = point => { if (point == "after-dispatch") throw new IOException("interrupted move"); };
+                AssertEqual("effect_unknown", RuntimeThrows<WorkspaceFileException>(() =>
+                    files.MoveText(workspace, "moved.txt", current.Reference, "recovered.txt")).Code,
+                    "interrupted large move has unknown effect");
+                var restarted = new WorkspaceFileService(paths);
+                AssertEqual("unresolved_previous_effect", RuntimeThrows<WorkspaceFileException>(() =>
+                    restarted.ReadTextCharacters(workspace, "recovered.txt", 0, 128)).Code,
+                    "large move blocks target reads until reconciliation");
+                var moveRecovery = restarted.ReconcileUncertain(workspace, "moved.txt");
+                AssertEqual(WorkspaceRecoveryOutcome.UnknownAfterDispatch,
+                    moveRecovery.Outcome,
+                    "large move recovery inspects current bytes without replay");
+                AssertTrue(File.ReadAllBytes(Path.Combine(workspace.RootPath, "recovered.txt"))
+                    .SequenceEqual(bytes), "recovered large move preserves bytes");
+                AssertTrue(restarted.ReadTextViewCharacters(workspace, "recovered.txt", 0, 128,
+                    moveRecovery.Current.Reference).Text.Length == 128,
+                    "recovered large move preserves exact text continuation");
+
+                current = restarted.ReadTextCharacters(workspace, "recovered.txt", 0, 128);
+                restarted.FaultPoint = point => { if (point == "after-dispatch") throw new IOException("interrupted delete"); };
+                AssertEqual("effect_unknown", RuntimeThrows<WorkspaceFileException>(() =>
+                    restarted.DeleteText(workspace, "recovered.txt", current.Reference)).Code,
+                    "interrupted large delete has unknown effect");
+                var finalOwner = new WorkspaceFileService(paths);
+                AssertEqual(WorkspaceRecoveryOutcome.UnknownAfterDispatch,
+                    finalOwner.ReconcileUncertain(workspace, "recovered.txt").Outcome,
+                    "large delete recovery records unknown causality");
+                finalOwner.RestoreDeletedText(workspace, "recovered.txt");
+                AssertTrue(File.ReadAllBytes(Path.Combine(workspace.RootPath, "recovered.txt"))
+                    .SequenceEqual(bytes), "explicit large restore recovers managed trash");
+
+                current = finalOwner.ReadTextCharacters(workspace, "recovered.txt", 0, 128);
+                finalOwner.FaultPoint = point => { if (point == "after-dispatch") throw new IOException("interrupted copy"); };
+                AssertEqual("effect_unknown", RuntimeThrows<WorkspaceFileException>(() =>
+                    finalOwner.CopyText(workspace, "recovered.txt", current.Reference, "pending-copy.txt")).Code,
+                    "interrupted large copy has unknown effect");
+                var copyOwner = new WorkspaceFileService(paths);
+                AssertEqual(WorkspaceRecoveryOutcome.UnknownAfterDispatch,
+                    copyOwner.ReconcileUncertain(workspace, "pending-copy.txt").Outcome,
+                    "large copy recovery inspects the target without replay");
+                AssertTrue(File.ReadAllBytes(Path.Combine(workspace.RootPath, "pending-copy.txt"))
+                    .SequenceEqual(bytes), "recovered large copy preserves bytes");
+            });
+        }
+
         private static void WorkspaceFilesStreamLargePatch()
         {
             WithTempPaths(paths =>

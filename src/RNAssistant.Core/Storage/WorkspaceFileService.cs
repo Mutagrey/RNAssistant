@@ -682,6 +682,10 @@ namespace RNAssistant.Core.Storage
             ResourceRef expectedSource, string targetRelativePath, Action onDispatch = null)
         {
             RequireWritable(workspace);
+            var sourcePath = ResolvePath(workspace, sourceRelativePath, false, true);
+            if (RequiresStreamedFile(sourcePath, expectedSource))
+                return CopyStreamedText(workspace, sourceRelativePath, expectedSource,
+                    targetRelativePath, onDispatch);
             var source = ReadText(workspace, sourceRelativePath);
             if (expectedSource == null || expectedSource.Uri != source.Reference.Uri ||
                 expectedSource.Revision != source.Reference.Revision)
@@ -700,6 +704,8 @@ namespace RNAssistant.Core.Storage
             var target = ResolvePath(workspace, targetRelativePath, false, true);
             if (source == target)
                 throw new WorkspaceFileException("target_conflict", "Move source and target must differ.");
+            var streamed = RequiresStreamedFile(source, expectedSource);
+            if (streamed) AcceptedStreamedTextSource(workspace, sourceRelativePath, expectedSource);
             using (AcquireFileScope(source, out var id, out var scope))
             {
                 EnsureNoUnresolved(scope);
@@ -710,8 +716,8 @@ namespace RNAssistant.Core.Storage
                     ObserveMissing(scope, id);
                     throw new WorkspaceFileException("target_conflict", "Move source is missing.");
                 }
-                byte[] bytes;
-                try { bytes = ReadBounded(source); Decode(bytes); }
+                byte[] bytes = null;
+                try { if (!streamed) { bytes = ReadBounded(source); Decode(bytes); } }
                 catch (WorkspaceFileException ex) when (ex.Code == "encoding_ambiguous" || ex.Code == "file_too_large")
                 {
                     ObserveUnknown(scope, id, ex.Code);
@@ -722,13 +728,16 @@ namespace RNAssistant.Core.Storage
                 if (head?.Knowledge != HeadKnowledge.Known || head.Revision.Revision != expectedSource.Revision)
                     throw new WorkspaceFileException("target_conflict", "Source authority changed since the accepted read.");
                 var revision = _authority.GetRevision(scope, expectedSource);
-                var hash = Hash(bytes);
-                if (revision?.ContentSha256 != hash)
+                if (revision?.Payload == null)
+                    throw new WorkspaceFileException("snapshot_unavailable", "The retained move preimage is unavailable.");
+                if (streamed) VerifyLargePatchSource(source, revision);
+                var hash = streamed ? revision.ContentSha256 : Hash(bytes);
+                if (!streamed && revision.ContentSha256 != hash)
                 {
                     Observe(scope, id, bytes);
                     throw new WorkspaceFileException("target_conflict", "Source changed outside RNAssistant since the accepted read.");
                 }
-                if (revision.Payload == null || !_blobs.HasVerifiedReference(revision.Payload.ToBlobReference()))
+                if (!_blobs.HasVerifiedReference(revision.Payload.ToBlobReference()))
                     throw new WorkspaceFileException("snapshot_unavailable", "The retained move preimage is unavailable.");
                 if (!Directory.Exists(Path.GetDirectoryName(target)))
                     throw new WorkspaceFileException("target_parent_missing", "Move target parent must already exist.");
@@ -746,7 +755,9 @@ namespace RNAssistant.Core.Storage
                     SaveMoveIntent(intent);
                     ResolvePath(workspace, sourceRelativePath, false, true);
                     ResolvePath(workspace, targetRelativePath, false, true);
-                    if (Hash(ReadBounded(source)) != hash || File.Exists(target) || Directory.Exists(target) ||
+                    if (streamed) VerifyLargePatchSource(source, revision);
+                    if ((!streamed && Hash(ReadBounded(source)) != hash) ||
+                        File.Exists(target) || Directory.Exists(target) ||
                         ExistingLocatorId(target) != null || PendingMoveFileId(target) != id)
                         throw new WorkspaceFileException("target_conflict", "Move paths changed just before dispatch.");
                     onDispatch?.Invoke();
@@ -755,14 +766,18 @@ namespace RNAssistant.Core.Storage
                     File.Move(source, target);
                     FaultPoint?.Invoke("after-dispatch");
                     ResolvePath(workspace, targetRelativePath, false, true);
-                    if (File.Exists(source) || Hash(ReadBounded(target)) != hash)
+                    if (File.Exists(source))
+                        throw new WorkspaceFileException("read_back_mismatch", "Move read-back did not match its retained preimage.");
+                    if (streamed) VerifyLargePatchReadBack(target, revision.Payload);
+                    else if (Hash(ReadBounded(target)) != hash)
                         throw new WorkspaceFileException("read_back_mismatch", "Move read-back did not match its retained preimage.");
                     RelocateLocator(source, target, id);
                     FaultPoint?.Invoke("after-locator");
                     var exact = NewRevision(id);
                     _authority.RegisterRevision(scope, new ResourceRevisionMetadata(exact, hash,
                         revision.Payload, expectedSource));
-                    _authority.RegisterView(scope, new ResourceRevisionView(exact, "text", hash,
+                    _authority.RegisterView(scope, new ResourceRevisionView(exact,
+                        streamed ? ResourceRepresentations.Raw : ResourceRepresentations.Text, hash,
                         revision.Payload, ResourceCoverage.Whole()));
                     var current = _authority.Capture(scope);
                     var currentHead = current.GetHead(Identity(id));
@@ -781,9 +796,11 @@ namespace RNAssistant.Core.Storage
                     _journal.Resolve(attempt.AttemptId, commit.CommitId);
                     RemoveMoveIntent(attempt.AttemptId);
                     return new WorkspaceFileObservation { RelativePath = targetRelativePath,
-                        Text = Decode(bytes), Reference = exact, ContentSha256 = hash, AuthorityCommit = commit,
-                        Evidence = new ResourceEvidence("ev_" + Guid.NewGuid().ToString("N"), scope, exact, "text",
-                            ResourceCoverage.Whole(), true, current.Generation + 1, revision.Payload, contentSha256: hash) };
+                        Text = streamed ? null : Decode(bytes), Reference = exact, ContentSha256 = hash,
+                        SourceByteLength = revision.Payload.ByteLength, AuthorityCommit = commit,
+                        Evidence = streamed ? null : new ResourceEvidence("ev_" + Guid.NewGuid().ToString("N"),
+                            scope, exact, "text", ResourceCoverage.Whole(), true,
+                            current.Generation + 1, revision.Payload, contentSha256: hash) };
                 }
                 catch (Exception ex)
                 {
@@ -850,6 +867,8 @@ namespace RNAssistant.Core.Storage
         {
             RequireWritable(workspace);
             var path = ResolvePath(workspace, relativePath, false, true);
+            var streamed = RequiresStreamedFile(path, expected);
+            if (streamed) AcceptedStreamedTextSource(workspace, relativePath, expected);
             using (AcquireFileScope(path, out var id, out var scope))
             {
                 EnsureNoUnresolved(scope);
@@ -860,8 +879,8 @@ namespace RNAssistant.Core.Storage
                     ObserveMissing(scope, id);
                     throw new WorkspaceFileException("target_conflict", "Observed file is missing.");
                 }
-                byte[] bytes;
-                try { bytes = ReadBounded(path); Decode(bytes); }
+                byte[] bytes = null;
+                try { if (!streamed) { bytes = ReadBounded(path); Decode(bytes); } }
                 catch (WorkspaceFileException ex) when (ex.Code == "encoding_ambiguous" || ex.Code == "file_too_large")
                 {
                     ObserveUnknown(scope, id, ex.Code);
@@ -872,12 +891,15 @@ namespace RNAssistant.Core.Storage
                 if (head?.Knowledge != HeadKnowledge.Known || head.Revision.Revision != expected.Revision)
                     throw new WorkspaceFileException("target_conflict", "File authority changed since the accepted read.");
                 var revision = _authority.GetRevision(scope, expected);
-                if (revision?.ContentSha256 != Hash(bytes))
+                if (revision?.Payload == null)
+                    throw new WorkspaceFileException("snapshot_unavailable", "The retained delete preimage is unavailable.");
+                if (streamed) VerifyLargePatchSource(path, revision);
+                if (!streamed && revision.ContentSha256 != Hash(bytes))
                 {
                     Observe(scope, id, bytes);
                     throw new WorkspaceFileException("target_conflict", "File changed outside RNAssistant since the accepted read.");
                 }
-                if (revision.Payload == null || !_blobs.HasVerifiedReference(revision.Payload.ToBlobReference()))
+                if (!_blobs.HasVerifiedReference(revision.Payload.ToBlobReference()))
                     throw new WorkspaceFileException("snapshot_unavailable", "The retained delete preimage is unavailable.");
                 var trashDirectory = TrashDirectory(workspace, id);
                 var attempt = _journal.Prepare(scope, "files.delete", Identity(id), expected.Revision, revision.Payload);
@@ -887,12 +909,18 @@ namespace RNAssistant.Core.Storage
                 {
                     ResolvePath(workspace, relativePath, false, true);
                     if (File.Exists(trashPath)) throw new IOException("Managed trash target already exists.");
+                    if (streamed) VerifyLargePatchSource(path, revision);
+                    else if (Hash(ReadBounded(path)) != revision.ContentSha256)
+                        throw new WorkspaceFileException("target_conflict", "File changed just before delete.");
                     onDispatch?.Invoke();
                     _journal.MarkDispatchMayHaveOccurred(attempt.AttemptId);
                     dispatched = true;
                     File.Move(path, trashPath);
                     FaultPoint?.Invoke("after-dispatch");
-                    if (File.Exists(path) || Hash(ReadBounded(trashPath)) != revision.ContentSha256)
+                    if (File.Exists(path))
+                        throw new WorkspaceFileException("read_back_mismatch", "Delete read-back did not match its retained preimage.");
+                    if (streamed) VerifyLargePatchReadBack(trashPath, revision.Payload);
+                    else if (Hash(ReadBounded(trashPath)) != revision.ContentSha256)
                         throw new WorkspaceFileException("read_back_mismatch", "Delete read-back did not match its retained preimage.");
                     var current = _authority.Capture(scope);
                     var currentHead = current.GetHead(Identity(id));
@@ -947,6 +975,10 @@ namespace RNAssistant.Core.Storage
                 var trashPath = Path.Combine(TrashDirectory(workspace, id, false), deletion.MutationAttemptId + ".utf8");
                 if (!File.Exists(trashPath) || StorageFileSystem.IsReparsePoint(trashPath))
                     throw new WorkspaceFileException("snapshot_unavailable", "The managed trash preimage is unavailable.");
+                if (retained.Payload.ByteLength > MaximumTextBytes ||
+                    new FileInfo(trashPath).Length > MaximumTextBytes)
+                    return RestoreStreamedDeletedText(workspace, scope, id, relativePath,
+                        path, trashPath, head, previous, retained, onDispatch);
                 var bytes = ReadBounded(trashPath);
                 Decode(bytes);
                 if (Hash(bytes) != retained.ContentSha256)
@@ -1169,37 +1201,70 @@ namespace RNAssistant.Core.Storage
             ResourceHeadState after;
             if (targetExists)
             {
-                var bytes = ReadBounded(target);
-                Decode(bytes);
-                if (Hash(bytes) != intent.ExpectedSha256)
+                var streamed = new FileInfo(target).Length > MaximumTextBytes;
+                long length;
+                string text, hash;
+                if (streamed)
+                { hash = HashUtf8File(target, out length); text = null; }
+                else
+                { var bytes = ReadBounded(target); text = Decode(bytes); hash = Hash(bytes); length = bytes.Length; }
+                if (hash != intent.ExpectedSha256 || length != attempt.Payload.ByteLength)
                     throw new WorkspaceFileException("recovery_ambiguous", "Moved target no longer matches the prepared preimage.");
+                if (streamed) VerifyLargePatchReadBack(target, attempt.Payload);
                 RelocateLocator(source, target, id);
                 var exact = NewRevision(id);
                 _authority.RegisterRevision(scope, new ResourceRevisionMetadata(exact, intent.ExpectedSha256,
                     attempt.Payload, previous.Revision));
-                _authority.RegisterView(scope, new ResourceRevisionView(exact, "text", intent.ExpectedSha256,
+                _authority.RegisterView(scope, new ResourceRevisionView(exact,
+                    streamed ? ResourceRepresentations.Raw : ResourceRepresentations.Text, intent.ExpectedSha256,
                     attempt.Payload, ResourceCoverage.Whole()));
                 after = ResourceHeadState.Known(exact, snapshot.Generation + 1, "reconciled-unknown-move");
                 observed = new WorkspaceFileObservation { RelativePath = intent.TargetRelativePath,
-                    Text = Decode(bytes), Reference = exact, ContentSha256 = intent.ExpectedSha256 };
+                    Text = text, Reference = exact, ContentSha256 = hash, SourceByteLength = length };
             }
             else if (sourceExists)
             {
-                var bytes = ReadBounded(source);
-                var text = Decode(bytes);
+                var streamed = new FileInfo(source).Length > MaximumTextBytes;
+                long length;
+                string text, hash;
+                byte[] bytes = null;
+                if (streamed)
+                { hash = HashUtf8File(source, out length); text = null; }
+                else
+                { bytes = ReadBounded(source); text = Decode(bytes); hash = Hash(bytes); length = bytes.Length; }
                 RelocateLocator(target, source, id);
-                var hash = Hash(bytes);
                 var exact = hash == intent.ExpectedSha256 ? previous.Revision.Copy() : NewRevision(id);
                 if (exact.Revision != previous.Revision.Revision)
                 {
-                    var payload = PayloadRef.FromBlob(_blobs.StoreBytes(bytes, "text/plain; charset=utf-8"));
+                    PayloadRef payload;
+                    if (streamed)
+                    {
+                        using (var input = new FileStream(source, FileMode.Open, FileAccess.Read,
+                            FileShare.Read, 81920, FileOptions.SequentialScan))
+                            payload = PayloadRef.FromBlob(_blobs.StoreHashedFile(input, hash, length,
+                                "text/plain; charset=utf-8", CancellationToken.None, null));
+                    }
+                    else payload = PayloadRef.FromBlob(_blobs.StoreBytes(bytes, "text/plain; charset=utf-8"));
+                    if (streamed)
+                    {
+                        long checkedLength;
+                        if (HashUtf8File(source, out checkedLength) != hash || checkedLength != length)
+                            throw new WorkspaceFileException("recovery_ambiguous", "Move source changed during reconciliation.");
+                    }
                     _authority.RegisterRevision(scope, new ResourceRevisionMetadata(exact, hash, payload, previous.Revision));
-                    _authority.RegisterView(scope, new ResourceRevisionView(exact, "text", hash,
+                    _authority.RegisterView(scope, new ResourceRevisionView(exact,
+                        streamed ? ResourceRepresentations.Raw : ResourceRepresentations.Text, hash,
                         payload, ResourceCoverage.Whole()));
+                }
+                if (streamed && exact.Revision == previous.Revision.Revision)
+                {
+                    long checkedLength;
+                    if (HashUtf8File(source, out checkedLength) != hash || checkedLength != length)
+                        throw new WorkspaceFileException("recovery_ambiguous", "Move source changed during reconciliation.");
                 }
                 after = ResourceHeadState.Known(exact, snapshot.Generation + 1, "reconciled-unknown-move");
                 observed = new WorkspaceFileObservation { RelativePath = intent.SourceRelativePath,
-                    Text = text, Reference = exact, ContentSha256 = hash };
+                    Text = text, Reference = exact, ContentSha256 = hash, SourceByteLength = length };
             }
             else
             {

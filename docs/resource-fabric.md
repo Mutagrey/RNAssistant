@@ -153,11 +153,16 @@ block ordinary reads and writes until explicit reconciliation; recovery inspects
 current bytes without replay or automatic rollback.
 Overlapping starts count separately. Empty, missing and ambiguous anchors return
 `invalid_patch`, `patch_not_found` and `patch_ambiguous`; external drift returns
-`target_conflict`. Patch leaves untouched line endings intact. Replace/copy/move/
-delete retain the complete-read prerequisite.
+`target_conflict`. Patch leaves untouched line endings intact. `files.replace`
+retains the complete-read prerequisite. `files.copy/move/delete` accept a current
+delivered exact text window as the source guard; the file owner validates the
+whole retained UTF-8 source and rechecks the live revision before dispatch.
+Large copies stage exact retained bytes, preserve source provenance through a
+whole raw dependency and publish only after streamed target read-back. Large
+move/delete read back the moved bytes without whole-body materialization.
 
-Verified mutations return exact after-source evidence through the common authority
-and context compiler. A partial patch returns verified new text with
+Verified mutations publish exact after-revisions; a model-visible after-source
+is included only when a bounded text view is available. A partial patch returns verified new text with
 `complete=false`; a large patch reads a bounded patch-centered excerpt from its
 retained after-revision. A cache entry alone grants no subsequent write.
 Prepared file mutations persist that exact observation (prepared-state version 1)
@@ -187,21 +192,24 @@ interrupted possible effects are not replayed. Office retains its bound gate and
 uses the same logical publisher. This does not introduce a filesystem reader or
 an artifact store, and does not implement workspace-owned Markdown Plans.
 
-The file owner publishes mutation effects. Guarded `files.delete` moves an accepted complete
+The file owner publishes mutation effects. Guarded `files.delete` moves an accepted
 UTF-8 file into `.rnassistant/trash`, verifies its retained preimage and publishes an
 unavailable head. Explicit `files.restore` moves that managed preimage back only
 when the original path is absent and the latest head is the matching deletion; it
-publishes a new revision with `RestoredFrom` provenance. An interrupted delete
+publishes a new revision with `RestoredFrom` provenance. Large restores stream
+verification of the trash preimage and restored bytes. An interrupted delete
 requires explicit reconciliation before restore. This is workspace-local managed
 trash, not the OS recycle bin or permanent deletion. Guarded `files.move` preserves
 the logical file ID, advances its revision, and changes its locator only after an
-accepted complete source read. It requires an existing target parent and never
+accepted exact source read. It requires an existing target parent and never
 overwrites a target or prior target identity. A durable two-path move intent lets
 `recover` inspect either path after an interrupted dispatch; both paths are blocked
 from ordinary reads until reconciliation. An uncertain move is never replayed.
 Move/delete/restore verify the retained CAS body before preparation/dispatch;
 corrupt bytes yield `snapshot_unavailable`, even when file size and envelope match.
-Cross-volume move semantics, binary mutations, large whole-body writes, trash retention policy
+Large copy/move/delete and restore return verified effects without claiming
+complete after-text evidence; subsequent text access uses exact selected windows.
+Cross-volume move semantics, binary mutations, trash retention policy
 and full symlink/hardlink race guarantees remain open M3–M5 work. Bounded raw and
 PNG/JPEG application views are implemented below. They and the shared compiler do
 not complete workspace-first plan §8.1: large/format-specific views, remaining preview/viewer

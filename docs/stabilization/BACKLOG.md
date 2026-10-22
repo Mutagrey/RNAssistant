@@ -208,8 +208,8 @@ internal bound, and large sources require multiple selected reads. Other Office
 representations (including large PowerPoint `source` JSON), imported artifact
 index/transfer bounds, the whole-module prerequisite of typed VBA patching, and
 Windows Word/VBA/PowerPoint validation remain separate work. Workspace
-copy/move/delete retain their existing whole-source bounds; do not claim host
-qualification from the host-neutral checks.
+copy/move/delete and managed restore now stream large UTF-8 sources from exact
+selected reads; do not claim host qualification from the host-neutral checks.
 Repeated indexed reads of strongly compressed sources now reuse one verified
 encoding fingerprint; every call still hashes all current stored bytes. The local
 >10 MiB/329-part fixture is about 40% faster. Larger/weakly compressed encodings

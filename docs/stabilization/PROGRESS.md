@@ -1,5 +1,16 @@
 # Stabilization progress
 
+## Large workspace copy, move and delete — 2026-10-22
+
+`files.copy/move/delete` now accept a delivered exact text window for a large
+UTF-8 source. The file owner verifies the pinned full revision, streams copy and
+read-back, and retains journaled unknown-effect recovery. Large managed deletion
+also restores through streamed read-back. Full text is never returned as after
+evidence for these operations; exact window continuation remains available.
+Focused host-neutral copy/move/delete, restore and interrupted-operation checks
+pass. `files.replace` still requires a complete accepted read. Real
+Windows/Office/WebView2 qualification remains open.
+
 ## Large PowerPoint notes through common resources — 2026-10-22
 
 `PowerPoint notes: N` now exposes speaker notes through the shared `text` read:

@@ -77,6 +77,9 @@ configured read budget.
 a stream buffer, exact after-source, overlapping ambiguity, stale/external drift,
 no-op, read-back mismatch and explicit restart reconciliation after an interrupted
 large write.
+`workspace files: streamed large copy move delete` covers exact partial-source
+guards, byte-preserving copy/move, managed delete/restore, exact continuation and
+reconciliation after interrupted large copy/move/delete.
 `storage: source streams`, `storage: file CAS` and `storage: plaintext CAS` cover
 stream ownership, cancellation, compression/encryption and envelope-prefix
 compatibility. Source-stream checks also cover explicit seek staging across all

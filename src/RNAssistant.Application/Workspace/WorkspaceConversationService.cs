@@ -822,10 +822,10 @@ namespace RNAssistant.Runtime
                     Register(registry, entries, "files.create", "Create a new real UTF-8 file; never overwrite.",
                         Schema("relativePath", true, "text", true), true,
                         new FileHandler(files, workspace, _observed, "create", payloads));
-                    Register(registry, entries, "files.copy", "Copy a previously read complete UTF-8 file to a new path; never overwrite.",
+                    Register(registry, entries, "files.copy", "Copy a previously read UTF-8 file to a new path; a selected text window is enough to pin a large source. Never overwrite.",
                         Schema("relativePath", true, "targetPath", true), true,
                         new FileHandler(files, workspace, _observed, "copy", payloads));
-                    Register(registry, entries, "files.move", "Move a previously read complete UTF-8 file to a new path; preserve file identity and never overwrite.",
+                    Register(registry, entries, "files.move", "Move a previously read UTF-8 file to a new path; a selected text window is enough to pin a large source. Preserve file identity and never overwrite.",
                         Schema("relativePath", true, "targetPath", true), true,
                         new FileHandler(files, workspace, _observed, "move", payloads), true);
                     Register(registry, entries, "files.patch", "Replace one exact unique observed text anchor in a UTF-8 file. The model context bounds each supplied fragment; large sources and results are streamed.",
@@ -834,7 +834,7 @@ namespace RNAssistant.Runtime
                     Register(registry, entries, "files.replace", "Replace a previously read whole UTF-8 file.",
                         Schema("relativePath", true, "text", true), true,
                         new FileHandler(files, workspace, _observed, "replace", payloads));
-                    Register(registry, entries, "files.delete", "Move a previously read UTF-8 file into managed workspace trash.",
+                    Register(registry, entries, "files.delete", "Move a previously read UTF-8 file into managed workspace trash; a selected text window is enough to pin a large source.",
                         Schema("relativePath", true), true,
                         new FileHandler(files, workspace, _observed, "delete", payloads), true);
                     Register(registry, entries, "files.restore", "Restore the latest managed deletion to its original path without overwriting.",
@@ -1468,8 +1468,13 @@ namespace RNAssistant.Runtime
                 var recovery = new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.RefreshRequired,
                     resource.Reference.Identity, ResourceRepresentations.Text, path,
                     readScope: _operation == "patch" ? ToolRecoveryReadScope.RelevantLines : ToolRecoveryReadScope.None);
-                var action = _operation == "copy" ? "copying it." : _operation == "move" ? "moving it." : "editing it.";
-                return new ToolHandlerResult(ToolResult.Error((_operation == "patch" ? "Read the exact lines containing oldText before " : "Read the complete current file before ") + action,
+                var action = _operation == "copy" ? "copying it." : _operation == "move" ? "moving it." :
+                    _operation == "delete" ? "deleting it." : "editing it.";
+                var prefix = _operation == "patch" ? "Read the exact lines containing oldText before " :
+                    _operation == "copy" || _operation == "move" || _operation == "delete"
+                        ? "Read the current file or an exact text window before " :
+                        "Read the complete current file before ";
+                return new ToolHandlerResult(ToolResult.Error(prefix + action,
                     "{\"code\":\"source_observation_required\"}"), ToolEffectEvidence.None, recovery: recovery);
             }
 
@@ -1477,6 +1482,12 @@ namespace RNAssistant.Runtime
             {
                 if (observation == null) return false;
                 if (observation.Complete && observation.Coverage.Kind == ResourceCoverageKinds.Whole) return true;
+                if ((_operation == "copy" || _operation == "move" || _operation == "delete") &&
+                    observation.Resource?.IsExact == true &&
+                    observation.View == ResourceRepresentations.Text &&
+                    observation.Coverage.Kind == ResourceCoverageKinds.CharacterRange &&
+                    observation.Payload != null && !string.IsNullOrWhiteSpace(observation.ContentSha256))
+                    return true;
                 if (_operation != "patch" || observation.Coverage.Kind != ResourceCoverageKinds.CharacterRange || observation.Payload == null) return false;
                 var anchor = Value(context, "oldText");
                 return anchor.Length > 0 && (_payloads.ReadText(observation.Payload.ToBlobReference()) ?? string.Empty)
@@ -1501,7 +1512,8 @@ namespace RNAssistant.Runtime
                     if (_operation == "restore")
                     {
                         changed = _files.RestoreDeletedText(_workspace, path, context.MarkDispatchPossible);
-                        _observed[path] = changed.Evidence;
+                        if (changed.Evidence == null) _observed.Remove(path);
+                        else _observed[path] = changed.Evidence;
                         return Return(ToolResult.Ok("Deleted file restored and verified by exact read-back.",
                             JsonConvert.SerializeObject(new { path, restored = true })),
                             ToolEffectEvidence.VerifiedChange, evidence: changed.Evidence, authorityCommit: changed.AuthorityCommit);
@@ -1520,7 +1532,8 @@ namespace RNAssistant.Runtime
                         var target = Value(context, "targetPath");
                         changed = _files.MoveText(_workspace, path, expected, target, context.MarkDispatchPossible);
                         _observed.Remove(path);
-                        _observed[target] = changed.Evidence;
+                        if (changed.Evidence == null) _observed.Remove(target);
+                        else _observed[target] = changed.Evidence;
                         return Return(ToolResult.Ok("File moved and verified at the new path.",
                             JsonConvert.SerializeObject(new { path, target = target, targetPath = target, moved = true })),
                             ToolEffectEvidence.VerifiedChange, evidence: changed.Evidence, authorityCommit: changed.AuthorityCommit);

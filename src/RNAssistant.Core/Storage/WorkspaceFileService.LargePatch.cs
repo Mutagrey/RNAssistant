@@ -213,10 +213,10 @@ namespace RNAssistant.Core.Storage
                 81920, FileOptions.SequentialScan))
             {
                 if (source.Length != payload.ByteLength)
-                    throw new WorkspaceFileException("read_back_mismatch", "Patched file length differs from prepared bytes.");
+                    throw new WorkspaceFileException("read_back_mismatch", "File length differs from prepared bytes.");
                 long length;
                 if (ChatBlobStore.HashFile(source, out length, CancellationToken.None, null) != payload.Sha256)
-                    throw new WorkspaceFileException("read_back_mismatch", "Patched file does not match prepared bytes.");
+                    throw new WorkspaceFileException("read_back_mismatch", "File does not match prepared bytes.");
             }
         }
     }
