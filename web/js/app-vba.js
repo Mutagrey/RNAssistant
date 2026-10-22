@@ -174,8 +174,7 @@ async function deleteVbaModule(moduleName) {
   var module = (state.vba.modules || []).filter(function (item) {
     return vbaModuleName(item) === moduleName;
   })[0] || null;
-  var type = String(vbaModuleType(module)).toLowerCase();
-  if (!module || (type !== "stdmodule" && type !== "classmodule")) return false;
+  if (!isDeletableVbaModule(module)) return false;
   var selectedName = vbaModuleName(selectedVbaModule());
   if (state.vbaEditorDirty && selectedName !== moduleName) {
     window.alert("Сначала сохраните изменения текущего VBA-модуля.");

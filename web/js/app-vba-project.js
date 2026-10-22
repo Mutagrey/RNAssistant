@@ -163,7 +163,8 @@ function vbaModuleType(module) {
 
 function isDeletableVbaModule(module) {
   var type = String(vbaModuleType(module)).toLowerCase();
-  return type === "stdmodule" || type === "classmodule";
+  return type === "stdmodule" || type === "classmodule" ||
+    type === "msform" && (module.codeOnlyUserForm === true || module.CodeOnlyUserForm === true);
 }
 
 function vbaModuleGroupLabel(type) {

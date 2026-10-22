@@ -2602,7 +2602,17 @@ namespace RNAssistant.Harness
                 false);
             AssertTrue(edited.Success, "COM UserForm code-behind edit succeeds");
             AssertContains(form.CodeModule.Code, "UserForm_Initialize", "COM UserForm code-behind changed");
-            AssertEqual("vba_component_type_read_only", VbaProjectSupport.DeleteModule(document, "UserForm1").ErrorCode, "COM UserForm delete remains blocked");
+            AssertTrue(!VbaProjectSupport.DeleteModule(document, "UserForm1", read.CodeSha256).Success,
+                "a changed UserForm cannot be deleted with an old source guard");
+            var currentForm = VbaProjectSupport.ReadModule(document, "UserForm1", int.MaxValue);
+            form.Designer.Controls.Count = 1;
+            AssertTrue(!VbaProjectSupport.DeleteModule(document, "UserForm1", currentForm.CodeSha256).Success,
+                "designer changes cannot be lost through a code-only deletion even with an unchanged code hash");
+            form.Designer.Controls.Count = 0;
+            AssertTrue(VbaProjectSupport.DeleteModule(document, "UserForm1", currentForm.CodeSha256).Success,
+                "COM CodeOnly UserForm deletion verifies the current source");
+            AssertTrue(!document.VBProject.VBComponents.Cast<FakeVbaComponent>().Any(component => component.Name == "UserForm1"),
+                "deleted CodeOnly UserForm is absent");
 
             WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
@@ -2637,6 +2647,15 @@ namespace RNAssistant.Harness
                     session);
                 AssertTrue(publicEdit.Success, "public UserForm code edit succeeds");
                 AssertContains(adapter.GetVbaModuleCode("UserForm2"), "UserForm_Activate", "public UserForm code changed");
+                var savedForm = adapter.GetVbaModuleCode("UserForm2");
+                ReadVbaSource(executor, session, "UserForm2");
+                var deleted = executor.ExecuteManual(Command(VbaToolCatalog.DeleteModule, "moduleName", "UserForm2"),
+                    tools, settings, false, false, session);
+                AssertTrue(deleted.Success, "public CodeOnly UserForm deletion succeeds: " + deleted.Message);
+                var restored = executor.ExecuteManual(Command(VbaToolCatalog.RestoreBackup, "moduleName", "UserForm2"),
+                    tools, settings, false, false, session);
+                AssertTrue(restored.Success, "deleted CodeOnly UserForm backup can be restored: " + restored.Message);
+                AssertEqual(savedForm, adapter.GetVbaModuleCode("UserForm2"), "restored form keeps exact code");
             });
         }
 

@@ -40,6 +40,14 @@ Direct `common.vba_write_module` and `common.vba_apply_patch` mutations journal 
 
 Package storage uses `.form.vba` for code-only form source and never persists an exported `.frm` or `.frx`. Install/remove journals the form, launcher and event-sink classes as one multi-component transaction before COM mutation. Its terminal record retains each component's observed state and rollback outcome. Existing forms can be updated or removed only when runtime verifies an owned blank code-only `MSForm`; a type collision, Designer control, unverified Designer state or exported form payload fails closed.
 
+Direct `common.vba_delete_module` and the editor Delete action also accept a verified
+CodeOnly `MSForm`. Preparation pins component type, CodeOnly state and source hash;
+dispatch rechecks these conditions, journals the complete source backup and verifies
+absence. The existing restore recreates the blank form and its exact code. Designer
+controls/properties and FRX remain excluded. Intrinsic document/sheet modules cannot
+be removed as standalone VBA components; deletion never silently clears their code
+or deletes the owning Office document/sheet.
+
 ## Required Windows verification
 
 Validate on Windows x64 + Office x64 + VS 2022 in Excel, Word and PowerPoint: blank `MSForm` creation, `Controls.Add`, fixed and collection-backed events, unload/recreate after source restore, Trust Access disabled, macro-free documents, and package install/remove/crash/rollback behavior.

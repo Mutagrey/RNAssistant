@@ -48,14 +48,13 @@ namespace RNAssistant.Office.Vba
                     "delete"));
             }
 
+            var guard = CreateGuard(correlation, resolvedName, currentHash, requestedName);
+            guard.ComponentType = current.ComponentType;
+            guard.CodeOnlyUserForm = current.CodeOnlyUserForm;
             return new VbaDeleteModuleGuardPreparation
             {
                 ResolvedModuleName = resolvedName,
-                Guard = CreateGuard(
-                    correlation,
-                    resolvedName,
-                    currentHash,
-                    requestedName)
+                Guard = guard
             };
         }
 
@@ -90,7 +89,7 @@ namespace RNAssistant.Office.Vba
             if (!CanDeleteModule(module))
             {
                 return VbaMutationOutcome.Error(
-                    "Document modules and UserForms cannot be deleted through RNAssistant.",
+                    "Only standard/class modules and verified CodeOnly UserForms can be removed. Document modules belong to their Office object; forms with Designer state require a complete form backup.",
                     null,
                     "vba_component_type_read_only",
                     false);
@@ -176,6 +175,8 @@ namespace RNAssistant.Office.Vba
 
             var actualHash = CodeSha256(current == null ? string.Empty : current.Code);
             if (!guard.ModuleExists ||
+                !string.Equals(guard.ComponentType, current.ComponentType, StringComparison.OrdinalIgnoreCase) ||
+                guard.CodeOnlyUserForm != current.CodeOnlyUserForm ||
                 !string.Equals(
                     guard.CodeSha256,
                     actualHash,
@@ -203,7 +204,9 @@ namespace RNAssistant.Office.Vba
                  string.Equals(
                     module.ComponentType,
                     "ClassModule",
-                    StringComparison.OrdinalIgnoreCase));
+                    StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(module.ComponentType, "MSForm", StringComparison.OrdinalIgnoreCase) &&
+                    module.CodeOnlyUserForm == true);
         }
 
         private static VbaDeleteModuleGuardPreparation DeleteModuleGuardFailure(

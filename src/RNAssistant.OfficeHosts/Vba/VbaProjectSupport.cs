@@ -578,9 +578,10 @@ namespace RNAssistant.OfficeHosts.Vba
                     : StaleLiveModule(moduleName, expectedCodeSha256, false, null, "delete");
             }
             var type = (int)component.Type;
-            if (type != StdModuleType && type != ClassModuleType)
+            if (type != StdModuleType && type != ClassModuleType &&
+                (type != MsFormType || !IsCodeOnlyUserForm(component)))
                 return VbaBackendActionResult.Error(
-                    "Document modules and UserForms cannot be deleted through RNAssistant.",
+                    "Only standard/class modules and verified CodeOnly UserForms can be removed. Document modules belong to their Office object; forms with Designer state require a complete form backup.",
                     null,
                     "vba_component_type_read_only",
                     false);
