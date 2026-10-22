@@ -530,6 +530,34 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void WorkspaceFilesRecoverLargeRestore()
+        {
+            WithTempPaths(paths =>
+            {
+                var workspace = new WorkspaceStore(paths).Open(Path.Combine(paths.Root, "project"));
+                var path = Path.Combine(workspace.RootPath, "restore.txt");
+                const long length = 256L * 1024 * 1024 + 1;
+                var block = Enumerable.Repeat((byte)'r', 81920).ToArray();
+                using (var output = File.Create(path))
+                    for (long offset = 0; offset < length; offset += block.Length)
+                        output.Write(block, 0, (int)Math.Min(block.Length, length - offset));
+                var files = new WorkspaceFileService(paths);
+                var source = files.CaptureFile(workspace, "restore.txt", long.MaxValue);
+                files.DeleteText(workspace, "restore.txt", source.Reference);
+                files.FaultPoint = point => { if (point == "after-dispatch") throw new IOException("interrupted restore"); };
+                AssertEqual("effect_unknown", RuntimeThrows<WorkspaceFileException>(() =>
+                    files.RestoreDeletedText(workspace, "restore.txt")).Code,
+                    "interrupted text restore beyond the binary bound stays unknown");
+                var restarted = new WorkspaceFileService(paths);
+                AssertEqual(WorkspaceRecoveryOutcome.UnknownAfterDispatch,
+                    restarted.ReconcileUncertain(workspace, "restore.txt").Outcome,
+                    "text restore reconciliation has no binary size cap");
+                var current = restarted.CaptureFile(workspace, "restore.txt", long.MaxValue);
+                AssertTrue(current.ByteLength == length && current.ContentSha256 == source.ContentSha256,
+                    "reconciliation preserves the complete restored bytes without replay");
+            });
+        }
+
         private static void WorkspaceFilesStreamLargeCopyMoveDelete()
         {
             WithTempPaths(paths =>

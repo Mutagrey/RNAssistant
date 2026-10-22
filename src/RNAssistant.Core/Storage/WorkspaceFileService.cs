@@ -1134,6 +1134,7 @@ namespace RNAssistant.Core.Storage
                         {
                             if (input.Length > 256L * 1024 * 1024 &&
                                 attempt.Operation != "files.patch" &&
+                                attempt.Operation != "files.restore" &&
                                 attempt.Payload?.ContentType != "text/plain; charset=utf-8")
                                 throw new WorkspaceFileException("file_too_large", "Recovery exceeds the binary file budget.");
                             long length; var digest = ChatBlobStore.HashFile(input, out length, CancellationToken.None, null);

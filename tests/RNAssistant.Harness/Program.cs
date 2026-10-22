@@ -158,6 +158,7 @@ namespace RNAssistant.Harness
                 Test("workspace files: streamed large patch and recovery", WorkspaceFilesStreamLargePatch),
                 Test("workspace files: staged large text create replace", WorkspaceFilesStageLargeTextWrites),
                 Test("workspace files: streamed large copy move delete", WorkspaceFilesStreamLargeCopyMoveDelete),
+                Test("workspace files: large restore recovery has no binary cap", WorkspaceFilesRecoverLargeRestore),
                 Test("workspace files: windows and patch beyond former source cap", WorkspaceFilesBeyondFormerSourceCap),
                 Test("workspace files: exact raw and image views", WorkspaceBinaryViewsStayExact),
                 Test("workspace files: large source streams and historical authority", WorkspaceLargeSourcesStayExact),
