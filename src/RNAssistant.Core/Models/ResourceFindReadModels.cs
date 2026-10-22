@@ -111,18 +111,36 @@ namespace RNAssistant.Core.Models
         public static ResourceReadProjection FromLines(ResourceReadResult result, string target,
             string type, string scope, int startLine, int requestedLines)
         {
-            if (startLine < 1 || requestedLines < 1 || result?.Text == null || result.Complete ||
-                result.Coverage?.Kind != ResourceCoverageKinds.CharacterRange ||
-                result.Coverage.Start != result.Offset ||
-                result.Coverage.End != (long)result.Offset + result.Text.Length ||
-                result.ReturnedCharacters != result.Text.Length ||
-                result.TotalCharacters < result.Coverage.End)
+            if (startLine < 1 || requestedLines < 1 || result?.Complete != false ||
+                !HasExactSelectedText(result))
                 throw new System.InvalidOperationException("A complete bounded line selection requires exact excerpt coverage.");
             var projection = From(result, target, type, scope);
             projection.StartLine = startLine;
             projection.RequestedLines = requestedLines;
             projection.SelectionComplete = true;
             return projection;
+        }
+
+        public static ResourceReadProjection FromSection(ResourceReadResult result, string target,
+            string type, string scope, string section)
+        {
+            if (string.IsNullOrWhiteSpace(section) || result?.Complete != true || result.Truncated ||
+                !HasExactSelectedText(result))
+                throw new System.InvalidOperationException("A complete section selection requires exact excerpt coverage.");
+            var projection = From(result, target, type, scope);
+            projection.Section = section;
+            projection.SelectionComplete = true;
+            projection.Complete = false;
+            return projection;
+        }
+
+        private static bool HasExactSelectedText(ResourceReadResult result)
+        {
+            return result?.Text != null && result.Coverage?.Kind == ResourceCoverageKinds.CharacterRange &&
+                result.Coverage.Start == result.Offset &&
+                result.Coverage.End == (long)result.Offset + result.Text.Length &&
+                result.ReturnedCharacters == result.Text.Length &&
+                result.TotalCharacters >= result.Coverage.End;
         }
     }
 

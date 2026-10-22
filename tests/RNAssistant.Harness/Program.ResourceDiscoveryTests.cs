@@ -69,6 +69,46 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void MarkdownSectionModelCompleteness()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>
+            {
+                var session = NewSession(adapter);
+                var tools = executor.GetControllerTools().ToList();
+                var body = "# Intro\nother\n## Target\nselected\n## Next\nlater\n";
+                var saved = executor.ExecuteManual(Command(MarkdownDocumentToolCatalog.SaveToolId,
+                    "title", "Selection.md", "description", "Section completeness fixture",
+                    "markdown", body), tools, new AppSettings(), false, false, session);
+                AssertTrue(saved.Success, "section source published");
+                var target = executor.ResourceGateway.Find(session, "Selection.md", "document").Items.Single().Target;
+                var read = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                    "target", target, "representation", "text", "section", "Target"),
+                    tools, new AppSettings(), false, false, session);
+                AssertTrue(read.Success, "selected section read succeeds");
+                var data = Newtonsoft.Json.Linq.JObject.Parse(read.DataJson);
+                var start = body.IndexOf("## Target", StringComparison.Ordinal);
+                var end = body.IndexOf("## Next", StringComparison.Ordinal);
+                AssertEqual(body.Substring(start, end - start), (string)data["text"],
+                    "selected section is exact");
+                var model = ModelResultProjection.ProjectResourceData(ResourceToolCatalog.ReadToolId, data);
+                AssertTrue((bool)model["selectionComplete"] && !(bool)model["complete"] &&
+                    (string)model["section"] == "Target" &&
+                    (string)model["coverage"]["kind"] == ResourceCoverageKinds.CharacterRange &&
+                    (int)model["coverage"]["start"] == start &&
+                    (int)model["coverage"]["end"] == end,
+                    "model receives complete selection and partial resource coverage");
+                var spanning = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                    "target", target, "representation", "text", "section", "Intro"),
+                    tools, new AppSettings(), false, false, session);
+                AssertTrue(spanning.Success, "root section read succeeds");
+                var spanningData = Newtonsoft.Json.Linq.JObject.Parse(spanning.DataJson);
+                AssertTrue((bool)spanningData["selectionComplete"] && !(bool)spanningData["complete"] &&
+                    (int)spanningData["coverage"]["start"] == 0 &&
+                    (int)spanningData["coverage"]["end"] == body.Length,
+                    "explicit section selector stays partial even when its range spans the resource");
+            });
+        }
+
         private static void MarkdownSectionsRespectSourceBounds()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>

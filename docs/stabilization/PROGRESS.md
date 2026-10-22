@@ -1,5 +1,17 @@
 # Stabilization progress
 
+## Markdown section completeness in model results — 2026-10-22
+
+The next Wave 2 RC-04 slice separates a complete selected Markdown section
+from a whole-resource read in the model projection: `selectionComplete=true`,
+`complete=false`, with its actual character-range coverage. Exact runtime
+evidence still records the complete selected excerpt and cannot authorize a
+whole-resource refresh. The new focused host-neutral model-result check passes;
+two older Markdown cases still fail on unrelated stale Harness expectations
+recorded in [BACKLOG](BACKLOG.md).
+Other selectors, derived views and Windows/Office/WebView2 qualification remain
+open.
+
 ## Bounded line-read coverage in model results — 2026-10-22
 
 The first Wave 2 RC-04 slice now keeps the existing typed actual `coverage` in

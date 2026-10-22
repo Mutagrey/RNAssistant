@@ -533,7 +533,10 @@ Model `common.resources_read` may select an exact unique ATX heading with `secti
 and `representation=text` for document Markdown/Plans and complete uploaded
 Markdown. This uses the same provider/authority/evidence path and retains only
 character-range coverage, even for a complete selected section. It cannot satisfy
-a whole-resource refresh requirement. Bounds, unsupported sources and ambiguity
+a whole-resource refresh requirement. The model result reports
+`selectionComplete=true` and `complete=false`; exact runtime evidence may mark
+the selected section complete, but its character-range coverage still prevents
+whole-resource authorization. Bounds, unsupported sources and ambiguity
 fail explicitly; see [Artifact Library](artifact-library.md#implemented-markdown-section-reads--2026-09-08).
 
 Sent originals now have `DocumentArtifactStore` as their immutable publication

@@ -12,6 +12,18 @@
 новая возможность требует явной задачи, scope и owner; дефекты работающей системы
 приоритетнее расширения без конкретного пользовательского результата.
 
+## Устаревшие ожидания в тестах Markdown-секций — 2026-10-22
+
+Owner: Harness / conversation-response schema and artifact ingestion tests.
+`resources: Markdown sections preserve exact partial evidence` проходит проверки
+секции, но падает в последнем assertion: описание
+`properties.message.description` больше не содержит `actual upcoming calls`.
+`resources: Markdown sections enforce source bounds` ожидает отказ для
+`Truncated.md`, хотя fixture около 1 млн символов ниже текущего лимита
+`MaximumTextCharacters=2_000_000` и не получает `TextTruncated`.
+Согласовать обе проверки с текущими контрактами отдельно, не менять
+resource-read поведение ради устаревших ожиданий.
+
 ## История source-чата во время выполнения — 2026-10-21
 
 Owner: `web/js/app-plugins.js` и `tests/web/workspace-chat-layout.test.js`.

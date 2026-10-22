@@ -1005,6 +1005,7 @@ namespace RNAssistant.Harness
                 Test("resources: model projection preserves literal source", ResourceProjectionPreservesLiteralSource),
                 Test("resources: original text index preserves extraction coverage", OriginalTextIndexPreservesCoverage),
                 Test("resources: Markdown sections preserve exact partial evidence", MarkdownSectionsUseExactPartialEvidence),
+                Test("resources: Markdown section model completeness", MarkdownSectionModelCompleteness),
                 Test("resources: Markdown sections enforce source bounds", MarkdownSectionsRespectSourceBounds),
                 Test("resources: hard cutover artifact tools", ResourceToolsHardCutoverArtifactTools),
                 Test("chart: default config", ChartArtifactBuildsDefaultConfig),

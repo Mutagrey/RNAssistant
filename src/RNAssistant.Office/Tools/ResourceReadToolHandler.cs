@@ -93,10 +93,12 @@ namespace RNAssistant.Office.Tools
                     selected.Target, selected.Type, selected.Scope,
                     ToolArgumentReader.Int32(context.Arguments, "startLine", 1),
                     ToolArgumentReader.Int32(context.Arguments, "lineCount", 100))
+                : section != null
+                ? ResourceReadProjection.FromSection(observation.Result,
+                    selected.Target, selected.Type, selected.Scope, section)
                 : ResourceReadProjection.From(observation.Result,
                     selected.Target, selected.Type, selected.Scope);
             projection.SnapshotTarget = selected.Descriptor.SnapshotTarget;
-            projection.Section = section;
             // These bodies are runtime metadata, not user JSON/source. Publish
             // addressable semantic targets instead of opaque resource references.
             if (selected.Type == "HTML data" && selection.Result.Representation == "text")
