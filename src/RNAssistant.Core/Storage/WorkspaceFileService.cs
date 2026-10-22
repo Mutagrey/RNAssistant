@@ -240,6 +240,17 @@ namespace RNAssistant.Core.Storage
             return ReadTextWindow(workspace, relativePath, new TextWindow(startChar, charCount, false, 16000), token);
         }
 
+        // Bounded reads may publish a raw revision larger than the text mutation
+        // path can journal and verify. Use the retained revision size, not a live
+        // file stat or the much smaller excerpt payload, for patch admission.
+        public bool ExceedsTextWriteBound(ResourceRef exact)
+        {
+            if (exact == null || !exact.IsExact) return false;
+            var address = ResourceUri.Parse(exact.Uri);
+            if (address.Provider != "file" || address.Segments.Count != 1) return false;
+            return _authority.GetRevision(Scope(address.Segments[0]), exact)?.Payload?.ByteLength > MaximumTextBytes;
+        }
+
         // Application-only bounded text view. An exact continuation consumes only
         // its published raw revision; a missing/corrupt text view is not repaired.
         public WorkspaceFileObservation ReadTextViewCharacters(WorkspaceDescriptor workspace, string relativePath,

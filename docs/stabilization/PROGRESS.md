@@ -1,5 +1,15 @@
 # Stabilization progress
 
+## Large workspace excerpts do not authorize text patch — 2026-10-22
+
+Workspace file reads now expose source windows up to 80 MiB, but the existing
+text mutation/read-back and recovery path remains limited to 1 MiB. Patch
+preparation and execution reject an observed larger revision before dispatch,
+using the retained source length rather than the excerpt payload length. The
+model tool and built-in file skill state the same boundary. The focused
+host-neutral file check passes; large-source mutation still needs a separate
+streaming journal/read-back/recovery design and Windows qualification remains open.
+
 ## Large CLI text-view continuation — 2026-10-22
 
 `rna open --view text` now streams 128–32000 UTF-16 characters from a pinned

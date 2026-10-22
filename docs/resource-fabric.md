@@ -134,8 +134,11 @@ projection through an explicit dependency. The separate CLI result projector and
 request assembler are removed. A prior-turn read without freshly admitted authority
 is unavailable. A body omitted by the compiler, or an incomplete/stale read, cannot
 authorize a CLI overwrite. A delivered current excerpt can authorize `files.patch`
-only when it contains the exact nonempty `oldText`; the owner still requires the
-pinned full-file revision and one matching start across the complete source.
+only for a source at most 1 MiB and when it contains the exact nonempty `oldText`;
+larger source excerpts are read-only with the current file mutation tools. Patch
+admission checks the retained source length, not the selected fragment length. The
+owner still requires the pinned full-file revision and one matching start across
+the complete source.
 Overlapping starts count separately. Empty, missing and ambiguous anchors return
 `invalid_patch`, `patch_not_found` and `patch_ambiguous`; external drift returns
 `target_conflict`. Patch leaves untouched line endings intact. Replace/copy/move/

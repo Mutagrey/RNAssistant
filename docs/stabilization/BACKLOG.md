@@ -185,10 +185,14 @@ comparison cap remains; large files show verified bounded hunks instead.
 
 Owner: CLI `WorkspaceFileService`/provider and Office live providers. The CLI file
 owner still has a 1 MiB whole-file bound and 16,000-character model delivery;
-selected model/application text windows now stream sources up to 80 MiB. Live
-Word/VBA/PowerPoint captures remain independently bounded near 1 MiB. Extend
-these providers through semantic selectors and exact bounded windows before
-advertising 20 MiB support or large one-line editing there. Repeated indexed reads of strongly compressed sources now reuse one verified
+selected model/application text windows now stream sources up to 80 MiB. A large
+excerpt does not authorize `files.patch`: the CLI mutation journal, exact
+read-back, partial after-state and uncertain-effect reconciliation still assume
+the 1-MiB text bound. Design and verify all four before enabling large-file
+patching. Live Word/VBA/PowerPoint captures remain independently bounded near
+1 MiB. Extend these providers through semantic selectors and exact bounded
+windows before advertising 20 MiB support or large one-line editing there.
+Repeated indexed reads of strongly compressed sources now reuse one verified
 encoding fingerprint; every call still hashes all current stored bytes. The local
 >10 MiB/329-part fixture is about 40% faster. Larger/weakly compressed encodings
 retain full streaming verification; full traversal is not generally linear in

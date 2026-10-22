@@ -114,8 +114,11 @@ namespace RNAssistant.Runtime
                     projection.References = (skill.References ?? new List<SkillReferenceMetadata>())
                         .Select(item => new SkillReferenceProjection { Path = item.Path, ByteLength = item.ByteLength }).ToArray();
                 }
-                return Return(ToolResult.Ok(read.Result.Complete ? "Complete resource representation read." :
-                    "Exact text excerpt read from the current version; other regions are not observed. Read another bounded range as needed; each read rechecks the current source.", JsonConvert.SerializeObject(projection),
+                var message = read.Result.Complete ? "Complete resource representation read." :
+                    "Exact text excerpt read from the current version; other regions are not observed. Read another bounded range as needed; each read rechecks the current source.";
+                if (type == "file" && _files.ExceedsTextWriteBound(read.Result.Resource.Reference))
+                    message += " This file exceeds the 1-MiB text mutation bound; files.patch is unavailable.";
+                return Return(ToolResult.Ok(message, JsonConvert.SerializeObject(projection),
                     new[] { read.Result.Resource.Reference }), read.Evidence);
             }
             catch (ResourceRequestException error)

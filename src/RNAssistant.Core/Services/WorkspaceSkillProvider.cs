@@ -19,7 +19,7 @@ Use for tasks that create, inspect or edit real workspace files.
 
 1. Identify the required files and completion checks. Use common.resources_find for an unfamiliar directory; known relative paths can be read directly with common.resources_read (type=file).
 2. Before editing, reuse current source already included from a read or verified after-state; read missing/stale source. Use files.create only for a new path. Success means it exists; do not create it again. After an already-existing error, read its current content.
-3. Use files.patch for one unique exact anchor inside an observed excerpt; files.replace requires complete current source and an intended whole-file change. A failed call is not a change; reconcile an unknown effect before continuing and never retry it automatically.
+3. Use files.patch for one unique exact anchor inside an observed excerpt only when the entire file is at most 1 MiB. Larger files can be read in bounded windows but cannot be changed with the current file mutation tools. files.replace requires complete current source and an intended whole-file change. A failed call is not a change; reconcile an unknown effect before continuing and never retry it automatically.
 4. Verify the changed behavior with the available task checks. A write read-back confirms bytes, not application behavior. A skill read supplies instructions, not file source or mutation permission.
 5. Reuse current verified after-state for final source assessment. If RUNTIME_CONTEXT.readAcceptance is present, complete its remaining exact final-file reads and expected paths; later writes invalidate those reads, and browser checks or skill reads do not satisfy them. Report only verified outcomes and explicit remaining limitations.
 

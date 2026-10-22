@@ -270,6 +270,8 @@ namespace RNAssistant.Harness
                     "one long line cannot fit a bounded line read");
                 var start = 16003;
                 var selected = provider.ReadCharacters("long.txt", start, 16000);
+                AssertTrue(!files.ExceedsTextWriteBound(selected.Result.Resource.Reference),
+                    "a bounded read of a small source may still authorize an exact patch");
                 AssertEqual(new string('x', 4000) + "END", selected.Result.Text,
                     "character window reads the exact tail of a long line");
                 var projection = ResourceReadProjection.FromCharacters(selected.Result,
@@ -349,6 +351,22 @@ namespace RNAssistant.Harness
                     large.Evidence.Single().Coverage.Start == tailOffset &&
                     large.Evidence.Single().Coverage.End == large.Result.TotalCharacters,
                     "large read retains only exact partial text evidence");
+                AssertTrue(files.ExceedsTextWriteBound(large.Result.Resource.Reference),
+                    "patch admission uses the retained source size, not the excerpt payload");
+                var modelLarge = handler.ExecuteAsync(new ToolHandlerContext(execution,
+                    new Dictionary<string, object> { ["target"] = "large.txt",
+                        ["startChar"] = tailOffset, ["charCount"] = 16000 }), CancellationToken.None)
+                    .GetAwaiter().GetResult();
+                AssertEqual(ToolResultStatus.Ok, modelLarge.Result.Status,
+                    "the model may still read a bounded large-source excerpt");
+                AssertTrue(modelLarge.Result.Message.Contains("files.patch is unavailable"),
+                    "the model read states that the large source is not patchable");
+                var patchDispatched = false;
+                AssertEqual("file_too_large", RuntimeThrows<WorkspaceFileException>(() =>
+                    files.PatchExact(workspace, "large.txt", large.Result.Resource.Reference, "DONE", "NEXT",
+                        () => patchDispatched = true)).Code,
+                    "a large source cannot enter the whole-file mutation path");
+                AssertTrue(!patchDispatched, "large patch refusal happens before dispatch");
                 var selectedLine = provider.Read("large.txt", 3, 1);
                 AssertEqual(large.Result.Text, selectedLine.Result.Text, "line window reaches beyond one MiB");
                 AssertEqual(prefix.Length + longLineLength + 1, selectedLine.Result.Offset,
