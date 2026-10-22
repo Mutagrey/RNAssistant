@@ -22,6 +22,12 @@ using RNAssistant.Runtime.Contracts;
 
 namespace RNAssistant.Runtime
 {
+    public sealed class WorkspaceSessionLeaseUnavailableException : IOException
+    {
+        public WorkspaceSessionLeaseUnavailableException(IOException innerException)
+            : base("Workspace session is already running or its lease is unavailable.", innerException) { }
+    }
+
     // The CLI host supplies input/output only. This service uses the same kernel,
     // materialized model protocol, ToolRuntime and canonical stores as Office.
     public sealed partial class WorkspaceConversationService : IDisposable
@@ -618,7 +624,7 @@ namespace RNAssistant.Runtime
             if (File.Exists(path) && StorageFileSystem.IsReparsePoint(path))
                 throw new IOException("Workspace run lease cannot be a link.");
             try { return StorageFileSystem.AcquireWriteLock(path); }
-            catch (IOException ex) { throw new IOException("Workspace session is already running or its lease is unavailable.", ex); }
+            catch (IOException ex) { throw new WorkspaceSessionLeaseUnavailableException(ex); }
         }
 
         private void InterruptAbandonedRun(ChatSession session)

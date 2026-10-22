@@ -276,6 +276,38 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void PluginsProjectChatBusyLeaseIsTyped()
+        {
+            WithPluginPaths(paths =>
+            {
+                using (var service = new PluginApplicationService(paths))
+                {
+                    var item = PluginFixture(service, paths, false);
+                    var chat = service.ChatState(item.PluginId);
+                    var leaseDirectory = Path.Combine(paths.WorkspaceDirectory, "run-leases");
+                    Directory.CreateDirectory(leaseDirectory);
+                    var leasePath = Path.Combine(leaseDirectory,
+                        TextPatternEngine.Sha256(chat.SessionId) + ".lck");
+                    using (new FileStream(leasePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
+                    {
+                        PluginFailure(() => service.SubmitProjectChatAsync(new ProjectChatRequest {
+                            WorkspaceId = item.SourceWorkspaceId, SessionId = chat.SessionId,
+                            Input = new RNAssistant.Runtime.Contracts.WorkspaceSubmitInputRequest {
+                                SessionId = chat.SessionId, RequestId = Guid.NewGuid().ToString("N"),
+                                Message = "Check the project" } },
+                            new AppSettings { BaseUrl = "http://localhost", Model = "test" },
+                            () => string.Empty, CancellationToken.None).GetAwaiter().GetResult(),
+                            "project_chat_busy");
+                    }
+                    var workspace = new WorkspaceStore(paths).OpenConnected(item.SourceWorkspaceId);
+                    AssertEqual(0, service.Conversations.GetSession(workspace, chat.SessionId).Messages.Count,
+                        "busy submission did not append the user input");
+                    AssertTrue(service.Conversations.PrepareResume(workspace, chat.SessionId) != null,
+                        "chat lease is usable after the other owner releases it");
+                }
+            });
+        }
+
         private static void PluginsPanelVisibility()
         {
             WithPluginPaths(paths => {

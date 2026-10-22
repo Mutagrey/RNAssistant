@@ -777,8 +777,16 @@ namespace RNAssistant.Application
                 throw new PluginException("project_chat_invalid", "The submitted chat identity changed.");
             if (Conversations.GetSession(workspace, request.SessionId) == null)
                 throw new PluginException("project_chat_missing", "The chat is not in this workspace.");
-            await Conversations.SubmitInputAsync(workspace, request.Input, settings, key,
-                cancellationToken: token).ConfigureAwait(false);
+            try
+            {
+                await Conversations.SubmitInputAsync(workspace, request.Input, settings, key,
+                    cancellationToken: token).ConfigureAwait(false);
+            }
+            catch (WorkspaceSessionLeaseUnavailableException)
+            {
+                throw new PluginException("project_chat_busy",
+                    "This chat is running or its storage lease is unavailable. Refresh the chat before submitting again.");
+            }
             return ProjectChat(request);
             }
         }
@@ -794,8 +802,19 @@ namespace RNAssistant.Application
             RNAssistant.Runtime.Contracts.WorkspaceCancellationReceipt cancellation = null;
             if (cancel) cancellation = await Conversations.CancelRunAsync(workspace, new RNAssistant.Runtime.Contracts.WorkspaceRunControlRequest {
                 SessionId = session.Id, RunId = request.RunId, Cursor = request.Cursor }, token).ConfigureAwait(false);
-            else await Conversations.ResolvePendingAsync(workspace, session.Id, request.PendingId, request.Approve,
-                settings, key, cancellationToken: token, modelDigest: session.LastRun?.ModelConfiguration?.Digest).ConfigureAwait(false);
+            else
+            {
+                try
+                {
+                    await Conversations.ResolvePendingAsync(workspace, session.Id, request.PendingId, request.Approve,
+                        settings, key, cancellationToken: token, modelDigest: session.LastRun?.ModelConfiguration?.Digest).ConfigureAwait(false);
+                }
+                catch (WorkspaceSessionLeaseUnavailableException)
+                {
+                    throw new PluginException("project_chat_busy",
+                        "This chat is running or its storage lease is unavailable. Refresh the chat before submitting again.");
+                }
+            }
             if (cancellation?.Status == RNAssistant.Runtime.Contracts.WorkspaceCancellationStatus.StaleState)
                 throw new PluginException("project_chat_stale", "The run changed. Refresh the chat before requesting cancellation again.");
             if (cancellation?.Status == RNAssistant.Runtime.Contracts.WorkspaceCancellationStatus.Unconfirmed)

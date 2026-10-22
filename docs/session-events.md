@@ -268,6 +268,10 @@ covers actual event replay, pending/cancelled confirmation, stale CAS and faults
 
 ### Workspace run control
 
+The project-chat submit/approval boundary reports an unavailable session run
+lease as typed `project_chat_busy`. It does not accept input while another
+process owns that chat; the UI can refresh its state before another submission.
+
 For the independent workspace CLI, plain `resume` takes the session's cross-process
 lease, reloads the canonical chat, and marks an abandoned `running` run interrupted.
 An in-flight file mutation is recorded as a possible effect; its original call is
