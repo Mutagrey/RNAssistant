@@ -822,7 +822,8 @@ namespace RNAssistant.Runtime
                         maximumFileReadCharacters,
                         office?.ResourceFind));
                 Register(registry, entries, "common.resources_read", (_mode.AllowsSkills ? "Read a UTF-8 file (default type=file, target is its workspace-relative path) or published skill instructions (type=skill, target is the skill ID). referencePath belongs only to a listed skill reference. For a workspace Plan use type=plan, omit target for the selected plan or supply an exact unique title. Optional version reads history without selecting it; a current read selects its exact revision. File text delivery follows this run's model input budget; Plans and published skill sources use the same budget and excerpt selectors; reading an excerpt does not activate a skill. For large files use startLine and positive lineCount, or zero-based UTF-16 startChar and charCount for a long single line; each slice observes the current version. files.patch accepts a unique anchor from an observed excerpt of a UTF-8 source. No partial skill activation." : "Read UTF-8 text by workspace-relative target. File text delivery follows this run's model input budget; use startLine/positive lineCount or zero-based UTF-16 startChar/charCount for bounded excerpts of files.") +
-                    (office == null ? string.Empty : " Use type=office and a semantic target to read the pinned Office document."),
+                    " For VBA files, procedure selects a unique procedure by name; optional procedureKind=sub/function/property-get/property-let/property-set disambiguates accessors. Do not combine with line/character selectors." +
+                    (office == null ? string.Empty : " Use type=office and a semantic target to read the pinned Office document; VBA source supports the same procedure selector with representation=source."),
                     ResourceSchema(false, _mode.AllowsSkills, office != null, maximumFileReadCharacters), false,
                     new WorkspaceResourceHandler(_resources.Select("file"), _skillPublications, () => _skills, _observed, false, _plans,
                         maximumFileReadCharacters,
@@ -983,7 +984,34 @@ namespace RNAssistant.Runtime
                     properties["fields"] = new JObject { ["type"] = "array", ["maxItems"] = 128,
                         ["items"] = new JObject { ["type"] = "string", ["maxLength"] = 128 } };
                 }
+                if (!find) AddProcedureVariant(schema, true);
                 return schema;
+            }
+
+            private static void AddProcedureVariant(JObject schema, bool office)
+            {
+                var text = schema.DeepClone();
+                AddProcedureSelectors((JObject)schema["properties"]);
+                var procedure = (JObject)schema.DeepClone();
+                var properties = (JObject)procedure["properties"];
+                foreach (var name in new[] { "startLine", "lineCount", "startChar", "charCount", "partNumber", "limit", "offset", "fields" })
+                    properties.Remove(name);
+                ((JArray)procedure["required"]).Add("procedure");
+                if (office)
+                {
+                    properties["representation"]["enum"] = new JArray("source");
+                    ((JArray)procedure["required"]).Add("representation");
+                }
+                schema["anyOf"] = new JArray(text, procedure);
+            }
+
+            private static void AddProcedureSelectors(JObject properties)
+            {
+                properties["procedure"] = new JObject { ["type"] = "string", ["minLength"] = 1,
+                    ["description"] = "Unique VBA procedure name, case-insensitive, without brackets. Reads the declaration through its terminator from one exact source revision." };
+                properties["procedureKind"] = new JObject { ["type"] = "string",
+                    ["enum"] = new JArray("sub", "function", "property-get", "property-let", "property-set"),
+                    ["description"] = "Optional kind to disambiguate property accessors; conditional duplicate declarations require line/character selectors." };
             }
 
             private static JObject PlanResourceVariant(bool find, int maximumFileReadCharacters)
@@ -1035,6 +1063,7 @@ namespace RNAssistant.Runtime
                             ["description"] = "Maximum UTF-16 characters in this excerpt, bounded by this run's model input budget. Each read checks the current version." };
                     }
                 }
+                if (!find && !skill) AddProcedureVariant(schema, false);
                 return schema;
             }
 

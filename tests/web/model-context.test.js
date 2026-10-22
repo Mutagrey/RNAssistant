@@ -48,7 +48,11 @@ function fixture(withAliases = false) {
             coverage: { kind: "line-range", start: 1, end: 2 }, observationComplete: false, bodyIncludedInMessage: null,
             readMetadata: { requestedCoverage: { kind: "line-range", start: 1, end: 6 },
               sourceCoverage: { kind: "line-range", start: 1, end: 2 }, selectionComplete: true,
-              representationComplete: false, sourceComplete: null } }] }] : [];
+              representationComplete: false, sourceComplete: null } },
+            { requestAlias: "Q1", operationAlias: "O2", evidenceAlias: "E2", view: "source",
+              coverage: { kind: "character-range", start: 10, end: 80 }, observationComplete: false,
+              readMetadata: { requestedProcedure: "Value", requestedProcedureKind: "property-get",
+                selectionComplete: true, representationComplete: false, sourceComplete: false } }] }] : [];
         if (query.verifyResourceAlias) {
           if (verification.hold) await verification.hold;
           assert.equal(query.requestEventId, "r1");
@@ -220,6 +224,7 @@ function fixture(withAliases = false) {
   assert.match(resourceText(), /1234 байт.*text\/plain.*payload-hash.*сохранённое тело не проверено/);
   assert.match(resourceText(), /Запрошено:.*"end":6.*Покрытие в источнике:.*"end":2/);
   assert.match(resourceText(), /Выбранный фрагмент: полностью.*Представление: не полностью.*Источник: неизвестно/);
+  assert.match(resourceText(), /Запрошено: процедура Value \(property-get\)/);
   assert.equal(linked.calls.filter(call => call.query.verifyResourceAlias).length, 0, "opening resources does not start expensive verification");
   await checkButton(linked).fire("click"); await flush();
   assert.equal(linked.calls.at(-1).query.verifyResourceAlias, "R1@v1");

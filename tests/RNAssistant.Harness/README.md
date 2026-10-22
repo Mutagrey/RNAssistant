@@ -65,6 +65,14 @@ These tests do not execute/compile `TabularWebViewExecutor`; Windows build, nati
 interception, hidden-controller/stream behavior, startup disposal and hard-stop latency
 remain explicit target-host gates. The loader still prepares sources only.
 
+`resources: VBA procedure` covers the common Core parser, live Office read handler
+and streamed workspace file selector: exact declaration/terminator spans, mixed line
+endings, Unicode, comments/strings, continuations, property accessors, conditional
+ambiguity, cancellation, model budget and partial authority. It uses a live-module
+fake above one million characters and a 16-MiB UTF-8 file with bounded allocations;
+real Windows/Office/VBE validation remains open. `node tests/web/model-context.test.js`
+checks procedure-name/kind diagnostics alongside existing coverage metadata.
+
 `workspace files:` includes an actual 80-MiB source retained/read without a
 whole-body allocation, exact history after drift/deletion/restart, operation
 budgets, busy-file cancellation and missing/corrupt/unpublished source refusals.

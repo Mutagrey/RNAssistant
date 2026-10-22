@@ -193,6 +193,7 @@
     <Compile Include="ModelProtocol\ConversationResponseHistoryReader.cs" />
     <Compile Include="Models\VbaModels.cs" />
     <Compile Include="Models\ResourceFindReadModels.cs" />
+    <Compile Include="Models\ResourceProcedureSelection.cs" />
     <Compile Include="Llm\LlmClient.cs" />
     <Compile Include="Llm\LlmHttpTransport.cs" />
     <Compile Include="Llm\LlmMessageBuilder.cs" />
@@ -211,6 +212,7 @@
     <Compile Include="Tools\VbaToolManifestParser.cs" />
     <Compile Include="Tools\VbaPatchEngine.cs" />
     <Compile Include="Tools\VbaSourceValidator.cs" />
+    <Compile Include="Tools\VbaProcedureSelector.cs" />
     <Compile Include="Tools\VbaTextCanonicalizer.cs" />
     <Compile Include="Tools\ConversationMessageStreamExtractor.cs" />
     <Compile Include="Services\ContextNormalizer.cs" />

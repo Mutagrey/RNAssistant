@@ -841,7 +841,7 @@ namespace RNAssistant.Office.Services
             if (type == "VBA project")
                 return "Read structure for the complete component inventory. To search code across the project, use common.resources_find with scope=vba and query; use common.resources_search only on a VBA module target.";
             if (type == "VBA module")
-                return "Read source directly. For a large module, continue with startLine/lineCount using sourceTotalLines and sourceCoverage; use common.resources_search for literal occurrences. Live VBA modules do not support common.resources_outline or partNumber.";
+                return "Read source directly; procedure selects a unique VBA procedure, optionally qualified by procedureKind for a property accessor. For a large module, continue with startLine/lineCount using sourceTotalLines and sourceCoverage; use common.resources_search for literal occurrences. Live VBA modules do not support common.resources_outline or partNumber.";
             if (type == "HTML file")
                 return "Read source for the complete file contents. Structure belongs to the HTML workspace root; a structure request on this file returns source explicitly.";
             if (type == "HTML workspace")

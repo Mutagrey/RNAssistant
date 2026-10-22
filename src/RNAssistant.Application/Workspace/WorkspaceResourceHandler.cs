@@ -74,12 +74,21 @@ namespace RNAssistant.Runtime
                 var lineCount = Number(context, "lineCount");
                 var startChar = Number(context, "startChar");
                 var charCount = Number(context, "charCount");
+                var procedure = Value(context, "procedure");
+                var procedureKind = Value(context, "procedureKind");
+                if (string.IsNullOrEmpty(procedureKind)) procedureKind = null;
+                var hasProcedure = context.Arguments.ContainsKey("procedure") || context.Arguments.ContainsKey("procedureKind");
+                if (hasProcedure && (type != "file" || string.IsNullOrWhiteSpace(procedure) ||
+                    startLine.HasValue || lineCount.HasValue || startChar.HasValue || charCount.HasValue))
+                    throw Error("VBA procedure selection requires a file and procedure, optionally procedureKind, without line/character selectors.", "resource_procedure_invalid");
                 if (type == "file")
                 {
                     if (startChar.HasValue != charCount.HasValue ||
                         (startChar.HasValue && (startLine.HasValue || lineCount.HasValue)))
                         throw Error("Supply startChar and charCount together, without line selectors.", "resource_chars_invalid");
-                    read = startChar.HasValue
+                    read = hasProcedure
+                        ? _files.ReadProcedure(target, procedure, procedureKind, _maximumTextReadCharacters, cancellationToken)
+                        : startChar.HasValue
                         ? _files.ReadCharacters(target, startChar.Value, charCount.Value, cancellationToken,
                             _maximumTextReadCharacters)
                         : startLine.HasValue || lineCount.HasValue
@@ -106,7 +115,9 @@ namespace RNAssistant.Runtime
                 if (read.Result.Text.Length > _maximumTextReadCharacters)
                     throw Error("The source exceeds the model read budget. Use startLine/lineCount or startChar/charCount to select a smaller region.", "read_too_large");
                 if (read.Result.Complete) read.RequireCompleteExactText();
-                var projection = startChar.HasValue
+                var projection = hasProcedure
+                    ? ResourceReadProjection.FromProcedure(read.Result, target, type, "workspace")
+                    : startChar.HasValue
                     ? ResourceReadProjection.FromCharacters(read.Result, target, type, type == "skill" ? "catalog" : "workspace", startChar.Value, charCount.Value)
                     : startLine.HasValue
                     ? ResourceReadProjection.FromLines(read.Result, target, type, type == "skill" ? "catalog" : "workspace", startLine.Value, lineCount.Value)
@@ -118,7 +129,7 @@ namespace RNAssistant.Runtime
                     {
                         projection.SourceCoverage = read.Result.Coverage;
                         projection.SourceEndChar = read.Result.TotalCharacters;
-                        if (!startChar.HasValue && !startLine.HasValue)
+                        if (!hasProcedure && !startChar.HasValue && !startLine.HasValue)
                         {
                             projection.SelectionComplete = true;
                             projection.StartChar = 0;
@@ -143,8 +154,9 @@ namespace RNAssistant.Runtime
                     : startLine.HasValue
                     ? new ResourceCoverage(ResourceCoverageKinds.LineRange, start: startLine,
                         end: (long)startLine.Value + lineCount.Value)
-                    : ResourceCoverage.Whole();
-                read = read.WithReadMetadata(projection, requestedCoverage);
+                    : hasProcedure ? null : ResourceCoverage.Whole();
+                read = read.WithReadMetadata(projection, requestedCoverage,
+                    requestedProcedure: hasProcedure ? procedure : null, requestedProcedureKind: procedureKind);
                 if (type == "file") _observed[target] = read.Evidence.Single();
                 var message = read.Result.Complete ? "Complete resource representation read." :
                     "Exact text excerpt read from the current version; other regions are not observed. Read another bounded range as needed; each read rechecks the current source.";

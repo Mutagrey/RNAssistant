@@ -1,5 +1,25 @@
 # Stabilization progress
 
+## Resource Context VBA procedure selection — 2026-10-23
+
+Owner: Core resource parsing, Office Gateway and workspace file provider. Wave 3
+now includes a common `procedure`/`procedureKind` selector for VBA source and UTF-8
+workspace files, including the workspace Office binding. It selects from one exact
+snapshot, preserves CRLF/Unicode and reports partial character coverage, selected
+accessor and conditional-compilation status. Missing/ambiguous or incomplete
+boundaries fail explicitly. Workspace scanning is streamed; live VBA retains its
+existing whole-capture and mutation strategy. Only selected text is governed by
+the model read budget. Requested procedure metadata reaches saved evidence and
+Inspector; whole-source mutation authority is never inferred from a procedure.
+
+Three focused Harness checks cover lexical boundaries, a live module beyond one
+million characters, a streamed 16-MiB workspace file, budget expansion/refusal,
+exact history/drift, schemas and evidence. These checks, three adjacent Harness
+checks (line/character reads and compiler presentation), five Web scenarios and
+ValidateVersionFormat pass. Windows/Office/VBE/WebView2 qualification remains open.
+Wave 3 still needs JSON Pointer/tree, image/PDF semantic views and cost/capability
+metadata; this does not close the wave.
+
 ## Conversation v8.1 admission audit — 2026-10-23
 
 Phase 0 reproduces premature v7 `done` through real loopback HTTP and the
@@ -93,7 +113,7 @@ build/test/Windows результатов эта запись не заявля�
 | Wave 0 — Audit | Трассировка, owners, RC-01…04 и accept/adapt/reject сохранены в аудите | Аудит исходников выполнен; измерений исходного реального Office/model workflow он не содержал |
 | Wave 1 — Observability | Exact serialized request в CAS, RequestId/ContextSnapshotId, позиции messages/parts, links к evidence, причины основных exclusions, mixed-media golden fixture | Полная атрибуция всех преобразований не закрыта: strict-schema/смешанные сообщения могут иметь `Unknown`; полной стоимости каждого элемента нет. Сохранённая подготовка запроса не доказывает получение сервером |
 | Wave 2 — Coverage/visibility | Requested/actual coverage и selection/representation/source completeness для lines/chars, Markdown sections, indexed parts и table rows; общий путь сохраняет эти факты в evidence, receipt, trace и Inspector | Покрыты реализованные selectors, а не вся матрица новых views из §4; delivery остаётся свойством конкретного request, старые записи без metadata — unknown |
-| Wave 3 — Adaptive materialization | Общий бюджет текстового чтения, большие источники/длинные строки, потоковые workspace mutations, Office windows, media/pageIndex; искусственные source ceilings сняты | Не реализованы общие procedure, JSON Pointer/tree, crop/bbox и семантические PDF table/figure/OCR views; единая cost/capability metadata по всей матрице не завершена |
+| Wave 3 — Adaptive materialization | Общий бюджет текстового чтения, большие источники/длинные строки, потоковые workspace mutations, Office windows, media/pageIndex; общий VBA procedure selector для Office и workspace/CLI; искусственные source ceilings сняты | Не реализованы JSON Pointer/tree, crop/bbox и семантические PDF table/figure/OCR views; единая cost/capability metadata по всей матрице не завершена |
 | Wave 4 — Compiler cleanup | Один compiler, frozen authority, causal frames, selective hydration, корректировка repeated-read links после budget eviction, restart/archive checks | Подтверждённые исправления сделаны. Деление compiler по размеру файла отклонено; новые refactor допускаются только под конкретный дефект |
 | Wave 5 — Context Explorer | Существующий inspector: attempts/messages, exact JSON, evidence/revision/coverage, omissions, оригиналы и downloads; стабильные chat-local `R@v/E/O/Q`, поиск, resource view, revision provenance и явная CAS-проверка payload ревизии | Частично. Нет полной metadata/capabilities/availability для views/providers, derived graph, общего revision diff и явного reread из Explorer. Redacted trajectory export существует отдельно, но не интегрирован как этот Explorer workflow |
 | Wave 6 — Qualification | Точечные host-neutral Harness/Web и large-source проверки предыдущих срезов; HTML restore fixture исправлен отдельно | Общий acceptance gate не закрыт: реальный Windows/Office/VBE/WebView2, representative PDF/visual provenance и измерения целевого model workflow остаются открыты |

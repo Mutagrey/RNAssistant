@@ -78,6 +78,7 @@ namespace RNAssistant.Core.Models
         [JsonProperty("requestedRows", NullValueHandling = NullValueHandling.Ignore)] public int? RequestedRows { get; set; }
         [JsonProperty("selectionComplete", NullValueHandling = NullValueHandling.Ignore)] public bool? SelectionComplete { get; set; }
         [JsonProperty("section", NullValueHandling = NullValueHandling.Ignore)] public string Section { get; set; }
+        [JsonProperty("procedure", NullValueHandling = NullValueHandling.Ignore)] public ResourceProcedureSelection Procedure { get; set; }
         [JsonProperty("partNumber", NullValueHandling = NullValueHandling.Ignore)] public int? PartNumber { get; set; }
         [JsonProperty("partCount", NullValueHandling = NullValueHandling.Ignore)] public int? PartCount { get; set; }
         [JsonProperty("kind")] public string Kind { get; set; } = "resource-read";
@@ -109,7 +110,7 @@ namespace RNAssistant.Core.Models
                 Representation = result.Representation, Text = result.Text, Table = result.Table,
                 Coverage = result.Coverage, Offset = result.Offset,
                 ReturnedCharacters = result.ReturnedCharacters, TotalCharacters = result.TotalCharacters,
-                Complete = result.Complete, SourceComplete = result.SourceComplete,
+                Complete = result.Complete, SourceComplete = result.SourceComplete, Procedure = result.Procedure,
                 SourceEndChar = result.SourceEndChar, SourceTotalLines = result.SourceTotalLines,
                 PartNumber = result.PartNumber, PartCount = result.PartCount,
                 HydratedForNextModelStep = result.HydratedForNextModelStep,
@@ -165,6 +166,19 @@ namespace RNAssistant.Core.Models
             projection.Section = section;
             projection.SelectionComplete = true;
             projection.Complete = false;
+            return projection;
+        }
+
+        public static ResourceReadProjection FromProcedure(ResourceReadResult result, string target,
+            string type, string scope)
+        {
+            if (result?.Procedure == null || result.Resource?.Reference?.IsExact != true || result.Complete ||
+                (result.Representation != ResourceRepresentations.Source && result.Representation != ResourceRepresentations.Text) ||
+                !HasExactSelectedText(result) || result.Coverage.Start != result.Procedure.StartChar || result.Coverage.End != result.Procedure.EndChar)
+                throw new System.InvalidOperationException("A procedure requires exact partial source coverage.");
+            var projection = From(result, target, type, scope);
+            projection.SelectionComplete = true;
+            projection.SourceComplete = false;
             return projection;
         }
 
@@ -295,11 +309,13 @@ namespace RNAssistant.Core.Models
         // Enrich the fresh observation before recording the accepted tool result.
         // Never reconstruct request intent from an adaptive provider's chosen window.
         public ResourceReadObservation WithReadMetadata(ResourceReadProjection projection,
-            ResourceCoverage requestedCoverage, string requestedSection = null, int? requestedPartNumber = null)
+            ResourceCoverage requestedCoverage, string requestedSection = null, int? requestedPartNumber = null,
+            string requestedProcedure = null, string requestedProcedureKind = null)
         {
             if (projection == null) throw new System.ArgumentNullException(nameof(projection));
             var metadata = new ResourceReadMetadata(requestedCoverage, requestedSection, requestedPartNumber,
-                projection.SourceCoverage, projection.SelectionComplete, projection.Complete, projection.SourceComplete);
+                projection.SourceCoverage, projection.SelectionComplete, projection.Complete, projection.SourceComplete,
+                requestedProcedure, requestedProcedureKind);
             return new ResourceReadObservation(Result, Evidence.Select(item =>
                 item.Resource.Uri == Result.Resource.Reference.Uri && item.Resource.Revision == Result.Resource.Reference.Revision &&
                 item.View == Result.Representation

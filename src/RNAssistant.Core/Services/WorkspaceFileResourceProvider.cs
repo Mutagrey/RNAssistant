@@ -80,6 +80,17 @@ namespace RNAssistant.Core.Services
         { return Project(_files.ReadTextCharacters(_workspace, relativePath, startChar, charCount,
             token, maximumCharacters), false); }
 
+        public ResourceReadObservation ReadProcedure(string relativePath, string name, string kind,
+            int maximumCharacters, CancellationToken token = default(CancellationToken))
+        {
+            ResourceProcedureSelection procedure;
+            var read = Project(_files.ReadVbaProcedure(_workspace, relativePath, name, kind,
+                maximumCharacters, out procedure, token), false);
+            read.Result.Procedure = procedure;
+            read.Result.SourceComplete = false;
+            return read;
+        }
+
         public ResourceReadObservation ReadViewCharacters(string relativePath, int startChar, int charCount,
             ResourceRef exact = null, CancellationToken token = default(CancellationToken))
         { return Project(_files.ReadTextViewCharacters(_workspace, relativePath, startChar, charCount, exact, token), exact != null); }

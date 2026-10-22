@@ -66,6 +66,10 @@ namespace RNAssistant.Core.Models
         public string RequestedSection { get; private set; }
         [JsonProperty("requestedPartNumber", NullValueHandling = NullValueHandling.Ignore)]
         public int? RequestedPartNumber { get; private set; }
+        [JsonProperty("requestedProcedure", NullValueHandling = NullValueHandling.Ignore)]
+        public string RequestedProcedure { get; private set; }
+        [JsonProperty("requestedProcedureKind", NullValueHandling = NullValueHandling.Ignore)]
+        public string RequestedProcedureKind { get; private set; }
         [JsonProperty("sourceCoverage", NullValueHandling = NullValueHandling.Ignore)]
         public ResourceCoverage SourceCoverage { get; private set; }
         [JsonProperty("selectionComplete", NullValueHandling = NullValueHandling.Ignore)]
@@ -78,12 +82,14 @@ namespace RNAssistant.Core.Models
         [JsonConstructor]
         public ResourceReadMetadata(ResourceCoverage requestedCoverage = null, string requestedSection = null,
             int? requestedPartNumber = null, ResourceCoverage sourceCoverage = null,
-            bool? selectionComplete = null, bool? representationComplete = null, bool? sourceComplete = null)
+            bool? selectionComplete = null, bool? representationComplete = null, bool? sourceComplete = null,
+            string requestedProcedure = null, string requestedProcedureKind = null)
         {
             RequestedCoverage = requestedCoverage; RequestedSection = requestedSection;
             RequestedPartNumber = requestedPartNumber; SourceCoverage = sourceCoverage;
             SelectionComplete = selectionComplete; RepresentationComplete = representationComplete;
             SourceComplete = sourceComplete;
+            RequestedProcedure = requestedProcedure; RequestedProcedureKind = requestedProcedureKind;
         }
     }
 

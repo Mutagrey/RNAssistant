@@ -570,6 +570,27 @@ windows are never stitched into whole-source evidence. Module mutations and
 observed source drift invalidate all retained current line windows of that module;
 their exact historical bytes and unrelated modules remain available.
 
+VBA source reads also accept `procedure` (case-insensitive name without brackets)
+and optional `procedureKind` (`sub`, `function`, `property-get`, `property-let`,
+`property-set`), exclusive of other selectors. Office uses `representation=source`;
+workspace/CLI uses the same selector on UTF-8 files, or `type=office` for its bound
+Office target. The shared Core boundary parser scans the complete exact source for
+uniqueness and returns the declaration through its matching terminator, preserving
+line endings and Unicode. Output `procedure` identifies the resolved kind, half-open
+UTF-16 character span, inclusive line bounds and `conditionalCompilation` status.
+It does not evaluate conditional branches or claim VBA compilation. Duplicate
+matching declarations, incomplete/cross-branch boundaries and missing names fail
+explicitly with `resource_procedure_*` errors; line/character reads remain available.
+
+Only the selected procedure must fit the configured model read budget; there is no
+new module/file size ceiling. Live VBA reuses its authoritative whole capture;
+workspace files scan retained UTF-8 bytes with bounded buffers, then extract from
+that same revision without recapturing the live file. Evidence retains only the
+selected body and exact character coverage. Model `selectionComplete=true`,
+`complete=false` and `sourceComplete=false` remain distinct even when the procedure
+spans the entire source. A procedure read never grants whole-source overwrite
+rights; existing full-module mutation preparation and replacement are unchanged.
+
 Within-target search requires an advertised `text` or `source` representation.
 A VBA project exposes its component inventory as `structure`; search its module
 names and code with `common.resources_find(scope=vba, query=...)`, then use
@@ -633,7 +654,8 @@ actual coverage give the next safe offset.
 
 Accepted `common.resources_read` results in Office and workspace/CLI retain typed
 `ReadMetadata` on the existing immutable `ResourceEvidence`. It records requested
-line/character/row coverage (with table path/fields), section or part selection,
+line/character/row coverage (with table path/fields), section/part or procedure
+name and optional kind,
 actual parent-source coordinates when supplied, and separate nullable
 `selectionComplete`, `representationComplete` and `sourceComplete` facts from the
 read projection. Actual target coverage stays on `ResourceEvidence.Coverage`.

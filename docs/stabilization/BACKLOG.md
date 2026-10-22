@@ -41,7 +41,8 @@
    views. Существующий `Unknown` сохранять, когда факт нельзя доказать; measured tokens не подменять
    estimate. Проверка: точный serialized request плюс соответствующие golden fixtures.
 3. **Специализированные selectors/views.** Owner: соответствующий provider через
-   общий Gateway. Отдельные ограниченные slices для VBA procedure, JSON Pointer/tree,
+   общий Gateway. VBA procedure name/kind с exact partial evidence реализован общим
+   parser для Office и workspace/CLI. Остались отдельные slices для JSON Pointer/tree,
    image crop, PDF page ranges/table/figure/bbox и extractor provenance; исходная
    таблица включает также дополнительные Word/Excel/HTML semantic views. Наличие
    raw text/media/pageIndex не закрывает эту матрицу. Каждый slice требует своего

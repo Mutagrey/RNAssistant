@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
+using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Office.Services
 {
@@ -311,6 +312,39 @@ namespace RNAssistant.Office.Services
             result.Truncated = true;
             result.CompleteViewPayload = null;
             result.Payload = null;
+            return selection;
+        }
+
+        internal ResourceReadSelection ReadProcedure(ChatSession session, ResourceRef reference,
+            string name, string kind, int maximumCharacters,
+            System.Threading.CancellationToken cancellationToken)
+        {
+            VbaProcedureSelector.Validate(name, kind);
+            // Capture once under the provider gate, then parse/slice the exact
+            // retained revision. A runtime whole capture is not a model whole read.
+            var selection = ReadWhole(session, reference, ResourceRepresentations.Source, cancellationToken);
+            var result = selection.Result;
+            if (result.Representation != ResourceRepresentations.Source || result.Text == null ||
+                result.SourceComplete == false || result.SourceCoverage != null)
+                throw new ResourceRequestException("Procedure selection requires complete VBA source; use line/character selectors for this view.",
+                    "resource_procedure_unsupported", false);
+            ResourceProcedureSelection procedure;
+            using (var reader = new System.IO.StringReader(result.Text))
+                procedure = VbaProcedureSelector.Select(reader, name, kind, cancellationToken);
+            VbaProcedureSelector.RequireFits(procedure, maximumCharacters);
+            result.Text = result.Text.Substring(procedure.StartChar, procedure.EndChar - procedure.StartChar);
+            result.Offset = procedure.StartChar;
+            result.ReturnedCharacters = result.Text.Length;
+            result.Coverage = result.Resource.Coverage = new ResourceCoverage(ResourceCoverageKinds.CharacterRange,
+                start: procedure.StartChar, end: procedure.EndChar);
+            result.Procedure = procedure;
+            result.Complete = false;
+            result.SourceComplete = false;
+            result.Truncated = true;
+            result.Payload = result.CompleteViewPayload = null;
+            result.CompleteViewParts = null;
+            result.NextCursor = null;
+            selection.RetainedText = null;
             return selection;
         }
 

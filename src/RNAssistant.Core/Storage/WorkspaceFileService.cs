@@ -8,6 +8,7 @@ using System.Threading;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
+using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Core.Storage
 {
@@ -268,6 +269,26 @@ namespace RNAssistant.Core.Storage
                 throw new WorkspaceFileException("resource_chars_invalid",
                     "Use zero-based startChar and a positive charCount within the selected read budget.");
             return ReadTextWindow(workspace, relativePath, new TextWindow(startChar, charCount, false, maximumCharacters), token);
+        }
+
+        public WorkspaceFileObservation ReadVbaProcedure(WorkspaceDescriptor workspace, string relativePath,
+            string name, string kind, int maximumCharacters, out ResourceProcedureSelection procedure,
+            CancellationToken token = default(CancellationToken))
+        {
+            VbaProcedureSelector.Validate(name, kind);
+            var snapshot = CaptureFile(workspace, relativePath, long.MaxValue, token);
+            try
+            {
+                using (var input = OpenExactRead(workspace, relativePath, snapshot.Reference, long.MaxValue, token))
+                using (var reader = new StreamReader(input, StrictUtf8, false, 81920))
+                    procedure = VbaProcedureSelector.Select(reader, name, kind, token);
+            }
+            catch (DecoderFallbackException)
+            { throw new WorkspaceFileException("encoding_ambiguous", "Only strict UTF-8 text is supported."); }
+            VbaProcedureSelector.RequireFits(procedure, maximumCharacters);
+            // Decode the same immutable bytes, never recapture a possibly newer file.
+            return ReadTextWindow(workspace, relativePath,
+                new TextWindow(procedure.StartChar, procedure.EndChar - procedure.StartChar, false, maximumCharacters), token, snapshot);
         }
 
         // Application-only bounded text view. An exact continuation consumes only

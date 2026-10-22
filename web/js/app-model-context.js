@@ -164,6 +164,8 @@
     if (!metadata) return "Запрошенный диапазон и раздельная полнота не сохранены.";
     var requested = metadata.requestedCoverage ? JSON.stringify(metadata.requestedCoverage) :
       metadata.requestedSection != null ? "раздел " + metadata.requestedSection :
+      metadata.requestedProcedure != null ? "процедура " + metadata.requestedProcedure +
+        (metadata.requestedProcedureKind ? " (" + metadata.requestedProcedureKind + ")" : "") :
       metadata.requestedPartNumber != null ? "часть " + metadata.requestedPartNumber : "неизвестно";
     function complete(label, value) { return label + ": " + (value === true ? "полностью" : value === false ? "не полностью" : "неизвестно"); }
     return ["Запрошено: " + requested,

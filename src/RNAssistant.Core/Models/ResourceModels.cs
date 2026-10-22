@@ -177,6 +177,8 @@ namespace RNAssistant.Core.Models
         [Newtonsoft.Json.JsonIgnore]
         public ResourceCoverage SourceCoverage { get; set; }
         [Newtonsoft.Json.JsonIgnore]
+        public ResourceProcedureSelection Procedure { get; set; }
+        [Newtonsoft.Json.JsonIgnore]
         public int? SourceEndChar { get; set; }
         [Newtonsoft.Json.JsonIgnore]
         public int? SourceTotalLines { get; set; }
