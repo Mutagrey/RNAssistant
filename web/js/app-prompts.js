@@ -1,6 +1,6 @@
 (function () {
   var promptLibrary = null, promptSources = {}, promptReading = null, promptPending = 0, promptWriting = null;
-  var maximumSourceBytes = 400000, maximumMutationBytes = 8 * 1024 * 1024;
+  var maximumSourceBytes = Number.MAX_SAFE_INTEGER, maximumMutationBytes = Number.MAX_SAFE_INTEGER;
   var promptDefinitions = [
     { key: "systemPrompt", label: "Агент · общие", group: "Основные", field: "SystemPrompt", description: "Роль, runtime context, формат ответа и условие завершения Agent-потока." },
     { key: "agentToolsPrompt", label: "Агент · tools", group: "Основные", field: "AgentToolsPrompt", description: "Общие правила выбора и выполнения tools; конкретные аргументы остаются в схемах tools." },
@@ -87,7 +87,7 @@
         active();
         if (!response || response.type !== "rnassistant.promptSource" || response.contractVersion !== 1 ||
             response.chatId !== operation.chatId || !sameResource(response.resource, operation.resource) ||
-            !Number.isInteger(response.totalCharacters) || response.totalCharacters < 0 || response.totalCharacters > 100000 ||
+            !Number.isInteger(response.totalCharacters) || response.totalCharacters < 0 ||
             Object.prototype.hasOwnProperty.call(response, "text") || !response.data || !response.data.payload ||
             response.data.payload.contentType !== "text/markdown; charset=utf-8") throw new Error("Некорректный contract текста промпта.");
         var bytes = await window.RNAssistantResourceDownload.read(response.data,
@@ -463,7 +463,7 @@
     syncSelectedPromptFromEditor();
     var changes = Object.keys(promptSources).filter(promptDirty).map(function (key) {
       var value = state.promptDrafts[key];
-      if (typeof value !== "string" || value.length > 100000) throw new Error("Промпт превышает лимит 100000 символов.");
+      if (typeof value !== "string") throw new Error("Промпт должен быть строкой.");
       if (new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(new TextEncoder().encode(value)) !== value)
         throw new Error("Некорректный Unicode в промпте.");
       if (promptSources[key].resource.revision !== promptLibrary.publication.revision)

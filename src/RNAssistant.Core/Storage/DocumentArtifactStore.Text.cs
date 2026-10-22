@@ -16,8 +16,8 @@ namespace RNAssistant.Core.Storage
         private const string TextIndexView = "artifact-text-index-v3";
         private const string ExtractedTextIndexView = "artifact-extracted-text-index-v3";
         private const int TextPartCharacters = 32000;
-        private const int MaximumIndexedCharacters = 20 * 1024 * 1024;
-        private const int MaximumIndexedBytes = 20 * 1024 * 1024;
+        private const int MaximumIndexedCharacters = int.MaxValue;
+        private const long MaximumIndexedBytes = long.MaxValue;
 
         public ResourceReadResult ReadMarkdownSection(ChatSession session, ResourceRef reference, string section, int maxCharacters)
         {
@@ -140,7 +140,7 @@ namespace RNAssistant.Core.Storage
             else if (artifact.Kind == ChatArtifactKinds.File)
                 source = FileTextPayload(session, reference, artifact, source);
             if (source.ByteLength > MaximumIndexedBytes || !_payloads.HasVerifiedReference(source.ToBlobReference()))
-                throw new InvalidDataException("The exact text source is unavailable or exceeds 20 MiB.");
+                throw new InvalidDataException("The exact text source is unavailable.");
             var sourceComplete = original == null || !(original.TextTruncated ||
                 original.Kind == "pdf" && original.PageCount > (original.PageTextLengths?.Count ?? 0));
             var coverage = sourceComplete ? ResourceCoverage.Whole() :
@@ -210,7 +210,7 @@ namespace RNAssistant.Core.Storage
         private ResourceReadResult ReadIndexedTextPartFromView(ResourceRevisionView captured,
             PayloadRef source, bool sourceComplete, int partNumber)
         {
-            if (captured?.Payload == null || captured.Payload.ByteLength > 8 * 1024 * 1024)
+            if (captured?.Payload == null || captured.Payload.ByteLength > int.MaxValue)
                 throw new InvalidDataException("The exact text index is unavailable.");
             var manifest = _payloads.ReadText(captured.Payload.ToBlobReference());
             var index = manifest == null ? null : JsonConvert.DeserializeObject<TextIndex>(manifest);
@@ -299,7 +299,7 @@ namespace RNAssistant.Core.Storage
             string query, int characterBudget, int snippetCharacters)
         {
             if (member?.Reference == null || member.Parent == null || text == null || string.IsNullOrEmpty(query) ||
-                characterBudget < 1 || characterBudget > 1000000 || snippetCharacters < 1 || snippetCharacters > 2000)
+                characterBudget < 1 || snippetCharacters < 1 || snippetCharacters > 2000)
                 throw new ArgumentException("An exact member and bounded search are required.");
             var artifact = Read(session, member.Parent, false);
             var parent = ResourceUri.Parse(member.Parent.Uri);
@@ -494,7 +494,7 @@ namespace RNAssistant.Core.Storage
         }
 
         // Incremental counterpart of MarkdownHeadingScanner's bounded ATX grammar.
-        // Even a 20 MiB line retains only 201 title characters.
+        // Even a very long line retains only 201 title characters.
         private sealed class TextHeadingCollector
         {
             private readonly TextIndex _index;
@@ -577,7 +577,7 @@ namespace RNAssistant.Core.Storage
             string query, int budget, int snippetCharacters, int maximumMatches = 1,
             bool scanAll = false, bool matchCase = false)
         {
-            if (captured.Payload == null || captured.Payload.ByteLength > 8 * 1024 * 1024)
+            if (captured.Payload == null || captured.Payload.ByteLength > int.MaxValue)
                 throw new InvalidDataException("The text index is unavailable.");
             var json = _payloads.ReadText(captured.Payload.ToBlobReference());
             var index = json == null ? null : JsonConvert.DeserializeObject<TextIndex>(json);

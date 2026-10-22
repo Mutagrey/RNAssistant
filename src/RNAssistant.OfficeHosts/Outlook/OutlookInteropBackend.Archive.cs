@@ -235,8 +235,6 @@ namespace RNAssistant.OfficeHosts
             try
             {
                 item.Body = mail.Body;
-                if (item.Body != null && item.Body.Length > 1000000)
-                { item.Body = null; item.Error = "body exceeds 1,000,000 characters"; }
             }
             catch (Exception error) { item.Error = "body: " + error.Message; }
             return item;

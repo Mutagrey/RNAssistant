@@ -1,5 +1,22 @@
 # Stabilization progress
 
+## Common source-size policy and CodeOnly form deletion — 2026-10-22
+
+The source-size audit removes fixed character/byte ceilings from the common text
+resource/editor/import paths. Model delivery uses the configured context budget;
+Office and workspace line/character selectors agree, including long VBA lines,
+Plans and published skill sources. Shared uploads stage to disposable files with
+chunk reservations; complete typed consumers still use local memory. Exact revision,
+coverage, UTF-8/hash validation, prepared-before-effect and read-back remain mandatory.
+Direct deletion now supports verified CodeOnly UserForms with journaled restoration;
+Designer/FRX and intrinsic document modules retain their explicit exclusions.
+Owners: existing Core storage/publication, resource Gateway, shared data plane and
+VBA mutation services. See [source policy and remaining operation bounds](../resource-fabric.md#source-sizes-and-context-budgets--2026-10-22).
+Focused host-neutral checks cover large sources, chunked import/export, editor
+integrity, search tails, partial evidence and CodeOnly deletion/restore. Full suite
+and real Windows/Office/WebView2 qualification are not claimed. The independently
+reproduced old copied-HTML restoration fixture remains open in the risk register.
+
 ## Resource Context regression review — 2026-10-22
 
 Review of the Resource Context plan through `dae0dda8` reproduced and fixed six

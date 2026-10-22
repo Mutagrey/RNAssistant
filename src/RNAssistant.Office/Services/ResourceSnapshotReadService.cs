@@ -26,7 +26,6 @@ namespace RNAssistant.Office.Services
             var whole = captured?.Coverage?.Kind == ResourceCoverageKinds.Whole ? captured : null;
             var payload = whole?.Payload ?? (view == "text" ? metadata.Payload : null);
             if (payload == null) throw Error("RESOURCE_VIEW_UNAVAILABLE", "This exact revision has no complete payload for the requested view.");
-            if (payload.ByteLength > 8L * 1024 * 1024) throw Error("RESOURCE_BATCH_TOO_LARGE", "The retained view exceeds its materialization bound.");
             var binding = ResourceReadCursor.ReadBinding(exact.Uri, view);
             var position = ResourceReadCursor.ParseExact(request, binding);
             var text = ReadPayload(_payloads, payload);
@@ -48,7 +47,7 @@ namespace RNAssistant.Office.Services
                 ResourceRefs = new[] { exact.Copy() }, RetainedText = text };
         }
 
-        // Callers negotiate their domain-specific size bound before hydration.
+        // Whole hydration stays local; each returned observation uses its own budget.
         internal static string ReadPayload(ChatBlobStore payloads, PayloadRef payload)
         {
             return RNAssistant.Core.Services.ResourcePublicationReader.ReadPayload(payloads, payload, long.MaxValue);

@@ -61,7 +61,7 @@ namespace RNAssistant.Office.Services
             ChatSession session, ResourceDerivedDefinition definition, CancellationToken cancellationToken)
         {
             var rows = new List<IDictionary<string, object>>();
-            var characters = 0;
+            long characters = 0;
             while (true)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -69,7 +69,7 @@ namespace RNAssistant.Office.Services
                 foreach (var row in table.Rows)
                 {
                     characters += JsonConvert.SerializeObject(row).Length;
-                    if (characters > 1900000 || rows.Count >= 100000)
+                    if (characters > int.MaxValue || rows.Count == int.MaxValue)
                         throw Error("RESOURCE_SNAPSHOT_TOO_LARGE", "Select a narrower source or use a virtual derived resource.");
                     rows.Add(row);
                 }

@@ -19,7 +19,7 @@ namespace RNAssistant.Harness
                     "assets", "local-helper", "1.0.0");
                 Directory.CreateDirectory(packageDirectory);
                 File.WriteAllText(Path.Combine(packageDirectory, "index.html"),
-                    "<main id=\"app\">Local</main>", new UTF8Encoding(false));
+                    "<main id=\"app\">Local</main><!--" + new string('x', 3100001) + "-->", new UTF8Encoding(false));
                 File.WriteAllText(Path.Combine(packageDirectory, "helper.js"),
                     "window.LocalHelper = { ready: true };", new UTF8Encoding(false));
                 File.WriteAllText(Path.Combine(packageDirectory, "manifest.json"),

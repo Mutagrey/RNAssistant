@@ -217,6 +217,8 @@ This switch does not affect JavaScript inside an HTML workspace/WebView page.
 There is no dedicated built-in JS skill; the existing Tool Authoring skill describes
 VBA packages only, so disabling the switch leaves no JS skill instructions active.
 
+Source text has no separate character or request-byte ceiling; the worker's execution
+memory, deadline, statement and result budgets still apply.
 `common.js_run` runs one async JavaScript function body in a separate local .NET Framework
 worker. It accepts named `{name,target,view,path?}` resource bindings and exposes
 `RN.resources.names()`, `await RN.resources.open(name)`, bounded `read()` and
@@ -374,7 +376,9 @@ explicit chat, tool id and expected Library revision. `ToolEditorResourceService
 reserves a shared download slot before catalog hydration/live reads; its response
 contains exact source refs and a bounded download capability. One inert UTF-8
 `ToolSourceBodyDto` (schema, code, README, components) is delivered through the
-existing data plane, at most 16 MiB, with complete-byte integrity verification.
+existing data plane in bounded chunks, with complete-byte integrity verification.
+Source size is limited by the runtime's byte-array/string representation and
+available memory; there is no separate 16 MiB source ceiling.
 
 Custom source comes from the committed `rna://catalog/tools` publication; built-in
 source registrations are published once through the same catalog owner under
@@ -429,12 +433,13 @@ consumer, `ToolEditorResourceService`, over the existing resource data plane.
 `saveTools` control contains only `chatId`, `uploadLeaseId` and the complete
 upload's SHA-256. Code, README, schema and native typed component values travel in
 one UTF-8 `ToolLibraryMutationBatch` body, not an inline bridge request. The batch
-is limited to 16 MiB and 256 mutations and shares existing upload capacity/expiry.
+retains the 256-mutation contract and shares upload concurrency/expiry; the
+former 16 MiB body ceiling is removed and input stages to a temporary file.
 Complete bytes, hash, typed shape and batch identities/guards are checked before
 dispatch; the capability is consumed even on validation failure. Upload alone is
 transient input, not a package, catalog publication or model observation.
 
-The same `ToolAuthoringService` still owns per-package source bounds, validation,
+The same `ToolAuthoringService` still owns package format, validation,
 revision recheck, read-back and the existing catalog commit barrier. Mutations
 remain sequential and stop at the first non-OK member; a verified committed prefix
 is retained, not rolled back or replayed as an atomic multi-package transaction.
@@ -633,7 +638,8 @@ snapshots and do not activate a catalog or grant model observations.
 
 The typed `rnassistant.toolLibraryDocumentation*` v1 response carries chat/id/revision,
 an exact `ResourceRef` and the shared download lease, not inline `markdown`.
-Complete UTF-8/SHA-256 verification and the 2 MiB limit precede rendering. One
+Complete UTF-8/SHA-256 verification precedes rendering; the former 2 MiB
+documentation source ceiling is removed. One
 selected-tool/chat/revision cache replaces the state-wide body/request dictionaries;
 selection/catalog/chat/Library-section and bridge/page closure cancel requests,
 discard stale cached bodies and close late leases. Cancelled openings keep their

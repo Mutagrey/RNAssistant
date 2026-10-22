@@ -207,6 +207,37 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void ResourceTextWindowsPreserveEvidence()
+        {
+            WithTempPaths(paths =>
+            {
+                var workspace = new WorkspaceStore(paths).Open(Path.Combine(paths.Root, "project"));
+                var files = new WorkspaceFileService(paths);
+                var payloads = new ChatBlobStore(paths);
+                var provider = new WorkspaceFileResourceProvider(files, workspace);
+                var source = string.Concat(Enumerable.Repeat("x\r\n", 600)) + "😀TAIL";
+                File.WriteAllText(Path.Combine(workspace.RootPath, "source.txt"), source, new System.Text.UTF8Encoding(false));
+                var whole = provider.Read("source.txt");
+                Func<string, PayloadRef> retain = text => PayloadRef.FromBlob(payloads.StoreText(text, "text/plain"));
+                var first = whole.SelectTextWindow(1801, retain);
+                AssertEqual(source.Substring(0, 1800), first.Result.Text, "implicit window preserves the Unicode boundary");
+                AssertTrue(!first.Result.Complete && !first.Evidence.Single().Complete &&
+                    first.Evidence.Single().Coverage.End == 1800, "only delivered bytes grant observation evidence");
+                AssertEqual(first.Result.Text, payloads.ReadText(first.Evidence.Single().Payload.ToBlobReference()),
+                    "the retained observation contains only the selected bytes");
+                whole.RequireCompleteExactText();
+                var tail = whole.SelectTextWindow(64, retain, startChar: 1800, charCount: 6);
+                AssertEqual("😀TAIL", tail.Result.Text, "explicit continuation retains the complete tail");
+                AssertEqual(whole.Result.Resource.Reference.Revision, tail.Result.Resource.Reference.Revision,
+                    "selection cannot invent a different source revision");
+                RuntimeThrows<ResourceRequestException>(() => whole.SelectTextWindow(64, retain, startChar: 1801, charCount: 5));
+                var lines = whole.SelectTextWindow(2000, retain, startLine: 1, lineCount: 600);
+                AssertEqual(1800, lines.Result.Text.Length, "shared line selectors have no separate 500-line ceiling");
+                AssertEqual(lines.Result.Text, files.ReadTextLines(workspace, "source.txt", 1, 600,
+                    maximumCharacters: 2000).Text, "streamed file and retained source selectors agree");
+            });
+        }
+
         private static void WorkspaceFilesListBounded()
         {
             WithTempPaths(paths =>

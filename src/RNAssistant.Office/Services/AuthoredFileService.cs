@@ -14,8 +14,8 @@ namespace RNAssistant.Office.Services
 {
     internal sealed class AuthoredFileService
     {
-        internal const int MaximumInlineCharacters = 32000;
-        private const int MaximumHunks = 16;
+        internal const int MaximumInlineCharacters = int.MaxValue;
+        private const int MaximumHunks = int.MaxValue;
         private readonly ResourceGatewayService _gateway;
         private readonly DocumentArtifactStore _artifacts;
         private readonly ChatBlobStore _payloads;
@@ -66,8 +66,6 @@ namespace RNAssistant.Office.Services
             {
                 RequireName(ToolArgumentReader.String(context.Arguments, "name", ""));
                 var content = ToolArgumentReader.String(context.Arguments, "content", "");
-                if (content.Length > MaximumInlineCharacters)
-                    throw new InvalidDataException("Create accepts at most 32,000 characters; copy a large original instead.");
                 DocumentArtifactStore.EncodeFileText(content, "utf8");
             }
             else throw new InvalidDataException("Unknown authored file operation.");
@@ -160,8 +158,6 @@ namespace RNAssistant.Office.Services
                 name = RequireName(ToolArgumentReader.String(context.Arguments, "name", ""));
                 mime = Mime(name);
             }
-            if (bytes.Length > ArtifactTransferPackage.MaximumBytes)
-                throw new InvalidDataException("The authored file exceeds 20 MiB.");
             var staged = _payloads.StoreBytes(bytes, mime);
             var revision = checked((parent?.Revision ?? 0) + 1);
             var artifact = new ChatArtifact {
@@ -189,7 +185,7 @@ namespace RNAssistant.Office.Services
             var reference = record.Result.Resources.Single();
             var artifact = session.Artifacts.Single(item => ChatResourceUri.CreateArtifactRevisionUri(session, item) == reference.Uri);
             if (SnapshotLogicalId(artifact.Id) != intent.LogicalId || artifact.Kind != ChatArtifactKinds.File ||
-                !artifact.ContentByteLength.HasValue || artifact.ContentByteLength > ArtifactTransferPackage.MaximumBytes)
+                !artifact.ContentByteLength.HasValue || artifact.ContentByteLength > int.MaxValue)
                 throw new InvalidDataException("File read-back does not match the prepared intent.");
             var bytes = payloads.ReadBytes(new ChatBlobReference { Sha256 = artifact.ContentSha256,
                 ByteLength = artifact.ContentByteLength.Value, ContentType = artifact.MimeType });
@@ -216,7 +212,7 @@ namespace RNAssistant.Office.Services
             if (hunks == null || hunks.Count < 1 || hunks.Count > MaximumHunks ||
                 hunks.Any(h => h == null || string.IsNullOrEmpty(h.Find) || h.Replace == null || h.Find == h.Replace) ||
                 hunks.Sum(h => (long)h.Find.Length + h.Replace.Length) > MaximumInlineCharacters)
-                throw new InvalidDataException("Use 1–16 exact nonempty fragments within 32,000 total characters.");
+                throw new InvalidDataException("Use one or more exact nonempty patch fragments.");
             return hunks;
         }
 

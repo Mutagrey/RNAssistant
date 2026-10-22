@@ -309,7 +309,7 @@ namespace RNAssistant.Office.Tools
             VbaModuleState module;
             ToolRunResult error;
             if (_reader == null || !_reader.TryReadModule(
-                moduleName, 1000000, out module, out error) || module == null)
+                moduleName, int.MaxValue, out module, out error) || module == null)
                 return;
             var source = module.Code ?? string.Empty;
             if (!module.Truncated && source.Length <= 16384)

@@ -11,7 +11,7 @@ namespace RNAssistant.Office.Services
 {
     internal sealed partial class LiveDocumentResourceProvider
     {
-        private const int MaximumMaterializedCharacters = 1000000;
+        private const int MaximumMaterializedCharacters = int.MaxValue;
         private const int MaximumSearchResults = 20;
         private const int MaximumSnippetCharacters = 2000;
 

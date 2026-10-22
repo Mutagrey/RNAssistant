@@ -25,7 +25,7 @@ namespace RNAssistant.Office.Services
             if (session == null || string.IsNullOrWhiteSpace(session.Id) || request == null || request.ChatId != session.Id ||
                 string.IsNullOrWhiteSpace(owner) || _ownerIsActive != null && !_ownerIsActive(session.Id, owner))
                 throw Error("RESOURCE_ACCESS_DENIED", "An explicit addressed chat is required for upload.");
-            if (maximumBytes < 1 || maximumBytes > AttachmentStore.MaxFileBytes ||
+            if (maximumBytes < 1 ||
                 request.ByteLength < (allowEmpty ? 0 : 1) || request.ByteLength > maximumBytes)
                 throw Error("RESOURCE_BATCH_TOO_LARGE", "The upload exceeds its owner's byte bounds.");
             if (string.IsNullOrWhiteSpace(request.FileName) || request.FileName.Length > 255 ||
@@ -36,12 +36,14 @@ namespace RNAssistant.Office.Services
                 EnsureActive(); Expire(); cancellationToken.ThrowIfCancellationRequested();
                 if (LeaseCount >= 64 || _uploads.Count >= 4)
                     throw Error("RESOURCE_LEASE_LIMIT", "Only four uploads may be open at once.");
-                if (TransferBytes + request.ByteLength > AttachmentStore.MaxMessageBytes)
+                if (TransferBytes + MaximumUploadChunkBytes > MaximumInFlightTransferBytes)
                     throw Error("RESOURCE_BACKPRESSURE", "Uploads may reserve at most 50 MiB in total.");
-                // One exact-sized transient buffer, reserved before reading any body. No second
-                // durable store or CAS publication; completed drafts use the existing ingestion owner.
+                // A disposable staging stream keeps transport memory proportional to a
+                // chunk, not to source length. Only the existing consumer publishes data.
                 var upload = new Upload { Id = NewLeaseId(), ChatId = session.Id, Owner = owner, FileName = request.FileName,
-                    ContentType = request.ContentType, Bytes = new byte[checked((int)request.ByteLength)],
+                    ContentType = request.ContentType, Length = request.ByteLength,
+                    Stream = new FileStream(Path.Combine(Path.GetTempPath(), "rna-upload-" + Guid.NewGuid().ToString("N")),
+                        FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None, 81920, FileOptions.DeleteOnClose),
                     ExpiresUtc = _utcNow().AddMinutes(10) };
                 _uploads.Add(upload.Id, upload);
                 return new ResourceUploadOpenResponse { LeaseId = upload.Id, Url = Origin + "/v1/upload/" + upload.Id,
@@ -56,7 +58,7 @@ namespace RNAssistant.Office.Services
             RequireActiveUpload(upload, CancellationToken.None);
         }
 
-        internal ResourceUploadBatchResponse WriteUpload(string leaseId, int offset, int count, Stream body, CancellationToken token)
+        internal ResourceUploadBatchResponse WriteUpload(string leaseId, long offset, int count, Stream body, CancellationToken token)
         {
             var upload = EnterUpload(leaseId, null);
             try
@@ -64,7 +66,7 @@ namespace RNAssistant.Office.Services
                 RequireActiveUpload(upload, token);
                 if (offset != upload.Received)
                     throw Error("RESOURCE_CURSOR_INVALID", "Upload chunks must continue the exact acknowledged byte offset.");
-                if (count < 1 || count > MaximumUploadChunkBytes || count > upload.Bytes.Length - offset)
+                if (count < 1 || count > MaximumUploadChunkBytes || count > upload.Length - offset)
                     throw Error("RESOURCE_BATCH_TOO_LARGE", "The upload chunk exceeds the negotiated bounds.");
                 if (body == null || !body.CanRead) throw Error("RESOURCE_UPLOAD_INVALID", "A binary request body is required.");
                 // WebView2's COMStreamWrapper only implements Read with a zero buffer offset.
@@ -76,7 +78,7 @@ namespace RNAssistant.Office.Services
                     RequireActiveUpload(upload, token, false);
                     var next = body.Read(buffer, 0, Math.Min(buffer.Length, count - read));
                     if (next == 0) throw Error("RESOURCE_UPLOAD_INVALID", "The upload chunk is truncated.");
-                    Buffer.BlockCopy(buffer, 0, upload.Bytes, offset + read, next);
+                    upload.Stream.Write(buffer, 0, next);
                     read += next;
                 }
                 if (body.Read(buffer, 0, 1) != 0) throw Error("RESOURCE_BATCH_TOO_LARGE", "The upload body exceeds its declared chunk length.");
@@ -144,9 +146,23 @@ namespace RNAssistant.Office.Services
             try
             {
                 RequireActiveUpload(upload, token);
-                if (upload.Received != upload.Bytes.Length)
+                if (upload.Received != upload.Length)
                     throw Error("RESOURCE_UPLOAD_INCOMPLETE", "Every byte must be acknowledged before consuming the upload.");
-                var result = consume(upload.Bytes, upload.FileName, upload.ContentType);
+                // Current typed consumers materialize text/JSON. Byte-array representability
+                // is checked here rather than imposing a configured source/transfer ceiling.
+                if (upload.Length > int.MaxValue)
+                    throw Error("RESOURCE_BATCH_TOO_LARGE", "This consumer requires a source representable as a .NET byte array.");
+                var bytes = new byte[(int)upload.Length];
+                upload.Stream.Position = 0;
+                var read = 0;
+                while (read < bytes.Length)
+                {
+                    RequireActiveUpload(upload, token);
+                    var count = upload.Stream.Read(bytes, read, Math.Min(81920, bytes.Length - read));
+                    if (count == 0) throw Error("RESOURCE_UPLOAD_INCOMPLETE", "The retained upload is incomplete.");
+                    read += count;
+                }
+                var result = consume(bytes, upload.FileName, upload.ContentType);
                 RequireActiveUpload(upload, token);
                 return result;
             }
@@ -215,7 +231,7 @@ namespace RNAssistant.Office.Services
             upload.Cancelled = true;
             // Retain the reservation until an in-flight read/extraction leaves its lease.
             // Closing cannot grant capacity still occupied by a slow producer.
-            if (!upload.Busy) { _uploads.Remove(upload.Id); upload.Bytes = null; }
+            if (!upload.Busy) { _uploads.Remove(upload.Id); upload.Stream?.Dispose(); upload.Stream = null; }
         }
 
         private void ExitUpload(Upload upload)
@@ -226,8 +242,8 @@ namespace RNAssistant.Office.Services
         private sealed class Upload
         {
             internal string Id, ChatId, Owner, FileName, ContentType;
-            internal byte[] Bytes;
-            internal int Received;
+            internal FileStream Stream;
+            internal long Length, Received;
             internal DateTime ExpiresUtc;
             internal bool Busy;
             internal volatile bool Cancelled;

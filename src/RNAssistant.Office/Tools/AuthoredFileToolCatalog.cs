@@ -45,8 +45,8 @@ namespace RNAssistant.Office.Tools
                 {
                     properties["target"] = new JObject { ["type"] = "string", ["minLength"] = 1,
                         ["description"] = "Current authored file semantic target from resources_find. Never use a URI or an uploaded original." };
-                    properties["patches"] = new JObject { ["type"] = "array", ["minItems"] = 1, ["maxItems"] = 16,
-                        ["description"] = "One to sixteen exact unique replacements; combined find and replace text must be at most 32,000 characters.",
+                    properties["patches"] = new JObject { ["type"] = "array", ["minItems"] = 1, ["maxItems"] = int.MaxValue,
+                        ["description"] = "One or more exact unique replacements; supply fragments that fit the model context.",
                         ["items"] = new JObject { ["type"] = "object", ["properties"] = new JObject {
                             ["find"] = new JObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = AuthoredFileService.MaximumInlineCharacters },
                             ["replace"] = new JObject { ["type"] = "string", ["maxLength"] = AuthoredFileService.MaximumInlineCharacters } },

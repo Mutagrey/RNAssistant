@@ -80,8 +80,8 @@ namespace RNAssistant.Core.Storage
 
         private static string Read(PayloadRef payload, ChatBlobStore payloads)
         {
-            if (payload == null || payloads == null || payload.ByteLength > 16L * 1024 * 1024)
-                throw new InvalidOperationException("RUNTIME_PAYLOAD_UNAVAILABLE: exact bounded payload required; cancel the pending action or open a new chat.");
+            if (payload == null || payloads == null)
+                throw new InvalidOperationException("RUNTIME_PAYLOAD_UNAVAILABLE: exact payload required; cancel the pending action or open a new chat.");
             var value = payloads.ReadText(payload.ToBlobReference());
             if (value == null) throw new InvalidOperationException("RUNTIME_PAYLOAD_UNAVAILABLE: exact body is missing; no replay or newer body substitution is allowed.");
             return value;

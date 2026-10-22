@@ -10,6 +10,42 @@ Read its normative documents in order: [URF](stabilization/resource-cutover/UNIV
 This file maps implementation owners, not a fourth normative architecture.
 Earlier R61 whole-read/accepted-tool-result binding explanations are superseded.
 
+## Source sizes and context budgets — 2026-10-22
+
+Text source size is not a model-context limit. Complete text is delivered when it
+fits the configured model input budget; otherwise `common.resources_read` returns
+an exact excerpt with coverage and continuation coordinates. Explicit character
+and line selections use that same budget in Office and the workspace runtime,
+including workspace Plans and published skill sources/references. Reading a skill
+excerpt does not activate its instructions. Internal complete snapshots, CAS,
+search and whole-module VBA replacement do not become model observations by
+being materialized locally. A partial read never grants whole-source evidence.
+
+The former source ceilings are removed from VBA/editor, Word/PowerPoint/Outlook
+captures, HTML sources and local assets, document text indexes, authored text,
+Markdown/Plans, prompts, tool/skill source and their uploads/downloads. Project
+file uploads stage to disk; shared editor/attachment uploads now also stage to a
+single-use temporary stream and reserve transport chunks, not declared source
+length. Disposal/expiry removes temporary data. Final typed text/JSON consumers
+still materialize their input; this change does not claim constant-memory Office
+capture, arbitrary binary editing or support beyond .NET string/array/offset
+representability and available memory/disk. Existing owners and journals remain
+unchanged; no second body store or mutation fallback is introduced.
+
+| Remaining bound | Purpose / continuation |
+|---|---|
+| Model input budget | Final common compiler admission; source selectors expose omitted text |
+| 32,000-character provider/index pages; 256 KiB binary chunks; 8 MiB transport batches | Per-transfer portions, not maximum file/document length |
+| Transfer concurrency, expiry and queued-work limits | Bound simultaneous work; cancelled busy operations retain their slot until exit |
+| HTML membership, package counts, schema depth, path/name/metadata and typed operation limits | Explicit format/operation contracts; not source text length |
+| UI history/source caches, viewer/diff/JSON/autocomplete previews and rendered-image dimensions | Optional derived views; exact source/resource reads and original download remain available |
+| Excel/Outlook collection and typed table batch limits | Select narrower ranges/items/fields; do not infer complete source coverage from one batch |
+
+Specialized job/configuration contracts (for example Data Templates), network
+request/response budgets and diagnostic export budgets are separate from this
+source-read/write policy; their existing operation contracts were not broadened.
+Real Windows x64/Office x64/WebView2 behavior remains an open qualification gate.
+
 ## Goals
 
 Workspace file slice (2026-10-05): `WorkspaceFileService` is the current file
@@ -22,7 +58,7 @@ replaying the command. External edits advance observation rather than silently
 accepting a stale replace. Exact historical text reads use published retained CAS
 bytes and fail when unavailable. `WorkspaceFileResourceProvider.ReadExact` exposes
 that retained text as a typed `ResourceReadObservation` with whole-view payload,
-byte length and exact evidence. It enforces the one MiB text bound and rejects
+byte length and exact evidence. It uses the existing small-text path or streamed large-source path and rejects
 unpublished revisions and missing/corrupt payloads without a live-file fallback.
 Reading an old revision does not refresh or republish the head; its currentness
 still comes from frozen authority.
@@ -112,7 +148,7 @@ CLI `common.resources_read(target)` returns complete UTF-8 text when it fits thi
 run's model input budget; otherwise it returns the first exact character window
 and can be continued by selectors. This uses the same file owner, retained payload,
 coverage and evidence as explicit windows. File reads also accept paired `startLine`
-(1-based) and `lineCount` (1–500), or `startChar` (zero-based UTF-16) and a positive
+(1-based) and `lineCount` (positive, within the model read budget), or `startChar` (zero-based UTF-16) and a positive
 `charCount` up to the context-derived limit in the offered tool schema. A range
 that splits a surrogate pair is rejected. Each call
 captures the current revision; ranges from different revisions are never combined
@@ -506,13 +542,12 @@ manifest holds 32,000-character parts, UTF-16 character coverage, line ranges,
 bounded Markdown headings and advisory C#/VBA/JS/TS declarations. The source is
 verified through the protected CAS decoder while the index is built incrementally;
 no plaintext temporary file, head, second store or read evidence is created.
-The index supports up to 20 MiB of retained UTF-8 text and a single line of that
-size. Derived parts remain CAS retention roots. A missing/corrupt part is rebuilt
+The index has no configured whole-source byte ceiling; long lines remain addressable by parts. Derived parts remain CAS retention roots. A missing/corrupt part is rebuilt
 from the same exact source; unavailable source bytes fail closed.
 
 `common.resources_find` discovers semantic targets under its existing bounded
 cross-resource budget. `common.resources_search(target, query)` scans one selected
-indexed text completely within the 20 MiB source bound and returns bounded literal
+indexed text completely and returns bounded literal
 snippets, a total match count, `scanComplete`, `sourceComplete` and a matching
 `partNumber`. A negative result proves absence only when `scanComplete=true`.
 `common.resources_outline(target, fromPart, limit)` pages exact part/line ranges;
@@ -523,9 +558,8 @@ artifact text/source and returns at most 32,000 characters with `partCount` and
 character-range evidence. A successful selected part reports
 `selectionComplete=true` and `complete=false` in the model result; its exact
 coverage and `sourceComplete` remain separate. Neither a part nor a
-search/outline result grants whole-source mutation authority. Other provider
-families retain their own bounds;
-this contract does not claim 20 MiB Office live, HTML-member or CLI file reads.
+search/outline result grants whole-source mutation authority. Other provider families retain their typed capture and representation contracts,
+with the shared context budget governing model text delivery.
 Live VBA modules have no indexed outline or `partNumber` selector. Read the VBA
 project `structure` for module inventory; read a module's `source` and continue
 large sources with `startLine`/`lineCount` using the returned line bounds.
@@ -544,14 +578,14 @@ Project discovery and tool guidance expose this route. A structure-only target
 fails with non-retryable `resource_search_unsupported` and actionable guidance
 before a text read; it is never silently searched as a different scope.
 
-Agent `common.file_create` creates a small text/code file with an explicit extension;
+Agent `common.file_create` creates a text/code file with an explicit extension;
 `common.file_copy` creates an independent authored `File` from an exact complete
-uploaded or authored text source (up to 20 MiB); `common.file_patch` replaces 1–16
+uploaded or authored text source; `common.file_patch` replaces
 unique non-overlapping exact fragments on the selected current authored revision.
 Copy accepts an optional output filename to choose an extension such as `.md`;
 the rename does not alter the source bytes.
-Each call carries at most 32,000 replacement characters in total. The tool never
-accepts a runtime URI or a 10 MiB whole-body argument. Copy retains source
+Call arguments must fit model context; runtime identities remain hidden. There is
+no separate 32,000-character edit ceiling. Copy retains source
 provenance and exact bytes; patch preserves supported UTF-8/UTF-16/UTF-32 encoding,
 BOM and untouched line endings, rejecting unroundtrippable text. The runtime
 checks the selected head before dispatch and verifies the complete new CAS bytes
@@ -744,13 +778,13 @@ notice with a bounded-read recovery action. Omitted bytes confer no whole-source
 write authority; they remain in local CAS. Other request/invariant budget failures
 remain explicit and do not silently trim user instructions or task state.
 Office `common.resources_read` accepts `startLine` (1-based) plus `lineCount`
-(1–500), or `startChar` (zero-based UTF-16) plus `charCount` (1–32,000), for
-text/source. Each excerpt has an exact 32,000-character maximum. This uses the
+(positive), or `startChar` (zero-based UTF-16) plus positive `charCount`, for
+text/source. Each excerpt must fit the configured model input budget. This uses the
 provider's bounded capture when available: Word main-story ranges and PowerPoint
 slide/notes text use character windows, while live VBA uses line windows without
 materializing the complete module. These live windows retain exact coverage and
-source continuation bounds. Other text providers use their existing revision-pinned
-whole snapshot and its materialization bounds. An excerpt selector cannot be
+source continuation bounds. For very long VBA lines and other text providers, character selectors slice the
+existing revision-pinned complete snapshot. Internal capture does not grant whole observation. An excerpt selector cannot be
 combined with other selectors. Semantic metadata projections such as a
 workspace root/shared-context archive cannot be bypassed with bounded text reads.
 Character windows can split a long line where that provider exposes them; live VBA
@@ -1114,11 +1148,9 @@ The existing `LiveDocumentResourceProvider` routes all Word source reads through
 `WordService.CaptureText` and the bound `IWordBackend`; it does not call the generic
 adapter's document/selection text fallback. Complete captures use existing CAS and
 authority, so internal pages and historical exact reads do not recapture live Word.
-Whole captures check their one-million-character materialization ceiling before
-COM `Range.Text`. An unqualified main-story document read uses metadata bounds to
-select a context-sized first window when needed, including documents beyond that
-capture ceiling; exact character windows continue through the source. Whole
-selection capture remains bounded and can require a narrower main-story range.
+Whole captures have no configured one-million-character ceiling. An unqualified
+main-story read uses metadata bounds and the model budget to choose complete text
+or a first exact window; character selectors continue through the source.
 Empty exact ranges remain readable.
 The document `structure` view reads only the main-story `start`/`end` positions
 through the bound Word backend. It does not materialize document text, so a large
@@ -1226,8 +1258,8 @@ Use a discovered mail child for stable mail identity within this bound scope.
 
 The `text` view contains the full body; `source` includes headers, body and attachment
 metadata (not attachment bytes); `structure` includes headers/attachment metadata
-without reading body. Message reads return the entire body within the ceiling (at most
-one million characters) or fail explicitly. They never return a clipped body.
+without reading body. Internal message captures retain the complete body or fail explicitly; model
+delivery uses the shared context budget and exact character windows.
 The backend reads body once and derives the preparation token from those same
 captured fields; source/attachment getter failures are not replaced by empty values.
 Attachment-only capture does not access body or create a mutation token.
@@ -1235,8 +1267,8 @@ Attachment-only capture does not access body or create a mutation token.
 Missing body/token/attachment metadata, mismatched explicit targets and cancellation
 fail before the snapshot reaches a caller or a mutation dispatch.
 
-Outlook OOM exposes `MailItem.Body` as one string: the character ceiling is enforced
-after that property read, **not** before COM materialization. Bounded body acquisition
+Outlook OOM exposes `MailItem.Body` as one string; removing the old character
+ceiling does not make that COM property acquisition incremental. Bounded body acquisition
 and real large-mail execution remain open. Mutation read-back remains a specialized
 existing contour; folder search uses the exact projection described below. Real Inspector/folder/store
 membership, unsaved-mail identity, WebView2 and final catalog/model qualification
@@ -1264,8 +1296,7 @@ remain unsupported; malformed or protected content fails explicitly.
 `OutlookService.CaptureAttachment` validates the typed request/result. The bound
 `OutlookInteropBackend` saves only `olByValue` into a uniquely named temporary directory,
 checks reported size before saving and actual file length before allocating bytes, then
-checks attachment metadata and mail modification time again. Limit: 20 MiB per file;
-complete extracted text: 1,000,000 characters. Temporary files are removed in `finally`;
+checks attachment metadata and mail modification time again. There is no separate file/text size ceiling beyond current importer representation. Temporary files are removed in `finally`;
 new attachment/collection and owned Explorer-mail COM references are released. No mail mutation/open/execute
 occurs. Attachment capture itself never obtains `MailItem.Body`.
 
@@ -1292,8 +1323,8 @@ No separate collection store, bulk result tool or compatibility alias remains.
 The singleton collection resolves directly, so a truncated list of individual mail
 targets cannot block it with `resource_scope_incomplete`. The semantic target
 `Outlook collection: latest:N` (N = 1–500) limits the Outlook capture itself;
-`maxRows` limits only a derived records page after capture. A failed oversized
-capture should be retried with a smaller N, not the same collection target.
+`maxRows` limits only a derived records page after capture. Capture failure remains
+explicit; smaller N reduces requested work.
 
 This is a bounded projection of at most 500 newest **folder items** (mail rows only),
 not a complete mailbox or full-body capture. The JSON envelope reports
@@ -1308,8 +1339,7 @@ assumed unique; that read returns `resource_scope_incomplete` with guidance rath
 than silently selecting one matching message.
 
 The typed `OutlookService.CaptureCollection` validates row identity/extent and a
-750,000-character aggregate budget; serialized JSON has the provider's one-million
-character ceiling. The collection backend captures each preview once, with explicit
+complete captured data without the former 750,000/1,000,000-character ceilings. The collection backend captures each preview once, with explicit
 truncation and no mutation-token/second body read. Header/getter failures cannot
 become empty successful captures. OOM still materializes the full body before
 trimming, so this does not close the pre-COM allocation gate. Inspector runtimes
@@ -1329,15 +1359,9 @@ adapter search branch are removed without fallback; complete mail bodies use
 The document provider exposes `Outlook search scope: latest:N` (headers only) and
 `latest:N+body`, where N is 1–500 newest folder items; the default 100-item scopes are
 discoverable without body reads. The exact text JSON includes the capture limit,
-body-capture flag, folder extent/truncation and mail header/body-prefix rows. Bodies
-are capped at 100,000 characters per mail with explicit `bodyTruncated`; the
-aggregate retained header/body bound is 750,000 characters and serialized JSON is
-limited to one million. Oversize aggregate captures fail and request a lower N.
-Changing the search query alone does not reduce this capture; `maxItems` or the
-selected fields must change.
-Subject and sender names stay exact for semantic mail targets and reject values above
-4,096 characters. Sender email and `To`/`CC`/`BCC` capture at most 4,096 characters
-each, preserving surrogate boundaries; `senderEmailTruncated` and
+body-capture flag, folder extent/truncation and complete selected mail fields.
+The old body, header and aggregate character cutoffs are removed. `maxItems` and
+selected fields still determine capture work; backend truncation remains explicit. `senderEmailTruncated` and
 `recipientsTruncated` mark incomplete prefixes. One long recipient list no longer
 rejects a subject, sender or body search by itself. `sourceTruncated` includes these markers
 only when the corresponding sender or recipient field was searched, so zero-match
@@ -1348,8 +1372,7 @@ token, preserves surrogate boundaries and never substitutes empty text after err
 `sourceTruncated` and the returned overall `truncated` flag include incomplete
 searched-field prefixes as well as folder truncation; `matchCount` counts only
 captured fields.
-Complete evidence means the complete bounded projection, not the entire mailbox or
-full mail bodies. Positive, zero-match and empty-folder searches retain exact CAS
+Complete evidence means the complete bounded projection, not the entire mailbox or fields outside the selected capture. Positive, zero-match and empty-folder searches retain exact CAS
 evidence and publish observed drift; historical reads do no Office I/O and missing
 payloads never fall forward. Inspector runtimes cannot search their parent folder.
 The old search-body duplicate field and unused folder-path snapshot field are removed.
@@ -1560,13 +1583,15 @@ Attachment ingestion uses the same router at `/v1/upload/<opaque-lease>`.
 typed metadata/capabilities. Binary POST chunks have an exact acknowledged byte
 offset and count, at most 256 KiB each; CORS preflight admits only POST/Content-Type
 from the opaque local origin. There is one in-flight operation per upload, at most
-four uploads within the shared 50 MiB transfer-buffer and 64-lease budgets.
+four uploads within the shared in-flight buffer and 64-lease budgets.
 The browser materializes one chunk as an `ArrayBuffer` before POST, with explicit
 `application/octet-stream`; it never posts a Blob/File-backed body or reads the
 whole file up front. This avoids WebView2's reported missing binary request-content
 path ([upstream issue](https://github.com/MicrosoftEdge/WebView2Feedback/issues/2162)).
 Cancellation/currentness is rechecked after the file read and before dispatch.
-The existing 20 MiB/file and 50 MiB/message limits remain. Ten-minute expiry is
+The former 20 MiB/file and 50 MiB/message admission ceilings are removed.
+Uploads stage to disposable temporary files; final typed consumers materialize
+verified bytes, subject to .NET array/string representability. Ten-minute expiry is
 checked on access and swept periodically; close/dispose releases idle buffers.
 A cancelled busy lease retains its reservation until the operation actually exits.
 Chat ingestion accepts XLSM/XLSB/XLS/ODS and common template/add-in variants as
@@ -1623,8 +1648,9 @@ Read/cancel/reload bounds are in [source downloads](artifact-library.md#html-edi
 Trajectory ZIP export uses the same owner-scoped data plane at
 `/v1/download/<opaque-lease>`, with metadata-only bridge setup, sequential 256 KiB
 GET chunks and full-payload SHA-256 verification before download. At most two
-downloads share capture/lease limits and the 50 MiB transfer budget with uploads;
-reservation precedes source validation and production. The ZIP remains a transient
+downloads share capture/lease limits and chunk-buffer reservations with uploads;
+reservation precedes source validation and production. Whole-source length is not
+a transfer reservation; complete download consumers can still retain a byte array. The ZIP remains a transient
 projection of one validated event snapshot, not a synthetic published resource or
 second store. Redaction, bounds and lifetime are owned by
 [Trajectory export](trajectory-export.md). Binary/raw resource views use the shared
@@ -1669,7 +1695,7 @@ eviction and chat change, including late responses. Full text is an explicit
 bounded user action, not an eager workspace cache.
 
 Artifact list/resolve descriptors now advertise admitted binary views through the
-existing `representations` and typed `viewCapabilities`: image (20 MiB), image
+existing `representations` and typed `viewCapabilities`: image (current byte-array representation), image
 thumbnail (512 KiB), PDF page (10 MiB) and PDF thumbnail (1 MiB). The existing media
 owner supplies these metadata-only capabilities only for matching exact attachment
 evidence and admitted kind/MIME/extent; an unconfigured attachment reader advertises
@@ -1690,7 +1716,7 @@ under the shared no-sniff/CSP route. HTML bindings accept `view: raw`, and the s
 `RN.resources` binary consumer and standalone export return original byte chunks.
 The same raw owner also admits committed CAS originals for file, Markdown, plan,
 task-list and chart artifacts, without requiring an attachment reader. Discovery
-checks kind, exact hash/length, the same 20 MiB bound and absence of attachment
+checks kind, exact hash/length, byte-array representability and absence of attachment
 provenance, without loading bodies. Reads verify the original CAS bytes directly;
 they never reserialize JSON, normalize text, hydrate `InlineText` or reconstruct a
 missing original. Broken/ambiguous attachment provenance and malformed metadata
@@ -1700,7 +1726,7 @@ their byte payloads use the same authority retention roots and historical access
 Workspace file members also offer `raw`: UTF-8 bytes of the exact committed file
 source, not bytes of the parent workspace JSON. BOM, CRLF and Unicode are preserved;
 the byte hash matches the same member's `source` CAS payload. Empty files are valid.
-The existing member catalog checks the 20 MiB bound before encoding. Data-binding
+The existing member catalog verifies complete encoded bytes. Data-binding
 members deliberately do not offer `raw`: a binding descriptor is not the bound data;
 consumers read that resource's advertised view instead.
 `ChatArtifactResourceProvider` owns all raw capture through `IResourceRawSource`;
@@ -1752,8 +1778,8 @@ historical bindings stay exact. Head opens and the final export set use the comm
 head alone cannot pass when its schema/mapping/source has changed or is unknown.
 Exact historical views remain readable. Export never changes binding policy or creates a
 second head/body store. The UI pulls the complete export in bounded sequential
-batches: at most 32 bindings, 1024 parts, 32 MiB of transport bytes and 8 MiB per
-part. Failure, cancellation/chat change or mixed revisions prevent download and
+batches: at most 32 bindings and 8 MiB per part, without a total-part or
+aggregate transport-byte ceiling. Failure, cancellation/chat change or mixed revisions prevent download and
 release prepared leases. No bulk body crosses the ordinary control bridge.
 
 The standalone HTML contains inert, integrity-checked snapshot parts plus exact

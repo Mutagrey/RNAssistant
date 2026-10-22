@@ -11,7 +11,8 @@ namespace RNAssistant.Core.Models
     }
     public static class ChatArtifactLimits
     {
-        public const int MaximumTextCharacters = 2000000;
+        // String representability, not a configured document or model-context budget.
+        public const int MaximumTextCharacters = int.MaxValue;
     }
 
     public static class ChatArtifactKinds

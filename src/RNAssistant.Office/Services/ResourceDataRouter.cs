@@ -82,7 +82,7 @@ namespace RNAssistant.Office.Services
         {
             if (method != "POST" && method != "OPTIONS")
                 return Failure(405, "RESOURCE_METHOD_NOT_ALLOWED", "Upload capabilities only accept POST chunks.");
-            int offset, count;
+            long offset; int count;
             var error = TransferBounds(uri, ResourceDataPlaneService.MaximumUploadChunkBytes, out offset, out count);
             if (error != null) return error;
             token.ThrowIfCancellationRequested();
@@ -100,7 +100,7 @@ namespace RNAssistant.Office.Services
         private ResourceStreamResponse Download(string method, Uri uri, string id, CancellationToken token)
         {
             if (method != "GET") return Failure(405, "RESOURCE_METHOD_NOT_ALLOWED", "Download capabilities only accept GET chunks.");
-            int offset, count;
+            long offset; int count;
             var error = TransferBounds(uri, ResourceDataPlaneService.MaximumDownloadChunkBytes, out offset, out count);
             if (error != null) return error;
             string contentType;
@@ -108,7 +108,7 @@ namespace RNAssistant.Office.Services
             return new ResourceStreamResponse { StatusCode = 200, Reason = "OK", ContentType = contentType, Body = new MemoryStream(bytes, false) };
         }
 
-        private static ResourceStreamResponse TransferBounds(Uri uri, int maximumCount, out int offset, out int count)
+        private static ResourceStreamResponse TransferBounds(Uri uri, int maximumCount, out long offset, out int count)
         {
             offset = -1; count = -1;
             var fields = uri.Query.TrimStart('?').Split('&');
@@ -116,11 +116,11 @@ namespace RNAssistant.Office.Services
             foreach (var field in fields)
             {
                 var parts = field.Split('=');
-                int value;
-                if (parts.Length != 2 || !int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out value))
+                long value;
+                if (parts.Length != 2 || !long.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out value))
                     return Failure(400, "RESOURCE_CURSOR_INVALID", "Invalid bounded transfer selector.");
                 if (parts[0] == "offset" && offset == -1) offset = value;
-                else if (parts[0] == "count" && count == -1) count = value;
+                else if (parts[0] == "count" && count == -1 && value <= int.MaxValue) count = (int)value;
                 else return Failure(400, "RESOURCE_CURSOR_INVALID", "Unknown or duplicated transfer selector.");
             }
             if (offset < 0 || count < 1 || count > maximumCount)

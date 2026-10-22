@@ -49,14 +49,13 @@
     }
     function validate(workspace, wanted) {
       var files = workspace.files || [];
-      if (files.length > 100 || files.some(function (file) { return !Number.isInteger(file.characters) || file.characters < 0 || file.characters > 300000; }) ||
-          files.reduce(function (total, file) { return total + file.characters; }, 0) > 1500000)
+      if (files.length > 100 || files.some(function (file) { return !Number.isInteger(file.characters) || file.characters < 0; }))
         throw new Error("RESOURCE_BATCH_TOO_LARGE");
       wanted.forEach(function (file) {
         if (files.indexOf(file) < 0 || !file.source || typeof file.source.uri !== "string" || !file.source.uri.startsWith("rna://chat/") ||
             typeof file.source.revision !== "string" || !file.source.revision || !Number.isInteger(file.characters) ||
-            file.characters < 0 || file.characters > 300000 || !Number.isInteger(file.byteLength) || file.byteLength < 0 ||
-            file.byteLength > 1200000 || !/^[a-f0-9]{64}$/.test(file.sha256)) throw new Error("RESOURCE_SOURCE_METADATA_INVALID");
+            file.characters < 0 || !Number.isInteger(file.byteLength) || file.byteLength < 0 ||
+            !/^[a-f0-9]{64}$/.test(file.sha256)) throw new Error("RESOURCE_SOURCE_METADATA_INVALID");
       });
     }
     function demandKey(workspace, wanted) { return workspace.revisionArtifactId + ":" + wanted.map(key).join("|"); }
@@ -85,7 +84,7 @@
                 !job.data.payload || job.data.payload.sha256 !== file.sha256 || job.data.payload.byteLength !== file.byteLength)
               throw new Error("RESOURCE_SOURCE_MISMATCH");
             var bytes = await window.RNAssistantResourceDownload.read(job.data,
-              { maxBytes: 1200000, fetch: window.fetch.bind(window), signal: job.abort.signal, isCurrent: current });
+              { maxBytes: Number.MAX_SAFE_INTEGER, fetch: window.fetch.bind(window), signal: job.abort.signal, isCurrent: current });
             var text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
             if (text.length !== file.characters) throw new Error("RESOURCE_SOURCE_INCOMPLETE");
             await close(job); active();

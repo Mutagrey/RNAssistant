@@ -807,7 +807,7 @@ namespace RNAssistant.Runtime
                     new WorkspaceResourceHandler(_resources.Select("file"), _skillPublications, () => _skills, _observed, true, _plans,
                         maximumFileReadCharacters,
                         office?.ResourceFind));
-                Register(registry, entries, "common.resources_read", (_mode.AllowsSkills ? "Read a UTF-8 file (default type=file, target is its workspace-relative path) or published skill instructions (type=skill, target is the skill ID). referencePath belongs only to a listed skill reference. For a workspace Plan use type=plan, omit target for the selected plan or supply an exact unique title. Optional version reads history without selecting it; a current read selects its exact revision. File text delivery follows this run's model input budget; skill instructions retain their separate publication bound, and Plans allow 32000 characters. For large files use startLine and lineCount (1–500), or zero-based UTF-16 startChar and charCount for a long single line; each slice observes the current version. files.patch accepts a unique anchor from an observed excerpt of a UTF-8 source. No partial skill activation." : "Read UTF-8 text by workspace-relative target. File text delivery follows this run's model input budget; use startLine/lineCount (1–500) or zero-based UTF-16 startChar/charCount for bounded excerpts of files.") +
+                Register(registry, entries, "common.resources_read", (_mode.AllowsSkills ? "Read a UTF-8 file (default type=file, target is its workspace-relative path) or published skill instructions (type=skill, target is the skill ID). referencePath belongs only to a listed skill reference. For a workspace Plan use type=plan, omit target for the selected plan or supply an exact unique title. Optional version reads history without selecting it; a current read selects its exact revision. File text delivery follows this run's model input budget; Plans and published skill sources use the same budget and excerpt selectors; reading an excerpt does not activate a skill. For large files use startLine and positive lineCount, or zero-based UTF-16 startChar and charCount for a long single line; each slice observes the current version. files.patch accepts a unique anchor from an observed excerpt of a UTF-8 source. No partial skill activation." : "Read UTF-8 text by workspace-relative target. File text delivery follows this run's model input budget; use startLine/positive lineCount or zero-based UTF-16 startChar/charCount for bounded excerpts of files.") +
                     (office == null ? string.Empty : " Use type=office and a semantic target to read the pinned Office document."),
                     ResourceSchema(false, _mode.AllowsSkills, office != null, maximumFileReadCharacters), false,
                     new WorkspaceResourceHandler(_resources.Select("file"), _skillPublications, () => _skills, _observed, false, _plans,
@@ -936,7 +936,7 @@ namespace RNAssistant.Runtime
                 // Complete alternatives: the exact runtime gate and structured output
                 // must reject selectors belonging to the other resource kind.
                 var variants = new JArray(files);
-                if (allowSkills) { variants.Add(ResourceVariant(find, true, maximumFileReadCharacters)); variants.Add(PlanResourceVariant(find)); }
+                if (allowSkills) { variants.Add(ResourceVariant(find, true, maximumFileReadCharacters)); variants.Add(PlanResourceVariant(find, maximumFileReadCharacters)); }
                 if (allowOffice) variants.Add(OfficeResourceVariant(find));
                 return new JObject { ["type"] = "object", ["properties"] = new JObject(),
                     ["required"] = new JArray(), ["additionalProperties"] = false,
@@ -961,9 +961,9 @@ namespace RNAssistant.Runtime
                         ["enum"] = new JArray("metadata", "text", "structure", "source", "media", "formulas", "table") };
                     properties["partNumber"] = new JObject { ["type"] = "integer", ["minimum"] = 1 };
                     properties["startLine"] = new JObject { ["type"] = "integer", ["minimum"] = 1 };
-                    properties["lineCount"] = new JObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = 500 };
+                    properties["lineCount"] = new JObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = int.MaxValue };
                     properties["startChar"] = new JObject { ["type"] = "integer", ["minimum"] = 0 };
-                    properties["charCount"] = new JObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = 32000 };
+                    properties["charCount"] = new JObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = int.MaxValue };
                     properties["limit"] = new JObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = 5000 };
                     properties["offset"] = new JObject { ["type"] = "integer", ["minimum"] = 0 };
                     properties["fields"] = new JObject { ["type"] = "array", ["maxItems"] = 128,
@@ -972,7 +972,7 @@ namespace RNAssistant.Runtime
                 return schema;
             }
 
-            private static JObject PlanResourceVariant(bool find)
+            private static JObject PlanResourceVariant(bool find, int maximumFileReadCharacters)
             {
                 var schema = JObject.Parse(find ? Schema("query", false) : Schema("target", false));
                 var properties = (JObject)schema["properties"];
@@ -983,6 +983,9 @@ namespace RNAssistant.Runtime
                     properties["target"]["description"] = "Exact unique Plan title from discovery; omit or null for the selected active plan. A current read selects that exact revision for later guarded saves.";
                     properties["version"] = new JObject { ["type"] = "integer", ["minimum"] = 1,
                         ["description"] = "Optional user-visible historical version; a historical read never changes the selected plan." };
+                    var textSelectors = (JObject)ResourceVariant(false, false, maximumFileReadCharacters)["properties"];
+                    foreach (var name in new[] { "startLine", "lineCount", "startChar", "charCount" })
+                        properties[name] = textSelectors[name].DeepClone();
                 }
                 return schema;
             }
@@ -1005,11 +1008,10 @@ namespace RNAssistant.Runtime
                 {
                     properties["target"]["description"] = skill ? "Enabled skill ID from discovery or the catalog." : "Workspace-relative file path, for example notes.txt or src/app.js.";
                     if (skill) properties["referencePath"]["description"] = "One listed reference path of this skill. Omit or use null to read its core instructions.";
-                    else
                     {
                         properties["startLine"] = new JObject { ["type"] = "integer", ["minimum"] = 1,
                             ["description"] = "First line, 1-based. Supply together with lineCount; omitted means whole file." };
-                        properties["lineCount"] = new JObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = 500,
+                        properties["lineCount"] = new JObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = int.MaxValue,
                             ["description"] = "Number of lines. Selected text must fit this run's model input budget; each read checks the current version." };
                         properties["startChar"] = new JObject { ["type"] = "integer", ["minimum"] = 0,
                             ["maximum"] = WorkspaceFileService.MaximumWindowTextCharacters,

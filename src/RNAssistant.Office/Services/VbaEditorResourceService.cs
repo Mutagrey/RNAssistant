@@ -13,8 +13,8 @@ namespace RNAssistant.Office.Services
     internal sealed class VbaEditorResourceService
     {
         internal const string Owner = "vba-editor";
-        internal const int MaximumCharacters = 1000000;
-        internal const int MaximumBytes = 4 * MaximumCharacters;
+        internal const int MaximumCharacters = int.MaxValue;
+        internal const int MaximumBytes = int.MaxValue;
         private readonly ResourceGatewayService _gateway;
         private readonly ResourceDataPlaneService _data;
 

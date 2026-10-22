@@ -465,7 +465,7 @@
     var transfer;
     try {
       transfer = await send("exportArtifact", { chatId: id, documentId: item.documentId, resourceUri: item.resourceUri, preview: preview });
-      var bytes = await window.RNAssistantResourceDownload.read(transfer.data, { maxBytes: 20 * 1024 * 1024,
+      var bytes = await window.RNAssistantResourceDownload.read(transfer.data, { maxBytes: Number.MAX_SAFE_INTEGER,
         fetch: window.fetch.bind(window), isCurrent: isCurrent || function () { return current(id, nav); } });
       return { transfer: transfer, bytes: bytes };
     } finally {
@@ -612,7 +612,6 @@
   }
   async function importFile(file) {
     if (!file || !canMutate()) return;
-    if (file.size > 20 * 1024 * 1024) { status("Максимальный размер — 20 МиБ."); return; }
     var id = state.activeChatId, nav = state.chatNavigationVersion, lease;
     pending = true; actions();
     try {
@@ -620,7 +619,7 @@
       if (!current(id, nav)) return;
       status("Загрузка файла…");
       lease = await send("beginArtifactImport", { chatId: id, fileName: file.name, contentType: file.type || "application/octet-stream", byteLength: file.size });
-      await window.RNAssistantResourceUpload.write(lease, file, { maxBytes: 20 * 1024 * 1024, isCurrent: function () { return current(id, nav); } });
+      await window.RNAssistantResourceUpload.write(lease, file, { maxBytes: Number.MAX_SAFE_INTEGER, isCurrent: function () { return current(id, nav); } });
       if (!current(id, nav) || state.htmlWorkspaceDirty) return;
       var edit = state.htmlWorkspaceEditVersion || 0;
       var result = await send("importArtifact", { chatId: id, expectedSessionRevision: catalogState.sessionRevision, uploadLeaseId: lease.leaseId, operationId: operationId() });

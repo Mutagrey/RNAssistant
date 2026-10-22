@@ -343,7 +343,7 @@ namespace RNAssistant.Office.Services
             try
             {
                 ToolRunResult error;
-                return _vbaReader.TryReadModule(moduleName, 2000000, out module, out error);
+                return _vbaReader.TryReadModule(moduleName, int.MaxValue, out module, out error);
             }
             catch (OfficeDocumentGuardException) { throw; }
             catch (HostRuntime.MutationLockException) { throw; }

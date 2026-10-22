@@ -142,7 +142,7 @@ namespace RNAssistant.Office.Tools
                 var patch = StructuredTextPatchEngine.Apply(
                     before, operations, MaxHtmlChars);
                 ValidateFile(file.Path, file.Kind, patch.Text);
-                ValidateWorkspaceCapacity(workspace, file.Id, patch.Text, null, null);
+                ValidateWorkspaceCapacity(workspace, file.Id, null);
                 var changed = !string.Equals(before, patch.Text, StringComparison.Ordinal);
                 var preview = new JObject
                 {

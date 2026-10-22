@@ -233,7 +233,7 @@ namespace RNAssistant.Harness
             return new ToolLibraryMutationBatch { Type = ToolLibraryMutationBatch.ContractType, ContractVersion = 1,
                 Mutations = new List<ToolCoreMutationPayload> { new ToolCoreMutationPayload {
                     Kind = "upsert", Id = tool.Id, Host = tool.Host, Name = tool.Name, Description = tool.Description,
-                    Code = tool.Code, Readme = "# Справка\r\n" + new string('ж', 140000), Enabled = true,
+                    Code = tool.Code, Readme = "# Справка\r\n" + new string('ж', 1100000), Enabled = true,
                     Executor = "vba", ArgumentSchemaJson = tool.ArgumentSchemaJson, RequiresConfirmation = true, MutatesDocument = true,
                     RiskLevel = 1, Components = tool.Components.Select(ToolPackageComponentDto.From).ToList() } } };
         }

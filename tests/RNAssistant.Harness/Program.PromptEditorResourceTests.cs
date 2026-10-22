@@ -153,14 +153,18 @@ namespace RNAssistant.Harness
                         ChatId = foreign.Id, UploadLeaseId = request.UploadLeaseId, Sha256 = request.Sha256 }, CancellationToken.None));
                     RuntimeThrows<ResourceRequestException>(() => data.CloseUpload(session.Id, request.UploadLeaseId, SkillEditorResourceService.Owner));
                     AssertEqual("valid", editor.ReadMutation(session, request, CancellationToken.None).Changes[0].Value, "foreign consumers cannot destroy the rightful upload");
-                    foreach (var mode in new[] { "hash", "partial", "json", "utf8", "shape", "duplicate", "oversized", "null", "cancel" })
+                    change.Value = new string('x', 100001);
+                    request = UploadPromptMutation(data, editor, session, Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(batch)));
+                    AssertEqual(change.Value, editor.ReadMutation(session, request, CancellationToken.None).Changes[0].Value,
+                        "prompt source beyond the former ceiling is preserved");
+                    foreach (var mode in new[] { "hash", "partial", "json", "utf8", "shape", "duplicate", "null", "cancel" })
                     {
                         var input = bytes;
                         if (mode == "json") input = Encoding.UTF8.GetBytes("{} trailing");
                         if (mode == "utf8") input = new byte[] { 255 };
                         if (mode == "shape") input = Encoding.UTF8.GetBytes("{\"unknown\":true}");
                         if (mode == "duplicate") { batch.Changes = new[] { change, change }; input = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(batch)); }
-                        if (mode == "oversized" || mode == "null") { batch.Changes = new[] { change }; change.Value = mode == "null" ? null : new string('x', 100001); input = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(batch)); }
+                        if (mode == "null") { batch.Changes = new[] { change }; change.Value = null; input = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(batch)); }
                         request = UploadPromptMutation(data, editor, session, input, mode == "partial");
                         if (mode == "hash") request.Sha256 = new string('0', 64);
                         if (mode == "cancel") RuntimeThrows<OperationCanceledException>(() => editor.ReadMutation(session, request, new CancellationToken(true)));

@@ -14,7 +14,7 @@ namespace RNAssistant.Office.Services
     internal sealed class SkillEditorResourceService
     {
         internal const string Owner = "skill-editor";
-        internal const int MaximumMutationBytes = 16 * 1024 * 1024;
+        internal const int MaximumMutationBytes = int.MaxValue;
         private readonly ResourceGatewayService _gateway;
         private readonly ResourceDataPlaneService _data;
         private readonly SkillCatalogService _skills;

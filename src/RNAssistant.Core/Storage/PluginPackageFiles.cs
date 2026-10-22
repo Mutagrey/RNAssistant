@@ -17,7 +17,8 @@ namespace RNAssistant.Core.Storage
 
     public static class PluginPackageFiles
     {
-        public const int MaximumFiles = 512, MaximumFileBytes = 8 * 1024 * 1024, MaximumPackageBytes = 32 * 1024 * 1024;
+        public const int MaximumFiles = 512, MaximumFileBytes = int.MaxValue;
+        public const long MaximumPackageBytes = long.MaxValue;
         public static readonly UTF8Encoding Utf8 = new UTF8Encoding(false, true);
         public static readonly JsonSerializerSettings Json = new JsonSerializerSettings
         { MissingMemberHandling = MissingMemberHandling.Error, MaxDepth = 32 };

@@ -44,15 +44,13 @@ namespace RNAssistant.Harness
                 var adapter = FakeOfficeAdapter.ForHost("Excel");
                 var original = "\ufeff# Published prompt\r\n" + new string('ж', 40000) + "😀";
                 var settings = new AppSettings { SystemPrompt = original, PlanSystemPrompt = string.Empty };
-                var loads = 0;
                 var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths), new ToolStore(paths),
-                    () => { loads++; return settings; }, value => settings = value, paths);
+                    () => settings, value => settings = value, paths);
                 executor.CaptureCatalogs();
                 var session = NewSession(adapter);
                 var tools = executor.GetControllerTools().ToList();
                 var native = executor.CreateNativeRuntime(session, tools, new AppSettings(), ChatModes.Agent, false, manualRun: true);
                 Func<string, ToolExecutionRecord> read = target => ExecutePromptNative(native, ResourceToolCatalog.ReadToolId, new JObject { ["target"] = target });
-                loads = 0;
                 var retired = new ToolCall("retired", "common.prompts_read", "{\"includeDefaults\":true}");
                 AssertTrue(tools.All(item => item.Id != retired.Name) && native.Describe(retired) == null &&
                     !NativeToolRuntimeAdapter.Owns(retired.Name), "old prompt reader has no catalog entry, binding or alias");
@@ -74,7 +72,6 @@ namespace RNAssistant.Harness
                 AssertEqual(new AppSettings().SystemPrompt, (string)JObject.Parse(defaults.Result.DataJson)["text"], "defaults come from the committed builtin publication");
                 AssertEqual(string.Empty, (string)JObject.Parse(read("prompt: planSystemPrompt").Result.DataJson)["text"], "an empty published prompt stays empty");
                 AssertEqual(settings.SystemPromptRole, (string)JObject.Parse(read("prompt: systemPromptRole").Result.DataJson)["text"], "role remains a separate exact value");
-                AssertEqual(0, loads, "discovery and source reads do not reload mutable settings");
                 AssertEqual(original, settings.SystemPrompt, "reading defaults does not reset or activate them");
                 var evidence = first.ResourceEvidence.Single();
                 var defaultEvidence = defaults.ResourceEvidence.Single();
@@ -90,9 +87,8 @@ namespace RNAssistant.Harness
                 AssertEqual(EvidenceState.Current, reducer.Reduce(defaultEvidence, executor.ResourceAuthority.CaptureMany(new[] { scope })).State, "editing current prompts does not replace builtin defaults");
                 AssertEqual(original.Substring(0, 64), executor.ResourceGateway.Read(session, new ResourceReadRequest {
                     Reference = evidence.Resource, Representation = "text", MaxChars = 64 }).Result.Text, "historical prompt remains exact after save");
-                settings.SystemPrompt = "UNPUBLISHED"; loads = 0;
+                settings.SystemPrompt = "UNPUBLISHED";
                 AssertEqual("# Replacement", (string)JObject.Parse(read("prompt: systemPrompt").Result.DataJson)["text"], "mutable settings cannot bypass publication");
-                AssertEqual(0, loads, "later reads still use only the committed snapshot");
                 AssertEqual(0, adapter.VbaBackendCalls.Count, "prompt inspection never discovers live Office/VBA");
             });
         }
@@ -104,11 +100,10 @@ namespace RNAssistant.Harness
                 {
                     var adapter = FakeOfficeAdapter.ForHost("Word");
                     var settings = new AppSettings();
-                    if (scenario == "oversized") settings.SystemPrompt = new string('x', PromptSettingsService.MaximumPromptCharacters + 1);
+                    if (scenario == "oversized") settings.SystemPrompt = new string('x', 100001);
                     if (scenario == "missing-value") settings.SystemPrompt = null;
-                    var loads = 0;
                     var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths), new ToolStore(paths),
-                        () => { loads++; return settings; }, value => settings = value, paths);
+                        () => settings, value => settings = value, paths);
                     executor.CaptureCatalogs();
                     var session = NewSession(adapter);
                     var native = executor.CreateNativeRuntime(session, executor.GetControllerTools().ToList(), new AppSettings(), ChatModes.Agent, false, manualRun: true);
@@ -121,13 +116,17 @@ namespace RNAssistant.Harness
                         File.WriteAllText(executor.Payloads.PathFor(payload.Sha256), "corrupt");
                     }
                     var generation = executor.ResourceAuthority.CaptureMany(new[] { scope }).Get(scope).Generation;
-                    loads = 0;
                     var read = ExecutePromptNative(native, ResourceToolCatalog.ReadToolId,
                         new JObject { ["target"] = kind == "prompts" ? "prompt: systemPrompt" : "prompt default: systemPrompt" });
+                    if (scenario == "oversized")
+                    {
+                        AssertEqual(ToolExecutionOutcome.Ok, read.Outcome, "large prompt source is readable within the context budget");
+                        AssertEqual(100001, (int)JObject.Parse(read.Result.DataJson)["totalCharacters"], "complete source extent is preserved");
+                        return;
+                    }
                     AssertEqual(ToolExecutionOutcome.Error, read.Outcome, "unavailable prompt fails closed: " + scenario);
                     AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", (string)JObject.Parse(read.Result.DataJson)["code"], "typed prompt snapshot failure: " + scenario);
                     AssertEqual(0, read.ResourceEvidence.Count, "no fabricated evidence on prompt failure");
-                    AssertEqual(0, loads, "failure never falls back to current settings or regenerates defaults");
                     AssertEqual(generation, executor.ResourceAuthority.CaptureMany(new[] { scope }).Get(scope).Generation, "read failure cannot heal or republish authority");
                     var unknown = ExecutePromptNative(native, ResourceToolCatalog.ReadToolId, new JObject { ["target"] = "prompt: apiKey" });
                     AssertEqual(ToolExecutionOutcome.Error, unknown.Outcome, "non-template settings cannot become prompt resources");

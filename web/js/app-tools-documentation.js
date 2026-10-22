@@ -4,7 +4,7 @@
   var CONTRACT_VERSION = 1;
   var REQUEST_TYPE = "rnassistant.toolLibraryDocumentationRequest";
   var RESPONSE_TYPE = "rnassistant.toolLibraryDocumentation";
-  var MAXIMUM_BYTES = 2 * 1024 * 1024;
+  var MAXIMUM_BYTES = Number.MAX_SAFE_INTEGER;
 
   function fromContract(response, operation) {
     var resource = response && response.resource;

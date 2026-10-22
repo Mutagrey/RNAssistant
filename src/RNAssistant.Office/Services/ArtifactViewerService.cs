@@ -31,8 +31,8 @@ namespace RNAssistant.Office.Services
     {
         public const int PageCharacters = 32000;
         public const int MaximumDocumentCharacters = 512000;
-        public const long MaximumImageBytes = 20L * 1024L * 1024L;
-        public const long MaximumRawBytes = 20L * 1024L * 1024L;
+        public const long MaximumImageBytes = int.MaxValue;
+        public const long MaximumRawBytes = int.MaxValue;
         public const int MaximumImageThumbnailDimension = 1280;
         public const long MaximumImageThumbnailBytes = 512L * 1024L;
         // Change the profile when raster output changes; retained previews are immutable.

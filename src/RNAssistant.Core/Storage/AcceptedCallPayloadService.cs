@@ -50,8 +50,8 @@ namespace RNAssistant.Core.Storage
             if (fact?.AcceptedCallPayload == null) return fact;
             if (!IsExternalizedCall(fact))
                 throw new InvalidOperationException("ACCEPTED_CALL_PAYLOAD_INVALID: exact accepted-call metadata is incomplete.");
-            if (payloads == null || fact.AcceptedCallPayload.ByteLength > 16L * 1024 * 1024)
-                throw new InvalidOperationException("ACCEPTED_CALL_PAYLOAD_UNAVAILABLE: bounded exact payload required.");
+            if (payloads == null)
+                throw new InvalidOperationException("ACCEPTED_CALL_PAYLOAD_UNAVAILABLE: exact payload required.");
             var text = payloads.ReadText(fact.AcceptedCallPayload.ToBlobReference());
             if (text == null) throw new InvalidOperationException("ACCEPTED_CALL_PAYLOAD_UNAVAILABLE: exact historical body is missing.");
             var body = JsonConvert.DeserializeObject<AcceptedCallBody>(text);

@@ -31,7 +31,7 @@
       };
       try {
         active();
-        if (!chatId || typeof code !== "string" || code.length > 1000000) throw new Error("RESOURCE_BATCH_TOO_LARGE");
+        if (!chatId || typeof code !== "string") throw new Error("RESOURCE_BATCH_TOO_LARGE");
         if (type === "saveVbaModule" && !/^[a-fA-F0-9]{64}$/.test(payload.expectedCodeSha256))
           throw new Error("Перед сохранением загрузите полный исходный код модуля.");
         var bytes = new TextEncoder().encode(code);
@@ -46,7 +46,7 @@
         operation.requestId = null;
         active();
         await window.RNAssistantResourceUpload.write(operation.lease, new Blob([bytes]), {
-          maxBytes: 4000000, signal: operation.abort.signal, isCurrent: current
+          maxBytes: Number.MAX_SAFE_INTEGER, signal: operation.abort.signal, isCurrent: current
         });
         active();
         payload.chatId = chatId;

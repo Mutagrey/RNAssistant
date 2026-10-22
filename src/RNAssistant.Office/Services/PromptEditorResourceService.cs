@@ -13,8 +13,8 @@ namespace RNAssistant.Office.Services
     internal sealed class PromptEditorResourceService
     {
         internal const string Owner = "prompt-editor";
-        internal const int MaximumSourceBytes = 4 * PromptSettingsService.MaximumPromptCharacters;
-        internal const int MaximumMutationBytes = 8 * 1024 * 1024;
+        internal const int MaximumSourceBytes = int.MaxValue;
+        internal const int MaximumMutationBytes = int.MaxValue;
         private readonly ResourceGatewayService _gateway;
         private readonly ResourceDataPlaneService _data;
 

@@ -85,7 +85,7 @@ namespace RNAssistant.Office.Services
                 Kind = OutlookSearchKind, Title = key.Substring(7).Replace("latest-", "latest:"), Mutable = true,
                 MimeType = "application/json", Tracking = "externally-observed" };
             descriptor.Representations.AddRange(new[] { "metadata", "text" });
-            descriptor.Metadata["coverage"] = "Newest N folder items; +body captures at most 100000 characters per mail. Read text for truncation.";
+            descriptor.Metadata["coverage"] = "Newest N folder items; +body requests full bodies. Read text for explicit backend truncation markers.";
             return descriptor;
         }
 

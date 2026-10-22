@@ -325,6 +325,63 @@ namespace RNAssistant.Core.Models
                 throw new System.InvalidOperationException("Complete byte read requires matching exact whole-view evidence.");
         }
 
+        // Select from one authoritative snapshot. Retain only delivered bytes as
+        // observation evidence; a local whole capture is not a model whole read.
+        public ResourceReadObservation SelectTextWindow(int maximumCharacters,
+            System.Func<string, PayloadRef> retainText, int? startLine = null, int? lineCount = null,
+            int? startChar = null, int? charCount = null)
+        {
+            RequireCompleteExactText();
+            if (maximumCharacters < 1 || retainText == null)
+                throw new System.ArgumentException("A positive context budget and payload owner are required.");
+            if (startLine.HasValue != lineCount.HasValue || startChar.HasValue != charCount.HasValue ||
+                startLine.HasValue && startChar.HasValue)
+                throw new ResourceRequestException("Supply one complete line or character selector.", "resource_window_invalid", false);
+            var source = Result.Text;
+            if (!startLine.HasValue && !startChar.HasValue && source.Length <= maximumCharacters) return this;
+            var start = startChar ?? 0;
+            var end = (int)System.Math.Min(source.Length, (long)start + (charCount ?? maximumCharacters));
+            if (startChar.HasValue && (start < 0 || start > source.Length || charCount < 1 || charCount > maximumCharacters))
+                throw new ResourceRequestException("Character selection must fit the source and model budget.", "resource_chars_invalid", false);
+            if (startLine.HasValue)
+            {
+                if (startLine < 1 || lineCount < 1)
+                    throw new ResourceRequestException("Line selectors must be positive.", "resource_lines_invalid", false);
+                long line = 1;
+                start = startLine == 1 ? 0 : -1;
+                end = source.Length;
+                for (var i = 0; i < source.Length; i++)
+                {
+                    if (source[i] != '\r' && source[i] != '\n') continue;
+                    if (source[i] == '\r' && i + 1 < source.Length && source[i + 1] == '\n') i++;
+                    line++;
+                    if (line == startLine) start = i + 1;
+                    if (line == (long)startLine + lineCount) { end = i + 1; break; }
+                }
+                if (start < 0) throw new ResourceRequestException("startLine is past the end of the source.", "resource_lines_invalid", false);
+                if (end - start > maximumCharacters)
+                    throw new ResourceRequestException("Selected lines exceed the model budget; reduce lineCount or select characters.", "resource_lines_too_large", false);
+            }
+            if (!startLine.HasValue && !startChar.HasValue && end > 0 && end < source.Length &&
+                char.IsHighSurrogate(source[end - 1]) && char.IsLowSurrogate(source[end])) end--;
+            if (start > 0 && start < source.Length && char.IsHighSurrogate(source[start - 1]) && char.IsLowSurrogate(source[start]) ||
+                end > 0 && end < source.Length && char.IsHighSurrogate(source[end - 1]) && char.IsLowSurrogate(source[end]))
+                throw new ResourceRequestException("Character selection splits a UTF-16 pair.", "resource_chars_invalid", false);
+            var text = source.Substring(start, end - start);
+            var payload = retainText(text);
+            var coverage = new ResourceCoverage(ResourceCoverageKinds.CharacterRange, start: start, end: end);
+            var selected = new ResourceReadResult { Resource = Result.Resource, Representation = Result.Representation,
+                Text = text, Offset = start, ReturnedCharacters = text.Length, TotalCharacters = source.Length,
+                ContentSha256 = Result.ContentSha256, Coverage = coverage, Complete = false, Truncated = true,
+                SourceComplete = false, SourceEndChar = source.Length, RawContentIncluded = true, Payload = payload };
+            var evidence = Evidence.Where(item => item.Resource.Uri == Result.Resource.Reference.Uri &&
+                item.Resource.Revision == Result.Resource.Reference.Revision && item.View == Result.Representation)
+                .Select(item => new ResourceEvidence("ev_" + System.Guid.NewGuid().ToString("N"), item.ScopeId,
+                    item.Resource, item.View, coverage, false, item.AuthorityGeneration, payload, item.Dependencies,
+                    item.ObservedAt, item.SourceEventId, item.Immutable, item.ContentSha256)).ToArray();
+            return new ResourceReadObservation(selected, evidence);
+        }
+
     }
 
 }

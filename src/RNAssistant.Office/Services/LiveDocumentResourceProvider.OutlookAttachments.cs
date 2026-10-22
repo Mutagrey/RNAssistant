@@ -77,7 +77,7 @@ namespace RNAssistant.Office.Services
             descriptor.Metadata["fileName"] = attachment.FileName;
             descriptor.Metadata["attachmentType"] = attachment.Type;
             descriptor.Metadata["size"] = attachment.Size.ToString(CultureInfo.InvariantCulture);
-            descriptor.Metadata["coverage"] = "One file attachment, up to 20 MiB. Text/PDF: text; image or visual PDF: media. Unsupported views fail explicitly.";
+            descriptor.Metadata["coverage"] = "One exact file attachment. Text/PDF: text; image or visual PDF: media. Unsupported views fail explicitly.";
             return descriptor;
         }
 

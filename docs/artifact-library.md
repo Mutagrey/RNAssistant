@@ -87,9 +87,8 @@ produces a standalone page, separately from an editable project package.
 
 `exportArtifact`, `beginArtifactImport`, `importArtifact`, `copyArtifact` and
 `closeArtifactTransfer` use typed control DTOs and the existing chunked resource
-upload/download plane. Transfers are bounded to 20 MiB, including expanded archive
-content; native workspace limits also apply (100 files/data items, 300,000 characters
-per source file, 1,500,000 aggregate source/binding characters). A package needs an
+upload/download plane. Transfers no longer have a configured 20 MiB ceiling, including expanded archive
+content; the native 100-file/data-item workspace format contract still applies. A package needs an
 HTML entry; duplicate/unsafe paths, unsupported versions and missing dependencies
 are rejected before publication. The document authority publishes the entire authored
 aggregate in one commit. New immutable bodies alone are not visible catalog entries.
@@ -301,7 +300,7 @@ remain open; indexed discovery is a separate slice.
 
 Agent mode exposes `common.markdown_save` and `common.markdown_restore`. Save
 requires a title, a grounded description of purpose/contents, and the complete
-Markdown (up to 200,000 characters). Omitting `target` creates an independent
+Markdown (without a separate source-character ceiling). Omitting `target` creates an independent
 logical document. Supplying the exact semantic target returned by common resource
 discovery replaces that document's current revision; titles alone are not targets.
 An uploaded `.md` remains immutable. Ordinary Markdown replies remain messages.
@@ -489,7 +488,7 @@ and 32,000-character text parts live in the existing CAS/revision journal, using
 the same retention/GC edges. It publishes no heads, observation or read guard and
 introduces no library database or second currentness projection.
 
-First materialization verifies one exact source bounded to 20 MiB and builds
+First materialization verifies one exact source and builds
 parts incrementally through the protected CAS decoder. Discovery still uses its
 existing 1-million-character cross-resource query budget; explicit selected-target
 search scans the retained source completely. Authored Markdown/Plans no longer stop
@@ -586,7 +585,7 @@ headings are ignored; Setext/HTML headings are not supported by this grammar.
 
 An incremental counterpart of `MarkdownHeadingScanner` drives index headings;
 section selection uses the complete-source scanner and never trusts a clipped label.
-Section resolution reads the exact CAS text under the 20 MiB source bound and scans
+Section resolution reads the exact CAS text and scans
 at most 4096 headings. It does not infer uniqueness from incomplete extraction.
 Missing/repeated headings, truncated extraction, unsupported resources, oversized
 sections and generation drift fail explicitly with recovery guidance. A selected
@@ -932,8 +931,8 @@ composer waits for that chat's serialized staging queue before it snapshots the
 draft IDs. A staging failure keeps the text and successful drafts available for
 retry and starts no partial text-only model request.
 
-The current limits remain 10 files per message, 20 MiB per file and 50 MiB total
-unless a later bounded contract changes them explicitly. Supported uploads are
+The 10-file message contract remains. The former 20 MiB per-file and 50 MiB total
+source ceilings are removed; typed importer representation and memory still apply. Supported uploads are
 signature-validated images, PDF, MP3/WAV and safely decoded text-based files;
 arbitrary binary files are not accepted merely because of their extension.
 
@@ -1107,8 +1106,8 @@ The original upload remains immutable. New versions preserve UTF-8/UTF-16/UTF-32
 encoding, BOM and untouched line endings; unsupported or lossy decoding fails
 explicitly. Raw export uses the verified exact body and filename, so an uploaded
 10 MiB code file can become an editable/exportable `.md` without placing its body in
-`common.markdown_save`'s 200,000-character argument. That older whole-body limit
-still applies to standalone Markdown authoring.
+model arguments. Standalone `common.markdown_save` follows the same source-size
+policy, while its create/replace contract still requires the complete new Markdown.
 
 Chat reopening keeps authored `File` bodies lazy, independently of MIME.
 Explicit body loading uses `DocumentArtifactStore` and its encoding-aware exact
@@ -1118,7 +1117,7 @@ saves never re-encode document/workspace-owned bytes or replace their CAS refere
 UTF-16 save/reopen/read/save/export preserves the original BOM and byte hash.
 
 Resource parts, search and outline cover authored files. The viewer can page
-through up to 20 MiB of authored-file text, rendering one page at a time; its
+through the complete authored-file text, rendering one page at a time; its
 full-source copy remains limited to 512,000 characters. Run Changes presents
 verified bounded hunk previews for large files instead of claiming a full-file
 visual diff. Export is the exact full-file path. This feature does not validate
@@ -1176,7 +1175,7 @@ are preview frames, never child artifacts or independently durable revisions.
 ## Viewer contracts
 
 - Text/source: fixed 32,000-character pages within a 512,000-character viewer
-  document bound (up to 20 MiB navigation for authored `File`), line numbers,
+  preview bound (authored `File` navigation follows the complete source extent), line numbers,
   page search/copy and exact full copy/download only
   after a contiguous stable-URI/hash/total read. A truncated extracted source or an
   over-limit document remains explicitly partial.
@@ -1184,7 +1183,7 @@ are preview frames, never child artifacts or independently durable revisions.
   the full exact source is available. Plan uses this viewer and is never labelled
   JSON; a dirty Plan preview is explicitly a non-durable draft.
 - Image: the exact revision-pinned JPEG/PNG/GIF/WebP bytes are read from attachment
-  CAS through a typed bridge under the existing 20 MiB attachment bound. The
+  CAS through a typed bridge under the current byte-array representation. The
   locally vendored Viewer.js 1.12.0 receives one admitted Blob image and provides
   proportional fit with upscaling, 100%/button/wheel/pinch zoom, pan, rotation,
   Fit/100% double-click toggle and keyboard shortcuts. RNAssistant retains natural
@@ -1199,8 +1198,8 @@ are preview frames, never child artifacts or independently durable revisions.
   evidence and an explicit truncation/scan warning; it does not return the whole
   extracted body. Text uses the same exact viewer paging as other sources: 32,000
   characters per read within the 512,000-character viewer ceiling. Storage ingestion
-  may retain up to 1,000,000 extracted characters, so a larger or incomplete
-  extraction remains explicitly partial in the viewer. Page navigation renders one
+  has no configured extracted-text ceiling; the viewer labels its bounded preview
+  explicitly, and common resources can continue through the exact retained text. Page navigation renders one
   requested page at a time to JPEG through the separately admitted local
   PDFtoImage/PDFium/Skia path, bounded to 2,048 px and 10 MiB per page. The same
   Viewer.js instance type displays that verified JPEG. A separate typed thumbnail
@@ -1318,8 +1317,8 @@ Manual package example (place the listed files beside `manifest.json`):
 Current package kind admits UTF-8 classic `.js`, `.css`, `.html` and `.htm`
 files only. Paths are workspace-relative and cannot traverse, link outside the
 package or collide case-insensitively. Limits: 300 packages, 20 files per package,
-1,000,000 bytes/300,000 characters per file, 3,000,000 bytes per package,
-16,384 bytes per manifest.
+16,384 bytes per manifest. Source files and the aggregate package have no
+configured byte/character ceiling; revision hashing is incremental.
 Descriptions and usage are bounded metadata, not trusted instructions or an
 offline proof. `offline: true` declares the author's intent; normal sandbox/CSP
 and static preflight still govern the page, while user-authored code must be
@@ -1376,8 +1375,8 @@ text hashes, continuation checks and lease cleanup share `ArtifactViewerService`
 and the existing viewer cache. Text reads and imports require an explicit chat,
 without selecting another chat or falling back to the active one.
 `UploadedHtmlResourceService` imports through exact Gateway text pages, not a direct
-attachment callback. Retained text evidence and the existing 300,000-character
-import limit are checked before hydration; contiguous pages, total length and the
+attachment callback. Retained text evidence is checked before hydration; the former source-size ceiling
+is removed and contiguous pages, total length and the
 complete extracted-text SHA-256 are verified before any workspace revision is
 created. Missing, corrupted or truncated text cannot be imported as empty/partial
 content. Original binary identity, source provenance, target-path collision and
@@ -1431,8 +1430,9 @@ parent artifact, not the active run's mutable artifact list. Source transport is
 inert UTF-8; it neither executes HTML nor adds model evidence. Historical exact
 reads do not switch the active workspace, and opened leases retain their snapshot.
 
-Per-file bounds remain 300,000 characters / 1,200,000 bytes; the current workspace
-cache is limited by the existing 100-file and 1,500,000-source-character bounds.
+Per-file and aggregate source ceilings are removed. The workspace retains its
+100-member format contract; the optional reusable clean-source cache stays bounded
+to 3,000,000 characters / 200 entries and does not reject larger selected files.
 There is one source producer, coalesced demand/cancellation and no automatic retry
 after read/integrity failure. Late leases close in the original owner. Chat/page
 cleanup, exact resource/hash/length checks and strict decoding precede hydration.
@@ -1459,8 +1459,8 @@ Known publication must still match its exact immutable workspace snapshot; stale
 Unknown, invalid-path/JSON and capacity failures cannot dispatch. The existing
 read-back/persistence/authority barrier remains the only publication owner.
 
-Reservation is at most 1,200,000 UTF-8 bytes; existing per-source 300,000-character
-and aggregate workspace limits remain. Empty files are complete replacements;
+Reservation covers a transfer chunk and disposable staging stream; per-source
+and aggregate workspace text ceilings are removed. Empty files are complete replacements;
 empty/invalid JSON is refused. The browser has one in-flight writer, sequential
 acknowledged chunks, chat/page cancellation and late-lease cleanup. Changed drafts
 prevent dispatch; edits made after dispatch are not replaced or silently rebased
@@ -1566,7 +1566,7 @@ Phase 11 is implemented as separate changes:
      inert; the UI obtains only an exact 32,000-character bounded source projection
      and inserts it with `textContent`. Explicit import requires the current HTML
      head, a new `.html`/`.htm` path and a complete decoded payload within the
-     300,000-character workspace-file bound, then creates a separate workspace
+     complete-source integrity checks, then creates a separate workspace
      revision with exact source URI/hash/relation provenance.
      [Evidence](stabilization/PHASE_11C2_HTML_IMPORT_PREVIEW.md).
    - 11C3 — done host-neutral: storage cannot synthesize workspace revisions;

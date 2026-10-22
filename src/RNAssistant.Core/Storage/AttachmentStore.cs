@@ -10,10 +10,10 @@ namespace RNAssistant.Core.Storage
     public sealed class AttachmentStore
     {
         public const int MaxFilesPerMessage = 10;
-        public const long MaxFileBytes = 20L * 1024L * 1024L;
-        public const long MaxMessageBytes = 50L * 1024L * 1024L;
-        private const int MaxExtractedChars = 20 * 1024 * 1024;
-        private const int MaxExtractedTextBytes = 20 * 1024 * 1024;
+        public const long MaxFileBytes = int.MaxValue;
+        public const long MaxMessageBytes = long.MaxValue;
+        private const int MaxExtractedChars = int.MaxValue;
+        private const int MaxExtractedTextBytes = int.MaxValue;
         private const int MaxInlinePreviewChars = 4000;
         private static readonly HashSet<string> TextExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -47,7 +47,7 @@ namespace RNAssistant.Core.Storage
             draftChatId = RequireDraftChatId(draftChatId);
             if (bytes == null || bytes.LongLength == 0 || bytes.LongLength > MaxFileBytes)
             {
-                throw new InvalidOperationException("Attachment must be between 1 byte and 20 MB.");
+                throw new InvalidOperationException("Attachment bytes must be nonempty and representable by the current importer.");
             }
 
             fileName = SafeDisplayName(fileName);
@@ -356,7 +356,7 @@ namespace RNAssistant.Core.Storage
             text = BoundExtractedText(text, out truncated);
             attachment.TextTruncated = truncated;
             if (truncated)
-                attachment.ExtractionWarning = "Extracted text exceeds the 20 MiB text representation limit.";
+                attachment.ExtractionWarning = "Extracted text exceeds the current in-memory representation.";
             attachment.ExtractedCharCount = text.Length;
             attachment.ExtractedText = text.Length > MaxInlinePreviewChars
                 ? text.Substring(0, MaxInlinePreviewChars)
@@ -460,13 +460,13 @@ namespace RNAssistant.Core.Storage
         public static AttachmentContent ReadContent(string fileName, byte[] bytes)
         {
             if (bytes == null || bytes.LongLength < 1 || bytes.LongLength > MaxFileBytes)
-                throw new InvalidOperationException("Attachment must be between 1 byte and 20 MB.");
+                throw new InvalidOperationException("Attachment bytes must be nonempty and representable by the current importer.");
             var kind = DetectKind(fileName, null, bytes);
             if (kind != "text" && kind != "pdf" && kind != "image" && kind != "office")
                 throw new InvalidOperationException("Only text, PDF, DOCX, XLSX, PPTX and image attachments are supported.");
             var result = ExtractContent(fileName, null, bytes, kind);
             if (result.TextTruncated)
-                throw new InvalidOperationException("Complete attachment text exceeds 1,000,000 characters.");
+                throw new InvalidOperationException("Complete attachment text is unavailable; the extractor reported incomplete coverage.");
             return result;
         }
 
@@ -475,7 +475,7 @@ namespace RNAssistant.Core.Storage
         internal static AttachmentContent ReadOriginalContent(string fileName, string contentType, byte[] bytes)
         {
             if (bytes == null || bytes.LongLength > MaxFileBytes)
-                throw new InvalidOperationException("Attachment must not exceed 20 MB.");
+                throw new InvalidOperationException("Attachment bytes are unavailable or not representable by the current importer.");
             return ExtractContent(fileName, contentType, bytes, DetectKind(fileName, contentType, bytes) ?? "file");
         }
 
@@ -509,7 +509,7 @@ namespace RNAssistant.Core.Storage
                 result.TextTruncated |= truncated;
             }
             if (result.TextTruncated)
-                result.Warning = "Extracted text exceeds the 20 MiB text representation limit or has unextracted pages. " + result.Warning;
+                result.Warning = "Extracted text is not fully representable or has unextracted pages. " + result.Warning;
             return result;
         }
 

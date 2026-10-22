@@ -30,7 +30,7 @@ namespace RNAssistant.Office.Tools
         private static string Parameters()
         {
             return new JObject { ["type"] = "object", ["properties"] = new JObject {
-                ["code"] = new JObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 1000000,
+                ["code"] = new JObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = int.MaxValue,
                     ["description"] = "Body of an async JavaScript function; return a JSON-serializable value." },
                 ["resources"] = new JObject { ["type"] = "array", ["maxItems"] = 32,
                     ["description"] = "Explicit named inputs for this invocation. Use [] if no inputs are needed; HTML bindings are not inherited.",
@@ -78,8 +78,8 @@ namespace RNAssistant.Office.Tools
             {
                 var arguments = JObject.FromObject(context.Arguments);
                 var code = _source ?? (string)arguments["code"];
-                if (string.IsNullOrWhiteSpace(code) || code.Length > 1000000)
-                    return await OfficeToolFailure.Rejected("JS source is empty or too large.", "invalid_js_source");
+                if (string.IsNullOrWhiteSpace(code))
+                    return await OfficeToolFailure.Rejected("JS source is empty.", "invalid_js_source");
                 var input = arguments["resources"] as JArray;
                 if (input == null || input.Count > 32)
                     return await OfficeToolFailure.Rejected("JS resources must be an array of at most 32 bindings.", "invalid_js_resources");
@@ -144,8 +144,6 @@ namespace RNAssistant.Office.Tools
                         var start = new JObject { ["code"] = code, ["args"] = arguments,
                             ["names"] = new JArray(resources.Keys.OrderBy(value => value, StringComparer.Ordinal)) };
                         var startJson = start.ToString(Formatting.None);
-                        if (Encoding.UTF8.GetByteCount(startJson) > 2 * 1024 * 1024)
-                            throw new InvalidDataException("JS request exceeds 2 MiB.");
                         await process.StandardInput.WriteLineAsync(startJson).ConfigureAwait(false);
                         await process.StandardInput.FlushAsync().ConfigureAwait(false);
                         var leases = new Dictionary<string, long>(StringComparer.Ordinal);

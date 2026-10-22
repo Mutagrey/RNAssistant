@@ -118,7 +118,7 @@ namespace RNAssistant.Office.Tools
                     else definition = ResourceDerivedViewService.Materialize(_gateway, _session, derived, cancellationToken);
                 }
                 var json = JsonConvert.SerializeObject(definition);
-                if (json.Length > 2000000) throw new InvalidOperationException("The materialized output exceeds its resource bound.");
+                if (json.Length > int.MaxValue) throw new InvalidOperationException("The materialized output exceeds its resource bound.");
                 cancellationToken.ThrowIfCancellationRequested();
                 context.MarkDispatchPossible();
                 var payload = PayloadRef.FromBlob(_gateway.Authority.Payloads.StoreText(json, contentType));

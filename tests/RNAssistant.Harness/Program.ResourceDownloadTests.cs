@@ -80,9 +80,9 @@ namespace RNAssistant.Harness
                 data.OpenUpload(session, UploadRequest(session, AttachmentStore.MaxFileBytes));
                 data.OpenUpload(session, UploadRequest(session, AttachmentStore.MaxFileBytes));
                 var captured = false;
-                AssertEqual("RESOURCE_BACKPRESSURE", RuntimeThrows<ResourceRequestException>(() => data.OpenDownload(session, owner,
-                    TrajectoryExportService.MaximumBundleBytes, token => { captured = true; return content(token); })).ErrorCode, "uploads and downloads share the byte reservation budget");
-                AssertTrue(!captured, "capacity rejection precedes stream/CAS validation and ZIP production");
+                data.OpenDownload(session, owner, TrajectoryExportService.MaximumBundleBytes,
+                    token => { captured = true; return content(token); });
+                AssertTrue(captured, "large staged uploads do not reserve whole-source memory or block a download");
                 data.CloseTransfers();
                 data.OpenDownload(session, owner, 2, content);
                 data.OpenDownload(session, owner, 2, content);
@@ -94,8 +94,10 @@ namespace RNAssistant.Harness
                 RuntimeThrows<OperationCanceledException>(() => data.OpenDownload(session, owner, 2, content, new CancellationToken(true)));
                 RuntimeThrows<ResourceRequestException>(() => data.OpenDownload(session, owner, 24 * 1024 * 1024, token => {
                     data.CloseWorkspace(session.Id, owner);
-                    AssertEqual("RESOURCE_BACKPRESSURE", RuntimeThrows<ResourceRequestException>(() => data.OpenDownload(session, owner, 27 * 1024 * 1024, content)).ErrorCode,
-                        "a cancelled capture keeps its reservation until it exits");
+                    var other = data.OpenDownload(session, owner, 27 * 1024 * 1024, content);
+                    AssertEqual("RESOURCE_LEASE_LIMIT", RuntimeThrows<ResourceRequestException>(() => data.OpenDownload(session, owner, 2, content)).ErrorCode,
+                        "a cancelled capture keeps its concurrency slot until it exits");
+                    data.Close(session.Id, owner, other.LeaseId);
                     return content(token);
                 }));
                 var largeReservation = data.OpenDownload(session, owner, AttachmentStore.MaxMessageBytes, content);
@@ -112,8 +114,10 @@ namespace RNAssistant.Harness
                     AssertEqual("RESOURCE_BACKPRESSURE", RuntimeThrows<ResourceRequestException>(() => data.ReadDownload(lease.LeaseId, 0, 1, CancellationToken.None, out mime)).ErrorCode,
                         "a second in-flight read is rejected without producing another chunk");
                     data.Close(session.Id, owner, lease.LeaseId);
-                    AssertEqual("RESOURCE_BACKPRESSURE", RuntimeThrows<ResourceRequestException>(() => data.OpenDownload(session, owner, AttachmentStore.MaxMessageBytes, content)).ErrorCode,
-                        "close racing a read retains its occupied buffer budget");
+                    var other = data.OpenDownload(session, owner, AttachmentStore.MaxMessageBytes, content);
+                    AssertEqual("RESOURCE_LEASE_LIMIT", RuntimeThrows<ResourceRequestException>(() => data.OpenDownload(session, owner, 2, content)).ErrorCode,
+                        "close racing a read retains its occupied slot");
+                    data.Close(session.Id, owner, other.LeaseId);
                 };
                 RuntimeThrows<ResourceRequestException>(() => data.ReadDownload(lease.LeaseId, 0, 1, CancellationToken.None, out mime));
                 lease = data.OpenDownload(session, owner, 2, content);

@@ -10,8 +10,6 @@ namespace RNAssistant.Office.Services
     internal sealed partial class ResourceGatewayService
     {
         private const int InternalReadCharacters = ResourceReadRequest.MaximumCharacters;
-        private const int MaximumWholeReadCharacters = ChatArtifactLimits.MaximumTextCharacters;
-        private const int MaximumWholeReadPages = 128;
 
         // A model's unqualified text read returns a complete representation when
         // available; an oversized live source returns one exact selected window.
@@ -27,12 +25,12 @@ namespace RNAssistant.Office.Services
                     ? ResourceRepresentations.Text : ResourceRepresentations.Source
                 : representation;
             if (view != ResourceRepresentations.Text && view != ResourceRepresentations.Source)
-                return ReadWhole(session, reference, representation, cancellationToken);
+                return ReadWithinBudget(session, reference, representation, maximumCharacters, cancellationToken);
             if ((view == ResourceRepresentations.Text &&
                  !(provider is IResourceCharacterWindowProvider)) ||
                 (view == ResourceRepresentations.Source &&
                  !(provider is IResourceLineWindowProvider)))
-                return ReadWhole(session, reference, representation, cancellationToken);
+                return ReadWithinBudget(session, reference, representation, maximumCharacters, cancellationToken);
             var firstCharacter = 0;
             if (view == ResourceRepresentations.Text &&
                 provider is IResourceTextBoundsProvider boundedText)
@@ -85,13 +83,13 @@ namespace RNAssistant.Office.Services
                             selected, null, provider is ILiveOfficeResourceProvider);
                     }
                     catch (ResourceRequestException tooWide) when (
-                        tooWide.ErrorCode == "resource_lines_too_large" && count > 1) { }
+                        tooWide.ErrorCode == "resource_lines_too_large") { }
                 }
             }
             ResourceReadSelection materialized = null;
             try
             {
-                materialized = ReadWhole(session, reference, representation, cancellationToken);
+                materialized = ReadWithinBudget(session, reference, representation, maximumCharacters, cancellationToken);
                 if (materialized.Result.Text == null ||
                     materialized.Result.Text.Length <= maximumCharacters)
                     return materialized;
@@ -114,6 +112,36 @@ namespace RNAssistant.Office.Services
             if (materialized != null) return materialized;
             throw new ResourceRequestException("Choose a bounded text target or selector for this source.",
                 "RESOURCE_SNAPSHOT_TOO_LARGE", false);
+        }
+
+        private ResourceReadSelection ReadWithinBudget(ChatSession session, ResourceRef reference,
+            string representation, int maximumCharacters, System.Threading.CancellationToken cancellationToken)
+        {
+            var first = Read(session, new ResourceReadRequest { Reference = reference,
+                Representation = representation, MaxChars = Math.Min(InternalReadCharacters, maximumCharacters) }, cancellationToken);
+            var result = first.Result;
+            if (result.Text == null || result.Complete && !result.Truncated) return first;
+            // Runtime metadata must remain parseable for its semantic projection.
+            // The compiler budgets that projection; only source text is excerpted here.
+            if (result.Representation != ResourceRepresentations.Text && result.Representation != ResourceRepresentations.Source ||
+                result.Resource.Kind == ChatHtmlResourceCatalog.DataKind || result.TotalCharacters <= maximumCharacters)
+                return ReadWhole(session, result.Resource.Reference, representation, cancellationToken);
+            var length = Math.Min(result.Text.Length, maximumCharacters);
+            if (length > 0 && (long)result.Offset + length < result.TotalCharacters &&
+                char.IsHighSurrogate(result.Text[length - 1])) length--;
+            result.Text = result.Text.Substring(0, length);
+            result.ReturnedCharacters = length;
+            result.Coverage = result.Resource.Coverage = new ResourceCoverage(ResourceCoverageKinds.CharacterRange,
+                start: result.Offset, end: (long)result.Offset + length);
+            result.SourceComplete = false;
+            result.SourceEndChar = result.TotalCharacters;
+            result.Complete = false;
+            result.Truncated = true;
+            result.CompleteViewPayload = null;
+            result.Payload = null;
+            result.NextCursor = null;
+            first.RetainedText = null;
+            return first;
         }
 
         // Probe only bounded line windows until the context budget is exceeded
@@ -185,10 +213,11 @@ namespace RNAssistant.Office.Services
         // A semantic line selection pins the same whole snapshot used by the
         // gateway. Only its exact excerpt becomes model observation evidence.
         internal ResourceReadSelection ReadLines(ChatSession session, ResourceRef reference,
-            string representation, int startLine, int lineCount, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
+            string representation, int startLine, int lineCount, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken),
+            int maximumCharacters = InternalReadCharacters)
         {
-            if ((representation != "source" && representation != "text") || startLine < 1 || lineCount < 1 || lineCount > 500)
-                throw new ResourceRequestException("Use source/text with 1-based startLine and lineCount between 1 and 500.", "resource_lines_invalid", false);
+            if ((representation != "source" && representation != "text") || startLine < 1 || lineCount < 1 || maximumCharacters < 1)
+                throw new ResourceRequestException("Use source/text with positive startLine and lineCount.", "resource_lines_invalid", false);
             var lineProvider = ProviderFor(reference.Uri);
             if (lineProvider is IResourceLineWindowProvider boundedLines)
             {
@@ -197,7 +226,7 @@ namespace RNAssistant.Office.Services
                 var pushed = WithProvider(lineProvider, session, () =>
                 {
                     var selected = boundedLines.ReadLineWindow(session, reference, representation,
-                        startLine, lineCount, cancellationToken);
+                        startLine, lineCount, cancellationToken, maximumCharacters);
                     return selected == null || _authority == null ? selected : _authority.PublishRead(session, selected, null,
                         lineProvider is ILiveOfficeResourceProvider);
                 });
@@ -219,8 +248,8 @@ namespace RNAssistant.Office.Services
             var start = starts[startLine - 1];
             var next = Math.Min((long)starts.Count, (long)startLine - 1 + lineCount);
             var end = next < starts.Count ? starts[(int)next] : text.Length;
-            if (end - start > InternalReadCharacters)
-                throw new ResourceRequestException("Selected lines exceed 32000 characters. Reduce lineCount or use startChar/charCount for a long line.", "resource_lines_too_large", false);
+            if (end - start > maximumCharacters)
+                throw new ResourceRequestException("Selected lines exceed the model read budget. Reduce lineCount or use startChar/charCount for a long line.", "resource_lines_too_large", false);
             result.Text = text.Substring(start, end - start);
             result.Offset = start;
             result.ReturnedCharacters = end - start;
@@ -236,11 +265,12 @@ namespace RNAssistant.Office.Services
         // pinned before slicing; no selected excerpt grants whole-source authority.
         internal ResourceReadSelection ReadCharacters(ChatSession session, ResourceRef reference,
             string representation, int startChar, int charCount,
-            System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
+            System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken),
+            int maximumCharacters = InternalReadCharacters)
         {
             if ((representation != "source" && representation != "text") ||
-                startChar < 0 || charCount < 1 || charCount > InternalReadCharacters)
-                throw new ResourceRequestException("Use source/text with zero-based startChar and charCount from 1 to 32000.",
+                startChar < 0 || charCount < 1 || charCount > maximumCharacters)
+                throw new ResourceRequestException("Use source/text with zero-based startChar and positive charCount within the model read budget.",
                     "resource_chars_invalid", false);
             var characterProvider = ProviderFor(reference.Uri);
             if (characterProvider is IResourceCharacterWindowProvider boundedCharacters)
@@ -302,13 +332,6 @@ namespace RNAssistant.Office.Services
             while (true)
             {
                 pages++;
-                if (pages > MaximumWholeReadPages)
-                {
-                    throw new ResourceRequestException(
-                        "The provider exceeded the bounded internal page count. No partial content was returned to the model.",
-                        "resource_whole_read_incomplete",
-                        false);
-                }
                 var page = Read(
                     session,
                     new ResourceReadRequest
@@ -349,16 +372,6 @@ namespace RNAssistant.Office.Services
                 {
                     throw WholeReadFailure(
                         "Resource provider returned a non-contiguous whole-read page.");
-                }
-                if (result.TotalCharacters > MaximumWholeReadCharacters ||
-                    text.Length + pageText.Length > MaximumWholeReadCharacters)
-                {
-                    throw new ResourceRequestException(
-                        "The complete resource representation exceeds the " +
-                        MaximumWholeReadCharacters +
-                        "-character whole-read safety bound. For artifact text/source read partNumber=1, then follow partCount; otherwise choose a narrower semantic target.",
-                        "resource_whole_read_too_large",
-                        false);
                 }
                 if (pages == 1 && page.RetainedText != null)
                 {

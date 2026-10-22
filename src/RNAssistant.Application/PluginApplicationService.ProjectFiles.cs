@@ -13,8 +13,7 @@ namespace RNAssistant.Application
     public sealed partial class PluginApplicationService
     {
         private const int ProjectFileChunkBytes = 256 * 1024;
-        private const long ProjectFileMaxBytes = 20L * 1024 * 1024;
-        private const long ProjectUploadBudgetBytes = 50L * 1024 * 1024;
+        private const long ProjectFileMaxBytes = long.MaxValue;
         private readonly object _projectUploadSync = new object();
         private readonly Dictionary<string, ProjectFileUploadLease> _projectUploadLeases =
             new Dictionary<string, ProjectFileUploadLease>(StringComparer.Ordinal);
@@ -29,7 +28,7 @@ namespace RNAssistant.Application
         public ProjectChatUploadOpenDto BeginProjectChatFileUpload(ProjectChatUploadOpenRequest request)
         {
             if (request == null || request.ByteLength < 1 || request.ByteLength > ProjectFileMaxBytes)
-                throw new PluginException("project_file_invalid", "Выберите непустой файл размером не более 20 МБ.");
+                throw new PluginException("project_file_invalid", "Выберите непустой файл.");
             var name = SafeProjectFileName(request.FileName);
             using (PluginStore.AcquireRuntimeUse(_paths))
             {
@@ -38,8 +37,7 @@ namespace RNAssistant.Application
                 {
                     if (_disposed) throw new PluginException("plugins_closed", "Plugin host is closing.");
                     ExpireProjectUploads();
-                    if (_projectUploadLeases.Count >= 4 ||
-                        _projectUploadLeases.Values.Sum(item => item.ByteLength) + request.ByteLength > ProjectUploadBudgetBytes)
+                    if (_projectUploadLeases.Count >= 4)
                         throw new PluginException("project_file_busy", "Дождитесь завершения текущих загрузок.");
                     var directory = ProjectUploadDirectory();
                     var id = Guid.NewGuid().ToString("N");

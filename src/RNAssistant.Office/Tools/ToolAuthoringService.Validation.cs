@@ -53,8 +53,8 @@ namespace RNAssistant.Office.Tools
             if ((tool.Name ?? string.Empty).Length > 200 ||
                 (tool.Description ?? string.Empty).Length > 8000 ||
                 (tool.ArgumentSchemaJson ?? string.Empty).Length > 64000 ||
-                (tool.Code ?? string.Empty).Length > 1000000 ||
-                (tool.Readme ?? string.Empty).Length > 500000 ||
+                (tool.Code ?? string.Empty).Length > int.MaxValue ||
+                (tool.Readme ?? string.Empty).Length > int.MaxValue ||
                 (tool.UseWhen ?? string.Empty).Length > 4000 ||
                 (tool.DoNotUseWhen ?? string.Empty).Length > 4000 ||
                 (tool.Limitations ?? string.Empty).Length > 4000)
@@ -65,8 +65,8 @@ namespace RNAssistant.Office.Tools
                 .Where(component => component != null)
                 .ToList();
             if (componentsForSize.Count > 50 ||
-                componentsForSize.Any(component => (component.Code ?? string.Empty).Length > 1000000) ||
-                componentsForSize.Sum(component => (long)(component.Code ?? string.Empty).Length) > 2000000)
+                componentsForSize.Any(component => (component.Code ?? string.Empty).Length > int.MaxValue) ||
+                componentsForSize.Sum(component => (long)(component.Code ?? string.Empty).Length) > int.MaxValue)
             {
                 return ToolAuthoringOutcome.Error("VBA package exceeds the supported component or source size limit.", null, "tool_definition_too_large", false);
             }

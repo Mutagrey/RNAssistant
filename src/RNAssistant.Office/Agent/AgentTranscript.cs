@@ -18,7 +18,7 @@ namespace RNAssistant.Office
         private const int MaxTranscriptReasoningChars = 24000;
         private const int MaxTranscriptArgumentsChars = 64000;
         private const int MaxTranscriptDataChars = 128000;
-        private const int MaxRenderableTranscriptDataChars = ChatArtifactLimits.MaximumTextCharacters;
+        private const int MaxRenderableTranscriptDataChars = 2000000;
         private const int MaxTranscriptMessageChars = 16000;
 
         internal static ChatMessage CreateRunningToolMessage(ChatSession session, ToolInvocation command,

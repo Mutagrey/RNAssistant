@@ -7,6 +7,7 @@ using System.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Services;
@@ -32,8 +33,9 @@ namespace RNAssistant.Harness
             {
                 var session = new ChatSession { DocumentAuthorityId = DocumentAuthorityId.Create().Id };
                 var store = new AttachmentStore(paths);
-                var ingestion = new ChatResourceIngestionService(store, new ChatStore(paths).DocumentArtifacts);
-                var bytes = Encoding.UTF8.GetBytes(new string('x', ResourceDataPlaneService.MaximumUploadChunkBytes + 17));
+                var artifacts = new ChatStore(paths).DocumentArtifacts;
+                var ingestion = new ChatResourceIngestionService(store, artifacts);
+                var bytes = Encoding.UTF8.GetBytes(new string('x', 21 * 1024 * 1024 + 17) + "TAIL");
                 using (var data = new ResourceDataPlaneService(new ResourceGatewayService(), (chat, owner) => chat == session.Id && owner == ResourceDataPlaneService.UploadOwner))
                 {
                     var lease = data.OpenUpload(session, UploadRequest(session, bytes.Length));
@@ -51,8 +53,13 @@ namespace RNAssistant.Harness
                         AssertEqual(lease.LeaseId, (string)ack["leaseId"], "ack is correlated to the exact capability");
                         AssertEqual(lease.MaxChunkBytes, (int)ack["nextOffset"], "first byte offset acknowledged");
                     }
-                    using (var last = new MemoryStream(bytes, lease.MaxChunkBytes, 17, false))
-                        UploadResponse(router.Handle("POST", lease.Url + "?offset=" + lease.MaxChunkBytes + "&count=17", CancellationToken.None, last), 200);
+                    for (var offset = lease.MaxChunkBytes; offset < bytes.Length; offset += lease.MaxChunkBytes)
+                    {
+                        var count = Math.Min(lease.MaxChunkBytes, bytes.Length - offset);
+                        using (var chunk = new MemoryStream(bytes, offset, count, false))
+                            UploadResponse(router.Handle("POST", lease.Url + "?offset=" + offset + "&count=" + count,
+                                CancellationToken.None, chunk), 200);
+                    }
                     AssertEqual(0, Directory.GetFiles(paths.ChatBlobDirectory, "*.blob", SearchOption.AllDirectories).Length, "chunks do not publish CAS");
                     AssertEqual("RESOURCE_ACCESS_DENIED", RuntimeThrows<ResourceRequestException>(() =>
                         data.CompleteUpload(new ChatSession(), lease.LeaseId, ingestion)).ErrorCode, "another chat cannot consume this upload");
@@ -65,6 +72,10 @@ namespace RNAssistant.Harness
                     ingestion.CommitAndLink(session, message, 0);
                     AssertTrue(!string.IsNullOrEmpty(message.Attachments[0].ContentSha256), "existing ingestion owns CAS publication");
                     AssertTrue(session.Artifacts.Count > 0, "existing ingestion links resource before dispatch");
+                    var tail = artifacts.ReadIndexedTextWindow(session,
+                        ChatResourceUri.CreateArtifactRevision(session, session.Artifacts.Last()), bytes.Length - 17, 128);
+                    AssertTrue(tail.Text.EndsWith("TAIL") && tail.TotalCharacters == bytes.Length,
+                        "indexed text beyond the former 20 MiB ceiling remains addressable to its exact tail");
                     ingestion.DeleteDrafts(message);
                     AssertEqual("RESOURCE_LEASE_EXPIRED", RuntimeThrows<ResourceRequestException>(() => data.CompleteUpload(session, lease.LeaseId, ingestion)).ErrorCode,
                         "completion cannot replay a consumed upload");
@@ -172,16 +183,17 @@ namespace RNAssistant.Harness
                 var first = data.OpenUpload(session, UploadRequest(session, AttachmentStore.MaxFileBytes));
                 data.OpenUpload(session, UploadRequest(session, AttachmentStore.MaxFileBytes));
                 data.OpenUpload(session, UploadRequest(session, 10 * 1024 * 1024));
-                AssertEqual("RESOURCE_BACKPRESSURE", RuntimeThrows<ResourceRequestException>(() => data.OpenUpload(session, UploadRequest(session, 1))).ErrorCode,
-                    "50 MiB aggregate reservation precedes reading body bytes");
+                data.OpenUpload(session, UploadRequest(session, 1));
+                AssertEqual("RESOURCE_LEASE_LIMIT", RuntimeThrows<ResourceRequestException>(() => data.OpenUpload(session, UploadRequest(session, 1))).ErrorCode,
+                    "staged uploads reserve bounded buffers rather than their declared source sizes");
                 AssertEqual("RESOURCE_ACCESS_DENIED", RuntimeThrows<ResourceRequestException>(() => data.CloseUpload("another-chat", first.LeaseId)).ErrorCode,
                     "foreign chat cannot revoke uploads");
                 using (var body = new UploadProbeStream(new byte[] { 65 }, () => {
                     AssertEqual("RESOURCE_BACKPRESSURE", RuntimeThrows<ResourceRequestException>(() => data.WriteUpload(first.LeaseId, 0, 1,
                         new MemoryStream(new byte[] { 65 }), CancellationToken.None)).ErrorCode, "one operation in flight per capability");
                     data.CloseUpload(session.Id, first.LeaseId);
-                    AssertEqual("RESOURCE_BACKPRESSURE", RuntimeThrows<ResourceRequestException>(() => data.OpenUpload(session, UploadRequest(session, 1))).ErrorCode,
-                        "closing a busy lease does not release its occupied memory budget");
+                    AssertEqual("RESOURCE_LEASE_LIMIT", RuntimeThrows<ResourceRequestException>(() => data.OpenUpload(session, UploadRequest(session, 1))).ErrorCode,
+                        "closing a busy lease does not release its concurrency slot");
                 }))
                     AssertEqual("RESOURCE_LEASE_EXPIRED", RuntimeThrows<ResourceRequestException>(() => data.WriteUpload(first.LeaseId, 0, 1, body, CancellationToken.None)).ErrorCode,
                         "owner close racing a chunk cannot acknowledge it");

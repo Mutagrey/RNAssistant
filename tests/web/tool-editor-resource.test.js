@@ -5,7 +5,7 @@ const read = file => fs.readFileSync(path.join(__dirname, "../../web", file), "u
 const sha = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
 function deferred() { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; }
 
-function fixture(readme = "# Справка\r\n" + "ж".repeat(140000) + "😀", kind = "custom") {
+function fixture(readme = "# Справка\r\n" + "ж".repeat(1100000) + "😀", kind = "custom") {
   const body = { argumentSchemaJson: '{"type":"object","properties":{}}', code: "Option Explicit\r\n", readme,
     components: [{ name: "RNA_Test", type: "StdModule", fileName: "RNA_Test.bas", code: "Option Explicit\r\n", codeSha256: "b".repeat(64) }] };
   const bytes = Buffer.from(JSON.stringify(body)), calls = [], closes = [], errors = [], cancelled = [], elements = {};
@@ -47,7 +47,7 @@ function fixture(readme = "# Справка\r\n" + "ж".repeat(140000) + "😀",
 
 (async () => {
   {
-    for (const kind of ["custom", "builtin", "document"]) for (const text of ["", "\ufeff# Справка\r\n" + "ж".repeat(140000) + "😀"]) {
+    for (const kind of ["custom", "builtin", "document"]) for (const text of ["", "\ufeff# Справка\r\n" + "ж".repeat(1100000) + "😀"]) {
       const f = fixture(text, kind); await f.load();
       assert.equal(f.tool.Readme, text, f.errors.join("; ")); assert.equal(f.tool._sourceLoaded, true); assert.equal(f.closes.length, 1); assert.equal(f.errors.length, 0);
       assert.equal(f.closes[0].workspaceId, "tool-editor"); assert.equal(f.closes[0].chatId, "chat");
@@ -71,8 +71,8 @@ function fixture(readme = "# Справка\r\n" + "ж".repeat(140000) + "😀",
       assert.throws(() => f.context.toolLibraryMutations(), /не загружен/);
     }
     const f = fixture(); assert.throws(() => f.context.toolFromContract({ ...f.wire, code: "inline" }), /typed package/);
-    f.tool.Source.byteLength = 16 * 1024 * 1024 + 1; await f.load(); assert.equal(f.calls.length, 0, "oversize rejected before request");
-    console.log("PASS tool source: invalid metadata, partial/corrupt bytes, old inline catalog and oversized sources fail closed");
+    assert.throws(() => f.context.toolFromContract({ ...f.wire, source: { ...f.wire.source, byteLength: -1 } }), /typed package/);
+    console.log("PASS tool source: invalid metadata, partial/corrupt bytes, old inline catalog and invalid source sizes fail closed");
   }
   {
     for (const change of [f => { f.state.activeChatId = "other"; }, f => { f.state.tools = []; },

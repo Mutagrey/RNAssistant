@@ -39,8 +39,8 @@ function fixture(text = "Sub Main()\r\n'😀\r\nEnd Sub\r\n") {
 
 (async function () {
   {
-    for (const text of ["Sub Main()\r\n'😀\r\nEnd Sub\r\n", ""]) {
-      const f = fixture(text); await f.read();
+    for (const text of ["Sub Main()\r\n'😀\r\nEnd Sub\r\n", "", "x".repeat(1000001)]) {
+      const f = fixture(text); if (text.length > 1000000) f.metadata.data.maxChunkBytes = 262144; await f.read();
       assert.equal(f.module.code, text);
       assert.equal(f.module.codeSha256, f.metadata.codeSha256, "write guard is not replaced with raw transport hash");
       assert.equal(f.module.resource.revision, "r_source");
@@ -53,7 +53,7 @@ function fixture(text = "Sub Main()\r\n'😀\r\nEnd Sub\r\n") {
   }
   {
     for (const mutate of [m => { m.chatId = "other"; }, m => { m.moduleName = "Other"; }, m => { m.resource.revision = ""; },
-      m => { m.totalCharacters = 1000001; }, m => { m.codeSha256 = ""; }, m => { m.data.payload.byteLength = 4000001; },
+      m => { m.totalCharacters = -1; }, m => { m.codeSha256 = ""; }, m => { m.data.payload.byteLength = -1; },
       m => { m.data.url = "https://example.com"; }]) {
       const f = fixture(); mutate(f.metadata); await f.read();
       assert.equal(f.context.hasVbaModuleCode(f.module), false);
@@ -105,11 +105,11 @@ function fixture(text = "Sub Main()\r\n'😀\r\nEnd Sub\r\n") {
       assert.match(fs.readFileSync(path.join(__dirname, "../../web/js", file), "utf8"), /cancelVbaModuleRead\(\)/);
     });
     ["app-vba.js", "app-vba-project.js"].forEach(file => {
-      assert.ok(page.includes(file + "?v=" + (file === "app-vba.js" ? "run-diff-20260908-1" : "vba-upload-20260906-1")));
+      assert.ok(page.includes(file + "?v=" + (file === "app-vba.js" ? "shared-editor-tabs-20261019-1" : "vba-upload-20260906-1")));
     });
     ["app-chat-state.js", "app-chat-session.js"].forEach(file => {
       assert.ok(page.includes(file + "?v=" +
-        (file === "app-chat-state.js" ? "html-source-reuse-20260928-1" : "startup-timing-20260928-1")));
+        (file === "app-chat-state.js" ? "chat-tree-20261018-1" : "bridge-contract-20261015-1")));
     });
     console.log("PASS VBA resource read: cancellation aborts active transfer and is wired to owner lifecycle");
   }

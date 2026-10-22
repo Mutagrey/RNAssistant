@@ -162,7 +162,7 @@ namespace RNAssistant.Harness
                 {
                     var editor = new HtmlWorkspaceEditorResourceService(executor, data);
                     Func<string, HtmlWorkspaceFilePayload> upload = value => UploadHtmlSource(data, editor, session, Encoding.UTF8.GetBytes(value));
-                    editor.SaveFile(session, upload("before"), CancellationToken.None);
+                    editor.SaveFile(session, upload("before" + new string('x', 2100001)), CancellationToken.None);
                     var original = session.ActiveHtmlArtifactId;
                     var scope = executor.ResourceAuthority.Scope(session, true);
                     var identity = HtmlWorkspaceIdentity.Identity(session, HtmlWorkspaceIdentity.LogicalId(session.ActiveHtmlArtifactId));
@@ -176,10 +176,8 @@ namespace RNAssistant.Harness
                     RuntimeThrows<ResourceRequestException>(() => editor.SaveFile(session, utf8, CancellationToken.None));
                     var invalidPath = upload("text"); invalidPath.Path = "../outside.html";
                     RuntimeThrows<InvalidOperationException>(() => editor.SaveFile(session, invalidPath, CancellationToken.None));
-                    var tooLarge = upload(new string('x', 300001));
-                    RuntimeThrows<InvalidOperationException>(() => editor.SaveFile(session, tooLarge, CancellationToken.None));
                     RuntimeThrows<ResourceRequestException>(() => editor.BeginUpload(session, new HtmlWorkspaceMutationUploadRequest {
-                        ChatId = session.Id, ByteLength = HtmlWorkspaceEditorResourceService.MaximumSourceBytes + 1 }, CancellationToken.None));
+                        ChatId = session.Id, ByteLength = -1 }, CancellationToken.None));
                     var invalidJson = HtmlDataRequest(upload("not json"));
                     RuntimeThrows<JsonReaderException>(() => editor.SaveData(session, invalidJson, CancellationToken.None));
                     var emptyJson = HtmlDataRequest(upload(""));

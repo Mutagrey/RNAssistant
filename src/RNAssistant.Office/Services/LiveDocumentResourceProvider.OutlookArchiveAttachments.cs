@@ -65,7 +65,7 @@ namespace RNAssistant.Office.Services
             descriptor.Representations.AddRange(new[] { "metadata", "text", "media" });
             descriptor.Metadata["host"] = "Outlook";
             descriptor.Metadata["subject"] = records[row - 1].Subject ?? string.Empty;
-            descriptor.Metadata["coverage"] = "Exact indexed mail and attachment slot; bytes read on demand, up to 20 MiB. A changed or detached source fails explicitly.";
+            descriptor.Metadata["coverage"] = "Exact indexed mail and attachment slot; bytes read on demand. A changed or detached source fails explicitly.";
             return descriptor;
         }
 

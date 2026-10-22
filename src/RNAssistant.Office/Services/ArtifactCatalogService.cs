@@ -184,7 +184,7 @@ namespace RNAssistant.Office.Services
                 var head = _authority.GetHead(scope, exact.Identity);
                 var view = _authority.GetView(scope, exact, "text");
                 var payload = view?.Coverage?.Kind == ResourceCoverageKinds.Whole ? view.Payload : null;
-                if (head == null || payload == null || payload.ByteLength > 8000000)
+                if (head == null || payload == null)
                     throw new InvalidDataException("Нет полного сохранённого снимка зависимости. Откройте исходный документ и сохраните данные проекта.");
                 json = _blobs.ReadText(payload.ToBlobReference());
             }
@@ -223,7 +223,7 @@ namespace RNAssistant.Office.Services
 
         internal ChatArtifact Import(ChatSession actor, byte[] bytes, string fileName, string contentType, string operationId, ArtifactTransferOrigin origin = null)
         {
-            if (bytes == null || bytes.Length > ArtifactTransferPackage.MaximumBytes) throw new InvalidDataException("Файл превышает 20 МиБ.");
+            if (bytes == null || bytes.Length > ArtifactTransferPackage.MaximumBytes) throw new InvalidDataException("Файл недоступен или не представим в текущем буфере импорта.");
             fileName = SafeName(fileName);
             var extension = Path.GetExtension(fileName).ToLowerInvariant();
             ArtifactTransferPackage project = null;
@@ -235,7 +235,6 @@ namespace RNAssistant.Office.Services
             if (extension == ".md" || extension == ".markdown" || extension == ".json")
             {
                 var text = new UTF8Encoding(false, true).GetString(bytes);
-                if (text.Length > (extension == ".json" ? 2000000 : 200000)) throw new InvalidDataException("Текст превышает допустимый размер.");
                 if (extension == ".json") JToken.Parse(text);
                 return _artifacts.ImportAuthored(actor, null, fileName, text, extension == ".json" ? ChatArtifactKinds.File : ChatArtifactKinds.Markdown, operationId, origin);
             }

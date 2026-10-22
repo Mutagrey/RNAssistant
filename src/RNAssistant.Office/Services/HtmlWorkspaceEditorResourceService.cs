@@ -15,7 +15,7 @@ namespace RNAssistant.Office.Services
     internal sealed class HtmlWorkspaceEditorResourceService
     {
         internal const string Owner = "html-editor";
-        internal const int MaximumSourceBytes = 4 * HtmlWorkspaceToolService.MaxHtmlChars;
+        internal const int MaximumSourceBytes = int.MaxValue;
         private const string ContentType = "text/plain; charset=utf-8";
         private readonly OfficeToolExecutor _executor;
         private readonly ResourceDataPlaneService _data;

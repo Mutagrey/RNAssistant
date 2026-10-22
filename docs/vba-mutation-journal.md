@@ -44,8 +44,8 @@ download capability. The former `ReadVbaModuleForEditor` direct source read,
 controller `DataJson` parsing and inline bridge body are removed. Project inventory
 remains metadata-only under its existing bound read owner.
 
-The existing 1,000,000 UTF-16-code-unit editor limit remains; transfer reservation
-is at most 4,000,000 bytes. A complete empty module is valid. Truncated, missing,
+The former 1,000,000-character / 4,000,000-byte editor ceiling is removed.
+Transfer reserves a bounded chunk; the complete local snapshot remains in CAS. A complete empty module is valid. Truncated, missing,
 corrupt or mismatched source never enables editing. The UI verifies the exact raw
 byte SHA-256 and complete decoded extent; CRLF, Unicode and final line terminators
 are preserved. Raw payload SHA-256 is not the normalized VBA write guard. Saving
@@ -61,7 +61,7 @@ and WebView2 editor read/save/cancel qualification remains an open Windows gate.
 ## Editor source uploads
 
 Editor save/create sends source through the existing shared upload route, not an
-inline `code` field. `beginVbaModuleUpload` reserves bounded bytes for the explicit
+inline `code` field. `beginVbaModuleUpload` reserves a chunk and a staging stream for the explicit
 chat and `vba-editor` consumer; `saveVbaModule`/`createVbaModule` carry that single-use
 capability, raw source SHA-256, module metadata and (for save) the mandatory normalized
 editor read guard. Attachment ingestion cannot consume or close a VBA upload, and
@@ -70,8 +70,8 @@ the same 256 KiB POST chunks, four-upload cap, shared transfer quota and expiry.
 
 `VbaEditorResourceService` consumes complete UTF-8/hash-verified source once, before
 the existing `ExecuteManual` → typed VBA mutation owner prepares, dispatches and
-verifies the write. Empty source is valid; the 1,000,000 UTF-16/4,000,000-byte limits
-remain explicit. Uploads do not create attachments, publish VBA revisions or grant
+verifies the write. Empty and large complete sources are valid; staged transport
+does not impose an additional source-size ceiling. Uploads do not create attachments, publish VBA revisions or grant
 model observations. CAS preimages/intended state, write guards, CodeOnly UserForms
 and authority publication stay with the existing mutation/journal owners.
 

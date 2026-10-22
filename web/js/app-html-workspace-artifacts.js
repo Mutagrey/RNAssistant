@@ -890,7 +890,7 @@
 
   function validatePlanDraft(artifact) {
     var markdownText = String(artifactInlineText(artifact) || "");
-    if (!markdownText.trim() || markdownText.length > 32000) throw new Error("Markdown-план должен содержать от 1 до 32000 символов.");
+    if (!markdownText.trim()) throw new Error("Markdown-план не должен быть пустым.");
     return { id: storedPlanId(artifact), markdown: markdownText, title: prop(artifact, "Title", "title", "План"), expectedRevisionArtifactId: artifactId(artifact) };
   }
 

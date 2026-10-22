@@ -291,7 +291,7 @@ function deferred() {
     console.log("PASS skill upload: begin/fetch/late-dispatch cancellation closes the captured lease, preserves drafts and never retries");
   }
   {
-    for (const text of ["", "# Reference\r\n" + "Ж".repeat(40000) + "😀", "late-edit"]) {
+    for (const text of ["", "# Reference\r\n" + "Ж".repeat(600000) + "😀", "late-edit"]) {
       const f = fixture(); await f.load(); f.context.setSkillLibraryBaseline([f.skill]);
       f.skill._sourceDrafts[referencePath] = text; f.skill._sourceDirty[referencePath] = true;
       f.context.renderSkills = () => {};
@@ -327,9 +327,9 @@ function deferred() {
     console.log("PASS skill upload: empty/Unicode reference bodies, exact guards, frozen plans and later drafts without inline echo");
   }
   {
-    for (const mode of ["oversize", "unicode", "count", "invalid-response", "unknown"]) {
+    for (const mode of ["unicode", "count", "invalid-response", "unknown"]) {
       const f = fixture("# Core", ""); await f.load(); f.context.setSkillLibraryBaseline([f.skill]);
-      f.skill._sourceDrafts[""] = mode === "oversize" ? "x".repeat(500001) : mode === "unicode" ? "\ud800" : "# Edit";
+      f.skill._sourceDrafts[""] = mode === "unicode" ? "\ud800" : "# Edit";
       f.skill._sourceDirty[""] = true; f.context.renderSkills = () => {};
       if (mode === "count") f.context.skillLibraryMutations = () => new Array(257).fill({ kind: "delete" });
       const transport = uploads(f, () => mode === "invalid-response" ? {} : {
@@ -346,7 +346,7 @@ function deferred() {
       assert.equal(transport.controls.length, dispatched ? 1 : 0);
       assert.equal(f.context.state.skills[0]._sourceDirty[""], true); assert.equal(f.context.skillWriteOperation, null);
     }
-    console.log("PASS skill upload: source/count bounds fail before allocation; malformed/unknown results preserve drafts and stop");
+    console.log("PASS skill upload: Unicode/count bounds fail before allocation; malformed/unknown results preserve drafts and stop");
   }
   console.log("OK 13/13");
 })().catch(error => { console.error(error.stack || error); process.exitCode = 1; });

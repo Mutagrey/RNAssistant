@@ -64,8 +64,8 @@ namespace RNAssistant.JsWorker
             if (start == null) throw new InvalidDataException("Missing JS request.");
             var request = JObject.Parse(start);
             var code = (string)request["code"];
-            if (string.IsNullOrWhiteSpace(code) || code.Length > 1000000)
-                throw new InvalidDataException("JS source is empty or exceeds 1000000 characters.");
+            if (string.IsNullOrWhiteSpace(code))
+                throw new InvalidDataException("JS source is empty.");
             var names = request["names"] as JArray ?? new JArray();
             var args = request["args"] as JObject ?? new JObject();
             var engine = new Engine(options => {

@@ -90,7 +90,7 @@ namespace RNAssistant.Office.Vba
             int startLine, int lineCount, int maxChars)
         {
             if (string.IsNullOrWhiteSpace(moduleName) || startLine < 1 || lineCount < 1 ||
-                lineCount > 500 || maxChars < 1)
+                maxChars < 1)
                 throw new VbaBackendException("Invalid bounded VBA line request.", "resource_lines_invalid", false);
             var snapshot = _backend.ReadModuleLines(new VbaReadModuleLineRequest {
                 ModuleName = moduleName, StartLine = startLine, LineCount = lineCount, MaxChars = maxChars });

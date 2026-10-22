@@ -19,10 +19,11 @@ namespace RNAssistant.Office.Services
     internal sealed partial class ResourceDataPlaneService
     {
         internal const int MaximumDownloadChunkBytes = 256 * 1024;
+        internal const long MaximumInFlightTransferBytes = 50L * 1024 * 1024;
         private readonly Dictionary<string, Download> _downloads = new Dictionary<string, Download>(StringComparer.Ordinal);
         private int LeaseCount { get { return _access.Count + _openings.Count + _uploads.Count + _downloads.Count; } }
         private int OpeningCount { get { return _openings.Count + _downloads.Values.Count(item => item.Capturing); } }
-        private long TransferBytes { get { return _uploads.Values.Sum(item => (long)item.Bytes.Length) + _downloads.Values.Sum(item => item.ReservedBytes) +
+        private long TransferBytes { get { return (long)_uploads.Count * MaximumUploadChunkBytes + _downloads.Values.Sum(item => item.ReservedBytes) +
             _openings.Sum(item => item.ReservedBytes) + _access.Values.Sum(item => item.ReservedBytes); } }
 
         internal ResourceDownloadOpenResponse OpenDownload(ChatSession session, string workspaceId, long maximumBytes,
@@ -31,17 +32,17 @@ namespace RNAssistant.Office.Services
             if (session == null || string.IsNullOrWhiteSpace(session.Id) || string.IsNullOrWhiteSpace(workspaceId) || capture == null ||
                 _ownerIsActive != null && !_ownerIsActive(session.Id, workspaceId))
                 throw Error("RESOURCE_ACCESS_DENIED", "An explicit live owner is required for a download.");
-            if (maximumBytes < 1 || maximumBytes > AttachmentStore.MaxMessageBytes)
+            if (maximumBytes < 1)
                 throw Error("RESOURCE_BATCH_TOO_LARGE", "The download reservation exceeds the transfer budget.");
             Download access;
             lock (_sync)
             {
                 EnsureActive(); Expire(); token.ThrowIfCancellationRequested();
                 if (LeaseCount >= 64 || _downloads.Count >= 2) throw Error("RESOURCE_LEASE_LIMIT", "Close existing downloads before creating another.");
-                if (OpeningCount >= 4 || TransferBytes + maximumBytes > AttachmentStore.MaxMessageBytes)
+                if (OpeningCount >= 4 || TransferBytes + MaximumDownloadChunkBytes > MaximumInFlightTransferBytes)
                     throw Error("RESOURCE_BACKPRESSURE", "The shared capture or transfer budget is occupied.");
                 access = new Download { Id = NewLeaseId(), ChatId = session.Id, WorkspaceId = workspaceId,
-                    ReservedBytes = maximumBytes, Capturing = true, Busy = true, ExpiresUtc = _utcNow().AddMinutes(10) };
+                    ReservedBytes = MaximumDownloadChunkBytes, Capturing = true, Busy = true, ExpiresUtc = _utcNow().AddMinutes(10) };
                 _downloads.Add(access.Id, access);
             }
             try
@@ -59,7 +60,7 @@ namespace RNAssistant.Office.Services
                 {
                     token.ThrowIfCancellationRequested();
                     if (access.Cancelled) throw Error("RESOURCE_LEASE_EXPIRED", "The download owner closed during capture.");
-                    access.Bytes = content.Bytes; access.Payload = payload; access.ReservedBytes = content.Bytes.LongLength;
+                    access.Bytes = content.Bytes; access.Payload = payload;
                     access.Capturing = false;
                 }
                 return new ResourceDownloadOpenResponse { LeaseId = access.Id, Url = Origin + "/v1/download/" + access.Id,
@@ -69,7 +70,7 @@ namespace RNAssistant.Office.Services
             finally { ExitDownload(access); }
         }
 
-        internal byte[] ReadDownload(string leaseId, int offset, int count, CancellationToken token, out string contentType)
+        internal byte[] ReadDownload(string leaseId, long offset, int count, CancellationToken token, out string contentType)
         {
             Download access;
             lock (_sync)
@@ -88,7 +89,7 @@ namespace RNAssistant.Office.Services
                 if (count < 1 || count > MaximumDownloadChunkBytes || count > access.Bytes.Length - offset)
                     throw Error("RESOURCE_BATCH_TOO_LARGE", "The download chunk exceeds its negotiated bounds.");
                 var bytes = new byte[count];
-                Buffer.BlockCopy(access.Bytes, offset, bytes, 0, count);
+                Buffer.BlockCopy(access.Bytes, checked((int)offset), bytes, 0, count);
                 RequireDownloadActive(access, token);
                 contentType = access.Payload.ContentType;
                 access.Offset += count;
@@ -127,7 +128,7 @@ namespace RNAssistant.Office.Services
             internal byte[] Bytes;
             internal PayloadRef Payload;
             internal long ReservedBytes;
-            internal int Offset;
+            internal long Offset;
             internal volatile bool Cancelled;
         }
     }

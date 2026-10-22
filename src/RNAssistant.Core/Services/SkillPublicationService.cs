@@ -140,7 +140,8 @@ namespace RNAssistant.Core.Services
             return entries;
         }
 
-        public ResourceReadObservation ReadSkill(ResourceRef exact)
+        public ResourceReadObservation ReadSkill(ResourceRef exact, int maximumCharacters = int.MaxValue,
+            int? startLine = null, int? lineCount = null, int? startChar = null, int? charCount = null)
         {
             var frozen = CaptureReady().Get(ScopeId);
             var descriptor = Describe(exact, frozen);
@@ -164,7 +165,8 @@ namespace RNAssistant.Core.Services
             var evidence = new ResourceEvidence("e_" + Guid.NewGuid().ToString("N"), ScopeId, exact, "text",
                 ResourceCoverage.Whole(), true, frozen.Generation, payload, descriptor.Dependencies,
                 immutable: true, contentSha256: payload.Sha256);
-            return new ResourceReadObservation(result, new[] { evidence });
+            return new ResourceReadObservation(result, new[] { evidence }).SelectTextWindow(maximumCharacters,
+                body => PayloadRef.FromBlob(_payloads.StoreText(body, "text/markdown")), startLine, lineCount, startChar, charCount);
         }
 
         public ResourceDescriptor Describe(ResourceRef exact)

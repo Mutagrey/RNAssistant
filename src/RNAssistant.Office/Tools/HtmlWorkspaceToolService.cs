@@ -16,10 +16,9 @@ namespace RNAssistant.Office.Tools
 {
     internal sealed partial class HtmlWorkspaceToolService
     {
-        internal const int MaxHtmlChars = 300000;
-        private const int MaxDataChars = 300000;
+        internal const int MaxHtmlChars = int.MaxValue;
+        private const int MaxDataChars = int.MaxValue;
         private const int MaxWorkspaceItems = 100;
-        private const int MaxWorkspaceCharacters = 1500000;
 
         private readonly ResourceGatewayService _resources;
         private readonly LocalHtmlAssetLibraryService _assets;
@@ -604,33 +603,26 @@ namespace RNAssistant.Office.Tools
         {
             HtmlWorkspaceArtifactService.EnsureMutable(session);
             ValidateFile(path, kind, content);
-            ValidateWorkspaceCapacity(NormalizedWorkspaceCopy(session.HtmlWorkspace), FileId(NormalizePath(path)), content, null, null);
+            ValidateWorkspaceCapacity(NormalizedWorkspaceCopy(session.HtmlWorkspace), FileId(NormalizePath(path)), null);
         }
 
         internal static void ValidateDataWrite(ChatSession session, string name, string json)
         {
             HtmlWorkspaceArtifactService.EnsureMutable(session);
             ValidateDataSource(name, json);
-            ValidateWorkspaceCapacity(NormalizedWorkspaceCopy(session.HtmlWorkspace), null, null, DataSourceId(NormalizeDataName(name)), json);
+            ValidateWorkspaceCapacity(NormalizedWorkspaceCopy(session.HtmlWorkspace), null, DataSourceId(NormalizeDataName(name)));
         }
 
         private static void ValidateFile(string path, string kind, string content)
         {
             ValidatePath(path);
-            if ((content ?? string.Empty).Length > MaxHtmlChars)
-            {
-                throw new InvalidOperationException("HTML workspace file is too large. Limit is " + MaxHtmlChars + " characters.");
-            }
-
             NormalizeKind(kind, NormalizePath(path));
         }
 
         private static void ValidateWorkspaceCapacity(
             HtmlWorkspace workspace,
             string replacingFileId,
-            string fileContent,
-            string replacingDataId,
-            string dataJson)
+            string replacingDataId)
         {
             workspace = workspace ?? new HtmlWorkspace();
             var files = (workspace.Files ?? new List<HtmlWorkspaceFile>()).Where(item => item != null).ToList();
@@ -644,24 +636,7 @@ namespace RNAssistant.Office.Tools
                 throw new InvalidOperationException("HTML workspace has too many files/data sources. Limit is " + MaxWorkspaceItems + ".");
             }
 
-            long characters = files.Sum(item => (long)(item.Content ?? string.Empty).Length) +
-                dataSources.Sum(item => (long)JsonConvert.SerializeObject(item.Binding).Length);
-            if (!string.IsNullOrWhiteSpace(replacingFileId))
-            {
-                var existing = files.FirstOrDefault(item => string.Equals(item.Id, replacingFileId, StringComparison.OrdinalIgnoreCase));
-                characters -= existing == null ? 0 : (existing.Content ?? string.Empty).Length;
-                characters += (fileContent ?? string.Empty).Length;
-            }
-            if (!string.IsNullOrWhiteSpace(replacingDataId))
-            {
-                var existing = dataSources.FirstOrDefault(item => string.Equals(item.Id, replacingDataId, StringComparison.OrdinalIgnoreCase));
-                characters -= existing == null ? 0 : JsonConvert.SerializeObject(existing.Binding).Length;
-                characters += 2048; // bounded binding metadata; payload lives in the resource CAS
-            }
-            if (characters > MaxWorkspaceCharacters)
-            {
-                throw new InvalidOperationException("HTML workspace is too large. Aggregate limit is " + MaxWorkspaceCharacters + " characters.");
-            }
+
         }
 
         private static HtmlWorkspaceFile FindFile(ChatSession session, string path)
@@ -769,10 +744,6 @@ namespace RNAssistant.Office.Tools
             if (string.IsNullOrWhiteSpace(json))
             {
                 throw new InvalidOperationException("Data content must be non-empty valid JSON.");
-            }
-            if (json.Length > MaxDataChars)
-            {
-                throw new InvalidOperationException("HTML workspace data is too large. Limit is " + MaxDataChars + " characters.");
             }
 
             JToken.Parse(json);

@@ -13,7 +13,7 @@ namespace RNAssistant.Office.Services
     // enter model descriptors, callable-pack revisions or token accounting.
     internal static class ToolLibraryDocumentationService
     {
-        internal const int MaximumBytes = 2 * 1024 * 1024;
+        internal const int MaximumBytes = int.MaxValue;
         internal static string Build(ToolCatalogEntry tool)
         {
             if (tool == null || !tool.BuiltIn ||

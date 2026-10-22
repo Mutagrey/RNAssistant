@@ -220,7 +220,7 @@ namespace RNAssistant.Harness
                 var headerResult = ExecuteHtmlNative(runtime, OutlookToolIds.SearchMail, headers);
                 AssertEqual(ToolExecutionOutcome.Ok, headerResult.Outcome, "header matching works");
                 AssertEqual(0, adapter.OutlookSearchBodyCaptureCount, "header-only search never reads body");
-                adapter.OutlookSelectedTo = new string('a', OutlookService.MaxSearchHeaderChars - 1) + "😀needle@example.com";
+                adapter.OutlookSelectedTo = new string('a', 4095) + "😀needle@example.com";
                 var subject = ExecuteHtmlNative(runtime, OutlookToolIds.SearchMail,
                     new JObject { ["query"] = "Renewal", ["fields"] = "subject" });
                 AssertEqual(ToolExecutionOutcome.Ok, subject.Outcome, "long unrelated recipient list cannot reject subject search");
@@ -229,34 +229,34 @@ namespace RNAssistant.Harness
                 var source = ResourceSnapshotReadService.ReadPayload(executor.Payloads,
                     subject.ResourceEvidence.Single().Payload);
                 var firstMail = JObject.Parse(source)["folder"]["messages"][0];
-                AssertTrue((bool)firstMail["recipientsTruncated"] &&
-                    ((string)firstMail["to"]).Length == OutlookService.MaxSearchHeaderChars - 1,
-                    "bounded recipient prefix preserves the truncation marker and surrogate boundary");
+                AssertTrue(!(bool)firstMail["recipientsTruncated"] &&
+                    (string)firstMail["to"] == adapter.OutlookSelectedTo,
+                    "complete recipient source preserves the Unicode tail");
                 var recipient = ExecuteHtmlNative(runtime, OutlookToolIds.SearchMail,
                     new JObject { ["query"] = "needle@example.com", ["fields"] = "recipients" });
                 AssertTrue(recipient.Outcome == ToolExecutionOutcome.Ok &&
-                    (int)JObject.Parse(recipient.Result.DataJson)["matchCount"] == 0 &&
-                    (bool)JObject.Parse(recipient.Result.DataJson)["sourceTruncated"],
-                    "recipient negative result reports its incomplete source");
-                adapter.OutlookSelectedSenderEmail = new string('e', OutlookService.MaxSearchHeaderChars) + "needle";
+                    (int)JObject.Parse(recipient.Result.DataJson)["matchCount"] == 1 &&
+                    !(bool)JObject.Parse(recipient.Result.DataJson)["sourceTruncated"],
+                    "recipient search finds the tail beyond the former prefix");
+                adapter.OutlookSelectedSenderEmail = new string('e', 4096) + "needle";
                 var sender = ExecuteHtmlNative(runtime, OutlookToolIds.SearchMail,
                     new JObject { ["query"] = "needle", ["fields"] = "sender" });
                 AssertTrue(sender.Outcome == ToolExecutionOutcome.Ok &&
-                    (bool)JObject.Parse(sender.Result.DataJson)["sourceTruncated"],
-                    "sender email prefix is explicitly incomplete");
+                    !(bool)JObject.Parse(sender.Result.DataJson)["sourceTruncated"] &&
+                    (int)JObject.Parse(sender.Result.DataJson)["matchCount"] == 1, "complete sender source is searched");
                 adapter.OutlookSelectedTo = "owner@example.com";
                 adapter.OutlookSelectedSenderEmail = "customer@example.com";
-                adapter.OutlookSelectedBody = new string('x', OutlookService.MaxSearchBodyChars - 1) + "😀 needle";
+                adapter.OutlookSelectedBody = new string('x', 99999) + "😀 needle";
                 var bodies = new JObject { ["query"] = "needle", ["fields"] = "body" };
                 var limited = ExecuteHtmlNative(runtime, OutlookToolIds.SearchMail, bodies);
                 var data = JObject.Parse(limited.Result.DataJson);
-                AssertTrue((bool)data["sourceTruncated"] && (int)data["matchCount"] == 0, "body prefix cannot claim a full negative search");
+                AssertTrue(!(bool)data["sourceTruncated"] && (int)data["matchCount"] == 1, "body search reaches the complete tail beyond the former prefix");
                 adapter.OutlookFolderSnapshotTransform = snapshot => { snapshot.Messages[0].To = null; return snapshot; };
                 AssertEqual(ToolExecutionOutcome.Error, ExecuteHtmlNative(runtime, OutlookToolIds.SearchMail, headers).Outcome, "incomplete header rejected");
                 adapter.OutlookFolderSnapshotTransform = snapshot => { snapshot.Messages[0].Body = "unexpected body"; return snapshot; };
                 AssertEqual(ToolExecutionOutcome.Error, ExecuteHtmlNative(runtime, OutlookToolIds.SearchMail, headers).Outcome, "header source cannot smuggle body");
-                adapter.OutlookFolderSnapshotTransform = snapshot => { snapshot.Messages[0].Body = new string('x', OutlookService.MaxSearchBodyChars + 1); return snapshot; };
-                AssertEqual(ToolExecutionOutcome.Error, ExecuteHtmlNative(runtime, OutlookToolIds.SearchMail, bodies).Outcome, "oversized provider prefix rejected");
+                adapter.OutlookFolderSnapshotTransform = snapshot => { snapshot.Messages[0].Body = null; return snapshot; };
+                AssertEqual(ToolExecutionOutcome.Error, ExecuteHtmlNative(runtime, OutlookToolIds.SearchMail, bodies).Outcome, "missing requested body source rejected");
                 adapter.OutlookFolderSnapshotTransform = snapshot => { snapshot.Messages = new OutlookMailSnapshot[0]; snapshot.TotalItems = 0; snapshot.Truncated = false; return snapshot; };
                 var empty = ExecuteHtmlNative(runtime, OutlookToolIds.SearchMail, bodies);
                 AssertTrue(empty.Outcome == ToolExecutionOutcome.Ok && empty.ResourceEvidence.Single().Complete, "empty folder is exact observed data");
@@ -460,9 +460,9 @@ namespace RNAssistant.Harness
                 AssertTrue(next.Complete && next.Table.Rows.Count == 1, "old collection continuation retains removed member");
                 AssertEqual(count, adapter.OutlookCollectionCaptureCount, "old records never fall forward to live folder");
                 var bound = executor.ExecuteManual(Command(HtmlWorkspaceToolCatalog.BindDataToolId,
-                    "name", "mail_collection", "target", candidate.Target, "view", "records", "path", "$.messages"),
+                    "name", "mail_collection", "target", candidate.Target, "view", "table"),
                     tools, new AppSettings(), false, false, session);
-                AssertTrue(bound.Success, "HTML binds the same resource records");
+                AssertTrue(bound.Success, "HTML binds the same resource records: " + bound.Message);
                 string error;
                 AssertTrue(!tools.Any(tool => tool.Id == "outlook.collect_mail") && !NativeToolRuntimeAdapter.Owns("outlook.collect_mail") &&
                     !ModelToolResultProjection.ValidateAcceptedCall(new ToolCall("old-collection", "outlook.collect_mail", "{}"), out error),
@@ -493,15 +493,10 @@ namespace RNAssistant.Harness
                         EntryId = "budget-" + index, Subject = new string('s', 4096), Sender = new string('r', 4096),
                         Body = new string('b', 1000) }).ToArray();
                     snapshot.TotalItems = 100; return snapshot; };
-                denied = false;
-                try { executor.ResourceGateway.Read(session, new ResourceReadRequest { Reference = reference, Representation = "text" }); }
-                catch (ResourceRequestException error)
-                {
-                    denied = error.ErrorCode == "RESOURCE_SNAPSHOT_TOO_LARGE";
-                    AssertContains(error.Message, "Outlook collection: latest:N",
-                        "oversized capture gives the actionable bounded source target");
-                }
-                AssertTrue(denied, "aggregate collection budget refuses individually valid oversized rows");
+                var largeCollection = executor.ResourceGateway.Read(session, new ResourceReadRequest {
+                    Reference = reference, Representation = "text" }).Result;
+                AssertTrue(largeCollection.TotalCharacters > 750000,
+                    "a complete collection may exceed the former aggregate source ceiling");
                 adapter.OutlookFolderSnapshotTransform = snapshot => {
                     snapshot.Messages[0].Body = ""; snapshot.Messages[1].Body = ""; return snapshot; };
                 var emptyBodies = new OutlookService(adapter).CaptureCollection(CancellationToken.None);
@@ -588,7 +583,7 @@ namespace RNAssistant.Harness
 
                 AssertEqual("RESOURCE_SNAPSHOT_TOO_LARGE", OutlookCaptureError(service,
                     new OutlookReadMailRequest { Content = "message", MaxChars = 10 }), "oversize is explicit, not clipped success");
-                adapter.OutlookSelectedBody = new string('x', OutlookService.MaxBodyChars + 1);
+                adapter.OutlookSelectedBody = new string('x', 1000001);
                 count = adapter.OutlookBodyMaterializationCount;
                 var metadata = service.CaptureMail(new OutlookReadMailRequest { Content = "attachments", MaxChars = 1 }, CancellationToken.None);
                 AssertTrue(!metadata.BodyCaptured && metadata.Mail.Body == null && metadata.Mail.StateToken == null,

@@ -97,19 +97,20 @@ namespace RNAssistant.Harness
                     data.CloseTransfers();
                     RuntimeThrows<OperationCanceledException>(() => editor.Open(session, "Module1", new CancellationToken(true)));
                     AssertEqual(reads, adapter.CountVbaCalls(FakeVbaOperation.ReadModule), "cancelled open never touches VBA");
-                    adapter.VbaModuleCode = new string('x', VbaEditorResourceService.MaximumCharacters + 1);
-                    AssertEqual("vba_editor_source_truncated", RuntimeThrows<ResourceRequestException>(() =>
-                        editor.Open(session, "Module1", CancellationToken.None)).ErrorCode, "partial source cannot become editable");
+                    adapter.VbaModuleCode = new string('x', 1000001);
+                    var large = editor.Open(session, "Module1", CancellationToken.None);
+                    AssertEqual(1000001, large.TotalCharacters, "large complete source is editable without the former ceiling");
+                    data.Close(session.Id, VbaEditorResourceService.Owner, large.Data.LeaseId);
                     var identity = VbaResourceProvider.ComponentIdentity(session.DocumentAuthorityId, "Module1");
                     var scope = ResourceAuthorityScopeId.Document(new DocumentAuthorityId(session.DocumentAuthorityId));
                     var head = executor.ResourceAuthority.Store.GetHead(scope, identity);
                     var view = ((IResourceRevisionStore)executor.ResourceAuthority.Store).GetView(scope, head.Revision, ResourceRepresentations.Source);
-                    AssertTrue(view.Coverage.Kind != ResourceCoverageKinds.Whole, "truncation cannot publish a complete source snapshot");
+                    AssertEqual(ResourceCoverageKinds.Whole, view.Coverage.Kind, "large source retains complete exact coverage");
                     adapter.QueueVbaModuleSnapshot(new VbaModuleSnapshot { Name = "Module1", ComponentType = "StdModule",
-                        Code = adapter.VbaModuleCode, CodeSha256 = VbaTextCanonicalizer.LiveCodeSha256(adapter.VbaModuleCode), Truncated = false });
+                        Code = "substituted", CodeSha256 = VbaTextCanonicalizer.LiveCodeSha256(adapter.VbaModuleCode), Truncated = false });
                     var blobs = Directory.GetFiles(paths.ChatBlobDirectory, "*.blob", SearchOption.AllDirectories).Length;
-                    AssertEqual("RESOURCE_BATCH_TOO_LARGE", RuntimeThrows<ResourceRequestException>(() =>
-                        editor.Open(session, "Module1", CancellationToken.None)).ErrorCode, "an overproducing backend fails before CAS capture");
+                    AssertEqual("vba_read_invalid", RuntimeThrows<ResourceRequestException>(() =>
+                        editor.Open(session, "Module1", CancellationToken.None)).ErrorCode, "a substituted backend source fails before CAS capture");
                     AssertEqual(blobs, Directory.GetFiles(paths.ChatBlobDirectory, "*.blob", SearchOption.AllDirectories).Length,
                         "an oversized claimed-complete source cannot create a CAS publication");
                     RuntimeThrows<ResourceRequestException>(() => editor.Open(session, "Missing", CancellationToken.None));

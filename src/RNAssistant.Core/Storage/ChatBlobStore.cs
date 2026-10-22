@@ -240,8 +240,8 @@ namespace RNAssistant.Core.Storage
             Action<byte[], int> visit, Action reset)
         {
             if (visit == null || reset == null) throw new ArgumentNullException();
-            if (!ValidReference(reference) || reference.ByteLength > 20L * 1024 * 1024)
-                throw new InvalidDataException("The bounded text source is unavailable.");
+            if (!ValidReference(reference))
+                throw new InvalidDataException("The exact text source is unavailable.");
             var protector = Protection();
             if (!ProtectionMatches(reference, protector))
                 throw new InvalidDataException("The protected text source is unavailable.");

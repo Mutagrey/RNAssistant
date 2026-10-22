@@ -44,7 +44,7 @@
     options = options || {};
     var state = options.state;
     var write = null;
-    var maximumMutationBytes = 16 * 1024 * 1024;
+    var maximumMutationBytes = Number.MAX_SAFE_INTEGER;
 
     function closeUpload(operation) {
       if (!operation || operation.closed || !operation.lease || !/^[a-f0-9]{64}$/.test(operation.lease.leaseId)) return Promise.resolve();

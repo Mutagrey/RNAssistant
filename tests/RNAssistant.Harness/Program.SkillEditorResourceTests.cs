@@ -247,9 +247,13 @@ namespace RNAssistant.Harness
                     request.ChatId = session.Id;
                     RuntimeThrows<ResourceRequestException>(() => data.CloseUpload(session.Id, request.UploadLeaseId, VbaEditorResourceService.Owner));
                     AssertEqual(body.Content, editor.PrepareReferenceMutation(session, request, CancellationToken.None).Content, "foreign consumers cannot destroy the owned upload");
-                    foreach (var mode in new[] { "hash", "partial", "shape", "cancel", "oversized" })
+                    body.Content = new string('x', 500001);
+                    request = UploadSkillMutation(data, editor, session, body);
+                    AssertEqual(body.Content, editor.PrepareReferenceMutation(session, request, CancellationToken.None).Content,
+                        "a complete reference beyond the former size ceiling is accepted");
+                    foreach (var mode in new[] { "hash", "partial", "shape", "cancel" })
                     {
-                        body.Content = mode == "oversized" ? new string('x', 500001) : "# Content";
+                        body.Content = "# Content";
                         request = UploadSkillMutation(data, editor, session, body, mode == "partial");
                         if (mode == "hash") request.Sha256 = new string('0', 64);
                         if (mode == "cancel") RuntimeThrows<OperationCanceledException>(() => editor.PrepareReferenceMutation(session, request, new CancellationToken(true)));

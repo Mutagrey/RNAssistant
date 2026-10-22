@@ -12,14 +12,15 @@ namespace RNAssistant.Office.Services
 {
     internal sealed partial class VbaResourceProvider
     {
-        private const int MaximumMaterializedCharacters = 1000000;
-        private const int MaximumSearchCharacters = 1000000;
-        private const int MaximumSearchCharactersPerResource = 128000;
+        private const int MaximumMaterializedCharacters = int.MaxValue;
+        private const int MaximumSearchCharacters = int.MaxValue;
+        private const int MaximumSearchCharactersPerResource = int.MaxValue;
         private const string TruncatedMarker = "\n...[truncated]";
 
         public ResourceReadSelection ReadLineWindow(ChatSession session, ResourceRef reference,
             string representation, int startLine, int lineCount,
-            System.Threading.CancellationToken cancellationToken)
+            System.Threading.CancellationToken cancellationToken,
+            int maximumCharacters = ResourceReadRequest.MaximumCharacters)
         {
             if (representation != ResourceRepresentations.Source) return null;
             cancellationToken.ThrowIfCancellationRequested();
@@ -29,7 +30,7 @@ namespace RNAssistant.Office.Services
                 if (!TryResolveTarget(session, reference?.Uri, out target) || target.Module == null)
                     return null;
                 var window = _source.ReadResourceModuleLines(session, target.Module.Name,
-                    startLine, lineCount, ResourceReadRequest.MaximumCharacters);
+                    startLine, lineCount, maximumCharacters);
                 cancellationToken.ThrowIfCancellationRequested();
                 var code = window.Code;
                 var hash = TextPatternEngine.Sha256(code);

@@ -19,8 +19,7 @@ namespace RNAssistant.Office.Services
         private const int MaxPackages = 300;
         private const int MaxFiles = 20;
         private const int MaxManifestBytes = 16384;
-        private const int MaxFileBytes = 1000000;
-        private const int MaxPackageBytes = 3000000;
+        private const int MaxFileBytes = int.MaxValue;
         private static readonly Regex IdPattern = new Regex("^[a-z][a-z0-9._-]{0,63}$", RegexOptions.CultureInvariant);
         private static readonly Regex VersionPattern = new Regex("^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[a-zA-Z0-9.-]+)?$", RegexOptions.CultureInvariant);
         private static readonly Regex SegmentPattern = new Regex("^[A-Za-z0-9][A-Za-z0-9._-]*$", RegexOptions.CultureInvariant);
@@ -124,8 +123,8 @@ namespace RNAssistant.Office.Services
             var manifest = ReadManifest(id, version, out manifestBytes);
             var packageDirectory = Path.Combine(_directory, id, version);
             var files = new List<HtmlAssetFile>();
-            var totalBytes = manifestBytes.Length;
-            using (var revisionBytes = new MemoryStream())
+            using (var sha = SHA256.Create())
+            using (var revisionBytes = new CryptoStream(Stream.Null, sha, CryptoStreamMode.Write))
             {
                 WriteHashPart(revisionBytes, manifestBytes);
                 foreach (var relativePath in manifest.Files)
@@ -138,31 +137,24 @@ namespace RNAssistant.Office.Services
                             throw new InvalidOperationException("Linked asset directory is unsupported: " + relativePath);
                     }
                     var bytes = ReadRegularFile(filePath, MaxFileBytes);
-                    totalBytes += bytes.Length;
-                    if (totalBytes > MaxPackageBytes)
-                        throw new InvalidOperationException("HTML asset package is too large.");
                     var content = StrictUtf8.GetString(bytes);
-                    if (content.Length > 300000)
-                        throw new InvalidOperationException("HTML asset file exceeds the workspace limit: " + relativePath);
                     files.Add(new HtmlAssetFile { Path = relativePath, Content = content,
                         Kind = relativePath.EndsWith(".js", StringComparison.OrdinalIgnoreCase) ? "script" :
                             relativePath.EndsWith(".css", StringComparison.OrdinalIgnoreCase) ? "css" : "html" });
                     WriteHashPart(revisionBytes, StrictUtf8.GetBytes(relativePath));
                     WriteHashPart(revisionBytes, bytes);
                 }
-                using (var sha = SHA256.Create())
+                revisionBytes.FlushFinalBlock();
+                return new HtmlAssetPackage
                 {
-                    return new HtmlAssetPackage
-                    {
-                        Id = id, Version = version, Kind = manifest.Kind,
-                        Title = manifest.Title.Trim(),
-                        Description = manifest.Description.Trim(), Usage = manifest.Usage,
-                        License = manifest.License, Provenance = manifest.Provenance,
-                        Revision = BitConverter.ToString(sha.ComputeHash(revisionBytes.ToArray()))
-                            .Replace("-", string.Empty).ToLowerInvariant(),
-                        Files = files
-                    };
-                }
+                    Id = id, Version = version, Kind = manifest.Kind,
+                    Title = manifest.Title.Trim(),
+                    Description = manifest.Description.Trim(), Usage = manifest.Usage,
+                    License = manifest.License, Provenance = manifest.Provenance,
+                    Revision = BitConverter.ToString(sha.Hash)
+                        .Replace("-", string.Empty).ToLowerInvariant(),
+                    Files = files
+                };
             }
         }
 
@@ -213,17 +205,12 @@ namespace RNAssistant.Office.Services
                 files.Count < 1 || files.Count > MaxFiles)
                 throw new InvalidOperationException("Invalid HTML asset package metadata.");
             var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var totalBytes = 0;
             foreach (var file in files)
             {
                 ValidateRelativePath(file?.Path);
                 if (!names.Add(file.Path))
                     throw new InvalidOperationException("Duplicate HTML asset path: " + file.Path);
-                var bytes = StrictUtf8.GetBytes(file.Content ?? string.Empty);
-                totalBytes += bytes.Length;
-                if (bytes.Length > MaxFileBytes || (file.Content ?? string.Empty).Length > 300000 ||
-                    totalBytes > MaxPackageBytes)
-                    throw new InvalidOperationException("HTML asset package exceeds its size limit.");
+                StrictUtf8.GetByteCount(file.Content ?? string.Empty);
             }
             var idDirectory = Path.Combine(_directory, id);
             var destination = Path.Combine(idDirectory, version);

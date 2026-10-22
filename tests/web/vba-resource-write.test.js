@@ -57,7 +57,7 @@ function fixture() {
 
 (async () => {
   {
-    const f = fixture(); f.state.code += "'" + "ж".repeat(140000);
+    const f = fixture(); f.state.code += "'" + "ж".repeat(1100000);
     assert.equal(await f.actions.saveModule(), true);
     const bytes = Buffer.concat(f.chunks), payload = f.writes()[0].payload;
     assert.equal(bytes.toString("utf8"), f.state.code); assert.ok(f.chunks.length > 1);
@@ -72,7 +72,7 @@ function fixture() {
   }
   {
     for (const invalid of [f => { f.lease.url = "https://foreign/upload"; }, f => { f.lease.maxChunkBytes = 262145; },
-      f => { f.state.code = "x".repeat(1000001); }, f => { f.state.code = "\ud800"; },
+      f => { f.state.code = "\ud800"; },
       f => { f.state.guard = ""; },
       f => { f.fetchHook = async () => ({ ok: true, json: async () => ({ leaseId: "foreign", nextOffset: 1 }) }); }]) {
       const f = fixture(); invalid(f);

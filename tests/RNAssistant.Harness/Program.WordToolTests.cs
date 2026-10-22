@@ -235,10 +235,11 @@ namespace RNAssistant.Harness
                 AssertEqual(ToolRetryPolicy.Replan,
                     invalid.Recovery.RetryPolicy,
                     "invalid Word search asks the model to correct its call");
-                adapter.Write(new WordWriteRequest { Mode = "replaceselection", Text = new string('x', WordService.MaximumTextCharacters + 1) }, () => { });
-                var oversized = executor.ExecuteManual(Command(WordToolIds.FindText, "query", "x"), tools, new AppSettings(), false, false, session);
-                AssertEqual("RESOURCE_SNAPSHOT_TOO_LARGE", oversized.ErrorCode, "oversized search requires narrower scope");
-                AssertEqual(0, adapter.WordStoryMaterializationCount, "search bound precedes text materialization");
+                adapter.Write(new WordWriteRequest { Mode = "replaceselection", Text = new string('x', 1000001) + "TAIL" }, () => { });
+                var large = executor.ExecuteManual(Command(WordToolIds.FindText, "query", "TAIL"), tools, new AppSettings(), false, false, session);
+                AssertTrue(large.Success && (int)JObject.Parse(large.DataJson)["matchCount"] == 1,
+                    "search reaches text beyond the former source ceiling");
+                AssertEqual(1, adapter.WordStoryMaterializationCount, "search uses one exact source capture");
                 adapter.Write(new WordWriteRequest { Mode = "replaceselection", Text = "" }, () => { });
                 adapter.WordStoriesFactory = request => new[] { new WordStorySnapshot { Kind = "main", Start = 0, End = 1, Text = null } };
                 var missing = executor.ExecuteManual(Command(WordToolIds.FindText, "query", "x"), tools, new AppSettings(), false, false, session);
@@ -270,7 +271,7 @@ namespace RNAssistant.Harness
                 }
                 var empty = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId, "target", "Word range: 0:0"), tools, new AppSettings(), false, false, session);
                 AssertTrue(empty.Success && (string)JObject.Parse(empty.DataJson)["text"] == "", "explicit empty range is complete");
-                adapter.Write(new WordWriteRequest { Mode = "replaceselection", Text = new string('x', WordService.MaximumTextCharacters + 1) }, () => { });
+                adapter.Write(new WordWriteRequest { Mode = "replaceselection", Text = new string('x', 1000001) }, () => { });
                 var document = executor.ResourceGateway.List(session, LiveDocumentResourceProvider.ProviderName,
                     LiveDocumentResourceProvider.DocumentKind, null, 10).Items.Single();
                 var before = adapter.WordTextMaterializationCount;
@@ -284,7 +285,7 @@ namespace RNAssistant.Harness
                     (int)firstWindow["sourceCoverage"]["start"] == 0 &&
                     (int)firstWindow["sourceCoverage"]["end"] == ResourceReadRequest.MaximumCharacters,
                     "ordinary read advertises exact partial source coverage");
-                AssertEqual(WordService.MaximumTextCharacters + 1, (int)firstWindow["sourceEndChar"],
+                AssertEqual(1000001, (int)firstWindow["sourceEndChar"],
                     "first window reports the document end for continuation");
                 AssertEqual(before + 1, adapter.WordTextMaterializationCount,
                     "large document materializes only the selected window");
@@ -295,7 +296,7 @@ namespace RNAssistant.Harness
                 AssertTrue(structure.Success, "large Word document exposes bounded structure");
                 var bounds = JObject.Parse((string)JObject.Parse(structure.DataJson)["text"]);
                 AssertEqual(0, (int)bounds["start"], "main story starts at zero in the fake host");
-                AssertEqual(WordService.MaximumTextCharacters + 1, (int)bounds["end"],
+                AssertEqual(1000001, (int)bounds["end"],
                     "structure reports the full main-story end");
                 AssertEqual(before, adapter.WordTextMaterializationCount,
                     "bounds do not materialize the large document body");

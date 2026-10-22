@@ -46,7 +46,7 @@
       binaryPending.add(data);
       try {
         var bytes = await window.RNAssistantResourceDownload.readBinary(data, {
-          maxBytes: 20 * 1024 * 1024, fetch: options.fetch || window.fetch.bind(window), signal: data.abort.signal,
+          maxBytes: Number.MAX_SAFE_INTEGER, fetch: options.fetch || window.fetch.bind(window), signal: data.abort.signal,
           isCurrent: function () { return !data.closed && state.activeChatId === data.chatId && current(); }
         });
         if (data.closed || state.activeChatId !== data.chatId || !current()) throw new Error("RESOURCE_READ_CANCELLED");
@@ -188,7 +188,7 @@
       var data = binaryData(response, uri, byteLength, hash);
       if (returnedUri !== uri || viewerKind !== "image" ||
           ["image/jpeg", "image/png", "image/gif", "image/webp"].indexOf(mimeType) < 0 ||
-          !/^[a-f0-9]{64}$/i.test(hash) || byteLength <= 0 || byteLength > 20 * 1024 * 1024) {
+          !/^[a-f0-9]{64}$/i.test(hash) || byteLength <= 0) {
         throw new Error("Artifact image returned inconsistent exact-read evidence.");
       }
       return {
@@ -367,12 +367,12 @@
       var textTruncated = value(response, "TextTruncated", "textTruncated", false) === true;
       if (returnedUri !== uri || viewerKind !== "pdf" || mimeType !== "application/pdf" ||
           !/^[a-f0-9]{64}$/i.test(hash) || !Number.isInteger(byteLength) ||
-          byteLength <= 0 || byteLength > 20 * 1024 * 1024 ||
+          byteLength <= 0 ||
           !Number.isInteger(pageCount) || pageCount <= 0 || pageCount > 10000 ||
           !Array.isArray(pageTextLengths) || pageTextLengths.length > pageCount ||
           pageTextLengths.some(function (length) { return !Number.isInteger(length) || length < 0; }) ||
           !/^[a-f0-9]{64}$/i.test(extractedHash) || !Number.isInteger(extractedCharacters) || extractedCharacters < 0 ||
-          extractedCharacters > 1000000 || (!textTruncated && pageTextLengths.length < pageCount)) {
+          (!textTruncated && pageTextLengths.length < pageCount)) {
         throw new Error("Artifact PDF returned inconsistent exact-read evidence.");
       }
       return {

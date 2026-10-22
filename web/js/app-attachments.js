@@ -1,6 +1,6 @@
 var ATTACHMENT_MAX_FILES = 10;
-var ATTACHMENT_MAX_FILE_BYTES = 20 * 1024 * 1024;
-var ATTACHMENT_MAX_TOTAL_BYTES = 50 * 1024 * 1024;
+var ATTACHMENT_MAX_FILE_BYTES = 2147483647;
+var ATTACHMENT_MAX_TOTAL_BYTES = Number.MAX_SAFE_INTEGER;
 
 function attachmentValue(item, pascal, camel, fallback) {
   item = item || {};
@@ -116,7 +116,7 @@ async function stageChatResourceFiles(targetChatId, files) {
   }
   if (files.some(function (file) { return file.size <= 0 || file.size > ATTACHMENT_MAX_FILE_BYTES; }) ||
       existingBytes + files.reduce(function (sum, file) { return sum + file.size; }, 0) > ATTACHMENT_MAX_TOTAL_BYTES) {
-    setAttachmentStatus(targetChatId, "Файл должен быть непустым. Лимит: 20 МБ на файл и 50 МБ на сообщение.", "warning");
+    setAttachmentStatus(targetChatId, "Файл должен быть непустым и поддерживаться текущим способом импорта.", "warning");
     return false;
   }
   try {

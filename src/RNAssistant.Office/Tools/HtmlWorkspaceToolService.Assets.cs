@@ -104,7 +104,7 @@ namespace RNAssistant.Office.Tools
                     Content = assetFile.Content, CreatedUtc = now, UpdatedUtc = now
                 });
             }
-            ValidateWorkspaceCapacity(workspace, null, null, null, null);
+            ValidateWorkspaceCapacity(workspace, null, null);
             workspace.UpdatedUtc = now;
             NormalizeWorkspace(workspace);
             markDispatchPossible();

@@ -38,7 +38,7 @@ namespace RNAssistant.Office.Contracts
     public sealed class ResourceUploadBatchResponse
     {
         [JsonProperty("leaseId")] public string LeaseId { get; set; }
-        [JsonProperty("nextOffset")] public int NextOffset { get; set; }
+        [JsonProperty("nextOffset")] public long NextOffset { get; set; }
     }
 
     public sealed class ResourceChangedMessage

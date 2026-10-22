@@ -426,7 +426,7 @@ namespace RNAssistant.Core.Llm
                     continue;
                 }
                 var maxChars = (int)Math.Min(
-                    1000000L,
+                    (long)int.MaxValue,
                     Math.Max(64L, (long)ModelContextBudget.ApproximateTextCharacterCapacity(remainingTokens, settings) + 16L));
                 var cacheKey = AttachmentKey(attachment) + "|text";
                 string extracted = null;

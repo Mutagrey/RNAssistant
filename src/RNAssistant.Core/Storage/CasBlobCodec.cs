@@ -161,8 +161,8 @@ namespace RNAssistant.Core.Storage
             StorageProtector protector, string purpose, Action<byte[], int> visit, Action reset,
             CancellationToken token)
         {
-            if (visit == null || reset == null || expectedLength < 0 || expectedLength > 20L * 1024 * 1024)
-                throw new ArgumentException("A bounded verified visitor is required.");
+            if (visit == null || reset == null || expectedLength < 0)
+                throw new ArgumentException("A verified source visitor is required.");
             return VerifyFile(path, expectedLength, expectedHash, protector, purpose,
                 null, 0, token, visit, reset);
         }

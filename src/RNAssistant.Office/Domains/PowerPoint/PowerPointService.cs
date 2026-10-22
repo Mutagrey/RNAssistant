@@ -24,13 +24,13 @@ namespace RNAssistant.Office.Domains.PowerPoint
             _backend = backend ?? throw new ArgumentNullException(nameof(backend));
         }
 
-        public const int MaximumTextCharacters = 1000000;
+        public const int MaximumTextCharacters = int.MaxValue;
 
         internal PowerPointSlideTextWindowSnapshot CaptureSlideTextWindow(
             PowerPointSlideTextWindowRequest request, CancellationToken cancellationToken)
         {
             if (request == null || request.SlideIndex < 1 || request.StartChar < 0 ||
-                request.CharCount < 0 || request.CharCount > ResourceReadRequest.MaximumCharacters)
+                request.CharCount < 0)
                 throw new PowerPointBackendException("Invalid bounded slide text request.", "resource_chars_invalid", false);
             cancellationToken.ThrowIfCancellationRequested();
             var snapshot = _backend.ReadSlideTextWindow(request);

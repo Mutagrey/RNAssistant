@@ -8,6 +8,40 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## Source-size audit — 2026-10-22
+
+Fixed source limits were removed across live text captures, HTML and file import,
+text indexing, editor libraries and shared transport. A discovered `int.MaxValue + 1`
+lookahead overflow in artifact search was corrected with saturated lookahead; generic
+first windows preserve UTF-16 boundaries and partial evidence. Transport no longer
+allocates a full declared upload at open. Runtime typed consumers, COM properties
+and download producers can still materialize a complete source: available memory,
+array/string/offset representability and real host behavior remain practical limits.
+This is not constant-memory qualification for Office or arbitrary binary editing.
+Large-tail and recovery checks also exposed nested 20-MiB CAS visitor, 8-MiB
+retained snapshot and 16-MiB accepted/pending action hydration caps. These were
+removed at their owners; exact integrity and single-source hydration remain required.
+
+Remaining operation/preview/format limits are classified in the canonical
+[source-size policy](../resource-fabric.md#source-sizes-and-context-budgets--2026-10-22).
+The optional history/cache budgets are deliberately decoupled from source admission.
+CodeOnly UserForm deletion rechecks Designer state at dispatch; actual VBE/COM
+creation/deletion/restoration, cancellation and large-source WebView2 responsiveness
+still require Windows evidence. The deployed .NET Framework JS worker also needs
+target-host execution evidence after removal of its duplicate source/request cap;
+its execution and result budgets remain unchanged. No Office/VSTO validation ran
+on this machine.
+
+Baseline comparison at `43f71591` reproduces the prompt fixtures' unrelated global
+settings-callback count assertions and the old Outlook binding `path` argument and model-facing `records` view.
+Those fixtures now assert retained source/failure evidence and the current semantic
+binding contract. Stale browser asset-version assertions were aligned with the
+existing entrypoint; no product behavior was changed to satisfy them.
+The separate `resource cutover: schema mapping derived publication` fixture still
+fails at restoration of an old copied HTML workspace, identically on `43f71591`.
+It remains open under the existing fork/HTML owner; source-size work does not claim
+to repair or qualify that restoration path.
+
 ## Resource Context review — 2026-10-22
 
 Scope: the [Resource Context plan](resource-context/PLAN.md), its implemented
@@ -42,8 +76,8 @@ journal, read-back and non-replay of unknown effects remain the selected design.
 No second store/compiler, generic Office abstraction or broad rewrite is justified
 by these findings. Common semantics do not imply identical provider capabilities:
 bounded selectors, typed Office mutations and UI transfer budgets remain explicit;
-arbitrary binary editing is outside the agreed scope. A single over-budget VBA
-line still lacks a character-window route, and non-text project file views remain
+arbitrary binary editing is outside the agreed scope. The follow-up source-size audit adds exact character windows for an over-budget VBA
+line. Non-text project file views remain
 in [BACKLOG](BACKLOG.md#чтение-нетекстовых-файлов-проектным-чатом--2026-10-21).
 
 Focused host-neutral fixtures cover each repair, with existing streamed writes,
@@ -2376,7 +2410,7 @@ no global polling/background rescan. Owner: Gateway + live document/VBA provider
 Real Windows/COM qualification and other host-specific search consumers remain open.
 
 Resource cutover / Outlook (2026-09-06, open): `MailItem.Body` materializes a whole
-COM string before the character ceiling can reject it; exact-capture completion
+COM string (the former character ceiling is removed); exact-capture completion
 does not prove bounded source allocation. Owner: Outlook backend/resource cutover.
 The former session-wide `ResolveMail(entryId)` lookup is contained host-neutral:
 Inspector lookup uses only its retained mail; folder lookup supplies StoreID and

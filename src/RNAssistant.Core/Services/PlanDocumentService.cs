@@ -11,7 +11,7 @@ namespace RNAssistant.Core.Services
 {
     public sealed class PlanDocumentService
     {
-        public const int MaximumMarkdownCharacters = 32000;
+        public const int MaximumMarkdownCharacters = int.MaxValue;
 
         public static string CreationId(ChatSession session, ToolExecutionContext context)
         {
@@ -596,10 +596,10 @@ namespace RNAssistant.Core.Services
         private static string RequiredMarkdown(string value)
         {
             value = value ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(value) || value.Length > MaximumMarkdownCharacters)
+            if (string.IsNullOrWhiteSpace(value))
             {
                 throw new InvalidOperationException(
-                    "markdown must contain 1-" + MaximumMarkdownCharacters + " characters.");
+                    "markdown must contain non-whitespace text.");
             }
             return value;
         }

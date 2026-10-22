@@ -70,13 +70,12 @@ namespace RNAssistant.Runtime
                 ResourceReadObservation read;
                 SkillDefinition skill = null;
                 var referencePath = Value(context, "referencePath");
-                int? startLine = null, lineCount = null, startChar = null, charCount = null;
+                var startLine = Number(context, "startLine");
+                var lineCount = Number(context, "lineCount");
+                var startChar = Number(context, "startChar");
+                var charCount = Number(context, "charCount");
                 if (type == "file")
                 {
-                    startLine = Number(context, "startLine");
-                    lineCount = Number(context, "lineCount");
-                    startChar = Number(context, "startChar");
-                    charCount = Number(context, "charCount");
                     if (startChar.HasValue != charCount.HasValue ||
                         (startChar.HasValue && (startLine.HasValue || lineCount.HasValue)))
                         throw Error("Supply startChar and charCount together, without line selectors.", "resource_chars_invalid");
@@ -90,7 +89,8 @@ namespace RNAssistant.Runtime
                 else if (type == "plan")
                 {
                     var versionText = Value(context, "version");
-                    read = _plans.Read(target, string.IsNullOrEmpty(versionText) ? (int?)null : int.Parse(versionText, System.Globalization.CultureInfo.InvariantCulture));
+                    read = _plans.Read(target, string.IsNullOrEmpty(versionText) ? (int?)null : int.Parse(versionText, System.Globalization.CultureInfo.InvariantCulture),
+                        _maximumTextReadCharacters, startLine, lineCount, startChar, charCount);
                     target = read.Result.Resource.Title;
                 }
                 else
@@ -100,19 +100,19 @@ namespace RNAssistant.Runtime
                     if (!string.IsNullOrEmpty(referencePath) && !(skill.References ?? new List<SkillReferenceMetadata>()).Any(item => item.Path == referencePath))
                         throw Error("The reference is not part of the selected skill publication.", "RESOURCE_NOT_FOUND");
                     read = _publications.ReadSkill(SkillPublicationService.SkillResource(skill,
-                        string.IsNullOrEmpty(referencePath) ? null : referencePath));
+                        string.IsNullOrEmpty(referencePath) ? null : referencePath),
+                        _maximumTextReadCharacters, startLine, lineCount, startChar, charCount);
                 }
-                if (read.Result.Text.Length > (type == "plan" ? PlanDocumentService.MaximumMarkdownCharacters :
-                    _maximumTextReadCharacters))
-                    throw Error("The source exceeds the model read bound. For files, use startLine/lineCount or startChar/charCount to read a bounded region.", "read_too_large");
-                if (type != "file" || read.Result.Complete) read.RequireCompleteExactText();
+                if (read.Result.Text.Length > _maximumTextReadCharacters)
+                    throw Error("The source exceeds the model read budget. Use startLine/lineCount or startChar/charCount to select a smaller region.", "read_too_large");
+                if (read.Result.Complete) read.RequireCompleteExactText();
                 if (type == "file") _observed[target] = read.Evidence.Single();
                 var projection = startChar.HasValue
-                    ? ResourceReadProjection.FromCharacters(read.Result, target, type, "workspace", startChar.Value, charCount.Value)
+                    ? ResourceReadProjection.FromCharacters(read.Result, target, type, type == "skill" ? "catalog" : "workspace", startChar.Value, charCount.Value)
                     : startLine.HasValue
-                    ? ResourceReadProjection.FromLines(read.Result, target, type, "workspace", startLine.Value, lineCount.Value)
+                    ? ResourceReadProjection.FromLines(read.Result, target, type, type == "skill" ? "catalog" : "workspace", startLine.Value, lineCount.Value)
                     : ResourceReadProjection.From(read.Result, target, type, type == "skill" ? "catalog" : "workspace");
-                if (type == "file")
+                if (type == "file" || !read.Result.Complete)
                 {
                     projection.SourceComplete = read.Result.Complete;
                     if (!read.Result.Complete)

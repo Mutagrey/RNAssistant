@@ -38,7 +38,7 @@ namespace RNAssistant.Core.Storage
         public static string DecodeFileText(byte[] bytes, out string encoding)
         {
             if (bytes == null || bytes.LongLength > ArtifactTransferPackage.MaximumBytes)
-                throw new InvalidDataException("The text file exceeds 20 MiB.");
+                throw new InvalidDataException("The text file bytes are unavailable.");
             Encoding decoder;
             var offset = 0;
             if (bytes.Length >= 4 && bytes[0] == 0xff && bytes[1] == 0xfe && bytes[2] == 0 && bytes[3] == 0)
@@ -82,7 +82,7 @@ namespace RNAssistant.Core.Storage
             {
                 var content = codec.GetBytes(text);
                 if ((long)content.Length + bom.Length > ArtifactTransferPackage.MaximumBytes)
-                    throw new InvalidDataException("The edited file exceeds 20 MiB.");
+                    throw new InvalidDataException("The encoded file cannot be represented as a .NET byte array.");
                 var result = new byte[bom.Length + content.Length];
                 Buffer.BlockCopy(bom, 0, result, 0, bom.Length);
                 Buffer.BlockCopy(content, 0, result, bom.Length, content.Length);
@@ -99,7 +99,6 @@ namespace RNAssistant.Core.Storage
             var scope = Scope(session);
             var view = _revisions.GetView(scope, reference, FileTextView);
             if (view != null && view.ContentSha256 == raw.Sha256 && view.Payload != null &&
-                view.Payload.ByteLength <= 20 * 1024 * 1024 &&
                 _payloads.HasVerifiedReference(raw.ToBlobReference()) &&
                 _payloads.HasVerifiedReference(view.Payload.ToBlobReference()))
                 return view.Payload;
@@ -108,8 +107,6 @@ namespace RNAssistant.Core.Storage
             string encoding;
             var text = DecodeFileText(bytes, out encoding);
             if (encoding != FileEncoding(artifact)) throw new InvalidDataException("The file encoding changed.");
-            if (Encoding.UTF8.GetByteCount(text) > 20 * 1024 * 1024)
-                throw new InvalidDataException("The decoded file text exceeds the index bound.");
             var payload = PayloadRef.FromBlob(_payloads.StoreText(text, "text/plain; charset=utf-8"));
             if (view == null)
                 _revisions.RegisterView(scope, new ResourceRevisionView(reference, FileTextView,

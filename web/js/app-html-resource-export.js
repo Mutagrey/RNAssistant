@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var MAX_BYTES = 32 * 1024 * 1024, MAX_PARTS = 1024, MAX_BATCH_BYTES = 8 * 1024 * 1024;
+  var MAX_BYTES = Number.MAX_SAFE_INTEGER, MAX_PARTS = Number.MAX_SAFE_INTEGER, MAX_BATCH_BYTES = 8 * 1024 * 1024;
 
   function sameRef(left, right) {
     return !!left && !!right && left.uri === right.uri && left.revision === right.revision;
@@ -33,7 +33,7 @@
           !Number.isInteger(lease.maxBatchBytes) || lease.maxBatchBytes < 0 || lease.maxBatchBytes > MAX_BATCH_BYTES)
         throw new Error("RESOURCE_EXPORT_INVALID");
       if (lease.binary && (!lease.binary.payload || !Number.isInteger(lease.binary.payload.byteLength) ||
-          lease.binary.payload.byteLength < 0 || lease.binary.payload.byteLength > 20 * 1024 * 1024 ||
+          lease.binary.payload.byteLength < 0 ||
           lease.maxBatchBytes > 256 * 1024 || lease.maxBatchItems !== lease.maxBatchBytes)) throw new Error("RESOURCE_EXPORT_INVALID");
       var resource = { name: binding.name, descriptor: lease.descriptor, view: lease.view, path: lease.path,
         binary: lease.binary, maxBatchBytes: lease.maxBatchBytes, maxBatchItems: lease.maxBatchItems, parts: [] };

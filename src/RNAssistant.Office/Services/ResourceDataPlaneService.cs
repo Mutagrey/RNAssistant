@@ -46,13 +46,13 @@ namespace RNAssistant.Office.Services
                 throw Error("RESOURCE_ACCESS_DENIED", "An explicit workspace owner and bound resource are required.");
             cancellationToken.ThrowIfCancellationRequested();
             var opening = new Opening { Owner = session.Id + ":" + workspaceId,
-                ReservedBytes = ResourceGatewayService.IsBinaryView(view) ? ArtifactViewerService.MaximumRawBytes : 0 };
+                ReservedBytes = ResourceGatewayService.IsBinaryView(view) ? MaximumBinaryChunkBytes : 0 };
             lock (_sync)
             {
                 EnsureActive(); Expire();
                 if (LeaseCount >= 64) throw Error("RESOURCE_LEASE_LIMIT", "Close unused resource handles before opening more.");
                 if (OpeningCount >= 4) throw Error("RESOURCE_BACKPRESSURE", "Only four resource opens may be in flight.");
-                if (TransferBytes + opening.ReservedBytes > RNAssistant.Core.Storage.AttachmentStore.MaxMessageBytes)
+                if (TransferBytes + opening.ReservedBytes > MaximumInFlightTransferBytes)
                     throw Error("RESOURCE_BACKPRESSURE", "The shared binary/transfer budget is occupied.");
                 _openings.Add(opening);
             }
@@ -84,7 +84,7 @@ namespace RNAssistant.Office.Services
                         throw Error("RESOURCE_LEASE_EXPIRED", "The resource owner closed during capture.");
                     _access.Add(id, new Access { Lease = lease, Session = session, WorkspaceId = workspaceId, First = first,
                         ViewPath = viewPath, Offset = first.Result.Offset, Cursor = initialCursor,
-                        ReservedBytes = first.Result.Binary?.Payload.ByteLength ?? 0 });
+                        ReservedBytes = first.Result.Binary == null ? 0 : MaximumBinaryChunkBytes });
                     opening.ReservedBytes = 0;
                 }
                 return new ResourceDataOpenResponse { LeaseId = id, Url = Origin + "/v1/" + id,

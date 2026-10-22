@@ -53,7 +53,7 @@ namespace RNAssistant.Office.Tools
             {
                 ["type"] = "string",
                 ["description"] = "Complete Markdown instructions for the skill core; references are written in separate calls.",
-                ["maxLength"] = 500000
+                ["maxLength"] = int.MaxValue
             };
             properties["enabled"] = new JObject
             {

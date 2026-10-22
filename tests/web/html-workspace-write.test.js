@@ -62,10 +62,10 @@ function fixture(text = "<main>before</main>") {
 
 (async function () {
   {
-    const text = "\ufeff<main>\r\n" + "я".repeat(270000) + "😀</main>";
+    const text = "\ufeff<main>\r\n" + "я".repeat(2100001) + "😀</main>";
     const f = fixture(text); await f.actions.saveSelection();
     assert.equal(Buffer.concat(f.chunks).toString("utf8"), text);
-    assert.equal(f.chunks.length, 3); assert.equal(f.saves().length, 1);
+    assert.equal(f.chunks.length, Math.ceil(Buffer.byteLength(text) / 262144)); assert.equal(f.saves().length, 1);
     const payload = f.saves()[0].payload;
     assert.equal(payload.sha256, createHash("sha256").update(text).digest("hex"));
     assert.equal(payload.expectedActiveHtmlArtifactId, "html-r1");
@@ -89,12 +89,12 @@ function fixture(text = "<main>before</main>") {
     console.log("PASS HTML write: Save/create file and JSON use one writer, including empty file");
   }
   {
-    for (const text of ["x".repeat(300001), "\ud800"]) {
+    for (const text of ["\ud800"]) {
       const f = fixture(text); await f.actions.saveSelection(); assert.equal(f.calls.length, 0); assert.equal(f.applied.length, 0);
     }
     const f = fixture(); await f.actions.createData("items");
     assert.equal(f.calls.length, 0, "creating a resource never discards an existing dirty draft");
-    console.log("PASS HTML write: invalid/oversized text and dirty create fail before upload");
+    console.log("PASS HTML write: invalid Unicode and dirty create fail before upload");
   }
   {
     const f = fixture(); f.wrongAck = true; await f.actions.saveSelection();

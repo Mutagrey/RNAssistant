@@ -14,10 +14,10 @@ namespace RNAssistant.Core.Storage
 {
     public sealed class ToolStore
     {
-        private const long MaxToolMetadataFileBytes = 2100000;
-        private const long MaxReadmeFileBytes = 2100000;
-        private const long MaxComponentFileBytes = 4100000;
-        private const long MaxComponentPackageBytes = 8100000;
+        private const long MaxToolMetadataFileBytes = int.MaxValue;
+        private const long MaxReadmeFileBytes = int.MaxValue;
+        private const long MaxComponentFileBytes = int.MaxValue;
+        private const long MaxComponentPackageBytes = int.MaxValue;
         private const int MaxComponents = 50;
         private readonly AppDataPaths _paths;
         private readonly JsonFileStore _json;
@@ -56,7 +56,7 @@ namespace RNAssistant.Core.Storage
                 string sidecar;
                 if (js)
                 {
-                    if (string.IsNullOrWhiteSpace(tool.Code) || tool.Code.Length > 1000000 ||
+                    if (string.IsNullOrWhiteSpace(tool.Code) || tool.Code.Length > int.MaxValue ||
                         tool.Components != null && tool.Components.Count != 0) continue;
                     tool.MutatesDocument = false;
                     tool.MutatesLocalState = false;
@@ -320,9 +320,9 @@ namespace RNAssistant.Core.Storage
                     totalBytes += Encoding.UTF8.GetByteCount(code);
                     if (totalBytes > MaxComponentPackageBytes) return false;
                     component.Code = code;
-                    if (component.Code.Length > 1000000) return false;
+                    if (component.Code.Length > int.MaxValue) return false;
                     totalCharacters += component.Code.Length;
-                    if (totalCharacters > 2000000) return false;
+                    if (totalCharacters > int.MaxValue) return false;
                     component.CodeSha256 = VbaTextCanonicalizer.PackageCodeSha256(component.Code);
                 }
                 var manifestEntries = tool.Components.Where(component => component != null &&
@@ -394,7 +394,7 @@ namespace RNAssistant.Core.Storage
             return (tool.Name ?? string.Empty).Length <= 200 &&
                 (tool.Description ?? string.Empty).Length <= 8000 &&
                 (tool.ArgumentSchemaJson ?? string.Empty).Length <= 64000 &&
-                (tool.Readme ?? string.Empty).Length <= 500000 &&
+                (tool.Readme ?? string.Empty).Length <= int.MaxValue &&
                 (tool.UseWhen ?? string.Empty).Length <= 4000 &&
                 (tool.DoNotUseWhen ?? string.Empty).Length <= 4000 &&
                 (tool.Limitations ?? string.Empty).Length <= 4000;

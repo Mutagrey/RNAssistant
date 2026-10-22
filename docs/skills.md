@@ -248,9 +248,8 @@ reference-only reader/bridge action is removed, not kept as an alias;
 there is no direct authoring-file reader, inline read body or fake mutation result.
 Reading does not publish a catalog or add model observations.
 
-Capacity is reserved before catalog hydration. The existing limits remain 500,000
-characters and 2,100,000 bytes; the editor enables only a complete verified UTF-8
-snapshot. Source-file revision/byte length (which may include a file BOM) remain
+A transfer slot is reserved before catalog hydration. The former source character/byte
+ceilings are removed; the editor enables only a complete verified UTF-8 snapshot. Source-file revision/byte length (which may include a file BOM) remain
 distinct from the published text's transport hash/length and the logical resource
 revision. The existing `SkillAuthoringService` still checks live package drift
 before Save/Delete; an old published read cannot authorize overwriting changed files.
@@ -281,9 +280,9 @@ complete uploaded UTF-8 JSON. The typed mutation body (including revision guards
 travels through the existing chunk upload route, never the bridge control message.
 It is transient input, not an attachment, CAS publication or model observation.
 
-One upload is limited to 16 MiB and shares existing upload capacity. A core batch
-contains at most 256 mutations; each replacement source retains the 500,000
-character / 2,100,000 byte limit. Empty reference text is valid. Complete bytes,
+Uploads stage through the shared chunk transport without the former 16 MiB
+source ceiling. A core batch still contains at most 256 mutations; replacement
+source length is constrained by its actual representation and model context when applicable. Empty reference text is valid. Complete bytes,
 hash, typed shape and all batch body bounds are checked before the first domain
 dispatch. The capability is consumed once, including on validation failure.
 The existing authoring owner then applies revision-guarded mutations sequentially

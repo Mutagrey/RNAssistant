@@ -3,7 +3,7 @@ const assert = require("node:assert/strict"), fs = require("node:fs"), path = re
 const read = file => fs.readFileSync(path.join(__dirname, "../../web", file), "utf8");
 const sha = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
 function deferred() { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; }
-function fixture(text = "# Справка\r\n" + "ж".repeat(140000) + "😀") {
+function fixture(text = "# Справка\r\n" + "ж".repeat(1100000) + "😀") {
   const bytes = Buffer.from(text), calls = [], closed = [], cancelled = [], errors = [], elements = {};
   const tool = { Id: "common.inspect", Revision: "library", BuiltIn: true };
   const state = { host: "Excel", tools: [tool], selectedToolIndex: 0, selectedInstructionKind: "tool", activeChatId: "chat", toolEditorPage: "docs" };

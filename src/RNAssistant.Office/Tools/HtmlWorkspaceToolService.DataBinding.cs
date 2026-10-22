@@ -64,7 +64,7 @@ namespace RNAssistant.Office.Tools
                 previous.Resource.Revision == binding.Resource.Revision)
                 return WorkspaceResult(session, "HTML resource is already bound: " + name + ".",
                     WorkspaceMutationData(session, "data", name, target.Descriptor), HtmlWorkspaceEffect.VerifiedNoChange);
-            ValidateWorkspaceCapacity(workspace, null, null, id, null);
+            ValidateWorkspaceCapacity(workspace, null, id);
             markDispatchPossible();
             session.HtmlWorkspace = NormalizeWorkspace(session.HtmlWorkspace);
             var data = session.HtmlWorkspace.DataSources.SingleOrDefault(item => item.Id == id);

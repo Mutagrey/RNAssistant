@@ -207,7 +207,7 @@ namespace RNAssistant.Office.Services
 
         private static List<int> ValidTextEvidence(ChatAttachment attachment, int pageCount)
         {
-            if (attachment.ExtractedCharCount < 0 || attachment.ExtractedCharCount > 1000000 ||
+            if (attachment.ExtractedCharCount < 0 ||
                 !ArtifactViewerService.IsSha256(attachment.ExtractedTextSha256))
             {
                 throw new InvalidOperationException("Artifact PDF extracted-text evidence is inconsistent.");

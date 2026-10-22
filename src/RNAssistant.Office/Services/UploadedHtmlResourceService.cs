@@ -14,7 +14,6 @@ namespace RNAssistant.Office.Services
 {
     internal sealed class UploadedHtmlResourceService
     {
-        private const int MaximumImportCharacters = 300000;
 
         private readonly ResourceGatewayService _gateway;
 
@@ -93,8 +92,6 @@ namespace RNAssistant.Office.Services
             if (source.Attachment.TextTruncated || expectedLength < 0 || string.IsNullOrWhiteSpace(expectedHash) ||
                 !source.Attachment.ExtractedTextByteLength.HasValue)
                 throw new InvalidOperationException("Complete uploaded HTML text evidence is required for import.");
-            if (expectedLength > MaximumImportCharacters)
-                throw new InvalidOperationException("Uploaded HTML is too large to import. Limit is 300000 characters.");
             if (source.Attachment.ExtractedTextByteLength.Value < 0 ||
                 source.Attachment.ExtractedTextByteLength.Value > (long)expectedLength * 4)
                 throw new InvalidOperationException("Uploaded HTML text byte evidence exceeds its character bound.");

@@ -35,8 +35,8 @@
   }
   async function uploadProjectFile(target, file) {
     var lease = null, completing = false;
-    if (!file || file.size < 1 || file.size > 20 * 1024 * 1024)
-      throw new Error("Выберите непустой файл размером не более 20 МБ.");
+    if (!file || file.size < 1)
+      throw new Error("Выберите непустой файл.");
     try {
       lease = await send("beginProjectChatFileUpload", { workspaceId: target.workspaceId,
         sessionId: target.sessionId, fileName: file.name, byteLength: file.size });
@@ -69,8 +69,8 @@
   }
   async function addProjectFiles(files, target) {
     if (uploadingFiles || !target || !files.length) return;
-    if (files.length > 10 || files.reduce(function (sum, file) { return sum + file.size; }, 0) > 50 * 1024 * 1024) {
-      fileStatus(target, "За один раз можно добавить не более 10 файлов общим размером до 50 МБ.", true);
+    if (files.length > 10) {
+      fileStatus(target, "За один раз можно добавить не более 10 файлов.", true);
       return;
     }
     uploadingFiles = true; render();

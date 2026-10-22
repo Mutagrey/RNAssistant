@@ -262,12 +262,12 @@ namespace RNAssistant.Harness
                 adapter.SetVbaModule("ScanModule", "needle " + new string('x', 140000), "StdModule");
                 var partial = gateway.Search(session, "vba", "needle", VbaResourceProvider.ComponentKind, 20, 128);
                 var scan = partial.Scans.Single(s => s.Resource.Title == "ScanModule");
-                AssertTrue(partial.ScanTruncated && !scan.Complete && scan.CompleteViewPayload == null && scan.ReturnedCharacters == 128000,
-                    "bounded VBA scan never claims full source capture");
-                AssertEqual(ResourceCoverageKinds.CharacterRange, scan.Coverage.Kind, "truncated scan has only prefix coverage");
+                AssertTrue(!partial.ScanTruncated && scan.Complete && scan.CompleteViewPayload != null && scan.ReturnedCharacters == 140007,
+                    "VBA scans the complete source beyond the former prefix limit");
+                AssertEqual(ResourceCoverageKinds.Whole, scan.Coverage.Kind, "complete scan has whole-source coverage");
                 var backups = gateway.Search(session, "vba", "needle", VbaResourceProvider.BackupKind, 20, 128);
-                AssertTrue(backups.ScanTruncated && !backups.Scans.Single().Complete && backups.Scans.Single().CompleteViewPayload != null,
-                    "backup search prefix and already-captured whole backup are distinct");
+                AssertTrue(!backups.ScanTruncated && backups.Scans.Single().Complete && backups.Scans.Single().CompleteViewPayload != null,
+                    "backup search scans the complete captured backup");
                 var backup = gateway.Read(session, new ResourceReadRequest { Reference = backups.Matches.Single().Reference,
                     Representation = "source", MaxChars = 32000 }).Result;
                 AssertEqual(backupCode.Substring(0, 32000), backup.Text, "backup source reads use retained whole capture");
@@ -2345,6 +2345,27 @@ namespace RNAssistant.Harness
                     (string)JObject.Parse(moderate.DataJson)["text"] == moderateSource &&
                     JObject.Parse(moderate.DataJson)["sourceComplete"]?.Value<bool>() != false,
                     "a module beyond 500 short lines is delivered whole when it fits the context");
+                var selectedLines = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                    "target", "VBA module: ModerateModule", "representation", "source", "startLine", 1, "lineCount", 600),
+                    tools, new AppSettings(), false, false, session);
+                AssertTrue(selectedLines.Success, "an explicit source window can exceed the former 500-line ceiling");
+                var singleLine = new string('q', 31999) + "😀" + new string('q', 1067999) + "TAIL_SENTINEL";
+                adapter.SetVbaModule("LongLine", singleLine, "StdModule");
+                var autoLong = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                    "target", "VBA module: LongLine", "representation", "source"), tools,
+                    new AppSettings(), false, false, session);
+                AssertTrue(autoLong.Success, "automatic read can recover with a character window for a long VBA line: " + autoLong.DataJson + " " + autoLong.Message);
+                var longProjection = JObject.Parse(autoLong.DataJson);
+                var initialText = (string)longProjection["text"];
+                AssertEqual(singleLine.Substring(0, 31999), initialText,
+                    "the implicit generic window does not split a UTF-16 pair");
+                AssertTrue(!(bool)longProjection["complete"] && !(bool)longProjection["sourceComplete"],
+                    "a generic window never grants whole-source observation");
+                var tail = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                    "target", "VBA module: LongLine", "representation", "source", "startChar", 1060000, "charCount", 40013),
+                    tools, new AppSettings(), false, false, session);
+                AssertTrue(tail.Success && ((string)JObject.Parse(tail.DataJson)["text"]).EndsWith("TAIL_SENTINEL"),
+                    "a character window beyond one million reaches the exact long-line tail without a 32000-character ceiling");
                 var first = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
                     "target", "VBA module: LargeModule", "representation", "source"),
                     tools, new AppSettings(), false, false, session);

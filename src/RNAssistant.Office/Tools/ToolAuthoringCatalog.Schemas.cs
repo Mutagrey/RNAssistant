@@ -33,7 +33,7 @@ namespace RNAssistant.Office.Tools
                         {
                             ["name"] = Property("string", "Exact VBA component name."),
                             ["type"] = EnumProperty("VBA component type.", "StdModule", "ClassModule", "MSForm"),
-                            ["code"] = BoundedStringProperty("Complete VBA source code for this component.", 1000000)
+                            ["code"] = BoundedStringProperty("Complete VBA source code for this component.", int.MaxValue)
                         },
                         ["required"] = new JArray("name", "type", "code"),
                         ["additionalProperties"] = false
@@ -55,7 +55,7 @@ namespace RNAssistant.Office.Tools
                     ["required"] = new JArray("action"),
                     ["additionalProperties"] = false
                 },
-                ["readme"] = BoundedStringProperty("Markdown documentation stored with the custom tool.", 500000),
+                ["readme"] = BoundedStringProperty("Markdown documentation stored with the custom tool.", int.MaxValue),
                 ["useWhen"] = BoundedStringProperty("Positive selection guidance for the model.", 4000),
                 ["doNotUseWhen"] = BoundedStringProperty("Cases where the model should not select this tool.", 4000),
                 ["limitations"] = BoundedStringProperty("Known limitations presented to the model.", 4000)
@@ -68,7 +68,7 @@ namespace RNAssistant.Office.Tools
                 properties["executor"] = EnumProperty("Custom tool runtime.", "vba", "js");
                 properties["host"] = EnumProperty("Tool host for JavaScript packages; VBA host comes from its manifest.", "Common", "Excel", "Word", "PowerPoint", "Outlook");
                 properties["parameters"] = BoundedStringProperty("Strict object JSON Schema serialized as a string for saved JS tool arguments.", 64000);
-                properties["code"] = BoundedStringProperty("Complete JS async function body when executor=js.", 1000000);
+                properties["code"] = BoundedStringProperty("Complete JS async function body when executor=js.", int.MaxValue);
             }
             var schema = new JObject
             {

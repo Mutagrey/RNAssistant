@@ -2,7 +2,7 @@ var skillSourceLoadSequence = 0;
 var skillSourceRead = null;
 var skillSourceReadPending = 0;
 var skillWriteOperation = null;
-var skillMutationMaximumBytes = 16 * 1024 * 1024;
+var skillMutationMaximumBytes = Number.MAX_SAFE_INTEGER;
 var skillLibraryContractVersion = 1;
 var skillLibraryContractType = "rnassistant.skillLibrary";
 var skillLibraryMutationRequestType = "rnassistant.skillLibraryMutationRequest";
@@ -29,8 +29,8 @@ function skillFromContract(skill) {
     typeof skill.host !== "string" || typeof skill.name !== "string" ||
     typeof skill.description !== "string" || typeof skill.version !== "string" ||
     !skill.body || !/^[a-f0-9]{64}$/.test(skill.body.sha256) ||
-    !Number.isInteger(skill.body.byteLength) || skill.body.byteLength < 0 || skill.body.byteLength > 2100000 ||
-    !Number.isInteger(skill.body.characters) || skill.body.characters < 0 || skill.body.characters > 500000 ||
+    !Number.isInteger(skill.body.byteLength) || skill.body.byteLength < 0 ||
+    !Number.isInteger(skill.body.characters) || skill.body.characters < 0 ||
     typeof skill.enabled !== "boolean" ||
     typeof skill.builtIn !== "boolean" || !Array.isArray(skill.references)) {
     throw new Error("Некорректный typed package навыка.");
@@ -509,7 +509,7 @@ function skillSourceReadFromContract(response, operation) {
   if (!response || response.type !== "rnassistant.skillSourceRead" || response.contractVersion !== skillLibraryContractVersion ||
       response.chatId !== operation.chatId || response.skillId !== operation.skillId || response.packageRevision !== operation.packageRevision ||
       response.path !== operation.path || !Number.isInteger(response.totalCharacters) ||
-      response.totalCharacters < 0 || response.totalCharacters > 500000 || !response.data ||
+      response.totalCharacters < 0 || !response.data ||
       !response.data.payload || response.data.payload.contentType !== "text/markdown; charset=utf-8" ||
       parts.length !== (isReference ? 7 : 6) || parts[0] !== "rna:" || parts[1] !== "" || parts[2] !== "catalog" ||
       (operation.builtIn ? !/^builtin-skills-[a-z]+$/.test(parts[3]) : parts[3] !== "skills") ||
@@ -581,7 +581,7 @@ async function loadSelectedSkillSource(skill, path) {
     operation.data = response && response.data;
     active();
     var typed = skillSourceReadFromContract(response, operation);
-    var bytes = await window.RNAssistantResourceDownload.read(typed.data, { maxBytes: 2100000, fetch: window.fetch.bind(window),
+    var bytes = await window.RNAssistantResourceDownload.read(typed.data, { maxBytes: Number.MAX_SAFE_INTEGER, fetch: window.fetch.bind(window),
       signal: operation.abort.signal, isCurrent: current });
     var text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
     if (text.length !== typed.totalCharacters) throw new Error("Неполный снимок источника навыка.");
@@ -806,7 +806,7 @@ function updateSkillWriteControls() {
 async function uploadSkillMutation(operation, action, body) {
   operation.active();
   function validateText(text) {
-    if (typeof text !== "string" || text.length > 500000) throw new Error("RESOURCE_BATCH_TOO_LARGE");
+    if (typeof text !== "string") throw new Error("RESOURCE_BATCH_TOO_LARGE");
     if (new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(new TextEncoder().encode(text)) !== text)
       throw new Error("RESOURCE_UPLOAD_INVALID: некорректный Unicode в тексте навыка.");
   }

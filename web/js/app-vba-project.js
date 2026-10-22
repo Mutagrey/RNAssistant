@@ -325,11 +325,11 @@ async function loadSelectedVbaModule() {
         typeof response.resource.revision !== "string" || !response.resource.revision ||
         !/^[a-f0-9]{64}$/.test(response.codeSha256) || typeof response.componentType !== "string" || !response.componentType ||
         !Number.isInteger(response.lineCount) || response.lineCount < 0 ||
-        !Number.isInteger(response.totalCharacters) || response.totalCharacters < 0 || response.totalCharacters > 1000000 ||
+        !Number.isInteger(response.totalCharacters) || response.totalCharacters < 0 ||
         !operation.data || !operation.data.payload || operation.data.payload.contentType !== "text/plain; charset=utf-8")
       throw new Error("Ответ чтения VBA-модуля неполон; редактирование и сохранение заблокированы.");
     var bytes = await window.RNAssistantResourceDownload.read(operation.data, {
-      fetch: window.fetch.bind(window), signal: operation.abort.signal, isCurrent: current, maxBytes: 4000000
+      fetch: window.fetch.bind(window), signal: operation.abort.signal, isCurrent: current, maxBytes: Number.MAX_SAFE_INTEGER
     });
     var code = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
     if (code.length !== response.totalCharacters) throw new Error("VBA-модуль прочитан не полностью; сохранение заблокировано.");

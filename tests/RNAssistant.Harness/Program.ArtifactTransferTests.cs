@@ -40,6 +40,7 @@ namespace RNAssistant.Harness
                 var catalog = new ArtifactCatalogService(registry, chats.DocumentArtifacts, links, new ResourceAuthorityStore(paths), new ChatBlobStore(paths));
                 var fixture = TransferFixture();
                 fixture.Title = new string('Ж', 200);
+                fixture.Files[1].Content += "\n/*" + new string('x', 2100001) + "*/";
                 var first = catalog.Import(source, fixture.Export(), fixture.Title + ".rna-html.zip", "application/zip", Guid.NewGuid().ToString("N"));
                 links.Change(source, LinkRequest(source, ChatResourceUri.CreateArtifactRevisionUri(source, first), false), chats.Save);
                 AssertEqual(2, source.HtmlWorkspace.Files.Count, "imported HTML restores files");

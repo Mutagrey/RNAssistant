@@ -15,7 +15,7 @@ namespace RNAssistant.Office.Services
     // Domain intent and exact immutable content only; the common observer owns publication.
     internal sealed class MarkdownDocumentService
     {
-        internal const int MaximumCharacters = 200000;
+        internal const int MaximumCharacters = int.MaxValue;
         private readonly ResourceGatewayService _gateway;
         private readonly DocumentArtifactStore _artifacts;
         internal MarkdownDocumentService(ResourceGatewayService gateway, DocumentArtifactStore artifacts)

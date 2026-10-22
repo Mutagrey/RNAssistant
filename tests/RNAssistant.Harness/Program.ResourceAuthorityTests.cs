@@ -497,7 +497,7 @@ namespace RNAssistant.Harness
                 var payloads = new ChatBlobStore(paths);
                 var store = new ResourceAuthorityStore(paths);
                 var authority = new ResourceAuthorityService(store, store, new ResourceMutationJournal(paths), payloads);
-                var bytes = new byte[(int)ArtifactViewerService.MaximumRawBytes]; bytes[bytes.Length - 1] = 123;
+                var bytes = new byte[21 * 1024 * 1024]; bytes[bytes.Length - 1] = 123;
                 Action capturePause = null;
                 var hash = ArtifactViewerService.Sha256(bytes);
                 var attachment = new ChatAttachment { Id = "chunks", Kind = "file", ContentType = "application/octet-stream",
@@ -516,9 +516,9 @@ namespace RNAssistant.Harness
                     var first = data.Open(session, "viewer", exact, "raw");
                     var second = data.Open(session, "viewer", exact, "raw");
                     var validated = false;
-                    AssertEqual("RESOURCE_BACKPRESSURE", RuntimeThrows<ResourceRequestException>(() => data.Open(session,
-                        "viewer", exact, "raw", validate: result => validated = true)).ErrorCode, "binary captures share transfer budget");
-                    AssertTrue(!validated && reads == 1, "budget refuses before another capture/validation");
+                    var additional = data.Open(session, "viewer", exact, "raw", validate: result => validated = true);
+                    AssertTrue(validated && reads == 1, "raw leases reserve bounded chunks and share the exact captured source");
+                    data.Close(session.Id, "viewer", additional.LeaseId);
                     AssertEqual(ResourceDataPlaneService.MaximumBinaryChunkBytes, first.MaxBatchBytes, "wire batch is not whole payload size");
                     var part = data.Read(first.LeaseId, 0, first.MaxBatchItems, System.Threading.CancellationToken.None);
                     AssertEqual(first.MaxBatchItems, part.Length, "first response is bounded");
@@ -553,9 +553,10 @@ namespace RNAssistant.Harness
                             AssertTrue(entered.Wait(TimeSpan.FromSeconds(10)), "capture entered");
                             data.CloseWorkspace(session.Id, "viewer");
                             var produced = false;
-                            RuntimeThrows<ResourceRequestException>(() => data.OpenDownload(session, "export", 40L * 1024 * 1024,
-                                token => { produced = true; return new ResourceDownloadContent { Bytes = new byte[1], ContentType = "application/octet-stream" }; }));
-                            AssertTrue(!produced, "closing a busy capture does not free its reservation prematurely");
+                            var independent = data.OpenDownload(session, "export", 40L * 1024 * 1024,
+                                token => { produced = true; return new ResourceDownloadContent { Bytes = new byte[1], ContentType = "application/octet-stream" }; });
+                            AssertTrue(produced, "a busy capture reserves its chunk without blocking an independent bounded transfer");
+                            data.Close(session.Id, "export", independent.LeaseId);
                         }
                         finally { finish.Set(); }
                         pending.GetAwaiter().GetResult();
@@ -572,7 +573,7 @@ namespace RNAssistant.Harness
             WithTempPaths(paths =>
             {
                 var payloads = new ChatBlobStore(paths);
-                var text = "{\"source\":\"" + new string('x', 50000) + "\"}";
+                var text = "{\"source\":\"" + new string('x', 17 * 1024 * 1024) + "\"}";
                 var root = new JObject { ["LastRun"] = new JObject { ["KernelState"] = new JObject {
                     ["Summary"] = new JObject { ["PendingConfirmation"] = new JObject {
                         ["Call"] = new JObject { ["ArgumentsJson"] = text }, ["PreparedStateJson"] = text } } } } };
@@ -1114,7 +1115,7 @@ namespace RNAssistant.Harness
             WithTempPaths(paths =>
             {
                 var payloads = new ChatBlobStore(paths);
-                var arguments = "{\"content\":\"" + new string('x', 100000) + "\"}";
+                var arguments = "{\"content\":\"" + new string('x', 17 * 1024 * 1024) + "\"}";
                 var invocation = new ToolInvocation { ToolCallId = "large", ToolId = "common.html_workspace_write_file" };
                 var call = new ChatMessage { Role = "assistant", ProtocolMessage = true, ToolCallId = invocation.ToolCallId, ToolName = invocation.ToolId,
                     ResponseProtocolVersion = ConversationResponse.ProtocolVersion,
@@ -1145,7 +1146,7 @@ namespace RNAssistant.Harness
                 RuntimeThrows<PromptBudgetExceededException>(() => new ModelContextCompiler().Compile(frozen, new ChatMessage[0],
                     new[] { call, result }, null, new ToolCatalogEntry[0], new AppSettings(), 1024));
                 var recent = new ModelContextCompiler(payloads).Compile(frozen, new ChatMessage[0], new[] { call, result },
-                    null, new ToolCatalogEntry[0], new AppSettings(), 100000);
+                    null, new ToolCatalogEntry[0], new AppSettings(), 10000000);
                 AssertEqual(1, recent.Receipt.HydratedPayloads, "latest accepted call requires its exact CAS body");
                 AssertEqual(arguments, recent.Messages[0].ToolCalls.Single().ArgumentsJson, "hydrated native arguments remain exact");
                 var later = ContinuityResult("later", "files.patch", RNAssistant.Core.Tools.Contracts.ToolResult.Error("No effect."));
@@ -1960,7 +1961,7 @@ namespace RNAssistant.Harness
                 var session = new ChatSession();
                 var scope = authority.Scope(session, false);
                 var exact = new ResourceRef(ResourceStateProvider.Identity(scope, "whole-lines").Uri, "r1");
-                var body = "first\r\n" + new string('x', 96000) + "\r\nlast";
+                var body = "first\r\n" + new string('x', 9 * 1024 * 1024) + "\r\nlast";
                 var payload = PayloadRef.FromBlob(payloads.StoreText(body, "text/plain"));
                 store.RegisterRevision(scope, new ResourceRevisionMetadata(exact, payload.Sha256, payload));
                 store.Publish(ResourceAuthorityCommit.Create(scope, 0, null,

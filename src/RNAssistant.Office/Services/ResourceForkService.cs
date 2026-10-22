@@ -47,7 +47,6 @@ namespace RNAssistant.Office.Services
             private readonly Dictionary<string, ResourceRevisionMetadata> _copies = new Dictionary<string, ResourceRevisionMetadata>(StringComparer.Ordinal);
             private readonly HashSet<string> _visiting = new HashSet<string>(StringComparer.Ordinal);
             private readonly HashSet<string> _artifactIds = new HashSet<string>(StringComparer.Ordinal);
-            private long _bytes;
 
             internal Preparation(ResourceAuthorityService authority, ChatBlobStore payloads, ChatSession source, ChatSession target)
             {
@@ -146,9 +145,8 @@ namespace RNAssistant.Office.Services
                         throw Error("The copy graph contains an unpublished revision.");
                     _published[key] = publicationOrder;
                     var metadata = _revisions.GetRevision(_sourceScope, reference);
-                    if (metadata?.Payload == null || metadata.Payload.ByteLength > 2000000 ||
-                        (_bytes += metadata.Payload.ByteLength) > 16L * 1024 * 1024)
-                        throw Error("The exact copy payload is unavailable or exceeds the bounded preparation.");
+                    if (metadata?.Payload == null)
+                        throw Error("The exact copy payload is unavailable.");
                     var body = _payloads.ReadText(metadata.Payload.ToBlobReference());
                     if (body == null) throw Error("The exact copy payload is missing; no newer revision was substituted.");
                     address = ResourceUri.Parse(reference.Uri);

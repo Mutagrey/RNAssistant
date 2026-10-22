@@ -55,7 +55,8 @@ namespace RNAssistant.Office.Services
     {
         ResourceReadSelection ReadLineWindow(ChatSession session, ResourceRef reference,
             string representation, int startLine, int lineCount,
-            System.Threading.CancellationToken cancellationToken);
+            System.Threading.CancellationToken cancellationToken,
+            int maximumCharacters = ResourceReadRequest.MaximumCharacters);
     }
 
     internal interface IResourceIdentityResolver

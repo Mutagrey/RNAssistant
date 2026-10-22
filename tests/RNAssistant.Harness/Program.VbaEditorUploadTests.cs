@@ -96,12 +96,17 @@ namespace RNAssistant.Harness
             {
                 var editor = new VbaEditorResourceService(new ResourceGatewayService(), data);
                 var session = new ChatSession();
-                foreach (var bytes in new[] { new byte[] { 0xff }, Encoding.UTF8.GetBytes(new string('x', 1000001)) })
+                foreach (var bytes in new[] { new byte[] { 0xff } })
                 {
                     var request = UploadVbaSource(data, editor, session, bytes);
                     RuntimeThrows<ResourceRequestException>(() => editor.ReadUploadedSource(session, request, CancellationToken.None));
                     RuntimeThrows<ResourceRequestException>(() => data.ValidateUpload(request.UploadLeaseId));
                 }
+                var largeSource = new string('x', 1000001);
+                var large = UploadVbaSource(data, editor, session, Encoding.UTF8.GetBytes(largeSource));
+                AssertEqual(largeSource, editor.ReadUploadedSource(session, large, CancellationToken.None),
+                    "editor upload accepts a complete source beyond the former character limit");
+                RuntimeThrows<ResourceRequestException>(() => data.ValidateUpload(large.UploadLeaseId));
                 var tampered = UploadVbaSource(data, editor, session, new byte[] { 65 });
                 tampered.SourceSha256 = new string('0', 64);
                 RuntimeThrows<ResourceRequestException>(() => editor.ReadUploadedSource(session, tampered, CancellationToken.None));
@@ -119,7 +124,7 @@ namespace RNAssistant.Harness
                 var empty = UploadVbaSource(data, editor, session, new byte[0]);
                 AssertEqual(string.Empty, editor.ReadUploadedSource(session, empty, CancellationToken.None), "empty source is exact without a fake body");
                 RuntimeThrows<ResourceRequestException>(() => editor.BeginUpload(session,
-                    new VbaEditorUploadRequest { ChatId = session.Id, ByteLength = 4000001 }, CancellationToken.None));
+                    new VbaEditorUploadRequest { ChatId = session.Id, ByteLength = -1 }, CancellationToken.None));
                 for (var i = 0; i < 4; i++) UploadVbaSource(data, editor, session, new byte[0]);
                 AssertEqual("RESOURCE_LEASE_LIMIT", RuntimeThrows<ResourceRequestException>(() =>
                     UploadVbaSource(data, editor, session, new byte[0])).ErrorCode, "VBA shares the existing four-upload cap");

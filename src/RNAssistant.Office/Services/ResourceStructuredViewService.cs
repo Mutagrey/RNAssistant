@@ -16,8 +16,8 @@ namespace RNAssistant.Office.Services
     // immutable revision journal and CAS; this service owns no freshness state.
     internal sealed class ResourceStructuredViewService
     {
-        private const int MaximumSourceCharacters = 2000000;
-        private const int MaximumRows = 100000;
+        private const int MaximumSourceCharacters = int.MaxValue;
+        private const int MaximumRows = int.MaxValue;
         private const int PartRows = 256;
         private readonly ResourceGatewayService _gateway;
         private readonly ResourceAuthorityService _authority;
@@ -62,7 +62,7 @@ namespace RNAssistant.Office.Services
                     if (part.Resource.Reference.Revision != first.Resource.Reference.Revision ||
                         part.Offset != text.Length || part.ContentSha256 != first.ContentSha256)
                         throw Error("RESOURCE_REVISION_CHANGED", "The source changed during snapshot capture. No mixed-revision view was published.");
-                    if (part.TotalCharacters > MaximumSourceCharacters || text.Length + (part.Text ?? "").Length > MaximumSourceCharacters)
+                    if (part.TotalCharacters > MaximumSourceCharacters || (long)text.Length + (part.Text ?? "").Length > MaximumSourceCharacters)
                         throw Error("RESOURCE_SNAPSHOT_TOO_LARGE", "Select a narrower resource before materializing this structural view.");
                     text.Append(part.Text);
                     cursor = part.NextCursor;
@@ -81,7 +81,7 @@ namespace RNAssistant.Office.Services
                 descriptor.Dependencies = metadata.Dependencies.ToList();
                 generation = frozen.Generation;
             }
-            var index = JsonConvert.DeserializeObject<RecordIndex>(RequiredText(captured.Payload, 1024 * 1024));
+            var index = JsonConvert.DeserializeObject<RecordIndex>(RequiredText(captured.Payload, int.MaxValue));
             if (index == null || index.Columns == null || index.Parts == null || index.RowCount > MaximumRows)
                 throw Error("RESOURCE_SNAPSHOT_UNAVAILABLE", "The exact structural index is unavailable.");
             var fields = request.Fields == null || request.Fields.Count == 0 ? index.Columns.Select(item => item.Key).ToArray() : request.Fields.ToArray();
@@ -98,7 +98,7 @@ namespace RNAssistant.Office.Services
             var bytes = 0;
             foreach (var part in index.Parts.Where(item => item.Start + item.Count > offset && item.Start < (long)offset + limit))
             {
-                var values = JsonConvert.DeserializeObject<List<Dictionary<string, object>>>(RequiredText(part.Payload, 2 * 1024 * 1024));
+                var values = JsonConvert.DeserializeObject<List<Dictionary<string, object>>>(RequiredText(part.Payload, int.MaxValue));
                 if (values == null || values.Count != part.Count) throw Error("RESOURCE_SNAPSHOT_UNAVAILABLE", "A structural part is incomplete.");
                 foreach (var value in values.Skip(Math.Max(0, offset - part.Start)))
                 {
@@ -172,8 +172,6 @@ namespace RNAssistant.Office.Services
             for (var start = 0; start < rows.Count; start += PartRows)
             {
                 var json = JsonConvert.SerializeObject(rows.Skip(start).Take(PartRows));
-                if (Encoding.UTF8.GetByteCount(json) > 2 * 1024 * 1024)
-                    throw Error("RESOURCE_BATCH_TOO_LARGE", "Select narrower fields before snapshot materialization.");
                 index.Parts.Add(new RecordPart { Start = start, Count = Math.Min(PartRows, rows.Count - start),
                     Payload = PayloadRef.FromBlob(_payloads.StoreText(json, "application/json")) });
             }

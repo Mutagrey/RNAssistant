@@ -11,7 +11,7 @@ namespace RNAssistant.Core.Services
 {
     public sealed class ArtifactTransferPackage
     {
-        public const int MaximumBytes = 20 * 1024 * 1024;
+        public const int MaximumBytes = int.MaxValue;
         [JsonProperty(Required = Required.Always)]
         public int Version { get; set; } = 1;
         public string Title { get; set; }
@@ -29,23 +29,20 @@ namespace RNAssistant.Core.Services
                 throw new InvalidDataException("Неподдерживаемый или неполный HTML-проект.");
             if (Origin != null && ((Origin.ResourceUri?.Length ?? 0) > 2048 || (Origin.ContentSha256?.Length ?? 0) > 64))
                 throw new InvalidDataException("Некорректное описание происхождения проекта.");
-            long size = 0;
             var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var file in Files)
             {
                 if (file == null || !SafePath(file.Path) || !paths.Add(file.Path) ||
-                    file.Kind != "html" && file.Kind != "css" && file.Kind != "js" && file.Kind != "script" || file.Content == null || file.Content.Length > 300000)
+                    file.Kind != "html" && file.Kind != "css" && file.Kind != "js" && file.Kind != "script" || file.Content == null)
                     throw new InvalidDataException("Некорректный, повторяющийся или слишком большой файл проекта.");
-                size += Encoding.UTF8.GetByteCount(file.Content);
             }
             if (!Files.Any(f => f.Path == EntryPath && f.Kind == "html"))
                 throw new InvalidDataException("HTML-файл запуска отсутствует.");
-            if (Files.Sum(f => (long)f.Content.Length) + Data.Count * 2048 > 1500000) throw new InvalidDataException("Превышен размер редактируемого проекта.");
             var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var data in Data)
             {
                 if (data == null || string.IsNullOrWhiteSpace(data.Name) || data.Name.Length > 128 || data.Name != data.Name.Trim() || data.Name.IndexOfAny(new[] { '/', '\\', ':' }) >= 0 || data.Name.Contains("..") || data.Name.EndsWith(".json", StringComparison.OrdinalIgnoreCase) || !names.Add(data.Name) ||
-                    data.Json == null || data.Json.Length > 2000000 || data.View != "text" && data.View != "table" && data.View != "records" ||
+                    data.Json == null || data.View != "text" && data.View != "table" && data.View != "records" ||
                     data.ViewPath != null && (data.ViewPath.Length > 256 || data.View == "text"))
                     throw new InvalidDataException("Некорректный снимок данных проекта.");
                 var parsed = JToken.Parse(data.Json);
@@ -54,13 +51,11 @@ namespace RNAssistant.Core.Services
                     if (rows == null || rows.Any(row => !(row is JObject) && !(row is JArray)))
                         throw new InvalidDataException("Структурный снимок должен содержать массив записей.");
                 }
-                size += Encoding.UTF8.GetByteCount(data.Json);
                 foreach (var auxiliary in new[] { data.SchemaJson, data.MappingJson }.Where(value => value != null)) {
-                    if (auxiliary.Length > 2000000) throw new InvalidDataException("Зависимость превышает допустимый размер.");
-                    JToken.Parse(auxiliary); size += Encoding.UTF8.GetByteCount(auxiliary);
+                    JToken.Parse(auxiliary);
                 }
             }
-            if (size > MaximumBytes || ExternalDependencies.Any(s => s == null || s.Length > 2048))
+            if (ExternalDependencies.Any(s => s == null || s.Length > 2048))
                 throw new InvalidDataException("Проект превышает допустимый размер.");
         }
 
@@ -71,40 +66,38 @@ namespace RNAssistant.Core.Services
             {
                 using (var zip = new ZipArchive(output, ZipArchiveMode.Create, true))
                 {
-                    long expandedBytes = 0;
                     var manifest = new ArtifactTransferPackage { Title = Title, EntryPath = EntryPath, Origin = Origin, ExternalDependencies = ExternalDependencies };
                     foreach (var file in Files)
                     {
-                        expandedBytes += Write(zip, "files/" + file.Path, file.Content);
+                        Write(zip, "files/" + file.Path, file.Content);
                         manifest.Files.Add(new ArtifactTransferFile { Path = file.Path, Kind = file.Kind });
                     }
                     for (var i = 0; i < Data.Count; i++)
                     {
-                        expandedBytes += Write(zip, "data/" + i + ".json", Data[i].Json);
+                        Write(zip, "data/" + i + ".json", Data[i].Json);
                         var schemaPath = Data[i].SchemaJson == null ? null : "data/" + i + ".schema.json";
                         var mappingPath = Data[i].MappingJson == null ? null : "data/" + i + ".mapping.json";
-                        if (schemaPath != null) expandedBytes += Write(zip, schemaPath, Data[i].SchemaJson);
-                        if (mappingPath != null) expandedBytes += Write(zip, mappingPath, Data[i].MappingJson);
+                        if (schemaPath != null) Write(zip, schemaPath, Data[i].SchemaJson);
+                        if (mappingPath != null) Write(zip, mappingPath, Data[i].MappingJson);
                         manifest.Data.Add(new ArtifactTransferData { Name = Data[i].Name, View = Data[i].View, ViewPath = Data[i].ViewPath,
                             SchemaPath = schemaPath, MappingPath = mappingPath });
                     }
                     var manifestJson = JsonConvert.SerializeObject(manifest);
                     if (Encoding.UTF8.GetByteCount(manifestJson) > 256 * 1024) throw new InvalidDataException("Описание проекта превышает допустимый размер.");
-                    expandedBytes += Write(zip, "manifest.json", manifestJson);
-                    if (expandedBytes > MaximumBytes) throw new InvalidDataException("Распакованный проект превышает 20 МиБ.");
+                    Write(zip, "manifest.json", manifestJson);
                 }
-                if (output.Length > MaximumBytes) throw new InvalidDataException("Архив превышает 20 МиБ.");
+                if (output.Length > MaximumBytes) throw new InvalidDataException("Архив превышает возможности текущего буфера экспорта.");
                 return output.ToArray();
             }
         }
 
         public static ArtifactTransferPackage Import(byte[] bytes)
         {
-            if (bytes == null || bytes.Length > MaximumBytes) throw new InvalidDataException("Архив превышает 20 МиБ.");
+            if (bytes == null || bytes.Length > MaximumBytes) throw new InvalidDataException("Архив превышает возможности текущего буфера экспорта.");
             using (var input = new MemoryStream(bytes, false))
             using (var zip = new ZipArchive(input, ZipArchiveMode.Read))
             {
-                if (zip.Entries.Count > 353 || zip.Entries.Sum(e => e.Length) > MaximumBytes ||
+                if (zip.Entries.Count > 353 ||
                     zip.Entries.Any(e => !SafePath(e.FullName)) ||
                     zip.Entries.Select(e => e.FullName).Distinct(StringComparer.OrdinalIgnoreCase).Count() != zip.Entries.Count)
                     throw new InvalidDataException("Некорректная структура архива.");
@@ -117,19 +110,19 @@ namespace RNAssistant.Core.Services
                 foreach (var file in result.Files)
                 {
                     if (file == null || !SafePath(file.Path)) throw new InvalidDataException("Некорректный путь.");
-                    file.Content = Read(zip, "files/" + file.Path, 1200000);
+                    file.Content = Read(zip, "files/" + file.Path, int.MaxValue);
                 }
                 for (var i = 0; i < result.Data.Count; i++)
                 {
                     if (result.Data[i] == null) throw new InvalidDataException("Отсутствует описание данных.");
-                    result.Data[i].Json = Read(zip, "data/" + i + ".json", 8000000);
+                    result.Data[i].Json = Read(zip, "data/" + i + ".json", int.MaxValue);
                     if (result.Data[i].SchemaPath != null) {
                         if (result.Data[i].SchemaPath != "data/" + i + ".schema.json") throw new InvalidDataException("Некорректный путь схемы.");
-                        result.Data[i].SchemaJson = Read(zip, result.Data[i].SchemaPath, 8000000);
+                        result.Data[i].SchemaJson = Read(zip, result.Data[i].SchemaPath, int.MaxValue);
                     }
                     if (result.Data[i].MappingPath != null) {
                         if (result.Data[i].MappingPath != "data/" + i + ".mapping.json") throw new InvalidDataException("Некорректный путь mapping.");
-                        result.Data[i].MappingJson = Read(zip, result.Data[i].MappingPath, 8000000);
+                        result.Data[i].MappingJson = Read(zip, result.Data[i].MappingPath, int.MaxValue);
                     }
                 }
                 result.Validate();

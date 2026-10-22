@@ -121,7 +121,7 @@ namespace RNAssistant.OfficeHosts.Vba
             VbaReadModuleLineRequest request)
         {
             if (request == null || request.StartLine < 1 || request.LineCount < 1 ||
-                request.LineCount > 500 || request.MaxChars < 1)
+                request.MaxChars < 1)
                 throw new VbaBackendException("Invalid bounded VBA line request.", "resource_lines_invalid", false);
             dynamic component = FindComponent(GetVbaProject(documentObject), request.ModuleName);
             if (component == null)

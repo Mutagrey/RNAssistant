@@ -109,7 +109,7 @@
       if (typeof state.activeHtmlArtifactId !== "string") throw new Error("Сначала загрузите HTML workspace.");
       if (!state.htmlWorkspace || state.htmlWorkspace.revisionArtifactId !== state.activeHtmlArtifactId)
         throw new Error("Черновик workspace устарел. Скопируйте правки и перезагрузите исходники.");
-      if (typeof content !== "string" || content.length > 300000) throw new Error("Лимит исходного текста — 300000 символов.");
+      if (typeof content !== "string") throw new Error("Исходный текст должен быть строкой.");
       var bytes = new TextEncoder().encode(content);
       if (new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes) !== content)
         throw new Error("Некорректный Unicode в исходном тексте.");
@@ -132,7 +132,7 @@
         operation.requestId = opening.requestId;
         operation.lease = await opening; operation.requestId = null; active();
         await window.RNAssistantResourceUpload.write(operation.lease, new Blob([bytes]),
-          { maxBytes: 1200000, signal: operation.abort.signal, isCurrent: current });
+          { maxBytes: Number.MAX_SAFE_INTEGER, signal: operation.abort.signal, isCurrent: current });
         active();
         if (!unchanged()) throw new Error("Черновик изменён во время загрузки. Запись не начата; сохраните актуальные правки.");
         var saving = options.send(action, Object.assign({}, controls, { chatId: operation.chatId,

@@ -20,7 +20,7 @@ namespace RNAssistant.Office.Domains.Word
             _backend = backend ?? throw new ArgumentNullException(nameof(backend));
         }
 
-        public const int MaximumTextCharacters = 1000000;
+        public const int MaximumTextCharacters = int.MaxValue;
 
         internal WordTextBounds CaptureMainStoryBounds(CancellationToken cancellationToken)
         {

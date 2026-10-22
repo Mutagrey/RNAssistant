@@ -252,9 +252,9 @@ namespace RNAssistant.Core.Storage
             int startLine, int lineCount, CancellationToken token = default(CancellationToken),
             int maximumCharacters = MaximumWindowTextCharacters)
         {
-            if (startLine < 1 || lineCount < 1 || lineCount > 500 ||
+            if (startLine < 1 || lineCount < 1 ||
                 maximumCharacters < 1 || maximumCharacters > MaximumWindowTextCharacters)
-                throw new WorkspaceFileException("resource_lines_invalid", "Use startLine >= 1 and lineCount between 1 and 500.");
+                throw new WorkspaceFileException("resource_lines_invalid", "Use positive startLine and lineCount within the model read budget.");
             return ReadTextWindow(workspace, relativePath, new TextWindow(startLine, lineCount, true, maximumCharacters), token);
         }
 

@@ -158,7 +158,6 @@ async function loadSelectedToolSource(tool) {
     tool.Source.sha256 === operation.hash && tool.Source.byteLength === operation.length; }
   function active() { if (!current()) throw new Error("RESOURCE_READ_CANCELLED"); }
   try {
-    if (operation.length > 16 * 1024 * 1024) throw new Error("RESOURCE_BATCH_TOO_LARGE");
     active();
     var opening = send("readToolSource", { type: "rnassistant.toolSourceRequest", contractVersion: toolLibraryContractVersion,
       chatId: operation.chatId, toolId: operation.id, expectedRevision: operation.revision });
@@ -166,7 +165,7 @@ async function loadSelectedToolSource(tool) {
     var response = await opening; operation.requestId = null; operation.data = response && response.data;
     active();
     var typed = toolSourceReadFromContract(response, operation);
-    var bytes = await window.RNAssistantResourceDownload.read(typed.data, { maxBytes: 16 * 1024 * 1024,
+    var bytes = await window.RNAssistantResourceDownload.read(typed.data, { maxBytes: Number.MAX_SAFE_INTEGER,
       fetch: window.fetch.bind(window), signal: operation.abort.signal, isCurrent: current });
     var body = JSON.parse(new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes));
     if (operation.documentLocal && (!body || !Array.isArray(body.components) || typed.sources.length !== body.components.length ||

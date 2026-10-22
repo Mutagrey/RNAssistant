@@ -16,8 +16,8 @@ namespace RNAssistant.Office.Services
         internal const string DocumentArtifactKind = "document-artifact";
         private const int MaximumListItems = 50;
         private const int MaximumSearchResults = 20;
-        private const int MaximumSearchCharacters = 1000000;
-        private const int MaximumSearchCharactersPerArtifact = 128000;
+        private const int MaximumSearchCharacters = int.MaxValue;
+        private const int MaximumSearchCharactersPerArtifact = int.MaxValue;
 
         private readonly Func<ChatSession, string, bool> _loadArtifactBody;
         private readonly Func<ChatAttachment, int, string> _readAttachmentText;
@@ -342,7 +342,7 @@ namespace RNAssistant.Office.Services
                             var readLimit = Math.Min(MaximumSearchCharactersPerArtifact, remaining);
                             // Probe one additional character: a bounded prefix is not a
                             // complete negative search over the resource.
-                            var text = ReadText(session, artifact, readLimit + 1);
+                            var text = ReadText(session, artifact, readLimit == int.MaxValue ? readLimit : readLimit + 1);
                             if (text == null)
                             {
                                 var source = FindExactAttachment(session, artifact);

@@ -16,7 +16,7 @@ namespace RNAssistant.Office.Services
     internal sealed class ToolEditorResourceService
     {
         internal const string Owner = "tool-editor";
-        internal const int MaximumMutationBytes = 16 * 1024 * 1024;
+        internal const int MaximumMutationBytes = int.MaxValue;
         private readonly ResourceDataPlaneService _data;
         private readonly ResourceGatewayService _gateway;
         private readonly ToolCatalogService _tools;

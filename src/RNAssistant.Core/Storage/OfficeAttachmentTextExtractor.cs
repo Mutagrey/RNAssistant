@@ -11,9 +11,8 @@ namespace RNAssistant.Core.Storage
 {
     internal static class OfficeAttachmentTextExtractor
     {
-        private const long MaxXmlPartBytes = 20L * 1024L * 1024L;
-        private const long MaxXmlTotalBytes = 80L * 1024L * 1024L;
-        private const int MaxParts = 2000;
+        private const long MaxXmlPartBytes = long.MaxValue;
+        private const long MaxXmlTotalBytes = long.MaxValue;
 
         internal static string Extract(string fileName, byte[] bytes, int maxChars)
         {
@@ -22,8 +21,6 @@ namespace RNAssistant.Core.Storage
             var extension = Path.GetExtension(fileName ?? string.Empty).ToLowerInvariant();
             using (var archive = new ZipArchive(new MemoryStream(bytes, false), ZipArchiveMode.Read))
             {
-                if (archive.Entries.Count > MaxParts)
-                    throw new InvalidOperationException("Office attachment contains too many parts.");
                 var parts = archive.Entries.ToDictionary(entry => entry.FullName.Replace('\\', '/'),
                     entry => entry, StringComparer.OrdinalIgnoreCase);
                 if (parts.Values.Where(entry => entry.FullName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase))

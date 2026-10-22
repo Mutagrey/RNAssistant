@@ -12,11 +12,11 @@ namespace RNAssistant.Office.Domains.Outlook
     {
         public const int MaxItems = 500;
         public const int MaxAttachments = 1000;
-        public const int MaxBodyChars = 1000000;
-        public const int MaxSearchBodyChars = 100000;
-        public const int MaxSearchHeaderChars = 4096;
+        public const int MaxBodyChars = int.MaxValue;
+        public const int MaxSearchBodyChars = int.MaxValue;
+        public const int MaxSearchHeaderChars = int.MaxValue;
         public const int CollectionPreviewCharacters = 1000;
-        public const int CollectionMaximumCharacters = 750000;
+        public const int CollectionMaximumCharacters = int.MaxValue;
 
         private readonly IOutlookBackend _backend;
 
@@ -487,7 +487,7 @@ namespace RNAssistant.Office.Domains.Outlook
         {
             if (request.Body.Length > MaxBodyChars)
                 return Failure(
-                    "body exceeds the 1000000-character safety limit.",
+                    "body exceeds the current text representation.",
                     "outlook_body_too_large", false);
             if (request.To.Length > 65536 || request.Cc.Length > 65536 ||
                 request.Bcc.Length > 65536 || request.Subject.Length > 65536)

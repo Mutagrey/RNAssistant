@@ -12,10 +12,10 @@ namespace RNAssistant.Core.Storage
 {
     public sealed class SkillStore
     {
-        public const int MaximumSkillReferenceCharacters = 500000;
-        public const long MaximumSkillReferenceBytes = 2100000;
+        public const int MaximumSkillReferenceCharacters = int.MaxValue;
+        public const long MaximumSkillReferenceBytes = int.MaxValue;
         public const int MaximumSkillReferences = 64;
-        private const long MaxSkillFileBytes = 2100000;
+        private const long MaxSkillFileBytes = int.MaxValue;
         private readonly AppDataPaths _paths;
 
         public SkillStore(AppDataPaths paths)
@@ -694,7 +694,7 @@ namespace RNAssistant.Core.Storage
             if ((skill.Name ?? string.Empty).Length > 200) return "Skill name is too long.";
             if ((skill.Description ?? string.Empty).Length > 4000) return "Skill description is too long.";
             if ((skill.Version ?? string.Empty).Length > 64) return "Skill version is too long.";
-            if ((skill.BodyMarkdown ?? string.Empty).Length > 500000) return "Skill bodyMarkdown is too large.";
+
             var skillHost = FirstNonEmpty(skill.Host, "Common");
             if (!new[] { "Common", "Workspace", "Excel", "Word", "PowerPoint", "Outlook" }
                 .Any(host => string.Equals(host, skillHost, StringComparison.OrdinalIgnoreCase)))

@@ -23,7 +23,7 @@ namespace RNAssistant.Harness
             {
                 adapter.SetText(new PowerPointSetTextRequest { HasSlideIndex = true,
                     SlideIndex = 1, ShapeName = "Content Placeholder 2",
-                    Text = new string('p', PowerPointService.MaximumTextCharacters + 1) }, () => { });
+                    Text = new string('p', 1000001) }, () => { });
                 var session = NewSession(adapter);
                 executor.BindResourceAuthority(session);
                 var tools = OfficeToolCatalog.ForHost("PowerPoint")
@@ -66,7 +66,7 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("PowerPoint"), (executor, adapter) =>
             {
                 var notes = new string('n', ResourceReadRequest.MaximumCharacters - 1) + "😀" +
-                    new string('n', PowerPointService.MaximumTextCharacters) + "😀";
+                    new string('n', 1000000) + "😀";
                 adapter.SetText(new PowerPointSetTextRequest { Target = "notes", HasSlideIndex = true,
                     SlideIndex = 1, Text = notes }, () => { });
                 var session = NewSession(adapter);
@@ -119,7 +119,7 @@ namespace RNAssistant.Harness
                     SlideIndex = 1, Text = "Short notes" }, () => { });
                 adapter.SetText(new PowerPointSetTextRequest { Target = "shape", HasSlideIndex = true,
                     SlideIndex = 1, ShapeName = "Content Placeholder 2",
-                    Text = new string('p', PowerPointService.MaximumTextCharacters + 1) }, () => { });
+                    Text = new string('p', 1000001) }, () => { });
                 var shortRead = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
                     "target", "PowerPoint notes: 1"), tools, new AppSettings(), false, false, session);
                 AssertTrue(shortRead.Success, "small notes have a whole text view");
@@ -201,8 +201,10 @@ namespace RNAssistant.Harness
                 AssertEqual(1, (int)JObject.Parse(valid.Result.DataJson)["matchCount"], "shape-only scope works");
                 target.Kind = "notes";
                 AssertEqual(ToolExecutionOutcome.Error, ExecuteHtmlNative(runtime, PowerPointToolIds.SearchText, args).Outcome, "unexpected notes refused");
-                target.Kind = "shape"; target.Text = new string('x', PowerPointService.MaximumTextCharacters + 1);
-                AssertEqual(ToolExecutionOutcome.Error, ExecuteHtmlNative(runtime, PowerPointToolIds.SearchText, args).Outcome, "oversized capture refused");
+                target.Kind = "shape"; target.Text = new string('x', 1000001) + "needle";
+                var large = ExecuteHtmlNative(runtime, PowerPointToolIds.SearchText, args);
+                AssertTrue(large.Outcome == ToolExecutionOutcome.Ok && (int)JObject.Parse(large.Result.DataJson)["matchCount"] == 1,
+                    "search reaches the complete large source tail");
                 target.Text = null;
                 AssertEqual(ToolExecutionOutcome.Error, ExecuteHtmlNative(runtime, PowerPointToolIds.SearchText, args).Outcome, "null source is not empty source");
                 target.Text = "needle";
@@ -373,14 +375,14 @@ namespace RNAssistant.Harness
                 AssertEqual(count, adapter.PowerPointSourceMaterializationCount, "deck bound precedes materialization");
 
                 adapter.SetText(new PowerPointSetTextRequest { Target = "body", HasSlideIndex = true, SlideIndex = 1,
-                    Text = new string('x', PowerPointService.MaximumTextCharacters + 1) }, () => { });
+                    Text = new string('x', 1000001) }, () => { });
                 var large = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId, "target", "PowerPoint slide: 1"),
                     tools, new AppSettings(), false, false, session);
                 AssertTrue(large.Success, "oversized slide returns an exact bounded first window");
                 var firstWindow = JObject.Parse(large.DataJson);
                 AssertTrue(!(bool)firstWindow["sourceComplete"] &&
                     (int)firstWindow["sourceCoverage"]["start"] == 0 &&
-                    (int)firstWindow["sourceEndChar"] > PowerPointService.MaximumTextCharacters,
+                    (int)firstWindow["sourceEndChar"] > 1000000,
                     "large slide never presents a clipped window as the whole source");
                 AssertEqual(count, adapter.PowerPointSourceMaterializationCount,
                     "first window avoids whole-slide materialization");

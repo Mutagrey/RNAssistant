@@ -111,7 +111,7 @@
           if (!Number.isInteger(limit) || limit < 1 || limit > lease.maxBatchItems || requestedOffset !== offset)
             throw new Error("RESOURCE_BATCH_BOUNDS");
           if (lease.binary && (options.fields && options.fields.length || !Number.isInteger(lease.binary.payload.byteLength) ||
-              lease.binary.payload.byteLength < 0 || lease.binary.payload.byteLength > 20 * 1024 * 1024 ||
+              lease.binary.payload.byteLength < 0 ||
               lease.maxBatchBytes > 256 * 1024 || limit > lease.maxBatchBytes)) throw new Error("RESOURCE_BATCH_BOUNDS");
           busy = true;
           try {

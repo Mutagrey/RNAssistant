@@ -17,8 +17,8 @@ namespace RNAssistant.Office.Services
         public const string DataKind = "html-data";
         internal const string CurrentWorkspaceTarget = "HTML workspace: current";
         private const int MaximumItems = 50;
-        private const int MaximumSearchCharacters = 1000000;
-        private const int MaximumSearchCharactersPerMember = 128000;
+        private const int MaximumSearchCharacters = int.MaxValue;
+        private const int MaximumSearchCharactersPerMember = int.MaxValue;
 
         private readonly Func<ChatSession, string, bool> _loadArtifactBody;
         private readonly ChatBlobStore _payloads;

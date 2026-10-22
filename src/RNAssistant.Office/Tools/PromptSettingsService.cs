@@ -9,7 +9,7 @@ namespace RNAssistant.Office.Tools
 {
     internal sealed class PromptSettingsService
     {
-        internal const int MaximumPromptCharacters = 100000;
+        internal const int MaximumPromptCharacters = int.MaxValue;
         private const int PreparedContractVersion = 1;
 
         private static readonly string[] EditableFields =
@@ -211,7 +211,7 @@ namespace RNAssistant.Office.Tools
                 (value ?? string.Empty).Length > MaximumPromptCharacters)
             {
                 return PromptToolOutcome.Error(
-                    "Prompt template exceeds the 100000 character limit.",
+                    "Prompt template exceeds the runtime string representation.",
                     null, "prompt_too_large", false);
             }
             if (string.Equals(key, "systemPromptRole",
