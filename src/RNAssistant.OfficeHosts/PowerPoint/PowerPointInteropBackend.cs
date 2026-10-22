@@ -50,9 +50,11 @@ namespace RNAssistant.OfficeHosts
             var slide = ResolveSlide(Presentation(), request.SlideIndex);
             var selected = new StringBuilder();
             long offset = 0;
-            AppendLiteralWindow("Slide " + slide.SlideIndex.ToString(CultureInfo.InvariantCulture) + ":\n",
-                request, selected, ref offset);
-            foreach (PowerPoint.Shape shape in slide.Shapes)
+            if (!request.IncludeNotes)
+                AppendLiteralWindow("Slide " + slide.SlideIndex.ToString(CultureInfo.InvariantCulture) + ":\n",
+                    request, selected, ref offset);
+            var shapes = request.IncludeNotes ? slide.NotesPage.Shapes : slide.Shapes;
+            foreach (PowerPoint.Shape shape in shapes)
             {
                 if (shape.HasTextFrame != MsoTriState.msoTrue ||
                     shape.TextFrame.HasText != MsoTriState.msoTrue) continue;

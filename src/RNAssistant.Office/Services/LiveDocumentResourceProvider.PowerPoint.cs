@@ -12,6 +12,7 @@ namespace RNAssistant.Office.Services
     internal sealed partial class LiveDocumentResourceProvider
     {
         internal const string PowerPointSlideKind = "powerpoint-slide";
+        internal const string PowerPointNotesKind = "powerpoint-notes";
         internal const string PowerPointSearchKind = "powerpoint-search-scope";
         private readonly IPowerPointBackend _powerPoint;
         internal bool IsPowerPoint { get { return string.Equals(_adapter.HostName, "PowerPoint", StringComparison.OrdinalIgnoreCase); } }
@@ -65,12 +66,58 @@ namespace RNAssistant.Office.Services
             return _scope.Read(session, () => Describe(session, key));
         }
 
+        internal ResourceDescriptor ResolvePowerPointNotes(ChatSession session, string target)
+        {
+            if (!IsPowerPoint || _powerPoint == null)
+                throw new ResourceRequestException("The bound PowerPoint reader is unavailable.", "RESOURCE_PROVIDER_UNAVAILABLE", false);
+            var key = "notes-" + target.Substring("PowerPoint notes: ".Length);
+            if (!IsPowerPointNotes(key))
+                throw new ResourceRequestException("Use PowerPoint notes: N with a positive one-based index.", "RESOURCE_TARGET_INVALID", false);
+            return _scope.Read(session, () => Describe(session, key));
+        }
+
         private static bool IsPowerPointSlide(string target)
         {
             int index;
             return target != null && target.StartsWith("slide-", StringComparison.Ordinal) &&
                 int.TryParse(target.Substring(6), NumberStyles.None, CultureInfo.InvariantCulture, out index) &&
                 index > 0 && target == "slide-" + index.ToString(CultureInfo.InvariantCulture);
+        }
+
+        private static bool IsPowerPointNotes(string target)
+        {
+            int index;
+            return target != null && target.StartsWith("notes-", StringComparison.Ordinal) &&
+                int.TryParse(target.Substring(6), NumberStyles.None, CultureInfo.InvariantCulture, out index) &&
+                index > 0 && target == "notes-" + index.ToString(CultureInfo.InvariantCulture);
+        }
+
+        private string ReadPowerPointNotes(string target)
+        {
+            if (_powerPoint == null)
+                throw new ResourceRequestException("The bound PowerPoint reader is unavailable.", "RESOURCE_PROVIDER_UNAVAILABLE", false);
+            try
+            {
+                var slideIndex = int.Parse(target.Substring(6), CultureInfo.InvariantCulture);
+                var service = new PowerPointService(_powerPoint);
+                var probe = service.CaptureSlideTextWindow(new PowerPointSlideTextWindowRequest
+                { SlideIndex = slideIndex, StartChar = 0,
+                    CharCount = ResourceReadRequest.MaximumCharacters, IncludeNotes = true },
+                    CancellationToken.None);
+                if (probe.TotalCharacters <= ResourceReadRequest.MaximumCharacters)
+                    return probe.Text;
+                var snapshot = service.CaptureSlides(new PowerPointReadSlidesRequest
+                {
+                    HasSlideIndex = true,
+                    SlideIndex = slideIndex,
+                    MaxSlides = PowerPointService.MaxSlides,
+                    MaxShapesPerSlide = PowerPointService.MaxShapesPerSlide,
+                    MaxCharacters = PowerPointService.MaximumTextCharacters
+                }, CancellationToken.None);
+                return snapshot.Slides[0].Notes;
+            }
+            catch (PowerPointBackendException error)
+            { throw new ResourceRequestException(error.Message, error.ErrorCode, error.Retryable); }
         }
 
         private string ReadPowerPointSource(string target, bool includeNotes)
@@ -116,23 +163,27 @@ namespace RNAssistant.Office.Services
             return _scope.Read(session, () =>
             {
                 string target;
-                if (!TryParseUri(session, reference?.Uri, out target) || !IsPowerPointSlide(target))
+                if (!TryParseUri(session, reference?.Uri, out target) ||
+                    !IsPowerPointSlide(target) && !IsPowerPointNotes(target))
                     return null;
                 var slideIndex = int.Parse(target.Substring(6), CultureInfo.InvariantCulture);
+                var notes = IsPowerPointNotes(target);
                 PowerPointSlideTextWindowSnapshot window;
                 try { window = new PowerPointService(_powerPoint).CaptureSlideTextWindow(
                     new PowerPointSlideTextWindowRequest { SlideIndex = slideIndex,
-                        StartChar = startChar, CharCount = charCount }, cancellationToken); }
+                        StartChar = startChar, CharCount = charCount,
+                        IncludeNotes = notes }, cancellationToken); }
                 catch (PowerPointBackendException error)
                 { throw new ResourceRequestException(error.Message, error.ErrorCode, error.Retryable); }
                 var end = startChar + window.Text.Length;
-                var selectedTarget = "slide-window-" + slideIndex.ToString(CultureInfo.InvariantCulture) +
+                var selectedTarget = (notes ? "notes-window-" : "slide-window-") +
+                    slideIndex.ToString(CultureInfo.InvariantCulture) +
                     "-" + startChar.ToString(CultureInfo.InvariantCulture) +
                     "-" + end.ToString(CultureInfo.InvariantCulture);
                 var uri = CreateUri(session, selectedTarget);
                 var hash = RNAssistant.Core.Tools.TextPatternEngine.Sha256(window.Text);
                 var descriptor = new ResourceDescriptor { Reference = new ResourceRef(uri),
-                    Provider = ProviderName, Kind = PowerPointSlideKind,
+                    Provider = ProviderName, Kind = notes ? PowerPointNotesKind : PowerPointSlideKind,
                     Title = slideIndex.ToString(CultureInfo.InvariantCulture),
                     MimeType = "text/plain; charset=utf-8", Mutable = true,
                     Parent = new ResourceRef(CreateUri(session, target)), ContentSha256 = hash };
@@ -153,12 +204,14 @@ namespace RNAssistant.Office.Services
         private string ReadPowerPointStructure(string target)
         {
             var slideIndex = int.Parse(target.Substring(6), CultureInfo.InvariantCulture);
+            var notes = IsPowerPointNotes(target);
             try
             {
                 var bounds = new PowerPointService(_powerPoint).CaptureSlideTextWindow(
                     new PowerPointSlideTextWindowRequest { SlideIndex = slideIndex,
-                        StartChar = 0, CharCount = 0 }, CancellationToken.None);
-                return new JObject { ["type"] = "rnassistant.powerPointSlide",
+                        StartChar = 0, CharCount = 0,
+                        IncludeNotes = notes }, CancellationToken.None);
+                return new JObject { ["type"] = notes ? "rnassistant.powerPointNotes" : "rnassistant.powerPointSlide",
                     ["slideIndex"] = slideIndex, ["slideId"] = bounds.SlideId,
                     ["textStart"] = 0, ["textEnd"] = bounds.TotalCharacters,
                     ["windowSelector"] = "startChar + charCount" }.ToString(Formatting.None);

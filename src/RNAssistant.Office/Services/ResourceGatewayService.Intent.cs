@@ -272,6 +272,13 @@ namespace RNAssistant.Office.Services
                 return powerPoint == null ? null : WithProvider(powerPoint,
                     session, () => powerPoint.ResolvePowerPointSlide(session, query));
             }
+            if (query.StartsWith("PowerPoint notes: ", StringComparison.Ordinal))
+            {
+                var powerPoint = _registry.All()
+                    .OfType<LiveDocumentResourceProvider>().SingleOrDefault();
+                return powerPoint == null ? null : WithProvider(powerPoint,
+                    session, () => powerPoint.ResolvePowerPointNotes(session, query));
+            }
             return null;
         }
 
@@ -467,6 +474,14 @@ namespace RNAssistant.Office.Services
                 if (powerPoint == null) throw new ResourceRequestException("PowerPoint resource provider is unavailable.", "RESOURCE_PROVIDER_UNAVAILABLE", false);
                 var descriptor = WithProvider(powerPoint, session, () => powerPoint.ResolvePowerPointSlide(session, target));
                 return new ResourceIntentTarget { Target = IntentTarget(descriptor), Type = "PowerPoint slide", Scope = "document",
+                    Descriptor = descriptor, Reference = descriptor.Reference };
+            }
+            if (target.StartsWith("PowerPoint notes: ", StringComparison.Ordinal))
+            {
+                var powerPoint = _registry.All().OfType<LiveDocumentResourceProvider>().SingleOrDefault();
+                if (powerPoint == null) throw new ResourceRequestException("PowerPoint resource provider is unavailable.", "RESOURCE_PROVIDER_UNAVAILABLE", false);
+                var descriptor = WithProvider(powerPoint, session, () => powerPoint.ResolvePowerPointNotes(session, target));
+                return new ResourceIntentTarget { Target = IntentTarget(descriptor), Type = "PowerPoint notes", Scope = "document",
                     Descriptor = descriptor, Reference = descriptor.Reference };
             }
             if (target.StartsWith("Word range: ", StringComparison.Ordinal))
@@ -1063,6 +1078,7 @@ namespace RNAssistant.Office.Services
                 case "Outlook archive digest":
                 case "Outlook archive mail":
                 case "PowerPoint slide":
+                case "PowerPoint notes":
                 case "Word range": return "document";
                 case "Word search scope": return "document";
                 case "PowerPoint search scope": return "document";
@@ -1113,6 +1129,7 @@ namespace RNAssistant.Office.Services
                 case LiveDocumentResourceProvider.OutlookArchiveDigestKind: return "Outlook archive digest";
                 case LiveDocumentResourceProvider.OutlookArchiveMailKind: return "Outlook archive mail";
                 case LiveDocumentResourceProvider.PowerPointSlideKind: return "PowerPoint slide";
+                case LiveDocumentResourceProvider.PowerPointNotesKind: return "PowerPoint notes";
                 case LiveDocumentResourceProvider.WordRangeKind: return "Word range";
                 case LiveDocumentResourceProvider.WordSearchKind: return "Word search scope";
                 case LiveDocumentResourceProvider.PowerPointSearchKind: return "PowerPoint search scope";
@@ -1145,7 +1162,7 @@ namespace RNAssistant.Office.Services
             if (type == "Excel table") return "document";
             if (type == "Excel name") return "document";
             if (type == "Outlook search scope") return "document";
-            if (string.Equals(type, "document", StringComparison.Ordinal) || type == "Excel range" || type == "Word range" || type == "Word search scope" || type == "PowerPoint search scope" || type == "PowerPoint slide" || type == "Outlook attachment" || type == "Outlook mail" || type == "Outlook collection" || type == "Outlook archive page" || type == "Outlook archive digest" || type == "Outlook archive mail" || type == "Office observation") return "document";
+            if (string.Equals(type, "document", StringComparison.Ordinal) || type == "Excel range" || type == "Word range" || type == "Word search scope" || type == "PowerPoint search scope" || type == "PowerPoint slide" || type == "PowerPoint notes" || type == "Outlook attachment" || type == "Outlook mail" || type == "Outlook collection" || type == "Outlook archive page" || type == "Outlook archive digest" || type == "Outlook archive mail" || type == "Office observation") return "document";
             if (string.Equals(type, "selection", StringComparison.Ordinal)) return "selection";
             if (string.Equals(type, "VBA backup", StringComparison.Ordinal)) return "backups";
             if (string.Equals(type, "VBA module", StringComparison.Ordinal) ||

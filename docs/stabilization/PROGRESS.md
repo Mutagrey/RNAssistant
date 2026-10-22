@@ -1,5 +1,15 @@
 # Stabilization progress
 
+## Large PowerPoint notes through common resources — 2026-10-22
+
+`PowerPoint notes: N` now exposes speaker notes through the shared `text` read:
+metadata bounds, a context-sized first window and exact `startChar`/`charCount`
+continuation. The bound backend selects COM text ranges without materializing the
+whole notes body. Focused host-neutral PowerPoint resource checks pass, including
+notes beyond the former one-million-character capture ceiling and UTF-16 boundary
+refusal. The `source` JSON view retains its separate whole-capture bound; real
+Windows/PowerPoint/WebView2 qualification remains open.
+
 ## Context-sized text reads and streamed workspace writes — 2026-10-22
 
 The common model read now returns complete text when the provider can materialize

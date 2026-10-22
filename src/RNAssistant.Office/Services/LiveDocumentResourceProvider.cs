@@ -151,22 +151,24 @@ namespace RNAssistant.Office.Services
             }
             var selection = string.Equals(target, "selection", StringComparison.Ordinal);
             var powerPointSlide = IsPowerPoint && IsPowerPointSlide(target);
+            var powerPointNotes = IsPowerPoint && IsPowerPointNotes(target);
             var wordRange = IsWord && target.StartsWith("range-", StringComparison.Ordinal);
             var descriptor = new ResourceDescriptor
             {
                 Reference = new ResourceRef(CreateUri(session, target)),
                 Provider = ProviderName,
-                Kind = powerPointSlide ? PowerPointSlideKind : wordRange ? WordRangeKind : selection ? SelectionKind : DocumentKind,
-                Title = IsOutlook ? (selection ? "Current Office selection" : "Current Outlook mail") : powerPointSlide ? target.Substring(6) : wordRange ? target.Substring(6).Replace('-', ':') : selection ? "Current Office selection" : _adapter.DocumentTitle ?? "Office document",
+                Kind = powerPointNotes ? PowerPointNotesKind : powerPointSlide ? PowerPointSlideKind : wordRange ? WordRangeKind : selection ? SelectionKind : DocumentKind,
+                Title = IsOutlook ? (selection ? "Current Office selection" : "Current Outlook mail") : powerPointNotes || powerPointSlide ? target.Substring(6) : wordRange ? target.Substring(6).Replace('-', ':') : selection ? "Current Office selection" : _adapter.DocumentTitle ?? "Office document",
                 MimeType = "text/plain; charset=utf-8",
                 Mutable = true
             };
             descriptor.Representations.Add(ResourceRepresentations.Metadata);
             descriptor.Representations.Add(ResourceRepresentations.Structure);
             descriptor.Representations.Add(ResourceRepresentations.Text);
-            if (IsOutlook || (IsPowerPoint && !selection)) descriptor.Representations.Add(ResourceRepresentations.Source);
+            if (IsOutlook || (IsPowerPoint && !selection && !powerPointNotes)) descriptor.Representations.Add(ResourceRepresentations.Source);
             if (IsOutlook) descriptor.Metadata["sourceTarget"] = "Current selected/open mail; use outlook-mail children for durable mail identity.";
             if (IsPowerPoint) descriptor.Metadata["slideTargetFormat"] = "PowerPoint slide: N (one-based); source includes text and notes";
+            if (IsPowerPoint) descriptor.Metadata["notesTargetFormat"] = "PowerPoint notes: N (one-based); text supports startChar/charCount";
             descriptor.Metadata["host"] = _adapter.HostName ?? string.Empty;
             descriptor.Metadata["live"] = "true";
             descriptor.Metadata["target"] = target;
@@ -206,6 +208,7 @@ namespace RNAssistant.Office.Services
                 !(IsWord && IsWordRange(address.Segments[1])) &&
                 !(IsWord && IsWordSearch(address.Segments[1])) &&
                 !(IsPowerPoint && IsPowerPointSlide(address.Segments[1])) &&
+                !(IsPowerPoint && IsPowerPointNotes(address.Segments[1])) &&
                 !(IsPowerPoint && IsPowerPointSearch(address.Segments[1])) &&
                 !(IsOutlook && TryAttachmentKey(address.Segments[1], out attachmentMail, out attachmentIndex)) &&
                 !(IsOutlook && TryOutlookCollectionLimit(address.Segments[1], out var collectionLimit)) &&

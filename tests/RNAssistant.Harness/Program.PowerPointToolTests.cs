@@ -61,6 +61,73 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void PowerPointLargeNotesTextWindow()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("PowerPoint"), (executor, adapter) =>
+            {
+                var notes = new string('n', PowerPointService.MaximumTextCharacters + 1) + "😀";
+                adapter.SetText(new PowerPointSetTextRequest { Target = "notes", HasSlideIndex = true,
+                    SlideIndex = 1, Text = notes }, () => { });
+                var session = NewSession(adapter);
+                executor.BindResourceAuthority(session);
+                var tools = OfficeToolCatalog.ForHost("PowerPoint")
+                    .Concat(executor.GetControllerTools()).ToList();
+                AssertTrue(executor.ResourceGateway.Find(session, "PowerPoint notes: 1", "document")
+                    .Items.Any(item => item.Target == "PowerPoint notes: 1"),
+                    "notes target is discoverable");
+                var structure = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                    "target", "PowerPoint notes: 1", "representation", "structure"),
+                    tools, new AppSettings(), false, false, session);
+                AssertTrue(structure.Success, "large notes expose text bounds");
+                var bounds = JObject.Parse((string)JObject.Parse(structure.DataJson)["text"]);
+                AssertEqual(notes.Length, (int)bounds["textEnd"], "notes bounds cover the full source");
+                var materializations = adapter.PowerPointSourceMaterializationCount;
+                var first = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                    "target", "PowerPoint notes: 1"), tools, new AppSettings(), false, false, session);
+                AssertTrue(first.Success, "ordinary large notes read returns the first window");
+                var firstVisible = JObject.Parse(first.DataJson);
+                AssertTrue(!(bool)firstVisible["sourceComplete"] &&
+                    (int)firstVisible["sourceCoverage"]["start"] == 0 &&
+                    (int)firstVisible["sourceEndChar"] == notes.Length,
+                    "first notes window reports continuation bounds");
+                var selected = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                    "target", "PowerPoint notes: 1", "representation", "text",
+                    "startChar", notes.Length - 3, "charCount", 3),
+                    tools, new AppSettings(), false, false, session);
+                AssertTrue(selected.Success, "large notes tail is readable");
+                var visible = JObject.Parse(selected.DataJson);
+                AssertEqual("n😀", (string)visible["text"], "notes window preserves a UTF-16 pair");
+                AssertTrue((bool)visible["selectionComplete"] &&
+                    (int)visible["sourceCoverage"]["start"] == notes.Length - 3 &&
+                    !(bool)visible["sourceComplete"], "notes selection is only partial evidence");
+                AssertEqual(materializations, adapter.PowerPointSourceMaterializationCount,
+                    "notes windows avoid whole-slide materialization");
+                var split = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                    "target", "PowerPoint notes: 1", "representation", "text",
+                    "startChar", notes.Length - 1, "charCount", 1),
+                    tools, new AppSettings(), false, false, session);
+                AssertTrue(!split.Success, "split UTF-16 notes selection is rejected");
+                var unsupported = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                    "target", "PowerPoint notes: 1", "representation", "source"),
+                    tools, new AppSettings(), false, false, session);
+                AssertTrue(!unsupported.Success, "notes target does not alias the bounded source JSON");
+                adapter.SetText(new PowerPointSetTextRequest { Target = "notes", HasSlideIndex = true,
+                    SlideIndex = 1, Text = "Short notes" }, () => { });
+                adapter.SetText(new PowerPointSetTextRequest { Target = "shape", HasSlideIndex = true,
+                    SlideIndex = 1, ShapeName = "Content Placeholder 2",
+                    Text = new string('p', PowerPointService.MaximumTextCharacters + 1) }, () => { });
+                var shortRead = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                    "target", "PowerPoint notes: 1"), tools, new AppSettings(), false, false, session);
+                AssertTrue(shortRead.Success, "small notes have a whole text view");
+                var shortVisible = JObject.Parse(shortRead.DataJson);
+                AssertEqual("Short notes", (string)shortVisible["text"], "whole notes contain exact text");
+                AssertTrue((bool)shortVisible["complete"],
+                    "small notes retain complete evidence");
+                AssertEqual(materializations, adapter.PowerPointSourceMaterializationCount,
+                    "small notes avoid materializing unrelated large slide text");
+            });
+        }
+
         private static void PowerPointSearchRetainsExactSnapshots()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("PowerPoint"), (executor, adapter) =>

@@ -1132,6 +1132,15 @@ view contains slide text; `source` is an ordered JSON array of slide id/index,
 text and speaker notes, including for a single slide. `structure` remains metadata,
 not a slide-content alias. Noncanonical and nonexistent slide targets fail explicitly.
 
+`PowerPoint notes: N` selects the speaker notes of one slide as a separate `text`
+resource. Its `structure` view reports UTF-16 text bounds without reading the
+body. An ordinary model read returns a complete small notes view or an exact first
+window; `startChar`/`charCount` continue through large notes with selected source
+coverage. The bound backend reads only selected COM `TextRange.Characters` and
+refuses split surrogate pairs. This target uses the common resource read and
+evidence path. The existing `source` JSON view still has its whole-capture bound;
+large slide text and notes remain individually readable through their text targets.
+
 The existing document provider calls `PowerPointService.CaptureSlides` and the bound
 `IPowerPointBackend`; document/slide reads no longer call the adapter's clipped
 document snapshot. Complete captures use the shared authority, CAS and evidence;

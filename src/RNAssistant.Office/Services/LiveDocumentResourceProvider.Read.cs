@@ -37,7 +37,7 @@ namespace RNAssistant.Office.Services
                     catch (WordBackendException error)
                     { throw new ResourceRequestException(error.Message, error.ErrorCode, error.Retryable); }
                 }
-                if (IsPowerPoint && IsPowerPointSlide(target))
+                if (IsPowerPoint && (IsPowerPointSlide(target) || IsPowerPointNotes(target)))
                 {
                     if (_powerPoint == null)
                         throw new ResourceRequestException("The bound PowerPoint reader is unavailable.",
@@ -48,7 +48,8 @@ namespace RNAssistant.Office.Services
                             System.Globalization.CultureInfo.InvariantCulture);
                         var bounds = new PowerPointService(_powerPoint).CaptureSlideTextWindow(
                             new PowerPointSlideTextWindowRequest { SlideIndex = slideIndex,
-                                StartChar = 0, CharCount = 0 }, cancellationToken);
+                                StartChar = 0, CharCount = 0,
+                                IncludeNotes = IsPowerPointNotes(target) }, cancellationToken);
                         return new ResourceTextBounds { StartChar = 0, EndChar = bounds.TotalCharacters };
                     }
                     catch (PowerPointBackendException error)
@@ -93,6 +94,10 @@ namespace RNAssistant.Office.Services
                     return CaptureAttachmentSource(session, target);
                 }
                 var representation = NormalizeRepresentation(request == null ? null : request.Representation, target);
+                if (IsPowerPoint && IsPowerPointNotes(target) &&
+                    representation == ResourceRepresentations.Source)
+                    throw new ResourceRequestException("PowerPoint notes support text and structure views.",
+                        "RESOURCE_VIEW_UNSUPPORTED", false);
                 if (representation == ResourceRepresentations.Metadata)
                 {
                     ResourceReadCursor.RejectCursor(request);
@@ -225,6 +230,7 @@ namespace RNAssistant.Office.Services
         {
             if (IsOutlook) return ReadOutlookSource(target, ResourceRepresentations.Text);
             if (IsWord) return ReadWordText(target);
+            if (IsPowerPoint && IsPowerPointNotes(target)) return ReadPowerPointNotes(target);
             if (IsPowerPoint && target != "selection") return ReadPowerPointSource(target, false);
             if (string.Equals(target, "selection", StringComparison.Ordinal))
             {
@@ -244,7 +250,7 @@ namespace RNAssistant.Office.Services
         private string ReadStructure(string target)
         {
             if (IsWord && target == "root") return ReadWordStructure();
-            if (IsPowerPoint && IsPowerPointSlide(target))
+            if (IsPowerPoint && (IsPowerPointSlide(target) || IsPowerPointNotes(target)))
                 return ReadPowerPointStructure(target);
             if (IsWord && target.StartsWith("range-", StringComparison.Ordinal))
             {

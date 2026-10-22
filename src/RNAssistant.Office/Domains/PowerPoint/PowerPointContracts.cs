@@ -31,6 +31,7 @@ namespace RNAssistant.Office.Domains.PowerPoint
         public int SlideIndex { get; set; }
         public int StartChar { get; set; }
         public int CharCount { get; set; }
+        public bool IncludeNotes { get; set; }
     }
 
     public sealed class PowerPointSlideTextWindowSnapshot

@@ -202,10 +202,10 @@ cap support exact selected windows and streamed `files.patch`. Patch fragments n
 longer have a one-MiB bound. Large `files.create`/`files.replace` stage text and
 verify read-back. The internal materialized `ReadText` path and some retained web
 snapshots still have separate one-MiB bounds; neither limits selected file reads.
-Word, VBA and PowerPoint slide text now use the same model read selectors, selected
+Word, VBA and PowerPoint slide/notes text now use the same model read selectors, selected
 source coverage and first-window continuation. Whole Office capture still has an
 internal bound, and large sources require multiple selected reads. Other Office
-representations (including large PowerPoint notes/source), imported artifact
+representations (including large PowerPoint `source` JSON), imported artifact
 index/transfer bounds, the whole-module prerequisite of typed VBA patching, and
 Windows Word/VBA/PowerPoint validation remain separate work. Workspace
 copy/move/delete retain their existing whole-source bounds; do not claim host

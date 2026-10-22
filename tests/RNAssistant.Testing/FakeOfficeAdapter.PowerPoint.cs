@@ -68,7 +68,8 @@ namespace RNAssistant.Harness
         {
             BeginPowerPointBackendCall("powerpoint.slide_window.direct");
             var slide = PowerPointSlide(request.SlideIndex);
-            var full = "Slide " + request.SlideIndex.ToString(CultureInfo.InvariantCulture) + ":\n" +
+            var full = request.IncludeNotes ? slide.Notes ?? string.Empty :
+                "Slide " + request.SlideIndex.ToString(CultureInfo.InvariantCulture) + ":\n" +
                 PowerPointSlideText(slide);
             if (request.StartChar < 0 || request.StartChar > full.Length || request.CharCount < 0)
                 throw new PowerPointBackendException("Invalid slide text window.", "resource_chars_invalid", false);
