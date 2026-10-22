@@ -85,7 +85,7 @@ namespace RNAssistant.Harness
                     var result = service.CompleteProjectChatFileUpload(new ProjectChatUploadLeaseRequest {
                         WorkspaceId = workspaceId, SessionId = sessionId, LeaseId = opened.LeaseId });
                     AssertEqual(opened.RelativePath, result.RelativePath, "published path matches the announced target");
-                    AssertTrue(result.ModelReadable, "bounded UTF-8 file is readable by project model resources");
+                    AssertTrue(result.ModelReadable, "UTF-8 file is readable by project model resources");
                     AssertTrue(source.SequenceEqual(File.ReadAllBytes(Path.Combine(root, result.RelativePath.Replace('/', Path.DirectorySeparatorChar)))),
                         "exact uploaded bytes are published in the selected project");
                     PluginFailure(() => service.CompleteProjectChatFileUpload(new ProjectChatUploadLeaseRequest {
@@ -103,6 +103,26 @@ namespace RNAssistant.Harness
                     AssertTrue(!binaryResult.ModelReadable &&
                         binary.SequenceEqual(File.ReadAllBytes(Path.Combine(root, binaryResult.RelativePath.Replace('/', Path.DirectorySeparatorChar)))),
                         "binary file is retained exactly without claiming model text access");
+                    var largeText = Encoding.UTF8.GetBytes(new string('a', 127) + "😀" + new string('b', 1024 * 1024));
+                    foreach (var validUtf8 in new[] { true, false })
+                    {
+                        if (!validUtf8) largeText[largeText.Length - 1] = 0xff;
+                        var largeLease = service.BeginProjectChatFileUpload(new ProjectChatUploadOpenRequest {
+                            WorkspaceId = workspaceId, SessionId = sessionId,
+                            FileName = validUtf8 ? "large.txt" : "late-invalid.bin", ByteLength = largeText.Length });
+                        for (var offset = 0; offset < largeText.Length; offset += 256 * 1024)
+                            service.WriteProjectChatFileChunk(new ProjectChatUploadChunkRequest {
+                                WorkspaceId = workspaceId, SessionId = sessionId, LeaseId = largeLease.LeaseId,
+                                Offset = offset, Base64 = Convert.ToBase64String(largeText, offset,
+                                    Math.Min(256 * 1024, largeText.Length - offset)) });
+                        var largeResult = service.CompleteProjectChatFileUpload(new ProjectChatUploadLeaseRequest {
+                            WorkspaceId = workspaceId, SessionId = sessionId, LeaseId = largeLease.LeaseId });
+                        AssertEqual(validUtf8, largeResult.ModelReadable,
+                            "streamed upload readability checks the whole UTF-8 source without a size or surrogate-boundary refusal");
+                        AssertTrue(largeText.SequenceEqual(File.ReadAllBytes(Path.Combine(root,
+                            largeResult.RelativePath.Replace('/', Path.DirectorySeparatorChar)))),
+                            "large upload preserves the exact source bytes");
+                    }
                     var cancelled = service.BeginProjectChatFileUpload(new ProjectChatUploadOpenRequest {
                         WorkspaceId = workspaceId, SessionId = sessionId, FileName = "cancel.txt", ByteLength = 3 });
                     service.CancelProjectChatFileUpload(new ProjectChatUploadLeaseRequest {

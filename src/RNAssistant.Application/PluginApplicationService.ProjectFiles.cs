@@ -112,11 +112,10 @@ namespace RNAssistant.Application
                     var files = new WorkspaceFileService(_paths);
                     var published = files.CommitStagedFile(workspace,
                         lease.RelativePath, lease.StagePath, null, ProjectFileMaxBytes, token: token);
-                    var modelReadable = published.ByteLength <= 1024 * 1024;
-                    if (modelReadable)
-                        try { files.ReadText(workspace, published.RelativePath, token); }
-                        catch (IOException) { modelReadable = false; }
-                        catch (UnauthorizedAccessException) { modelReadable = false; }
+                    var modelReadable = true;
+                    try { files.ReadModelText(workspace, published.RelativePath, ResourceReadRequest.MinimumCharacters, token); }
+                    catch (IOException) { modelReadable = false; }
+                    catch (UnauthorizedAccessException) { modelReadable = false; }
                     return new ProjectChatImportedFileDto { RelativePath = published.RelativePath,
                         ByteLength = published.ByteLength, ModelReadable = modelReadable };
                 }
