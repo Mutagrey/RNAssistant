@@ -1,5 +1,6 @@
 using RNAssistant.Core.Tools;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
@@ -95,6 +96,27 @@ namespace RNAssistant.Harness
                         "runtime reference fields do not reach the model");
                 }
             }
+        }
+
+        private static void ResourceTableProjectionDistinguishesSelection()
+        {
+            var result = new ResourceReadResult {
+                Representation = "table", Offset = 1,
+                Table = new ResourceTableBatch { TotalRows = 4,
+                    Rows = new IDictionary<string, object>[] {
+                        new Dictionary<string, object> { ["value"] = 2 } } },
+                Coverage = new ResourceCoverage(ResourceCoverageKinds.RecordRange, start: 1, end: 2),
+                Complete = false, Truncated = true
+            };
+            var projection = ResourceReadProjection.FromTable(result, "Records", "file", "document", 1, 2);
+            var visible = ModelResultProjection.ProjectResourceData("common.resources_read", JObject.FromObject(projection));
+            AssertTrue((bool)visible["selectionComplete"] == false && !(bool)visible["complete"] &&
+                (int)visible["requestedOffset"] == 1 && (int)visible["requestedRows"] == 2 &&
+                (int)visible["coverage"]["end"] == 2,
+                "a byte-limited row batch does not claim the requested selection is complete");
+            result.Coverage = new ResourceCoverage(ResourceCoverageKinds.RecordRange, start: 0, end: 1);
+            RuntimeThrows<InvalidOperationException>(() => ResourceReadProjection.FromTable(
+                result, "Records", "file", "document", 1, 2));
         }
 
         private static void ResourceReferencePinsRevision()

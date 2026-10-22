@@ -1,5 +1,15 @@
 # Stabilization progress
 
+## Structured row-selection completeness in model results — 2026-10-22
+
+The next Wave 2 RC-04 slice separates a selected `table` row window from a
+whole-resource read. Model results now carry requested offset/count, actual
+record-range coverage and `selectionComplete`, which is false if a bounded batch
+stops before the requested window. `complete=false` even on a terminal provider
+page. Exact row bounds and provider completion metadata are checked before
+projection. Focused host-neutral Excel table and short-batch checks pass;
+Windows/Office/WebView2 qualification and other provider views remain open.
+
 ## Indexed text-part completeness in model results — 2026-10-22
 
 The next Wave 2 RC-04 slice marks a successful `partNumber` read as

@@ -100,6 +100,11 @@ namespace RNAssistant.Office.Tools
                 : section != null
                 ? ResourceReadProjection.FromSection(observation.Result,
                     selected.Target, selected.Type, selected.Scope, section)
+                : structured
+                ? ResourceReadProjection.FromTable(observation.Result,
+                    selected.Target, selected.Type, selected.Scope,
+                    ToolArgumentReader.Int32(context.Arguments, "offset", 0),
+                    ToolArgumentReader.Int32(context.Arguments, "limit", 500))
                 : ResourceReadProjection.From(observation.Result,
                     selected.Target, selected.Type, selected.Scope);
             projection.SnapshotTarget = selected.Descriptor.SnapshotTarget;

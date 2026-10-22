@@ -1003,6 +1003,7 @@ namespace RNAssistant.Harness
                 Test("resources: original text index streams a large one-line source", OriginalTextIndexStreamsLargeOneLine),
                 Test("resources: original text outline finds code declarations", OriginalTextOutlineFindsCodeDeclarations),
                 Test("resources: model projection preserves literal source", ResourceProjectionPreservesLiteralSource),
+                Test("resources: table projection distinguishes selected rows", ResourceTableProjectionDistinguishesSelection),
                 Test("resources: original text index preserves extraction coverage", OriginalTextIndexPreservesCoverage),
                 Test("resources: Markdown sections preserve exact partial evidence", MarkdownSectionsUseExactPartialEvidence),
                 Test("resources: Markdown section model completeness", MarkdownSectionModelCompleteness),

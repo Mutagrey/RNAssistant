@@ -72,6 +72,8 @@ namespace RNAssistant.Core.Models
         [JsonProperty("historical", NullValueHandling = NullValueHandling.Ignore)] public bool? Historical { get; set; }
         [JsonProperty("startLine", NullValueHandling = NullValueHandling.Ignore)] public int? StartLine { get; set; }
         [JsonProperty("requestedLines", NullValueHandling = NullValueHandling.Ignore)] public int? RequestedLines { get; set; }
+        [JsonProperty("requestedOffset", NullValueHandling = NullValueHandling.Ignore)] public int? RequestedOffset { get; set; }
+        [JsonProperty("requestedRows", NullValueHandling = NullValueHandling.Ignore)] public int? RequestedRows { get; set; }
         [JsonProperty("selectionComplete", NullValueHandling = NullValueHandling.Ignore)] public bool? SelectionComplete { get; set; }
         [JsonProperty("section", NullValueHandling = NullValueHandling.Ignore)] public string Section { get; set; }
         [JsonProperty("partNumber", NullValueHandling = NullValueHandling.Ignore)] public int? PartNumber { get; set; }
@@ -143,6 +145,27 @@ namespace RNAssistant.Core.Models
                 throw new System.InvalidOperationException("A complete text part requires matching part metadata and exact excerpt coverage.");
             var projection = From(result, target, type, scope);
             projection.SelectionComplete = true;
+            return projection;
+        }
+
+        public static ResourceReadProjection FromTable(ResourceReadResult result, string target,
+            string type, string scope, int offset, int requestedRows)
+        {
+            if (offset < 0 || requestedRows < 1 || result?.Table?.Rows == null ||
+                result.Coverage?.Kind != ResourceCoverageKinds.RecordRange ||
+                result.Offset != offset || result.Coverage.Start != offset ||
+                result.Coverage.End != (long)offset + result.Table.Rows.Count ||
+                result.Table.Rows.Count > requestedRows ||
+                result.Table.TotalRows < result.Coverage.End ||
+                result.Complete != (result.Coverage.End == result.Table.TotalRows) ||
+                result.Truncated == result.Complete)
+                throw new System.InvalidOperationException("A bounded table selection requires exact row coverage and consistent completion metadata.");
+            var projection = From(result, target, type, scope);
+            projection.RequestedOffset = offset;
+            projection.RequestedRows = requestedRows;
+            projection.SelectionComplete = result.Coverage.End ==
+                System.Math.Min((long)result.Table.TotalRows, (long)offset + requestedRows);
+            projection.Complete = false;
             return projection;
         }
 

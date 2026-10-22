@@ -532,6 +532,14 @@ the internal `offset` remain runtime-only. Literal URI-shaped text inside source
 snippets or headings is preserved as user content, while operational envelopes
 are sanitized.
 
+Model `table` reads report requested `offset`/`limit` as `requestedOffset`/
+`requestedRows` and actual `record-range` coverage. `selectionComplete=true`
+means the returned rows fill the requested window through its limit or EOF;
+byte-bounded early stops report false. Model `complete=false` for every bounded
+table page, including a terminal page with provider `Complete=true`: a completed
+row window is not a whole-resource observation. The table's `totalRows` and
+actual coverage give the next safe offset.
+
 Model `common.resources_read` may select an exact unique ATX heading with `section`
 and `representation=text` for document Markdown/Plans and complete uploaded
 Markdown. This uses the same provider/authority/evidence path and retains only

@@ -574,6 +574,20 @@ namespace RNAssistant.Harness
                     new JObject { ["target"] = "Excel table: Sales", ["representation"] = "table", ["limit"] = 2 });
                 AssertEqual(ToolExecutionOutcome.Ok, rows.Outcome,
                     "bounded model table rows use the canonical path without model plumbing");
+                var firstPage = JObject.Parse(rows.Result.DataJson);
+                AssertTrue((bool)firstPage["selectionComplete"] && !(bool)firstPage["complete"] &&
+                    (int)firstPage["requestedOffset"] == 0 && (int)firstPage["requestedRows"] == 2 &&
+                    (int)firstPage["coverage"]["start"] == 0 && (int)firstPage["coverage"]["end"] == 2,
+                    "first table page reports requested and actual row coverage separately");
+                var tail = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
+                    new JObject { ["target"] = "Excel table: Sales", ["representation"] = "table", ["offset"] = 2, ["limit"] = 2 });
+                AssertEqual(ToolExecutionOutcome.Ok, tail.Outcome, "terminal table page is readable by offset");
+                var tailModel = ModelResultProjection.ProjectResourceData(ResourceToolCatalog.ReadToolId,
+                    JObject.Parse(tail.Result.DataJson));
+                AssertTrue((bool)tailModel["selectionComplete"] && !(bool)tailModel["complete"] &&
+                    (int)tailModel["requestedOffset"] == 2 && (int)tailModel["requestedRows"] == 2 &&
+                    (int)tailModel["coverage"]["start"] == 2 && (int)tailModel["coverage"]["end"] == 3,
+                    "terminal table page does not claim whole-resource completeness");
                 var rangeReads = adapter.ExcelBackendCalls.Count(item =>
                     item == FakeOfficeAdapter.ExcelRangeReadOperation);
                 var wrongPath = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
