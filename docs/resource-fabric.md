@@ -515,6 +515,9 @@ coverage and `sourceComplete` remain separate. Neither a part nor a
 search/outline result grants whole-source mutation authority. Other provider
 families retain their own bounds;
 this contract does not claim 20 MiB Office live, HTML-member or CLI file reads.
+Live VBA modules have no indexed outline or `partNumber` selector. Read the VBA
+project `structure` for module inventory; read a module's `source` and continue
+large sources with `startLine`/`lineCount` using the returned line bounds.
 
 Within-target search requires an advertised `text` or `source` representation.
 A VBA project exposes its component inventory as `structure`; search its module

@@ -2310,6 +2310,30 @@ namespace RNAssistant.Harness
                     (int)visible["sourceCoverage"]["end"] == 9001 &&
                     !(bool)visible["sourceComplete"],
                     "shared projection marks only the selected VBA lines complete");
+                var found = executor.ExecuteManual(Command(ResourceToolCatalog.FindToolId,
+                    "scope", "vba", "query", "LargeModule"), tools,
+                    new AppSettings(), false, false, session);
+                AssertTrue(found.Success, "VBA discovery succeeds");
+                var module = JObject.Parse(found.DataJson)["items"]
+                    .Single(item => (string)item["target"] == "VBA module: LargeModule");
+                AssertContains((string)module["usage"], "startLine/lineCount",
+                    "VBA discovery advertises supported line navigation");
+                AssertContains((string)module["usage"], "partNumber",
+                    "VBA discovery distinguishes indexed artifact parts");
+                var outline = executor.ExecuteManual(Command(ResourceToolCatalog.OutlineToolId,
+                    "target", "VBA module: LargeModule"), tools,
+                    new AppSettings(), false, false, session);
+                AssertEqual("resource_outline_unsupported", outline.ErrorCode,
+                    "live VBA has no indexed outline");
+                AssertContains(outline.Message, "startLine/lineCount",
+                    "outline refusal explains the supported VBA path");
+                var part = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                    "target", "VBA module: LargeModule", "representation", "source", "partNumber", 1),
+                    tools, new AppSettings(), false, false, session);
+                AssertEqual("resource_part_unsupported", part.ErrorCode,
+                    "live VBA has no indexed parts");
+                AssertContains(part.Message, "startLine/lineCount",
+                    "part refusal explains the supported VBA path");
             });
         }
 

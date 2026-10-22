@@ -264,7 +264,10 @@ namespace RNAssistant.Office.Services
             if (request.PartNumber.HasValue && (!(provider is ChatArtifactResourceProvider) || request.PartNumber.Value < 1 ||
                 !string.IsNullOrEmpty(request.Cursor) || request.Section != null ||
                 request.Representation != "text" && request.Representation != "source"))
-                throw new ResourceRequestException("Part reads require a positive partNumber on an exact text/source artifact.", "resource_part_unsupported", false);
+                throw new ResourceRequestException(provider is VbaResourceProvider
+                    ? "Live VBA modules have no indexed parts. Omit partNumber; read representation=source, then use startLine/lineCount and sourceTotalLines for further excerpts."
+                    : "Part reads require a positive partNumber on an indexed text/source artifact.",
+                    "resource_part_unsupported", false);
             var outlook = provider as LiveDocumentResourceProvider;
             if (outlook?.IsOutlookAttachment(request.Reference.Uri) == true)
                 return ReadOutlookAttachment(session, request, outlook);

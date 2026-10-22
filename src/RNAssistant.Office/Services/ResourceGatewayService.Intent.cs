@@ -88,7 +88,9 @@ namespace RNAssistant.Office.Services
                 artifact.OriginalAttachment == null && artifact.Kind != ChatArtifactKinds.Markdown &&
                 artifact.Kind != ChatArtifactKinds.PlanDocument &&
                 !(artifact.Kind == ChatArtifactKinds.File && DocumentArtifactStore.FileEncoding(artifact) != null))
-                throw new ResourceRequestException("This target has no indexed text outline.",
+                throw new ResourceRequestException(selected.Type == "VBA module"
+                    ? "Live VBA modules have no indexed outline. Read the VBA project with representation=structure for module inventory, then read this module with representation=source and startLine/lineCount for excerpts."
+                    : "This target has no indexed text outline. Use a supported representation from resource discovery.",
                     "resource_outline_unsupported", false);
             var outline = provider.OutlineText(session, selected.Reference, fromPart, limit);
             outline.Target = selected.Target;
@@ -838,6 +840,8 @@ namespace RNAssistant.Office.Services
         {
             if (type == "VBA project")
                 return "Read structure for the complete component inventory. To search code across the project, use common.resources_find with scope=vba and query; use common.resources_search only on a VBA module target.";
+            if (type == "VBA module")
+                return "Read source directly. For a large module, continue with startLine/lineCount using sourceTotalLines and sourceCoverage; use common.resources_search for literal occurrences. Live VBA modules do not support common.resources_outline or partNumber.";
             if (type == "HTML file")
                 return "Read source for the complete file contents. Structure belongs to the HTML workspace root; a structure request on this file returns source explicitly.";
             if (type == "HTML workspace")
