@@ -67,13 +67,19 @@ namespace RNAssistant.Office.Services
                                 cancellationToken));
                         if (selected == null) break;
                         if (selected.Result.Text.Length > maximumCharacters) continue;
-                        if (selected.Result.SourceTotalLines.HasValue &&
-                            selected.Result.SourceCoverage.End ==
-                                (long)selected.Result.SourceTotalLines.Value + 1)
+                        if (LineSourceFits(provider, lines, session, reference, view,
+                            selected.Result, maximumCharacters, cancellationToken))
                         {
-                            var whole = ReadWhole(session, reference, representation, cancellationToken);
-                            if (whole.Result.Text == null || whole.Result.Text.Length <= maximumCharacters)
-                                return whole;
+                            try
+                            {
+                                var whole = ReadWhole(session, reference, representation, cancellationToken);
+                                if (whole.Result.Text == null || whole.Result.Text.Length <= maximumCharacters)
+                                    return whole;
+                            }
+                            catch (ResourceRequestException error) when (
+                                error.ErrorCode == "RESOURCE_BATCH_TOO_LARGE" ||
+                                error.ErrorCode == "resource_whole_read_too_large" ||
+                                error.ErrorCode == "resource_whole_read_incomplete") { }
                         }
                         return _authority == null ? selected : _authority.PublishRead(session,
                             selected, null, provider is ILiveOfficeResourceProvider);
@@ -110,15 +116,67 @@ namespace RNAssistant.Office.Services
                 "RESOURCE_SNAPSHOT_TOO_LARGE", false);
         }
 
+        // Probe only bounded line windows until the context budget is exceeded
+        // or EOF is reached. A fitting source still uses the authoritative whole
+        // read; independently captured windows never become a stitched observation.
+        private bool LineSourceFits(IResourceProvider provider, IResourceLineWindowProvider lines,
+            ChatSession session, ResourceRef reference, string representation,
+            ResourceReadResult first, int maximumCharacters,
+            System.Threading.CancellationToken cancellationToken)
+        {
+            if (!first.SourceTotalLines.HasValue || first.SourceCoverage?.End == null) return false;
+            var totalLines = first.SourceTotalLines.Value;
+            long next = first.SourceCoverage.End.Value;
+            long characters = first.Text.Length;
+            while (next <= totalLines && characters <= maximumCharacters)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                ResourceReadSelection selected = null;
+                for (var count = (int)Math.Min(500L, (long)totalLines - next + 1); count >= 1; count /= 2)
+                {
+                    try
+                    {
+                        selected = WithProvider(provider, session, () => lines.ReadLineWindow(
+                            session, reference, representation, (int)next, count, cancellationToken));
+                        break;
+                    }
+                    catch (ResourceRequestException error) when (error.ErrorCode == "resource_lines_too_large") { }
+                }
+                var result = selected?.Result;
+                if (result?.Text == null || result.SourceTotalLines != totalLines ||
+                    result.SourceCoverage?.Start != next || result.SourceCoverage.End == null ||
+                    result.SourceCoverage.End <= next)
+                    return false;
+                // VBIDE may omit the separator at a window boundary.
+                characters += result.Text.Length + 2L;
+                next = result.SourceCoverage.End.Value;
+            }
+            return next == (long)totalLines + 1 && characters <= maximumCharacters;
+        }
+
         private ResourceReadSelection ReadInitialCharacterWindow(IResourceProvider provider,
             ChatSession session, ResourceRef reference, string representation, int startChar,
             int maximumCharacters, System.Threading.CancellationToken cancellationToken)
         {
             var characters = provider as IResourceCharacterWindowProvider;
             if (characters == null) return null;
+            var count = Math.Min(maximumCharacters, InternalReadCharacters);
             var selected = WithProvider(provider, session, () =>
-                characters.ReadCharacterWindow(session, reference, representation, startChar,
-                    Math.Min(maximumCharacters, InternalReadCharacters), cancellationToken));
+            {
+                try
+                {
+                    return characters.ReadCharacterWindow(session, reference, representation,
+                        startChar, count, cancellationToken);
+                }
+                catch (ResourceRequestException error) when (
+                    error.ErrorCode == "resource_chars_invalid" && count > 1)
+                {
+                    // Only an implicit first window may shorten its boundary to
+                    // avoid splitting a UTF-16 pair. Explicit selectors still fail.
+                    return characters.ReadCharacterWindow(session, reference, representation,
+                        startChar, count - 1, cancellationToken);
+                }
+            });
             return selected == null || _authority == null ? selected :
                 _authority.PublishRead(session, selected, null,
                     provider is ILiveOfficeResourceProvider);

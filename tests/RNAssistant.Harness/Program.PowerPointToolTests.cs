@@ -65,7 +65,8 @@ namespace RNAssistant.Harness
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("PowerPoint"), (executor, adapter) =>
             {
-                var notes = new string('n', PowerPointService.MaximumTextCharacters + 1) + "😀";
+                var notes = new string('n', ResourceReadRequest.MaximumCharacters - 1) + "😀" +
+                    new string('n', PowerPointService.MaximumTextCharacters) + "😀";
                 adapter.SetText(new PowerPointSetTextRequest { Target = "notes", HasSlideIndex = true,
                     SlideIndex = 1, Text = notes }, () => { });
                 var session = NewSession(adapter);
@@ -86,6 +87,9 @@ namespace RNAssistant.Harness
                     "target", "PowerPoint notes: 1"), tools, new AppSettings(), false, false, session);
                 AssertTrue(first.Success, "ordinary large notes read returns the first window");
                 var firstVisible = JObject.Parse(first.DataJson);
+                AssertEqual(ResourceReadRequest.MaximumCharacters - 1,
+                    ((string)firstVisible["text"]).Length,
+                    "automatic first window ends before a split UTF-16 pair");
                 AssertTrue(!(bool)firstVisible["sourceComplete"] &&
                     (int)firstVisible["sourceCoverage"]["start"] == 0 &&
                     (int)firstVisible["sourceEndChar"] == notes.Length,

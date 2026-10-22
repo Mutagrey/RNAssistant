@@ -2336,6 +2336,15 @@ namespace RNAssistant.Harness
                 executor.BindResourceAuthority(session);
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName)
                     .Concat(executor.GetControllerTools()).ToList();
+                var moderateSource = string.Join("\n", Enumerable.Repeat("' short comment", 600));
+                adapter.SetVbaModule("ModerateModule", moderateSource, "StdModule");
+                var moderate = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                    "target", "VBA module: ModerateModule", "representation", "source"),
+                    tools, new AppSettings(), false, false, session);
+                AssertTrue(moderate.Success && (bool)JObject.Parse(moderate.DataJson)["complete"] &&
+                    (string)JObject.Parse(moderate.DataJson)["text"] == moderateSource &&
+                    JObject.Parse(moderate.DataJson)["sourceComplete"]?.Value<bool>() != false,
+                    "a module beyond 500 short lines is delivered whole when it fits the context");
                 var first = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
                     "target", "VBA module: LargeModule", "representation", "source"),
                     tools, new AppSettings(), false, false, session);
