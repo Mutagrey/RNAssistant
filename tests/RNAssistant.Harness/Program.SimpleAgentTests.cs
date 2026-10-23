@@ -2239,30 +2239,49 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     LoadToolSchemaResponse("common.office_run_macro"),
-                    "{\"message\":\"Запускаю выбранный макрос.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.office_run_macro\",\"arguments\":{\"macroName\":\"Module1.MigrateApiKey\",\"arguments\":[\"value\",2,true]}}]}",
-                    "{\"message\":\"Макрос выполнен.\",\"action\":\"done\",\"tool_calls\":[]}"
+                    ModelProtocolWire.WriteAcceptedCall("Run the named macro with its exact arguments.",
+                        "Запускаю выбранный макрос.", new ConversationToolCall {
+                            Name = VbaToolCatalog.RunMacro, Arguments = new JObject {
+                                ["macroName"] = "Module1.MigrateApiKey", ["arguments"] = new JArray("value", 2, true) } }),
+                    LoadToolSchemaResponse("excel.inspect"),
+                    ModelProtocolWire.WriteAcceptedCall("Inspect the current workbook after the opaque macro.",
+                        "Проверяю доступное состояние книги.", new ConversationToolCall {
+                            Name = "excel.inspect", Arguments = new JObject { ["kind"] = "sheets" } }),
+                    null
                 });
+                var session = NewSession(adapter);
                 var calls = new List<IReadOnlyList<ChatMessage>>();
                 var requestOptions = new List<LlmRequestOptions>();
                 LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
                 {
                     calls.Add(messages.ToList());
                     requestOptions.Add(options);
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    var response = responses.Dequeue();
+                    if (response == null)
+                    {
+                        var evidence = session.Messages.Where(message => message.AcceptedCallOrigin != null &&
+                            (message.ToolName == VbaToolCatalog.RunMacro || message.ToolName == "excel.inspect"))
+                            .Select(message => message.ToolCallId).ToArray();
+                        AssertEqual(2, evidence.Length, "macro dispatch and subsequent inspection are cited");
+                        response = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                            "Report macro dispatch without claiming an effect.", "Макрос выполнен.",
+                            results: new[] { new ConversationResultClaim("Macro dispatched; effect unverified.",
+                                evidence, ConversationAssessment.Unverified) });
+                    }
+                    return Task.FromResult(new LlmCompletionResult { Content = response });
                 };
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
-                var session = NewSession(adapter);
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteWithApprovalsAsync(
                     ChatModes.Agent, "Run Module1.MigrateApiKey with arguments.", session, NewContext(adapter),
                     new AppSettings
                     {
                         AgentResponseMode = AgentResponseModes.JsonSchema,
                         AutoConfirmToolActions = true,
-                        MaxAgentIterations = 4
+                        MaxAgentIterations = 6
                     }, tools, null)
                     .GetAwaiter().GetResult();
 
-                AssertEqual(3, calls.Count, "schema load, macro execution, and final response");
+                AssertEqual(5, calls.Count, "schema loads, macro execution, inspection and final response");
                 var initialCallable = ResponseSchemaCallNames(requestOptions[0].ResponseSchemaJson).ToArray();
                 var admittedCallable = ResponseSchemaCallNames(requestOptions[1].ResponseSchemaJson).ToArray();
                 AssertTrue(!initialCallable.Contains("common.office_run_macro", StringComparer.OrdinalIgnoreCase) &&
