@@ -2,81 +2,103 @@ using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Core.ModelProtocol
 {
     public static class ConversationResponseSchemaBuilder
     {
-        public const string SchemaName = "rnassistant_conversation_response_v7";
+        public const string SchemaName = "rnassistant_conversation_response_v8";
         public const int MaximumToolCalls = 32;
 
         public static string Build(IEnumerable<ToolCatalogEntry> callableTools, ModelProtocolCallContext context)
         {
             if (context == null || !context.IsComplete)
-                throw new System.ArgumentException("V7 schema requires a complete local sequential-batch context.", nameof(context));
+                throw new System.ArgumentException("V8 schema requires a complete local sequential-batch context.", nameof(context));
+            if (callableTools == null) throw new System.ArgumentNullException(nameof(callableTools));
             var reads = new JArray();
             var singleCalls = new JArray();
-            foreach (var tool in (callableTools ?? new ToolCatalogEntry[0])
-                .Where(item => item != null && !string.IsNullOrWhiteSpace(item.Id))
+            foreach (var tool in callableTools.Where(item => item != null && !string.IsNullOrWhiteSpace(item.Id))
                 .GroupBy(item => item.Id, System.StringComparer.Ordinal).Select(group => group.First()))
             {
                 JObject parameters;
                 string error;
                 if (!ToolSchemaSupport.TryParse(tool, out parameters, out error)) continue;
                 var options = context.AllowsSequentialBatch(tool) ? reads : singleCalls;
-                options.Add(new JObject
+                options.Add(ClosedObject(new JObject
                 {
-                    ["type"] = "object",
-                    ["properties"] = new JObject
-                    {
-                        ["name"] = new JObject { ["type"] = "string", ["const"] = tool.Id },
-                        ["arguments"] = ToolSchemaSupport.ForStructuredOutput(parameters)
-                    },
-                    ["required"] = new JArray("name", "arguments"),
-                    ["additionalProperties"] = false
-                });
+                    ["name"] = new JObject { ["type"] = "string", ["const"] = tool.Id },
+                    ["arguments"] = ToolSchemaSupport.ForStructuredOutput(parameters)
+                }));
             }
-            // Disjoint call catalogs keep every argument contract exactly once.
-            // Mixed read/mutation arrays cannot satisfy either branch.
-            var calls = reads.Count > 0 && singleCalls.Count > 0
-                ? new JObject { ["anyOf"] = new JArray(CallArray(singleCalls, 1), CallArray(reads, MaximumToolCalls)) }
-                : reads.Count > 0 ? CallArray(reads, MaximumToolCalls) : CallArray(singleCalls, singleCalls.Count > 0 ? 1 : 0);
-            calls["description"] = "Calls to execute now. Only action=tool may have calls.";
-            return new JObject
+            var branches = new JArray();
+            // Disjoint catalogs keep each argument contract once, and exclude mixed batches.
+            if (reads.Count > 0 || singleCalls.Count > 0)
             {
-                ["type"] = "object",
-                ["description"] = "V7: message/action/tool_calls. Runtime owns IDs, lifecycle and effects. " +
-                    "Only independent local reads may be batched. Return every mutation and other call alone; wait for the result before proposing another mutation. " +
-                    ModelProtocolWire.ActionGuidance,
-                ["properties"] = new JObject
+                var calls = reads.Count > 0 && singleCalls.Count > 0
+                    ? new JObject { ["anyOf"] = new JArray(CallArray(singleCalls, 1), CallArray(reads, MaximumToolCalls)) }
+                    : reads.Count > 0 ? CallArray(reads, MaximumToolCalls) : CallArray(singleCalls, 1);
+                branches.Add(Branch(ConversationResponse.ExecuteAction, "tool_calls", calls));
+            }
+            branches.Add(Branch(ConversationResponse.ReflectionAction, "decision", NonblankString()));
+            branches.Add(Branch(ConversationResponse.FinishAction, "results", new JObject
+            {
+                ["type"] = "array",
+                ["items"] = ClosedObject(new JObject
                 {
-                    ["message"] = new JObject { ["type"] = "string", ["description"] = ModelProtocolWire.MessageGuidance },
-                    ["action"] = new JObject
+                    ["summary"] = NonblankString(),
+                    ["evidence"] = new JObject
+                    {
+                        ["type"] = "array", ["items"] = NonblankString(), ["uniqueItems"] = true,
+                        ["description"] = "Exact runtime tool_call_id references to terminal results of this run; never invented IDs."
+                    },
+                    ["assessment"] = new JObject
                     {
                         ["type"] = "string",
-                        ["enum"] = new JArray("tool", "done", "blocked", "needs_input"),
-                        ["description"] = "tool requires calls; done/blocked/needs_input end the turn with no calls."
-                    },
-                    ["tool_calls"] = calls
-                },
-                ["required"] = new JArray("message", "action", "tool_calls"),
-                ["additionalProperties"] = false
+                        ["enum"] = new JArray("satisfied", "partially_satisfied", "unverified", "not_satisfied")
+                    }
+                })
+            }));
+            return new JObject
+            {
+                ["description"] = "Conversation response v8. " + ModelProtocolWire.ActionGuidance,
+                ["anyOf"] = branches
             }.ToString(Formatting.None);
+        }
+
+        private static JObject Branch(string action, string field, JObject schema)
+        {
+            return ClosedObject(new JObject
+            {
+                ["action"] = new JObject { ["type"] = "string", ["const"] = action },
+                ["reason"] = NonblankString(),
+                [field] = schema,
+                ["message"] = new JObject { ["type"] = "string", ["description"] = ModelProtocolWire.MessageGuidance }
+            });
+        }
+
+        private static JObject ClosedObject(JObject properties)
+        {
+            return new JObject
+            {
+                ["type"] = "object", ["properties"] = properties,
+                ["required"] = new JArray(properties.Properties().Select(property => property.Name)),
+                ["additionalProperties"] = false
+            };
+        }
+
+        private static JObject NonblankString()
+        {
+            // Spell out Char.IsWhiteSpace's set; regex engines disagree on \\s (e.g. U+FEFF).
+            return new JObject { ["type"] = "string", ["pattern"] = @"[^\t\n\v\f\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]" };
         }
 
         private static JObject CallArray(JArray options, int maxItems)
         {
             return new JObject
             {
-                ["type"] = "array",
-                ["items"] = options.Count > 0 ? new JObject { ["anyOf"] = options } : new JObject
-                {
-                    ["type"] = "object", ["properties"] = new JObject(),
-                    ["required"] = new JArray(), ["additionalProperties"] = false
-                },
-                ["maxItems"] = maxItems
+                ["type"] = "array", ["items"] = new JObject { ["anyOf"] = options },
+                ["minItems"] = 1, ["maxItems"] = maxItems
             };
         }
     }

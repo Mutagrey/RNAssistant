@@ -1,0 +1,187 @@
+# Conversation v8: phase-4 persistence/UI slice
+
+2026-10-23. Owner: Core chat format/run projection, Office transcript and
+Workspace/CLI recovery. Branch: `conversation-v8`. This is a checked slice,
+not completed phase-4 or release qualification.
+
+## Specification reconciliation — 2026-10-23
+
+Reviewed candidate code at `02872af0` against the original
+`RNAssistant_v8_1_implementation_spec.md` (including amendments A–I),
+[ADR-0016](../../decisions/ADR-0016-conversation-v8-admission.md) and the phase
+reports. This review inspected code and existing evidence; it did not rerun
+builds, the full Harness, a real-model benchmark or Office validation.
+
+| Phase | Readiness |
+| --- | --- |
+| 0 — audit/ADR | Controlled premature-finish reproduction and evidence retained. This does not reproduce the original live-model incident. |
+| 1 — protocol | Codec/schema/repair implemented; focused checks and one pinned endpoint's schema probes exist. |
+| 2 — kernel | Bounded reflection and durable terminal-evidence admission implemented; focused restart/no-replay checks exist. One direct-finish restriction differs from spec §C.3. |
+| 3 — adapters/prompts | Shared v8 guidance and adapters implemented. The complete common scenario matrix across surfaces is not yet qualified. |
+| 4 — persistence/UI | Partial. CLI recovery and Office-neutral projection slices pass, but Workspace UI still drops claims and renders empty reflections. Reflection-specific compaction/restart/UI integration remains unverified. |
+| 5 — real-model qualification | Open. Schema probes are not the required task comparison or field-order/reason ablation. |
+
+The review found two implementation gaps, now tracked with owners and closure
+checks in the [risk register](../RISK_REGISTER.md#conversation-v8-readiness-review--2026-10-23):
+Workspace presentation loses finish assessments/evidence and creates an empty
+message for an empty reflection; no-call admission rejects even an evidence-free
+claim although spec §C.3 permits an empty results array without requiring it.
+The saved reflection protocol record does retain decision and attempt origin;
+only its separate Office activity is excluded from model context. Existing
+compaction role/provenance rules handle assistant interpretations, but the
+reflection-specific end-to-end scenario has no qualifying evidence yet.
+
+Remaining order: close these bounded implementation gaps and the unmigrated
+integration scenarios; complete the pinned v7/v8/adaptive-reflection benchmark
+with external task grading and cost/latency metrics; qualify the candidate on
+Windows x64 + Office x64 + WebView2 before release. Default cutover still requires
+the reproducible real-model benefit in spec §G. No implementation percentage or
+completion date follows from the current focused test counts. The separate
+large shared-archive limitation remains open and is not repaired by narrowing
+its fixture.
+
+Follow-up at `1ee68c62`: both code gaps above are fixed host-neutral.
+Workspace project/plugin chat now presents typed reflection decisions and finish
+claims, including partial/unverified assessments and exact evidence IDs; an
+empty reflection message creates no answer bubble. Direct finish permits
+evidence-free claims while foreign citations remain rejected. Focused UI,
+plugin projection and kernel smoke checks pass. The context-continuity fixture
+now preserves a real accepted reflection decision and its assistant provenance
+through two compactions and ChatStore reload; separate UI rendering coverage
+checks the saved step. These checks do not replace a full Office/Workspace
+browser or real-model run.
+
+New chats use stream format 8. Formats 6 and 7 remain readable, but run policy
+refuses execution in them; no history is rewritten or deleted. The
+[candidate wire contract](../../protocols/CONVERSATION_RESPONSE_V8.md) owns
+the v8 envelope, terminal evidence and model-claim boundaries.
+
+The Office run projection reconstructs accepted `finish.results` from the
+identified v8 protocol record for the exact run and exposes assessment,
+summary and evidence IDs in typed `RunViewState.ModelResults`.
+`GoalVerification` remains `not_assessed`. The UI shows partial, unverified
+and unsatisfied claims as model assessments with the IDs; an ordinary clean
+completed answer still has no service card. Accepted `reflection` also has
+one visible saved activity excluded from model context; the accepted protocol
+record remains a model-history source. Old
+`model_done/model_blocked/model_needs_input` presentation paths are gone.
+
+Workspace preserves a terminal honest failure: when explicit acceptance
+criteria remain unmet, a finish containing an incomplete assessment can end
+the run with `acceptance=failed` and CLI exit 5. A finish with no incomplete
+assessment remains rejected with feedback. This preserves a way to stop at
+an irreparable obstacle without reporting success or replaying a tool.
+
+## Host-neutral checks
+
+- `sh tests/RNAssistant.V8KernelSmoke/run.sh`: source-linked production build
+  and 26 focused checks plus 57 migrated `AgentKernel` and 14 context-continuity
+  Harness fixture cases,
+  including format-7 read-only policy,
+  finish-claim projection/serialization, stale-response discard on steer and
+  closure of a steered read batch with exact terminal IDs. A controlled HTTP
+  request through production `ConversationRunService` and fake Excel reproduces
+  the phase-0 sequence in v8: schema read, one verified sheet mutation,
+  rejected empty-results finish, then an honest partial finish. The rejected
+  promise is absent from accepted history; replay preserves the partial claim
+  and sheet evidence without presenting task verification.
+  The kernel fixtures exercise v8 terminal citations, unknown-effect inspection,
+  continuation, confirmation, cancellation and append failures. Confirmation
+  retains the accepted run ID so finish can resolve its terminal evidence.
+  Context fixtures preserve paired call/result bodies, bounded archived source
+  selection and recovery facts; the controlled Office loop tests duplicate-read
+  feedback followed by discovery, corrected read and evidence-citing finish.
+  The fake-Excel unknown-effect case runs in both response modes and result roles:
+  a clear with inconclusive read-back is not replayed, inspection clears the
+  workflow guard, the remaining sheet write executes, and finish keeps the
+  clear unverified while runtime health remains unknown.
+- `node tests/web/run-view-state.test.js`: 7/7, including immutable model
+  results, a visible partial outcome and no card for an ordinary answer.
+- `dotnet build src/RNAssistant.Cli/RNAssistant.Cli.csproj --no-restore`:
+  passes. Controlled CLI/HTTP smokes pass:
+  `response_mode_smoke.py` (response modes, result roles, approval),
+  `mode_questions_smoke.py` (Plan/Agent typed questions, answer/restart and
+  old-run evidence isolation),
+  `interrupted_run_smoke.py` (process death and source revalidation),
+  `compaction_resume_smoke.py` (checkpoint, source drift, honest failure,
+  native result pairing), and `run_control_smoke.py` (cancel/continue, exact
+  cursor, lease, approved write with no replay).
+- `python3 -B tests/cli/conversation_v8_finish_smoke.py`: controlled HTTP/CLI
+  file analogue of the phase-0 failure. After one verified write, an empty
+  `finish.results` receives `missing_finish_results`; the rejected proposal is
+  absent from accepted model context. The run then performs a second write and
+  finishes with both terminal IDs, without replaying the first write.
+- The full host-neutral Harness now builds. Focused Harness runs pass for
+  Plan questions after restart, optional schema admission, Markdown/HTML
+  publication and replay, VBA source recovery, approval/unknown-effect
+  accounting, and event-store replay. Scripted VBA and Excel-report workflows
+  complete with runtime-assigned terminal IDs in their v8 finish claims.
+  A tight-context VBA continuation refuses before model/tool dispatch when
+  its complete causal context does not fit.
+- The migrated `conversation v8:` parser/schema group passes 13/13 checks.
+  The two `agent: no-tool` cases now cover rejected `continue`, typed question
+  and post-answer continuation, plus empty-`execute` repair with evidence-citing
+  finish. Related schema fallback, Task List and VBA patch fixtures pass.
+- The `model protocol:` group passes 15/15 with v8 accepted responses and
+  current repair guidance; retry, fallback and provider budgets retain their
+  original assertions.
+- The `protocol context:` group passes 6/6. Confirmation continuation keeps
+  the exact run identity through the evidence-citing finish; accepted call IDs
+  survive compaction without being regenerated.
+- Prompt-schema migration and default-prompt checks pass with the shared v8
+  action guidance; migrated settings complete direct Agent and Plan turns.
+- Model compatibility probe fixtures pass in both response modes and all three
+  result roles (2/2 cases): exact v8 sentinels qualify, while altered fields,
+  model-owned IDs and loose responses remain rejected.
+- The cancellation-after-unknown and three tool-result prompt-budget checks
+  pass with v8 execute calls and a terminal-evidence finish; the budget checks
+  still verify complete result delivery or refusal before model dispatch.
+- The `kernel replay:` group passes 10/10, `kernel recovery:` 2/2, and the
+  optional causal-trace failure check passes. Confirmation keeps the accepted
+  run identity through the v8 finish; interrupted recovery retains a complete
+  schema-read pair but excludes the unpaired write call from model context.
+- Two `agent continuity:` workflow checks pass with v8 calls and cited finish
+  evidence: an unfinished task list remains available to the next run, and a
+  CSS edit closes the plan without inventing a redundant JS edit.
+- The complete `agent continuity:` group passes 5/5 after updating the resource
+  presentation fixture to the current `unavailableScopes` wire and runtime-owned
+  media hydration evidence.
+- The `conversation:` streaming group passes 4/4 with v8 finish envelopes:
+  chunked escaped messages and provider reasoning remain separate, while a
+  rejected finish with an extra field resets the visible stream and reasoning
+  before its accepted repair.
+- The `shared context:` group passes 2/2 with an accepted v8 read and
+  evidence-citing finish. An oversized shared archive still exceeds one
+  model-facing read window and leaves claims explicitly unavailable; the
+  [open risk](../RISK_REGISTER.md#shared-context-archive-read-limit--2026-10-23)
+  records that limitation.
+- Workspace accepted-call history and plugin publication checks pass with v8
+  per-call records. Plugin chat presentation now uses the strict v8 history
+  reader, so a valid non-native call shows its narration and action, while
+  missing runtime call metadata is refused before the next model request.
+- `node tests/web/workspace-chat-v8.test.js` checks that an empty reflection
+  creates a saved step without an answer bubble and that an incomplete finish
+  displays its assessment and terminal evidence ID. The focused plugin Harness
+  check covers the typed persisted-message projection and the updated v8 source
+  chat fixture; Core smoke covers direct claims and foreign citation rejection.
+  The context-continuity Harness fixture checks reflection compaction and reload.
+
+The full host-neutral Harness completed after the v8 fixture migration through
+`6de9a8bd`: 986 passed, 18 failed, 1004 total. All formerly red v8
+lifecycle/history cases pass. Three remaining failures need the absent pinned
+Data Templates native package on this Mac; the others are separate resource,
+tool-catalog and bridge investigations, so the full suite is not qualified.
+The Outlook archive/CAS pointer-lock failure in this run was fixed at
+`5a91261b`; its archive/collection and malformed-name checks pass individually,
+but the full suite has not been repeated after that change. A bridge cancellation
+check failed in both full runs but passed immediately when run alone; its
+reproducibility is tracked in the
+[risk register](../RISK_REGISTER.md#harness-bridge-cancellation-flake--2026-10-23).
+
+The [isolated real-model pilot](PHASE5_PILOT.md) compares exact file tasks on a
+pinned local endpoint and retains exact HTTP bodies. It does not close the
+three-way phase-5 comparison or ablations. The original v7 red audit and its
+route have been retired; captured evidence remains historical. Target-host
+Office steer/UI checks, Windows x64 + Office x64 + WebView2 and formal release
+qualification remain open. Playwright layout qualification is unavailable in
+this worktree (`playwright` module absent).

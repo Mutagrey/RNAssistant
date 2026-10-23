@@ -496,24 +496,29 @@ reset and composer status alongside the existing responsive layout.
 formats/result roles. The former Chat-only and implicit-auto-confirm assumptions
 are not the new contract.
 `mode_questions_smoke.py` verifies Plan/Agent typed questions across processes.
+`conversation_v8_finish_smoke.py` checks rejection of an empty v8 finish after
+a verified CLI write, feedback to the model and continuation without write replay.
+`sh tests/RNAssistant.V8KernelSmoke/run.sh` also checks the production Office
+conversation service over controlled HTTP with fake Excel, including a rejected
+premature finish and a replayed partial outcome. It does not run Office/COM.
 `dotnet run --project demo/RNAssistant.MockDemo -- --unified-agent-test` exercises
 the actual controller with a fake host, including permission snapshot cloning,
 approval after settings changes/restart, AutoConfirm and planning wrappers.
 
-`conversation v7:` checks batch policy in both parser and actual HTTP response
+`conversation v8:` checks batch policy in both parser and generated transport
 schema: authorized reads, singleton effects, mixed batches, contradictory policy
 and the 32-call bound. `protocol context: immutable complete snapshots` also
 rejects schema generation with missing/incomplete authority. Request-size and
 tool-pack checks cover schema projection and admission with both array branches.
 
-`no-tool` checks distinct terminal outcomes, rejection and frozen repair of the
-removed `continue` action, and resuming tool work only after an actual user reply.
-It also checks missing-call repair followed by either a complete code answer or a
-real tool step/result before that answer, in both response formats and result roles.
-These scripted responses check control flow and emitted guidance, not whether a
-real model will select `done` at the right time.
-`kernel: rejects narrative checkpoint` and `protocol preflight:` reject old
-checkpoints/history without migration or dispatch. After building the CLI,
+`agent: no-tool` checks rejection and frozen repair of removed `continue`,
+schema admission followed by a typed question, and a new run after the user's
+answer. It also checks empty-`execute` repair followed by either a direct
+answer or a real tool result with a cited v8 `finish`, in both response formats
+and result roles. These scripted responses check control flow and emitted
+guidance, not real-model decision quality.
+`kernel: stopped continuation rejects unsafe history` and `protocol preflight:`
+reject unsafe checkpoints/history without migration or dispatch. After building the CLI,
 `python3 -B tests/cli/turn_decisions_smoke.py` checks production HTTP requests in
 both result roles and response formats; `mode_questions_smoke.py` checks typed
 question/answer persistence. These are controlled host-neutral checks; they do not
@@ -593,7 +598,7 @@ limits normalize to 10/20, and exhausted replies preserve the prior checkpoint.
 Both modes keep frozen sources/schema and only the latest correction, preserve
 accepted history, and do not retry refusal, transport errors or cancellation.
 Kind-mismatch repair names the supplied source and allowed kinds without copying
-the rejected claim. `conversation v7: batches only independent reads` also checks
+the rejected claim. `conversation v8: batches only independent reads` also checks
 that rejected skill-load batches expose no partial calls and require a standalone
 load; the existing exact-admission and usable-selection checks cover recovery
 after a refused load.
@@ -613,8 +618,8 @@ assistant provenance through repeated-read folding, empty updates, two actual
 compaction-helper requests, checkpoint save/reload and claim-promotion rejection
 in all three result roles. Claims are scripted; this proves transport/provenance,
 not real-model summary quality. The large-call archive case also retains exact
-narration without hydrating arguments. `settings: prompt`, `conversation v7:` and
-`no-tool` cover schema-44 migration, silent tool responses and shared default/schema/
+narration without hydrating arguments. `settings: prompt`, `conversation v8:` and
+`no-tool` cover prompt-schema migration, silent tool responses and shared default/schema/
 repair guidance. `tests/web/live-run-projection.test.js` verifies that one comment
 can cover several visible tool activities in live and restored history.
 
@@ -953,23 +958,28 @@ dotnet run --no-build --project tests/RNAssistant.Harness/RNAssistant.Harness.cs
 
 Filtering limits executed tests. The harness source-links Core and Office-neutral production files, so a normal run still compiles that full linked source set. Compilation does not require reading every test file into agent context.
 
-Conversation v8 phase-0 red regression runs separately from the default suite:
+Conversation v8 has narrow [protocol checks](../RNAssistant.ProtocolTests/README.md)
+and [source-linked kernel/prompt checks](../RNAssistant.V8KernelSmoke/run.sh).
+The latter builds host-neutral Core, Office and Workspace sources and runs the
+migrated `AgentKernel` and context-continuity fixtures while other Harness sources
+still use v7. It also runs the fake-Excel unknown-effect fixture in both response
+modes and result roles. The full Harness now builds; targeted Plan, optional
+schema, Markdown/HTML, VBA, Excel-report, approval and replay cases also pass.
+The controlled
+`python3 -B tests/cli/response_mode_smoke.py` exercises v8 through actual
+CLI/HTTP requests. `interrupted_run_smoke.py`, `compaction_resume_smoke.py`
+and `run_control_smoke.py` cover process loss, compaction, confirmation and
+cancellation/continuation; `mode_questions_smoke.py` covers typed questions
+and answer/restart on the candidate branch. The full Harness still contains v7
+wire bodies and assertions, so its complete suite is not yet green; these
+focused checks do not replace its integration coverage at cutover.
 
-```bash
-dotnet run --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj -- \
-  --conversation-v8-audit artifacts/conversation-v8-repro
-```
-
-Use a new or empty output directory. The fixture sends scripted responses through
-real loopback HTTP and the production parser/kernel/store with fake Excel. It saves
-exact request/response bodies, decoded event export and the replayed UI projection.
-Expected current result is exit **1** with `FAIL conversation v8 admission`: v7
-accepts `done` after a verified sheet write, without creating requested data/chart
-or presenting results/evidence. Exit **2** is a fixture/precondition failure, not
-proof of this defect. At the atomic v8 cutover, replace the script with v8 responses
-and assert rejection/continuation without repeated mutation. This does not call a
-real model or qualify Office/COM. Scope and retained evidence:
-[Conversation v8 audit](../../docs/stabilization/conversation-v8/AUDIT.md).
+The phase-0 v7 red audit route has been retired after its failure was covered
+by the v8 fake-Excel HTTP scenario in `RNAssistant.V8KernelSmoke/run.sh`.
+The original request/response bodies, decoded event export and UI projection
+remain in [Conversation v8 audit](../../docs/stabilization/conversation-v8/AUDIT.md).
+The green scenario checks rejection, continuation and replay without repeating
+the verified sheet mutation. Neither scenario qualifies real Office/COM.
 
 For large-chat storage profiling, run
 `RNA_CHAT_PERF=1 dotnet run --no-build --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj -- "storage perf:"`
@@ -1130,10 +1140,10 @@ compaction check rejects input-only references as substitutes for visible bytes
 and covers calibrated admission of complete mutation source.
 `agent: large VBA read and edit survive compaction` uses the production run service
 with a scripted model and fake host: create/read a CRLF module over the internal
-32K resource page, restore its source after a persisted checkpoint, then edit it.
-At 24K context it checks omitted-source overwrite refusal followed by an exact
-line read and patch, preserving all unrelated source. Large conflict recovery
-must not pin a stitched head/tail body that prevents the next request.
+32K resource page, explicitly reread the current source after a persisted
+checkpoint, then edit it without losing unrelated lines. A constrained 32K
+request refuses before model or tool dispatch when the complete causal context
+does not fit, preserving the exact source.
 `vba: patch disambiguates with exact context` also covers explicit line/column
 selection, duplicate procedures, stale-address refusal and candidate completeness.
 `vba: pure patch text contract` covers copied blocks in mixed-newline source.

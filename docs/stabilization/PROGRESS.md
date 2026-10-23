@@ -1,5 +1,21 @@
 # Stabilization progress
 
+## Conversation v8 integration on main — 2026-10-23
+
+The `conversation-v8` implementation and its protocol, kernel, workspace, Office-neutral,
+CLI and Web tests are merged into `main` together with newer Unified Shell, resource
+and question work. Current new chats use v8; old v7 streams remain read-only and
+are not rewritten. Workspace replay retains exact accepted call/batch identity,
+refuses inconsistent history before accepting another input, and presents final
+model narration without exposing the durable envelope. Reflection and finish
+claims keep their separate v8 semantics.
+
+Per user request no additional test suite was run for this merge. The last
+complete candidate Harness run was 986 passed / 18 failed; several failures
+subsequently passed focused checks, but the full suite has not been repeated.
+Formal real-model phase 5 and Windows x64 + Office x64 + WebView2 gates remain
+open. The earlier candidate checkpoints below are historical.
+
 ## Unified Shell model-context no-call narration — 2026-10-23
 
 Owner: workspace application context preparation. A completed v7 response now
@@ -371,6 +387,76 @@ checks (line/character reads and compiler presentation), five Web scenarios and
 ValidateVersionFormat pass. Windows/Office/VBE/WebView2 qualification remains open.
 YAML tree is covered by the later slice above. Wave 3 still needs image/PDF
 semantic views and cost/capability metadata; this does not close the wave.
+
+## Conversation v8 phase-4 persistence/UI slice — 2026-10-23
+
+The [specification reconciliation](conversation-v8/PHASE4.md#specification-reconciliation--2026-10-23)
+at `02872af0` found two implementation gaps. Through `1ee68c62`, both are
+fixed host-neutral: Workspace chat shows saved reflection decisions and finish
+claims with evidence, and direct finish permits evidence-free claims while
+rejecting foreign citations. Focused Core, plugin, Node UI and reflection
+compaction/reload checks pass. The [risk register](RISK_REGISTER.md#conversation-v8-readiness-review--2026-10-23)
+retains the history and remaining target-host evidence.
+
+The candidate branch now creates format-8 chats, keeps v7 readable but
+read-only, projects finish claims without upgrading task verification, and
+persists visible reflection steps. Controlled CLI checks cover process death,
+confirmation, compaction and cancellation/continuation. A v8 production HTTP
+run with fake Excel now rejects the phase-0 premature finish and replays an
+honest partial claim after the verified sheet write. Workspace permits
+honest incomplete finish with failed acceptance; satisfied finish still
+requires explicit criteria. See [phase-4 evidence and gaps](conversation-v8/PHASE4.md).
+The host-neutral Harness builds and focused v8 workflow/replay scenarios pass.
+The latest complete run had 986 passed / 18 failed / 1004 total. All previously
+red v8 lifecycle/history fixtures now pass; three remaining failures depend on a
+missing local Data Templates package, and independent resource/tool/bridge cases
+still need triage. Six failures from that run subsequently passed targeted
+checks: Outlook archive/CAS, R61 Excel Agent, three built-in catalog fixtures,
+and bounded artifact search. The full suite has not been repeated. Accepted
+v8 replay now sanitizes runtime references in model-visible prose while
+preserving exact call arguments.
+
+[Pinned real-model comparisons](conversation-v8/PHASE5_PILOT.md) now include
+two repetitions of three synthetic tasks for v7 (0/6 accepted), ordinary v8
+(6/6), and v8 without the reflection schema branch (5/6). On the same v8
+binary, both field orders passed 6/6; a model-facing no-`reason` shim passed
+4/6 against 6/6 ordinary v8. Failed runs did not become accepted false
+successes. No ordinary v8 run selected reflection, and these small local CLI
+samples cannot isolate protocol effects or qualify Windows/Office/WebView2.
+Main remains v7. Owner: Core chat/run projection, Office transcript and
+Workspace/CLI recovery. Formal phase-5, steer/UI and target-host gates remain open.
+
+## Conversation v8 phase-3 adapter/prompt candidate — 2026-10-23
+
+The isolated branch now pins v8 guidance across default and editable prompts,
+projects tool schemas from the v8 root union, reports CLI finish correctly and
+passes a controlled CLI/HTTP response-mode and result-role smoke. See
+[phase-3 checks and gaps](conversation-v8/PHASE3.md). The full Harness still
+contains unmigrated v7 fixtures; process replay/UI, real-model comparison and
+Windows/Office gates remain open. Main remains v7. Owner: Core ModelProtocol /
+Office and Workspace/CLI adapters.
+
+## Conversation v8 phase-2 kernel candidate — 2026-10-23
+
+The isolated `conversation-v8` branch now has bounded reflection continuation,
+an event-stream terminal-evidence gate for finish, and v8 history records in both
+Office and Workspace adapters. Source-linked host-neutral compilation and the
+[phase-2 focused runner](conversation-v8/PHASE2.md) pass. Main remains v7; the
+full Harness has unmigrated v7 tests, while prompts, process-level replay/UI,
+real-model comparison and Windows/Office gates remain open. Owner: Core
+AgentKernel / Office and Workspace adapters. Next: phase-3 consumer/prompt/test
+migration, then phase-4 history/UI cutover.
+
+## Conversation v8 phase-1 candidate — 2026-10-23
+
+Core ModelProtocol now has the v8 closed forms, typed format errors, canonical
+writer/repair guidance and a source-linked protocol runner in the isolated
+`conversation-v8` worktree. Codec checks pass; see [phase-1 evidence and gaps](conversation-v8/PHASE1.md).
+This intermediate candidate is not an integrated application: kernel/adapters/history
+still call the removed v7 API, so a full candidate build is not ready. Main remains
+on v7. Owner: Core ModelProtocol / AgentKernel. Next: phase-2 evidence admission and
+reflection lifecycle, then atomic consumer/persistence/UI migration. Frozen repair
+integration, real-model comparison and Windows/Office qualification remain open.
 
 ## Conversation v8.1 admission audit — 2026-10-23
 

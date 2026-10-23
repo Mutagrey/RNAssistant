@@ -16,9 +16,15 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private const string KernelFixtureFinishReason = "Report the observed runtime outcome.";
+
         private static AgentResponseDraft KernelResponse(params ToolCallDraft[] calls)
         {
-            return new AgentResponseDraft("Done; all changes applied.", calls);
+            return calls.Length == 0
+                ? new AgentResponseDraft(ConversationResponse.FinishAction, KernelFixtureFinishReason,
+                    "Done; all changes applied.", results: new ConversationResultClaim[0])
+                : new AgentResponseDraft(ConversationResponse.ExecuteAction, "Execute the requested call.",
+                    "", calls: calls);
         }
 
         private static ToolCallDraft KernelCall(string name = "write", string argumentsJson = "{}")
@@ -47,15 +53,25 @@ namespace RNAssistant.Harness
         private static async Task KernelAggregatesOutcome(string tool, ToolExecutionOutcome outcome,
             ExecutionHealth health, string counts)
         {
-            var f = new KernelFixture(KernelResponse(KernelCall(tool)),
-                new AgentResponseDraft("Done; all changes applied.", new ToolCallDraft[0],
-                    outcome == ToolExecutionOutcome.Unknown ? ConversationResponse.BlockedAction : ConversationResponse.DoneAction));
+            var f = new KernelFixture(KernelResponse(KernelCall(tool)), KernelResponse());
             f.Tools.OnExecute = (context, token) => Task.FromResult(KernelRecord(context, outcome));
-            var result = await f.RunAsync();
-            AssertEqual(RunLifecycle.Completed, result.Summary.Lifecycle, "empty calls finish the loop");
+            var result = await f.RunAsync(limits: new AgentRunLimits(2, 10));
+            AssertEqual(outcome == ToolExecutionOutcome.Unknown ? RunLifecycle.Failed : RunLifecycle.Completed,
+                result.Summary.Lifecycle, "unknown effect requires inspection before finish");
             AssertEqual(health, result.Summary.ExecutionHealth, "runtime evidence owns health");
             AssertEqual(counts, KernelCounts(result.Summary), "actual tool counts");
-            AssertEqual("Done; all changes applied.", result.Summary.AssistantMessage, "narrative remains separate");
+            if (outcome != ToolExecutionOutcome.Unknown)
+            {
+                AssertEqual("Done; all changes applied.", result.Summary.AssistantMessage, "narrative remains separate");
+                var finish = result.AcceptedMessages.Single(message => message.Action == ConversationResponse.FinishAction);
+                AssertEqual(f.Tools.Calls.Single().Call.Id, finish.Results.Single().Evidence.Single(),
+                    "fixture finish cites the current run's terminal call");
+                AssertEqual(outcome == ToolExecutionOutcome.Ok ? ConversationAssessment.Satisfied :
+                    ConversationAssessment.NotSatisfied, finish.Results.Single().Assessment,
+                    "fixture assessment follows runtime outcome");
+            }
+            else
+                AssertEqual("iteration_limit", result.Summary.Reason, "unknown effect cannot be narrated into success");
             AssertEqual(1, f.Tools.Calls.Count, "no tool retry");
             AssertEqual(AgentRunEventKind.SummaryChanged, f.Store.Events.Last().Kind, "terminal summary is last");
             AssertEqual(counts, KernelCounts(f.Store.Events.Last().Summary), "append receives authoritative summary");
@@ -81,20 +97,13 @@ namespace RNAssistant.Harness
         {
             foreach (var message in new[] { "completed", "blocked", "refused" })
             {
-                var f = new KernelFixture(new AgentResponseDraft(message, new ToolCallDraft[0]));
+                var f = new KernelFixture(new AgentResponseDraft(ConversationResponse.FinishAction,
+                    "No tool effect is claimed.", message, results: new ConversationResultClaim[0]));
                 var result = await f.RunAsync();
                 AssertEqual(RunLifecycle.Completed, result.Summary.Lifecycle, "wording is not runtime lifecycle");
                 AssertEqual(ExecutionHealth.Clean, result.Summary.ExecutionHealth, "no effects is not an error");
                 AssertEqual("0,0,0,0,0", KernelCounts(result.Summary), "no invented writes");
                 AssertEqual(message, result.Summary.AssistantMessage, "narrative preserved");
-            }
-            foreach (var intent in new[] { ConversationResponse.BlockedAction, ConversationResponse.NeedsInputAction })
-            {
-                var f = new KernelFixture(new AgentResponseDraft("Unfinished work remains.", new ToolCallDraft[0], intent));
-                var result = await f.RunAsync();
-                AssertEqual(RunLifecycle.Completed, result.Summary.Lifecycle, "a terminal model decision closes the loop");
-                AssertEqual(intent == ConversationResponse.BlockedAction ? "model_blocked" : "model_needs_input",
-                    result.Summary.Reason, "unfinished outcome remains distinct from done");
             }
         }
 
@@ -108,7 +117,7 @@ namespace RNAssistant.Harness
                 AgentModelResult.Accepted(KernelResponse()) });
             f.Model.OnSend = (request, token) => Task.FromResult(responses.Dequeue());
             var result = await f.RunAsync();
-            AssertEqual("model_done", result.Summary.Reason, "verified completion can follow rejection in the same run");
+            AssertEqual("model_finish", result.Summary.Reason, "verified completion can follow rejection in the same run");
             AssertEqual(3, result.Summary.IterationsUsed, "rejected completion spends one ordinary iteration");
             AssertEqual(1, result.Summary.ToolStepsUsed, "rejection does not fabricate a tool step");
             AssertEqual(1, f.Model.Requests[1].AcceptedMessages.Count, "rejected done never enters accepted history");
@@ -152,26 +161,14 @@ namespace RNAssistant.Harness
                 AgentModelResult.Accepted(KernelResponse(KernelCall())),
                 AgentModelResult.RejectCompletion("Verified file changes: 0/1."),
                 AgentModelResult.Accepted(KernelResponse(KernelCall())),
-                AgentModelResult.Accepted(new AgentResponseDraft("Earlier write has an unknown effect.", new ToolCallDraft[0], ConversationResponse.BlockedAction)) });
+                AgentModelResult.Accepted(KernelResponse()) });
             f.Model.OnSend = (request, token) => Task.FromResult(responses.Dequeue());
             f.Tools.OnExecute = (context, token) => Task.FromResult(KernelRecord(context, ToolExecutionOutcome.Unknown));
-            var result = await f.RunAsync();
-            AssertEqual("model_blocked", result.Summary.Reason, "a concrete obstacle still ends the run");
+            var result = await f.RunAsync(limits: new AgentRunLimits(4, 10));
+            AssertEqual("iteration_limit", result.Summary.Reason, "uninspected effect cannot finish by narration");
             AssertEqual(ExecutionHealth.Unknown, result.Summary.ExecutionHealth, "completion feedback never erases uncertain effects");
             AssertEqual(1, f.Tools.Calls.Count, "the rejected completion cannot authorize replay of an uncertain write");
             AssertEqual(4, result.Summary.IterationsUsed, "the same kernel owns all continuation accounting");
-        }
-
-        private static async Task KernelRejectsUnsupportedContinuation()
-        {
-            var f = new KernelFixture(new AgentResponseDraft("I will continue.", new ToolCallDraft[0], "continue"));
-            var result = await f.RunAsync();
-            AssertEqual(RunLifecycle.Failed, result.Summary.Lifecycle, "unsupported action cannot end as success");
-            AssertEqual("invalid_accepted_response", result.Summary.Reason, "kernel defends the accepted boundary");
-            AssertEqual(1, f.Model.Requests.Count, "unsupported narrative cannot trigger another model step");
-            AssertEqual(0, f.Tools.Calls.Count, "no fabricated tool dispatch");
-            AssertTrue(!f.Store.Events.Any(e => e.Kind == AgentRunEventKind.ResponseAccepted),
-                "invalid continuation is never accepted as progress");
         }
 
         private static async Task KernelBlocksIdenticalDefiniteFailure()
@@ -232,8 +229,7 @@ namespace RNAssistant.Harness
                     KernelResponse(KernelCall("write", close)),
                     KernelResponse(KernelCall("write", save)),
                     KernelResponse(KernelCall("write", close)),
-                    new AgentResponseDraft("Further progress requires unavailable target inspection.", new ToolCallDraft[0],
-                        firstOutcome == ToolExecutionOutcome.Unknown ? ConversationResponse.BlockedAction : ConversationResponse.DoneAction));
+                    KernelResponse());
                 var attempts = 0;
                 f.Tools.OnExecute = (context, token) => Task.FromResult(
                     KernelRecord(context, ++attempts == 1 ? firstOutcome : ToolExecutionOutcome.Ok,
@@ -244,12 +240,14 @@ namespace RNAssistant.Harness
                             ? new ResourceEffect("saved", context.Call.Id, ResourceEffectOutcome.VerifiedChanged,
                                 new[] { new ResourceImpact(changed, ResourceImpactRelation.ContainerMembership) }) : null));
 
-                var result = await f.RunAsync();
+                var result = await f.RunAsync(limits: new AgentRunLimits(4, 10));
                 var retryAllowed = changed.Equals(target) && firstOutcome == ToolExecutionOutcome.Error;
-                AssertEqual(RunLifecycle.Completed, result.Summary.Lifecycle, "each outcome remains available for a final model decision");
+                AssertEqual(firstOutcome == ToolExecutionOutcome.Unknown ? RunLifecycle.Failed : RunLifecycle.Completed,
+                    result.Summary.Lifecycle, "unknown effect requires inspection before finish");
                 AssertEqual(retryAllowed ? 3 : 2, f.Tools.Calls.Count,
                     "only a verified change of the declared dependency permits an explicit retry after definite failure");
-                AssertEqual(4, f.Model.Requests.Count, "denied retries return their result before the final model response");
+                AssertEqual(4, f.Model.Requests.Count,
+                    "denied retries return their result before the final model response");
                 if (firstOutcome == ToolExecutionOutcome.Unknown)
                     AssertEqual(ExecutionHealth.Unknown, result.Summary.ExecutionHealth, "a matching repair cannot erase uncertain effects");
             }
@@ -375,7 +373,7 @@ namespace RNAssistant.Harness
                 "rejected done returns actionable feedback");
             AssertEqual<string>(null, f.Model.Requests[7].CompletionFeedback,
                 "successful inspection removes the workflow reminder without changing effect history");
-            AssertEqual(1, result.AcceptedMessages.Count(m => m.Action == ConversationResponse.DoneAction),
+            AssertEqual(1, result.AcceptedMessages.Count(m => m.Action == ConversationResponse.FinishAction),
                 "premature done never enters accepted history");
         }
 
@@ -386,7 +384,7 @@ namespace RNAssistant.Harness
             var result = await f.RunAsync(limits: new AgentRunLimits(3, 3));
             AssertEqual("iteration_limit", result.Summary.Reason, "ignored inspection feedback uses the existing limit");
             AssertEqual(1, f.Tools.Calls.Count, "no automatic mutation retry");
-            AssertEqual(0, result.AcceptedMessages.Count(m => m.Action == ConversationResponse.DoneAction), "uninspected done is never accepted");
+            AssertEqual(0, result.AcceptedMessages.Count(m => m.Action == ConversationResponse.FinishAction), "uninspected finish is never accepted");
 
             var tracker = new AgentProgressTracker();
             tracker.Restore(result.AcceptedMessages);
@@ -397,7 +395,8 @@ namespace RNAssistant.Harness
                 Newtonsoft.Json.JsonConvert.SerializeObject(ToolExecutionProgress.Capture(KernelRecord(readContext))));
             AssertTrue(progress.IndependentLocalRead, "captured read policy survives durable JSON");
             var history = result.AcceptedMessages.Concat(new[] {
-                AgentMessage.Assistant(new AgentResponse("Inspect", new[] { readContext.Call })),
+                AgentMessage.Assistant(new AgentResponse(ConversationResponse.ExecuteAction,
+                    "Inspect the uncertain effect.", "Inspect", new[] { readContext.Call })),
                 AgentMessage.AcceptedToolResult("read", "Inspected", "{}", progress) }).ToArray();
             tracker = new AgentProgressTracker();
             tracker.Restore(history);
@@ -525,7 +524,8 @@ namespace RNAssistant.Harness
         {
             var oldCall = new ToolCall("prior_read", "read", "{}");
             var history = new List<AgentMessage> { AgentMessage.User("old turn"),
-                AgentMessage.Assistant(new AgentResponse("Prior accepted read.", new[] { oldCall })),
+                AgentMessage.Assistant(new AgentResponse(ConversationResponse.ExecuteAction,
+                    "Read prior state.", "Prior accepted read.", new[] { oldCall })),
                 AgentMessage.AcceptedToolResult(oldCall.Id, "old result", "{}") };
             var f = new KernelFixture(KernelResponse(KernelCall("read")), KernelResponse());
             var request = new AgentRunRequest("run", "turn", "new turn", new AgentRunLimits(5, 5), history);
@@ -675,9 +675,7 @@ namespace RNAssistant.Harness
             ExecutionHealth health, string counts)
         {
             var f = new KernelFixture(KernelResponse(KernelCall()), KernelResponse(KernelCall("confirm")),
-                new AgentResponseDraft("The target cannot be inspected with available tools.", new ToolCallDraft[0],
-                    before == ToolExecutionOutcome.Unknown || after == ToolExecutionOutcome.Unknown
-                        ? ConversationResponse.BlockedAction : ConversationResponse.DoneAction));
+                KernelResponse());
             f.Tools.OnExecute = (context, token) => Task.FromResult(KernelRecord(context, context.Call.Name == "write"
                 ? before : context.IsConfirmed ? after : ToolExecutionOutcome.AwaitingConfirmation));
             var paused = await f.RunAsync(limits: new AgentRunLimits(3, 2));
@@ -686,13 +684,16 @@ namespace RNAssistant.Harness
             var pending = paused.Summary.PendingConfirmation;
             AssertEqual(0, paused.AcceptedMessages.Count(m => m.Kind == AgentMessageKind.ToolResult && m.ToolCallId == pending.Call.Id),
                 "pending is not a fabricated execution result");
-            var resumed = await f.Kernel.ResumeAsync("resume", pending.PendingId, paused.Continuation, CancellationToken.None);
-            AssertEqual(RunLifecycle.Completed, resumed.Summary.Lifecycle, "same loop resumes");
+            var resumed = await f.Kernel.ResumeAsync("run", pending.PendingId, paused.Continuation, CancellationToken.None);
+            AssertEqual(health == ExecutionHealth.Unknown ? RunLifecycle.Failed : RunLifecycle.Completed,
+                resumed.Summary.Lifecycle, "uncertain effect still requires inspection after confirmation");
+            if (health == ExecutionHealth.Unknown)
+                AssertEqual("iteration_limit", resumed.Summary.Reason, "unknown effect cannot finish by narration");
             AssertEqual(health, resumed.Summary.ExecutionHealth, "cumulative health preserved across confirmation");
             AssertEqual(counts, KernelCounts(resumed.Summary), "confirmed call counted exactly once");
             AssertEqual(2, resumed.Summary.ToolStepsUsed, "resume does not double-charge tool budget");
             AssertEqual(3, resumed.Summary.IterationsUsed, "resume shares model budget");
-            AssertEqual("resume", f.Tools.Calls.Last().RunId, "new execution run");
+            AssertEqual("run", f.Tools.Calls.Last().RunId, "confirmation remains in the accepted run");
             AssertEqual("turn", f.Tools.Calls.Last().TurnId, "same user turn");
             AssertEqual(f.Tools.Calls[1].StepId, f.Tools.Calls[2].StepId, "original model step retained");
             AssertEqual(1, f.Tools.Calls.Last().RemainingToolSteps, "pending reservation reusable only for the confirmed call");
@@ -731,12 +732,13 @@ namespace RNAssistant.Harness
                 "later confirmation-required mutation reaches runtime");
             AssertEqual(ExecutionHealth.Unknown, result.Summary.ExecutionHealth,
                 "pending confirmation keeps prior unknown health visible");
-            var restored = AgentRunContinuation.Restore(result.Summary, result.Continuation.Limits,
-                result.Continuation.Revision, result.AcceptedMessages);
-            var resumed = await f.Kernel.ResumeAsync("resumed", result.Summary.PendingConfirmation.PendingId,
+            var restored = AgentRunContinuation.Restore(new AgentRunState(result.Summary,
+                result.Continuation.Limits), result.Continuation.Revision, result.AcceptedMessages);
+            var resumed = await f.Kernel.ResumeAsync("run", result.Summary.PendingConfirmation.PendingId,
                 restored, CancellationToken.None);
             AssertEqual(RunLifecycle.Completed, resumed.Summary.Lifecycle,
-                "the model can continue after the restored guard rejects unknown replay");
+                "the model can continue after the restored guard rejects unknown replay: " +
+                resumed.Summary.Reason + ", requests " + f.Model.Requests.Count);
             AssertEqual(ExecutionHealth.Unknown, resumed.Summary.ExecutionHealth,
                 "an unrelated confirmed write does not erase unknown effect evidence");
             AssertEqual(4, f.Tools.Calls.Count, "only the confirmed call and inspection are dispatched on resume");
@@ -755,7 +757,7 @@ namespace RNAssistant.Harness
                 context.IsConfirmed ? ToolExecutionOutcome.Ok : ToolExecutionOutcome.AwaitingConfirmation));
             var paused = await f.RunAsync();
             var pending = paused.Summary.PendingConfirmation;
-            var resumed = await f.Kernel.ResumeAsync("resume", pending.PendingId, paused.Continuation, CancellationToken.None);
+            var resumed = await f.Kernel.ResumeAsync("run", pending.PendingId, paused.Continuation, CancellationToken.None);
             AssertEqual(RunLifecycle.Failed, resumed.Summary.Lifecycle, "allocation checks retained ids after confirmation");
             AssertEqual("call_id_allocation_failed", resumed.Summary.Reason, "post-confirmation collision remains an infrastructure failure");
             AssertEqual(2, f.Tools.Calls.Count, "only pending and confirmed dispatches enter runtime");
@@ -776,15 +778,15 @@ namespace RNAssistant.Harness
                 context.IsConfirmed ? ToolExecutionOutcome.Ok : ToolExecutionOutcome.AwaitingConfirmation));
             var paused = await f.RunAsync();
             var pending = paused.Summary.PendingConfirmation;
-            var restored = AgentRunContinuation.Restore(paused.Summary, paused.Continuation.Limits,
-                paused.Continuation.Revision, paused.AcceptedMessages);
+            var restored = AgentRunContinuation.Restore(new AgentRunState(paused.Summary,
+                paused.Continuation.Limits), paused.Continuation.Revision, paused.AcceptedMessages);
             var resumeAllocations = 0;
             var kernel = new AgentKernel(f.Model, f.Tools, f.Store, newCallId: () =>
             {
                 resumeAllocations++;
                 throw new InvalidOperationException("Pending call must already have an id.");
             });
-            var resumed = await kernel.ResumeAsync("new-runtime-run", pending.PendingId, restored, CancellationToken.None);
+            var resumed = await kernel.ResumeAsync("run", pending.PendingId, restored, CancellationToken.None);
             AssertEqual(RunLifecycle.Completed, resumed.Summary.Lifecycle, "restored continuation resumes in a new kernel");
             AssertEqual(0, resumeAllocations, "restoring and executing a pending call does not generate a replacement id");
             AssertEqual(1, f.AllocationCount, "one id was allocated before the original acceptance");
@@ -793,7 +795,7 @@ namespace RNAssistant.Harness
             AssertTrue(f.Tools.Calls.All(context => context.Call.Id == pending.Call.Id && context.Call.ArgumentsJson == arguments),
                 "pending and confirmed execution retain the original id and payload");
             AssertEqual(f.Tools.Calls[0].StepId, f.Tools.Calls[1].StepId, "confirmation preserves the original model step");
-            AssertEqual("new-runtime-run", f.Tools.Calls.Last().RunId, "runtime run changes on resume");
+            AssertEqual("run", f.Tools.Calls.Last().RunId, "confirmed execution retains the accepted run");
             AssertEqual(paused.Summary.TurnId, f.Tools.Calls.Last().TurnId, "logical turn remains unchanged");
             AssertEqual(pending.Call.Id, resumed.AcceptedMessages.Single(m => m.Kind == AgentMessageKind.ToolResult).ToolCallId,
                 "confirmed result pairs with the persisted accepted call");
@@ -807,12 +809,16 @@ namespace RNAssistant.Harness
                 context.IsConfirmed ? ToolExecutionOutcome.Ok : ToolExecutionOutcome.AwaitingConfirmation));
             var paused = await f.RunAsync();
             await KernelThrowsAsync<InvalidOperationException>(() =>
-                f.Kernel.ResumeAsync("wrong", "different", paused.Continuation, CancellationToken.None));
+                f.Kernel.ResumeAsync("run", "different", paused.Continuation, CancellationToken.None));
             AssertEqual(1, f.Tools.Calls.Count, "wrong pending id cannot execute");
             var pendingId = paused.Summary.PendingConfirmation.PendingId;
-            await f.Kernel.ResumeAsync("resume", pendingId, paused.Continuation, CancellationToken.None);
+            var eventsBeforeWrongRun = f.Store.Events.Count;
+            await KernelThrowsAsync<InvalidOperationException>(() =>
+                f.Kernel.ResumeAsync("wrong", pendingId, paused.Continuation, CancellationToken.None));
+            AssertEqual(eventsBeforeWrongRun, f.Store.Events.Count, "wrong run id cannot claim a continuation cursor");
+            await f.Kernel.ResumeAsync("run", pendingId, paused.Continuation, CancellationToken.None);
             await KernelThrowsAsync<RunStoreException>(() =>
-                f.Kernel.ResumeAsync("again", pendingId, paused.Continuation, CancellationToken.None));
+                f.Kernel.ResumeAsync("run", pendingId, paused.Continuation, CancellationToken.None));
             AssertEqual(2, f.Tools.Calls.Count, "stale cursor rejected before a second confirmed dispatch");
         }
 
@@ -840,7 +846,7 @@ namespace RNAssistant.Harness
             f.Tools.OnExecute = (context, token) => Task.FromResult(
                 KernelRecord(context, ToolExecutionOutcome.AwaitingConfirmation));
             var paused = await f.RunAsync();
-            var denied = await f.Kernel.ResumeAsync("resume", paused.Summary.PendingConfirmation.PendingId,
+            var denied = await f.Kernel.ResumeAsync("run", paused.Summary.PendingConfirmation.PendingId,
                 paused.Continuation, CancellationToken.None, rejectPending: true);
             AssertEqual(RunLifecycle.Cancelled, denied.Summary.Lifecycle, "denial terminates the run");
             AssertEqual("confirmation_denied", denied.Summary.Reason, "denial has a distinct runtime reason");
@@ -858,7 +864,7 @@ namespace RNAssistant.Harness
                 f.Tools.OnExecute = (context, token) => Task.FromResult(KernelRecord(context, ToolExecutionOutcome.AwaitingConfirmation));
                 var paused = await f.RunAsync();
                 f.Tools.Policies["confirm"] = new ToolPolicySnapshot("confirm", "changed", true, true);
-                var result = await f.Kernel.ResumeAsync("resume", paused.Summary.PendingConfirmation.PendingId,
+                var result = await f.Kernel.ResumeAsync("run", paused.Summary.PendingConfirmation.PendingId,
                     paused.Continuation, CancellationToken.None);
                 AssertEqual(1, f.Tools.Calls.Count, "changed confirmed policy never executes");
                 AssertEqual("0,0,0,1,0", KernelCounts(result.Summary), "known rejection is error, not unknown effect");
@@ -971,7 +977,7 @@ namespace RNAssistant.Harness
                 AssertEqual(1, result.Summary.ToolStepsUsed, "tool budget not reset");
                 AssertEqual(1, f.Tools.Calls.Count, "completed write not replayed and new call cannot exceed budget");
                 AssertEqual(1, result.Summary.ToolCounts.WriteOk, "verified effect count retained");
-                AssertEqual(nextTool ? "tool_step_limit" : "model_done", result.Summary.Reason, "original limit enforced");
+                AssertEqual(nextTool ? "tool_step_limit" : "model_finish", result.Summary.Reason, "original limit enforced");
                 await KernelThrowsAsync<RunStoreException>(() => f.Kernel.ContinueAsync(continuation, CancellationToken.None));
                 AssertEqual(2, f.Model.Requests.Count, "stale cursor cannot dispatch model");
                 KernelCheckpointRejected(() => AgentRunContinuation.RestoreCheckpoint(
@@ -1002,18 +1008,6 @@ namespace RNAssistant.Harness
                 KernelCheckpointRejected(() => AgentRunContinuation.RestoreCheckpoint(
                     new AgentRunState(exhausted, limits), 0, new[] { AgentMessage.User("Task") }), "abandoned request still consumed its iteration");
             }
-        }
-
-        private static void KernelRejectsNarrativeCheckpoint()
-        {
-            var summary = new RunSummary("run", "turn", RunLifecycle.Cancelled, new ToolCounts(),
-                1, 0, "", "cancelled", null);
-            var state = new AgentRunState(summary, new AgentRunLimits(10, 10));
-            var narrative = AgentMessage.Assistant(new AgentResponse("Still planning.", new ToolCall[0], "continue"));
-            KernelCheckpointRejected(() => AgentRunContinuation.RestoreCheckpoint(state, 1,
-                new[] { AgentMessage.User("Task"), narrative }), "old narrative checkpoint cannot resume");
-            KernelCheckpointRejected(() => AgentRunContinuation.RestoreCheckpoint(state, 1,
-                new[] { narrative, AgentMessage.User("New task") }), "unsupported action is rejected even before a new input");
         }
 
         private sealed class KernelFixture
@@ -1058,11 +1052,29 @@ namespace RNAssistant.Harness
                 _responses = new Queue<AgentResponseDraft>(responses);
             }
 
-            public Task<AgentModelResult> SendAsync(AgentModelRequest request, CancellationToken token)
+            public async Task<AgentModelResult> SendAsync(AgentModelRequest request, CancellationToken token)
             {
                 Requests.Add(request);
                 AssertEqual(AgentRunEventKind.ModelStepStarted, _store.Events.Last().Kind, "model boundary persisted before dispatch");
-                return OnSend != null ? OnSend(request, token) : Task.FromResult(AgentModelResult.Accepted(_responses.Dequeue()));
+                var result = OnSend != null ? await OnSend(request, token) : AgentModelResult.Accepted(_responses.Dequeue());
+                var draft = result?.Response;
+                if (draft == null || draft.Action != ConversationResponse.FinishAction ||
+                    draft.Reason != KernelFixtureFinishReason || draft.Results.Count != 0)
+                    return result;
+                // Fixture shorthand cites the latest terminal fact in this run; an explicitly
+                // constructed empty finish remains empty so admission tests can reject it.
+                var terminal = _store.Events.LastOrDefault(item => item.Kind == AgentRunEventKind.ToolCompleted &&
+                    item.Summary.RunId == request.RunId && item.Summary.TurnId == request.TurnId &&
+                    item.Execution.Outcome != ToolExecutionOutcome.AwaitingConfirmation);
+                if (terminal == null) return result;
+                var outcome = terminal.Execution.Outcome;
+                var assessment = outcome == ToolExecutionOutcome.Ok ? ConversationAssessment.Satisfied :
+                    outcome == ToolExecutionOutcome.Unknown ? ConversationAssessment.Unverified :
+                    ConversationAssessment.NotSatisfied;
+                var claim = new ConversationResultClaim("Observed runtime outcome.",
+                    new[] { terminal.Execution.Context.Call.Id }, assessment);
+                return AgentModelResult.Accepted(new AgentResponseDraft(ConversationResponse.FinishAction,
+                    draft.Reason, draft.Message, results: new[] { claim }), result.SourceModelAttemptId);
             }
         }
 
@@ -1113,6 +1125,29 @@ namespace RNAssistant.Harness
             internal bool ReturnUnchangedCursor;
             internal int FailedAppends;
             private long _revision;
+
+            public Task<FinishAdmission> EvaluateFinishAsync(string runId, string turnId,
+                IReadOnlyList<string> acceptedCallIds, IReadOnlyList<ConversationResultClaim> results,
+                long expectedRevision, CancellationToken token)
+            {
+                if (expectedRevision != _revision) throw new InvalidOperationException("Stale finish cursor.");
+                var accepted = Events.Where(item => item.Kind == AgentRunEventKind.ResponseAccepted &&
+                    item.Summary.RunId == runId && item.Summary.TurnId == turnId)
+                    .SelectMany(item => item.Response.ToolCalls).Select(item => item.Id).ToArray();
+                if (!accepted.OrderBy(id => id).SequenceEqual(acceptedCallIds.OrderBy(id => id)))
+                    throw new InvalidOperationException("Accepted call state disagrees with the fake event log.");
+                if (accepted.Length == 0)
+                    return Task.FromResult(results.Count == 0 ? FinishAdmission.Allow() :
+                        FinishAdmission.Reject("unknown_evidence", "No accepted calls belong to this run."));
+                var terminal = new HashSet<string>(Events.Where(item => item.Kind == AgentRunEventKind.ToolCompleted &&
+                    item.Summary.RunId == runId && item.Execution.Outcome != ToolExecutionOutcome.AwaitingConfirmation)
+                    .Select(item => item.Execution.Context.Call.Id), StringComparer.Ordinal);
+                var references = results.SelectMany(item => item.Evidence).ToArray();
+                if (results.Count == 0 || references.Length == 0)
+                    return Task.FromResult(FinishAdmission.Reject("missing_finish_evidence", "Terminal evidence is required."));
+                return Task.FromResult(references.All(id => terminal.Contains(id)) ? FinishAdmission.Allow() :
+                    FinishAdmission.Reject("nonterminal_evidence", "Evidence is not terminal in this run."));
+            }
 
             public Task<long> AppendAsync(AgentRunEvent fact, long expectedRevision, CancellationToken token)
             {

@@ -1,0 +1,13 @@
+{
+  "action": "execute",
+  "reason": "Proposing a probe.read call for sheets as part of the synthetic protocol test.",
+  "tool_calls": [
+    {
+      "name": "probe.read",
+      "arguments": {
+        "kind": "sheets"
+      }
+    }
+  ],
+  "message": ""
+}

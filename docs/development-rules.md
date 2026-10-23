@@ -96,11 +96,12 @@ ModelProtocol.
 
 - Protocol version меняется атомарно: parser, schema, prompts, history preflight и
   consumers переключаются вместе, без dual-write и скрытой нормализации.
-- Текущий model response — conversation-response v7: `message`, `action` и
-  `tool_calls`; call содержит только `name` и `arguments`. Runtime назначает IDs.
-- `action=tool` требует непустой `tool_calls` и продолжает цикл после результата.
-  `done`, `blocked` и `needs_input` завершают ход без вызовов. Промежуточное
-  сообщение само по себе не запускает следующий запрос модели. Эффект ответом модели не доказывается.
+- Текущий model response — [conversation-response v8](protocols/CONVERSATION_RESPONSE_V8.md):
+  `action`, `reason`, поля действия и `message` последним; вызов содержит только
+  `name` и `arguments`. Runtime назначает IDs.
+- `execute` требует непустой `tool_calls`; `reflection` сохраняет решение и
+  продолжает ограниченный цикл; `finish` завершает run с честными `results`.
+  Эффект ответом модели не доказывается.
 - `ok` означает успешное выполнение контракта tool, но не обязательно изменение.
   Изменение доказывается отдельным dispatch/read-back evidence.
 - Возможный внешний эффект после dispatch, который нельзя подтвердить, имеет

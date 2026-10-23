@@ -89,7 +89,7 @@ namespace RNAssistant.Office.Services
                 Description = "Compatibility probe.",
                 ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"string\",\"description\":\"Compatibility probe value.\"}},\"required\":[\"value\"],\"additionalProperties\":false}"
             };
-            var sentinel = ModelProtocolWire.Write("TOOL_OK", new[] { ProbeCall() });
+            var sentinel = ModelProtocolWire.WriteAcceptedCall("Probe one compatible tool call.", "TOOL_OK", ProbeCall());
             return RunAsync(
                 settings,
                 "agent_json",
@@ -114,7 +114,8 @@ namespace RNAssistant.Office.Services
             string toolResultRole,
             CancellationToken cancellationToken)
         {
-            var sentinel = ModelProtocolWire.Write("RESULT_OK", new ConversationToolCall[0]);
+            var sentinel = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                "Probe the terminal answer after a result.", "RESULT_OK", results: new ConversationResultClaim[0]);
             var messages = ToolResultProbeMessages(toolResultRole, sentinel);
             return RunAsync(
                 settings,
@@ -157,7 +158,7 @@ namespace RNAssistant.Office.Services
             ToolArgumentNormalizer.AddProperties(draft.Arguments, call.Arguments);
             return new[]
             {
-                AgentJsonProtocol.CreateToolCallMessage(call, "TOOL_OK", null, role,
+                AgentJsonProtocol.CreateToolCallMessage(call, "TOOL_OK", "Probe one compatible tool call.", null, role,
                     new AcceptedToolCallOrigin("compatibility-probe", "synthetic-attempt", 0)),
                 AgentJsonProtocol.CreateToolResultMessage(
                     new ToolInvocation { ToolCallId = call.Id, ToolId = call.Name },

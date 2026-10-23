@@ -264,7 +264,7 @@ namespace RNAssistant.Harness
                 ActiveHtmlArtifactId = "html-2"
             }, 1000);
             AssertContains(artifactPrompt, "CHAT_RESOURCE_INDEX", "prompt exposes resource metadata index");
-            AssertContains(artifactPrompt, "HTML workspace: HTML v2",
+            AssertContains(artifactPrompt, ChatHtmlResourceCatalog.CurrentWorkspaceTarget,
                 "prompt exposes active HTML semantic target");
             AssertTrue(artifactPrompt.IndexOf("html-2", StringComparison.OrdinalIgnoreCase) < 0,
                 "prompt hides internal artifact identity");

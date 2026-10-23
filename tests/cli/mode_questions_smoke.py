@@ -8,7 +8,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from read_acceptance_context_smoke import CLI, REPO, DONE, call
+from read_acceptance_context_smoke import CLI, REPO
 from skills_runtime_smoke import install
 
 
@@ -20,6 +20,31 @@ QUESTIONS = [
      "options": [{"label": "Steps", "description": "Ordered work"},
                  {"label": "Risks", "description": "Open constraints"}]},
 ]
+
+
+DONE = {"finish_from_request": True}
+DIRECT_DONE = {"direct_finish": True}
+
+
+def call(name, **arguments):
+    return {"action": "execute", "reason": "Perform the requested step.",
+            "tool_calls": [{"name": name, "arguments": arguments}],
+            "message": "Perform the requested step."}
+
+
+def finish(request, direct=False):
+    evidence = []
+    if not direct:
+        for item in request["messages"]:
+            content = item.get("content") or ""
+            if item.get("role") == "tool" and item.get("tool_call_id"):
+                evidence.append(item["tool_call_id"])
+            elif isinstance(content, str) and content.startswith("TOOL_RESULT:\n"):
+                evidence.append(json.loads(content.split("\n", 1)[1])["tool_call_id"])
+    return {"action": "finish", "reason": "Report the current request outcome.",
+            "results": [{"summary": "Finished.", "evidence": [evidence[-1]],
+                         "assessment": "satisfied"}] if evidence else [],
+            "message": "Finished."}
 
 
 def catalog(request):
@@ -41,10 +66,20 @@ def run_case(root, mode, role):
         def do_POST(self):
             try:
                 assert self.path == "/v1/chat/completions"
-                requests.append(json.loads(self.rfile.read(int(self.headers["Content-Length"]))))
+                request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                if "response_format" not in request:
+                    body = json.dumps({"choices": [{"message": {"role": "assistant",
+                        "content": "Test title"}}]}).encode()
+                    self.send_response(200); self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
+                    return
+                requests.append(request)
                 assert responses, "Unexpected model call after typed question stop"
+                response = responses.pop(0)
+                if response == DONE or response == DIRECT_DONE:
+                    response = finish(request, direct=response == DIRECT_DONE)
                 body = json.dumps({"choices": [{"message": {"role": "assistant",
-                    "content": json.dumps(responses.pop(0))}}]}).encode()
+                    "content": json.dumps(response)}}]}).encode()
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(body)))
@@ -108,7 +143,7 @@ def run_case(root, mode, role):
         result, _ = cli("run", "--mode", "typo", "--message", "Do not escalate")
         assert result.returncode == 2 and len(requests) == before, result.stderr
 
-        assert final["reason"] == "awaiting_user" and final["action"] == "needs_input", final
+        assert final["reason"] == "awaiting_user" and final["action"] == "awaiting_user", final
         assert final["acceptance"] == "pending", final
         pending = final["userInput"]
         restored = checked("resume", "--session", session_id, code=3)
@@ -141,7 +176,7 @@ def run_case(root, mode, role):
         path.write_text(json.dumps(answer))
         responses.extend([call("common.resources_read", target="notes.txt"), DONE])
         completed = checked("answer", "--session", session_id, "--answers-file", str(path), "--request-id", "answer-once")
-        assert completed["reason"] == "model_done" and completed["acceptance"] == "passed", completed
+        assert completed["reason"] == "model_finish" and completed["acceptance"] == "passed", completed
         assert completed["verifiedFileChanges"] == (1 if mode == "agent" else 0), "Answer required repeating a prior verified write"
         assert completed["RunId"] != pending["RunId"] and completed["userInput"] is None
         continuation = requests[before]
@@ -176,12 +211,12 @@ def run_case(root, mode, role):
         result, _ = cli("answer", "--session", session_id, "--answers-file", str(path))
         assert result.returncode == 2 and len(requests) == before, "Answered question replayed"
         if mode == "agent":
-            responses.append(DONE)
+            responses.append(DIRECT_DONE)
             new_task = checked("run", "--session", session_id, "--message", "A separate task requires a new write.",
                 "--min-writes", "1", "--max-iterations", "1", code=5)
             assert new_task["verifiedFileChanges"] == 0 and new_task["acceptance"] == "failed", "Unrelated task borrowed earlier writes"
         assert not errors and not responses
-        print(f"PASS {mode}/{role}: needs_input, restored questions, 10 invalid answers rejected without writes, "
+        print(f"PASS {mode}/{role}: typed questions, restored state, 10 invalid answers rejected without writes, "
               "semantic answers/new turn, duplicate/conflicting receipts, inherited mode/role, acceptance, no ID leak/replay")
     finally:
         server.shutdown()

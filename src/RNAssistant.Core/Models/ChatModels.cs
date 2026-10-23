@@ -102,8 +102,15 @@ namespace RNAssistant.Core.Models
         public bool ExcludeFromModelContext { get; set; }
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
         public bool ProtocolMessage { get; set; }
+        // Visible runtime summary, never an accepted model response or prompt fact.
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public bool RuntimeProjection { get; set; }
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
         public int ResponseProtocolVersion { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string ResponseReason { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string ResponseModelAttemptId { get; set; }
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
         public int ToolResultProtocolVersion { get; set; }
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
@@ -111,6 +118,9 @@ namespace RNAssistant.Core.Models
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public RunViewState RunViewState { get; set; }
         public string ToolCallId { get; set; }
+        // Runtime origin of a terminal result; not model-facing or an argument.
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string ResultStepId { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public AcceptedToolCallOrigin AcceptedCallOrigin { get; set; }
         public string ToolName { get; set; }
@@ -284,8 +294,8 @@ namespace RNAssistant.Core.Models
 
     public sealed class ChatSession
     {
-        public const int CurrentFormatVersion = 7;
-        public static bool IsReadableFormat(int? version) { return version == 6 || version == CurrentFormatVersion; }
+        public const int CurrentFormatVersion = 8;
+        public static bool IsReadableFormat(int? version) { return version == 6 || version == 7 || version == CurrentFormatVersion; }
 
         [JsonProperty(Required = Required.Always)]
         public int FormatVersion { get; set; }

@@ -151,7 +151,8 @@ namespace RNAssistant.Harness
             AssertContains(ConversationPromptComposer.BuildInstruction(ChatModes.Plan, new AppSettings()),
                 "common.capabilities_read", "Plan includes progressive capability policy");
             AssertContains(ConversationPromptComposer.BuildInstruction(ChatModes.Plan, new AppSettings()),
-                "Never substitute chat prose or an HTML workspace", "Plan requires the Markdown artifact");
+                "Save the active draft with common.plan_doc_save as soon as enough facts exist",
+                "Plan requires the Markdown artifact");
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
@@ -290,8 +291,7 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     LoadToolSchemaResponse(UserQuestionToolCatalog.AskToolId),
-                    ModelProtocolWire.Write("Нужен выбор.", new[]
-                    {
+                    ModelProtocolWire.WriteAcceptedCall("The scope needs the user's choice.", "Нужен выбор.",
                         new ConversationToolCall
                         {
                             Name = UserQuestionToolCatalog.AskToolId,
@@ -315,8 +315,7 @@ namespace RNAssistant.Harness
                                         })
                                 })
                             }
-                        }
-                    })
+                        })
                 });
                 IReadOnlyList<ChatMessage> lastRequest = null;
                 LlmCompletionDelegate completion =
@@ -382,7 +381,9 @@ namespace RNAssistant.Harness
                 AssertContains(answer, "Вопрос: Choose scope", "accepted answers retain the question as readable text");
                 AssertContains(answer, "Ответ: Core", "accepted answers contain selected labels without JSON");
                 AssertTrue(!answer.Contains(question.Id) && !answer.Contains("PLAN_ANSWERS"), "runtime IDs and raw JSON stay out of chat");
-                responses.Enqueue(ModelProtocolWire.WriteAction("Учту выбранную область Core.", ConversationResponse.DoneAction));
+                responses.Enqueue(ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                    "The user selected Core after the question.", "Учту выбранную область Core.",
+                    results: new ConversationResultClaim[0]));
                 var resumed = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Plan, answer, reloaded, NewContext(adapter),
                     new AppSettings { ToolResultRole = resultRole, ContextWindowOverrideTokens = 65536 }, tools, null).GetAwaiter().GetResult();

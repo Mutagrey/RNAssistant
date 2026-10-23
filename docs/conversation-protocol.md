@@ -1,5 +1,9 @@
 # Conversation JSON flow
 
+The current `main` uses the [v8 response contract](protocols/CONVERSATION_RESPONSE_V8.md)
+and format-8 execution streams. Dated v7 audit and qualification records below
+are historical and do not define the current wire contract.
+
 RNAssistant uses one `Core/Agent/AgentKernel`, invoked by Office's
 `ConversationRunService` and CLI's `WorkspaceConversationService`. A request may
 finish with zero calls; neither a router LLM nor a mandatory planner is involved.
@@ -126,8 +130,8 @@ The final inspector check separately verifies that draft AutoConfirm uses the ne
 run's settings without altering an accepted run. Version-format validation passes.
 Real-model task quality remains unqualified.
 
-All modes return conversation-response v7: `message` (string), `action` (enum)
-and `tool_calls` (array); calls contain `name` and `arguments`, never a
+All modes now return conversation-response v8: `action`, `reason`, action-specific
+fields and `message` last; calls contain `name` and `arguments`, never a
 model-owned ID. The shared ModelProtocol boundary owns strict parsing/schema,
 bounded repair and provider compatibility; the kernel receives one validated
 draft, separate provider-native refusal, or typed failure. Model wording and

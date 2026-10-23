@@ -53,10 +53,11 @@ namespace RNAssistant.Harness
                 }
                 var cases = new[] {
                     new { Tool = "common.resources_find", Name = "find-empty", Data = JsonConvert.SerializeObject(new
-                        { items = new object[0], total = 0, complete = true, partial = false }), Count = (int?)0, Rows = (int?)null,
+                        { items = new object[0], total = 0, complete = true }), Count = (int?)0, Rows = (int?)null,
                         Complete = true, Partial = false, Representation = (string)null },
                     new { Tool = "common.resources_find", Name = "find-partial", Data = JsonConvert.SerializeObject(new
-                        { items = new[] { new { target = "document: A" } }, total = 1, complete = false, partial = true }), Count = (int?)1, Rows = (int?)null,
+                        { items = new[] { new { target = "document: A" } }, total = 1, complete = false,
+                            unavailableScopes = new[] { "document" } }), Count = (int?)1, Rows = (int?)null,
                         Complete = false, Partial = true, Representation = (string)null },
                     new { Tool = "common.resources_read", Name = "read-empty", Data = JsonConvert.SerializeObject(new
                         { kind = "resource-read", representation = "text", text = "", returnedCharacters = 0, complete = true }), Count = (int?)null, Rows = (int?)null,
@@ -90,7 +91,8 @@ namespace RNAssistant.Harness
                 }
                 var large = new[] {
                     new { Tool = "common.resources_find", Name = "large-find", Data = JsonConvert.SerializeObject(new
-                        { items = new[] { new { target = "document: A" } }, total = 1, complete = false, partial = true, padding = new string('x', 130000) }) },
+                        { items = new[] { new { target = "document: A" } }, total = 1, complete = false,
+                            unavailableScopes = new[] { "document" }, padding = new string('x', 130000) }) },
                     new { Tool = "common.resources_read", Name = "large-read", Data = JsonConvert.SerializeObject(new
                         { kind = "resource-read", representation = "source", text = new string('x', 130000), returnedCharacters = 130000, complete = false }) },
                     new { Tool = "common.capabilities_search", Name = "large-cap-search", Data = JsonConvert.SerializeObject(new
@@ -118,9 +120,21 @@ namespace RNAssistant.Harness
                 AssertEqual("{\"externalized\":true}", projectedRead.DataJson,
                     "request-local data remains separate from summary");
                 AssertEqual(large[1].Data, readRecord.Result.DataJson, "durable terminal data stays exact");
-                var media = SummaryActivity("common.resources_read", JsonConvert.SerializeObject(new
-                    { kind = "resource-read", representation = "media", complete = true, hydratedForNextModelStep = true }), "media");
-                AssertTrue(media.ResultSummary.HydratedForNextModelStep, "media preparation is retained separately from effects");
+                var mediaData = JsonConvert.SerializeObject(new
+                    { kind = "resource-read", representation = "media", complete = true, hydratedForNextModelStep = true });
+                var media = SummaryActivity("common.resources_read", mediaData, "media");
+                AssertTrue(!media.ResultSummary.HydratedForNextModelStep,
+                    "raw result data cannot claim request-local media hydration");
+                var mediaContext = new ToolRuntimeFixture().Context(toolId: "common.resources_read");
+                var mediaResult = ToolResult.Ok("Read", mediaData);
+                var mediaRecord = new ToolExecutionRecord(mediaContext, ToolExecutionOutcome.Ok,
+                    mediaContext.StartedUtc, "Read", result: mediaResult);
+                var mediaPrepared = new ToolResultMaterialization(mediaResult, new[] { new ChatAttachment {
+                    Kind = "image", FileName = "pixel.png", ContentType = "image/png" } });
+                media = AgentTranscript.CreateToolActivity(new ToolInvocation { ToolId = "common.resources_read",
+                    ToolCallId = "media" }, ToolRunResultFactory.Create(mediaRecord, mediaPrepared), "tool");
+                AssertTrue(media.ResultSummary.HydratedForNextModelStep,
+                    "actual request-local attachment is retained separately from effects");
                 AssertTrue(media.ExecutionEvidence == null, "summary does not invent effect evidence");
                 var legacy = new ChatActivity { Kind = "tool", ToolId = "common.resources_read", ToolCallId = "legacy",
                     ReadSummary = new ResourceReadSummary { Representation = "source", ReturnedCharacters = 12, Complete = false } };
@@ -194,21 +208,34 @@ namespace RNAssistant.Harness
         {
             foreach (var blocked in new[] { false, true })
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) => {
-                Func<JObject, string> taskCall = args => new JObject { ["message"] = "Сохраняю состояние задачи.", ["action"] = "tool",
-                    ["tool_calls"] = new JArray(new JObject { ["name"] = TaskListToolCatalog.SetToolId, ["arguments"] = args }) }.ToString();
+                Func<JObject, string> taskCall = args => ModelProtocolWire.WriteAcceptedCall(
+                    "Update the saved task state.", "Сохраняю состояние задачи.",
+                    new ConversationToolCall { Name = TaskListToolCatalog.SetToolId, Arguments = args });
                 var responses = new Queue<string>(new[] {
                     LoadToolSchemaResponse(TaskListToolCatalog.SetToolId),
                     taskCall(new JObject { ["action"] = "save", ["goal"] = "Two deliverables", ["steps"] = new JArray(
                         new JObject { ["text"] = "First result" }, new JObject { ["text"] = "Second result" }) }) });
                 if (blocked) responses.Enqueue(taskCall(new JObject { ["action"] = "close", ["outcome"] = "blocked", ["reason"] = "Need the missing input" }));
-                const string final = "{\"message\":\"Нужны исходные данные; результаты ещё не готовы.\",\"action\":\"done\",\"tool_calls\":[]}";
-                responses.Enqueue(final); responses.Enqueue(final);
+                var session = NewSession(adapter);
+                var firstFinishSent = false;
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) => {
                     requests.Add(messages.ToList());
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    string content;
+                    if (responses.Count > 0) content = responses.Dequeue();
+                    else if (!firstFinishSent)
+                    {
+                        content = ScriptedVerifiedFinish(session, "Report the unfinished deliverables.",
+                            "Нужны исходные данные; результаты ещё не готовы.", "Deliverables remain unfinished.",
+                            blocked ? new[] { TaskListToolCatalog.SetToolId, TaskListToolCatalog.SetToolId }
+                                : new[] { TaskListToolCatalog.SetToolId });
+                        firstFinishSent = true;
+                    }
+                    else content = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                        "Answer the follow-up about remaining work.", "Нужны исходные данные; результаты ещё не готовы.",
+                        results: new ConversationResultClaim[0]);
+                    return Task.FromResult(new LlmCompletionResult { Content = content });
                 });
-                var session = NewSession(adapter);
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var completed = service.ExecuteAsync(ChatModes.Agent, "Подготовь два результата.", session, NewContext(adapter),
                     new AppSettings(), tools, (Action<string, string, ChatActivity>)null, null).GetAwaiter().GetResult();
@@ -238,8 +265,9 @@ namespace RNAssistant.Harness
                         () => HtmlWorkspaceToolService.UpsertFile(session, file[0], file[1], file[2], true));
                 var cssTarget = executor.ResourceGateway.Find(session, "styles.css", "html").Items.Single(i => i.Type == "HTML file").Target;
                 var jsTarget = executor.ResourceGateway.Find(session, "app.js", "html").Items.Single(i => i.Type == "HTML file").Target;
-                Func<string, JObject, string> call = (tool, args) => new JObject { ["message"] = "Выполняю следующий шаг.", ["action"] = "tool",
-                    ["tool_calls"] = new JArray(new JObject { ["name"] = tool, ["arguments"] = args }) }.ToString();
+                Func<string, JObject, string> call = (tool, args) => ModelProtocolWire.WriteAcceptedCall(
+                    "Complete the next workflow step.", "Выполняю следующий шаг.",
+                    new ConversationToolCall { Name = tool, Arguments = args });
                 var close = call(TaskListToolCatalog.SetToolId, new JObject { ["action"] = "close", ["outcome"] = "completed",
                     ["updates"] = new JArray(new JObject { ["index"] = 1, ["status"] = "completed" }, new JObject { ["index"] = 2, ["status"] = "completed", ["note"] = "Reviewed JS; no change needed." }) });
                 var responses = new Queue<string>(new[] {
@@ -248,14 +276,18 @@ namespace RNAssistant.Harness
                     LoadToolSchemaResponse(TaskListToolCatalog.SetToolId),
                     call(TaskListToolCatalog.SetToolId, new JObject { ["action"] = "save", ["goal"] = "Restore chart appearance",
                         ["steps"] = new JArray(new[] { cssTarget, jsTarget }.Select(target => new JObject { ["text"] = target })) }),
-                    LoadToolSchemaResponse(HtmlWorkspaceToolCatalog.WriteFileToolId),
+                    LoadSkillResponse("common.html_workspace_authoring"),
                     call(HtmlWorkspaceToolCatalog.WriteFileToolId, new JObject { ["path"] = "styles.css", ["content"] = "body{color:blue}" }),
-                    close,
-                    "{\"message\":\"Изменён CSS; JS проверен, правка не потребовалась.\",\"action\":\"done\",\"tool_calls\":[]}" });
+                    close });
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) => {
                     requests.Add(messages.ToList());
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    return Task.FromResult(new LlmCompletionResult { Content = responses.Count > 0
+                        ? responses.Dequeue()
+                        : ScriptedVerifiedFinish(session, "Report the completed CSS change and JS review.",
+                            "Изменён CSS; JS проверен, правка не потребовалась.", "CSS updated and JS reviewed.",
+                            ResourceToolCatalog.ReadToolId, ResourceToolCatalog.ReadToolId,
+                            HtmlWorkspaceToolCatalog.WriteFileToolId) });
                 });
                 var completed = service.ExecuteWithApprovalsAsync(ChatModes.Agent, "Проверь CSS и JS и исправь оформление графика.", session, NewContext(adapter), new AppSettings(),
                     OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(),

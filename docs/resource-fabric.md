@@ -146,7 +146,9 @@ selectors fail before dispatch rather than being silently ignored. Chat exposes
 only the file branch. Existing nullable optional arguments preserve their defaults.
 CLI `common.resources_read(target)` returns complete UTF-8 text when it fits this
 run's model input budget; otherwise it returns the first exact character window
-and can be continued by selectors. This uses the same file owner, retained payload,
+and can be continued by selectors. Whole, line-pair and character-pair reads are
+separate closed schema alternatives for workspace files, skills and Plans; a model
+cannot combine both selector families in one call. This uses the same file owner, retained payload,
 coverage and evidence as explicit windows. File reads also accept paired `startLine`
 (1-based) and `lineCount` (positive, within the model read budget), or `startChar` (zero-based UTF-16) and a positive
 `charCount` up to the context-derived limit in the offered tool schema. A range
@@ -545,8 +547,10 @@ no plaintext temporary file, head, second store or read evidence is created.
 The index has no configured whole-source byte ceiling; long lines remain addressable by parts. Derived parts remain CAS retention roots. A missing/corrupt part is rebuilt
 from the same exact source; unavailable source bytes fail closed.
 
-`common.resources_find` discovers semantic targets under its existing bounded
-cross-resource budget. `common.resources_search(target, query)` scans one selected
+`common.resources_find` discovers semantic targets under a one-million-character
+cross-resource budget; unindexed inline bodies contribute at most 128,000
+characters each. A prefix-only negative reports incomplete coverage.
+`common.resources_search(target, query)` scans one selected
 indexed text completely and returns bounded literal
 snippets, a total match count, `scanComplete`, `sourceComplete` and a matching
 `partNumber`. A negative result proves absence only when `scanComplete=true`.

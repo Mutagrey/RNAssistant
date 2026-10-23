@@ -26,6 +26,61 @@ is possible, but the photo does not identify the timed-out operation or stage.
 The triggering Windows cause remains open until the exact pane build and runtime
 log or a target-host reproduction are available; no chat data is reset for triage.
 
+## Conversation v8 readiness review — 2026-10-23
+
+Code review at candidate `02872af0` found two gaps against the original
+v8.1 specification. Both were fixed host-neutral through `1ee68c62` and have
+focused checks. Windows/UI delivery and full Harness qualification remain open.
+
+- **Workspace presentation (spec §G phase 4 / §H.7; fixed host-neutral).**
+  At `02872af0`, `PluginApplicationService.PresentWorkspaceMessage` returned only
+  message text and tool names; `PluginChatMessageDto` carried no finish claims.
+  Project/plugin chat omitted assessment and terminal evidence, including an
+  honest partial/unverified finish. An accepted reflection with `message=""`
+  became empty text with no actions, and `app-workspace-chat.js` appended an
+  article/footer. Owner: Workspace typed presentation and shared web chat
+  renderer. Typed claim presentation and a separate reflection step now retain
+  this information without rewriting history. Projection and Node rendering
+  checks cover partial/empty-message cases; target WebView2 still needs evidence.
+- **Direct-finish admission (spec §C.3; fixed host-neutral).**
+  At `02872af0`, `ConversationFinishEvidenceAdmission.Evaluate` rejected every nonempty results
+  array when accepted-call count is zero, including an evidence-free claim.
+  The specification permits `results=[]` here; it does not require it. The smoke
+  case named `old-run claim rejected` enshrined that extra restriction
+  even though its claim has no reference to an old run. Owner: Core finish
+  admission. The gate now accepts an evidence-free
+  direct claim and still rejects a foreign citation; the Core smoke covers both.
+
+Reflection decision/provenance now has a focused compaction/reload check, and
+the workspace renderer has a separate UI check. A combined process/browser
+scenario remains open. The full
+[phase readiness review](conversation-v8/PHASE4.md#specification-reconciliation--2026-10-23)
+also retains the representative real-model and Windows qualification gates;
+the [local CLI comparisons](conversation-v8/PHASE5_PILOT.md) are exploratory.
+
+## Harness bridge cancellation flake — 2026-10-23
+
+Two complete host-neutral v8 Harness runs (975/29 and 986/18 passed/failed)
+reported `bridge: agent run keeps controls responsive` failing to return a
+terminal response after cancellation. The same check passed immediately in
+isolation.
+Owner: Office bridge/run cancellation. Reproduce under suite load and inspect
+the addressed run's terminal event and bridge reply before treating cancellation
+as qualified. This is not Windows/Office/WebView2 evidence.
+
+## Shared context archive read limit — 2026-10-23
+
+The v8 Harness migration exposed a host-neutral gap in explicit shared-context
+reads. A published archive with an 80000-character source transcript yielded a
+JSON body larger than one `common.resources_read` window (at most 32000
+characters). The model-facing read contained truncated JSON, so
+`ModelContextCompiler` marked claims unavailable and exposed no raw source text.
+The bounded fixture with a 12000-character source passes after externalized
+payload hydration and authority filtering. Owner: resource read gateway and
+model context compiler. A complete internal archive read with bounded claim
+projection remains needed for larger valid archives; this gap is open and is
+not Windows/Office qualification evidence.
+
 ## Source-size audit — 2026-10-22
 
 Fixed source limits were removed across live text captures, HTML and file import,

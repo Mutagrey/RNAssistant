@@ -369,29 +369,56 @@ namespace RNAssistant.Core.Services
             if (string.Equals(source.ToolResultRole, ToolResultRoles.Tool, StringComparison.Ordinal))
                 return SanitizeOperationalText(source.Content);
 
-            // The non-native accepted call is a canonical v7 envelope. Preserve the
-            // exact tool_calls suffix: it may contain literal source text or hashes.
-            const string prefix = "{\"message\":";
+            // The v8 writer places reason before calls and message last. Change only
+            // those operational strings; call arguments may contain exact user text.
+            const string prefix = "{\"action\":\"execute\",\"reason\":";
+            const string calls = ",\"tool_calls\":";
+            const string messageField = ",\"message\":";
             var content = source.Content ?? string.Empty;
-            if (!content.StartsWith(prefix, StringComparison.Ordinal) ||
-                content.Length <= prefix.Length || content[prefix.Length] != '"')
+            if (source.ResponseProtocolVersion != ConversationResponse.ProtocolVersion ||
+                !content.StartsWith(prefix, StringComparison.Ordinal))
+                return SanitizeOperationalText(content);
+            int reasonEnd;
+            string reason;
+            if (!TryReadJsonString(content, prefix.Length, out reasonEnd, out reason) ||
+                content.IndexOf(calls, reasonEnd + 1, StringComparison.Ordinal) != reasonEnd + 1)
+                return SanitizeOperationalText(content);
+            var messageKey = content.LastIndexOf(messageField, StringComparison.Ordinal);
+            if (messageKey <= reasonEnd)
+                return SanitizeOperationalText(content);
+            var messageStart = messageKey + messageField.Length;
+            int messageEnd;
+            string message;
+            if (!TryReadJsonString(content, messageStart, out messageEnd, out message) ||
+                messageEnd != content.Length - 2 || content[content.Length - 1] != '}')
+                return SanitizeOperationalText(content);
+            var cleanReason = SanitizeOperationalText(reason);
+            var cleanMessage = SanitizeOperationalText(message);
+            if (string.Equals(reason, cleanReason, StringComparison.Ordinal) &&
+                string.Equals(message, cleanMessage, StringComparison.Ordinal))
                 return content;
+            return content.Substring(0, prefix.Length) + JsonConvert.SerializeObject(cleanReason) +
+                content.Substring(reasonEnd + 1, messageStart - reasonEnd - 1) +
+                JsonConvert.SerializeObject(cleanMessage) + '}';
+        }
+
+        private static bool TryReadJsonString(string content, int start, out int end, out string value)
+        {
+            end = -1;
+            value = null;
+            if (start >= content.Length || content[start] != '"') return false;
             var escaped = false;
-            for (var index = prefix.Length + 1; index < content.Length; index++)
+            for (var index = start + 1; index < content.Length; index++)
             {
                 if (escaped) { escaped = false; continue; }
                 if (content[index] == '\\') { escaped = true; continue; }
                 if (content[index] != '"') continue;
-                var encoded = content.Substring(prefix.Length, index - prefix.Length + 1);
-                string message;
-                try { message = JsonConvert.DeserializeObject<string>(encoded); }
-                catch (JsonException) { return content; }
-                var sanitized = SanitizeOperationalText(message);
-                return string.Equals(message, sanitized, StringComparison.Ordinal)
-                    ? content
-                    : prefix + JsonConvert.SerializeObject(sanitized) + content.Substring(index + 1);
+                try { value = JsonConvert.DeserializeObject<string>(content.Substring(start, index - start + 1)); }
+                catch (JsonException) { return false; }
+                end = index;
+                return true;
             }
-            return content;
+            return false;
         }
 
         private static ChatMessage InvalidCurrentResult(

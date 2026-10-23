@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using RNAssistant.Core.Agent;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 
@@ -57,7 +58,8 @@ namespace RNAssistant.Core.Services
                 pending,
                 summary.Reason,
                 string.IsNullOrWhiteSpace(run.CurrentAction) ? summary.AssistantMessage : run.CurrentAction,
-                run.StartedUtc);
+                run.StartedUtc,
+                modelResults: FinishResults(messages, summary));
         }
 
         public static RunViewState StampCurrentRun(ChatSession session)
@@ -75,11 +77,28 @@ namespace RNAssistant.Core.Services
         {
             if (summary.Lifecycle == RunLifecycle.AwaitingConfirmation) return RunViewLifecycles.AwaitingConfirmation;
             if (summary.Lifecycle == RunLifecycle.Completed &&
-                (summary.Reason == "awaiting_user" || summary.Reason == "model_needs_input")) return RunViewLifecycles.AwaitingUser;
+                summary.Reason == "awaiting_user") return RunViewLifecycles.AwaitingUser;
             if (summary.Lifecycle == RunLifecycle.Completed) return RunViewLifecycles.Completed;
             if (summary.Lifecycle == RunLifecycle.Cancelled) return RunViewLifecycles.Cancelled;
             if (summary.Lifecycle == RunLifecycle.Failed) return RunViewLifecycles.Failed;
             return RunViewLifecycles.Running;
+        }
+
+        private static IReadOnlyList<ModelResultViewState> FinishResults(
+            IEnumerable<ChatMessage> messages, RunSummary summary)
+        {
+            if (summary.Lifecycle != RunLifecycle.Completed || summary.Reason != "model_finish")
+                return new ModelResultViewState[0];
+            var message = (messages ?? Enumerable.Empty<ChatMessage>()).LastOrDefault(item =>
+                item != null && item.Role == "assistant" && item.ProtocolMessage &&
+                string.Equals(item.RunId, summary.RunId, StringComparison.Ordinal));
+            if (message == null || message.ResponseProtocolVersion != ConversationResponse.ProtocolVersion)
+                return new ModelResultViewState[0];
+            var accepted = ConversationResponseHistoryReader.Read(message);
+            return !accepted.Success || accepted.Response.Action != ConversationResponse.FinishAction
+                ? (IReadOnlyList<ModelResultViewState>)new ModelResultViewState[0]
+                : accepted.Response.Results.Select(claim => new ModelResultViewState(
+                    claim.Summary, claim.AssessmentName, claim.Evidence)).ToArray();
         }
 
         private static IReadOnlyList<ToolEffectEvidence> CollectEffects(

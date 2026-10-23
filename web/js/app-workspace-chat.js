@@ -112,6 +112,42 @@
     node.title = label; node.setAttribute("aria-label", label);
     node.innerHTML = window.RNAssistantIcons.render(icon); node.onclick = action; return node;
   }
+  function reflectionStep(decision) {
+    var step = document.createElement("div"); step.className = "workspace-reflection-step";
+    var title = document.createElement("strong"); title.textContent = "Промежуточное решение";
+    var text = document.createElement("span"); text.textContent = decision;
+    step.append(title, text);
+    return step;
+  }
+  function modelResultsNotice(results) {
+    var labels = { satisfied: "выполнено", partially_satisfied: "частично",
+      unverified: "не подтверждено", not_satisfied: "не выполнено" };
+    var incomplete = results.some(function (item) { return field(item, "assessment") !== "satisfied"; });
+    var note = document.createElement("div");
+    note.className = "message-outcome agent-run-notice " + (incomplete ? "status-warning" : "status-history");
+    note.setAttribute("role", "status");
+    var copy = document.createElement("div"); copy.className = "agent-run-notice-copy";
+    var heading = document.createElement("span");
+    heading.textContent = "Итоги по оценке модели. Достижение цели отдельно не проверено.";
+    copy.appendChild(heading);
+    var details = document.createElement("details"); details.className = "agent-model-results";
+    details.open = incomplete;
+    var summary = document.createElement("summary"); summary.textContent = "Утверждения и ссылки на результаты";
+    details.appendChild(summary);
+    var list = document.createElement("ol");
+    results.forEach(function (item) {
+      var row = document.createElement("li"), assessment = field(item, "assessment");
+      row.textContent = field(item, "summary") + " · " + (labels[assessment] || "оценка неизвестна");
+      var evidence = field(item, "evidence");
+      if (Array.isArray(evidence) && evidence.length) {
+        var refs = document.createElement("small");
+        refs.textContent = " · результаты: " + evidence.join(", "); row.appendChild(refs);
+      }
+      list.appendChild(row);
+    });
+    details.appendChild(list); copy.appendChild(details); note.appendChild(copy);
+    return note;
+  }
   function renderMessages(list, chat) {
     var key = JSON.stringify([field(field(chat, "project"), "workspaceId") || "", chat.sessionId || chat.pluginId || ""]), changed = list.dataset.session !== key;
     var following = changed || list.scrollHeight - list.scrollTop - list.clientHeight < 64;
@@ -120,10 +156,18 @@
     var expanded = new Set(Array.from(list.querySelectorAll("details[open][data-message-key]")).map(function (item) { return item.dataset.messageKey; }));
     var scroll = list.scrollTop;
     list.replaceChildren(); list.dataset.session = key; list._chatSignature = signature;
-    if (!(chat.messages || []).length) list.appendChild(renderChatEmptyState({ title: "С чего начнём?",
+    var visible = (chat.messages || []).filter(function (message) {
+      return !!(message.text || "").trim() || !!message.reflectionDecision ||
+        !!(message.actions && message.actions.length) || !!(message.results && message.results.length);
+    });
+    if (!visible.length) list.appendChild(renderChatEmptyState({ title: "С чего начнём?",
       text: "Опишите изменение плагина или задайте вопрос об исходниках." }));
-    (chat.messages || []).forEach(function (message, index) {
-      var article = renderMessageArticle({ Role: message.role, Content: message.text || "" }, index, { workspace: true });
+    visible.forEach(function (message, index) {
+      if (message.reflectionDecision) list.appendChild(reflectionStep(message.reflectionDecision));
+      var article = (message.text || "").trim()
+        ? renderMessageArticle({ Role: message.role, Content: message.text }, index, { workspace: true }) : null;
+      var extra = article || document.createElement("div");
+      if (!article) extra.className = "workspace-chat-activity";
       if (message.actions && message.actions.length) {
         var details = document.createElement("details"); details.className = "agent-run-history agent-run-overview";
         details.dataset.messageKey = message.id || String(index); details.open = !changed && expanded.has(details.dataset.messageKey);
@@ -135,9 +179,15 @@
         message.actions.forEach(function (action) {
           var row = document.createElement("div"); row.className = "agent-activity-tool-id"; row.textContent = action; details.appendChild(row);
         });
-        article.insertBefore(details, article.querySelector(".message-footer"));
+        if (article) article.insertBefore(details, article.querySelector(".message-footer"));
+        else extra.appendChild(details);
       }
-      list.appendChild(article);
+      if (message.results && message.results.length) {
+        var outcome = modelResultsNotice(message.results);
+        if (article) article.insertBefore(outcome, article.querySelector(".message-footer"));
+        else extra.appendChild(outcome);
+      }
+      if (article || extra.childNodes.length) list.appendChild(extra);
     });
     list.scrollTop = following ? list.scrollHeight : scroll;
   }

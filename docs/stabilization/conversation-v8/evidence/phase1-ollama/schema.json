@@ -1,0 +1,238 @@
+{
+  "description": "Conversation response v8. Return exactly one conversation-response-v8 JSON object. Order fields: action, reason, action-specific fields, message last. reason is a brief decision basis, not private reasoning. Choose execute with nonempty tool_calls when an authorized tool step remains. Each call has only name and object arguments; runtime assigns IDs. Batch only independent local reads; return other calls alone and wait for their results. Choose reflection with a nonblank decision only when a useful interpretation is needed before the next model request. Reflection executes nothing, creates no tool result and grants no permissions; it is optional and bounded. Choose finish with a results array to end the run; deliver the answer or outcomes now, not a promise. Each result has summary, evidence (terminal runtime tool_call_id strings), and assessment (satisfied, partially_satisfied, unverified or not_satisfied). Without accepted calls results may be empty. After accepted calls include results and at least one real terminal reference. Never invent evidence or convert failed/unknown outcomes into verified effects. execute forbids decision/results; reflection forbids tool_calls/results; finish forbids tool_calls/decision. No extra root fields. Assessments are model claims, not runtime success. Ask indispensable questions through the available question tool; explain unresolved outcomes truthfully.",
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "const": "execute"
+        },
+        "reason": {
+          "type": "string",
+          "pattern": "[^\\t\\n\\v\\f\\r \\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]"
+        },
+        "tool_calls": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "const": "probe.write"
+                      },
+                      "arguments": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "sheets",
+                              "charts"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "arguments"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "const": "probe.optional"
+                      },
+                      "arguments": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "sheets",
+                              "charts"
+                            ]
+                          },
+                          "limit": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ],
+                            "minimum": 1,
+                            "maximum": 10
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "limit"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "arguments"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "minItems": 1,
+              "maxItems": 1
+            },
+            {
+              "type": "array",
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "const": "probe.read"
+                      },
+                      "arguments": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "sheets",
+                              "charts"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "arguments"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "minItems": 1,
+              "maxItems": 32
+            }
+          ]
+        },
+        "message": {
+          "type": "string",
+          "description": "message is useful user-facing text; an empty string is allowed. On the first execute of a substantial task, state the approach briefly and include the next concrete call. On later turns report only new relevant findings, decisions, contradictions, blockers or meaningful stage changes. Use message=\"\" for routine continuation, including skill/schema loading. Do not repeat earlier progress, arguments or the plan. For finish, deliver the answer or outcomes and verification limits. Give concise decision reasons, not private reasoning or invented findings."
+        }
+      },
+      "required": [
+        "action",
+        "reason",
+        "tool_calls",
+        "message"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "const": "reflection"
+        },
+        "reason": {
+          "type": "string",
+          "pattern": "[^\\t\\n\\v\\f\\r \\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]"
+        },
+        "decision": {
+          "type": "string",
+          "pattern": "[^\\t\\n\\v\\f\\r \\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]"
+        },
+        "message": {
+          "type": "string",
+          "description": "message is useful user-facing text; an empty string is allowed. On the first execute of a substantial task, state the approach briefly and include the next concrete call. On later turns report only new relevant findings, decisions, contradictions, blockers or meaningful stage changes. Use message=\"\" for routine continuation, including skill/schema loading. Do not repeat earlier progress, arguments or the plan. For finish, deliver the answer or outcomes and verification limits. Give concise decision reasons, not private reasoning or invented findings."
+        }
+      },
+      "required": [
+        "action",
+        "reason",
+        "decision",
+        "message"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "const": "finish"
+        },
+        "reason": {
+          "type": "string",
+          "pattern": "[^\\t\\n\\v\\f\\r \\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]"
+        },
+        "results": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "summary": {
+                "type": "string",
+                "pattern": "[^\\t\\n\\v\\f\\r \\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]"
+              },
+              "evidence": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "[^\\t\\n\\v\\f\\r \\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]"
+                },
+                "uniqueItems": true,
+                "description": "Exact runtime tool_call_id references to terminal results of this run; never invented IDs."
+              },
+              "assessment": {
+                "type": "string",
+                "enum": [
+                  "satisfied",
+                  "partially_satisfied",
+                  "unverified",
+                  "not_satisfied"
+                ]
+              }
+            },
+            "required": [
+              "summary",
+              "evidence",
+              "assessment"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "message": {
+          "type": "string",
+          "description": "message is useful user-facing text; an empty string is allowed. On the first execute of a substantial task, state the approach briefly and include the next concrete call. On later turns report only new relevant findings, decisions, contradictions, blockers or meaningful stage changes. Use message=\"\" for routine continuation, including skill/schema loading. Do not repeat earlier progress, arguments or the plan. For finish, deliver the answer or outcomes and verification limits. Give concise decision reasons, not private reasoning or invented findings."
+        }
+      },
+      "required": [
+        "action",
+        "reason",
+        "results",
+        "message"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

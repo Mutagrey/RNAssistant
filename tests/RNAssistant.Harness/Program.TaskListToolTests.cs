@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.Llm;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office;
@@ -21,17 +22,26 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) => {
                 var close = new JObject { ["action"] = "close", ["outcome"] = "completed" };
                 var responses = new Queue<string>(new[] {
-                    V4Envelope(V4Call("common.capabilities_read", new JObject { ["id"] = TaskListToolCatalog.SetToolId })),
-                    V4Envelope(V4Call(TaskListToolCatalog.SetToolId, close)),
-                    V4Envelope(V4Call(TaskListToolCatalog.SetToolId, new JObject {
+                    V8Envelope(V8Call("common.capabilities_read", new JObject { ["id"] = TaskListToolCatalog.SetToolId })),
+                    V8Envelope(V8Call(TaskListToolCatalog.SetToolId, close)),
+                    V8Envelope(V8Call(TaskListToolCatalog.SetToolId, new JObject {
                         ["action"] = "save", ["goal"] = "Track the outcome",
                         ["steps"] = new JArray(new JObject { ["text"] = "Review", ["status"] = "completed" }) })),
-                    V4Envelope(V4Call(TaskListToolCatalog.SetToolId, close)),
-                    V4Envelope()
+                    V8Envelope(V8Call(TaskListToolCatalog.SetToolId, close))
                 });
                 var session = NewSession(adapter);
                 var result = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
-                    Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() }))
+                {
+                    var content = responses.Count > 0 ? responses.Dequeue() :
+                        ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                            "The requested review is saved and closed.", "Review recorded.",
+                            results: new[] { new ConversationResultClaim("Review recorded and closed.",
+                                new[] { session.Messages.Last(message => message.RunId == session.LastRun.RunId &&
+                                    message.ToolName == TaskListToolCatalog.SetToolId &&
+                                    message.AcceptedCallOrigin != null).ToolCallId },
+                                ConversationAssessment.Satisfied) });
+                    return Task.FromResult(new LlmCompletionResult { Content = content });
+                })
                     .ExecuteAsync(ChatModes.Agent, "Record the completed review.", session, NewContext(adapter), new AppSettings(),
                         OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null)
                     .GetAwaiter().GetResult();

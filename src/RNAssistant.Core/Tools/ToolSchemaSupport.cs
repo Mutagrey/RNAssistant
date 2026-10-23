@@ -5,7 +5,6 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using RNAssistant.Core.Models;
 
 namespace RNAssistant.Core.Tools
 {

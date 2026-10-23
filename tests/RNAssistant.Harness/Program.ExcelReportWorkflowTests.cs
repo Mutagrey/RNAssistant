@@ -74,8 +74,9 @@ namespace RNAssistant.Harness
 
             internal static Queue<string> Script()
             {
-                Func<string, JObject, string> call = (name, arguments) => ModelProtocolWire.Write("", new[] {
-                    new ConversationToolCall { Name = name, Arguments = arguments } });
+                Func<string, JObject, string> call = (name, arguments) =>
+                    ModelProtocolWire.WriteAcceptedCall("Perform the next report step.", "",
+                        new ConversationToolCall { Name = name, Arguments = arguments });
                 return new Queue<string>(new[] {
                     LoadSkillResponse("excel.analysis_reporting"),
                     call("common.resources_read", new JObject { ["target"] = "Excel range: Data!A1:C7", ["representation"] = "table" }),
@@ -87,7 +88,7 @@ namespace RNAssistant.Harness
                     call("excel.upsert_chart", new JObject { ["sheet"] = "SalesReport", ["sourceRange"] = "A1:B4", ["chartName"] = "SalesByRegion",
                         ["chartType"] = "column", ["title"] = "Revenue by region" }),
                     call("common.resources_read", new JObject { ["target"] = "Excel range: SalesReport!A1:B4", ["representation"] = "table" }),
-                    ModelProtocolWire.Write("Создан и проверен отчёт. Реальный Excel и внешний вид диаграммы не проверялись.", new ConversationToolCall[0])
+                    null // The finish is generated after runtime assigns terminal call IDs.
                 });
             }
         }

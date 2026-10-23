@@ -696,16 +696,15 @@ namespace RNAssistant.Cli
             var checkedAcceptance = result.Acceptance;
             var summary = result.Summary;
             var pending = summary.PendingConfirmation;
-            var needsInput = result.UserInput != null || summary.Reason == "model_needs_input";
+            var needsInput = result.UserInput != null || summary.Reason == "awaiting_user";
             var acceptancePassed = checkedAcceptance.State == WorkspaceAcceptanceState.NotRequested ||
                 checkedAcceptance.State == WorkspaceAcceptanceState.Passed;
             var cancelled = summary.Lifecycle == RNAssistant.Core.Agent.RunLifecycle.Cancelled;
             if (jsonl) Output(true, pending != null ? "run.awaiting_confirmation" : needsInput ? "run.needs_input" : cancelled ? "run.cancelled" : "run.completed",
                 new { result.SessionId, summary.RunId, result.Cursor, inputReceipt = result.Receipt,
                     lifecycle = summary.Lifecycle.ToString(), reason = summary.Reason,
-                    action = summary.Reason == "model_done" ? "done" :
-                        summary.Reason == "model_blocked" ? "blocked" :
-                        needsInput ? "needs_input" : "other",
+                    action = summary.Reason == "model_finish" ? "finish" :
+                        needsInput ? "awaiting_user" : "other",
                     health = summary.ExecutionHealth.ToString(), summary.AssistantMessage, summary.ToolCounts,
                     summary.IterationsUsed, summary.ToolStepsUsed,
                     pendingId = pending?.PendingId, pendingTool = pending?.Call.Name,
@@ -726,8 +725,7 @@ namespace RNAssistant.Cli
             if (pending != null || needsInput) return 3;
             if (cancelled) return 130;
             if (!acceptancePassed) return 5;
-            return summary.Lifecycle == RNAssistant.Core.Agent.RunLifecycle.Failed ? 5 :
-                summary.Reason == "model_needs_input" ? 3 : 0;
+            return summary.Lifecycle == RNAssistant.Core.Agent.RunLifecycle.Failed ? 5 : 0;
         }
 
         private sealed class QuestionsRequired

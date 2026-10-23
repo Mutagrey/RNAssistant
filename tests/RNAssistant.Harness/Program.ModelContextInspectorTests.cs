@@ -122,7 +122,7 @@ namespace RNAssistant.Harness
 
         private static void ModelRequestSchemaDuplicationModesAndFallback()
         {
-            var tool = V4ReadTool();
+            var tool = V8ReadTool();
             var tools = new[] { tool };
             var adapter = FakeOfficeAdapter.ForHost("Excel");
             var settings = new AppSettings { AgentResponseMode = AgentResponseModes.JsonSchema,
@@ -139,7 +139,7 @@ namespace RNAssistant.Harness
                 new ContextMessagePresentation { SourceMessageId = accepted[0].Id, MessageIndex = 0,
                     Role = accepted[0].Role, Presentation = ContextPresentationKind.Full } } };
             var driftedSchema = JObject.Parse(options.ResponseSchemaJson);
-            driftedSchema.SelectToken("properties.tool_calls.items.anyOf[0].properties.name.const")
+            driftedSchema.SelectToken("anyOf[0].properties.tool_calls.items.anyOf[0].properties.name.const")
                 .Replace(new JValue("different.tool"));
             AssertTrue(ReferenceEquals(accepted, ConversationPromptComposer.ProjectJsonSchemaMessages(
                 accepted, tools, driftedSchema.ToString(Newtonsoft.Json.Formatting.None))),
@@ -186,7 +186,8 @@ namespace RNAssistant.Harness
                 if (formats.Count == 2)
                     throw new LlmRequestException(LlmFailureKind.ResponseFormatUnsupported, "schema rejected during repair");
                 return System.Threading.Tasks.Task.FromResult(new LlmCompletionResult
-                    { Content = "{\"message\":\"Done.\",\"action\":\"done\",\"tool_calls\":[]}" });
+                    { Content = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                        "Answer directly.", "Done.", results: new ConversationResultClaim[0]) });
             });
             var result = protocol.GetResponseAsync(request, null, CancellationToken.None).GetAwaiter().GetResult();
             AssertTrue(result.Failure == null, "strict repair falls back and accepts a valid object response");
@@ -225,10 +226,11 @@ namespace RNAssistant.Harness
                     currentOptions.TraceContextReceipt, currentOptions.TraceMessageContentChanged)[0].Presentation,
                     "direct object request retains Full provenance");
                 return System.Threading.Tasks.Task.FromResult(new LlmCompletionResult
-                    { Content = "{\"message\":\"Done.\",\"action\":\"done\",\"tool_calls\":[]}" });
+                    { Content = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                        "Answer directly.", "Done.", results: new ConversationResultClaim[0]) });
             });
             AssertTrue(objectProtocol.GetResponseAsync(objectRequest, null, CancellationToken.None)
-                .GetAwaiter().GetResult().Failure == null, "json_object mode accepts the shared v5 response");
+                .GetAwaiter().GetResult().Failure == null, "json_object mode accepts the shared v8 response");
         }
 
         private static void ModelRequestSchemaDuplicationSize()

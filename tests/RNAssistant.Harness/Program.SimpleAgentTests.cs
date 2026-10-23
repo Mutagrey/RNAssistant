@@ -26,7 +26,8 @@ namespace RNAssistant.Harness
                 Arguments = new Dictionary<string, object> { ["at"] = "2026-08-28T12:34:56Z" } };
             foreach (var role in new[] { ToolResultRoles.User, ToolResultRoles.Developer, ToolResultRoles.Tool })
             {
-                var message = AgentJsonProtocol.CreateToolCallMessage(call, "Accepted step.", null, role, FixtureCallOrigin());
+                var message = AgentJsonProtocol.CreateToolCallMessage(call, "Accepted step.",
+                    "Read the requested history item.", null, role, FixtureCallOrigin());
                 message.ExcludeFromModelContext = true;
                 var before = JsonConvert.SerializeObject(message);
                 var parsed = ConversationResponseHistoryReader.Read(message);
@@ -36,50 +37,33 @@ namespace RNAssistant.Harness
                 var arguments = JsonConvert.DeserializeObject<JObject>(parsed.Response.ToolCalls[0].ArgumentsJson,
                     new JsonSerializerSettings { DateParseHandling = DateParseHandling.None });
                 AssertEqual("2026-08-28T12:34:56Z", (string)arguments["at"], "accepted ISO argument remains exact text");
-                var wire = ModelProtocolWire.Write(parsed.Response.Message,
-                    new[] { new ConversationToolCall { Name = call.Name, Arguments = arguments } });
+                var wire = ModelProtocolWire.WriteAcceptedCall(parsed.Response.Reason,
+                    parsed.Response.Message, new ConversationToolCall { Name = call.Name, Arguments = arguments });
                 AssertTrue(JObject.Parse(wire)["tool_calls"][0]["id"] == null, "history identity never becomes a model-generated wire field");
-                AssertTrue(!ParseV4(wire, V4ReadTool()).Success, "history reading does not grant execution authority");
+                AssertTrue(!ParseV8(wire, V8ReadTool()).Success, "history reading does not grant execution authority");
                 arguments["at"] = "changed copy";
                 AssertEqual(before, JsonConvert.SerializeObject(message), "history reader does not rewrite its source record");
             }
-            var final = AgentTranscript.CreateAssistantMessage(V4Envelope(V4Call()), null, null, AgentResponseStatuses.Refused);
-            var plain = ConversationResponseHistoryReader.Read(final);
-            AssertTrue(plain.Success && plain.Response.ToolCalls.Count == 0, "plain final text is not sniffed as a tool envelope");
-            AssertEqual(final.Content, plain.Response.Message, "JSON-looking final text remains exact text");
-
-            var workspace = new ChatMessage {
-                Role = "assistant", ProtocolMessage = true,
-                ResponseProtocolVersion = ConversationResponse.ProtocolVersion,
-                Content = ModelProtocolWire.Write("Workspace finding.", new[] { new ConversationToolCall {
-                    Name = "common.resources_read", Arguments = JObject.Parse("{\"target\":\"notes.txt\"}") } }),
-                ToolCallId = "workspace_call", ToolName = "common.resources_read",
-                AcceptedCallOrigin = FixtureCallOrigin("workspace_call"),
-                ToolCalls = new List<LlmToolCall> { new LlmToolCall { Id = "workspace_call",
-                    Type = "function", Name = "common.resources_read", ArgumentsJson = "{\"target\":\"notes.txt\"}" } }
-            };
-            var workspaceRead = ConversationResponseHistoryReader.Read(workspace);
-            AssertTrue(workspaceRead.Success, "workspace v7 envelope with durable call metadata is accepted");
-            AssertEqual("Workspace finding.", workspaceRead.Response.Message,
-                "workspace narration is the response message, not its JSON envelope");
-            AssertEqual("workspace_call", workspaceRead.Response.ToolCalls.Single().Id,
-                "workspace call keeps the runtime identity");
-            var changedArguments = JsonConvert.DeserializeObject<ChatMessage>(JsonConvert.SerializeObject(workspace));
-            changedArguments.ToolCalls[0].ArgumentsJson = "{}";
-            AssertTrue(!ConversationResponseHistoryReader.Read(changedArguments).Success,
-                "workspace call metadata must match the accepted arguments");
-            var missingCall = JsonConvert.DeserializeObject<ChatMessage>(JsonConvert.SerializeObject(workspace));
-            missingCall.ToolCalls.Clear();
-            AssertTrue(!ConversationResponseHistoryReader.Read(missingCall).Success,
-                "workspace envelope cannot lose its durable call metadata");
+            var final = AgentTranscript.CreateAssistantMessage(V8Envelope(), null, null, AgentResponseStatuses.Completed);
+            final.ProtocolMessage = true;
+            final.ResponseModelAttemptId = "accepted_finish";
+            var accepted = ConversationResponseHistoryReader.Read(final);
+            AssertTrue(accepted.Success && accepted.Response.ToolCalls.Count == 0,
+                "identified v8 finish reads without tool metadata");
+            AssertEqual("Читаю.", accepted.Response.Message, "finish message remains exact");
+            var unmarked = AgentTranscript.CreateAssistantMessage(V8Envelope(), null, null, AgentResponseStatuses.Refused);
+            AssertTrue(!ConversationResponseHistoryReader.Read(unmarked).Success,
+                "JSON-looking text without accepted origin is not inferred as v8 history");
         }
 
         private static void ConversationHistoryRejectsAmbiguousRecords()
         {
             Func<ChatMessage> jsonMessage = () => AgentJsonProtocol.CreateToolCallMessage(
-                new AgentToolCall { Id = "call_1", Name = "test.read" }, "Read.", null, ToolResultRoles.User, FixtureCallOrigin());
+                new AgentToolCall { Id = "call_1", Name = "test.read" }, "Read.",
+                "Read the requested item.", null, ToolResultRoles.User, FixtureCallOrigin());
             Func<ChatMessage> nativeMessage = () => AgentJsonProtocol.CreateToolCallMessage(
-                new AgentToolCall { Id = "call_1", Name = "test.read" }, "Read.", null, ToolResultRoles.Tool, FixtureCallOrigin());
+                new AgentToolCall { Id = "call_1", Name = "test.read" }, "Read.",
+                "Read the requested item.", null, ToolResultRoles.Tool, FixtureCallOrigin());
             var missingId = jsonMessage();
             missingId.ToolCallId = null;
             AssertTrue(!ConversationResponseHistoryReader.Read(missingId).Success, "missing runtime identity fails closed");
@@ -134,7 +118,7 @@ namespace RNAssistant.Harness
             AssertTrue(rejected, "one raw call position cannot map to two accepted identities");
         }
 
-        private static ToolCatalogEntry V4ReadTool(string id = "test.read")
+        private static ToolCatalogEntry V8ReadTool(string id = "test.read")
         {
             return new ToolCatalogEntry
             {
@@ -147,9 +131,9 @@ namespace RNAssistant.Harness
             };
         }
 
-        private static ToolCatalogEntry V4StructuredReadTool()
+        private static ToolCatalogEntry V8StructuredReadTool()
         {
-            var tool = V4ReadTool();
+            var tool = V8ReadTool();
             tool.ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{" +
                 "\"query\":{\"type\":\"string\",\"description\":\"Query.\",\"minLength\":1}," +
                 "\"at\":{\"type\":\"string\",\"description\":\"Optional timestamp.\"}," +
@@ -160,57 +144,62 @@ namespace RNAssistant.Harness
             return tool;
         }
 
-        private static JObject V4Call(string name = "test.read", JObject arguments = null)
+        private static JObject V8Call(string name = "test.read", JObject arguments = null)
         {
             return new JObject { ["name"] = name,
                 ["arguments"] = arguments ?? new JObject { ["query"] = "A" } };
         }
 
-        private static string V4Envelope(params JObject[] calls)
+        private static string V8Envelope(params JObject[] calls)
         {
             return new JObject
             {
-                ["message"] = "Читаю.",
-                ["action"] = calls == null || calls.Length == 0 ? "done" : "tool",
-                ["tool_calls"] = new JArray(calls ?? new JObject[0])
+                ["action"] = calls == null || calls.Length == 0 ? "finish" : "execute",
+                ["reason"] = "Handle the request.",
+                [calls == null || calls.Length == 0 ? "results" : "tool_calls"] =
+                    new JArray(calls ?? new JObject[0]),
+                ["message"] = "Читаю."
             }.ToString(Formatting.None);
         }
 
-        private static string V4EnvelopeWithFinal(bool final, params JObject[] calls)
+        private static string V8FinishWithIllegalCalls(params JObject[] calls)
         {
             return new JObject
             {
-                ["message"] = "Читаю.",
-                ["action"] = final ? "done" : "tool",
-                ["tool_calls"] = new JArray(calls ?? new JObject[0])
+                ["action"] = "finish",
+                ["reason"] = "Handle the request.",
+                ["results"] = new JArray(),
+                ["tool_calls"] = new JArray(calls ?? new JObject[0]),
+                ["message"] = "Читаю."
             }.ToString(Formatting.None);
         }
 
-        private static ConversationResponseParseResult ParseV4(string json, params ToolCatalogEntry[] tools)
+        private static ConversationResponseParseResult ParseV8(string json, params ToolCatalogEntry[] tools)
         {
             return new ConversationResponseParser().Parse(json, tools, tools,
                 new ModelProtocolCallContext(tools.Select(tool => tool.Id)));
         }
 
-        private static void ConversationV4RoundTripsWithoutStatus()
+        private static void ConversationV8RoundTripsWithoutStatus()
         {
             foreach (var message in new[] { "Готово.", "", "  ", "Не удалось выполнить.\nНужен доступ.", "He said \"done\" \\ / \t" })
             {
-                var json = new JObject { ["message"] = message, ["action"] = "done", ["tool_calls"] = new JArray() }.ToString(Formatting.None);
-                var parsed = ParseV4(json);
-                AssertTrue(parsed.Success, "v7 accepts a string message without interpreting its wording");
+                var json = new JObject { ["action"] = "finish", ["reason"] = "Answer the user.",
+                    ["results"] = new JArray(), ["message"] = message }.ToString(Formatting.None);
+                var parsed = ParseV8(json);
+                AssertTrue(parsed.Success, "v8 accepts a string message without interpreting its wording");
                 AssertEqual(message, parsed.Response.Message, "message remains exact");
                 AssertTrue(parsed.Response.Final, "final answer intent is explicit");
                 AssertTrue(JToken.DeepEquals(JObject.Parse(json), JObject.Parse(parsed.Response.ToJson())), "status-free final round trip");
             }
-            var tool = V4StructuredReadTool();
-            var callJson = V4Envelope(V4Call(arguments: new JObject
+            var tool = V8StructuredReadTool();
+            var callJson = V8Envelope(V8Call(arguments: new JObject
             {
                 ["query"] = "\\u0061", ["at"] = "2026-08-28T12:34:56Z",
                 ["items"] = new JArray(new JObject { ["name"] = "nested" })
             }));
-            var call = ParseV4(callJson, tool);
-            AssertTrue(call.Success, "v4 tool parses");
+            var call = ParseV8(callJson, tool);
+            AssertTrue(call.Success, "v8 execute parses");
             AssertEqual(typeof(JObject), typeof(ConversationToolCall).GetProperty("Arguments").PropertyType,
                 "validated arguments remain one JSON tree until canonical ArgumentsJson");
             AssertTrue(call.Response.ToolCalls[0].Arguments.Parent == null,
@@ -223,47 +212,52 @@ namespace RNAssistant.Harness
             AssertTrue(!call.Response.Final, "tool turns are not final answers");
             var silent = JObject.Parse(callJson);
             silent["message"] = "";
-            AssertTrue(ParseV4(silent.ToString(), tool).Success, "a tool call does not require visible narration");
+            AssertTrue(ParseV8(silent.ToString(), tool).Success, "a tool call does not require visible narration");
             AssertTrue(JToken.DeepEquals(JObject.Parse(callJson), JObject.Parse(call.Response.ToJson())), "call round trip preserves arguments without assigning ids");
-            AssertTrue(typeof(ConversationResponse).GetProperty("Status") == null, "v7 DTO has no model or universal status");
-            foreach (var action in new[] { "done", "blocked", "needs_input" })
+            AssertTrue(typeof(ConversationResponse).GetProperty("Status") == null, "v8 DTO has no model or universal status");
+            foreach (var action in new[] { ConversationResponse.ReflectionAction, ConversationResponse.FinishAction })
             {
-                var envelope = ModelProtocolWire.WriteAction("Observed result; next decision is explicit.", action);
-                var parsed = ParseV4(envelope);
+                var envelope = ModelProtocolWire.WriteAcceptedDecision(action,
+                    "Record the next decision.", "Observed result; next decision is explicit.",
+                    decision: action == ConversationResponse.ReflectionAction ? "Consider the observation." : null,
+                    results: action == ConversationResponse.FinishAction ? new ConversationResultClaim[0] : null);
+                var parsed = ParseV8(envelope);
                 AssertTrue(parsed.Success && parsed.Response.Action == action && parsed.Response.ToolCalls.Count == 0,
-                    "v7 preserves no-call action: " + action);
+                    "v8 preserves no-call action: " + action);
                 AssertEqual(envelope, parsed.Response.ToJson(), "no-call action round trips exactly");
             }
-            AssertTrue(!ParseV4("{\"message\":\"Wait\",\"action\":\"continue\",\"tool_calls\":[{}]}").Success,
+            AssertTrue(!ParseV8("{\"message\":\"Wait\",\"action\":\"continue\",\"tool_calls\":[{}]}").Success,
                 "progress cannot conceal a call");
-            AssertTrue(!ParseV4("{\"message\":\"Observed fact.\",\"action\":\"continue\",\"tool_calls\":[]}").Success,
+            AssertTrue(!ParseV8("{\"message\":\"Observed fact.\",\"action\":\"continue\",\"tool_calls\":[]}").Success,
                 "no-call progress is excluded even with a concrete message");
-            AssertTrue(!ParseV4("{\"message\":\"\",\"action\":\"blocked\",\"tool_calls\":[]}").Success,
-                "a blocked outcome must explain the remaining work");
+            AssertTrue(!ParseV8("{\"message\":\"\",\"action\":\"blocked\",\"tool_calls\":[]}").Success,
+                "removed blocked action is rejected");
         }
 
         private static void SimpleAgentEndsNoToolTurn()
         {
             foreach (var mode in new[] { ChatModes.Agent, ChatModes.Plan })
-            foreach (var action in new[] { ConversationResponse.DoneAction, ConversationResponse.BlockedAction, ConversationResponse.NeedsInputAction })
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) => {
                 var requests = 0;
                 var session = NewSession(adapter);
                 session.Mode = mode;
                 var result = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) => {
                     requests++;
-                    return Task.FromResult(new LlmCompletionResult { Content = ModelProtocolWire.WriteAction("Ответ пользователю.", action) });
+                    return Task.FromResult(new LlmCompletionResult { Content = ModelProtocolWire.WriteAcceptedDecision(
+                        ConversationResponse.FinishAction, "Answer the request directly.", "Ответ пользователю.",
+                        results: new ConversationResultClaim[0]) });
                 }).ExecuteAsync(mode, "Запрос пользователя.", session, NewContext(adapter), new AppSettings(),
                     OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null)
                     .GetAwaiter().GetResult();
                 AssertEqual(1, requests, "a no-call response ends the turn without self-prompting: " + mode);
-                AssertEqual(action == ConversationResponse.DoneAction ? AgentResponseStatuses.Completed :
-                    action == ConversationResponse.BlockedAction ? AgentResponseStatuses.Blocked : AgentResponseStatuses.AwaitingUser,
-                    result.ResponseStatus, "the terminal reason is retained independently of prose");
-                AssertEqual("model_" + action, result.RunViewState.Reason, "done, blocked and needs_input remain distinct");
-                var terminal = session.Messages.Last(message => message.Role == "assistant" && message.Activity == null);
+                AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus,
+                    "the direct finish ends the turn independently of prose");
+                AssertEqual("model_finish", result.RunViewState.Reason, "finish is the terminal model decision");
+                var terminal = session.Messages.Last(message => message.Role == "assistant" &&
+                    message.Activity == null && message.ProtocolMessage);
                 var parsed = ConversationResponseHistoryReader.Read(terminal);
-                AssertTrue(parsed.Success && parsed.Response.Action == action, "history preserves the terminal decision");
+                AssertTrue(parsed.Success && parsed.Response.Action == ConversationResponse.FinishAction,
+                    "history preserves the terminal decision");
             });
         }
 
@@ -273,9 +267,16 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) => {
                 var responses = new Queue<string>(new[] {
                     "{\"message\":\"I will continue.\",\"action\":\"continue\",\"tool_calls\":[]}",
-                    ModelProtocolWire.WriteAction("Какой источник использовать?", ConversationResponse.NeedsInputAction),
-                    V4Envelope(V4Call("common.capabilities_search", new JObject { ["query"] = "markdown" })),
-                    ModelProtocolWire.WriteAction("Готово.", ConversationResponse.DoneAction) });
+                    LoadToolSchemaResponse(UserQuestionToolCatalog.AskToolId),
+                    ModelProtocolWire.WriteAcceptedCall("The source requires the user's choice.", "Нужен выбор источника.",
+                        new ConversationToolCall { Name = UserQuestionToolCatalog.AskToolId,
+                            Arguments = new JObject { ["questions"] = new JArray(new JObject {
+                                ["header"] = "Источник", ["prompt"] = "Какой источник использовать?",
+                                ["selection"] = "single", ["options"] = new JArray(
+                                    new JObject { ["label"] = "Markdown", ["description"] = "Использовать Markdown." },
+                                    new JObject { ["label"] = "HTML", ["description"] = "Использовать HTML." }) }) } }),
+                    ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                        "The user chose Markdown.", "Использую Markdown.", results: new ConversationResultClaim[0]) });
                 var requests = new List<JObject>();
                 var session = NewSession(adapter);
                 var settings = new AppSettings { AgentResponseMode = responseMode, ToolResultRole = ToolResultRoles.Tool };
@@ -288,8 +289,8 @@ namespace RNAssistant.Harness
                 var waiting = service.ExecuteAsync(ChatModes.Agent, "Изучи источник.", session, NewContext(adapter), settings, catalog, null)
                     .GetAwaiter().GetResult();
                 AssertEqual(AgentResponseStatuses.AwaitingUser, waiting.ResponseStatus, "repair may ask a question instead of claiming completion");
-                AssertEqual("model_needs_input", waiting.RunViewState.Reason, "question is not done");
-                AssertEqual(2, requests.Count, "one rejected response and repair, then wait for actual input");
+                AssertEqual("awaiting_user", waiting.RunViewState.Reason, "typed question pauses the run");
+                AssertEqual(3, requests.Count, "rejected response, schema load and typed question precede the wait");
                 var original = (JArray)requests[0]["messages"];
                 var repaired = (JArray)requests[1]["messages"];
                 AssertTrue(JToken.DeepEquals(original, new JArray(repaired.Take(original.Count))), "repair keeps the frozen request intact");
@@ -301,170 +302,176 @@ namespace RNAssistant.Harness
                     "rejected narrative never enters durable chat history");
                 if (responseMode == AgentResponseModes.JsonSchema)
                 {
-                    AssertTrue(JToken.DeepEquals(new JArray("tool", "done", "blocked", "needs_input"),
-                        requests[0].SelectToken("response_format.json_schema.schema.properties.action.enum")), "schema exposes only four actions");
+                    AssertTrue(JToken.DeepEquals(new JArray("execute", "reflection", "finish"),
+                        new JArray(requests[0].SelectTokens("response_format.json_schema.schema.anyOf[*].properties.action.const"))),
+                        "schema exposes exactly the three v8 actions");
                     AssertEqual(ModelProtocolWire.MessageGuidance,
-                        (string)requests[0].SelectToken("response_format.json_schema.schema.properties.message.description"),
+                        (string)requests[0].SelectToken("response_format.json_schema.schema.anyOf[0].properties.message.description"),
                         "actual strict wire shares optional progress guidance with repair and defaults");
                     AssertContains((string)requests[0].SelectToken("response_format.json_schema.schema.description"),
                         ModelProtocolWire.ActionGuidance, "actual strict wire shares the completion decision rules");
                 }
                 var completed = service.ExecuteAsync(ChatModes.Agent, "Используй Markdown.", session, NewContext(adapter), settings, catalog, null)
                     .GetAwaiter().GetResult();
-                AssertEqual(AgentResponseStatuses.Completed, completed.ResponseStatus, "user reply resumes work through a real tool step");
-                AssertEqual(4, requests.Count, "user reply and tool result each drive one request");
-                AssertContains(requests[2]["messages"].ToString(), "Какой источник использовать?", "next turn retains the question");
-                AssertContains(requests[2]["messages"].ToString(), "Используй Markdown.", "next turn contains the actual answer");
+                AssertEqual(AgentResponseStatuses.Completed, completed.ResponseStatus, "user reply resumes the next run");
+                AssertEqual(4, requests.Count, "user reply drives one final model request");
+                AssertContains(requests[3]["messages"].ToString(), "Какой источник использовать?", "next turn retains the question");
+                AssertContains(requests[3]["messages"].ToString(), "Используй Markdown.", "next turn contains the actual answer");
                 AssertTrue(!requests.Any(request => request["messages"].ToString().Contains("RUNTIME_FEEDBACK:")), "no narrative feedback path remains");
             });
         }
 
-        private static void ConversationV4RejectsUnknownRootFields()
+        private static void ConversationV8RejectsUnknownRootFields()
         {
             foreach (var field in new[] { "status", "phase", "completed", "retry", "verified", "Message", "extra" })
             {
-                var root = JObject.Parse(V4Envelope());
+                var root = JObject.Parse(V8Envelope());
                 root[field] = "completed";
-                var parsed = ParseV4(root.ToString(Formatting.None));
+                var parsed = ParseV8(root.ToString(Formatting.None));
                 AssertTrue(!parsed.Success && parsed.Response == null, "unknown root field rejected: " + field);
                 AssertContains(parsed.Error, field, "unknown field diagnostic");
             }
-            AssertTrue(!ParseV4(V4EnvelopeWithFinal(true, V4Call()), V4ReadTool()).Success,
-                "final answer intent cannot accompany a tool call");
-            AssertTrue(!ParseV4("{\"message\":\"thinking\",\"action\":\"tool\",\"tool_calls\":[]}").Success,
-                "non-final intent requires a real tool call");
-            AssertTrue(!ParseV4("{\"message\":\"old\",\"final\":true,\"tool_calls\":[]}").Success,
-                "v5 envelope is not silently interpreted as v7");
-            foreach (var json in new[] { "{}", "{\"message\":\"x\"}", "{\"message\":\"x\",\"action\":\"done\"}",
-                "{\"message\":\"x\",\"tool_calls\":[]}", "{\"tool_calls\":[]}",
-                "{\"message\":null,\"action\":\"done\",\"tool_calls\":[]}", "{\"message\":1,\"action\":\"done\",\"tool_calls\":[]}",
-                "{\"message\":\"x\",\"final\":null,\"tool_calls\":[]}", "{\"message\":\"x\",\"final\":\"true\",\"tool_calls\":[]}",
-                "{\"message\":\"x\",\"final\":1,\"tool_calls\":[]}",
-                "{\"message\":\"x\",\"action\":\"done\",\"tool_calls\":null}", "{\"message\":\"x\",\"action\":\"done\",\"tool_calls\":{}}" })
-                AssertTrue(!ParseV4(json).Success, "missing/wrong root type rejected: " + json);
+            AssertTrue(!ParseV8(V8FinishWithIllegalCalls(V8Call()), V8ReadTool()).Success,
+                "finish cannot accompany a tool call");
+            AssertEqual(ConversationResponseError.EmptyExecuteCalls,
+                ParseV8("{\"action\":\"execute\",\"reason\":\"Read first.\",\"tool_calls\":[],\"message\":\"thinking\"}").ErrorKind,
+                "execute requires a real tool call");
+            AssertTrue(!ParseV8("{\"message\":\"old\",\"final\":true,\"tool_calls\":[]}").Success,
+                "legacy envelope is not silently interpreted as v8");
+            var valid = JObject.Parse(V8Envelope());
+            foreach (var json in new[] { "{}", "{\"message\":\"x\"}",
+                new JObject { ["action"] = "finish", ["results"] = new JArray(), ["message"] = "x" }.ToString(),
+                new JObject { ["action"] = "finish", ["reason"] = " ", ["results"] = new JArray(), ["message"] = "x" }.ToString(),
+                new JObject { ["action"] = "finish", ["reason"] = "Answer.", ["message"] = "x" }.ToString(),
+                new JObject { ["action"] = "finish", ["reason"] = "Answer.", ["results"] = new JObject(), ["message"] = "x" }.ToString(),
+                new JObject { ["action"] = "finish", ["reason"] = "Answer.", ["results"] = new JArray(), ["message"] = JValue.CreateNull() }.ToString(),
+                new JObject { ["action"] = "finish", ["reason"] = "Answer.", ["results"] = new JArray(), ["message"] = 1 }.ToString(),
+                valid.ToString(Formatting.None).Replace("\"finish\"", "\"done\"") })
+                AssertTrue(!ParseV8(json).Success, "missing/wrong root type rejected: " + json);
         }
 
-        private static void ConversationV4RejectsMalformedJson()
+        private static void ConversationV8RejectsMalformedJson()
         {
+            var valid = V8Envelope();
             foreach (var json in new[]
             {
                 "", "<html>Blocked</html>", "content rejected by protection", "[]", "null",
-                "```json\n{\"message\":\"x\",\"action\":\"done\",\"tool_calls\":[]}\n```",
-                "text {\"message\":\"x\",\"action\":\"done\",\"tool_calls\":[]}",
-                "{\"message\":\"x\",\"action\":\"done\",\"tool_calls\":[]} {}",
-                "{\"message\":\"x\",\"message\":\"y\",\"action\":\"done\",\"tool_calls\":[]}",
-                "{\"message\":\"x\",/*comment*/\"action\":\"done\",\"tool_calls\":[]}",
-                "{'message':'x','final':true,'tool_calls':[]}",
-                "{message:\"x\",\"action\":\"done\",\"tool_calls\":[]}",
-                "{true:\"x\",\"message\":\"x\",\"action\":\"done\",\"tool_calls\":[]}",
-                "{\"message\":\"x\",\"action\":\"done\",\"tool_calls\":[],}",
-                "{\"message\":\"line\nbreak\",\"action\":\"done\",\"tool_calls\":[]}",
-                "{\"message\":\"bad\\'escape\",\"action\":\"done\",\"tool_calls\":[]}",
-                "{\"message\":\"bad\\u12xx\",\"action\":\"done\",\"tool_calls\":[]}",
-                "{\"message\":\"x\",\"action\":\"done\",\"tool_calls\":[}",
-                "{\"message\":\"x\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"test.read\",\"arguments\":{\"query\":\"A\",\"limit\":NaN}}]}"
-            }) AssertTrue(!ParseV4(json, V4ReadTool()).Success, "non-JSON or incomplete envelope rejected: " + json);
+                "```json\n" + valid + "\n```", "text " + valid, valid + " {}",
+                valid.Replace("\"reason\":", "\"reason\":\"duplicate\",\"reason\":"),
+                valid.Replace("\"reason\":", "/*comment*/\"reason\":"),
+                "{'action':'finish','reason':'Answer.','results':[],'message':'x'}",
+                valid.Replace("\"action\":", "action:"),
+                valid.Replace("\"action\":", "true:"),
+                valid.Substring(0, valid.Length - 1) + ",}",
+                valid.Replace("\"message\":\"Читаю.\"", "\"message\":\"line\nbreak\""),
+                valid.Replace("Читаю.", "bad\\'escape"),
+                valid.Replace("Читаю.", "bad\\u12xx"),
+                valid.Replace("\"results\":[]", "\"results\":[}"),
+                V8Envelope(V8Call(arguments: new JObject { ["query"] = "A", ["limit"] = "NUMBER" }))
+                    .Replace("\"NUMBER\"", "NaN")
+            }) AssertEqual(ConversationResponseError.InvalidJson, ParseV8(json, V8ReadTool()).ErrorKind,
+                "non-JSON or extended JSON rejected before v8 envelope validation: " + json);
 
             foreach (var number in new[] { "01", "+1", ".5", "0x10", "undefined", "Infinity", "1e999", "999999999999999999999999999999999" })
             {
-                var json = V4Envelope(V4Call(arguments: new JObject { ["query"] = "A", ["limit"] = "NUMBER" }))
+                var json = V8Envelope(V8Call(arguments: new JObject { ["query"] = "A", ["limit"] = "NUMBER" }))
                     .Replace("\"NUMBER\"", number);
-                AssertTrue(!ParseV4(json, V4ReadTool()).Success, "non-JSON/non-finite number rejected: " + number);
+                AssertTrue(!ParseV8(json, V8ReadTool()).Success, "non-JSON/non-finite number rejected: " + number);
             }
-            var escaped = ParseV4("{\"message\":\"\\u0410\\/\\b\\f\\n\\r\\t\",\"action\":\"done\",\"tool_calls\":[]}");
+            var escaped = ParseV8("{\"action\":\"finish\",\"reason\":\"Answer the user.\",\"results\":[],\"message\":\"\\u0410\\/\\b\\f\\n\\r\\t\"}");
             AssertTrue(escaped.Success, "standard Unicode and control escapes are accepted");
             var exactSource = "line 1\nconst escaped = \"\\n\";\nconst regex = /\\d+\\\\path/;";
-            var exactWire = V4Envelope(V4Call(arguments: new JObject { ["query"] = exactSource }));
+            var exactWire = V8Envelope(V8Call(arguments: new JObject { ["query"] = exactSource }));
             AssertContains(exactWire, "line 1\\nconst escaped", "real source line break has one outer JSON escape");
             AssertContains(exactWire, "\\\"\\\\n\\\"", "literal source backslash survives as two outer JSON backslashes");
-            var exact = ParseV4(exactWire, V4ReadTool());
+            var exact = ParseV8(exactWire, V8ReadTool());
             AssertTrue(exact.Success, "escaped source argument is accepted");
             AssertEqual(exactSource,
                 (string)exact.Response.ToolCalls.Single().Arguments["query"],
                 "one JSON decode preserves real lines and literal source backslashes");
-            var nested = V4Envelope(V4Call(arguments: new JObject { ["query"] = "A", ["deep"] = "NESTED" }))
+            var nested = V8Envelope(V8Call(arguments: new JObject { ["query"] = "A", ["deep"] = "NESTED" }))
                 .Replace("\"NESTED\"", new string('[', 70) + "0" + new string(']', 70));
-            AssertTrue(!ParseV4(nested, V4ReadTool()).Success, "excessive nesting is a typed parse failure");
+            AssertTrue(!ParseV8(nested, V8ReadTool()).Success, "excessive nesting is a typed parse failure");
         }
 
-        private static void ConversationV4RequiresExactCallShape()
+        private static void ConversationV8RequiresExactCallShape()
         {
             foreach (var field in new[] { "name", "arguments" })
             {
-                var call = V4Call();
+                var call = V8Call();
                 call.Remove(field);
-                AssertTrue(!ParseV4(V4Envelope(call), V4ReadTool()).Success, "missing call field rejected: " + field);
+                AssertTrue(!ParseV8(V8Envelope(call), V8ReadTool()).Success, "missing call field rejected: " + field);
             }
             foreach (var arguments in new JToken[] { JValue.CreateNull(), new JValue("{}"), new JArray(), new JValue(3) })
             {
-                var call = V4Call();
+                var call = V8Call();
                 call["arguments"] = arguments;
-                AssertTrue(!ParseV4(V4Envelope(call), V4ReadTool()).Success, "arguments must be an object");
+                AssertTrue(!ParseV8(V8Envelope(call), V8ReadTool()).Success, "arguments must be an object");
             }
             foreach (var field in new[] { "id", "retry", "verified", "phase" })
             {
-                var extra = V4Call();
+                var extra = V8Call();
                 extra[field] = "model_owned";
-                AssertTrue(!ParseV4(V4Envelope(extra), V4ReadTool()).Success, "extra call field rejected: " + field);
+                AssertTrue(!ParseV8(V8Envelope(extra), V8ReadTool()).Success, "extra call field rejected: " + field);
             }
-            AssertTrue(!ParseV4(V4Envelope(V4Call(name: "")), V4ReadTool()).Success, "blank name rejected");
-            AssertTrue(!ParseV4(V4Envelope(V4Call(arguments: new JObject { ["query"] = "A", ["Query"] = "B" })), V4ReadTool()).Success,
+            AssertTrue(!ParseV8(V8Envelope(V8Call(name: "")), V8ReadTool()).Success, "blank name rejected");
+            AssertTrue(!ParseV8(V8Envelope(V8Call(arguments: new JObject { ["query"] = "A", ["Query"] = "B" })), V8ReadTool()).Success,
                 "ambiguous argument names rejected before normalization");
-            AssertTrue(!ParseV4(V4Envelope(V4Call(arguments: new JObject
+            AssertTrue(!ParseV8(V8Envelope(V8Call(arguments: new JObject
                 {
                     ["query"] = "A",
                     ["items"] = new JArray(new JObject { ["name"] = "A", ["Name"] = "B" })
-                })), V4StructuredReadTool()).Success,
+                })), V8StructuredReadTool()).Success,
                 "nested names that differ only by case fail schema validation");
-            AssertTrue(!ParseV4(V4Envelope(V4Call()).Replace("\"query\":\"A\"", "\"query\":\"A\",\"query\":\"B\""), V4ReadTool()).Success,
+            AssertTrue(!ParseV8(V8Envelope(V8Call()).Replace("\"query\":\"A\"", "\"query\":\"A\",\"query\":\"B\""), V8ReadTool()).Success,
                 "duplicate nested JSON property rejected");
         }
 
-        private static void ConversationV4RequiresCallableAuthority()
+        private static void ConversationV8RequiresCallableAuthority()
         {
-            var loaded = V4ReadTool();
-            var unloaded = V4ReadTool("test.other");
+            var loaded = V8ReadTool();
+            var unloaded = V8ReadTool("test.other");
             var parser = new ConversationResponseParser();
-            var result = parser.Parse(V4Envelope(V4Call(name: unloaded.Id)), new[] { loaded }, new[] { loaded, unloaded }, new ModelProtocolCallContext(new[] { loaded.Id }));
+            var result = parser.Parse(V8Envelope(V8Call(name: unloaded.Id)), new[] { loaded }, new[] { loaded, unloaded }, new ModelProtocolCallContext(new[] { loaded.Id }));
             AssertTrue(!result.Success, "known but unloaded tool cannot execute");
             AssertContains(result.Error, "Tool schema is not loaded", "unloaded tool diagnosis");
             AssertContains(result.Error, "common.capabilities_read", "explicit read recovery");
             AssertContains(result.Error, "\"id\":\"test.other\"", "recovery names exact capability");
             foreach (var name in new[] { "test.unknown", "TEST.READ", "test.read " })
             {
-                result = ParseV4(V4Envelope(V4Call(name: name)), loaded);
+                result = ParseV8(V8Envelope(V8Call(name: name)), loaded);
                 AssertTrue(!result.Success, "unknown/case-mismatched tool rejected");
                 AssertContains(result.Error, "Unknown tool", "unknown name diagnosis");
             }
             loaded.ArgumentSchemaJson = "{}";
-            AssertTrue(!ParseV4(V4Envelope(V4Call()), loaded).Success, "malformed callable schema cannot grant authority");
-            AssertTrue(!parser.Parse(V4Envelope(), new ToolCatalogEntry[0], new ToolCatalogEntry[0], null).Success,
+            AssertTrue(!ParseV8(V8Envelope(V8Call()), loaded).Success, "malformed callable schema cannot grant authority");
+            AssertTrue(!parser.Parse(V8Envelope(), new ToolCatalogEntry[0], new ToolCatalogEntry[0], null).Success,
                 "local safety context must be explicit, even if empty");
-            AssertTrue(!parser.Parse(V4Envelope(), new ToolCatalogEntry[0], new ToolCatalogEntry[0], new ModelProtocolCallContext(null)).Success,
+            AssertTrue(!parser.Parse(V8Envelope(), new ToolCatalogEntry[0], new ToolCatalogEntry[0], new ModelProtocolCallContext(null)).Success,
                 "batch safety authority must be explicit");
         }
 
-        private static void ConversationV4KeepsIdenticalCallsWithoutIds()
+        private static void ConversationV8KeepsIdenticalCallsWithoutIds()
         {
-            var tool = V4ReadTool();
-            var raw = V4Envelope(V4Call(), V4Call());
-            var first = ParseV4(raw, tool);
+            var tool = V8ReadTool();
+            var raw = V8Envelope(V8Call(), V8Call());
+            var first = ParseV8(raw, tool);
             AssertTrue(first.Success, "identical model requests are not misclassified as duplicate identity");
             AssertEqual(2, first.Response.ToolCalls.Count, "both requested calls are preserved without deduplication");
             AssertTrue(JToken.DeepEquals(JObject.Parse(raw), JObject.Parse(first.Response.ToJson())), "wire payload is unchanged by identity bookkeeping");
-            AssertTrue(ParseV4(raw, tool).Success, "a later step may request the same content without ID-triggered repair");
+            AssertTrue(ParseV8(raw, tool).Success, "a later step may request the same content without ID-triggered repair");
             AssertTrue(typeof(ConversationToolCall).GetProperty("Id") == null, "model-facing DTO cannot assign execution identity");
-            var rejected = ParseV4(V4Envelope(V4Call(), V4Call("unknown")), tool);
+            var rejected = ParseV8(V8Envelope(V8Call(), V8Call("unknown")), tool);
             AssertTrue(!rejected.Success && rejected.Response == null, "invalid complete response yields no partial accepted calls");
         }
 
-        private static void ConversationV4BatchesOnlyExplicitReadOnlyCalls()
+        private static void ConversationV8BatchesOnlyExplicitReadOnlyCalls()
         {
-            var read = V4ReadTool();
+            var read = V8ReadTool();
             var parser = new ConversationResponseParser();
-            var calls = V4Envelope(V4Call(arguments: new JObject { ["query"] = "first" }),
-                V4Call(arguments: new JObject { ["query"] = "second" }));
-            var accepted = ParseV4(calls, read);
+            var calls = V8Envelope(V8Call(arguments: new JObject { ["query"] = "first" }),
+                V8Call(arguments: new JObject { ["query"] = "second" }));
+            var accepted = ParseV8(calls, read);
             AssertTrue(accepted.Success, "independent read-only calls may be batched");
             AssertTrue(accepted.Response.ToolCalls.Select(call => (string)call.Arguments["query"]).SequenceEqual(new[] { "first", "second" }), "call order is preserved");
             AssertTrue(!parser.Parse(calls, new[] { read }, new[] { read }, new ModelProtocolCallContext(new string[0])).Success,
@@ -474,7 +481,7 @@ namespace RNAssistant.Harness
 
             foreach (var kind in new[] { "document", "local", "confirmation", "external", "unclassified" })
             {
-                var tool = V4ReadTool("test.action");
+                var tool = V8ReadTool("test.action");
                 tool.MutatesDocument = kind == "document";
                 tool.MutatesLocalState = kind == "local";
                 tool.RequiresConfirmation = kind == "confirmation";
@@ -490,13 +497,13 @@ namespace RNAssistant.Harness
                 var context = new ModelProtocolCallContext(batchSafe);
                 var catalog = new[] { read, tool };
                 AssertResponseBatchSchema(true, calls, catalog, context);
-                AssertResponseBatchSchema(true, V4Envelope(), catalog, context);
-                AssertResponseBatchSchema(true, V4Envelope(V4Call(tool.Id)), catalog, context);
-                AssertResponseBatchSchema(false, V4Envelope(V4Call(tool.Id), V4Call(tool.Id)), catalog, context);
+                AssertResponseBatchSchema(true, V8Envelope(), catalog, context);
+                AssertResponseBatchSchema(true, V8Envelope(V8Call(tool.Id)), catalog, context);
+                AssertResponseBatchSchema(false, V8Envelope(V8Call(tool.Id), V8Call(tool.Id)), catalog, context);
                 foreach (var batch in new[]
                 {
-                    V4Envelope(V4Call(tool.Id), V4Call(read.Id)),
-                    V4Envelope(V4Call(read.Id), V4Call(tool.Id))
+                    V8Envelope(V8Call(tool.Id), V8Call(read.Id)),
+                    V8Envelope(V8Call(read.Id), V8Call(tool.Id))
                 })
                 {
                     var result = parser.Parse(batch, new[] { read, tool }, new[] { read, tool }, new ModelProtocolCallContext(batchSafe));
@@ -507,30 +514,30 @@ namespace RNAssistant.Harness
                     AssertResponseBatchSchema(false, batch, catalog, context);
                 }
                 if (kind == "document" || kind == "local")
-                    AssertTrue(!parser.Parse(V4Envelope(V4Call(tool.Id), V4Call(tool.Id)),
+                    AssertTrue(!parser.Parse(V8Envelope(V8Call(tool.Id), V8Call(tool.Id)),
                         new[] { tool }, new[] { tool }, new ModelProtocolCallContext(new[] { tool.Id })).Success,
                         kind + " cannot batch two mutations even with forged batch context");
-                AssertTrue(parser.Parse(V4Envelope(V4Call(name: tool.Id)), new[] { tool }, new[] { tool }, new ModelProtocolCallContext(batchSafe)).Success,
+                AssertTrue(parser.Parse(V8Envelope(V8Call(name: tool.Id)), new[] { tool }, new[] { tool }, new ModelProtocolCallContext(batchSafe)).Success,
                     kind + " singleton is valid protocol, not execution permission");
             }
             var loader = SkillLoadToolHandler.Entry();
-            var load = V4Call(loader.Id, new JObject { ["id"] = "common.html_workspace_authoring" });
-            var loadVba = V4Call(loader.Id, new JObject { ["id"] = "common.vba_code_editing" });
+            var load = V8Call(loader.Id, new JObject { ["id"] = "common.html_workspace_authoring" });
+            var loadVba = V8Call(loader.Id, new JObject { ["id"] = "common.vba_code_editing" });
             var selectionContext = new ModelProtocolCallContext(new[] { read.Id });
             var selectionTools = new[] { loader, read };
-            foreach (var batch in new[] { V4Envelope(load, loadVba), V4Envelope(V4Call(), load) })
+            foreach (var batch in new[] { V8Envelope(load, loadVba), V8Envelope(V8Call(), load) })
             {
                 var rejected = parser.Parse(batch, selectionTools, selectionTools, selectionContext);
                 AssertTrue(!rejected.Success && rejected.Response == null, "skill batch is rejected as a whole");
-                AssertContains(rejected.Error, "No skill in this rejected response was loaded", "repair does not imply admission");
-                AssertContains(rejected.Error, "common.skills_load call alone", "repair preserves the prerequisite load");
+                AssertContains(rejected.Error, "No calls from this response were executed", "repair does not imply admission");
+                AssertContains(rejected.Error, "one at a time", "repair preserves the prerequisite load");
                 AssertResponseBatchSchema(false, batch, selectionTools, selectionContext);
             }
-            AssertTrue(parser.Parse(V4Envelope(load), selectionTools, selectionTools, selectionContext).Success,
+            AssertTrue(parser.Parse(V8Envelope(load), selectionTools, selectionTools, selectionContext).Success,
                 "the same skill selection is valid when returned alone");
         }
 
-        private static void ConversationV4ValidatesArgumentsBeforeAcceptance()
+        private static void ConversationV8ValidatesArgumentsBeforeAcceptance()
         {
             foreach (var arguments in new[]
             {
@@ -539,25 +546,25 @@ namespace RNAssistant.Harness
                 new JObject { ["query"] = "A", ["limit"] = "10" }, new JObject { ["query"] = "A", ["extra"] = true }
             })
             {
-                var parsed = ParseV4(V4Envelope(V4Call(arguments: arguments)), V4ReadTool());
+                var parsed = ParseV8(V8Envelope(V8Call(arguments: arguments)), V8ReadTool());
                 AssertTrue(!parsed.Success && parsed.Response == null, "argument contract violation cannot be accepted");
                 AssertContains(parsed.Error, "Invalid arguments", "schema violation diagnosis");
             }
-            var strictNulls = ParseV4(V4Envelope(V4Call(arguments: new JObject
+            var strictNulls = ParseV8(V8Envelope(V8Call(arguments: new JObject
             {
                 ["query"] = "A", ["limit"] = JValue.CreateNull(), ["at"] = JValue.CreateNull()
-            })), V4ReadTool());
+            })), V8ReadTool());
             AssertTrue(strictNulls.Success, "structured-output optional nulls are accepted");
             AssertEqual(1, strictNulls.Response.ToolCalls[0].Arguments.Count, "optional nulls removed, no execution defaults applied by protocol");
         }
 
-        private static void ConversationV4BoundsCallCount()
+        private static void ConversationV8BoundsCallCount()
         {
-            var tool = V4ReadTool();
-            var calls = Enumerable.Range(0, 32).Select(i => V4Call()).ToArray();
-            AssertTrue(ParseV4(V4Envelope(calls), tool).Success, "32 read-only calls accepted");
-            var oversized = V4Envelope(calls.Concat(new[] { V4Call() }).ToArray());
-            AssertTrue(!ParseV4(oversized, tool).Success, "33 calls rejected");
+            var tool = V8ReadTool();
+            var calls = Enumerable.Range(0, 32).Select(i => V8Call()).ToArray();
+            AssertTrue(ParseV8(V8Envelope(calls), tool).Success, "32 read-only calls accepted");
+            var oversized = V8Envelope(calls.Concat(new[] { V8Call() }).ToArray());
+            AssertTrue(!ParseV8(oversized, tool).Success, "33 calls rejected");
         }
 
         private static void SimpleAgentPromptContainsToolsAndSkills()
@@ -589,8 +596,6 @@ namespace RNAssistant.Harness
             AssertContains(prompt, "Test workflow", "skill description present");
             AssertTrue(prompt.IndexOf(SkillRevision.Compute(skills[0]), StringComparison.Ordinal) < 0,
                 "skill revision remains outside model catalog");
-            AssertContains(prompt, "\"bodyChars\":27", "skill body size present");
-            AssertContains(prompt, "\"referenceCount\":0", "skill reference count present");
             AssertTrue(prompt.IndexOf("TEST_SKILL_SENTINEL", StringComparison.Ordinal) < 0, "full skill is not in catalog");
             AssertContains(prompt, "common.capabilities_read", "unified capability loading guidance present");
             AssertContains(prompt, "\"kind\":\"skill\"", "skill kind is explicit in compact catalog");
@@ -619,14 +624,19 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     LoadSkillResponse("common.html_workspace_authoring"),
-                    "{\"message\":\"Создаю локальный HTML.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.html_workspace_write_file\",\"arguments\":{\"path\":\"index.html\",\"content\":\"<main>Offline</main>\"}}]}",
-                    "{\"message\":\"Локальный HTML готов.\",\"action\":\"done\",\"tool_calls\":[]}"
+                    ModelProtocolWire.WriteAcceptedCall("Create the local HTML file.", "Создаю локальный HTML.",
+                        new ConversationToolCall { Name = "common.html_workspace_write_file",
+                            Arguments = new JObject { ["path"] = "index.html", ["content"] = "<main>Offline</main>" } }),
+                    null
                 });
                 var calls = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
                 {
                     calls.Add(messages.ToList());
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    var response = responses.Dequeue() ?? ScriptedVerifiedFinish(session,
+                        "The local HTML write has a terminal result.", "Локальный HTML готов.",
+                        "The requested HTML file was created.", "common.html_workspace_write_file");
+                    return Task.FromResult(new LlmCompletionResult { Content = response });
                 };
 
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteWithApprovalsAsync(
@@ -690,20 +700,29 @@ namespace RNAssistant.Harness
                     BodyMarkdown = "Follow TEST_SKILL_SENTINEL.\n" + new string('x', 15000) + "\nTEST_SKILL_END.",
                     Enabled = true
                 };
+                var session = NewSession(adapter);
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"message\":\"Читаю подходящий skill.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.capabilities_read\",\"arguments\":{\"id\":\"common.test\"}}]}",
-                    "{\"message\":\"Повторное чтение для проверки контекста.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.capabilities_read\",\"arguments\":{\"id\":\"common.test\"}}]}",
-                    "{\"message\":\"Инструкции учтены.\",\"action\":\"done\",\"tool_calls\":[]}"
+                    ModelProtocolWire.WriteAcceptedCall("Read the selected skill.", "Читаю подходящий skill.",
+                        new ConversationToolCall { Name = CapabilityToolCatalog.ReadToolId,
+                            Arguments = new JObject { ["id"] = "common.test" } }),
+                    ModelProtocolWire.WriteAcceptedCall("Check the skill context again.",
+                        "Повторное чтение для проверки контекста.",
+                        new ConversationToolCall { Name = CapabilityToolCatalog.ReadToolId,
+                            Arguments = new JObject { ["id"] = "common.test" } }),
+                    null
                 });
                 var calls = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>
                 {
                     calls.Add(messages.ToList());
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    var response = responses.Dequeue() ?? ScriptedVerifiedFinish(session,
+                        "Both skill reads have terminal results.", "Инструкции учтены.",
+                        "The skill instructions were read.", CapabilityToolCatalog.ReadToolId,
+                        CapabilityToolCatalog.ReadToolId);
+                    return Task.FromResult(new LlmCompletionResult { Content = response });
                 };
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
-                var session = NewSession(adapter);
                 var published = executor.ExecuteManual(Command("common.skills_upsert", "id", skill.Id,
                     "host", "Common", "name", skill.Name, "description", skill.Description, "version", skill.Version,
                     "bodyMarkdown", skill.BodyMarkdown, "enabled", true), tools, new AppSettings(), false, true, session);
@@ -766,17 +785,15 @@ namespace RNAssistant.Harness
 
         private static void SimpleAgentPublishesNewSkillAndToolInSameRun()
         {
-            Func<string, JObject, string> call = (name, arguments) => new JObject
-            {
-                ["message"] = "Продолжаю проверку пакета.",
-                ["action"] = "tool",
-                ["tool_calls"] = new JArray(new JObject { ["name"] = name, ["arguments"] = arguments })
-            }.ToString(Formatting.None);
+            Func<string, JObject, string> call = (name, arguments) =>
+                ModelProtocolWire.WriteAcceptedCall("Continue inspecting the authored capability.",
+                    "Продолжаю проверку пакета.", new ConversationToolCall { Name = name, Arguments = arguments });
             const string skillId = "excel.in_run_skill";
             const string toolId = "excel.in_run_tool";
             const string body = "# In-run skill\n\nIN_RUN_SKILL_SENTINEL";
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
+                var session = NewSession(adapter);
                 var responses = new Queue<string>(new[]
                 {
                     call("common.skills_load", new JObject { ["id"] = "common.skill_authoring" }),
@@ -786,15 +803,18 @@ namespace RNAssistant.Harness
                         ["version"] = "1.0.0", ["bodyMarkdown"] = body, ["enabled"] = true }),
                     call("common.capabilities_read", new JObject { ["id"] = skillId }),
                     call("common.skills_load", new JObject { ["id"] = skillId }),
-                    "{\"message\":\"Скилл создан и загружен.\",\"action\":\"done\",\"tool_calls\":[]}"
+                    null
                 });
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
                 {
                     requests.Add(messages.ToList());
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    var response = responses.Dequeue() ?? ScriptedVerifiedFinish(session,
+                        "The published skill was loaded in the same run.", "Скилл создан и загружен.",
+                        "The skill was published and loaded.", "common.skills_upsert", "common.skills_load",
+                        "common.skills_load");
+                    return Task.FromResult(new LlmCompletionResult { Content = response });
                 };
-                var session = NewSession(adapter);
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent, "Create and load a skill in this run.", session, NewContext(adapter),
                     new AppSettings { AutoConfirmToolActions = true, MaxAgentIterations = 8 },
@@ -815,6 +835,7 @@ namespace RNAssistant.Harness
 
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
+                var session = NewSession(adapter);
                 var authored = CustomTool("Excel", toolId);
                 authored.Components[0].Code = authored.Components[0].Code
                     .Replace("' <RNAssistantTool>", "<RNAssistantTool>")
@@ -827,16 +848,20 @@ namespace RNAssistant.Harness
                         ["id"] = toolId, ["components"] = ToolComponentsPayload(authored) }),
                     call("common.resources_read", new JObject { ["target"] = "tool source: " + toolId }),
                     call("common.capabilities_read", new JObject { ["id"] = toolId }),
-                    "{\"message\":\"Инструмент создан и его схема прочитана.\",\"action\":\"done\",\"tool_calls\":[]}"
+                    null
                 });
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (settings, messages, requestOptions, stream, token) =>
                 {
                     requests.Add(messages.ToList());
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    var response = responses.Dequeue() ?? ScriptedVerifiedFinish(session,
+                        "The published tool source and schema were read.", "Инструмент создан и его схема прочитана.",
+                        "The tool was published and inspected.", "common.tools_upsert",
+                        ResourceToolCatalog.ReadToolId, CapabilityToolCatalog.ReadToolId);
+                    return Task.FromResult(new LlmCompletionResult { Content = response });
                 };
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
-                    ChatModes.Agent, "Create and inspect a tool in this run.", NewSession(adapter), NewContext(adapter),
+                    ChatModes.Agent, "Create and inspect a tool in this run.", session, NewContext(adapter),
                     new AppSettings { AutoConfirmToolActions = true, MaxAgentIterations = 8 },
                     OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(),
                     null).GetAwaiter().GetResult();
@@ -991,18 +1016,23 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     LoadToolSchemaResponse("excel.add_sheet"),
-                    "{\"message\":\"Добавляю лист.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"}}]}",
-                    "{\"message\":\"Лист Report создан.\",\"action\":\"done\",\"tool_calls\":[]}"
+                    ModelProtocolWire.WriteAcceptedCall("Create the requested sheet.", "Добавляю лист.",
+                        new ConversationToolCall { Name = "excel.add_sheet",
+                            Arguments = new JObject { ["name"] = "Report" } }),
+                    null
                 });
+                var session = NewSession(adapter);
                 var calls = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>
                 {
                     calls.Add(messages.ToList());
                     AssertEqual(LlmResponseFormats.JsonObject, options.ResponseFormat, "single response format");
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    var response = responses.Dequeue() ?? ScriptedVerifiedFinish(session,
+                        "The sheet write has a terminal result.", "Лист Report создан.",
+                        "The requested sheet was created.", "excel.add_sheet");
+                    return Task.FromResult(new LlmCompletionResult { Content = response });
                 };
                 var service = CreateConversationRunService(adapter, executor, completion);
-                var session = NewSession(adapter);
                 var result = service.ExecuteWithApprovalsAsync(
                     ChatModes.Agent,
                     "Создай лист Report.", session, NewContext(adapter),
@@ -1012,14 +1042,21 @@ namespace RNAssistant.Harness
                 AssertEqual("Лист Report создан.", result.AssistantText, "final response");
                 AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "successful write keeps the accepted model status");
                 AssertEqual(RunViewLifecycles.Completed, result.RunViewState.Lifecycle, "successful write completes the current run");
+                AssertEqual("satisfied", result.RunViewState.ModelResults.Single().Assessment,
+                    "the model assessment is retained separately from runtime completion");
+                AssertEqual(RunGoalVerification.NotAssessed, result.RunViewState.GoalVerification,
+                    "the model assessment does not become independent goal verification");
                 AssertEqual(AgentResponseStatuses.Completed, session.Messages.Last().ResponseStatus, "final status enters accepted history");
                 AssertRunViewState(result, session, "clean", 1, 0, 0);
                 AssertTrue(adapter.HasSheet("Report"), "tool executed");
                 AssertEqual(1, adapter.ExcelSheetRequests.Count(command => command.ToolId == "excel.add_sheet"), "one write dispatch");
+                AssertEqual(session.Messages.Single(message => message.ToolName == "excel.add_sheet" &&
+                    message.AcceptedCallOrigin != null).ToolCallId,
+                    result.RunViewState.ModelResults.Single().Evidence.Single(),
+                    "the projected model claim cites the accepted write call");
                 AssertEqual(3, calls.Count, "schema read, execution, and final model turns");
-                AssertContains(FlattenSimple(calls[0]),
-                    "\"function\":{\"name\":\"excel.add_sheet\"",
-                    "Excel core schema is complete before optional discovery");
+                AssertContains(FlattenSimple(calls[0]), "\"id\":\"excel.add_sheet\"",
+                    "Excel tool is discoverable before schema admission");
                 AssertContains(FlattenSimple(calls[1]), "\"kind\":\"tool-schema\"", "schema evidence reaches model");
                 var finalRequest = FlattenSimple(calls[2]);
                 AssertContains(finalRequest, "TOOL_RESULT", "tool result label");
@@ -1044,20 +1081,40 @@ namespace RNAssistant.Harness
             {
                 adapter.QueueExcelSheetApplyFailure(
                     "Write rejected before the effect.", "write_rejected", false);
+                var session = NewSession(adapter);
                 var responses = new Queue<string>(new[]
                 {
                     LoadToolSchemaResponse("excel.add_sheet"),
-                    "{\"message\":\"Добавляю лист.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"}}]}",
-                    "{\"message\":\"Лист Report создан.\",\"action\":\"done\",\"tool_calls\":[],\"executionSummary\":{\"ExecutionHealth\":\"clean\",\"WriteOk\":1000}}",
-                    "{\"message\":\"Лист Report создан.\",\"action\":\"done\",\"tool_calls\":[]}"
+                    ModelProtocolWire.WriteAcceptedCall("Create the requested sheet.", "Добавляю лист.",
+                        new ConversationToolCall { Name = "excel.add_sheet",
+                            Arguments = new JObject { ["name"] = "Report" } }),
+                    "__INVALID_FINISH__", "__FINISH__", "__HONEST_FINISH__"
                 });
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
                 {
                     requests.Add(messages.ToList());
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    var response = responses.Dequeue();
+                    if (response == "__INVALID_FINISH__" || response == "__FINISH__" ||
+                        response == "__HONEST_FINISH__")
+                    {
+                        var callId = session.Messages.Single(item => item.ToolName == "excel.add_sheet" &&
+                            item.AcceptedCallOrigin != null).ToolCallId;
+                        var honest = response == "__HONEST_FINISH__";
+                        var invalidShape = response == "__INVALID_FINISH__";
+                        response = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                            "Report the observed sheet write.", honest ? "Лист Report не создан." : "Лист Report создан.",
+                            results: new[] { new ConversationResultClaim(honest ? "Sheet Report was not created." : "Sheet Report was created.",
+                                new[] { callId }, honest ? ConversationAssessment.NotSatisfied : ConversationAssessment.Satisfied) });
+                        if (invalidShape)
+                        {
+                            var invalid = JObject.Parse(response);
+                            invalid["executionSummary"] = new JObject { ["ExecutionHealth"] = "clean", ["WriteOk"] = 1000 };
+                            response = invalid.ToString(Formatting.None);
+                        }
+                    }
+                    return Task.FromResult(new LlmCompletionResult { Content = response });
                 };
-                var session = NewSession(adapter);
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent, "Создай лист Report.", session, NewContext(adapter),
                     new AppSettings { AutoConfirmToolActions = true },
@@ -1073,17 +1130,21 @@ namespace RNAssistant.Harness
                     "the final model request saw the failed tool result");
                 AssertContains(FlattenSimple(requests.Last()), "Write rejected before the effect.",
                     "the folded error retains its actionable message");
-                AssertContains(requests.Last().Last().Content, "unsupported root field: executionSummary", "model cannot inject runtime health into v7");
+                AssertContains(requests[3].Last().Content, "forbids root field executionSummary",
+                    "model cannot inject runtime health into v8");
+                AssertContains(requests.Last().Last().Content, "contradictory_assessment",
+                    "satisfied claims on failed writes are rejected before an honest finish");
                 AssertEqual(RunViewLifecycles.Completed, result.RunViewState.Lifecycle, "loop completion is independent of execution health");
                 AssertRunViewState(result, session, "errors", 0, 1, 0);
-                AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "model completed is accepted after write error");
+                AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "honest finish is accepted after write error");
                 AssertContains(result.AssistantText, "операций записи завершились ошибкой",
-                    "runtime annotates a false success claim with authoritative write failure evidence");
+                    "runtime retains authoritative write failure evidence");
                 AssertContains(result.AssistantText, "История попыток:", "counts describe past attempts");
                 AssertContains(result.AssistantText, "а не число нерешённых проблем", "attempt counts cannot infer current task failure");
                 AssertContains(session.Messages.Last().Content, "последующее исправление конкретной операции ими не определяется",
                     "historical errors do not assert that the final task is still unresolved");
-                AssertEqual(AgentResponseStatuses.Completed, session.Messages.Last().ResponseStatus, "false completion enters accepted history");
+                AssertEqual(AgentResponseStatuses.Completed, session.Messages.Last().ResponseStatus,
+                    "only the honest completion enters accepted history");
             });
         }
 
@@ -1098,30 +1159,42 @@ namespace RNAssistant.Harness
                 adapter.VbaWriteTransform = code => code.Replace("\"after\"", "\"diverged\"");
                 var journal = new VbaJournalStore(paths);
                 var executor = new OfficeToolExecutor(adapter, journal, new SkillStore(paths));
+                var session = NewSession(adapter);
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"message\":\"Читаю текущий модуль.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.resources_read\",\"arguments\":{\"target\":\"VBA module: Module1\",\"representation\":\"source\"}}]}",
-                    "{\"message\":\"Загружаю процедуру редактирования VBA.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.skills_load\",\"arguments\":{\"id\":\"common.vba_code_editing\"}}]}",
-                    new JObject
-                    {
-                        ["message"] = "Обновляю модуль.",
-                        ["action"] = "tool",
-                        ["tool_calls"] = new JArray(new JObject
-                        {
-                            ["name"] = "common.vba_write_module",
-                            ["arguments"] = new JObject { ["moduleName"] = "Module1", ["code"] = intended }
-                        })
-                    }.ToString(Formatting.None),
-                    "{\"message\":\"Проверяю модуль после неподтверждённой записи.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.resources_read\",\"arguments\":{\"target\":\"VBA module: Module1\",\"representation\":\"source\"}}]}",
-                    "{\"message\":\"Модуль Module1 обновлён.\",\"action\":\"done\",\"tool_calls\":[]}"
+                    ModelProtocolWire.WriteAcceptedCall("Read the current module before editing.", "Читаю текущий модуль.",
+                        new ConversationToolCall { Name = ResourceToolCatalog.ReadToolId,
+                            Arguments = new JObject { ["target"] = "VBA module: Module1", ["representation"] = "source" } }),
+                    LoadSkillResponse("common.vba_code_editing"),
+                    ModelProtocolWire.WriteAcceptedCall("Apply the requested module source.", "Обновляю модуль.",
+                        new ConversationToolCall { Name = VbaToolCatalog.WriteModule,
+                            Arguments = new JObject { ["moduleName"] = "Module1", ["code"] = intended } }),
+                    ModelProtocolWire.WriteAcceptedCall("Inspect after the unverified write.",
+                        "Проверяю модуль после неподтверждённой записи.",
+                        new ConversationToolCall { Name = ResourceToolCatalog.ReadToolId,
+                            Arguments = new JObject { ["target"] = "VBA module: Module1", ["representation"] = "source" } }),
+                    "__FINISH__"
                 });
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
                 {
                     requests.Add(messages.ToList());
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    var response = responses.Dequeue();
+                    if (response == "__FINISH__")
+                    {
+                        var evidence = session.Messages.Where(item => item.RunId == session.LastRun.RunId &&
+                            item.AcceptedCallOrigin != null &&
+                            (item.ToolName == VbaToolCatalog.WriteModule ||
+                             item.ToolName == ResourceToolCatalog.ReadToolId))
+                            .Select(item => item.ToolCallId).ToArray();
+                        AssertEqual(3, evidence.Length, "finish cites the write and before/after reads");
+                        response = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                            "Report the divergent effect honestly.", "Модуль Module1 обновлён.",
+                            results: new[] { new ConversationResultClaim("Module source is divergent.",
+                                evidence, ConversationAssessment.Unverified) });
+                    }
+                    return Task.FromResult(new LlmCompletionResult { Content = response });
                 };
-                var session = NewSession(adapter);
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent, "Обнови модуль Module1.", session, NewContext(adapter),
                     new AppSettings { AutoConfirmToolActions = true },
@@ -1183,22 +1256,21 @@ namespace RNAssistant.Harness
                     DocumentRuntimeKey = adapter.RuntimeDocumentKey, StartedUtc = DateTime.UtcNow
                 };
                 store.Save(session);
-                var responses = new Queue<string>(Enumerable.Repeat("REJECTED_TRACE_SENTINEL", invalidAttempts).Concat(new[]
+                var validResponses = new List<string>
                 {
                     LoadSkillResponse("common.vba_code_editing"),
-                    new JObject
-                    {
-                        ["message"] = "Update module.",
-                        ["action"] = "tool",
-                        ["tool_calls"] = new JArray(new JObject
-                        {
-                            ["name"] = "common.vba_write_module",
-                            ["arguments"] = new JObject { ["moduleName"] = "Module1", ["code"] = intended }
-                        })
-                    }.ToString(Formatting.None),
-                    ModelProtocolWire.WriteAction("The target cannot be inspected with available tools.",
-                        outcome == "unknown" ? ConversationResponse.BlockedAction : ConversationResponse.DoneAction)
-                }));
+                    ModelProtocolWire.WriteAcceptedCall("Apply the requested module source.", "Update module.",
+                        new ConversationToolCall { Name = VbaToolCatalog.WriteModule,
+                            Arguments = new JObject { ["moduleName"] = "Module1", ["code"] = intended } })
+                };
+                if (outcome == "unknown")
+                    validResponses.Add(ModelProtocolWire.WriteAcceptedCall(
+                        "Inspect the current source after the unverified write.", "Inspect module.",
+                        new ConversationToolCall { Name = ResourceToolCatalog.ReadToolId,
+                            Arguments = new JObject { ["target"] = "VBA module: Module1", ["representation"] = "source" } }));
+                validResponses.Add("__FINISH__");
+                var responses = new Queue<string>(Enumerable.Repeat("REJECTED_TRACE_SENTINEL", invalidAttempts)
+                    .Concat(validResponses));
                 var trace = new ModelTracePersistenceService(EventStore(store));
                 var requestCount = 0;
                 var rawByAttempt = new Dictionary<string, string>();
@@ -1215,6 +1287,21 @@ namespace RNAssistant.Harness
                         PayloadJson = "{\"fake_transport\":true}", PayloadContentType = "application/json"
                     });
                     var content = responses.Dequeue();
+                    if (content == "__FINISH__")
+                    {
+                        var evidence = session.Messages.Where(item => item.RunId == "trace-run" &&
+                            item.AcceptedCallOrigin != null &&
+                            (item.ToolName == VbaToolCatalog.WriteModule ||
+                             outcome == "unknown" && item.ToolName == ResourceToolCatalog.ReadToolId))
+                            .Select(item => item.ToolCallId).ToArray();
+                        AssertEqual(outcome == "unknown" ? 2 : 1, evidence.Length,
+                            "finish cites the accepted write and any required inspection");
+                        content = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                            "Report the observed write outcome.", "The write outcome is recorded.",
+                            results: new[] { new ConversationResultClaim("Module write assessment", evidence,
+                                outcome == "ok" ? ConversationAssessment.Satisfied :
+                                outcome == "unknown" ? ConversationAssessment.Unverified : ConversationAssessment.NotSatisfied) });
+                    }
                     rawByAttempt.Add(options.TraceModelAttemptId, content);
                     options.TraceSink(new LlmTraceRecord
                     {
@@ -1237,15 +1324,16 @@ namespace RNAssistant.Harness
                 var requests = events.Where(item => item.Type == SessionEventTypes.LlmRequest).ToList();
                 var rejected = events.Where(item => item.Type == SessionEventTypes.AgentResponseRejected).ToList();
                 var accepted = events.Where(item => item.Type == "model.response.accepted").ToList();
-                AssertEqual(invalidAttempts + 3, requestCount, "trace introduces no retry or model request");
+                var acceptedSteps = outcome == "unknown" ? 4 : 3;
+                AssertEqual(invalidAttempts + acceptedSteps, requestCount, "trace introduces no retry or model request");
                 AssertEqual(invalidAttempts, rejected.Count, "every rejected attempt has a diagnostic event");
-                AssertEqual(3, accepted.Count, "only valid skill/write/final responses are accepted");
+                AssertEqual(acceptedSteps, accepted.Count, "only valid skill/write/inspection/final responses are accepted");
                 AssertEqual(requestCount, requests.Select(item => (string)item.Data["ModelAttemptId"]).Distinct().Count(),
                     "each completion attempt has a distinct id");
                 AssertTrue(requests.All(item => !string.IsNullOrWhiteSpace((string)item.Data["ModelAttemptId"])), "attempt ids exist");
                 AssertEqual(1, requests.Take(invalidAttempts + 1).Select(item => (string)item.Data["StepId"]).Distinct().Count(),
                     "repair attempts keep the same logical step");
-                AssertEqual(3, requests.Select(item => (string)item.Data["StepId"]).Distinct().Count(), "next iteration starts a new step");
+                AssertEqual(acceptedSteps, requests.Select(item => (string)item.Data["StepId"]).Distinct().Count(), "next iteration starts a new step");
                 foreach (var verdict in rejected.Concat(accepted))
                 {
                     var request = requests.Single(item => item.StepId == (string)verdict.Data["RequestId"]);
@@ -1342,7 +1430,9 @@ namespace RNAssistant.Harness
                     calls++;
                     return Task.FromResult(new LlmCompletionResult
                     {
-                        Content = "{\"message\":\"Лист Report создан.\",\"action\":\"done\",\"tool_calls\":[]}"
+                        Content = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                            "Answer without a tool call.", "Лист Report создан.",
+                            results: new ConversationResultClaim[0])
                     });
                 };
                 var session = NewSession(adapter);
@@ -1356,6 +1446,8 @@ namespace RNAssistant.Harness
                 AssertEqual(0, adapter.ExcelSheetRequests.Count(command => command.ToolId == "excel.add_sheet"), "no requested write was dispatched");
                 AssertTrue(!adapter.HasSheet("Report"), "model text did not create a sheet");
                 AssertEqual(RunViewLifecycles.Completed, result.RunViewState.Lifecycle, "a no-write response may finish the loop");
+                AssertEqual(RunGoalVerification.NotAssessed, result.RunViewState.GoalVerification,
+                    "a no-write finish cannot verify the requested sheet");
                 AssertRunViewState(result, session, "clean", 0, 0, 0);
                 AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "no-write response carries model completed");
                 AssertEqual("Лист Report создан.", session.Messages.Last().Content, "unsupported mutation claim reaches visible history");
@@ -1387,23 +1479,28 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), publishedSettings,
                 delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
-                var requests = new List<IReadOnlyList<ChatMessage>>();
-                var responses = new Queue<string>(new[]
-                {
-                    "{\"message\":\"Читаю листы.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
-                    "{\"message\":\"Готово.\",\"action\":\"done\",\"tool_calls\":[]}"
-                });
-                LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>
-                {
-                    requests.Add(messages.ToList());
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
-                };
                 var session = NewSession(adapter);
                 session.LastRun = new ChatRunRecord
                 {
                     RunId = Guid.NewGuid().ToString("N"),
                     DocumentRuntimeKey = adapter.RuntimeDocumentKey,
                     StartedUtc = DateTime.UtcNow
+                };
+                var requests = new List<IReadOnlyList<ChatMessage>>();
+                var responses = new Queue<string>(new[]
+                {
+                    ModelProtocolWire.WriteAcceptedCall("Inspect the sheet list.", "Читаю листы.",
+                        new ConversationToolCall { Name = "excel.inspect",
+                            Arguments = new JObject { ["kind"] = "sheets" } }),
+                    null
+                });
+                LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>
+                {
+                    requests.Add(messages.ToList());
+                    var response = responses.Dequeue() ?? ScriptedVerifiedFinish(session,
+                        "The sheet inspection has a terminal result.", "Готово.",
+                        "The sheet list was inspected.", "excel.inspect");
+                    return Task.FromResult(new LlmCompletionResult { Content = response });
                 };
                 var settings = publishedSettings.Clone();
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
@@ -1452,7 +1549,9 @@ namespace RNAssistant.Harness
                 var responses = new Queue<LlmCompletionResult>(new[]
                 {
                     new LlmCompletionResult { Content = invalid, ReasoningContent = "INVALID_REASONING_SENTINEL" },
-                    new LlmCompletionResult { Content = "{\"message\":\"Не могу выполнить этот запрос.\",\"action\":\"done\",\"tool_calls\":[]}" }
+                    new LlmCompletionResult { Content = ModelProtocolWire.WriteAcceptedDecision(
+                        ConversationResponse.FinishAction, "Explain the refusal.",
+                        "Не могу выполнить этот запрос.", results: new ConversationResultClaim[0]) }
                 });
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
@@ -1471,7 +1570,8 @@ namespace RNAssistant.Harness
                 AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "model-authored refusal text only ends its loop; it is not provider refusal");
                 var repair = requests[1].Last();
                 AssertContains(repair.Content, "FORMAT_REPAIR", "repair instruction added");
-                AssertContains(repair.Content, "message (string)", "refusal can remain final message text without a status field");
+                AssertContains(repair.Content, "Keep the envelope even when the task cannot be fulfilled",
+                    "v8 format repair permits a truthful refusal in finish");
                 AssertTrue(FlattenSimple(requests[1]).IndexOf(invalid, StringComparison.Ordinal) < 0,
                     "invalid raw response is not copied into repair prompt");
                 AssertTrue(!session.Messages.Any(message =>
@@ -1486,28 +1586,34 @@ namespace RNAssistant.Harness
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
-                const string invalidPair = "{\"status\":\"in_progress\",\"message\":\"Проверяю листы...\",\"action\":\"done\",\"tool_calls\":[]}";
+                const string invalidPair = "{\"status\":\"in_progress\",\"action\":\"finish\",\"reason\":\"Inspect sheets.\",\"results\":[],\"message\":\"Проверяю листы...\"}";
                 var responses = new Queue<string>(new[]
                 {
                     invalidPair,
                     LoadToolSchemaResponse("excel.inspect"),
-                    "{\"message\":\"Проверяю листы.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
-                    "{\"message\":\"Список листов проверен.\",\"action\":\"done\",\"tool_calls\":[]}"
+                    ModelProtocolWire.WriteAcceptedCall("Inspect the sheet list.", "Проверяю листы.",
+                        new ConversationToolCall { Name = "excel.inspect",
+                            Arguments = new JObject { ["kind"] = "sheets" } }),
+                    null
                 });
+                var session = NewSession(adapter);
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
                 {
                     requests.Add(messages.ToList());
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    var response = responses.Dequeue() ?? ScriptedVerifiedFinish(session,
+                        "The sheet inspection returned.", "Список листов проверен.",
+                        "The sheet list was inspected.", "excel.inspect");
+                    return Task.FromResult(new LlmCompletionResult { Content = response });
                 };
-                var session = NewSession(adapter);
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
                     "Проверь листы.", session, NewContext(adapter), new AppSettings(),
                     OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
 
                 AssertEqual(4, requests.Count, "structural repair, schema discovery, and tool continuation");
-                AssertContains(requests[1].Last().Content, "unsupported root field: status", "repair rejects the old envelope instead of adapting it");
+                AssertContains(requests[1].Last().Content, "action=finish forbids root field status",
+                    "repair rejects the old status field instead of adapting it");
                 AssertEqual("Список листов проверен.", result.AssistantText, "run completes after the actual tool call");
                 AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "legacy lifecycle projection means only model loop ended");
                 AssertEqual(AgentResponseProtocol.CurrentVersion, session.Messages.Last().ResponseProtocolVersion,
@@ -1530,12 +1636,9 @@ namespace RNAssistant.Harness
                         (settings, messages, options, stream, cancellationToken) => Task.FromResult(
                             new LlmCompletionResult
                             {
-                                Content = JsonConvert.SerializeObject(new
-                                {
-                                    message = terminalCase,
-                                    action = "done",
-                                    tool_calls = new object[0]
-                                })
+                                Content = ModelProtocolWire.WriteAcceptedDecision(
+                                    ConversationResponse.FinishAction, "Answer directly.", terminalCase,
+                                    results: new ConversationResultClaim[0])
                             }));
                     var terminalResult = terminalService.ExecuteAsync(
                         ChatModes.Agent,
@@ -1552,8 +1655,10 @@ namespace RNAssistant.Harness
                         "final empty calls end the model loop");
                     AssertEqual(AgentResponseProtocol.CurrentVersion, terminalResult.ResponseProtocolVersion,
                         "final record carries the active protocol version");
-                    AssertTrue(ConversationResponseHistoryReader.Read(terminalSession.Messages.Last()).Success,
-                        "actual final history is a valid v7 form even with empty or question-like text");
+                    var terminalHistory = terminalSession.Messages.Last(message => message.ProtocolMessage);
+                    var terminalRead = ConversationResponseHistoryReader.Read(terminalHistory);
+                    AssertTrue(terminalRead.Success,
+                        "actual final history is a valid v8 form for '" + terminalCase + "': " + terminalRead.Error);
                 }
 
                 var limitedSession = NewSession(adapter);
@@ -1563,7 +1668,9 @@ namespace RNAssistant.Harness
                     (settings, messages, options, stream, cancellationToken) => Task.FromResult(
                         new LlmCompletionResult
                         {
-                            Content = "{\"message\":\"Проверяю ресурсы.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.resources_find\",\"arguments\":{}}]}",
+                            Content = ModelProtocolWire.WriteAcceptedDecision(
+                                ConversationResponse.ReflectionAction, "Consider resource discovery.",
+                                "Проверяю ресурсы.", decision: "Inspect the available resources next."),
                             PromptTokens = 5
                         }));
                 var limitedResult = limitedService.ExecuteAsync(
@@ -1595,17 +1702,25 @@ namespace RNAssistant.Harness
                 const string promise = "Сейчас подготовлю CSS.";
                 const string answer = "Добавьте после исходных стилей:\n```css\nbutton { border-radius: 8px; }\n```";
                 var responses = new Queue<string>();
-                responses.Enqueue(new JObject { ["message"] = promise, ["action"] = "tool", ["tool_calls"] = new JArray() }.ToString());
+                responses.Enqueue(new JObject { ["action"] = "execute", ["reason"] = "Prepare the CSS.",
+                    ["tool_calls"] = new JArray(), ["message"] = promise }.ToString(Formatting.None));
                 if (needsTool)
-                    responses.Enqueue(V4Envelope(V4Call("common.capabilities_search", new JObject { ["query"] = "CSS" })));
-                responses.Enqueue(ModelProtocolWire.WriteAction(answer, ConversationResponse.DoneAction));
+                    responses.Enqueue(ModelProtocolWire.WriteAcceptedCall("Find CSS capabilities.", string.Empty,
+                        new ConversationToolCall { Name = "common.capabilities_search",
+                            Arguments = new JObject { ["query"] = "CSS" } }));
+                else
+                    responses.Enqueue(ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                        "Answer with the requested CSS.", answer, results: new ConversationResultClaim[0]));
                 var requests = new List<IReadOnlyList<ChatMessage>>();
+                var session = NewSession(adapter);
                 LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
                 {
                     requests.Add(messages.ToList());
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    return Task.FromResult(new LlmCompletionResult { Content = responses.Count > 0
+                        ? responses.Dequeue()
+                        : ScriptedVerifiedFinish(session, "Answer after capability discovery.", answer,
+                            "CSS guidance is ready.", "common.capabilities_search") });
                 };
-                var session = NewSession(adapter);
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
                     needsTool ? "Найди доступные инструменты CSS и предложи скругление button." : "Предложи CSS для скругления button.",
@@ -1616,9 +1731,9 @@ namespace RNAssistant.Harness
                 AssertEqual(needsTool ? 3 : 2, requests.Count, "repair either delivers the answer or continues through a real tool result");
                 AssertContains(FlattenSimple(requests[1]), "FORMAT_REPAIR:",
                     "repair reaches the model before accepting an answer");
-                AssertContains(FlattenSimple(requests[1]), "action must be tool with calls",
+                AssertContains(FlattenSimple(requests[1]), "empty_execute_calls",
                     "repair explains the exact invalid combination");
-                AssertContains(FlattenSimple(requests[1]), "Never relabel a promise as done",
+                AssertContains(FlattenSimple(requests[1]), "Never relabel a promise as finish",
                     "format repair cannot instruct the model to abandon unfinished work by changing only action");
                 AssertContains(FlattenSimple(requests[1]), ModelProtocolWire.ActionGuidance,
                     "both response formats receive the same work-or-answer decision rules");
@@ -1633,7 +1748,7 @@ namespace RNAssistant.Harness
                 }
                 AssertEqual(answer, result.AssistantText, "terminal response delivers the actual code without scheduling another model request");
                 AssertEqual(RunViewLifecycles.Completed, result.RunViewState.Lifecycle,
-                    "action=done with no calls ends the run");
+                    "v8 finish ends the run");
             });
         }
 
@@ -1693,7 +1808,9 @@ namespace RNAssistant.Harness
                         }
                         : new LlmCompletionResult
                         {
-                            Content = "{\"message\":\"Ответ принят.\",\"action\":\"done\",\"tool_calls\":[]}",
+                            Content = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                                "Answer the question after valid format repair.", "Ответ принят.",
+                                results: new ConversationResultClaim[0]),
                             ReasoningContent = "ACCEPTED_REASONING"
                         });
                 };
@@ -1709,7 +1826,8 @@ namespace RNAssistant.Harness
                 AssertEqual(0, result.ToolResults.Count, "repair attempts do not dispatch tools");
                 var accepted = session.Messages.Where(message => message.Role == "assistant" && !message.ExcludeFromModelContext).ToList();
                 AssertEqual(1, accepted.Count, "only one assistant response enters accepted history");
-                AssertEqual("Ответ принят.", accepted[0].Content, "accepted message is preserved");
+                AssertEqual("Ответ принят.", (string)JObject.Parse(accepted[0].Content)["message"],
+                    "accepted v8 message is preserved");
                 AssertEqual("ACCEPTED_REASONING", accepted[0].ReasoningContent, "only accepted provider reasoning is retained");
                 AssertTrue(!session.Messages.Concat(requests.SelectMany(request => request)).Any(message =>
                     (message.Content ?? string.Empty).Contains("PROTECTION_RESPONSE_") ||
@@ -1839,16 +1957,19 @@ namespace RNAssistant.Harness
                 const string userText = "List workbook sheets.";
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"message\":\"Читаю листы.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
-                    "{\"message\":\"Листы прочитаны.\",\"action\":\"done\",\"tool_calls\":[]}"
+                    "{\"action\":\"execute\",\"reason\":\"Нужно прочитать листы книги.\",\"tool_calls\":[{\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}],\"message\":\"Читаю листы.\"}",
+                    null
                 });
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 var requestOptions = new List<LlmRequestOptions>();
+                var session = NewSession(adapter);
                 LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>
                 {
                     requests.Add(messages.ToList());
                     requestOptions.Add(options);
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    var response = responses.Dequeue() ?? ScriptedVerifiedFinish(session,
+                        "Список листов получен.", "Листы прочитаны.", "Листы прочитаны.", "excel.inspect");
+                    return Task.FromResult(new LlmCompletionResult { Content = response });
                 };
                 var settings = new AppSettings
                 {
@@ -1858,7 +1979,6 @@ namespace RNAssistant.Harness
                 };
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName)
                     .Concat(executor.GetControllerTools()).ToList();
-                var session = NewSession(adapter);
                 var context = NewContext(adapter);
 
                 var runnable = ConversationRunService.PrepareToolsForMode(ChatModes.Agent, tools);
@@ -1892,8 +2012,8 @@ namespace RNAssistant.Harness
                     legacyMessages, legacyOptions, settings, repairReserve, continuationReserve);
                 AssertEqual(6, currentPack.Tools.Count,
                     "Excel Agent core contains five bootstrap tools and inspection");
-                AssertEqual(20, legacyCore.Length,
-                    "counterfactual Excel core retains all fifteen Excel schemas");
+                AssertEqual(21, legacyCore.Length,
+                    "counterfactual Excel core retains the current Excel schemas");
                 AssertTrue(currentTokens < legacyTokens,
                     "R61 core lowers deterministic initial input estimate; before=" +
                     legacyTokens + ", after=" + currentTokens);
@@ -1934,9 +2054,8 @@ namespace RNAssistant.Harness
             {
                 var responses = new Queue<string>(new[]
                 {
-                    ModelProtocolWire.Write("Invalid caller state.", new[]
-                    {
-                        new ConversationToolCall
+                    ModelProtocolWire.WriteAcceptedCall("Attempt a read with caller-owned state.",
+                        "Invalid caller state.", new ConversationToolCall
                         {
                             Name = ResourceToolCatalog.ReadToolId,
                             Arguments = new JObject
@@ -1945,9 +2064,10 @@ namespace RNAssistant.Harness
                                 ["cursor"] = "guessed",
                                 ["maxChars"] = 1000
                             }
-                        }
-                    }),
-                    ModelProtocolWire.Write("Нужна семантическая цель.", new ConversationToolCall[0])
+                        }),
+                    ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                        "A semantic target is required.", "Нужна семантическая цель.",
+                        results: new ConversationResultClaim[0])
                 });
                 var modelCalls = 0;
                 LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
@@ -1989,20 +2109,18 @@ namespace RNAssistant.Harness
                 adapter.SetVbaModule(moduleName, source, "StdModule");
 
                 var calls = new List<Tuple<IReadOnlyList<ChatMessage>, LlmRequestOptions>>();
+                var session = NewSession(adapter);
                 string semanticTarget = null;
                 LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>
                 {
                     calls.Add(Tuple.Create((IReadOnlyList<ChatMessage>)messages.ToList(), options));
                     if (calls.Count == 1)
                     {
-                        return Task.FromResult(new LlmCompletionResult { Content = ModelProtocolWire.Write(
-                            "Ищу VBA-модули.", new[]
+                        return Task.FromResult(new LlmCompletionResult { Content = ModelProtocolWire.WriteAcceptedCall(
+                            "Find the requested VBA module.", "Ищу VBA-модули.", new ConversationToolCall
                             {
-                                new ConversationToolCall
-                                {
-                                    Name = ResourceToolCatalog.FindToolId,
-                                    Arguments = new JObject { ["scope"] = "vba", ["query"] = moduleName }
-                                }
+                                Name = ResourceToolCatalog.FindToolId,
+                                Arguments = new JObject { ["scope"] = "vba", ["query"] = moduleName }
                             }) });
                     }
 
@@ -2022,17 +2140,14 @@ namespace RNAssistant.Harness
                             "VBA candidate hides URI, revision, provider, and provider kind");
                         AssertTrue(wire["resources"] == null,
                             "model find result omits exact root resource evidence");
-                        return Task.FromResult(new LlmCompletionResult { Content = ModelProtocolWire.Write(
-                            "Читаю исходник.", new[]
+                        return Task.FromResult(new LlmCompletionResult { Content = ModelProtocolWire.WriteAcceptedCall(
+                            "Read the discovered module source.", "Читаю исходник.", new ConversationToolCall
                             {
-                                new ConversationToolCall
+                                Name = ResourceToolCatalog.ReadToolId,
+                                Arguments = new JObject
                                 {
-                                    Name = ResourceToolCatalog.ReadToolId,
-                                    Arguments = new JObject
-                                    {
-                                        ["target"] = semanticTarget,
-                                        ["representation"] = ResourceRepresentations.Source
-                                    }
+                                    ["target"] = semanticTarget,
+                                    ["representation"] = ResourceRepresentations.Source
                                 }
                             }) });
                     }
@@ -2056,7 +2171,8 @@ namespace RNAssistant.Harness
                             "whole read exposes no model continuation state");
                         return Task.FromResult(new LlmCompletionResult
                         {
-                            Content = ModelProtocolWire.Write("VBA прочитан.", new ConversationToolCall[0])
+                            Content = ScriptedVerifiedFinish(session, "The module source was read.", "VBA прочитан.",
+                                "The requested VBA source was read.", ResourceToolCatalog.ReadToolId)
                         });
                     }
                     throw new InvalidOperationException("Unexpected model step in whole VBA resource scenario.");
@@ -2064,7 +2180,6 @@ namespace RNAssistant.Harness
 
                 var settings = new AppSettings { AgentResponseMode = AgentResponseModes.JsonSchema,
                     ContextWindowOverrideTokens = 40000 };
-                var session = NewSession(adapter);
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
                     "Прочитай VBA-модуль " + moduleName + ".",
@@ -2126,30 +2241,49 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     LoadToolSchemaResponse("common.office_run_macro"),
-                    "{\"message\":\"Запускаю выбранный макрос.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.office_run_macro\",\"arguments\":{\"macroName\":\"Module1.MigrateApiKey\",\"arguments\":[\"value\",2,true]}}]}",
-                    "{\"message\":\"Макрос выполнен.\",\"action\":\"done\",\"tool_calls\":[]}"
+                    ModelProtocolWire.WriteAcceptedCall("Run the named macro with its exact arguments.",
+                        "Запускаю выбранный макрос.", new ConversationToolCall {
+                            Name = VbaToolCatalog.RunMacro, Arguments = new JObject {
+                                ["macroName"] = "Module1.MigrateApiKey", ["arguments"] = new JArray("value", 2, true) } }),
+                    LoadToolSchemaResponse("excel.inspect"),
+                    ModelProtocolWire.WriteAcceptedCall("Inspect the current workbook after the opaque macro.",
+                        "Проверяю доступное состояние книги.", new ConversationToolCall {
+                            Name = "excel.inspect", Arguments = new JObject { ["kind"] = "sheets" } }),
+                    null
                 });
+                var session = NewSession(adapter);
                 var calls = new List<IReadOnlyList<ChatMessage>>();
                 var requestOptions = new List<LlmRequestOptions>();
                 LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
                 {
                     calls.Add(messages.ToList());
                     requestOptions.Add(options);
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    var response = responses.Dequeue();
+                    if (response == null)
+                    {
+                        var evidence = session.Messages.Where(message => message.AcceptedCallOrigin != null &&
+                            (message.ToolName == VbaToolCatalog.RunMacro || message.ToolName == "excel.inspect"))
+                            .Select(message => message.ToolCallId).ToArray();
+                        AssertEqual(2, evidence.Length, "macro dispatch and subsequent inspection are cited");
+                        response = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                            "Report macro dispatch without claiming an effect.", "Макрос выполнен.",
+                            results: new[] { new ConversationResultClaim("Macro dispatched; effect unverified.",
+                                evidence, ConversationAssessment.Unverified) });
+                    }
+                    return Task.FromResult(new LlmCompletionResult { Content = response });
                 };
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
-                var session = NewSession(adapter);
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteWithApprovalsAsync(
                     ChatModes.Agent, "Run Module1.MigrateApiKey with arguments.", session, NewContext(adapter),
                     new AppSettings
                     {
                         AgentResponseMode = AgentResponseModes.JsonSchema,
                         AutoConfirmToolActions = true,
-                        MaxAgentIterations = 4
+                        MaxAgentIterations = 6
                     }, tools, null)
                     .GetAwaiter().GetResult();
 
-                AssertEqual(3, calls.Count, "schema load, macro execution, and final response");
+                AssertEqual(5, calls.Count, "schema loads, macro execution, inspection and final response");
                 var initialCallable = ResponseSchemaCallNames(requestOptions[0].ResponseSchemaJson).ToArray();
                 var admittedCallable = ResponseSchemaCallNames(requestOptions[1].ResponseSchemaJson).ToArray();
                 AssertTrue(!initialCallable.Contains("common.office_run_macro", StringComparer.OrdinalIgnoreCase) &&
@@ -2181,8 +2315,9 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 var phase = 0;
                 var step = 0;
-                Func<string, JObject, string> call = (name, arguments) => ModelProtocolWire.Write("VBA source", new[] {
-                    new ConversationToolCall { Name = name, Arguments = arguments } });
+                Func<string, JObject, string> call = (name, arguments) =>
+                    ModelProtocolWire.WriteAcceptedCall("Perform the requested VBA step.", "VBA source",
+                        new ConversationToolCall { Name = name, Arguments = arguments });
                 LlmCompletionDelegate completion = (completionSettings, messages, options, stream, token) =>
                 {
                     step++;
@@ -2204,54 +2339,31 @@ namespace RNAssistant.Harness
                         var read = LastToolResult(messages, ResourceToolCatalog.ReadToolId);
                         AssertEqual("ok", (string)read["status"], "large source reads across internal exact pages");
                         AssertEqual(source, (string)read["data"]["text"], "whole source preserves exact CRLF bytes");
-                        response = ModelProtocolWire.Write("Created and read.", new ConversationToolCall[0]);
+                        response = ScriptedVerifiedFinish(session, "The module was created and read back.",
+                            "Created and read.", "The module source was created and read.",
+                            VbaToolCatalog.WriteModule, ResourceToolCatalog.ReadToolId);
                     }
                     else if (phase == 1 && step == 2)
                     {
-                        AssertTrue(messages.Any(message => message.SyntheticResourceObservation &&
-                            message.ResourceEvidence.Count > 0 && (message.Content ?? string.Empty).Contains(source)),
-                            "compaction restores the actual complete source with current evidence");
-                        response = call(VbaToolCatalog.WriteModule, new JObject {
-                            ["moduleName"] = module, ["code"] = after, ["mode"] = "updateOnly" });
+                        response = call(ResourceToolCatalog.ReadToolId, new JObject {
+                            ["target"] = "VBA module: " + module, ["representation"] = "source" });
                     }
                     else if (phase == 1 && step == 3)
                     {
-                        AssertEqual("ok", (string)LastToolResult(messages, VbaToolCatalog.WriteModule)["status"],
-                            "restored source authorizes a whole-module edit without another read");
-                        response = ModelProtocolWire.Write("Updated.", new ConversationToolCall[0]);
-                    }
-                    else if (phase == 2 && step == 2)
-                    {
-                        AssertTrue(!messages.Any(message => (message.Content ?? string.Empty).Contains(after)),
-                            "large source is omitted from the constrained request");
-                        response = call(VbaToolCatalog.WriteModule, new JObject { ["moduleName"] = module,
-                            ["code"] = "Option Explicit\r\nSub Main()\r\nDebug.Print \"final\"\r\nEnd Sub", ["mode"] = "updateOnly" });
-                    }
-                    else if (phase == 2 && step == 3)
-                    {
-                        var rejected = LastToolResult(messages, VbaToolCatalog.WriteModule);
-                        AssertEqual("error", (string)rejected["status"], "missing source blocks a destructive reconstruction");
-                        AssertContains(rejected.ToString(), "vba_snapshot_refresh_required", "source guard explains the refusal");
-                        AssertTrue(!rejected.ToString().Contains("preserved comment"),
-                            "large-source recovery does not pin synthetic head/tail excerpts in the request");
-                        AssertEqual(after, adapter.GetVbaModuleCode(module), "refusal preserves the full module");
-                        response = call(ResourceToolCatalog.ReadToolId, new JObject { ["target"] = "VBA module: " + module,
-                            ["representation"] = "source", ["startLine"] = 1, ["lineCount"] = 4 });
-                    }
-                    else if (phase == 2 && step == 4)
-                    {
                         var read = LastToolResult(messages, ResourceToolCatalog.ReadToolId);
-                        AssertEqual("ok", (string)read["status"], "bounded source recovery fits the constrained request");
-                        AssertContains((string)read["data"]["text"], "\"after\"", "excerpt has the current exact patch anchor");
-                        AssertEqual(false, (bool)read["data"]["complete"], "excerpt does not claim whole-module authority");
-                        response = call(VbaToolCatalog.ApplyPatch, new JObject { ["moduleName"] = module,
-                            ["patch"] = new JArray(new JObject { ["find"] = "\"after\"", ["text"] = "\"final\"" }) });
+                        AssertEqual("ok", (string)read["status"], "current source can be read after compaction");
+                        AssertEqual(source, (string)read["data"]["text"],
+                            "the complete current source is restored by an explicit read");
+                        response = call(VbaToolCatalog.WriteModule, new JObject {
+                            ["moduleName"] = module, ["code"] = after, ["mode"] = "updateOnly" });
                     }
-                    else if (phase == 2 && step == 5)
+                    else if (phase == 1 && step == 4)
                     {
-                        AssertEqual("ok", (string)LastToolResult(messages, VbaToolCatalog.ApplyPatch)["status"],
-                            "exact patch works without full source in model context");
-                        response = ModelProtocolWire.Write("Patched.", new ConversationToolCall[0]);
+                        AssertEqual("ok", (string)LastToolResult(messages, VbaToolCatalog.WriteModule)["status"],
+                            "explicit current source read authorizes the whole-module edit");
+                        response = ScriptedVerifiedFinish(session, "The module update completed.",
+                            "Updated.", "The module source was updated.",
+                            ResourceToolCatalog.ReadToolId, VbaToolCatalog.WriteModule);
                     }
                     else throw new InvalidOperationException("Unexpected VBA context recovery step: " + phase + "/" + step);
                     return Task.FromResult(new LlmCompletionResult { Content = response });
@@ -2282,23 +2394,27 @@ namespace RNAssistant.Harness
                 step = 0;
                 var continued = service.ExecuteWithApprovalsAsync(ChatModes.Agent, "Change before to after in ContextModule.", session,
                     NewContext(adapter), settings, tools, null).GetAwaiter().GetResult();
-                AssertEqual(3, step, "post-compaction edit needs only skill selection and no extra source read: " + continued.AssistantText);
+                AssertEqual(4, step, "post-compaction edit refreshes source before a whole-module write: " + continued.AssistantText);
                 AssertEqual(after, adapter.GetVbaModuleCode(module), "edit preserves all unrelated source after compaction");
                 AssertEqual(1, adapter.CountVbaCalls(FakeVbaOperation.CreateModule), "creation dispatches once");
                 AssertEqual(1, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "modification dispatches once");
                 compact();
                 phase = 2;
                 step = 0;
-                // Keep room for the production prompts and causal frames while
-                // forcing the full module body out of the request.
+                // Causal frames and exact source exceed this request budget; the
+                // next write must be refused before any model or tool dispatch.
                 settings.ContextWindowOverrideTokens = 32768;
                 settings.MaxTokens = 1024;
                 continued = service.ExecuteWithApprovalsAsync(ChatModes.Agent, "Change after to final in ContextModule using a focused edit.",
                     session, NewContext(adapter), settings, tools, null).GetAwaiter().GetResult();
-                AssertEqual(5, step, "small-context refusal recovers through skill selection, one excerpt and one patch: " + continued.AssistantText);
-                AssertEqual(after.Replace("\"after\"", "\"final\""), adapter.GetVbaModuleCode(module),
-                    "small-context patch preserves all unrelated source");
-                AssertEqual(2, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "bounded recovery writes exactly once");
+                AssertEqual(0, step, "oversized causal context is refused before model dispatch");
+                AssertEqual(RunViewLifecycles.Failed, continued.RunViewState.Lifecycle,
+                    "insufficient prompt budget cannot report a completed edit");
+                AssertContains(continued.AssistantText, "Current evidence and causal frames",
+                    "budget refusal identifies the missing complete request capacity");
+                AssertEqual(after, adapter.GetVbaModuleCode(module), "budget refusal preserves the exact source");
+                AssertEqual(1, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule),
+                    "budget refusal does not dispatch another module write");
             });
         }
 
@@ -2312,14 +2428,15 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 session.LastRun = new ChatRunRecord { RunId = "vba-refresh",
                     DocumentRuntimeKey = adapter.RuntimeDocumentKey, StartedUtc = DateTime.UtcNow };
-                Func<string, JObject, string> call = (name, arguments) => ModelProtocolWire.Write("", new[]
-                { new ConversationToolCall { Name = name, Arguments = arguments } });
+                Func<string, JObject, string> call = (name, arguments) =>
+                    ModelProtocolWire.WriteAcceptedCall("Perform the next VBA step.", "",
+                        new ConversationToolCall { Name = name, Arguments = arguments });
                 var read = call(ResourceToolCatalog.ReadToolId,
                     new JObject { ["target"] = "VBA module: UniLoader", ["representation"] = "source" });
                 var write = call("common.vba_write_module",
                     new JObject { ["moduleName"] = "UniLoader", ["code"] = after, ["mode"] = "updateOnly" });
                 var responses = new Queue<string>(new[] { read, LoadSkillResponse("common.vba_code_editing"),
-                    write, read, write, ModelProtocolWire.WriteAction("Изменение подтверждено.", ConversationResponse.DoneAction) });
+                    write, read, write, null });
                 var requests = 0;
                 var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
                 {
@@ -2335,7 +2452,18 @@ namespace RNAssistant.Harness
                         AssertEqual(0, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "stale write never dispatches");
                     }
                     AssertTrue(responses.Count > 0, "refresh must not create a repair loop");
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    var scriptedResponse = responses.Dequeue();
+                    if (scriptedResponse == null)
+                    {
+                        var applied = session.Messages.Last(item => item.ToolName == "common.vba_write_module" &&
+                            item.ExecutionProgress?.Outcome == ToolExecutionOutcome.Ok);
+                        scriptedResponse = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                            "The refreshed write completed.", "Изменение подтверждено.",
+                            results: new[] { new ConversationResultClaim(
+                                "The VBA change was applied after a current read.",
+                                new[] { applied.ToolCallId }, ConversationAssessment.Satisfied) });
+                    }
+                    return Task.FromResult(new LlmCompletionResult { Content = scriptedResponse });
                 });
                 var result = service.ExecuteAsync(ChatModes.Agent, "Замени вывод UniLoader на after.", session,
                     NewContext(adapter), new AppSettings { AutoConfirmToolActions = true },
@@ -2360,8 +2488,9 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 session.LastRun = new ChatRunRecord { RunId = "vba-inspection",
                     DocumentRuntimeKey = adapter.RuntimeDocumentKey, StartedUtc = DateTime.UtcNow };
-                Func<string, JObject, string> call = (name, arguments) => ModelProtocolWire.Write("", new[]
-                { new ConversationToolCall { Name = name, Arguments = arguments } });
+                Func<string, JObject, string> call = (name, arguments) =>
+                    ModelProtocolWire.WriteAcceptedCall("Perform the next VBA inspection step.", "",
+                        new ConversationToolCall { Name = name, Arguments = arguments });
                 var schemaRead = call(CapabilityToolCatalog.ReadToolId, new JObject { ["id"] = "common.vba_apply_patch" });
                 var script = new List<string> {
                     call(ResourceToolCatalog.ReadToolId, new JObject {
@@ -2373,9 +2502,9 @@ namespace RNAssistant.Harness
                     schemaRead,
                     call("common.vba_apply_patch", new JObject { ["moduleName"] = "UniLoader", ["patch"] = new JArray(
                         new JObject { ["find"] = "End Sub", ["text"] = "End If\nEnd Sub" }) }),
-                    ModelProtocolWire.Write("Исходник исправлен; компиляция Office не проверялась.", new ConversationToolCall[0])
+                    null // Generate finish after the patch result is available.
                 });
-                else script.Add(ModelProtocolWire.Write("Навык не подключён: контекст не вмещает полный запрос.", new ConversationToolCall[0]));
+                else script.Add(null); // Cite the refused skill load after its terminal result.
                 var responses = new Queue<string>(script);
                 var requests = 0;
                 LlmCompletionDelegate complete = (settings, messages, options, stream, token) =>
@@ -2406,7 +2535,25 @@ namespace RNAssistant.Harness
                         AssertContains((string)load["message"], "common.skills_load with action=remove", "budget recovery names the explicit removal operation");
                         AssertEqual(0, session.LastRun.SelectedSkills.Count, "candidate never becomes durable selection");
                     }
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    var scriptedResponse = responses.Dequeue();
+                    if (scriptedResponse == null)
+                    {
+                        if (!tightBudget)
+                            scriptedResponse = ScriptedVerifiedFinish(session, "The patch completed.",
+                                "Исходник исправлен; компиляция Office не проверялась.",
+                                "The VBA source was patched.", "common.vba_apply_patch");
+                        else
+                        {
+                            var refused = session.Messages.Last(item => item.ToolName == SkillLoadToolHandler.ToolId &&
+                                item.ExecutionProgress?.Outcome == ToolExecutionOutcome.Error);
+                            scriptedResponse = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                                "The skill load was refused by the context budget.",
+                                "Навык не подключён: контекст не вмещает полный запрос.",
+                                results: new[] { new ConversationResultClaim("The requested skill could not be loaded.",
+                                    new[] { refused.ToolCallId }, ConversationAssessment.NotSatisfied) });
+                        }
+                    }
+                    return Task.FromResult(new LlmCompletionResult { Content = scriptedResponse });
                 };
                 var requestSettings = new AppSettings { AutoConfirmToolActions = true, ContextWindowOverrideTokens = 32768 };
                 // The default 32K request now fits. Retain a deliberate full-request admission refusal
@@ -2431,7 +2578,9 @@ namespace RNAssistant.Harness
                     var resumed = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
                     {
                         resumedCalls++;
-                        return Task.FromResult(new LlmCompletionResult { Content = ModelProtocolWire.Write("Можно продолжать.", new ConversationToolCall[0]) });
+                        return Task.FromResult(new LlmCompletionResult { Content = ModelProtocolWire.WriteAcceptedDecision(
+                            ConversationResponse.FinishAction, "Answer the new request directly.", "Можно продолжать.",
+                            results: new ConversationResultClaim[0]) });
                     }).ExecuteAsync(ChatModes.Agent, "Продолжим без этого навыка.", session, NewContext(adapter),
                         new AppSettings { ContextWindowOverrideTokens = 32768 },
                         OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
@@ -2455,49 +2604,31 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     LoadSkillResponse("common.vba_code_editing"),
-                    new JObject
-                    {
-                        ["message"] = "Добавляю диагностику и обновляю заголовок.",
-                        ["action"] = "tool",
-                        ["tool_calls"] = new JArray(
-                            new JObject { ["name"] = "common.vba_apply_patch", ["arguments"] = new JObject
-                            {
-                                ["moduleName"] = "Module1", ["patch"] = new JArray(new JObject
-                                { ["find"] = "Sub Main()", ["text"] = "Sub Main()\nDebug.Print \"started\"" })
-                            } },
-                            new JObject { ["name"] = "common.resources_read", ["arguments"] = new JObject
-                            { ["target"] = "VBA module: Module1", ["representation"] = "source" } },
-                            new JObject { ["name"] = "common.vba_write_module", ["arguments"] = new JObject
-                            { ["moduleName"] = "Module1", ["code"] = "' Version 2\n" + before, ["mode"] = "updateOnly" } })
-                    }.ToString(Formatting.None),
-                    new JObject
-                    {
-                        ["message"] = "Добавляю диагностику отдельным действием.",
-                        ["action"] = "tool",
-                        ["tool_calls"] = new JArray(new JObject { ["name"] = "common.vba_apply_patch", ["arguments"] = new JObject
-                        {
-                            ["moduleName"] = "Module1", ["patch"] = new JArray(new JObject
-                            { ["find"] = "Sub Main()", ["text"] = "Sub Main()\nDebug.Print \"started\"" })
-                        } })
-                    }.ToString(Formatting.None),
-                    new JObject
-                    {
-                        ["message"] = "Читаю текущий модуль после записи.",
-                        ["action"] = "tool",
-                        ["tool_calls"] = new JArray(new JObject { ["name"] = "common.resources_read", ["arguments"] = new JObject
-                        { ["target"] = "VBA module: Module1", ["representation"] = "source" } })
-                    }.ToString(Formatting.None),
-                    new JObject
-                    {
-                        ["message"] = "Сохраняю заголовок вместе с прочитанной диагностикой.",
-                        ["action"] = "tool",
-                        ["tool_calls"] = new JArray(new JObject
-                        {
-                            ["name"] = "common.vba_write_module", ["arguments"] = new JObject
-                            { ["moduleName"] = "Module1", ["code"] = "' Version 2\n" + patched, ["mode"] = "updateOnly" }
-                        })
-                    }.ToString(Formatting.None),
-                    "{\"message\":\"Проверка завершена.\",\"action\":\"done\",\"tool_calls\":[]}"
+                    ModelProtocolWire.Write(new ConversationResponse(ConversationResponse.ExecuteAction,
+                        "Try an invalid mixed read/write batch.", "Добавляю диагностику и обновляю заголовок.",
+                        calls: new[] {
+                            new ConversationToolCall { Name = "common.vba_apply_patch", Arguments = new JObject {
+                                ["moduleName"] = "Module1", ["patch"] = new JArray(new JObject {
+                                    ["find"] = "Sub Main()", ["text"] = "Sub Main()\nDebug.Print \"started\"" }) } },
+                            new ConversationToolCall { Name = ResourceToolCatalog.ReadToolId, Arguments = new JObject {
+                                ["target"] = "VBA module: Module1", ["representation"] = "source" } },
+                            new ConversationToolCall { Name = VbaToolCatalog.WriteModule, Arguments = new JObject {
+                                ["moduleName"] = "Module1", ["code"] = "' Version 2\n" + before, ["mode"] = "updateOnly" } }
+                        })),
+                    ModelProtocolWire.WriteAcceptedCall("Apply the source patch separately.",
+                        "Добавляю диагностику отдельным действием.", new ConversationToolCall {
+                            Name = "common.vba_apply_patch", Arguments = new JObject {
+                                ["moduleName"] = "Module1", ["patch"] = new JArray(new JObject {
+                                    ["find"] = "Sub Main()", ["text"] = "Sub Main()\nDebug.Print \"started\"" }) } }),
+                    ModelProtocolWire.WriteAcceptedCall("Read current source after the patch.",
+                        "Читаю текущий модуль после записи.", new ConversationToolCall {
+                            Name = ResourceToolCatalog.ReadToolId, Arguments = new JObject {
+                                ["target"] = "VBA module: Module1", ["representation"] = "source" } }),
+                    ModelProtocolWire.WriteAcceptedCall("Write the title against the fresh source.",
+                        "Сохраняю заголовок вместе с прочитанной диагностикой.", new ConversationToolCall {
+                            Name = VbaToolCatalog.WriteModule, Arguments = new JObject {
+                                ["moduleName"] = "Module1", ["code"] = "' Version 2\n" + patched, ["mode"] = "updateOnly" } }),
+                    null
                 });
                 var modelRequests = 0;
                 var sourceRequests = new List<IReadOnlyList<ChatMessage>>();
@@ -2518,7 +2649,10 @@ namespace RNAssistant.Harness
                         AssertEqual(1, journal.ListMutations(adapter.HostName, adapter.DocumentKey).Count,
                             "rejected batch creates no VBA preparation");
                     }
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    var response = responses.Dequeue() ?? ScriptedVerifiedFinish(session,
+                        "Both VBA mutations have terminal results.", "Проверка завершена.",
+                        "The patch and module write completed.", "common.vba_apply_patch", VbaToolCatalog.WriteModule);
+                    return Task.FromResult(new LlmCompletionResult { Content = response });
                 };
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent, "Добавь Debug.Print, сохрани его при обновлении заголовка.",
@@ -2552,12 +2686,16 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     LoadToolSchemaResponse("excel.add_sheet"),
-                    "{\"message\":\"Создаю первый лист.\",\"action\":\"tool\",\"tool_calls\":[" +
-                    "{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"First\"}}]}",
-                    "{\"message\":\"Первый лист создан; создаю второй.\",\"action\":\"tool\",\"tool_calls\":[" +
-                    "{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Second\"}}]}",
-                    "{\"message\":\"Оба листа созданы.\",\"action\":\"done\",\"tool_calls\":[]}"
+                    ModelProtocolWire.WriteAcceptedCall("Create the first sheet.", "Создаю первый лист.",
+                        new ConversationToolCall { Name = "excel.add_sheet",
+                            Arguments = new JObject { ["name"] = "First" } }),
+                    ModelProtocolWire.WriteAcceptedCall("Create the second sheet.",
+                        "Первый лист создан; создаю второй.",
+                        new ConversationToolCall { Name = "excel.add_sheet",
+                            Arguments = new JObject { ["name"] = "Second" } }),
+                    null
                 });
+                var session = NewSession(adapter);
                 IReadOnlyList<ChatMessage> beforeSecondWrite = null;
                 IReadOnlyList<ChatMessage> finalRequest = null;
                 var progressActivities = new List<ChatActivity>();
@@ -2567,9 +2705,11 @@ namespace RNAssistant.Harness
                     callCount += 1;
                     if (callCount == 3) beforeSecondWrite = messages.ToList();
                     if (callCount == 4) finalRequest = messages.ToList();
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    var response = responses.Dequeue() ?? ScriptedVerifiedFinish(session,
+                        "Both sheet writes have terminal results.", "Оба листа созданы.",
+                        "The two requested sheets were created.", "excel.add_sheet", "excel.add_sheet");
+                    return Task.FromResult(new LlmCompletionResult { Content = response });
                 };
-                var session = NewSession(adapter);
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
                     "Создай листы First и Second.", session, NewContext(adapter),
@@ -2599,6 +2739,8 @@ namespace RNAssistant.Harness
                 AssertEqual(2, activities.Count, "two visible tool activities");
                 var executedIds = activities.Select(activity => activity.ToolCallId).ToArray();
                 AssertEqual(2, executedIds.Distinct().Count(), "separate writes receive different runtime IDs");
+                AssertEqual(2, result.RunViewState.ModelResults.Single().Evidence.Count,
+                    "finish cites both distinct accepted sheet writes");
                 AssertContains(replay, "Added sheet: First", "first committed mutation is folded into model history");
                 AssertContains(replay, "Added sheet: Second", "second committed mutation is folded into model history");
                 AssertTrue(!string.IsNullOrWhiteSpace(activities[0].StepId), "model step id stored");
@@ -2622,21 +2764,49 @@ namespace RNAssistant.Harness
                 else
                     adapter.QueueExcelSheetApplyFailure(
                         "Write did not report success", "write_rejected", false);
-                var responses = new Queue<string>(new[]
-                {
-                    LoadToolSchemaResponse("excel.add_sheet"),
-                    "{\"message\":\"Добавляю лист.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"}}]}",
-                    LoadSkillResponse("common.skill_authoring"),
-                    "{\"message\":\"Сохраняю skill.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.skills_upsert\",\"arguments\":{\"id\":\"common.test\",\"description\":\"Test\",\"bodyMarkdown\":\"# Test\"}}]}",
-                    ModelProtocolWire.WriteAction("Проверка листа недоступна; skill сохранён.",
-                        initialHealth == "unknown" ? ConversationResponse.BlockedAction : ConversationResponse.DoneAction),
-                    "{\"message\":\"Обычный новый ответ.\",\"action\":\"done\",\"tool_calls\":[]}"
-                });
-                var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
-                    Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() }));
+                var responses = new Queue<string>();
+                responses.Enqueue(LoadToolSchemaResponse("excel.add_sheet"));
+                responses.Enqueue(ModelProtocolWire.WriteAcceptedCall("Create the requested sheet.", "Добавляю лист.",
+                    new ConversationToolCall { Name = "excel.add_sheet", Arguments = new JObject { ["name"] = "Report" } }));
+                if (initialHealth == "unknown")
+                    responses.Enqueue(ModelProtocolWire.WriteAcceptedCall("Inspect the uncertain sheet write.",
+                        "Проверяю лист.", new ConversationToolCall { Name = ResourceToolCatalog.ReadToolId,
+                            Arguments = new JObject { ["target"] = "Excel range: Report!A1", ["representation"] = "text" } }));
+                responses.Enqueue(LoadSkillResponse("common.skill_authoring"));
+                responses.Enqueue(ModelProtocolWire.WriteAcceptedCall("Save the requested skill.", "Сохраняю skill.",
+                    new ConversationToolCall { Name = "common.skills_upsert", Arguments = new JObject {
+                        ["id"] = "common.test", ["description"] = "Test", ["bodyMarkdown"] = "# Test" } }));
+                responses.Enqueue(null);
+                responses.Enqueue(ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                    "Answer the new request directly.", "Обычный новый ответ.",
+                    results: new ConversationResultClaim[0]));
                 var session = NewSession(adapter);
                 session.LastRun = new ChatRunRecord { RunId = "initial", TurnId = "turn", Status = "running",
                     ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion };
+                var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
+                {
+                    var scriptedResponse = responses.Dequeue();
+                    if (scriptedResponse == null)
+                    {
+                        var sheet = session.Messages.Last(item => item.ToolName == "excel.add_sheet" &&
+                            item.ExecutionProgress?.Outcome == (initialHealth == "unknown" ? ToolExecutionOutcome.Unknown : ToolExecutionOutcome.Error));
+                        var skill = session.Messages.Last(item => item.ToolName == "common.skills_upsert" &&
+                            item.ExecutionProgress?.Outcome == ToolExecutionOutcome.Ok);
+                        var sheetEvidence = new List<string> { sheet.ToolCallId };
+                        if (initialHealth == "unknown")
+                            sheetEvidence.Add(session.Messages.Last(item => item.ToolName == ResourceToolCatalog.ReadToolId &&
+                                item.ExecutionProgress?.Outcome == ToolExecutionOutcome.Ok).ToolCallId);
+                        scriptedResponse = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                            "Report both observed outcomes.", "Проверка листа недоступна; skill сохранён.",
+                            results: new[] {
+                                new ConversationResultClaim("Sheet creation was not verified.", sheetEvidence,
+                                    initialHealth == "unknown" ? ConversationAssessment.Unverified : ConversationAssessment.NotSatisfied),
+                                new ConversationResultClaim("The requested skill was saved.",
+                                    new[] { skill.ToolCallId }, ConversationAssessment.Satisfied)
+                            });
+                    }
+                    return Task.FromResult(new LlmCompletionResult { Content = scriptedResponse });
+                });
                 var settingsForRun = new AppSettings { AutoConfirmToolActions = false };
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var first = service.ExecuteAsync(ChatModes.Agent, "Создай лист и skill.", session, NewContext(adapter),
@@ -2648,10 +2818,11 @@ namespace RNAssistant.Harness
                 AssertTrue(first.WaitingForConfirmation, "real loop stops at confirmation");
                 AssertEqual(initialHealth, first.RunViewState.ExecutionHealth, "pending cannot erase earlier execution evidence");
                 AssertEqual(0, first.RunViewState.VerifiedWrites + first.RunViewState.UnverifiedWrites, "pending mutation is not a successful write");
-                session.LastRun.RunId = "continuation";
+                var acceptedRunId = session.LastRun.RunId;
                 var confirmed = PendingCommand(session);
                 var final = service.ConfirmAsync("pending", confirmed, session,
                     new ConversationRunInput(settingsForRun, NewContext(adapter), tools), null).GetAwaiter().GetResult();
+                AssertEqual(acceptedRunId, session.LastRun.RunId, "confirmation retains the exact accepted run");
                 AssertRunViewState(final, session, initialHealth, 1,
                     initialHealth == "errors" ? 1 : 0, initialHealth == "unknown" ? 1 : 0);
                 AssertEqual(RunViewLifecycles.Completed, final.RunViewState.Lifecycle, "completed lifecycle does not erase errors or unknown");
@@ -2671,19 +2842,23 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     LoadSkillResponse("common.skill_authoring"),
-                    "{\"message\":\"Создаю skill.\",\"action\":\"tool\",\"tool_calls\":[" +
-                    "{\"name\":\"common.skills_upsert\",\"arguments\":{\"id\":\"common.test\",\"description\":\"Test\",\"bodyMarkdown\":\"# Test\"}}]}",
-                    "{\"message\":\"Skill сохранён.\",\"action\":\"done\",\"tool_calls\":[]}"
+                    ModelProtocolWire.WriteAcceptedCall("Save the requested skill.", "Создаю skill.",
+                        new ConversationToolCall { Name = "common.skills_upsert", Arguments = new JObject {
+                            ["id"] = "common.test", ["description"] = "Test", ["bodyMarkdown"] = "# Test" } }),
+                    null
                 });
+                var session = NewSession(adapter);
+                session.LastRun = new ChatRunRecord { Status = "running", ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion };
                 var calls = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>
                 {
                     calls.Add(messages.ToList());
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    var response = responses.Dequeue() ?? ScriptedVerifiedFinish(session,
+                        "The confirmed skill save has a terminal result.", "Skill сохранён.",
+                        "The requested skill was saved.", "common.skills_upsert");
+                    return Task.FromResult(new LlmCompletionResult { Content = response });
                 };
                 var service = CreateConversationRunService(adapter, executor, completion);
-                var session = NewSession(adapter);
-                session.LastRun = new ChatRunRecord { Status = "running", ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion };
                 var settings = new AppSettings { AutoConfirmToolActions = false, SystemPromptRole = "user" };
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var first = service.ExecuteAsync(
@@ -2725,6 +2900,8 @@ namespace RNAssistant.Harness
                     new ConversationRunInput(settings, NewContext(adapter), tools), null).GetAwaiter().GetResult();
 
                 AssertEqual("Skill сохранён.", final.AssistantText, "continued final response");
+                AssertEqual(skillCallId, final.RunViewState.ModelResults.Single().Evidence.Single(),
+                    "finish cites the original confirmed call ID");
                 AssertRunViewState(final, session, "clean", 1, 0, 0);
                 AssertEqual(3, session.LastRun.IterationsUsed, "confirmation continuation keeps cumulative iteration budget");
                 AssertEqual(2, session.LastRun.ToolStepsUsed, "confirmed result replaces reserved logical tool step");
@@ -2788,20 +2965,31 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     LoadSkillResponse("common.vba_code_editing"),
-                    new JObject { ["message"] = "Обновляю VBA.", ["action"] = "tool",
-                        ["tool_calls"] = new JArray(new JObject { ["name"] = "common.vba_apply_patch",
-                            ["arguments"] = new JObject { ["moduleName"] = "Module1", ["patch"] = patch } }) }.ToString(),
-                    externalDrift
-                        ? "{\"message\":\"Изменение отклонено как устаревшее.\",\"action\":\"done\",\"tool_calls\":[]}"
-                        : "{\"message\":\"Изменение сохранено.\",\"action\":\"done\",\"tool_calls\":[]}"
+                    ModelProtocolWire.WriteAcceptedCall("Apply the requested VBA patch.", "Обновляю VBA.",
+                        new ConversationToolCall { Name = VbaToolCatalog.ApplyPatch,
+                            Arguments = new JObject { ["moduleName"] = "Module1", ["patch"] = patch } }),
+                    "__FINISH__"
                 });
                 var calls = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion =
                     (completionSettings, messages, options, stream, token) =>
                 {
                     calls.Add(messages.ToList());
+                    var response = responses.Dequeue();
+                    if (response == "__FINISH__")
+                    {
+                        var callId = messages.Single(message => message.Role == "assistant" &&
+                            message.ToolName == VbaToolCatalog.ApplyPatch &&
+                            message.AcceptedCallOrigin != null).ToolCallId;
+                        response = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                            "Report the confirmed patch outcome.",
+                            externalDrift ? "Изменение отклонено как устаревшее." : "Изменение сохранено.",
+                            results: new[] { new ConversationResultClaim(
+                                externalDrift ? "The patch was rejected after source drift." : "The patch was applied.",
+                                new[] { callId }, externalDrift ? ConversationAssessment.NotSatisfied : ConversationAssessment.Satisfied) });
+                    }
                     return Task.FromResult(new LlmCompletionResult
-                        { Content = responses.Dequeue() });
+                        { Content = response });
                 };
                 var service = CreateConversationRunService(
                     adapter, executor, completion);
@@ -2915,26 +3103,43 @@ namespace RNAssistant.Harness
             {
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"message\":\"Очищаю ячейку.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"excel.clear_range\",\"arguments\":{\"address\":\"A1\",\"clearWhat\":\"values\"}}]}",
-                    "{\"message\":\"Определение инструмента изменилось; действие не выполнено.\",\"action\":\"done\",\"tool_calls\":[]}"
+                    LoadToolSchemaResponse("excel.clear_range"),
+                    ModelProtocolWire.WriteAcceptedCall("Clear the requested cell.", "Очищаю ячейку.",
+                        new ConversationToolCall { Name = "excel.clear_range",
+                            Arguments = new JObject { ["address"] = "A1", ["clearWhat"] = "values" } }),
+                    "__FINISH__"
                 });
                 var calls = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>
                 {
                     calls.Add(messages.ToList());
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    var response = responses.Dequeue();
+                    if (response == "__FINISH__")
+                    {
+                        var callId = messages.Single(message => message.Role == "assistant" &&
+                            message.ToolName == "excel.clear_range" &&
+                            message.AcceptedCallOrigin != null).ToolCallId;
+                        response = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                            "Report the confirmed policy drift.",
+                            "Определение инструмента изменилось; действие не выполнено.",
+                            results: new[] { new ConversationResultClaim("The clear was not dispatched.",
+                                new[] { callId }, ConversationAssessment.NotSatisfied) });
+                    }
+                    return Task.FromResult(new LlmCompletionResult { Content = response });
                 };
                 var service = CreateConversationRunService(adapter, executor, completion);
                 var session = NewSession(adapter);
-                session.LastRun = new ChatRunRecord { Status = "running", ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion };
                 var settings = new AppSettings { AutoConfirmToolActions = false };
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 tools.Single(tool => tool.Id == "excel.clear_range").Scope = "document";
-                service.ExecuteAsync(
+                var pendingTurn = service.ExecuteAsync(
                     ChatModes.Agent,
                     "Очисти A1.", session, NewContext(adapter), settings, tools,
                     (Action<string, string, ChatActivity>)null,
                     (pendingSession, pendingCommand, result) => "pending_failure").GetAwaiter().GetResult();
+                AssertTrue(pendingTurn.WaitingForConfirmation,
+                    "the clear pauses before confirmation: " + pendingTurn.RunViewState?.Reason +
+                    " / " + pendingTurn.AssistantText);
 
                 var command = PendingCommand(session);
                 var callsBeforeConfirmation = adapter.TotalBackendCallCount;
@@ -2946,8 +3151,8 @@ namespace RNAssistant.Harness
                 AssertContains(final.AssistantText,
                     "Определение инструмента изменилось; действие не выполнено.",
                     "agent continues after confirmed policy drift");
-                AssertEqual(2, calls.Count, "confirmed policy drift triggers the next model turn");
-                var replay = FlattenSimple(calls[1]);
+                AssertEqual(3, calls.Count, "confirmed policy drift triggers the next model turn");
+                var replay = FlattenSimple(calls[2]);
                 AssertContains(replay, "Tool policy changed; request a new call.",
                     "fingerprint failure is replayed without dispatch");
                 AssertTrue(replay.IndexOf("waiting_confirmation", StringComparison.OrdinalIgnoreCase) < 0, "waiting result is not replayed after failure");
@@ -2962,13 +3167,19 @@ namespace RNAssistant.Harness
             {
                 var calls = 0;
                 string[] acceptedIds = null;
+                var session = NewSession(adapter);
                 var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
                 {
                     calls++;
                     if (calls == 1) return Task.FromResult(new LlmCompletionResult { Content =
-                        "{\"message\":\"Read twice\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.resources_find\",\"arguments\":{}},{\"name\":\"common.resources_find\",\"arguments\":{}}]}" });
+                        ModelProtocolWire.Write(new ConversationResponse(ConversationResponse.ExecuteAction,
+                            "Read two independent resource views.", "Read twice", calls: new[] {
+                                new ConversationToolCall { Name = ResourceToolCatalog.FindToolId, Arguments = new JObject() },
+                                new ConversationToolCall { Name = ResourceToolCatalog.FindToolId, Arguments = new JObject() }
+                            })) });
                     if (calls == 3) return Task.FromResult(new LlmCompletionResult { Content =
-                        "{\"message\":\"Done\",\"action\":\"done\",\"tool_calls\":[]}" });
+                        ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                            "Summarize the existing paired read.", "Done", results: new ConversationResultClaim[0]) });
                     var accepted = messages.Where(message => message.Role == "assistant" &&
                         message.ToolName == ResourceToolCatalog.FindToolId && message.AcceptedCallOrigin != null).ToList();
                     AssertEqual(2, accepted.Count, "both identical read positions remain in history");
@@ -2987,9 +3198,10 @@ namespace RNAssistant.Harness
                     AssertEqual(string.Join(",", ids.SelectMany(id => new[] { "assistant:" + id, "tool:" + id })),
                         string.Join(",", exchange.Select(message => message.Role + ":" + message.ToolCallId)),
                         "native tool calls stay paired in both live and reloaded request history");
-                    return Task.FromResult(new LlmCompletionResult { Content = "{\"message\":\"Done\",\"action\":\"done\",\"tool_calls\":[]}" });
+                    return Task.FromResult(new LlmCompletionResult { Content = ScriptedVerifiedFinish(session,
+                        "Both independent reads are complete.", "Done", "Both resource views were read.",
+                        ResourceToolCatalog.FindToolId, ResourceToolCatalog.FindToolId) });
                 });
-                var session = NewSession(adapter);
                 var settingsForRun = new AppSettings { ToolResultRole = ToolResultRoles.Tool };
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var first = service.ExecuteAsync(ChatModes.Agent, "Read twice", session, NewContext(adapter), settingsForRun, tools, null).GetAwaiter().GetResult();
@@ -3013,31 +3225,31 @@ namespace RNAssistant.Harness
                         "<p data-row=\"" + index + "\">Точный текст &amp; символы: \\n \\t \\\\</p>\r\n")) +
                     "<script>const stamp = '2026-08-28T12:34:56.000Z'; const path = 'C:\\\\reports';</script>\n" +
                     "<footer>END_OF_COMPLETE_HTML</footer></body></html>";
-                var rawWrite = ModelProtocolWire.Write("Save complete HTML.", new[]
-                {
-                    new ConversationToolCall
+                var rawWrite = ModelProtocolWire.WriteAcceptedCall("Save the complete HTML body.",
+                    "Save complete HTML.", new ConversationToolCall
                     {
                         Name = HtmlWorkspaceToolCatalog.WriteFileToolId,
                         Arguments = new JObject
                         {
                             ["path"] = "report.html", ["content"] = html
                         }
-                    }
-                });
+                    });
                 var responses = new Queue<string>(new[]
                 {
-                    LoadSkillResponse("common.html_workspace_authoring"), rawWrite, rawWrite,
-                    ModelProtocolWire.Write("Done.", new ConversationToolCall[0])
+                    LoadSkillResponse("common.html_workspace_authoring"), rawWrite, rawWrite, null
                 });
                 var requestCount = 0;
+                var session = NewSession(adapter);
                 var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
                 {
                     requestCount++;
                     AssertTrue(!messages.Any(message => (message.Content ?? string.Empty).StartsWith("FORMAT_REPAIR:", StringComparison.Ordinal)),
                         "execution identity never triggers regeneration of HTML");
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    var scriptedResponse = responses.Dequeue() ?? ScriptedVerifiedFinish(session,
+                        "Both HTML writes completed.", "Done.", "The complete HTML was saved.",
+                        HtmlWorkspaceToolCatalog.WriteFileToolId, HtmlWorkspaceToolCatalog.WriteFileToolId);
+                    return Task.FromResult(new LlmCompletionResult { Content = scriptedResponse });
                 });
-                var session = NewSession(adapter);
                 var result = service.ExecuteWithApprovalsAsync(ChatModes.Agent, "Save complete HTML.", session, NewContext(adapter),
                     new AppSettings { AutoConfirmToolActions = true, MaxAgentFormatRetries = 1,
                         ToolResultRole = resultRole, ContextWindowOverrideTokens = 131072 },
@@ -3078,10 +3290,10 @@ namespace RNAssistant.Harness
                     calls += 1;
                     return Task.FromResult(new LlmCompletionResult
                     {
-                        Content = calls == 1 ? string.Empty : ModelProtocolWire.Write("Must not execute", new[]
-                        {
-                            new ConversationToolCall { Name = ResourceToolCatalog.FindToolId }
-                        }),
+                        Content = calls == 1 ? string.Empty : ModelProtocolWire.WriteAcceptedCall(
+                            "The provider refusal must stop execution.", "Must not execute",
+                            new ConversationToolCall { Name = ResourceToolCatalog.FindToolId,
+                                Arguments = new JObject() }),
                         RefusalContent = "Запрос отклонён провайдером."
                     });
                 };
@@ -3140,13 +3352,17 @@ namespace RNAssistant.Harness
             {
                 var responses = new Queue<string>(new[] {
                     LoadToolSchemaResponse("excel.add_sheet"),
-                    "{\"message\":\"Add sheet\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"ApprovedSheet\"}}]}",
-                    "{\"message\":\"Add another sheet\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"SecondApprovedSheet\"}}]}",
-                    ModelProtocolWire.WriteAction("Done", ConversationResponse.DoneAction)
+                    ModelProtocolWire.WriteAcceptedCall("Create the first approved sheet.", "Add sheet",
+                        new ConversationToolCall { Name = "excel.add_sheet", Arguments = new JObject { ["name"] = "ApprovedSheet" } }),
+                    ModelProtocolWire.WriteAcceptedCall("Create the second approved sheet.", "Add another sheet",
+                        new ConversationToolCall { Name = "excel.add_sheet", Arguments = new JObject { ["name"] = "SecondApprovedSheet" } }),
+                    null
                 });
-                var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
-                    Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() }));
                 var session = NewSession(adapter);
+                var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
+                    Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() ??
+                        ScriptedVerifiedFinish(session, "Both approved writes completed.", "Done",
+                            "Both requested sheets were created.", "excel.add_sheet", "excel.add_sheet") }));
                 var configuration = new AppSettings { AutoConfirmToolActions = false };
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var result = service.ExecuteAsync(ChatModes.Agent, "Create sheet", session, NewContext(adapter),
@@ -3180,19 +3396,42 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
             {
                 adapter.ExcelSheetThrowAfterMutation = unknown;
-                Func<string, string> add = name => new JObject { ["message"] = "Add sheet", ["action"] = "tool",
-                    ["tool_calls"] = new JArray(new JObject { ["name"] = "excel.add_sheet", ["arguments"] = new JObject { ["name"] = name } })
-                }.ToString(Formatting.None);
+                Func<string, string> add = name => ModelProtocolWire.WriteAcceptedCall(
+                    "Create the requested sheet.", "Add sheet", new ConversationToolCall {
+                        Name = "excel.add_sheet", Arguments = new JObject { ["name"] = name }
+                    });
                 var responses = new Queue<string>(new[] { LoadToolSchemaResponse("excel.add_sheet"),
                     add("AutoOne"), add(unknown ? "AutoOne" : "AutoTwo") });
-                if (unknown) responses.Enqueue("{\"message\":\"Проверяю созданный лист.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.resources_read\",\"arguments\":{\"target\":\"Excel range: AutoOne!A1\",\"representation\":\"text\"}}]}");
-                responses.Enqueue(ModelProtocolWire.WriteAction("Done", ConversationResponse.DoneAction));
+                if (unknown) responses.Enqueue(ModelProtocolWire.WriteAcceptedCall(
+                    "Inspect the sheet after the uncertain write.", "Проверяю созданный лист.",
+                    new ConversationToolCall { Name = ResourceToolCatalog.ReadToolId,
+                        Arguments = new JObject { ["target"] = "Excel range: AutoOne!A1", ["representation"] = "text" } }));
+                responses.Enqueue(null);
                 var configuration = new AppSettings { AutoConfirmToolActions = true };
+                var session = NewSession(adapter);
                 var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) => {
                     configuration.AutoConfirmToolActions = false;
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    var scriptedResponse = responses.Dequeue();
+                    if (scriptedResponse == null)
+                    {
+                        if (!unknown)
+                            scriptedResponse = ScriptedVerifiedFinish(session, "Both sheet writes completed.",
+                                "Done", "Both requested sheets were created.", "excel.add_sheet", "excel.add_sheet");
+                        else
+                        {
+                            var uncertain = session.Messages.Last(item => item.ToolName == "excel.add_sheet" &&
+                                item.ExecutionProgress?.Outcome == ToolExecutionOutcome.Unknown);
+                            var inspected = session.Messages.Last(item => item.ToolName == ResourceToolCatalog.ReadToolId &&
+                                item.ExecutionProgress?.Outcome == ToolExecutionOutcome.Ok);
+                            scriptedResponse = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                                "The write outcome remains uncertain after inspection.",
+                                "Состояние листа проверено; создание не подтверждено.",
+                                results: new[] { new ConversationResultClaim("Sheet creation remains unverified.",
+                                    new[] { uncertain.ToolCallId, inspected.ToolCallId }, ConversationAssessment.Unverified) });
+                        }
+                    }
+                    return Task.FromResult(new LlmCompletionResult { Content = scriptedResponse });
                 });
-                var session = NewSession(adapter);
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var result = service.ExecuteAsync(ChatModes.Agent, "Create sheets", session, NewContext(adapter),
                     configuration, tools, null).GetAwaiter().GetResult();
@@ -3219,7 +3458,9 @@ namespace RNAssistant.Harness
                 session.Mode = ChatModes.Chat;
                 var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) => {
                     calls++;
-                    return Task.FromResult(new LlmCompletionResult { Content = ModelProtocolWire.WriteAction("Unexpected", ConversationResponse.DoneAction) });
+                    return Task.FromResult(new LlmCompletionResult { Content = ModelProtocolWire.WriteAcceptedDecision(
+                        ConversationResponse.FinishAction, "Answer the new request.", "Unexpected",
+                        results: new ConversationResultClaim[0]) });
                 });
                 var count = session.Messages.Count;
                 RuntimeThrows<InvalidOperationException>(() => service.ExecuteAsync(ChatModes.Chat, "Continue", session,
@@ -3251,16 +3492,24 @@ namespace RNAssistant.Harness
                     session, "Reference note", "conversation").Items.Single().Target;
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"message\":\"Читаю заметку.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.resources_read\",\"arguments\":{\"target\":\"" + target + "\",\"representation\":\"text\"}}]}",
-                    "{\"message\":\"Первый ответ.\",\"action\":\"done\",\"tool_calls\":[]}",
-                    "{\"message\":\"Перечитываю заметку.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.resources_read\",\"arguments\":{\"target\":\"" + target + "\",\"representation\":\"text\"}}]}",
-                    "{\"message\":\"Второй ответ.\",\"action\":\"done\",\"tool_calls\":[]}"
+                    ModelProtocolWire.WriteAcceptedCall("Read the referenced artifact on demand.", "Читаю заметку.",
+                        new ConversationToolCall { Name = ResourceToolCatalog.ReadToolId,
+                            Arguments = new JObject { ["target"] = target, ["representation"] = "text" } }),
+                    null,
+                    ModelProtocolWire.WriteAcceptedCall("Read the current artifact again.", "Перечитываю заметку.",
+                        new ConversationToolCall { Name = ResourceToolCatalog.ReadToolId,
+                            Arguments = new JObject { ["target"] = target, ["representation"] = "text" } }),
+                    null
                 });
                 var captured = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
                 {
                     captured.Add(messages.ToList());
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    var response = responses.Dequeue() ?? ScriptedVerifiedFinish(session,
+                        "The referenced artifact was read in this run.",
+                        captured.Count == 2 ? "Первый ответ." : "Второй ответ.",
+                        "The current artifact body was read.", ResourceToolCatalog.ReadToolId);
+                    return Task.FromResult(new LlmCompletionResult { Content = response });
                 };
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var service = CreateConversationRunService(adapter, executor, completion);

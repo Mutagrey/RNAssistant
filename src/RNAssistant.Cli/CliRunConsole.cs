@@ -78,8 +78,6 @@ namespace RNAssistant.Cli
             else if (result.UserInput != null)
                 Console.WriteLine("Answers required. Resume with rna resume --workspace <path> --session " + Text(result.SessionId) +
                     ", or use answer --answers-file <file>. inspect --jsonl returns the question IDs.");
-            else if (summary.Reason == "model_needs_input")
-                Console.WriteLine("New input required: rna run --workspace <path> --session " + Text(result.SessionId) + " --message <answer>.");
         }
 
         private static void File(WorkspaceFileActivity file)

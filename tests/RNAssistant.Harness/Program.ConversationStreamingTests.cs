@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Services;
@@ -40,9 +41,9 @@ namespace RNAssistant.Harness
                 var responseChunks = new[]
                 {
                     "<think>" + thinking,
-                    "</think>{\"mes",
+                    "</think>{\"action\":\"finish\",\"reason\":\"Answer the request.\",\"results\":[],\"mes",
                     "sage\":\"Привет\\nмир \\uD83D",
-                    "\\uDE00\",\"action\":\"done\",\"tool_calls\":[]}"
+                    "\\uDE00\"}"
                 };
                 LlmCompletionDelegate completion = (settings, messages, options, streamProgress, cancellationToken) =>
                 {
@@ -96,8 +97,8 @@ namespace RNAssistant.Harness
                 {
                     BuildDeltaSse("reasoning_content", "Размышление "),
                     BuildDeltaSse("reasoning", "продолжается."),
-                    BuildDeltaSse("content", "{\"message\":\"Ответ"),
-                    BuildDeltaSse("content", ".\",\"action\":\"done\",\"tool_calls\":[]}"),
+                    BuildDeltaSse("content", "{\"action\":\"finish\",\"reason\":\"Answer the request.\",\"results\":[],\"message\":\"Ответ"),
+                    BuildDeltaSse("content", ".\"}"),
                     "data: [DONE]\n\n"
                 });
                 LlmCompletionDelegate completion = (settings, messages, options, streamProgress, cancellationToken) =>
@@ -135,8 +136,9 @@ namespace RNAssistant.Harness
             {
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"status\":\"in_progress\",\"message\":\"Жил-был потоковый черновик.\",\"action\":\"done\",\"tool_calls\":[]}",
-                    "{\"message\":\"Исправлено.\",\"action\":\"done\",\"tool_calls\":[]}"
+                    "{\"action\":\"finish\",\"reason\":\"Answer the request.\",\"results\":[],\"status\":\"in_progress\",\"message\":\"Жил-был потоковый черновик.\"}",
+                    ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                        "Answer after format repair.", "Исправлено.", results: new ConversationResultClaim[0])
                 });
                 var thoughts = new Queue<string>(new[] { "Первая мысль.", "Исправленная мысль." });
                 var calls = 0;
@@ -181,17 +183,17 @@ namespace RNAssistant.Harness
                     .Select(item => item.Item3.ResultMessage)
                     .ToList();
 
-                AssertEqual(2, calls, "status/tool_calls mismatch gets one repair request");
-                AssertContains(requests[1].Last().Content, "unsupported root field: status",
+                AssertEqual(2, calls, "extra finish field gets one repair request");
+                AssertContains(requests[1].Last().Content, "action=finish forbids root field status",
                     "repair receives the first parser rejection");
                 AssertEqual(2, traces.Count, "rejected and accepted parser verdicts are traced");
                 AssertEqual("rejected", traces[0].Type, "trace identifies the rejected response");
                 AssertContains(traces[0].PayloadJson, "Жил-был потоковый черновик.",
                     "trace preserves the first rejected payload");
-                AssertContains(traces[0].Error, "unsupported root field: status",
+                AssertContains(traces[0].Error, "action=finish forbids root field status",
                     "trace preserves the exact parser error");
                 AssertEqual("accepted", traces[1].Type, "repair acceptance has its own marker");
-                AssertTrue(traces[1].ResponseStatus == null, "accepted v3 marker has no model-declared lifecycle status");
+                AssertTrue(traces[1].ResponseStatus == null, "accepted v8 marker has no model-declared lifecycle status");
                 AssertTrue(traces[1].PayloadJson == null, "accepted marker does not duplicate model content");
                 AssertEqual(4, streamEvents.Count, "each attempt emits reset and visible message");
                 AssertEqual(string.Empty, streamEvents[0], "first attempt reset");

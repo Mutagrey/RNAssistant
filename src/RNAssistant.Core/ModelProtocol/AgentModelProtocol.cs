@@ -50,7 +50,7 @@ namespace RNAssistant.Core.ModelProtocol
                 SourceModelAttemptId = sourceModelAttemptId };
         }
 
-        // A valid done failed explicit application-owned postconditions. This is
+        // A valid finish failed explicit application-owned postconditions. This is
         // a fresh kernel step, never a format repair or accepted assistant answer.
         public static AgentModelResult RejectCompletion(string message)
         {

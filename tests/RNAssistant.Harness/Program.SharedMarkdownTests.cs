@@ -130,17 +130,24 @@ namespace RNAssistant.Harness
                 var body = "# Detailed documentation\r\n" + new string('x', 40000) + "\nEnd.\n";
                 var responses = new Queue<string>(new[] {
                     LoadToolSchemaResponse(MarkdownDocumentToolCatalog.SaveToolId),
-                    ModelProtocolWire.Write("I will save the complete documentation as a reusable Markdown document.", new[] {
+                    ModelProtocolWire.WriteAcceptedCall("Save the requested complete documentation.",
+                        "I will save the complete documentation as a reusable Markdown document.",
                         new ConversationToolCall { Name = MarkdownDocumentToolCatalog.SaveToolId,
-                            Arguments = new JObject { ["title"] = "Detailed.md", ["description"] = "Detailed system documentation.", ["markdown"] = body } } }),
-                    ModelProtocolWire.Write("Documentation saved.", new ConversationToolCall[0]) });
-                var service = CreateConversationRunService(adapter, executor,
-                    (settings, messages, options, stream, token) => Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() }));
+                            Arguments = new JObject { ["title"] = "Detailed.md", ["description"] = "Detailed system documentation.", ["markdown"] = body } }) });
                 var session = NewSession(adapter);
+                var finishCount = 0;
+                var service = CreateConversationRunService(adapter, executor,
+                    (settings, messages, options, stream, token) => Task.FromResult(new LlmCompletionResult {
+                        Content = responses.Count > 0 ? responses.Dequeue() : ++finishCount == 1
+                            ? ScriptedVerifiedFinish(session, "The document save completed.", "Documentation saved.",
+                                "Detailed documentation was saved.", MarkdownDocumentToolCatalog.SaveToolId)
+                            : throw new InvalidOperationException("Unexpected model request after Markdown finish.")
+                    }));
                 var result = service.ExecuteWithApprovalsAsync(ChatModes.Agent, "Create detailed Markdown documentation.", session, NewContext(adapter),
                     new AppSettings { AutoConfirmToolActions = true, ContextWindowOverrideTokens = 131072 },
                     OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
                 AssertEqual(RunViewLifecycles.Completed, result.RunViewState.Lifecycle, "the complete agent cycle discovers and executes the native Markdown tool: " + JsonConvert.SerializeObject(result.RunViewState));
+                AssertEqual(1, finishCount, "Markdown run accepts one evidence-citing finish");
                 var replayed = AssertKernelReplay(session);
                 var artifact = replayed.Artifacts.Single(item => item.Kind == ChatArtifactKinds.Markdown);
                 AssertTrue(artifact.InlineText == null, "replay remains metadata-only for Markdown");

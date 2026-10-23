@@ -1,0 +1,220 @@
+{
+  "endpoint": "http://127.0.0.1:11434/v1/chat/completions",
+  "started_utc": "2026-10-22T22:41:18.967515+00:00",
+  "endpoint_version": {
+    "version": "0.35.0"
+  },
+  "model": {
+    "name": "rna-gemma4-12b-32k:latest",
+    "model": "rna-gemma4-12b-32k:latest",
+    "modified_at": "2026-10-08T23:59:52.956268067+03:00",
+    "size": 8021618957,
+    "digest": "cf94f3793da5f501e0a2948b34825db5baceed926438a78551ffaa83f85a4082",
+    "details": {
+      "parent_model": "gemma4:12b",
+      "format": "gguf",
+      "family": "gemma4",
+      "families": [
+        "gemma4"
+      ],
+      "parameter_size": "11.9B",
+      "quantization_level": "Q4_K_M",
+      "context_length": 262144,
+      "embedding_length": 3840
+    },
+    "capabilities": [
+      "completion",
+      "vision",
+      "audio",
+      "tools",
+      "thinking"
+    ]
+  },
+  "base_commit": "1e5c4789bbd569b8afdfd54de17278e86021d9a8",
+  "working_tree": "uncommitted phase-1 candidate; full application not integrated",
+  "limits": "Synthetic format probes; no tool dispatch, evidence admission, Office or task-success qualification.",
+  "sources": {
+    "src/RNAssistant.Core/ModelProtocol/AgentModelProtocol.cs": "d9a9001957257c72d5ac803ad74033217f27de6eba4acb5dc8d190bb5cbcec0b",
+    "src/RNAssistant.Core/ModelProtocol/ConversationResponse.cs": "0041728124a2e5072e6de2445a8d8d36f7b22ca51bdf6737e89293e08e4136c5",
+    "src/RNAssistant.Core/ModelProtocol/ConversationResponseHistoryReader.cs": "be17ac1c8380d1c50090895bd849b4f91e0cb7c8100657a4a7c77824e41fd26f",
+    "src/RNAssistant.Core/ModelProtocol/ConversationResponseJson.cs": "a59ed2ee6c9f0bd23e3f3e593dcb16cee9d17a4d706d61e37ffbbbc601846790",
+    "src/RNAssistant.Core/ModelProtocol/ConversationResponseParser.cs": "62390ff9702d5ee27b806a2a40835dcf8de1ad6d79bddbe96fc2137b3586d882",
+    "src/RNAssistant.Core/ModelProtocol/ConversationResponseSchemaBuilder.cs": "f12c3cf5d7fa07a59bfe571c8db86233a4886fd4cf34371adb46a34d82b8c642",
+    "src/RNAssistant.Core/ModelProtocol/ModelProtocolCallContext.cs": "85d0093a71184a9f84ba8cc0cfe180eed8c6bb4e8e34ffe052e86290f450fa90",
+    "src/RNAssistant.Core/ModelProtocol/ModelProtocolClient.cs": "c72276f8ac1c7bac6ae62b0cd22b3bbd48c260464e038eb060c945cd0fa54f22",
+    "src/RNAssistant.Core/ModelProtocol/ModelProtocolContracts.cs": "d67410e86dc1895262f8fc77faac66d568c3c9ff09ea7d6b08b725a56434d69d",
+    "src/RNAssistant.Core/ModelProtocol/ModelProtocolRetryBudget.cs": "ffbfa81dfc4e63805e1e652d5d339185f5d373ccc8447849f0b11648ff15ce94",
+    "src/RNAssistant.Core/ModelProtocol/ModelProtocolWire.Requests.cs": "8ac91fe8f07a4f8a0e133449506ca20ab987fcfa56288be96c03890f3783582b",
+    "src/RNAssistant.Core/ModelProtocol/ModelProtocolWire.cs": "18dbbd36d455c4133e4e3da1b4ac255b4dd89cb7e234b3e75a6525862623040f",
+    "src/RNAssistant.Core/ModelProtocol/ToolResultWire.cs": "1120b9cec3a538b06a29534a59f5138c5e6dc743f615321502a358ba6929d1fd",
+    "src/RNAssistant.Core/Tools/ToolSchemaSupport.cs": "36b1ef9a04116c12629510a1281a364836443e7f76b605f20ecc089e9e9f3eb0",
+    "tests/RNAssistant.ProtocolTests/probe_endpoint.py": "af9bf5c00c71998c474056a272d31343dc4b5f1269b3b90f847fd340c1fc56ca",
+    "artifacts/protocol-v8/schema.json": "9dfd2423af9eee51c4b6c397b90602bf05aaaf649ae9d024f61999fde1c8fbb6",
+    "artifacts/protocol-v8/guidance.txt": "09d20cb9583fe5f7a73ddd8fbaf3b77285e746cf1a4917e961f9d949ddc51c13"
+  },
+  "probes": [
+    {
+      "name": "root-anyof",
+      "status": 200,
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 39,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "completion_tokens": 176,
+        "total_tokens": 215
+      },
+      "schema_valid": true,
+      "schema_errors": [],
+      "pass": true,
+      "elapsed_seconds": 12.967
+    },
+    {
+      "name": "root-oneof",
+      "status": 200,
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 39,
+        "prompt_tokens_details": {
+          "cached_tokens": 34
+        },
+        "completion_tokens": 176,
+        "total_tokens": 215
+      },
+      "schema_valid": true,
+      "schema_errors": [],
+      "pass": true,
+      "elapsed_seconds": 7.548
+    },
+    {
+      "name": "const",
+      "status": 200,
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 32,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "completion_tokens": 118,
+        "total_tokens": 150
+      },
+      "schema_valid": true,
+      "schema_errors": [],
+      "pass": true,
+      "elapsed_seconds": 5.057
+    },
+    {
+      "name": "minitems-enum",
+      "status": 200,
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 31,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "completion_tokens": 188,
+        "total_tokens": 219
+      },
+      "schema_valid": true,
+      "schema_errors": [],
+      "pass": true,
+      "elapsed_seconds": 8.896
+    },
+    {
+      "name": "defs",
+      "status": 200,
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 32,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "completion_tokens": 119,
+        "total_tokens": 151
+      },
+      "schema_valid": true,
+      "schema_errors": [],
+      "pass": true,
+      "elapsed_seconds": 5.206
+    },
+    {
+      "name": "dynamic-execute",
+      "status": 200,
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 406,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "completion_tokens": 597,
+        "total_tokens": 1003
+      },
+      "schema_valid": true,
+      "schema_errors": [],
+      "requested_action_observed": true,
+      "parser_valid": true,
+      "pass": true,
+      "elapsed_seconds": 24.561
+    },
+    {
+      "name": "reflection",
+      "status": 200,
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 399,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "completion_tokens": 274,
+        "total_tokens": 673
+      },
+      "schema_valid": true,
+      "schema_errors": [],
+      "requested_action_observed": true,
+      "parser_valid": true,
+      "pass": true,
+      "elapsed_seconds": 13.803
+    },
+    {
+      "name": "finish",
+      "status": 200,
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 413,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "completion_tokens": 574,
+        "total_tokens": 987
+      },
+      "schema_valid": true,
+      "schema_errors": [],
+      "requested_action_observed": true,
+      "parser_valid": true,
+      "pass": true,
+      "elapsed_seconds": 25.018
+    },
+    {
+      "name": "json-object",
+      "status": 200,
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 401,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "completion_tokens": 168,
+        "total_tokens": 569
+      },
+      "schema_valid": true,
+      "schema_errors": [],
+      "requested_action_observed": true,
+      "parser_valid": true,
+      "pass": true,
+      "elapsed_seconds": 9.399
+    }
+  ],
+  "completed_utc": "2026-10-22T22:43:11.448355+00:00",
+  "pass": true
+}

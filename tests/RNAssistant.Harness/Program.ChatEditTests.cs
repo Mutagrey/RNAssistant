@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office.Services;
@@ -217,7 +218,9 @@ namespace RNAssistant.Harness
                         captured = new List<ChatMessage>(messages ?? new ChatMessage[0]);
                         return Task.FromResult(new LlmCompletionResult
                         {
-                            Content = "{\"message\":\"Обновленный ответ.\",\"action\":\"done\",\"tool_calls\":[]}",
+                            Content = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                                "Answer the edited prompt once.", "Обновленный ответ.",
+                                results: new ConversationResultClaim[0]),
                             PromptTokens = 10,
                             CompletionTokens = 2,
                             TotalTokens = 12
@@ -240,7 +243,8 @@ namespace RNAssistant.Harness
 
                 var users = session.Messages.Where(message =>
                     message != null && string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase)).ToList();
-                AssertEqual(2, session.Messages.Count, "replay keeps a single exchange");
+                AssertEqual(1, session.Messages.Count(message => message.Role == "assistant" &&
+                    !message.ProtocolMessage), "replay keeps one visible assistant answer");
                 AssertEqual(1, users.Count, "replay does not duplicate user turn");
                 AssertEqual(edited.Id, users[0].Id, "replay preserves edited user id");
                 AssertEqual("Обновленный ответ.", session.Messages.Last().Content, "replay appends assistant answer");

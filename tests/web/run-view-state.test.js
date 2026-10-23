@@ -38,6 +38,18 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
   assert.equal(runView.normalize(Object.assign(state("bad-value"), { Lifecycle: "toString" })), null);
   assert.equal(runView.normalize(state("bad-pending-case", "awaiting_confirmation", "clean",
     { pendingId: "pending", toolCallId: "call", toolName: "excel.write_range" })), null);
+  const partial = runView.normalize(Object.assign(state("partial"), { Reason: "model_finish",
+    ModelResults: [{ Summary: "Chart remains unfinished", Assessment: "partially_satisfied",
+      Evidence: ["call-1"] }] }));
+  assert.equal(partial.modelResults[0].evidence[0], "call-1");
+  assert.ok(Object.isFrozen(partial.modelResults) && Object.isFrozen(partial.modelResults[0]));
+  assert.match(runView.outcomeLabel(partial), /частично по оценке модели/);
+  assert.equal(partial.goalVerification, "not_assessed");
+  assert.equal(runView.normalize(Object.assign(state("forged"), { ModelResults: [{
+    Summary: "No evidence", Assessment: "satisfied", Evidence: ["call-1", "call-1"] }] })), null);
+  assert.equal(runView.normalize(Object.assign(state("running-claim", "running"), {
+    ModelResults: [{ Summary: "Too early", Assessment: "unverified", Evidence: [] }]
+  })), null);
   assert.equal(runView.fromMessage({ RunViewState: state("message") }).runId, "message");
   assert.equal(runView.fromChatSummary({ RunViewState: state("summary") }).runId, "summary");
   assert.equal(runView.fromMessage({ runViewState: state("wrong-case") }), null);
@@ -163,6 +175,36 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
   console.log("PASS run view state: bridge/UI consumers use the typed projection without model-status inference");
 }
 
+{
+  class Node {
+    constructor() { this.children = []; this.textContent = ""; this.attributes = {}; }
+    appendChild(child) { this.children.push(child); return child; }
+    setAttribute(name, value) { this.attributes[name] = value; }
+    addEventListener() {}
+  }
+  const ui = vm.createContext({});
+  ui.window = ui;
+  ui.state = { activeChatId: "chat" };
+  ui.RNAssistantRunViewState = runView;
+  ui.RNAssistantAgentApproval = { create: () => ({}) };
+  ui.document = { createElement: () => new Node() };
+  vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-agent.js"), "utf8"), ui,
+    { filename: "app-agent.js" });
+  const partial = runView.normalize(Object.assign(state("partial"), { Reason: "model_finish",
+    ModelResults: [{ Summary: "Chart unfinished", Assessment: "partially_satisfied",
+      Evidence: ["call-1"] }] }));
+  const parent = new Node();
+  ui.appendAgentRunViewState(parent, partial, "run-partial");
+  const flatten = node => [node.textContent, ...node.children.flatMap(flatten)].join(" ");
+  assert.match(flatten(parent), /Chart unfinished/);
+  assert.match(flatten(parent), /call-1/);
+  assert.match(flatten(parent), /достижение цели отдельно не проверено/);
+  const ordinary = new Node();
+  ui.appendAgentRunViewState(ordinary, runView.normalize(state("ordinary")), "run-ordinary");
+  assert.equal(ordinary.children.length, 0, "ordinary completed answers have no service card");
+  console.log("PASS run view state: partial model claim is visible without promoting task success");
+}
+
 
 {
   const ui = vm.createContext({});
@@ -182,4 +224,4 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
   console.log("PASS chat ordering: activity ignores navigation/save time and includes background updates");
 }
 
-console.log("OK 6/6");
+console.log("OK 7/7");

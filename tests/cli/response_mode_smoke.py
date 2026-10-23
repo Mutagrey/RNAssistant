@@ -13,6 +13,26 @@ REPO = Path(__file__).resolve().parents[2]
 CLI = REPO / "src/RNAssistant.Cli/bin/Debug/net8.0/RNAssistant.Cli.dll"
 
 
+def finish(request, message="Ready."):
+    evidence = []
+    for item in request["messages"]:
+        content = item.get("content") or ""
+        if item.get("role") == "tool" and item.get("tool_call_id"):
+            evidence.append(item["tool_call_id"])
+        elif isinstance(content, str) and content.startswith("TOOL_RESULT:\n"):
+            receipt = json.loads(content.split("\n", 1)[1])
+            evidence.append(receipt["tool_call_id"])
+    return {"action": "finish", "reason": "Report observed results.",
+            "results": [{"summary": message, "evidence": evidence,
+                         "assessment": "satisfied"}] if evidence else [],
+            "message": message}
+
+
+def execute(message, name, arguments):
+    return {"action": "execute", "reason": "Run the requested tool.",
+            "tool_calls": [{"name": name, "arguments": arguments}], "message": message}
+
+
 def main():
     if not CLI.is_file():
         raise SystemExit("Build src/RNAssistant.Cli/RNAssistant.Cli.csproj first.")
@@ -22,9 +42,12 @@ def main():
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self):
             assert self.path == "/v1/chat/completions", self.path
-            requests.append(json.loads(self.rfile.read(int(self.headers["Content-Length"]))))
-            content = json.dumps(scripted.pop(0) if scripted else
-                                 {"message": "Ready.", "action": "done", "tool_calls": []})
+            request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            if "response_format" in request:
+                requests.append(request)
+                content = json.dumps(scripted.pop(0) if scripted else finish(request))
+            else:
+                content = "Test title"
             body = json.dumps({"choices": [{"message": {"role": "assistant",
                 "content": content}}]}).encode()
             self.send_response(200)
@@ -72,27 +95,16 @@ def main():
                           "--response-mode", mode, *role_args)
                 assert run.returncode == 0, (run.stdout, run.stderr)
                 result = json.loads(run.stdout.splitlines()[-1])["data"]
-                assert result["reason"] == "model_done", result
-                assert requests[-1]["response_format"]["type"] == mode, requests[-1]
+                assert result["reason"] == "model_finish" and result["action"] == "finish", result
+                assert requests[-1].get("response_format", {}).get("type") == mode, requests[-1]
                 assert requests[-1]["messages"][0]["role"] == role, requests[-1]
-                # json_object has no provider-side call schema. The initial
-                # instructions must show the same raw envelope in either mode.
+                # json_object has no provider-side schema. Both modes receive
+                # the same canonical v8 guidance.
                 prompt = requests[-1]["messages"][0]["content"]
-                examples = []
-                for index, character in enumerate(prompt):
-                    if character != "{":
-                        continue
-                    try:
-                        example, _ = json.JSONDecoder().raw_decode(prompt[index:])
-                    except ValueError:
-                        continue
-                    if isinstance(example, dict) and set(example) == {"message", "action", "tool_calls"}:
-                        examples.append(example)
-                assert any(example["action"] == "tool" and isinstance(example["message"], str)
-                           and example["tool_calls"] and all(set(call) == {"name", "arguments"}
-                           and isinstance(call["name"], str) and isinstance(call["arguments"], dict)
-                           for call in example["tool_calls"]) for example in examples), \
-                    "Initial model context lacks an explicit conversation-response call envelope"
+                assert "conversation-response-v8" in prompt and "Choose execute" in prompt \
+                    and "Choose reflection" in prompt and "Choose finish" in prompt \
+                    and "conversation-response-v7" not in prompt, \
+                    "Initial model context lacks the canonical v8 envelope"
                 inspect = cli("inspect", "--workspace", str(workspace),
                               "--session", result["SessionId"])
                 assert inspect.returncode == 0, inspect.stderr
@@ -105,7 +117,7 @@ def main():
                 "Changing the wire role must not rewrite the instruction text"
 
             def assert_pair(request, role, name, arguments):
-                assert "tools" not in request, "v7 stays the only generation protocol"
+                assert "tools" not in request, "v8 stays the only generation protocol"
                 messages = request["messages"]
                 if role == "tool":
                     pending = set()
@@ -146,11 +158,8 @@ def main():
                 path = role + ".html"
                 arguments = {"relativePath": path, "text": "<p>Exact accepted source.</p>"}
                 scripted.extend([
-                    {"message": "Create.", "action": "tool", "tool_calls": [
-                        {"name": "files.create", "arguments": arguments}]},
-                    {"message": "Read back.", "action": "tool", "tool_calls": [
-                        {"name": "common.resources_read", "arguments": {"target": path}}]},
-                    {"message": "Verified.", "action": "done", "tool_calls": []},
+                    execute("Create.", "files.create", arguments),
+                    execute("Read back.", "common.resources_read", {"target": path}),
                 ])
                 start = len(requests)
                 run = cli("run", "--workspace", str(workspace), "--message", "Create and read " + path,
@@ -167,10 +176,8 @@ def main():
             original = "Preserve until confirmation."
             (workspace / "victim.txt").write_text(original, encoding="utf-8")
             scripted.extend([
-                {"message": "Read before requesting deletion.", "action": "tool", "tool_calls": [
-                    {"name": "common.resources_read", "arguments": {"target": "victim.txt"}}]},
-                {"message": "Request guarded deletion.", "action": "tool", "tool_calls": [
-                    {"name": "files.delete", "arguments": {"relativePath": "victim.txt"}}]},
+                execute("Read before requesting deletion.", "common.resources_read", {"target": "victim.txt"}),
+                execute("Request guarded deletion.", "files.delete", {"relativePath": "victim.txt"}),
             ])
             env["RNA_INSTRUCTION_ROLE"] = "system"
             env["RNA_TOOL_RESULT_ROLE"] = "tool"

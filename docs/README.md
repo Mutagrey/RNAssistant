@@ -29,7 +29,7 @@ direct cutover объясняют порядок уже выполненной �
 | Область | Владелец текущего контракта |
 |---|---|
 | Model loop, modes, tool result/effect | [Conversation protocol](conversation-protocol.md) |
-| Wire JSON v7 | [Conversation response v7](protocols/CONVERSATION_RESPONSE_V7.md) |
+| Wire JSON v8 | [Conversation response v8](protocols/CONVERSATION_RESPONSE_V8.md); [v7](protocols/CONVERSATION_RESPONSE_V7.md) — исторический формат |
 | Resources, URI, providers, ingestion | [Resource Fabric](resource-fabric.md) |
 | Tool catalog, schemas, authoring | [Tool Library](tool-library.md) |
 | Skills | [Skill Library](skills.md) |
@@ -69,9 +69,17 @@ canonical docs и существующим реестрам.
 
 По спецификации пользователя начат [аудит Conversation v8.1](stabilization/conversation-v8/AUDIT.md)
 и подготовлен [ADR-0016](decisions/ADR-0016-conversation-v8-admission.md).
-Owner — Core ModelProtocol / AgentKernel. Это evidence фазы 0 и предложение
-следующего cutover; действующий контракт остаётся v7. После переключения аудит
-становится историей, текущие правила переходят в canonical protocol docs.
+Owner — Core ModelProtocol / AgentKernel. [Фаза 1](stabilization/conversation-v8/PHASE1.md)
+проверяет codec, [фаза 2](stabilization/conversation-v8/PHASE2.md) —
+kernel и admission по журналу, [кандидат фазы 3](stabilization/conversation-v8/PHASE3.md) —
+prompts, adapters и CLI, [срез фазы 4](stabilization/conversation-v8/PHASE4.md) —
+format-8 persistence/UI и восстановление в отдельном worktree.
+[Изолированные сравнения фазы 5](stabilization/conversation-v8/PHASE5_PILOT.md)
+сохраняют точные HTTP-запросы, результаты задач, абляции и открытые условия квалификации.
+Код и тесты объединены в `main`; v8 стал текущим контрактом. Полный Harness
+после объединения не запускался, а квалификация Windows/Office/WebView2 и
+формальная оценка реальных моделей остаются открытыми. Аудит и phase reports
+теперь исторические; текущие правила — в canonical protocol docs.
 
 По сохранённым пользовательским планам
 [Unified Shell](proposals/RNAssistant_Unified_Shell_Plan.md) и

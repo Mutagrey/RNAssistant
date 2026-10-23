@@ -374,11 +374,11 @@ namespace RNAssistant.Harness
                 AssertContains(prompt, RNAssistant.Core.ModelProtocol.ModelProtocolWire.MessageGuidance,
                     "all modes share useful, optional progress guidance");
                 AssertTrue(!prompt.Contains("For `tool`, use one or two concise sentences"), "no per-call narration obligation remains");
-                AssertContains(prompt, "deliver the complete requested answer or code in message now",
+                AssertContains(prompt, "deliver the answer or outcomes now, not a promise",
                     "no-tool work is delivered in the response, not promised for a nonexistent next step");
-                AssertContains(prompt, "Unfinished work alone is not a blocker",
-                    "an intermediate result does not require a terminal action");
-                AssertContains(prompt, "include the next concrete call in that same response",
+                AssertContains(prompt, "Choose reflection with a nonblank decision",
+                    "an interpretation can continue without a terminal claim");
+                AssertContains(prompt, "include the next concrete call",
                     "progress narration accompanies an executable next step");
             }
             foreach (var version in new[] { 0, AppSettings.CurrentAgentPromptSchemaVersion - 1,
@@ -646,10 +646,8 @@ namespace RNAssistant.Harness
                 "tool policy permits reasoned replanning");
             AssertContains(defaults.ContextCompactionPrompt, "Callable schemas and selected skill bodies are supplied separately",
                 "compaction does not copy instructions or teach a redundant reload");
-            AssertContains(defaults.SystemPrompt, "Use action=tool with nonempty tool_calls when a needed, authorized tool step remains",
+            AssertContains(defaults.SystemPrompt, "Choose execute with nonempty tool_calls when an authorized tool step remains",
                 "unfinished work continues instead of forcing a terminal decision");
-            AssertContains(defaults.SystemPrompt, "Unfinished work alone is not a blocker",
-                "the shared action contract does not treat every unfinished stage as a blocker");
             AssertContains(defaults.AgentToolsPrompt, "exact operations, root arguments and result semantics",
                 "tool arguments are supplied at the schema root");
             AssertContains(defaults.AgentToolsPrompt, "Skills own domain workflow",
@@ -714,7 +712,7 @@ namespace RNAssistant.Harness
                 var root = FindHarnessRepositoryRoot();
                 foreach (var relativePath in new[]
                 {
-                    "src/RNAssistant.OfficeHosts/ExcelAdapter.cs",
+                    "src/RNAssistant.Office/Services/ExcelBuiltInSkillProvider.cs",
                     "src/RNAssistant.OfficeHosts/WordAdapter.cs",
                     "src/RNAssistant.OfficeHosts/PowerPointAdapter.cs",
                     "src/RNAssistant.OfficeHosts/OutlookAdapter.cs"

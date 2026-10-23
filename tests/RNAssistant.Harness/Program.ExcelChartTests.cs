@@ -228,9 +228,9 @@ namespace RNAssistant.Harness
                             operation == FakeOfficeAdapter.ExcelChartApplyOperation),
                         "verified no-change skips chart dispatch");
 
-                    var wire = ModelProtocolWire.Write("", new[] {
+                    var wire = ModelProtocolWire.WriteAcceptedCall("Validate chart update.", "",
                         new ConversationToolCall { Name = definition.Id,
-                            Arguments = (JObject)strictUpdate.DeepClone() } });
+                            Arguments = (JObject)strictUpdate.DeepClone() });
                     var parsed = new ConversationResponseParser().Parse(
                         wire, new[] { definition }, new[] { definition },
                         new ModelProtocolCallContext(new string[0]));

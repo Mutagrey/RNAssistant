@@ -44,7 +44,8 @@ namespace RNAssistant.Runtime
                 if (session.LastRun.InterruptedToolId != null || session.LastRun.InterruptedEffectPossible ||
                     session.Messages.Any(item => item.RunId == request.RunId && item.ProtocolMessage && item.ExcludeFromModelContext))
                     throw new InvalidOperationException("An interrupted tool exchange requires explicit inspection/new input, not same-run continuation.");
-                var continuation = AgentRunContinuation.RestoreCheckpoint(session.LastRun.KernelState, 0, RestoreAcceptedHistory(session));
+                var continuation = AgentRunContinuation.RestoreCheckpoint(session.LastRun.KernelState, 0,
+                    RestoreAcceptedHistory(session, currentRunOnly: true));
                 var acceptance = session.LastRun.WorkspaceAcceptance ?? new WorkspaceRunAcceptance();
                 var ports = new WorkspacePorts(_paths, _chats, _files, _payloads, _webSnapshots, workspace,
                     session, settings, apiKeyProvider, progress, acceptance, webHost: _webHost,

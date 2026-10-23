@@ -1522,14 +1522,15 @@ namespace RNAssistant.Harness
             WithTempPaths(paths =>
             {
                 var payloads = new ChatBlobStore(paths);
-                var arguments = "{\"content\":\"" + new string('x', 17 * 1024 * 1024) + "\"}";
+                var content = new string('x', 17 * 1024 * 1024);
+                var arguments = "{\"content\":\"" + content + "\"}";
                 var invocation = new ToolInvocation { ToolCallId = "large", ToolId = "common.html_workspace_write_file" };
-                var call = new ChatMessage { Role = "assistant", ProtocolMessage = true, ToolCallId = invocation.ToolCallId, ToolName = invocation.ToolId,
-                    ResponseProtocolVersion = ConversationResponse.ProtocolVersion,
-                    Content = "Large accepted write.", ToolResultProtocolVersion = ToolResultWire.CurrentVersion, ToolResultRole = "tool",
-                    AcceptedCallOrigin = new AcceptedToolCallOrigin("step", "attempt", 0), ToolCalls = new List<RNAssistant.Core.Llm.LlmToolCall> {
-                        new RNAssistant.Core.Llm.LlmToolCall { Id = invocation.ToolCallId, Name = invocation.ToolId, Type = "function", ArgumentsJson = arguments } },
-                    ArgumentPayload = PayloadRef.FromBlob(payloads.StoreText(arguments, "application/json")) };
+                var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall {
+                    Id = invocation.ToolCallId, Name = invocation.ToolId,
+                    Arguments = new Dictionary<string, object> { { "content", content } }
+                }, "Large accepted write.", "Save the complete HTML file.", null, "tool",
+                    new AcceptedToolCallOrigin("step", "attempt", 0));
+                call.ArgumentPayload = PayloadRef.FromBlob(payloads.StoreText(arguments, "application/json"));
                 AcceptedCallPayloadService.Externalize(call, payloads);
                 AssertTrue(call.Content.Length < 256 && call.ToolCalls.Count == 0, "durable accepted fact contains metadata only");
                 AssertEqual("Large accepted write.", call.AcceptedCallNarration, "archived call header retains exact narration");
@@ -2088,7 +2089,8 @@ namespace RNAssistant.Harness
                 chatA.Messages.Add(AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall {
                     Id = command.ToolCallId, Name = command.ToolId,
                     Arguments = new Dictionary<string, object> { ["target"] = "Excel range: Data!J1", ["representation"] = "text" }
-                }, "Read the cell.", null, settings.ToolResultRole, new AcceptedToolCallOrigin("read-step", "read-attempt", 0)));
+                }, "Read the cell.", "Use the current cell observation.", null,
+                    settings.ToolResultRole, new AcceptedToolCallOrigin("read-step", "read-attempt", 0)));
                 chatA.Messages.Add(AgentJsonProtocol.CreateToolResultMessage(command,
                     new ToolResultMaterialization(read.Result, resourceEvidence: read.ResourceEvidence), settings.ToolResultRole));
                 foreach (var fact in chatA.Messages.Where(item => item.ProtocolMessage)) fact.RunId = "read-run";
@@ -2146,7 +2148,7 @@ namespace RNAssistant.Harness
                         Id = "next-call-" + scenario,
                         Name = "common.resources_find",
                         Arguments = new Dictionary<string, object> { ["scope"] = "document", ["query"] = "Data" }
-                    }, "Continue.", null,
+                    }, "Continue.", "Find the current resource.", null,
                         new AcceptedToolCallOrigin("next-step-" + scenario, "next-attempt-" + scenario, 0));
                     AssertEqual(scenario == "no-op",
                         chatA.Messages.Last().ResourceEvidence.Any(item => item.EvidenceId == evidence.EvidenceId),

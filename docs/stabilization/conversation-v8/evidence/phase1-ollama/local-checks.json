@@ -1,0 +1,18 @@
+{
+  "record_kind": "summary of completed local checks",
+  "protocol_runner": {
+    "response_cases": 153,
+    "assertions": 2156,
+    "exit_code": 0
+  },
+  "independent_jsonschema": {
+    "version": "4.23.0",
+    "envelopes": 139,
+    "syntax_only_cases": 14,
+    "optional_transport_projection_cases": 1,
+    "no_tools_union": true,
+    "exit_code": 0
+  },
+  "full_application_or_harness_build": "not run; v7 consumers are not yet migrated",
+  "office_validation": "not run"
+}

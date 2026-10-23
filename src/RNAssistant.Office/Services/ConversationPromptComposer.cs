@@ -4,6 +4,7 @@ using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
@@ -82,22 +83,29 @@ namespace RNAssistant.Office.Services
 
         internal static string BuildAgentInstruction(AppSettings settings)
         {
-            return string.Join("\n\n", new[]
+            return WithProtocolContract(string.Join("\n\n", new[]
             {
                 ResolveGeneralPrompt(settings),
                 ResolveToolPrompt(settings),
                 ResolveSkillPrompt(settings)
-            }.Where(value => !string.IsNullOrWhiteSpace(value)).ToArray());
+            }.Where(value => !string.IsNullOrWhiteSpace(value)).ToArray()));
         }
 
         internal static string BuildPlanInstruction(AppSettings settings)
         {
-            return string.Join("\n\n", new[]
+            return WithProtocolContract(string.Join("\n\n", new[]
             {
                 ResolvePlanPrompt(settings),
                 ResolveToolPrompt(settings),
                 ResolveSkillPrompt(settings)
-            }.Where(value => !string.IsNullOrWhiteSpace(value)).ToArray());
+            }.Where(value => !string.IsNullOrWhiteSpace(value)).ToArray()));
+        }
+
+        private static string WithProtocolContract(string instruction)
+        {
+            return instruction.IndexOf(AgentPromptDefaults.StructuredResponseContract, StringComparison.Ordinal) >= 0
+                ? instruction
+                : AgentPromptDefaults.StructuredResponseContract + instruction;
         }
 
         internal static string ResolvePlanPrompt(AppSettings settings)
@@ -261,8 +269,15 @@ namespace RNAssistant.Office.Services
             JObject responseSchema;
             try { responseSchema = JObject.Parse(responseSchemaJson); }
             catch (JsonException) { return messages; }
-            var options = responseSchema.SelectTokens("properties.tool_calls.items.anyOf[*]")
-                .Concat(responseSchema.SelectTokens("properties.tool_calls.anyOf[*].items.anyOf[*]")).ToArray();
+            var branches = responseSchema["anyOf"] as JArray;
+            var execute = branches == null ? null : branches.OfType<JObject>().SingleOrDefault(branch =>
+                (string)branch.SelectToken("properties.action.const") == ConversationResponse.ExecuteAction);
+            var calls = execute?.SelectToken("properties.tool_calls") as JObject;
+            if (calls == null) return messages;
+            var alternatives = calls["anyOf"] as JArray;
+            var arrays = alternatives == null ? new[] { calls } : alternatives.OfType<JObject>().ToArray();
+            var options = arrays.SelectMany(array => (array.SelectToken("items.anyOf") as JArray ?? new JArray())
+                .OfType<JObject>()).ToArray();
             if (options.Length != expected.Count) return messages;
             for (var index = 0; index < expected.Count; index++)
             {

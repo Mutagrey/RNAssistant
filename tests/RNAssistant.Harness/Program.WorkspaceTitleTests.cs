@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Application;
 using RNAssistant.Core.Agent;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
@@ -33,6 +34,7 @@ namespace RNAssistant.Harness
                     listener.Start();
                     var served = 0;
                     var requests = new string[3];
+                    string sessionId = null;
                     var server = Task.Run(async () =>
                     {
                         try
@@ -44,10 +46,18 @@ namespace RNAssistant.Harness
                                 using (var reader = new StreamReader(context.Request.InputStream))
                                     requests[number - 1] = await reader.ReadToEndAsync().ConfigureAwait(false);
                                 var content = number == 1
-                                    ? "{\"message\":\"Смотрю ресурсы.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.resources_find\",\"arguments\":{}},{\"name\":\"common.resources_find\",\"arguments\":{\"query\":\"missing\"}}]}"
+                                    ? new ConversationResponse(ConversationResponse.ExecuteAction, "Inspect available resources.",
+                                        "Смотрю ресурсы.", calls: new[] {
+                                            new ConversationToolCall { Name = "common.resources_find", Arguments = new JObject() },
+                                            new ConversationToolCall { Name = "common.resources_find", Arguments = new JObject { ["query"] = "missing" } }
+                                        }).ToJson()
                                     : number == 2
-                                        ? "{\"message\":\"Первый ответ.\",\"action\":\"done\",\"tool_calls\":[]}"
-                                        : "{\"message\":\"История читается.\",\"action\":\"done\",\"tool_calls\":[]}";
+                                        ? ScriptedVerifiedFinish(new ChatStore(paths).Load(sessionId),
+                                            "Report the resource search.", "Первый ответ.", "Resources inspected.",
+                                            "common.resources_find", "common.resources_find")
+                                        : ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                                            "Answer the follow-up from persisted history.", "История читается.",
+                                            results: new ConversationResultClaim[0]);
                                 var response = new JObject { ["choices"] = new JArray(new JObject {
                                     ["message"] = new JObject { ["content"] = content } }) }.ToString(Newtonsoft.Json.Formatting.None);
                                 var bytes = Encoding.UTF8.GetBytes(response);
@@ -65,7 +75,6 @@ namespace RNAssistant.Harness
                         var settings = new AppSettings { BaseUrl = "http://127.0.0.1:" + port,
                             Model = "test-model", StreamResponses = false, AutoCompressContext = false,
                             SmartChatTitles = false };
-                        string sessionId;
                         using (var service = new WorkspaceConversationService(paths))
                         {
                             sessionId = service.CreateSession(workspace, "История").Id;
@@ -74,10 +83,13 @@ namespace RNAssistant.Harness
                             }, settings, () => "test-key").GetAwaiter().GetResult();
                             AssertEqual(RunLifecycle.Completed, first.Summary.Lifecycle, "first workspace turn completes");
                             var calls = service.GetSession(workspace, sessionId).Messages.Where(message =>
-                                message.Role == "assistant" && message.ToolCalls != null && message.ToolCalls.Count > 0).ToArray();
+                                message.Role == "assistant" && message.AcceptedCallOrigin != null &&
+                                message.ToolName == "common.resources_find").ToArray();
                             AssertEqual(2, calls.Length, "accepted read batch has two durable per-call records");
-                            AssertTrue(calls.All(call => call.ToolCalls.Single().Id == call.ToolCallId &&
-                                call.ToolCalls.Single().Name == call.ToolName), "each durable call keeps its runtime identity");
+                            AssertTrue(calls.All(call => !string.IsNullOrWhiteSpace(call.ToolCallId) &&
+                                (string)JObject.Parse(call.Content)["tool_calls"]?[0]?["name"] == call.ToolName &&
+                                JObject.Parse(call.Content)["tool_calls"]?.Count() == 1),
+                                "each v8 per-call envelope keeps one tool while runtime owns its identity");
                             AssertTrue(calls.All(call => call.AcceptedCallOrigin != null &&
                                 !string.IsNullOrWhiteSpace(call.AcceptedCallOrigin.ModelAttemptId)) &&
                                 calls[0].AcceptedCallOrigin.ModelAttemptId == calls[1].AcceptedCallOrigin.ModelAttemptId &&
@@ -86,6 +98,8 @@ namespace RNAssistant.Harness
                             AssertEqual("Смотрю ресурсы.", PluginApplicationService.PresentWorkspaceMessage(calls[0]).Text,
                                 "plugin chat presents the accepted narration after a tool call");
                         }
+                        string oldCallMessageId = null, oldCallId = null, oldToolName = null;
+                        AcceptedToolCallOrigin oldOrigin = null;
                         string oldCallMessageId = null, oldCallId = null, oldToolName = null;
                         AcceptedToolCallOrigin oldOrigin = null;
                         using (var reopened = new WorkspaceConversationService(paths))
@@ -98,49 +112,45 @@ namespace RNAssistant.Harness
                             var modelMessages = (JArray)JObject.Parse(requests[2])["messages"];
                             AssertTrue(modelMessages.Any(item => (string)item["role"] == "assistant" &&
                                 (string)item["content"] == "Первый ответ."),
-                                "next request contains accepted final narration without a v7 JSON envelope");
-                            var legacy = reopened.GetSession(workspace, sessionId);
-                            AssertTrue(legacy.Messages.Any(item => item.Role == "assistant" && item.ProtocolMessage &&
+                                "next request contains accepted final narration without a protocol envelope");
+                            var corrupted = reopened.GetSession(workspace, sessionId);
+                            AssertTrue(corrupted.Messages.Any(item => item.Role == "assistant" && item.ProtocolMessage &&
                                 item.Content.Contains("\"message\":\"Первый ответ.\"")),
-                                "model projection leaves the durable v7 response intact");
-                            var oldCall = legacy.Messages.First(message => message.Role == "assistant" &&
-                                message.ToolCalls != null && message.ToolCalls.Count > 0);
+                                "model projection leaves the durable v8 response intact");
+                            var oldCall = corrupted.Messages.First(message => message.Role == "assistant" &&
+                                message.AcceptedCallOrigin != null && message.ToolName == "common.resources_find");
                             oldCallMessageId = oldCall.Id;
                             oldCallId = oldCall.ToolCallId;
                             oldToolName = oldCall.ToolName;
                             oldOrigin = oldCall.AcceptedCallOrigin;
                             oldCall.ToolCallId = null; oldCall.ToolName = null; oldCall.AcceptedCallOrigin = null;
-                            AssertEqual("Смотрю ресурсы.", PluginApplicationService.PresentWorkspaceMessage(oldCall).Text,
-                                "old workspace records still display their accepted narration");
-                            new ChatStore(paths).Commit(legacy,
+                            AssertContains(PluginApplicationService.PresentWorkspaceMessage(oldCall).Text, "неполная",
+                                "a corrupted v8 call is not presented as accepted history");
+                            new ChatStore(paths).Commit(corrupted,
                                 new RNAssistant.Core.Persistence.ConversationCommit(new[] { oldCall }));
                         }
                         server.GetAwaiter().GetResult();
-                        using (var legacyService = new WorkspaceConversationService(paths))
+                        using (var corruptedService = new WorkspaceConversationService(paths))
                         {
                             var invalidRequest = new WorkspaceSubmitInputRequest {
-                                SessionId = sessionId, RequestId = "invalid-history-retry",
+                                SessionId = sessionId, RequestId = "invalid-v8-history-retry",
                                 Message = "Ещё раз", Mode = ChatModes.Agent
                             };
-                            var rejected = false;
+                            InvalidOperationException rejected = null;
                             try
                             {
-                                legacyService.SubmitInputAsync(workspace, invalidRequest, settings, () => "test-key",
-                                    cancellationToken: new CancellationTokenSource(3000).Token)
-                                    .GetAwaiter().GetResult();
+                                corruptedService.SubmitInputAsync(workspace, invalidRequest,
+                                    settings, () => "test-key").GetAwaiter().GetResult();
                             }
-                            catch (InvalidOperationException error)
-                            {
-                                rejected = error.Message.Contains("Создайте новый чат") &&
-                                    error.Message.Contains("runtime ID");
-                            }
-                            AssertTrue(rejected, "incomplete accepted call history is refused before another input is recorded");
-                            AssertTrue(legacyService.FindAcceptedInput(workspace, invalidRequest) == null,
-                                "rejected history leaves no accepted input receipt");
+                            catch (InvalidOperationException error) { rejected = error; }
+                            AssertTrue(rejected != null && rejected.Message.Contains("Stored workspace response is invalid"),
+                                "incomplete accepted call history fails before another model request");
+                            AssertTrue(corruptedService.FindAcceptedInput(workspace, invalidRequest) == null,
+                                "rejected v8 history leaves no accepted input receipt");
                         }
                         var forged = new ChatStore(paths).Load(sessionId);
                         AssertTrue(!forged.Messages.Any(message => message.Role == "user" && message.Content == "Ещё раз"),
-                            "invalid response history does not accept another user turn");
+                            "invalid v8 response history does not accept another user turn");
                         var repairedCall = forged.Messages.Single(message => message.Id == oldCallMessageId);
                         repairedCall.ToolCallId = oldCallId;
                         repairedCall.ToolName = oldToolName;
@@ -149,7 +159,7 @@ namespace RNAssistant.Harness
                             new RNAssistant.Core.Persistence.ConversationCommit(new[] { repairedCall }));
                         forged = new ChatStore(paths).Load(sessionId);
                         var sibling = forged.Messages.Where(message => message.Role == "assistant" &&
-                            message.ToolCalls != null && message.ToolCalls.Count > 0).Skip(1).First();
+                            message.AcceptedCallOrigin != null).Skip(1).First();
                         var siblingOrigin = sibling.AcceptedCallOrigin;
                         sibling.AcceptedCallOrigin = new AcceptedToolCallOrigin(siblingOrigin.StepId,
                             siblingOrigin.ModelAttemptId, siblingOrigin.CallIndex + 2);
@@ -158,25 +168,21 @@ namespace RNAssistant.Harness
                         using (var batchService = new WorkspaceConversationService(paths))
                         {
                             var invalidBatch = new WorkspaceSubmitInputRequest {
-                                SessionId = sessionId, RequestId = "invalid-batch-origin",
+                                SessionId = sessionId, RequestId = "invalid-v8-batch-origin",
                                 Message = "После подмены пакета", Mode = ChatModes.Agent
                             };
-                            var rejected = false;
+                            InvalidOperationException rejected = null;
                             try
                             {
-                                batchService.SubmitInputAsync(workspace, invalidBatch, settings, () => "test-key",
-                                    cancellationToken: new CancellationTokenSource(3000).Token)
-                                    .GetAwaiter().GetResult();
+                                batchService.SubmitInputAsync(workspace, invalidBatch, settings,
+                                    () => "test-key").GetAwaiter().GetResult();
                             }
-                            catch (InvalidOperationException error)
-                            {
-                                rejected = error.Message.Contains("Создайте новый чат") &&
-                                    error.Message.Contains("Batch origin");
-                            }
-                            AssertTrue(rejected, "calls from a broken batch sequence cannot be rejoined");
+                            catch (InvalidOperationException error) { rejected = error; }
+                            AssertTrue(rejected != null && rejected.Message.Contains("Stored workspace batch"),
+                                "calls from a broken v8 batch sequence cannot be rejoined");
                             AssertTrue(batchService.FindAcceptedInput(workspace, invalidBatch) == null,
-                                "bad batch origin does not accept a new input");
-                            AssertEqual(3, served, "bad batch origin cannot cause a model request");
+                                "bad v8 batch origin does not accept a new input");
+                            AssertEqual(3, served, "bad v8 batch origin cannot cause a model request");
                         }
                         forged = new ChatStore(paths).Load(sessionId);
                         sibling = forged.Messages.Single(message => message.Id == sibling.Id);
@@ -191,20 +197,16 @@ namespace RNAssistant.Harness
                             new RNAssistant.Core.Persistence.ConversationCommit(new[] { forgedResult }));
                         using (var invalidService = new WorkspaceConversationService(paths))
                         {
-                            var rejected = false;
+                            InvalidOperationException rejected = null;
                             try
                             {
                                 invalidService.SubmitInputAsync(workspace, new WorkspaceSubmitInputRequest {
                                     SessionId = sessionId, Message = "После подмены результата", Mode = ChatModes.Agent
-                                }, settings, () => "test-key", cancellationToken: new CancellationTokenSource(3000).Token)
-                                    .GetAwaiter().GetResult();
+                                }, settings, () => "test-key").GetAwaiter().GetResult();
                             }
-                            catch (InvalidOperationException error)
-                            {
-                                rejected = error.Message.Contains("Stored workspace tool result is invalid") &&
-                                    error.Message.Contains("canonical tool name");
-                            }
-                            AssertTrue(rejected, "a result whose saved tool name differs from its wire is refused before replay");
+                            catch (InvalidOperationException error) { rejected = error; }
+                            AssertTrue(rejected != null && rejected.Message.Contains("Stored workspace tool result is invalid"),
+                                "a result whose saved tool name differs from its wire is refused before replay");
                             AssertEqual(3, served, "corrupt result cannot cause another model request");
                         }
                     }
@@ -247,8 +249,9 @@ namespace RNAssistant.Harness
                                 }
                                 var content = request.Contains("# Chat title")
                                     ? requestNumber == 4 ? "Навязанное название" : "Продажи за октябрь"
-                                    : new JObject { ["message"] = "Подготовлю отчёт.", ["action"] = "done",
-                                        ["tool_calls"] = new JArray() }.ToString(Newtonsoft.Json.Formatting.None);
+                                    : ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                                        "A direct answer needs no tools.", "Подготовлю отчёт.",
+                                        results: new ConversationResultClaim[0]);
                                 var response = new JObject { ["choices"] = new JArray(new JObject {
                                     ["message"] = new JObject { ["content"] = content } }) }.ToString(Newtonsoft.Json.Formatting.None);
                                 var bytes = Encoding.UTF8.GetBytes(response);

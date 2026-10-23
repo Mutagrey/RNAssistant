@@ -190,10 +190,10 @@ namespace RNAssistant.Office.Services
             _lastSnapshot = null;
         }
 
-        internal void AppendToolCall(AgentToolCall call, string message, LlmCompletionResult completion,
+        internal void AppendToolCall(AgentToolCall call, string message, string reason, LlmCompletionResult completion,
             AcceptedToolCallOrigin origin)
         {
-            var accepted = AgentJsonProtocol.CreateToolCallMessage(call, message, completion, _settings.ToolResultRole, origin);
+            var accepted = AgentJsonProtocol.CreateToolCallMessage(call, message, reason, completion, _settings.ToolResultRole, origin);
             AttachResponseEvidence(accepted);
             var arguments = JsonConvert.SerializeObject(call.Arguments);
             if (_payloads != null && arguments.Length > 8192)

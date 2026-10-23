@@ -42,6 +42,13 @@ namespace RNAssistant.Office.Services
             foreach (var message in session.Messages)
             {
                 if (message.Activity != null) continue;
+                if (message.RuntimeProjection)
+                {
+                    if (message.ProtocolMessage || message.Role != "assistant" ||
+                        !message.ExcludeFromModelContext || message.ResponseProtocolVersion != AgentResponseProtocol.CurrentVersion)
+                        throw HistoryFailure("Runtime projection has invalid model-history boundaries.");
+                    continue;
+                }
                 if (!string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase))
                 {
                     if (!message.ProtocolMessage && string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase))
@@ -151,7 +158,7 @@ namespace RNAssistant.Office.Services
                         message.ExecutionProgress, message.ResourceEvidence, message.ResourceEffect));
                 }
             }
-            try { return AgentRunContinuation.Restore(state.Summary, state.Limits, session.Revision, history); }
+            try { return AgentRunContinuation.Restore(state, session.Revision, history); }
             catch (InvalidOperationException ex) { throw HistoryFailure(ex.Message); }
         }
 

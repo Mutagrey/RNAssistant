@@ -238,10 +238,12 @@ namespace RNAssistant.Harness
                     AuthorityCommitReason.InitialObservation));
                 using (new ResourceMutationJournal(paths).AcquireScope(scope)) { }
                 File.WriteAllText(Path.Combine(paths.ResourceAuthorityDirectory, "documents.json"), "{}");
-                var cache = Path.Combine(paths.ResourceAuthorityDirectory, "outlook-archive-cache", "mailbox");
+                var cache = Path.Combine(paths.ResourceAuthorityDirectory, "outlook-archive-cache",
+                    AppDataPaths.SafeFileName("mailbox"));
                 Directory.CreateDirectory(cache);
                 var manifest = blobs.StoreText("{\"Pages\":[]}", "application/json");
-                File.WriteAllText(Path.Combine(cache, "archive.ref.json"), JsonConvert.SerializeObject(manifest));
+                File.WriteAllText(Path.Combine(cache, AppDataPaths.SafeFileName("archive") + ".ref.json"),
+                    JsonConvert.SerializeObject(manifest));
                 var orphan = blobs.StoreText("unreferenced rename leftover", "text/plain");
                 var service = CasService(paths, new ChatStore(paths), new VbaJournalStore(paths), () => StorageProtector.None);
                 var control = service.Audit();

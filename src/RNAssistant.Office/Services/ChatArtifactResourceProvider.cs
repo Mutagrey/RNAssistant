@@ -16,8 +16,10 @@ namespace RNAssistant.Office.Services
         internal const string DocumentArtifactKind = "document-artifact";
         private const int MaximumListItems = 50;
         private const int MaximumSearchResults = 20;
-        private const int MaximumSearchCharacters = int.MaxValue;
-        private const int MaximumSearchCharactersPerArtifact = int.MaxValue;
+        // Cross-resource discovery is a bounded prefix scan. Exact selected
+        // resource searches use the separate indexed text path.
+        private const int MaximumSearchCharacters = 1000000;
+        private const int MaximumSearchCharactersPerArtifact = 128000;
 
         private readonly Func<ChatSession, string, bool> _loadArtifactBody;
         private readonly Func<ChatAttachment, int, string> _readAttachmentText;

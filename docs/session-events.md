@@ -86,7 +86,7 @@ Every `SessionEvent` contains `SchemaVersion`, `SessionId`, contiguous `Sequence
 - When `DocumentKey` changes during first save or Save As, replay retains the prior key in `PreviousDocumentKeys`. This is derived from the same metadata operations and keeps existing opaque live-document/VBA URIs resolvable without rewriting historical messages.
 - Schema 3 uses `message.updated` for an existing message and `artifact.revision.created` for immutable artifact metadata. Generic `message.upsert` / `artifact.upsert` operations are not accepted.
 - Logical Plan deletion is another `artifact.revision.created`: an exact-current guarded `removed:true` child becomes the tombstone and the active Plan reference becomes null. It never emits `artifact.remove` and never rewrites historical message `ResourceRef` values. Replay, prune and fork derive removal from the applicable tombstone; a model-linked tombstone follows its source message, while a direct UI tombstone is session-level. Exact reads of retained removed revisions report `resource_removed`.
-- `turn.started` / `turn.ended` delimit one logical user turn. `TurnId` remains stable when a confirmation pause resumes under a new runtime `RunId`. Their data records the response protocol version; `turn.ended.Status` is a runtime-owned lifecycle projection, never a model-declared completion.
+- `turn.started` / `turn.ended` delimit one logical user turn. `TurnId` remains stable across a confirmation pause; older v7 runs could resume under a new runtime `RunId`, while v8 keeps the original one. Their data records the response protocol version; `turn.ended.Status` is a runtime-owned lifecycle projection, never a model-declared completion.
 - `step.started` / `step.ended` delimit one model request. Startup recovery appends a synthetic interrupted end for a request that never reached a terminal event.
 - `llm.request` records the exact final JSON body after messages, attachment parts, system instructions, tool schemas, and response schema are materialized. The body is serialized to UTF-8 once; those same bytes are written to CAS and then reused by HTTP without a duplicate JSON serialization or intermediate UTF-16 payload string. Persistence succeeds before HTTP dispatch.
 - `llm.request` diagnostic data may additionally carry typed `ContextMessages` and
@@ -108,7 +108,7 @@ Every `SessionEvent` contains `SchemaVersion`, `SessionId`, contiguous `Sequence
   and before/after revision against the current filtered catalog, and rematerializes
   each extension atomically. A broken chain resets to core until a later accepted event
   explicitly rebases from the current core revision.
-  `RunId` may change across confirmation. Rejected events and raw tool-result history
+  Historical v7 `RunId` may change across confirmation; v8 retains it. Rejected events and raw tool-result history
   remain diagnostics, never replay authority. Drift leaves deterministic core plus a
   visible `TOOL_PACK_RESTORE_STATE`; a later exact read/admission may establish a new
   accepted snapshot. These events do not mutate the `ChatSession` projection or add a
