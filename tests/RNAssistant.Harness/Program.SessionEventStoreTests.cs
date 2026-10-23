@@ -47,9 +47,9 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     LoadToolSchemaResponse("outlook.create_draft"),
-                    "{\"message\":\"Write\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"outlook.create_draft\",\"arguments\":{\"kind\":\"new\",\"body\":\"Replay\"}}]}",
-                    ModelProtocolWire.WriteAction("The draft cannot be inspected with available tools.",
-                        outcome == "unknown" ? ConversationResponse.BlockedAction : ConversationResponse.DoneAction)
+                    ModelProtocolWire.WriteAcceptedCall("Create the requested draft.", "Write",
+                        new ConversationToolCall { Name = "outlook.create_draft",
+                            Arguments = new JObject { ["kind"] = "new", ["body"] = "Replay" } })
                 });
                 var modelCalls = 0;
                 var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
@@ -59,7 +59,18 @@ namespace RNAssistant.Harness
                     AssertEqual(RunLifecycle.Running, persisted.LastRun.KernelState.Summary.Lifecycle, "summary saved before every model dispatch");
                     AssertEqual(modelCalls, persisted.LastRun.KernelState.Summary.IterationsUsed,
                         "model cursor saved before dispatch: " + (messages.LastOrDefault()?.Content ?? string.Empty));
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    if (responses.Count > 0)
+                        return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    var write = session.Messages.Last(item => item.ToolName == "outlook.create_draft" &&
+                        item.ExecutionProgress != null);
+                    var assessment = outcome == "ok" ? ConversationAssessment.Satisfied :
+                        outcome == "error" ? ConversationAssessment.NotSatisfied : ConversationAssessment.Unverified;
+                    var finish = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                        "Report the observed draft outcome.", outcome == "ok" ? "Draft created." :
+                            outcome == "error" ? "Draft creation failed." : "The draft cannot be inspected with available tools.",
+                        results: new[] { new ConversationResultClaim("Draft creation outcome: " + outcome + ".",
+                            new[] { write.ToolCallId }, assessment) });
+                    return Task.FromResult(new LlmCompletionResult { Content = finish });
                 });
                 ChatTurnResult result;
                 using (RunCausalTrace.Begin(EventStore(store), session))
@@ -77,8 +88,9 @@ namespace RNAssistant.Harness
                                 "durable call origin matches the dispatch step");
                         }).GetAwaiter().GetResult();
                 var replay = AssertKernelReplay(session);
-                AssertEqual(RunLifecycle.Completed, replay.LastRun.KernelState.Summary.Lifecycle,
-                    "model ending closes loop only: " + replay.LastRun.KernelState.Summary.Reason + " " +
+                AssertEqual(outcome == "unknown" ? RunLifecycle.Failed : RunLifecycle.Completed,
+                    replay.LastRun.KernelState.Summary.Lifecycle,
+                    "unknown effect without inspection cannot be finished: " + replay.LastRun.KernelState.Summary.Reason + " " +
                     string.Join(" | ", replay.Messages.Where(message => message.Activity?.Kind == "diagnostic").Select(message => message.Content)));
                 AssertEqual(outcome == "ok" ? "clean" :
                     outcome == "error" ? "errors" : "unknown",
@@ -110,15 +122,18 @@ namespace RNAssistant.Harness
                     ToolDispatchEvidence.MayHaveDispatched, ToolEffectEvidence.None));
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"message\":\"Find chat resources.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.resources_find\",\"arguments\":{\"scope\":\"conversation\"}}]}",
-                    "{\"message\":\"Resources listed.\",\"action\":\"done\",\"tool_calls\":[]}"
+                    ModelProtocolWire.WriteAcceptedCall("Find the requested resources.", "Find chat resources.",
+                        new ConversationToolCall { Name = ResourceToolCatalog.FindToolId,
+                            Arguments = new JObject { ["scope"] = "conversation" } })
                 });
                 var modelCalls = 0;
                 var completedSaves = 0;
                 LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
                 {
                     modelCalls++;
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    return Task.FromResult(new LlmCompletionResult { Content = responses.Count > 0
+                        ? responses.Dequeue() : ScriptedVerifiedFinish(session, "The resource list was read.",
+                            "Resources listed.", "Chat resources were listed.", ResourceToolCatalog.FindToolId) });
                 };
                 var conversationBackend = new ChatStore(FixturePaths.Value);
                 var service = new ConversationRunService(
@@ -2313,12 +2328,14 @@ namespace RNAssistant.Harness
                         Name = "excel.read_range",
                         Arguments = new Dictionary<string, object> { ["range"] = "A1" }
                     };
-                    var message = AgentJsonProtocol.CreateToolCallMessage(call, "Read.", null, role,
+                    var message = AgentJsonProtocol.CreateToolCallMessage(call, "Read.",
+                        "Read the requested range.", null, role,
                         new AcceptedToolCallOrigin("step-" + role, "attempt-" + role, 0));
                     message.RunId = "run-roles";
                     session.Messages.Add(message);
                     store.CommitRun(session, new ConversationRunCommit(new AgentRunEvent(AgentRunEventKind.ResponseAccepted, summary,
-                        response: new AgentResponse("Read.", new[] { PersistenceContext(summary.RunId, id).Call })), new[] { message }));
+                        response: new AgentResponse(ConversationResponse.ExecuteAction, "Read the requested range.", "Read.",
+                            new[] { PersistenceContext(summary.RunId, id).Call })), new[] { message }));
                 }
 
                 var callOperations = store.ReadEvents(session.Host, session.DocumentKey, session.Id)
@@ -2365,14 +2382,20 @@ namespace RNAssistant.Harness
                 store.Save(session);
                 var summary = new RunSummary("run-explicit", "turn-explicit", RunLifecycle.Running,
                     new ToolCounts(), 1, 0, "", null, null);
-                foreach (var action in new[] { "done", "blocked", "needs_input" })
+                foreach (var index in Enumerable.Range(0, 3))
                 {
+                    var action = index == 2 ? ConversationResponse.FinishAction : ConversationResponse.ReflectionAction;
+                    var reason = "Record the model's no-call decision.";
+                    var decision = index == 2 ? null : "Consider the remaining work.";
+                    var results = index == 2 ? new ConversationResultClaim[0] : null;
                     var message = new ChatMessage { Role = "assistant", ProtocolMessage = true,
                         ResponseProtocolVersion = ConversationResponse.ProtocolVersion, RunId = summary.RunId,
-                        Content = new ConversationResponse(action, new ConversationToolCall[0], action).ToJson() };
+                        Content = ModelProtocolWire.WriteAcceptedDecision(action, reason, action,
+                            decision: decision, results: results) };
                     session.Messages.Add(message);
                     var fact = new AgentRunEvent(AgentRunEventKind.ResponseAccepted, summary,
-                        response: new AgentResponse(action, new ToolCall[0], action));
+                        response: new AgentResponse(action, reason, action,
+                            decision: decision, results: results));
                     store.CommitRun(session, new ConversationRunCommit(fact, new[] { message }));
                 }
                 var events = store.ReadEvents(session.Host, session.DocumentKey, session.Id);
@@ -2425,6 +2448,7 @@ namespace RNAssistant.Harness
                         Arguments = new Dictionary<string, object> { ["range"] = "A1" }
                     },
                     "Read.",
+                    "Read the requested range.",
                     null,
                     ToolResultRoles.User,
                     new AcceptedToolCallOrigin("step-transition", "attempt-transition", 0));
@@ -2445,7 +2469,8 @@ namespace RNAssistant.Harness
                 };
                 session.Messages.Add(accepted);
                 store.CommitRun(session, new ConversationRunCommit(new AgentRunEvent(AgentRunEventKind.ResponseAccepted, summary,
-                    response: new AgentResponse("Read.", new[] { context.Call })), new[] { accepted }));
+                    response: new AgentResponse(ConversationResponse.ExecuteAction, "Read the requested range.",
+                        "Read.", new[] { context.Call })), new[] { accepted }));
                 session.Messages.Add(activity);
                 store.CommitRun(session, new ConversationRunCommit(new AgentRunEvent(AgentRunEventKind.ToolStarted, summary,
                     toolContext: context), new ChatMessage[0], activity));
