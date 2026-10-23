@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
@@ -89,6 +90,37 @@ namespace RNAssistant.Core.Services
             read.Result.Procedure = procedure;
             read.Result.SourceComplete = false;
             return read;
+        }
+
+        public ResourceReadObservation ReadJsonTree(string relativePath, string pointer, int depth,
+            int offset, int limit, int maximumCharacters, CancellationToken token = default(CancellationToken))
+        {
+            var snapshot = _files.CaptureFile(_workspace, relativePath, long.MaxValue, token);
+            ResourceJsonTree tree;
+            try
+            {
+                using (var input = _files.OpenExactRead(_workspace, relativePath, snapshot.Reference, long.MaxValue, token))
+                using (var reader = new StreamReader(input, new UTF8Encoding(false, true), false, 81920))
+                    tree = ResourceJsonTreeSelector.Select(reader, pointer, depth, offset, limit, maximumCharacters, token);
+            }
+            catch (DecoderFallbackException)
+            { throw new WorkspaceFileException("encoding_ambiguous", "Only strict UTF-8 JSON is supported."); }
+            var body = Newtonsoft.Json.JsonConvert.SerializeObject(tree);
+            var coverage = tree.Coverage();
+            var evidence = _files.PublishJsonTreeView(snapshot, body, coverage);
+            var descriptor = new ResourceDescriptor { Reference = snapshot.Reference, Provider = Id,
+                Kind = "file", Title = Path.GetFileName(relativePath), Mutable = !_workspace.ReadOnly,
+                Tracking = "current", ByteLength = snapshot.ByteLength,
+                ContentSha256 = snapshot.ContentSha256, Coverage = coverage, MimeType = "application/json" };
+            descriptor.Representations.Add(ResourceRepresentations.Metadata);
+            descriptor.Representations.Add(ResourceRepresentations.Text);
+            descriptor.Representations.Add(ResourceRepresentations.Tree);
+            descriptor.Metadata["relativePath"] = relativePath;
+            var result = new ResourceReadResult { Resource = descriptor, Representation = ResourceRepresentations.Tree,
+                Tree = tree, Text = body, Payload = evidence.Payload, ContentSha256 = snapshot.ContentSha256,
+                Coverage = coverage, Complete = false, SourceComplete = false, Truncated = true,
+                ReturnedCharacters = body.Length, TotalCharacters = body.Length };
+            return new ResourceReadObservation(result, new[] { evidence });
         }
 
         public ResourceReadObservation ReadViewCharacters(string relativePath, int startChar, int charCount,

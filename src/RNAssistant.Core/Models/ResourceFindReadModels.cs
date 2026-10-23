@@ -89,6 +89,7 @@ namespace RNAssistant.Core.Models
         [JsonProperty("representation")] public string Representation { get; set; }
         [JsonProperty("text")] public string Text { get; set; }
         [JsonProperty("table", NullValueHandling = NullValueHandling.Ignore)] public ResourceTableBatch Table { get; set; }
+        [JsonProperty("tree", NullValueHandling = NullValueHandling.Ignore)] public ResourceJsonTree Tree { get; set; }
         [JsonProperty("coverage")] public ResourceCoverage Coverage { get; set; }
         [JsonProperty("sourceCoverage", NullValueHandling = NullValueHandling.Ignore)] public ResourceCoverage SourceCoverage { get; set; }
         [JsonProperty("sourceEndChar", NullValueHandling = NullValueHandling.Ignore)] public int? SourceEndChar { get; set; }
@@ -179,6 +180,24 @@ namespace RNAssistant.Core.Models
             var projection = From(result, target, type, scope);
             projection.SelectionComplete = true;
             projection.SourceComplete = false;
+            return projection;
+        }
+
+        public static ResourceReadProjection FromTree(ResourceReadResult result, string target,
+            string type, string scope, string pointer, int depth, int offset, int limit)
+        {
+            if (result?.Resource?.Reference?.IsExact != true || result.Representation != ResourceRepresentations.Tree ||
+                result.Tree == null || result.Coverage?.Kind != ResourceCoverageKinds.JsonPath ||
+                result.Coverage.Path != pointer || result.Coverage.Start != offset ||
+                result.Coverage.End != (long)offset + result.Tree.ReturnedChildren ||
+                result.Tree.Pointer != pointer || result.Tree.Depth != depth ||
+                result.Tree.Offset != offset || result.Tree.Limit != limit || result.Complete ||
+                result.SourceComplete != false)
+                throw new System.InvalidOperationException("A JSON tree requires exact partial pointer coverage.");
+            var projection = From(result, target, type, scope);
+            projection.Text = null; // The retained JSON body is an internal evidence payload.
+            projection.Tree = result.Tree;
+            projection.SelectionComplete = true;
             return projection;
         }
 
@@ -310,12 +329,13 @@ namespace RNAssistant.Core.Models
         // Never reconstruct request intent from an adaptive provider's chosen window.
         public ResourceReadObservation WithReadMetadata(ResourceReadProjection projection,
             ResourceCoverage requestedCoverage, string requestedSection = null, int? requestedPartNumber = null,
-            string requestedProcedure = null, string requestedProcedureKind = null)
+            string requestedProcedure = null, string requestedProcedureKind = null,
+            int? requestedDepth = null)
         {
             if (projection == null) throw new System.ArgumentNullException(nameof(projection));
             var metadata = new ResourceReadMetadata(requestedCoverage, requestedSection, requestedPartNumber,
                 projection.SourceCoverage, projection.SelectionComplete, projection.Complete, projection.SourceComplete,
-                requestedProcedure, requestedProcedureKind);
+                requestedProcedure, requestedProcedureKind, requestedDepth);
             return new ResourceReadObservation(Result, Evidence.Select(item =>
                 item.Resource.Uri == Result.Resource.Reference.Uri && item.Resource.Revision == Result.Resource.Reference.Revision &&
                 item.View == Result.Representation

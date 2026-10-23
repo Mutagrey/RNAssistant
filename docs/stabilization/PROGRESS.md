@@ -1,5 +1,19 @@
 # Stabilization progress
 
+## Resource Context JSON Pointer tree — 2026-10-23
+
+Owner: Core JSON scanner, Office Gateway artifact reads and workspace file provider.
+Wave 3 now includes `representation=tree` with exact RFC 6901 pointer, depth and
+immediate-child offset/limit for complete JSON text sources. Both hosts use the
+same streaming selector, retain only the selected typed tree as partial CAS
+evidence, and expose actual `json-path` coverage, requested depth and separate
+completeness. Numeric values are marked previews; raw spelling requires source
+windows. No source-length ceiling was added. Three focused Harness checks and
+the Model Context Web check cover pointer semantics, large-file streaming,
+multi-page Office artifacts, model schemas, CAS/evidence and Inspector metadata.
+Real Windows/Office/WebView2 remains unqualified. Wave 3 still needs YAML tree,
+image/PDF semantic views and cost/capability metadata.
+
 ## Resource Context VBA procedure selection — 2026-10-23
 
 Owner: Core resource parsing, Office Gateway and workspace file provider. Wave 3
@@ -17,7 +31,7 @@ million characters, a streamed 16-MiB workspace file, budget expansion/refusal,
 exact history/drift, schemas and evidence. These checks, three adjacent Harness
 checks (line/character reads and compiler presentation), five Web scenarios and
 ValidateVersionFormat pass. Windows/Office/VBE/WebView2 qualification remains open.
-Wave 3 still needs JSON Pointer/tree, image/PDF semantic views and cost/capability
+Wave 3 still needs YAML tree, image/PDF semantic views and cost/capability
 metadata; this does not close the wave.
 
 ## Conversation v8.1 admission audit — 2026-10-23
@@ -113,7 +127,7 @@ build/test/Windows результатов эта запись не заявля�
 | Wave 0 — Audit | Трассировка, owners, RC-01…04 и accept/adapt/reject сохранены в аудите | Аудит исходников выполнен; измерений исходного реального Office/model workflow он не содержал |
 | Wave 1 — Observability | Exact serialized request в CAS, RequestId/ContextSnapshotId, позиции messages/parts, links к evidence, причины основных exclusions, mixed-media golden fixture | Полная атрибуция всех преобразований не закрыта: strict-schema/смешанные сообщения могут иметь `Unknown`; полной стоимости каждого элемента нет. Сохранённая подготовка запроса не доказывает получение сервером |
 | Wave 2 — Coverage/visibility | Requested/actual coverage и selection/representation/source completeness для lines/chars, Markdown sections, indexed parts и table rows; общий путь сохраняет эти факты в evidence, receipt, trace и Inspector | Покрыты реализованные selectors, а не вся матрица новых views из §4; delivery остаётся свойством конкретного request, старые записи без metadata — unknown |
-| Wave 3 — Adaptive materialization | Общий бюджет текстового чтения, большие источники/длинные строки, потоковые workspace mutations, Office windows, media/pageIndex; общий VBA procedure selector для Office и workspace/CLI; искусственные source ceilings сняты | Не реализованы JSON Pointer/tree, crop/bbox и семантические PDF table/figure/OCR views; единая cost/capability metadata по всей матрице не завершена |
+| Wave 3 — Adaptive materialization | Общий бюджет текстового чтения, большие источники/длинные строки, потоковые workspace mutations, Office windows, media/pageIndex; общие VBA procedure и JSON Pointer/tree selectors для Office и workspace/CLI; искусственные source ceilings сняты | Не реализованы YAML tree, crop/bbox и семантические PDF table/figure/OCR views; единая cost/capability metadata по всей матрице не завершена |
 | Wave 4 — Compiler cleanup | Один compiler, frozen authority, causal frames, selective hydration, корректировка repeated-read links после budget eviction, restart/archive checks | Подтверждённые исправления сделаны. Деление compiler по размеру файла отклонено; новые refactor допускаются только под конкретный дефект |
 | Wave 5 — Context Explorer | Существующий inspector: attempts/messages, exact JSON, evidence/revision/coverage, omissions, оригиналы и downloads; стабильные chat-local `R@v/E/O/Q`, поиск, resource view, revision provenance и явная CAS-проверка payload ревизии | Частично. Нет полной metadata/capabilities/availability для views/providers, derived graph, общего revision diff и явного reread из Explorer. Redacted trajectory export существует отдельно, но не интегрирован как этот Explorer workflow |
 | Wave 6 — Qualification | Точечные host-neutral Harness/Web и large-source проверки предыдущих срезов; HTML restore fixture исправлен отдельно | Общий acceptance gate не закрыт: реальный Windows/Office/VBE/WebView2, representative PDF/visual provenance и измерения целевого model workflow остаются открыты |

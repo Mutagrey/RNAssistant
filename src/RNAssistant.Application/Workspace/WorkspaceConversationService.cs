@@ -973,7 +973,7 @@ namespace RNAssistant.Runtime
                 {
                     properties["target"]["description"] = "Exact semantic target from the bound Office document or its discovery result.";
                     properties["representation"] = new JObject { ["type"] = "string",
-                        ["enum"] = new JArray("metadata", "text", "structure", "source", "media", "formulas", "table") };
+                        ["enum"] = new JArray("metadata", "text", "structure", "source", "media", "formulas", "table", "tree") };
                     properties["partNumber"] = new JObject { ["type"] = "integer", ["minimum"] = 1 };
                     properties["startLine"] = new JObject { ["type"] = "integer", ["minimum"] = 1 };
                     properties["lineCount"] = new JObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = int.MaxValue };
@@ -984,7 +984,7 @@ namespace RNAssistant.Runtime
                     properties["fields"] = new JObject { ["type"] = "array", ["maxItems"] = 128,
                         ["items"] = new JObject { ["type"] = "string", ["maxLength"] = 128 } };
                 }
-                if (!find) AddProcedureVariant(schema, true);
+                if (!find) { AddProcedureVariant(schema, true); AddTreeVariant(schema); }
                 return schema;
             }
 
@@ -1003,6 +1003,30 @@ namespace RNAssistant.Runtime
                     ((JArray)procedure["required"]).Add("representation");
                 }
                 schema["anyOf"] = new JArray(text, procedure);
+            }
+
+            private static void AddTreeVariant(JObject schema)
+            {
+                var variants = schema["anyOf"] as JArray;
+                if (variants == null) { variants = new JArray(schema.DeepClone()); schema["anyOf"] = variants; }
+                var tree = (JObject)schema.DeepClone();
+                tree.Remove("anyOf");
+                var properties = (JObject)tree["properties"];
+                foreach (var name in new[] { "startLine", "lineCount", "startChar", "charCount", "partNumber",
+                    "procedure", "procedureKind", "fields", "path", "section", "referencePath", "version" })
+                    properties.Remove(name);
+                properties["representation"] = new JObject { ["type"] = "string", ["enum"] = new JArray("tree") };
+                properties["pointer"] = new JObject { ["type"] = "string",
+                    ["description"] = "RFC 6901 JSON Pointer; empty string selects the root." };
+                properties["depth"] = new JObject { ["type"] = "integer", ["minimum"] = 0 };
+                properties["offset"] = new JObject { ["type"] = "integer", ["minimum"] = 0 };
+                properties["limit"] = new JObject { ["type"] = "integer", ["minimum"] = 1 };
+                ((JArray)tree["required"]).Add("representation");
+                ((JArray)tree["required"]).Add("pointer");
+                var outer = (JObject)schema["properties"];
+                foreach (var name in new[] { "representation", "pointer", "depth", "offset", "limit" })
+                    if (outer[name] == null) outer[name] = properties[name].DeepClone();
+                variants.Add(tree);
             }
 
             private static void AddProcedureSelectors(JObject properties)
@@ -1063,7 +1087,7 @@ namespace RNAssistant.Runtime
                             ["description"] = "Maximum UTF-16 characters in this excerpt, bounded by this run's model input budget. Each read checks the current version." };
                     }
                 }
-                if (!find && !skill) AddProcedureVariant(schema, false);
+                if (!find && !skill) { AddProcedureVariant(schema, false); AddTreeVariant(schema); }
                 return schema;
             }
 

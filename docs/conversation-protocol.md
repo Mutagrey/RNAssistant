@@ -769,8 +769,8 @@ payload does not imply that all views are unavailable. CAS validity does not cha
 head currentness, observation completeness or model-delivery evidence.
 The inspector does not perform a live provider reread or grant mutation authority.
 
-Read diagnostics also retain the accepted read's requested coverage/section/part
-and VBA procedure name/kind,
+Read diagnostics also retain the accepted read's requested coverage/section/part,
+JSON Pointer child range/depth and VBA procedure name/kind,
 actual source coordinates and independent selection, representation and source
 completeness from `ResourceEvidence.ReadMetadata`. Compiler receipt links, including
 excluded bodies, carry these immutable facts into the saved wire manifest and the

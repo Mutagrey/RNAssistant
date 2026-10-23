@@ -162,7 +162,12 @@
   }
   function readMetadataText(metadata) {
     if (!metadata) return "Запрошенный диапазон и раздельная полнота не сохранены.";
-    var requested = metadata.requestedCoverage ? JSON.stringify(metadata.requestedCoverage) :
+    var requested = metadata.requestedCoverage && metadata.requestedCoverage.kind === "json-path" ?
+      "JSON Pointer " + JSON.stringify(metadata.requestedCoverage.path) +
+        (metadata.requestedDepth != null ? ", глубина " + metadata.requestedDepth : "") +
+        (metadata.requestedCoverage.start != null ? ", дети [" + metadata.requestedCoverage.start +
+          ", " + metadata.requestedCoverage.end + ")" : "") :
+      metadata.requestedCoverage ? JSON.stringify(metadata.requestedCoverage) :
       metadata.requestedSection != null ? "раздел " + metadata.requestedSection :
       metadata.requestedProcedure != null ? "процедура " + metadata.requestedProcedure +
         (metadata.requestedProcedureKind ? " (" + metadata.requestedProcedureKind + ")" : "") :

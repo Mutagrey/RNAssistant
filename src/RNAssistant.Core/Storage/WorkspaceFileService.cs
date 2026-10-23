@@ -556,6 +556,21 @@ namespace RNAssistant.Core.Storage
             return OpenRetainedStream(evidence.Payload, maximumBytes, token, progress, requireSeek);
         }
 
+        public ResourceEvidence PublishJsonTreeView(WorkspaceFileSnapshot snapshot, string body, ResourceCoverage coverage)
+        {
+            if (snapshot == null || body == null || coverage?.Kind != ResourceCoverageKinds.JsonPath)
+                throw new ArgumentException("An exact JSON tree selection is required.");
+            var raw = PublishedEvidence(snapshot.Reference, ResourceRepresentations.Raw);
+            if (raw.ContentSha256 != snapshot.ContentSha256)
+                throw new WorkspaceFileException("snapshot_unavailable", "Exact JSON source changed.");
+            var payload = PayloadRef.FromBlob(_blobs.StoreText(body, "application/json; charset=utf-8"));
+            _authority.RegisterView(raw.ScopeId, new ResourceRevisionView(snapshot.Reference,
+                ResourceRepresentations.Tree, snapshot.ContentSha256, payload, coverage));
+            return new ResourceEvidence("ev_" + Guid.NewGuid().ToString("N"), raw.ScopeId,
+                snapshot.Reference, ResourceRepresentations.Tree, coverage, false, raw.AuthorityGeneration, payload,
+                raw.Dependencies, contentSha256: snapshot.ContentSha256);
+        }
+
         private Stream OpenRetainedStream(PayloadRef payload, long maximumBytes, CancellationToken token,
             Action<FileTransferProgress> progress, bool requireSeek = false)
         {

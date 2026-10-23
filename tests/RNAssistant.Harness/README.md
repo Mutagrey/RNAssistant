@@ -73,6 +73,13 @@ fake above one million characters and a 16-MiB UTF-8 file with bounded allocatio
 real Windows/Office/VBE validation remains open. `node tests/web/model-context.test.js`
 checks procedure-name/kind diagnostics alongside existing coverage metadata.
 
+`resources: JSON` covers the shared streaming JSON Pointer/tree selector, escaped
+and duplicate keys, exact array slices and child paging, model budget, 4-MiB
+workspace source without whole-body allocation, multi-page Office artifact,
+typed schemas, partial CAS evidence and saved read metadata. The same Web check
+renders requested pointer/depth and completeness. It does not qualify real
+Windows/Office/WebView2 or YAML parsing.
+
 `workspace files:` includes an actual 80-MiB source retained/read without a
 whole-body allocation, exact history after drift/deletion/restart, operation
 budgets, busy-file cancellation and missing/corrupt/unpublished source refusals.

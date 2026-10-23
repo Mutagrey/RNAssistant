@@ -10,6 +10,7 @@ namespace RNAssistant.Core.Models
         public const string Structure = "structure";
         public const string Media = "media";
         public const string Source = "source";
+        public const string Tree = "tree";
         public const string Raw = "raw";
         public const string Image = "image";
         public const string Thumbnail = "thumbnail";
@@ -164,6 +165,8 @@ namespace RNAssistant.Core.Models
         public string Text { get; set; }
         [Newtonsoft.Json.JsonProperty("table", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public ResourceTableBatch Table { get; set; }
+        [Newtonsoft.Json.JsonProperty("tree", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public ResourceJsonTree Tree { get; set; }
         [Newtonsoft.Json.JsonProperty("binary", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public ResourceBinaryView Binary { get; set; }
         [Newtonsoft.Json.JsonProperty("contentSha256")]

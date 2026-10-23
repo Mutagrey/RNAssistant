@@ -591,6 +591,28 @@ selected body and exact character coverage. Model `selectionComplete=true`,
 spans the entire source. A procedure read never grants whole-source overwrite
 rights; existing full-module mutation preparation and replacement are unchanged.
 
+JSON file artifacts, complete JSON text attachments and workspace UTF-8 files
+support `representation=tree` with
+an explicit [RFC 6901 JSON Pointer](https://www.rfc-editor.org/rfc/rfc6901)
+(`pointer=""` selects the root), `depth` (default 1) and zero-based `offset`/
+positive `limit` over the selected node's immediate children. The common Core
+scanner consumes one exact revision through paged Gateway text or verified file
+bytes; source length has no selector ceiling. Returned nodes contain canonical
+child pointers, type, scalar preview and child count. `totalChildren` and
+`nextOffset` support further pages; `depth=0` returns only the selected node.
+Escaped `~0`/`~1`, empty and whitespace-bearing keys remain exact. Duplicate
+keys along a pointer or among selected object's children, missing pointers,
+incomplete sources and invalid JSON fail explicitly. Numeric previews are marked
+`valueExact=false` because the JSON parser can normalize numeric lexemes; use
+source text windows when original spelling matters. An oversized selected tree
+fails against the model read budget with a narrower pointer/depth/limit hint.
+Shared context and other service artifacts cannot use this selector. This is a
+navigation view, not a raw JSON rewrite surface. Evidence keeps the
+exact source revision, `json-path` coverage with selected child range, requested
+depth and distinct selection/representation/source completeness; it never grants
+whole-source mutation authority. YAML and provider-specific tree views remain
+separate work.
+
 Within-target search requires an advertised `text` or `source` representation.
 A VBA project exposes its component inventory as `structure`; search its module
 names and code with `common.resources_find(scope=vba, query=...)`, then use
@@ -617,8 +639,9 @@ authored files use the same indexed parts for subsequent reads/search/outline.
 
 The shared layer currently owns identity, exact revision, view capabilities,
 coverage (`character-range`, `line-range`, `page-range`, `cell-range`,
-`record-range`), bounded reads and cursors. It does not yet expose one provider
-navigation contract. `resources_outline` is an indexed document-text operation;
+`record-range`, `json-path`), bounded reads and cursors. JSON tree is a typed
+selector for JSON text, not yet one provider-wide navigation contract.
+`resources_outline` is an indexed document-text operation;
 PDF page rendering selects `pageIndex` separately, while PDF extracted text is
 one flattened text view. `PageTextLengths` is not an exact page-to-text offset map.
 Adding shared navigation requires a typed optional provider capability with
@@ -654,8 +677,8 @@ actual coverage give the next safe offset.
 
 Accepted `common.resources_read` results in Office and workspace/CLI retain typed
 `ReadMetadata` on the existing immutable `ResourceEvidence`. It records requested
-line/character/row coverage (with table path/fields), section/part or procedure
-name and optional kind,
+line/character/row coverage (with table path/fields), JSON Pointer child range
+and depth, section/part or procedure name and optional kind,
 actual parent-source coordinates when supplied, and separate nullable
 `selectionComplete`, `representationComplete` and `sourceComplete` facts from the
 read projection. Actual target coverage stays on `ResourceEvidence.Coverage`.

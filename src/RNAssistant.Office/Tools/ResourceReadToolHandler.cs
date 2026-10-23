@@ -17,7 +17,7 @@ namespace RNAssistant.Office.Tools
         private const int InternalReadCharacters = ResourceReadRequest.MaximumCharacters;
         internal static readonly ToolDescriptor Descriptor = new ToolDescriptor(
             ResourceToolCatalog.ReadToolId,
-            "Read-only: Read a semantic target supplied by RUNTIME_CONTEXT, common.resources_find, workspace member results or binding sourceTarget. Copy supplied targets verbatim; they never contain :// and must not be constructed from display titles. For known Excel cells, use target=Excel range: Sheet!A1:B10 with representation=text directly; discovery is unnecessary. Do not read an Excel search scope to enumerate worksheet data: use excel.find_cells for text discovery or an Excel range/table/name target for values. table returns bounded row coverage with optional fields, offset and limit; omit path for Office targets because runtime applies their canonical record view. Text/source return a complete representation when available within the configured model context; large Word, VBA and PowerPoint slide text return an exact first excerpt with sourceCoverage. Continue with startChar/charCount for Word and PowerPoint slide text or speaker notes (PowerPoint notes: N), or startLine/lineCount for live VBA modules. Word structure gives main-story bounds; an explicit Word range: start:end is also available. For an indexed uploaded or authored artifact text/source, supply partNumber to read at most 32000 characters, including files written as one line; partNumber is unsupported for live VBA modules. For VBA source, procedure selects one unique Sub/Function/Property by name; optional procedureKind=sub/function/property-get/property-let/property-set disambiguates accessors. Conditional branches are not evaluated; duplicate names require line/character selectors. Only the selected body must fit the model read budget. For source at any size positive startLine and lineCount within the configured model read budget select an exact excerpt; a long single line can use zero-based startChar and positive charCount within that budget. Excerpts cannot authorize a whole-file overwrite. For document Markdown/Plans, section with representation=text selects a unique ATX heading and its nested subsections, bounded to 32000 characters. Section coverage never proves a whole-resource read; duplicate/missing/oversized sections fail explicitly. For a project-wide VBA request, read RUNTIME_CONTEXT.document.vba_project_target with representation=structure first. Exact URI, revision, cursor and guards remain runtime-owned. Media is hydrated only for the next model step; base64 is never embedded in JSON.",
+            "Read-only: Read a semantic target supplied by RUNTIME_CONTEXT, common.resources_find, workspace member results or binding sourceTarget. Copy supplied targets verbatim; they never contain :// and must not be constructed from display titles. For known Excel cells, use target=Excel range: Sheet!A1:B10 with representation=text directly; discovery is unnecessary. Do not read an Excel search scope to enumerate worksheet data: use excel.find_cells for text discovery or an Excel range/table/name target for values. table returns bounded row coverage with optional fields, offset and limit; omit path for Office targets because runtime applies their canonical record view. For a complete JSON text artifact, representation=tree with pointer (empty root or RFC 6901 path) returns typed nodes; depth controls expansion and offset/limit page immediate children. Numeric values are previews, not exact source lexemes. Text/source return a complete representation when available within the configured model context; large Word, VBA and PowerPoint slide text return an exact first excerpt with sourceCoverage. Continue with startChar/charCount for Word and PowerPoint slide text or speaker notes (PowerPoint notes: N), or startLine/lineCount for live VBA modules. Word structure gives main-story bounds; an explicit Word range: start:end is also available. For an indexed uploaded or authored artifact text/source, supply partNumber to read at most 32000 characters, including files written as one line; partNumber is unsupported for live VBA modules. For VBA source, procedure selects one unique Sub/Function/Property by name; optional procedureKind=sub/function/property-get/property-let/property-set disambiguates accessors. Conditional branches are not evaluated; duplicate names require line/character selectors. Only the selected body must fit the model read budget. For source at any size positive startLine and lineCount within the configured model read budget select an exact excerpt; a long single line can use zero-based startChar and positive charCount within that budget. Excerpts cannot authorize a whole-file overwrite. For document Markdown/Plans, section with representation=text selects a unique ATX heading and its nested subsections, bounded to 32000 characters. Section coverage never proves a whole-resource read; duplicate/missing/oversized sections fail explicitly. For a project-wide VBA request, read RUNTIME_CONTEXT.document.vba_project_target with representation=structure first. Exact URI, revision, cursor and guards remain runtime-owned. Media is hydrated only for the next model step; base64 is never embedded in JSON.",
             Parameters());
         internal static readonly ToolPolicy Policy = new ToolPolicy(ToolEffect.Read, ToolVerification.None,
             false, true, new[] { "agent", "plan", "chat" });
@@ -55,12 +55,23 @@ namespace RNAssistant.Office.Tools
                     "Use representation=table for structural reads; records is retained only for saved bindings.",
                     "RESOURCE_VIEW_UNSUPPORTED", false);
             var structured = representation == "table";
+            var tree = representation == ResourceRepresentations.Tree;
             var section = ToolArgumentReader.String(context.Arguments, "section", null);
             var lines = context.Arguments.ContainsKey("startLine") || context.Arguments.ContainsKey("lineCount");
             var chars = context.Arguments.ContainsKey("startChar") || context.Arguments.ContainsKey("charCount");
             var parts = context.Arguments.ContainsKey("partNumber");
             var procedure = ToolArgumentReader.String(context.Arguments, "procedure", null);
             var procedureKind = ToolArgumentReader.String(context.Arguments, "procedureKind", null);
+            var pointer = ToolArgumentReader.String(context.Arguments, "pointer", null);
+            var depth = ToolArgumentReader.Int32(context.Arguments, "depth", 1);
+            var treeOffset = ToolArgumentReader.Int32(context.Arguments, "offset", 0);
+            var treeLimit = ToolArgumentReader.Int32(context.Arguments, "limit", 100);
+            if (tree && (!context.Arguments.ContainsKey("pointer") || pointer == null || depth < 0 || treeOffset < 0 || treeLimit < 1 ||
+                section != null || lines || chars || parts || procedure != null || procedureKind != null ||
+                context.Arguments.ContainsKey("path") || context.Arguments.ContainsKey("fields")) ||
+                !tree && (context.Arguments.ContainsKey("pointer") || context.Arguments.ContainsKey("depth")))
+                throw new ResourceRequestException("JSON tree requires pointer, optional depth/offset/limit, and no other selectors.",
+                    "resource_json_selector_invalid", false);
             if ((context.Arguments.ContainsKey("procedure") || context.Arguments.ContainsKey("procedureKind")) &&
                 (string.IsNullOrWhiteSpace(procedure) || representation != "source" || lines || chars || parts || section != null || structured))
                 throw new ResourceRequestException("VBA procedure selection requires source and procedure, optionally procedureKind, without other selectors.",
@@ -78,13 +89,16 @@ namespace RNAssistant.Office.Tools
                 throw new ResourceRequestException("Character selection requires source/text, startChar and charCount, without other selectors.", "resource_chars_invalid", false);
             if (section != null && representation != "text")
                 throw new ResourceRequestException("section requires representation=text.", "resource_section_unsupported", false);
-            if (!structured && new[] { "limit", "offset", "path", "fields" }.Any(context.Arguments.ContainsKey))
+            if (!structured && !tree && new[] { "limit", "offset", "path", "fields" }.Any(context.Arguments.ContainsKey))
                 throw new ResourceRequestException("Structural selectors require representation=table.", "RESOURCE_VIEW_UNSUPPORTED", false);
             var viewPath = structured
                 ? ResourceSelectorContract.ResolvePath(selected, representation,
                     ToolArgumentReader.String(context.Arguments, "path", null))
                 : null;
-            var selection = procedure != null
+            var selection = tree
+                ? Gateway.ReadJsonTree(Session, reference, selected.Descriptor, pointer, depth, treeOffset,
+                    treeLimit, Math.Max(1, _maximumTextCharacters - 512), cancellationToken)
+                : procedure != null
                 ? Gateway.ReadProcedure(Session, reference, procedure, procedureKind, _maximumTextCharacters, cancellationToken)
                 : lines
                 ? Gateway.ReadLines(Session, reference, representation,
@@ -121,7 +135,10 @@ namespace RNAssistant.Office.Tools
                  selectedSource.End > (long)ToolArgumentReader.Int32(context.Arguments, "startLine", 1) +
                      ToolArgumentReader.Int32(context.Arguments, "lineCount", 100)))
                 throw new InvalidOperationException("Provider source coverage differs from the requested window.");
-            var projection = procedure != null
+            var projection = tree
+                ? ResourceReadProjection.FromTree(observation.Result, selected.Target, selected.Type,
+                    selected.Scope, pointer, depth, treeOffset, treeLimit)
+                : procedure != null
                 ? ResourceReadProjection.FromProcedure(observation.Result, selected.Target, selected.Type, selected.Scope)
                 : selectedSource != null
                 ? ResourceReadProjection.FromSelectedSourceRange(observation.Result,
@@ -161,7 +178,14 @@ namespace RNAssistant.Office.Tools
                 projection.RequestedLines = ToolArgumentReader.Int32(context.Arguments, "lineCount", 100);
             }
             projection.SnapshotTarget = selected.Descriptor.SnapshotTarget;
-            var requestedCoverage = lines
+            if (tree && Serialize(projection).Length > _maximumTextCharacters)
+                throw new ResourceRequestException("Selected JSON tree exceeds the model read budget; narrow pointer, depth or limit.",
+                    "resource_json_view_too_large", false);
+            var requestedCoverage = tree
+                ? new ResourceCoverage(ResourceCoverageKinds.JsonPath,
+                    address: "depth=" + depth + ";limit=" + treeLimit, start: treeOffset,
+                    end: (long)treeOffset + treeLimit, path: pointer)
+                : lines
                 ? new ResourceCoverage(ResourceCoverageKinds.LineRange, start: projection.StartLine,
                     end: (long)projection.StartLine.Value + projection.RequestedLines.Value)
                 : chars
@@ -173,7 +197,8 @@ namespace RNAssistant.Office.Tools
                     path: ToolArgumentReader.String(context.Arguments, "path", null), fields: Fields(context.Arguments))
                 : section != null || parts || procedure != null ? null : ResourceCoverage.Whole();
             observation = observation.WithReadMetadata(projection, requestedCoverage, section,
-                parts ? (int?)ToolArgumentReader.Int32(context.Arguments, "partNumber", 1) : null, procedure, procedureKind);
+                parts ? (int?)ToolArgumentReader.Int32(context.Arguments, "partNumber", 1) : null, procedure, procedureKind,
+                tree ? (int?)depth : null);
             // These bodies are runtime metadata, not user JSON/source. Publish
             // addressable semantic targets instead of opaque resource references.
             if (selected.Type == "HTML data" && selection.Result.Representation == "text")
@@ -192,6 +217,7 @@ namespace RNAssistant.Office.Tools
             var result = RuntimeResult.Ok(
                 htmlFileStructureAsSource
                     ? "HTML file has no structure view; returned source text with the reported coverage. The HTML workspace root has the structure view."
+                    : tree ? "Exact JSON Pointer tree read; navigate with pointer, depth and child offset. Values are not raw source lexemes."
                     : procedure != null ? "Complete selected VBA procedure read; coverage is limited to its exact source span. Conditional compilation is not evaluated."
                     : lines ? "Exact selected lines read; coverage is limited to this excerpt, not the whole resource."
                     : chars ? "Exact selected characters read; coverage is limited to this excerpt, not the whole resource."
@@ -229,14 +255,15 @@ namespace RNAssistant.Office.Tools
         private static string Parameters()
         {
             var target = "\"target\":" + ResourceSelectorContract.Target().ToString(Formatting.None);
-            const string representation = "\"representation\":{\"type\":\"string\",\"description\":\"Representation to read. Complete views cannot be combined with table selectors.\",\"enum\":[\"metadata\",\"text\",\"structure\",\"source\",\"media\",\"formulas\",\"table\"]}";
+            const string representation = "\"representation\":{\"type\":\"string\",\"description\":\"Representation to read. Complete views cannot be combined with table/tree selectors.\",\"enum\":[\"metadata\",\"text\",\"structure\",\"source\",\"media\",\"formulas\",\"table\",\"tree\"]}";
             const string procedure = "\"procedure\":{\"type\":\"string\",\"minLength\":1,\"description\":\"Unique VBA procedure name, case-insensitive and without brackets. Selects its declaration through End Sub/Function/Property from one exact source snapshot.\"},\"procedureKind\":{\"type\":\"string\",\"enum\":[\"sub\",\"function\",\"property-get\",\"property-let\",\"property-set\"],\"description\":\"Optional exact kind; use to disambiguate property accessors. Conditional duplicate declarations still require line/character selectors.\"}";
             const string section = "\"section\":{\"type\":\"string\",\"description\":\"Exact unique ATX heading title copied from Markdown, without leading #. Includes nested subsections; maximum selected text is 32000 characters. Does not grant whole-resource read evidence.\",\"minLength\":1,\"maxLength\":200}";
             const string part = "\"partNumber\":{\"type\":\"integer\",\"minimum\":1,\"description\":\"1-based text/source part of an indexed uploaded or authored artifact, not a live VBA module; each part has at most 32000 characters.\"}";
             const string lines = "\"startLine\":{\"type\":\"integer\",\"minimum\":1,\"description\":\"1-based first source/text line. Use with lineCount for an exact excerpt.\"},\"lineCount\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":2147483647,\"description\":\"Maximum selected lines; the excerpt must fit the configured model read budget. Not whole-file observation.\"}";
             const string chars = "\"startChar\":{\"type\":\"integer\",\"minimum\":0,\"description\":\"Zero-based UTF-16 character offset in source/text. Use with charCount for a long line.\"},\"charCount\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":2147483647,\"description\":\"Maximum selected UTF-16 characters within the configured model read budget; do not split a surrogate pair. Not whole-file observation.\"}";
+            const string jsonTree = "\"pointer\":{\"type\":\"string\",\"description\":\"RFC 6901 JSON Pointer, empty string for root; copy exact key spelling and escape ~ as ~0, / as ~1.\"},\"depth\":{\"type\":\"integer\",\"minimum\":0,\"description\":\"Levels of descendants to return, default 1.\"}";
             var selectors = "\"limit\":{\"type\":\"integer\",\"description\":\"Maximum rows in this table batch.\",\"minimum\":1,\"maximum\":5000},\"offset\":{\"type\":\"integer\",\"description\":\"Zero-based table row offset.\",\"minimum\":0}" + ",\"path\":" + ResourceSelectorContract.RecordPath().ToString(Formatting.None) + ",\"fields\":{\"type\":\"array\",\"description\":\"Exact column keys from returned columns metadata, not display headings or translated aliases.\",\"maxItems\":128,\"items\":{\"type\":\"string\",\"maxLength\":128}}";
-            return "{\"type\":\"object\",\"properties\":{" + target + "," + representation + "," + section + "," + procedure + "," + part + "," + selectors + "," + lines + "," + chars +
+            return "{\"type\":\"object\",\"properties\":{" + target + "," + representation + "," + section + "," + procedure + "," + part + "," + selectors + "," + lines + "," + chars + "," + jsonTree +
                 "},\"required\":[\"target\"],\"additionalProperties\":false,\"anyOf\":[" +
                 "{\"type\":\"object\",\"description\":\"Read one complete metadata, text, structure, source, media, or formulas representation. Do not send limit, offset, path, or fields.\",\"properties\":{" + target + "," +
                 "\"representation\":{\"type\":\"string\",\"description\":\"Complete representation to read; omit for provider-selected auto.\",\"enum\":[\"metadata\",\"text\",\"structure\",\"source\",\"media\",\"formulas\"]}},\"required\":[\"target\"],\"additionalProperties\":false}," +
@@ -244,6 +271,9 @@ namespace RNAssistant.Office.Tools
                 "\"representation\":{\"type\":\"string\",\"description\":\"Bounded structural representation to read.\",\"enum\":[\"table\"]}," +
                 selectors +
                 "},\"required\":[\"target\",\"representation\"],\"additionalProperties\":false}," +
+                "{\"type\":\"object\",\"description\":\"Read a JSON Pointer tree from one exact JSON text source. Only returned nodes use model budget.\",\"properties\":{" + target + "," + jsonTree + "," +
+                "\"representation\":{\"type\":\"string\",\"enum\":[\"tree\"]},\"offset\":{\"type\":\"integer\",\"minimum\":0},\"limit\":{\"type\":\"integer\",\"minimum\":1}" +
+                "},\"required\":[\"target\",\"representation\",\"pointer\"],\"additionalProperties\":false}," +
                 "{\"type\":\"object\",\"description\":\"Read exact bounded source/text lines. No section or structural selectors.\",\"properties\":{" + target + "," + lines + ",\"representation\":{\"type\":\"string\",\"enum\":[\"source\",\"text\"]}},\"required\":[\"target\",\"representation\",\"startLine\",\"lineCount\"],\"additionalProperties\":false}," +
                 "{\"type\":\"object\",\"description\":\"Read exact bounded UTF-16 characters from source/text. No other selectors.\",\"properties\":{" + target + "," + chars + ",\"representation\":{\"type\":\"string\",\"enum\":[\"source\",\"text\"]}},\"required\":[\"target\",\"representation\",\"startChar\",\"charCount\"],\"additionalProperties\":false}," +
                 "{\"type\":\"object\",\"description\":\"Read one unique VBA procedure from source; no other selectors.\",\"properties\":{" + target + "," + procedure + ",\"representation\":{\"type\":\"string\",\"enum\":[\"source\"]}},\"required\":[\"target\",\"representation\",\"procedure\"],\"additionalProperties\":false}," +

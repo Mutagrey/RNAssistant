@@ -59,8 +59,10 @@ namespace RNAssistant.Runtime
                         foreach (var item in page.Items)
                         {
                             // Binary delivery belongs to application/browser consumers;
-                            // this model tool currently admits complete UTF-8 text only.
+                            // model file reads admit UTF-8 text and JSON navigation.
                             item.Representations.RemoveAll(view => view != ResourceRepresentations.Metadata && view != ResourceRepresentations.Text);
+                            if (item.Type == "file" && item.Target.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                                item.Representations.Add(ResourceRepresentations.Tree);
                             if (item.Type == "file" && !item.Representations.Contains(ResourceRepresentations.Text))
                                 item.Usage = "Binary source; model text reading is unavailable. Application raw/image views can inspect it.";
                         }
@@ -76,6 +78,20 @@ namespace RNAssistant.Runtime
                 var charCount = Number(context, "charCount");
                 var procedure = Value(context, "procedure");
                 var procedureKind = Value(context, "procedureKind");
+                var isTree = Value(context, "representation") == ResourceRepresentations.Tree;
+                var hasPointer = context.Arguments.ContainsKey("pointer");
+                var pointer = Value(context, "pointer");
+                var depth = Number(context, "depth") ?? 1;
+                var treeOffset = Number(context, "offset") ?? 0;
+                var treeLimit = Number(context, "limit") ?? 100;
+                if (isTree && (type != "file" || !hasPointer || depth < 0 || treeOffset < 0 || treeLimit < 1 ||
+                    startLine.HasValue || lineCount.HasValue || startChar.HasValue || charCount.HasValue ||
+                    context.Arguments.ContainsKey("procedure") || context.Arguments.ContainsKey("procedureKind") ||
+                    !string.IsNullOrEmpty(referencePath) || context.Arguments.ContainsKey("version")) ||
+                    !isTree && (hasPointer || context.Arguments.ContainsKey("depth") ||
+                        context.Arguments.ContainsKey("offset") || context.Arguments.ContainsKey("limit")))
+                    throw Error("JSON tree requires a file, pointer, optional depth/offset/limit and no other selectors.",
+                        "resource_json_selector_invalid");
                 if (string.IsNullOrEmpty(procedureKind)) procedureKind = null;
                 var hasProcedure = context.Arguments.ContainsKey("procedure") || context.Arguments.ContainsKey("procedureKind");
                 if (hasProcedure && (type != "file" || string.IsNullOrWhiteSpace(procedure) ||
@@ -86,7 +102,10 @@ namespace RNAssistant.Runtime
                     if (startChar.HasValue != charCount.HasValue ||
                         (startChar.HasValue && (startLine.HasValue || lineCount.HasValue)))
                         throw Error("Supply startChar and charCount together, without line selectors.", "resource_chars_invalid");
-                    read = hasProcedure
+                    read = isTree
+                        ? _files.ReadJsonTree(target, pointer, depth, treeOffset, treeLimit,
+                            Math.Max(1, _maximumTextReadCharacters - 512), cancellationToken)
+                        : hasProcedure
                         ? _files.ReadProcedure(target, procedure, procedureKind, _maximumTextReadCharacters, cancellationToken)
                         : startChar.HasValue
                         ? _files.ReadCharacters(target, startChar.Value, charCount.Value, cancellationToken,
@@ -115,14 +134,17 @@ namespace RNAssistant.Runtime
                 if (read.Result.Text.Length > _maximumTextReadCharacters)
                     throw Error("The source exceeds the model read budget. Use startLine/lineCount or startChar/charCount to select a smaller region.", "read_too_large");
                 if (read.Result.Complete) read.RequireCompleteExactText();
-                var projection = hasProcedure
+                var projection = isTree
+                    ? ResourceReadProjection.FromTree(read.Result, target, type, "workspace", pointer,
+                        depth, treeOffset, treeLimit)
+                    : hasProcedure
                     ? ResourceReadProjection.FromProcedure(read.Result, target, type, "workspace")
                     : startChar.HasValue
                     ? ResourceReadProjection.FromCharacters(read.Result, target, type, type == "skill" ? "catalog" : "workspace", startChar.Value, charCount.Value)
                     : startLine.HasValue
                     ? ResourceReadProjection.FromLines(read.Result, target, type, type == "skill" ? "catalog" : "workspace", startLine.Value, lineCount.Value)
                     : ResourceReadProjection.From(read.Result, target, type, type == "skill" ? "catalog" : "workspace");
-                if (type == "file" || !read.Result.Complete)
+                if (!isTree && (type == "file" || !read.Result.Complete))
                 {
                     projection.SourceComplete = read.Result.Complete;
                     if (!read.Result.Complete)
@@ -148,7 +170,14 @@ namespace RNAssistant.Runtime
                     projection.References = (skill.References ?? new List<SkillReferenceMetadata>())
                         .Select(item => new SkillReferenceProjection { Path = item.Path, ByteLength = item.ByteLength }).ToArray();
                 }
-                var requestedCoverage = startChar.HasValue
+                if (isTree && JsonConvert.SerializeObject(projection).Length > _maximumTextReadCharacters)
+                    throw Error("Selected JSON tree exceeds the model read budget; narrow pointer, depth or limit.",
+                        "resource_json_view_too_large");
+                var requestedCoverage = isTree
+                    ? new ResourceCoverage(ResourceCoverageKinds.JsonPath,
+                        address: "depth=" + depth + ";limit=" + treeLimit,
+                        start: treeOffset, end: (long)treeOffset + treeLimit, path: pointer)
+                    : startChar.HasValue
                     ? new ResourceCoverage(ResourceCoverageKinds.CharacterRange, start: startChar,
                         end: (long)startChar.Value + charCount.Value)
                     : startLine.HasValue
@@ -156,9 +185,11 @@ namespace RNAssistant.Runtime
                         end: (long)startLine.Value + lineCount.Value)
                     : hasProcedure ? null : ResourceCoverage.Whole();
                 read = read.WithReadMetadata(projection, requestedCoverage,
-                    requestedProcedure: hasProcedure ? procedure : null, requestedProcedureKind: procedureKind);
+                    requestedProcedure: hasProcedure ? procedure : null, requestedProcedureKind: procedureKind,
+                    requestedDepth: isTree ? (int?)depth : null);
                 if (type == "file") _observed[target] = read.Evidence.Single();
-                var message = read.Result.Complete ? "Complete resource representation read." :
+                var message = isTree ? "Exact JSON Pointer tree read; navigate with pointer, depth and child offset. Values are not raw source lexemes." :
+                    read.Result.Complete ? "Complete resource representation read." :
                     "Exact text excerpt read from the current version; other regions are not observed. Read another bounded range as needed; each read rechecks the current source.";
                 return Return(ToolResult.Ok(message, JsonConvert.SerializeObject(projection),
                     new[] { read.Result.Resource.Reference }), read.Evidence);

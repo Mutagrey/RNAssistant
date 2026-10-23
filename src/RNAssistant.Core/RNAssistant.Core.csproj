@@ -114,6 +114,8 @@
     <Compile Include="Models\ModelContextModels.cs" />
     <Compile Include="Services\EvidenceStateReducer.cs" />
     <Compile Include="Services\ResourceSchemaValidator.cs" />
+    <Compile Include="Services\ResourceJsonTreeSelector.cs" />
+    <Compile Include="Services\StrictJsonSourceReader.cs" />
     <Compile Include="Models\AgentResponseModels.cs" />
     <Compile Include="Models\ChatModels.cs" />
     <Compile Include="Models\PluginModels.cs" />
@@ -193,6 +195,7 @@
     <Compile Include="ModelProtocol\ConversationResponseHistoryReader.cs" />
     <Compile Include="Models\VbaModels.cs" />
     <Compile Include="Models\ResourceFindReadModels.cs" />
+    <Compile Include="Models\ResourceJsonTree.cs" />
     <Compile Include="Models\ResourceProcedureSelection.cs" />
     <Compile Include="Llm\LlmClient.cs" />
     <Compile Include="Llm\LlmHttpTransport.cs" />

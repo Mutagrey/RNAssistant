@@ -190,11 +190,20 @@ namespace RNAssistant.Core.Services
                 : name == "common.resources_outline"
                 ? SelectFields(data, "target", "partCount", "totalLines", "nextPart", "sourceComplete", "symbolLanguage", "symbolsComplete", "parts", "code", "retryable")
                 : SelectFields(data, "version", "historical", "startLine", "requestedLines", "startChar", "requestedCharacters", "requestedOffset", "requestedRows", "selectionComplete", "section", "procedure", "partNumber", "partCount", "kind", "target", "type", "scope",
-                    "representation", "text", "table", "coverage", "sourceCoverage", "sourceEndChar", "sourceTotalLines",
+                    "representation", "text", "table", "tree", "coverage", "sourceCoverage", "sourceEndChar", "sourceTotalLines",
                     "returnedCharacters", "totalCharacters", "complete", "sourceComplete",
                     "rawContentIncluded", "references", "claims", "claimsUnavailable", "usage", "code", "retryable");
             if (name == "common.resources_read")
             {
+                if (result["tree"] is JObject tree)
+                {
+                    var selectedTree = SelectFields(tree, "pointer", "depth", "offset", "limit",
+                        "nodeType", "totalChildren", "returnedChildren", "nextOffset", "nodes");
+                    if (selectedTree["nodes"] is JArray nodes)
+                        selectedTree["nodes"] = new JArray(nodes.Select(node =>
+                            SelectFields(node, "pointer", "type", "value", "valueExact", "childCount")));
+                    result["tree"] = selectedTree;
+                }
                 if (result["procedure"] != null)
                     result["procedure"] = SelectFields(result["procedure"], "name", "kind", "startChar", "endChar",
                         "startLine", "endLine", "conditionalCompilation");

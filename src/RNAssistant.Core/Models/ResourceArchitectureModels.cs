@@ -143,7 +143,10 @@ namespace RNAssistant.Core.Models
             Address = string.IsNullOrWhiteSpace(address) ? null : address.Trim();
             Start = start;
             End = end;
-            Path = string.IsNullOrWhiteSpace(path) ? null : path.Trim();
+            // JSON Pointer is an exact Unicode address: even an empty or
+            // whitespace-bearing token must survive evidence serialization.
+            Path = Kind == ResourceCoverageKinds.JsonPath ? path :
+                string.IsNullOrWhiteSpace(path) ? null : path.Trim();
             Fields = Array.AsReadOnly((fields ?? new string[0])
                 .Where(value => !string.IsNullOrWhiteSpace(value))
                 .Select(value => value.Trim())

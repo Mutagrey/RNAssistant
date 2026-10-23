@@ -625,6 +625,10 @@ namespace RNAssistant.Office.Services
                 Representations = representations,
                 CreatedUtc = artifact.CreatedUtc
             };
+            if ((artifact.Kind == ChatArtifactKinds.File || artifact.Kind == ChatArtifactKinds.Attachment) &&
+                representations.Contains(ResourceRepresentations.Text) && attachment?.TextTruncated != true &&
+                ResourceGatewayService.IsJsonSource(result))
+                representations.Add(ResourceRepresentations.Tree);
             if (!string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId)) result.Metadata["scope"] = "document";
             if (artifact.Kind == ChatArtifactKinds.File && DocumentArtifactStore.FileEncoding(artifact) != null)
                 result.Metadata["authoredFile"] = "true";
