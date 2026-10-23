@@ -1,5 +1,15 @@
 # Stabilization progress
 
+## Resource Context read-time descriptor in Inspector — 2026-10-23
+
+Owner: shared resource-read evidence and Model Context Inspector. Accepted Office
+and workspace/CLI reads now save a copy of provider-reported kind, MIME, physical
+byte length, representations and view capabilities with their existing read
+metadata. The Inspector shows these as claims made at read time, including
+application-only views; old traces retain unknown fields. This does not verify
+current availability, model readability or token cost. Focused Harness and Web
+checks pass host-neutral; Windows/Office/WebView2 remain unqualified.
+
 ## Resource harness VBA recovery — 2026-10-23
 
 Owner: VBA resource provider and Resource Gateway fixture. The Outlook/HTML

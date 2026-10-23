@@ -552,7 +552,13 @@ namespace RNAssistant.Harness
                 var source = PayloadRef.FromBlob(blobs.StoreText("selected lines", "text/plain"));
                 var fragmentEvidence = new ResourceEvidence("fragment", scope, reference, "source",
                     new ResourceCoverage(ResourceCoverageKinds.LineRange, start: 1, end: 2), true, 1, source);
-                var selectedRead = new ResourceReadResult { Resource = new ResourceDescriptor { Reference = reference },
+                var descriptor = new ResourceDescriptor { Reference = reference, Provider = "vba", Kind = "module",
+                    MimeType = "text/plain", ByteLength = 1234 };
+                descriptor.Representations.Add("source");
+                descriptor.Capabilities.Add("read");
+                descriptor.ViewCapabilities.Add(new ResourceViewCapability("source", supportsOffset: true,
+                    maxBatchBytes: 65536));
+                var selectedRead = new ResourceReadResult { Resource = descriptor,
                     Representation = "source", Coverage = fragmentEvidence.Coverage, Complete = true };
                 var readProjection = ResourceReadProjection.From(selectedRead, "Module1", "VBA", "document");
                 readProjection.SelectionComplete = true;
@@ -561,6 +567,12 @@ namespace RNAssistant.Harness
                 fragmentEvidence = new ResourceReadObservation(selectedRead, new[] { fragmentEvidence })
                     .WithReadMetadata(readProjection, new ResourceCoverage(ResourceCoverageKinds.LineRange, start: 1, end: 6))
                     .Evidence.Single();
+                descriptor.Representations.Add("later");
+                descriptor.ViewCapabilities.Clear();
+                AssertEqual(1, fragmentEvidence.ReadMetadata.DescriptorAtRead.Representations.Count,
+                    "read-time views do not follow later descriptor mutations");
+                AssertEqual(1, fragmentEvidence.ReadMetadata.DescriptorAtRead.ViewCapabilities.Count,
+                    "read-time view capabilities do not follow later descriptor mutations");
                 fragmentEvidence = Newtonsoft.Json.JsonConvert.DeserializeObject<ResourceEvidence>(
                     Newtonsoft.Json.JsonConvert.SerializeObject(fragmentEvidence));
                 excluded.ResourceEvidence.Add(fragmentEvidence);
@@ -596,6 +608,12 @@ namespace RNAssistant.Harness
                 AssertEqual(2L, link.ObservedCoverage.End.Value, "actual coverage is not replaced by requested bounds");
                 AssertTrue(link.ReadMetadata.SelectionComplete == true && link.ReadMetadata.RepresentationComplete == true &&
                     link.ReadMetadata.SourceComplete == false, "complete selection and selected target do not claim a complete source");
+                AssertEqual("module", link.ReadMetadata.DescriptorAtRead.Kind,
+                    "saved receipt retains the provider-reported kind at accepted read");
+                AssertEqual(1234L, link.ReadMetadata.DescriptorAtRead.ByteLength.Value,
+                    "source byte length is diagnostic metadata, not a measured token cost");
+                AssertEqual(65536, link.ReadMetadata.DescriptorAtRead.ViewCapabilities.Single().MaxBatchBytes.Value,
+                    "saved receipt retains declared view bounds");
                 AssertTrue(snapshot.Receipt.Messages.Single(e => e.SourceMessageId == excluded.Id)
                     .EvidenceLinks.Single().ReadMetadata.SourceComplete == false, "excluded body retains read metadata");
                 AssertEqual(true, link.BodyIncludedInMessage.Value, "verified synthetic payload hydration proves body delivery");
@@ -603,7 +621,8 @@ namespace RNAssistant.Harness
                     new LlmMessageBuilder().Build(snapshot.Messages, new AppSettings()).Messages);
                 AssertTrue(!wire.Contains("\"EvidenceLinks\"") && !wire.Contains("\"ObservedCoverage\"") &&
                     !wire.Contains("\"ScopeId\"") && !wire.Contains("\"ObservationComplete\"") &&
-                    !wire.Contains("\"ExclusionKind\"") && !wire.Contains("\"ReadMetadata\""), "typed diagnostics do not enter provider messages");
+                    !wire.Contains("\"ExclusionKind\"") && !wire.Contains("\"ReadMetadata\"") &&
+                    !wire.Contains("\"descriptorAtRead\""), "typed diagnostics do not enter provider messages");
                 var changed = LlmClient.DescribeWireMessages(new[] { snapshot.Messages.First(m => m.Id == fragment.Id) },
                     snapshot.Receipt, new[] { true });
                 AssertTrue(!changed.Single(e => e.MessageIndex.HasValue).EvidenceLinks.Single().BodyIncludedInMessage.HasValue,
@@ -627,6 +646,10 @@ namespace RNAssistant.Harness
                         observation.BodyIncludedInMessage == null, "saved trace and inspector preserve independent completeness after restart");
                     AssertEqual(6L, observation.ReadMetadata.RequestedCoverage.End.Value, "inspector receives requested bounds");
                     AssertEqual(2L, observation.ReadMetadata.SourceCoverage.End.Value, "inspector receives source coordinates");
+                    AssertEqual("vba", observation.ReadMetadata.DescriptorAtRead.Provider,
+                        "inspector receives the accepted read's provider claim after restart");
+                    AssertEqual("source", observation.ReadMetadata.DescriptorAtRead.ViewCapabilities.Single().View,
+                        "inspector receives the accepted read's declared view after restart");
                 }
                 var mutation = ContinuityResult("saved", "common.vba_write_module", RNAssistant.Core.Tools.Contracts.ToolResult.Ok("Saved", "{\"changed\":true}"));
                 mutation.ResourceEffect = new ResourceEffect("effect", "write", ResourceEffectOutcome.VerifiedChanged, verification: "read-back");

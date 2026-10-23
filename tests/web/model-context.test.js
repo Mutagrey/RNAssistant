@@ -48,7 +48,11 @@ function fixture(withAliases = false) {
             coverage: { kind: "line-range", start: 1, end: 2 }, observationComplete: false, bodyIncludedInMessage: null,
             readMetadata: { requestedCoverage: { kind: "line-range", start: 1, end: 6 },
               sourceCoverage: { kind: "line-range", start: 1, end: 2 }, selectionComplete: true,
-              representationComplete: false, sourceComplete: null } },
+              representationComplete: false, sourceComplete: null,
+              descriptorAtRead: { provider: "vba", kind: "module", mimeType: "text/plain", byteLength: 1234,
+                representations: ["source", "outline"], capabilities: ["read"],
+                viewCapabilities: [{ view: "source", supportsOffset: true, supportsStream: true,
+                  maxBatchBytes: 65536 }] } } },
             { requestAlias: "Q1", operationAlias: "O2", evidenceAlias: "E2", view: "source",
               coverage: { kind: "character-range", start: 10, end: 80 }, observationComplete: false,
               readMetadata: { requestedProcedure: "Value", requestedProcedureKind: "property-get",
@@ -252,6 +256,8 @@ function fixture(withAliases = false) {
   assert.match(resourceText(), /1234 байт.*text\/plain.*payload-hash.*сохранённое тело не проверено/);
   assert.match(resourceText(), /Запрошено:.*"end":6.*Покрытие в источнике:.*"end":2/);
   assert.match(resourceText(), /Выбранный фрагмент: полностью.*Представление: не полностью.*Источник: неизвестно/);
+  assert.match(resourceText(), /Заявлено провайдером при чтении: провайдер vba; тип module; MIME text\/plain; 1234 байт; представления source, outline; операции read/);
+  assert.match(resourceText(), /параметры views source \(смещение, поток, байт за раз ≤ 65536\); текущая доступность не проверена; возможность чтения моделью не подтверждена/);
   assert.match(resourceText(), /Запрошено: процедура Value \(property-get\)/);
   assert.match(resourceText(), /JSON Pointer "\/data", глубина 2, дети \[1, 3\)/);
   assert.match(resourceText(), /YAML pointer "\/config", глубина 1, дети \[0, 2\)/);

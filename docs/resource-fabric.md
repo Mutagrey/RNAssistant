@@ -715,6 +715,14 @@ and depth, section/part or procedure name and optional kind,
 actual parent-source coordinates when supplied, and separate nullable
 `selectionComplete`, `representationComplete` and `sourceComplete` facts from the
 read projection. Actual target coverage stays on `ResourceEvidence.Coverage`.
+The same metadata can retain a read-time snapshot of provider-reported kind,
+MIME, physical byte length, representations, general capabilities and typed view
+bounds. The shared Office and workspace/CLI handlers use the accepted result's
+descriptor; they do not query a live provider during context compilation or
+Inspector display. This snapshot describes claims made at that read, including
+application-only views; it proves neither current view availability nor model
+readability, transformation provenance or token cost. Missing fields in older
+traces remain unknown.
 An adaptive first window retains the original whole-read intent rather than
 rewriting it to the provider's chosen window. Completeness of that chosen fragment
 does not prove completion of the original whole-read request. EOF can shorten

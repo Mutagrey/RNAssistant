@@ -179,7 +179,33 @@
       metadata.sourceCoverage ? "Покрытие в источнике: " + JSON.stringify(metadata.sourceCoverage) : "",
       complete("Выбранный фрагмент", metadata.selectionComplete),
       complete("Представление", metadata.representationComplete),
-      complete("Источник", metadata.sourceComplete)].filter(Boolean).join(" · ");
+      complete("Источник", metadata.sourceComplete),
+      descriptorAtReadText(metadata.descriptorAtRead)].filter(Boolean).join(" · ");
+  }
+  function descriptorAtReadText(descriptor) {
+    if (!descriptor) return "";
+    var facts = [];
+    if (descriptor.provider) facts.push("провайдер " + descriptor.provider);
+    if (descriptor.kind) facts.push("тип " + descriptor.kind);
+    if (descriptor.mimeType) facts.push("MIME " + descriptor.mimeType);
+    if (descriptor.byteLength != null) facts.push(descriptor.byteLength + " байт");
+    if (Array.isArray(descriptor.representations) && descriptor.representations.length)
+      facts.push("представления " + descriptor.representations.join(", "));
+    if (Array.isArray(descriptor.capabilities) && descriptor.capabilities.length)
+      facts.push("операции " + descriptor.capabilities.join(", "));
+    if (Array.isArray(descriptor.viewCapabilities) && descriptor.viewCapabilities.length)
+      facts.push("параметры views " + descriptor.viewCapabilities.map(function (view) {
+        var bounds = [];
+        if (view.supportsOffset) bounds.push("смещение");
+        if (view.supportsFields) bounds.push("поля");
+        if (view.supportsStream) bounds.push("поток");
+        if (view.maxItemsPerBatch != null) bounds.push("элементов за раз ≤ " + view.maxItemsPerBatch);
+        if (view.maxBatchBytes != null) bounds.push("байт за раз ≤ " + view.maxBatchBytes);
+        if (view.maxPayloadBytes != null) bounds.push("байт в view ≤ " + view.maxPayloadBytes);
+        return view.view + (bounds.length ? " (" + bounds.join(", ") + ")" : "");
+      }).join(", "));
+    return facts.length ? "Заявлено провайдером при чтении: " + facts.join("; ") +
+      "; текущая доступность не проверена; возможность чтения моделью не подтверждена" : "";
   }
   function partNote(part) {
     var details = [part.Kind || "Часть", note(part)];

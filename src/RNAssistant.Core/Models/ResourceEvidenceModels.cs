@@ -80,13 +80,15 @@ namespace RNAssistant.Core.Models
         public bool? RepresentationComplete { get; private set; }
         [JsonProperty("sourceComplete", NullValueHandling = NullValueHandling.Ignore)]
         public bool? SourceComplete { get; private set; }
+        [JsonProperty("descriptorAtRead", NullValueHandling = NullValueHandling.Ignore)]
+        public ResourceReadDescriptorSnapshot DescriptorAtRead { get; private set; }
 
         [JsonConstructor]
         public ResourceReadMetadata(ResourceCoverage requestedCoverage = null, string requestedSection = null,
             int? requestedPartNumber = null, ResourceCoverage sourceCoverage = null,
             bool? selectionComplete = null, bool? representationComplete = null, bool? sourceComplete = null,
             string requestedProcedure = null, string requestedProcedureKind = null,
-            int? requestedDepth = null)
+            int? requestedDepth = null, ResourceReadDescriptorSnapshot descriptorAtRead = null)
         {
             RequestedCoverage = requestedCoverage; RequestedSection = requestedSection;
             RequestedPartNumber = requestedPartNumber; SourceCoverage = sourceCoverage;
@@ -94,6 +96,55 @@ namespace RNAssistant.Core.Models
             SourceComplete = sourceComplete;
             RequestedProcedure = requestedProcedure; RequestedProcedureKind = requestedProcedureKind;
             RequestedDepth = requestedDepth;
+            DescriptorAtRead = descriptorAtRead;
+        }
+    }
+
+    // Provider claims captured with one accepted read, not a live availability check.
+    public sealed class ResourceReadDescriptorSnapshot
+    {
+        [JsonProperty("provider", NullValueHandling = NullValueHandling.Ignore)]
+        public string Provider { get; private set; }
+        [JsonProperty("kind", NullValueHandling = NullValueHandling.Ignore)]
+        public string Kind { get; private set; }
+        [JsonProperty("mimeType", NullValueHandling = NullValueHandling.Ignore)]
+        public string MimeType { get; private set; }
+        [JsonProperty("byteLength", NullValueHandling = NullValueHandling.Ignore)]
+        public long? ByteLength { get; private set; }
+        [JsonProperty("representations", NullValueHandling = NullValueHandling.Ignore)]
+        public IReadOnlyList<string> Representations { get; private set; }
+        [JsonProperty("capabilities", NullValueHandling = NullValueHandling.Ignore)]
+        public IReadOnlyList<string> Capabilities { get; private set; }
+        [JsonProperty("viewCapabilities", NullValueHandling = NullValueHandling.Ignore)]
+        public IReadOnlyList<ResourceViewCapability> ViewCapabilities { get; private set; }
+
+        [JsonConstructor]
+        public ResourceReadDescriptorSnapshot(string provider = null, string kind = null,
+            string mimeType = null, long? byteLength = null, IEnumerable<string> representations = null,
+            IEnumerable<string> capabilities = null, IEnumerable<ResourceViewCapability> viewCapabilities = null)
+        {
+            Provider = provider;
+            Kind = kind;
+            MimeType = mimeType;
+            ByteLength = byteLength;
+            var views = (representations ?? Enumerable.Empty<string>()).Where(item => !string.IsNullOrWhiteSpace(item)).ToArray();
+            var operations = (capabilities ?? Enumerable.Empty<string>()).Where(item => !string.IsNullOrWhiteSpace(item)).ToArray();
+            var typedViews = (viewCapabilities ?? Enumerable.Empty<ResourceViewCapability>()).Where(item => item != null).ToArray();
+            Representations = views.Length == 0 ? null : Array.AsReadOnly(views);
+            Capabilities = operations.Length == 0 ? null : Array.AsReadOnly(operations);
+            ViewCapabilities = typedViews.Length == 0 ? null : Array.AsReadOnly(typedViews);
+        }
+
+        public static ResourceReadDescriptorSnapshot From(ResourceDescriptor descriptor)
+        {
+            if (descriptor == null || (string.IsNullOrWhiteSpace(descriptor.Provider) &&
+                string.IsNullOrWhiteSpace(descriptor.Kind) && string.IsNullOrWhiteSpace(descriptor.MimeType) &&
+                !descriptor.ByteLength.HasValue && (descriptor.Representations == null || descriptor.Representations.Count == 0) &&
+                (descriptor.Capabilities == null || descriptor.Capabilities.Count == 0) &&
+                (descriptor.ViewCapabilities == null || descriptor.ViewCapabilities.Count == 0)))
+                return null;
+            return new ResourceReadDescriptorSnapshot(descriptor.Provider, descriptor.Kind, descriptor.MimeType,
+                descriptor.ByteLength, descriptor.Representations, descriptor.Capabilities, descriptor.ViewCapabilities);
         }
     }
 

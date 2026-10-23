@@ -41,7 +41,9 @@ page errors. Причина не установлена; при следующе
    потоковая проверка CAS payload ревизии с временем проверки и scope isolation.
    Для common reads сохранены requested/actual coverage и раздельная полнота
    selection/representation/source от evidence до receipt и Inspector.
-   Добавить доказуемые kind/views, cost/capabilities,
+   Для принятых common reads теперь сохраняется заявленный провайдером снимок
+   kind/MIME/byteLength/views/capabilities; он не доказывает доступность сейчас
+   или возможность чтения моделью. Остаются cost конкретных views,
    availability остальных views/parts и live providers, provenance преобразований;
    не подменять unknown предположением. При необходимости проверить старые traces
    и compaction/restart на реальном архиве. UI остаётся производной projection
