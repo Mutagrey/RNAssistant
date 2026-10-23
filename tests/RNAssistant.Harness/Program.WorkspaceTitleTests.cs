@@ -167,8 +167,9 @@ namespace RNAssistant.Harness
                                 }
                                 var content = request.Contains("# Chat title")
                                     ? requestNumber == 4 ? "Навязанное название" : "Продажи за октябрь"
-                                    : new JObject { ["message"] = "Подготовлю отчёт.", ["action"] = "done",
-                                        ["tool_calls"] = new JArray() }.ToString(Newtonsoft.Json.Formatting.None);
+                                    : ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                                        "A direct answer needs no tools.", "Подготовлю отчёт.",
+                                        results: new ConversationResultClaim[0]);
                                 var response = new JObject { ["choices"] = new JArray(new JObject {
                                     ["message"] = new JObject { ["content"] = content } }) }.ToString(Newtonsoft.Json.Formatting.None);
                                 var bytes = Encoding.UTF8.GetBytes(response);
