@@ -167,7 +167,8 @@ namespace RNAssistant.Office.Services
             result.Coverage = result.Coverage ?? CoverageFor(result);
             if (result.Payload == null && result.Text != null && _payloads != null)
                 result.Payload = PayloadRef.FromBlob(_payloads.StoreText(result.Text, result.Resource.MimeType ?? "text/plain; charset=utf-8"));
-            _revisions.RegisterView(scope, new ResourceRevisionView(result.Resource.Reference, result.Representation,
+            _revisions.RegisterView(scope, new ResourceRevisionView(result.Resource.Reference,
+                result.RetainedViewKey ?? result.Representation,
                 result.ContentSha256, result.Payload, result.Coverage));
         }
 
@@ -219,7 +220,9 @@ namespace RNAssistant.Office.Services
                 Cursor = string.IsNullOrEmpty(position.Revision) ? null :
                     ResourceReadCursor.CreateRevisionBound(position.Offset, metadata.ContentSha256, binding),
                 MaxChars = request.MaxChars, MaxRows = request.MaxRows, RowOffset = request.RowOffset,
-                ViewPath = request.ViewPath, Fields = request.Fields, PartNumber = request.PartNumber
+                ViewPath = request.ViewPath, Fields = request.Fields, PartNumber = request.PartNumber,
+                PageIndex = request.PageIndex, PageStartChar = request.PageStartChar,
+                PageCharCount = request.PageCharCount
             };
         }
 
@@ -372,10 +375,12 @@ namespace RNAssistant.Office.Services
             if (result.Text != null && _payloads != null)
                 result.Payload = PayloadRef.FromBlob(_payloads.StoreText(result.Text, result.Resource.MimeType ?? "text/plain; charset=utf-8"));
             if (result.CompleteViewPayload == null)
-                _revisions.RegisterView(scope, new ResourceRevisionView(exact, retainedView ?? result.Representation,
+                _revisions.RegisterView(scope, new ResourceRevisionView(exact,
+                    retainedView ?? result.RetainedViewKey ?? result.Representation,
                     contentSha256, result.Payload, result.Coverage));
             else
-                _revisions.RegisterView(scope, new ResourceRevisionView(exact, retainedView ?? result.Representation,
+                _revisions.RegisterView(scope, new ResourceRevisionView(exact,
+                    retainedView ?? result.RetainedViewKey ?? result.Representation,
                     contentSha256, result.CompleteViewPayload, ResourceCoverage.Whole(), result.CompleteViewParts));
             // Every referenced view is durable before the head becomes visible to another reader.
             if (publication != null) _authority.Publish(publication);

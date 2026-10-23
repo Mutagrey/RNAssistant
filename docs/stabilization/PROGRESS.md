@@ -1,5 +1,20 @@
 # Stabilization progress
 
+## Resource Context exact PDF page text — 2026-10-23
+
+Owner: Core PDF extractor and workspace file owner, Office artifact provider, and
+shared resource-read contract. `common.resources_read` now selects a zero-based
+PDF attachment or workspace file page and
+optional bounded UTF-16 window from the hash-checked exact original, even when
+flattened extraction lacks page offsets. Model output carries page-local character
+coverage, a parent page range only for complete extracted page text, page count and
+separate completeness; retained page
+views cannot replace flattened `text`. Two focused two-page Harness cases cover
+selection, continuation window, Office/CLI schemas, exact original guard and
+invalid page.
+Visual/scanned completeness, PDF table/figure/bbox and general provider navigation
+remain open; Windows/Office/WebView2 qualification is still outstanding.
+
 ## Resource Context model read offers — 2026-10-23
 
 Owner: Core model result projection. `common.resources_find` now shows only views

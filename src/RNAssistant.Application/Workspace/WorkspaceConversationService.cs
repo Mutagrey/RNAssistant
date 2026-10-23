@@ -823,6 +823,7 @@ namespace RNAssistant.Runtime
                         office?.ResourceFind));
                 Register(registry, entries, "common.resources_read", (_mode.AllowsSkills ? "Read a UTF-8 file (default type=file, target is its workspace-relative path) or published skill instructions (type=skill, target is the skill ID). referencePath belongs only to a listed skill reference. For a workspace Plan use type=plan, omit target for the selected plan or supply an exact unique title. Optional version reads history without selecting it; a current read selects its exact revision. File text delivery follows this run's model input budget; Plans and published skill sources use the same budget and excerpt selectors; reading an excerpt does not activate a skill. For large files use startLine and positive lineCount, or zero-based UTF-16 startChar and charCount for a long single line; each slice observes the current version. files.patch accepts a unique anchor from an observed excerpt of a UTF-8 source. No partial skill activation." : "Read UTF-8 text by workspace-relative target. File text delivery follows this run's model input budget; use startLine/positive lineCount or zero-based UTF-16 startChar/charCount for bounded excerpts of files.") +
                     " For VBA files, procedure selects a unique procedure by name; optional procedureKind=sub/function/property-get/property-let/property-set disambiguates accessors. Do not combine with line/character selectors." +
+                    " For PDF files or PDF attachments, representation=text with zero-based pageIndex extracts one exact page; optional startChar/charCount continues a long page. Extracted text may omit visual or scanned content." +
                     (office == null ? string.Empty : " Use type=office and a semantic target to read the pinned Office document; VBA source supports the same procedure selector with representation=source."),
                     ResourceSchema(false, _mode.AllowsSkills, office != null, maximumFileReadCharacters), false,
                     new WorkspaceResourceHandler(_resources.Select("file"), _skillPublications, () => _skills, _observed, false, _plans,
@@ -984,7 +985,7 @@ namespace RNAssistant.Runtime
                     properties["fields"] = new JObject { ["type"] = "array", ["maxItems"] = 128,
                         ["items"] = new JObject { ["type"] = "string", ["maxLength"] = 128 } };
                 }
-                if (!find) { AddProcedureVariant(schema, true); AddTreeVariant(schema); }
+                if (!find) { AddProcedureVariant(schema, true); AddTreeVariant(schema); AddPdfPageVariant(schema); }
                 return schema;
             }
 
@@ -1027,6 +1028,34 @@ namespace RNAssistant.Runtime
                 foreach (var name in new[] { "representation", "pointer", "depth", "offset", "limit" })
                     if (outer[name] == null) outer[name] = properties[name].DeepClone();
                 variants.Add(tree);
+            }
+
+            private static void AddPdfPageVariant(JObject schema)
+            {
+                var variants = schema["anyOf"] as JArray;
+                if (variants == null) { variants = new JArray(schema.DeepClone()); schema["anyOf"] = variants; }
+                var page = (JObject)schema.DeepClone();
+                page.Remove("anyOf");
+                var properties = (JObject)page["properties"];
+                foreach (var name in new[] { "startLine", "lineCount", "startChar", "charCount",
+                    "partNumber", "procedure", "procedureKind", "pointer", "depth", "offset", "limit",
+                    "fields", "path", "section", "referencePath", "version" })
+                    properties.Remove(name);
+                properties["representation"] = new JObject { ["type"] = "string", ["enum"] = new JArray("text") };
+                properties["pageIndex"] = new JObject { ["type"] = "integer", ["minimum"] = 0,
+                    ["description"] = "Zero-based page of an exact PDF original; extracted text may omit visual content." };
+                ((JArray)page["required"]).Add("representation");
+                ((JArray)page["required"]).Add("pageIndex");
+                var window = (JObject)page.DeepClone();
+                var windowProperties = (JObject)window["properties"];
+                var common = (JObject)schema["properties"];
+                windowProperties["startChar"] = common["startChar"].DeepClone();
+                windowProperties["charCount"] = common["charCount"].DeepClone();
+                ((JArray)window["required"]).Add("startChar");
+                ((JArray)window["required"]).Add("charCount");
+                common["pageIndex"] = properties["pageIndex"].DeepClone();
+                variants.Add(page);
+                variants.Add(window);
             }
 
             private static void AddProcedureSelectors(JObject properties)
@@ -1087,7 +1116,7 @@ namespace RNAssistant.Runtime
                             ["description"] = "Maximum UTF-16 characters in this excerpt, bounded by this run's model input budget. Each read checks the current version." };
                     }
                 }
-                if (!find && !skill) { AddProcedureVariant(schema, false); AddTreeVariant(schema); }
+                if (!find && !skill) { AddProcedureVariant(schema, false); AddTreeVariant(schema); AddPdfPageVariant(schema); }
                 return schema;
             }
 

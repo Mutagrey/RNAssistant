@@ -48,7 +48,9 @@
    реализован общим streaming selector в Office и workspace/CLI. YAML tree для
    однодокументных источников с адресуемыми scalar keys также реализован общим
    streaming selector; aliases, merge/complex keys и multi-document требуют
-   отдельной семантики. Остались image crop, PDF page ranges/table/figure/bbox и
+   отдельной семантики. PDF page text для chat attachment и workspace file с
+   ограниченными символьными окнами реализован по точному оригиналу; остались
+   image crop, обобщённые PDF page ranges, table/figure/bbox и
    extractor provenance; исходная
    таблица включает также дополнительные Word/Excel/HTML semantic views. Наличие
    raw text/media/pageIndex не закрывает эту матрицу. Каждый slice требует своего
@@ -280,10 +282,11 @@ Owner: Resource Gateway and provider-specific navigation owners. `ResourceCovera
 and exact cursors already support text, pages, cells and records, but `resources_outline`
 currently navigates only indexed document text. PDF rendering has a page selector;
 extracted PDF text is flattened with page labels and `PageTextLengths`, without
-exact page-to-text ranges. Add an optional typed navigation capability at the
-provider/Gateway boundary, with coordinate kinds, total/coverage completeness and
-bounded continuation. Derive PDF page text offsets during extraction, then route
-page text and page render through the same exact revision and page coordinate.
+exact page-to-text offsets. A direct exact-original `pageIndex` text read now
+selects one PDF attachment or workspace file page and bounded character windows.
+Add an optional typed navigation capability at the provider/Gateway boundary, with coordinate
+kinds, total/coverage completeness and bounded continuation across providers;
+align page text and page render discovery on one page coordinate.
 Keep provider-specific selectors and extraction/render owners; do not add a second
 cursor store or put CAS references in model-facing output. Validate partial and
 scanned PDFs, page boundaries, stale revisions and cross-provider pagination.
@@ -623,14 +626,14 @@ remaining live validation is tracked in the
 The PDF-specific bounded-view extension below remains a separate Resource Fabric slice.
 
 Owner: Resource Fabric / model context compiler / context compaction. A model-facing
-`common.resources_read` assembles a complete text view (up to 2,000,000 characters)
-from internal 32,000-character pages. A large PDF can therefore exceed the model
-request budget; the current tool has no bounded PDF page/text selection. Search
-matches are discovery evidence, not a substitute for an exact selected text view.
-Provide a bounded semantic PDF view with explicit page/range coverage and a
-budgeted current excerpt working set. Keep extracted originals in CAS and older
-read findings in provenance-checked claims; never label an excerpt as the entire
-PDF or silently drop a selected view.
+`common.resources_read` assembles a complete text view when it fits the model
+request budget. A direct exact-original `pageIndex` selector now supplies bounded
+PDF page text and character windows in Office and workspace. Search matches remain
+discovery evidence, not a substitute for an exact selected text view. Remaining work is
+cross-provider PDF ranges, visual/table/figure selection and budgeted working-set
+policy. Keep extracted originals in CAS and older read findings in
+provenance-checked claims; never label an excerpt as the entire PDF or silently
+drop a selected view.
 
 
 ## Outlook attachment follow-ups — 2026-09-08

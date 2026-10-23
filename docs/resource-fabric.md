@@ -652,12 +652,23 @@ coverage (`character-range`, `line-range`, `page-range`, `cell-range`,
 `record-range`, `json-path`, `yaml-path`), bounded reads and cursors. JSON/YAML
 tree is a typed selector for complete structured text, not yet one provider-wide
 navigation contract.
-`resources_outline` is an indexed document-text operation;
-PDF page rendering selects `pageIndex` separately, while PDF extracted text is
-one flattened text view. `PageTextLengths` is not an exact page-to-text offset map.
-Adding shared navigation requires a typed optional provider capability with
-coordinate kind, exact covered range, completeness and bounded continuation;
-page extraction must record exact offsets before PDF text pages can use it.
+`resources_outline` is an indexed document-text operation. PDF attachment and
+workspace PDF text can now be read through `common.resources_read` with
+`representation=text` and zero-based `pageIndex`; optional `startChar`/`charCount`
+select UTF-16 text within that page.
+Both providers re-extract the selected page from the hash-checked original of the
+exact revision, independently of the flattened extraction and `PageTextLengths`.
+The result reports page-local `character-range` coverage, page count and separate
+selection/whole-source completeness. A parent `page-range` is reported only when
+the complete extracted page text was selected; a partial window is identified by
+its `pageIndex` and page-local coverage address. It never treats
+extracted text as proof of visual or scanned content. The automatic first page
+window is bounded by the model context; explicit windows can continue through
+`totalCharacters`. Page views retain distinct CAS keys from flattened `text`.
+PDF rendering remains an application data-plane view. The CLI Office binding
+accepts the same page selector. A general navigation capability for cross-provider
+page/range discovery and bounded continuation is
+still open.
 
 `sourceComplete` distinguishes a complete retained text representation from a
 complete original. A clipped extraction or PDF with unextracted pages cannot

@@ -1160,6 +1160,11 @@ semantics, derived-byte repair, GC/restart and missing extraction. It also check
 explicit truncation/omitted PDF pages on positive and negative queries, including
 model-facing incomplete negatives. Use `resources:`, `document originals:` and
 `document Plan:` for this extension; no PDF/Office rendering is involved.
+`resource context: exact PDF page text` verifies two-page original extraction,
+page-local character windows and coverage, schema/model projection, separate
+retention, invalid page and source-byte mismatch without a renderer.
+`resource context: workspace PDF page text` checks the same selector in CLI,
+including retained exact bytes, discovery usage and Office-bound schema parity.
 
 `resources: document discovery` verifies healthy partial results with missing/corrupt
 current metadata, body loss, exact reads, metadata recovery, current-head selection

@@ -401,6 +401,8 @@ namespace RNAssistant.Office.Services
             var artifact = FindExactArtifact(session, address.ArtifactId);
             EnsureRevision(artifact, address.Revision);
             _htmlResources.ValidateRevision(session, artifact);
+            if (request.PageIndex.HasValue)
+                return ReadPdfPageText(session, request, artifact, address.IsMember, resourceUri, cancellationToken);
             if (request.Section != null)
             {
                 if (address.IsMember || _documentArtifacts == null || string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId) ||
@@ -579,6 +581,69 @@ namespace RNAssistant.Office.Services
                         : null
                 },
                 ResourceRefs = new[] { exactReference }
+            };
+        }
+
+        private ResourceReadSelection ReadPdfPageText(ChatSession session, ResourceReadRequest request,
+            ChatArtifact artifact, bool isMember, string resourceUri,
+            System.Threading.CancellationToken cancellationToken)
+        {
+            if (isMember || artifact.Kind != ChatArtifactKinds.Attachment)
+                throw new ResourceRequestException("Page text is available only for an exact PDF attachment.",
+                    "resource_page_unsupported", false);
+            EnsureNotRemoved(session, artifact, resourceUri);
+            var original = FindExactAttachment(session, artifact);
+            if (original?.Kind != "pdf" ||
+                ArtifactViewerService.NormalizeMimeType(original.ContentType) != "application/pdf" ||
+                ArtifactViewerService.NormalizeMimeType(artifact.MimeType) != "application/pdf")
+                throw new ResourceRequestException("Page text is available only for a PDF original.",
+                    "resource_page_unsupported", false);
+            var exact = ChatResourceUri.CreateArtifactRevision(session, artifact);
+            ResourceReadCursor.ValidatePinned(request, exact.Revision);
+            cancellationToken.ThrowIfCancellationRequested();
+            var source = ReadRawSource(session, exact);
+            PdfAttachmentPageText page;
+            try { page = PdfAttachmentTextExtractor.ExtractPage(source, request.PageIndex.Value); }
+            catch (ArgumentOutOfRangeException)
+            {
+                throw new ResourceRequestException("pageIndex is outside the PDF's exact page bounds.",
+                    "resource_page_selector_invalid", false);
+            }
+            catch (Exception error) when (!(error is OperationCanceledException) &&
+                                          !(error is OutOfMemoryException))
+            {
+                throw new ResourceRequestException("The exact PDF page text could not be extracted: " + error.Message,
+                    "resource_page_unavailable", false);
+            }
+            cancellationToken.ThrowIfCancellationRequested();
+            var start = request.PageStartChar;
+            int end;
+            string selected;
+            try { selected = page.SelectWindow(start, request.PageCharCount, out end); }
+            catch (ArgumentException error)
+            { throw new ResourceRequestException(error.Message, "resource_page_selector_invalid", false); }
+            var coverage = new ResourceCoverage(ResourceCoverageKinds.CharacterRange,
+                address: "pdf-page:" + request.PageIndex.Value.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                start: start, end: end);
+            return new ResourceReadSelection {
+                Result = new ResourceReadResult {
+                    Resource = Describe(session, artifact, false), Representation = ResourceRepresentations.Text,
+                    ContentSha256 = artifact.ContentSha256,
+                    Text = selected, Offset = start,
+                    ReturnedCharacters = end - start, TotalCharacters = page.Text.Length,
+                    PageIndex = request.PageIndex, PageCount = page.PageCount,
+                    RetainedViewKey = PdfAttachmentTextExtractor.PageViewProfile + ":" +
+                        request.PageIndex.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) +
+                        ":" + start.ToString(System.Globalization.CultureInfo.InvariantCulture) +
+                        ":" + end.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    Coverage = coverage,
+                    SourceCoverage = start == 0 && end == page.Text.Length
+                        ? new ResourceCoverage(ResourceCoverageKinds.PageRange,
+                            start: request.PageIndex.Value, end: (long)request.PageIndex.Value + 1)
+                        : null,
+                    Complete = false, SourceComplete = false, Truncated = true, RawContentIncluded = true
+                },
+                ResourceRefs = new[] { exact }
             };
         }
 

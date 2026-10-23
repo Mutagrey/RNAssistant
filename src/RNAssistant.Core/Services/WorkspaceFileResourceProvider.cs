@@ -132,6 +132,63 @@ namespace RNAssistant.Core.Services
             return new ResourceReadObservation(result, new[] { evidence });
         }
 
+        public ResourceReadObservation ReadPdfPageText(string relativePath, int pageIndex,
+            int startChar, int charCount, CancellationToken token = default(CancellationToken))
+        {
+            if (string.IsNullOrWhiteSpace(relativePath) ||
+                !relativePath.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase) ||
+                pageIndex < 0 || startChar < 0 || charCount < 1)
+                throw new WorkspaceFileException("resource_page_selector_invalid",
+                    "PDF page text requires a .pdf file, pageIndex and a bounded character window.");
+            var snapshot = _files.CaptureFile(_workspace, relativePath, long.MaxValue, token);
+            PdfAttachmentPageText page;
+            try
+            {
+                using (var input = _files.OpenExactRead(_workspace, relativePath, snapshot.Reference,
+                    long.MaxValue, token, requireSeek: true))
+                    page = PdfAttachmentTextExtractor.ExtractPage(input, pageIndex);
+            }
+            catch (ArgumentOutOfRangeException)
+            { throw new WorkspaceFileException("resource_page_selector_invalid", "pageIndex is outside the PDF's exact page bounds."); }
+            catch (Exception error) when (!(error is OperationCanceledException) &&
+                                          !(error is OutOfMemoryException) &&
+                                          !(error is WorkspaceFileException))
+            { throw new WorkspaceFileException("resource_page_unavailable", "The exact PDF page text could not be extracted: " + error.Message); }
+            token.ThrowIfCancellationRequested();
+            int end;
+            string selected;
+            try { selected = page.SelectWindow(startChar, charCount, out end); }
+            catch (ArgumentException error)
+            { throw new WorkspaceFileException("resource_page_selector_invalid", error.Message); }
+            var coverage = new ResourceCoverage(ResourceCoverageKinds.CharacterRange,
+                address: "pdf-page:" + pageIndex.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                start: startChar, end: end);
+            var evidence = _files.PublishPdfPageText(snapshot, pageIndex, selected, coverage);
+            var descriptor = new ResourceDescriptor { Reference = snapshot.Reference, Provider = Id,
+                Kind = "file", Title = Path.GetFileName(relativePath), Mutable = !_workspace.ReadOnly,
+                Tracking = "current", ByteLength = snapshot.ByteLength,
+                ContentSha256 = snapshot.ContentSha256, Coverage = coverage,
+                MimeType = "application/pdf" };
+            descriptor.Representations.Add(ResourceRepresentations.Metadata);
+            descriptor.Representations.Add(ResourceRepresentations.Text);
+            descriptor.Metadata["relativePath"] = relativePath;
+            var result = new ResourceReadResult { Resource = descriptor,
+                Representation = ResourceRepresentations.Text, Text = selected,
+                ContentSha256 = snapshot.ContentSha256, Payload = evidence.Payload,
+                RetainedViewKey = PdfAttachmentTextExtractor.PageViewProfile + ":" +
+                    pageIndex.ToString(System.Globalization.CultureInfo.InvariantCulture) +
+                    ":" + startChar.ToString(System.Globalization.CultureInfo.InvariantCulture) +
+                    ":" + end.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                Coverage = coverage, SourceCoverage = startChar == 0 && end == page.Text.Length
+                    ? new ResourceCoverage(ResourceCoverageKinds.PageRange,
+                        start: pageIndex, end: (long)pageIndex + 1)
+                    : null,
+                PageIndex = pageIndex, PageCount = page.PageCount, Offset = startChar,
+                ReturnedCharacters = selected.Length, TotalCharacters = page.Text.Length,
+                Complete = false, SourceComplete = false, Truncated = true, RawContentIncluded = true };
+            return new ResourceReadObservation(result, new[] { evidence });
+        }
+
         public ResourceReadObservation ReadViewCharacters(string relativePath, int startChar, int charCount,
             ResourceRef exact = null, CancellationToken token = default(CancellationToken))
         { return Project(_files.ReadTextViewCharacters(_workspace, relativePath, startChar, charCount, exact, token), exact != null); }

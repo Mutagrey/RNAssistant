@@ -11,11 +11,196 @@ using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
+using RNAssistant.Runtime;
+using UglyToad.PdfPig.Core;
+using UglyToad.PdfPig.Fonts.Standard14Fonts;
+using UglyToad.PdfPig.Writer;
+using ToolResultStatus = RNAssistant.Core.Tools.Contracts.ToolResultStatus;
 
 namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void ResourcePdfPageTextUsesExactOriginal()
+        {
+            WithTempPaths(paths =>
+            {
+                var builder = new PdfDocumentBuilder();
+                var font = builder.AddStandard14Font(Standard14Font.Helvetica);
+                builder.AddPage(300, 300).AddText("alpha page only", 12, new PdfPoint(20, 250), font);
+                builder.AddPage(300, 300).AddText("beta page only", 12, new PdfPoint(20, 250), font);
+                var bytes = builder.Build();
+                var hash = ArtifactViewerService.Sha256(bytes);
+                var attachment = new ChatAttachment { Id = "pdf-page-source", Kind = "pdf", FileName = "pages.pdf",
+                    ContentType = "application/pdf", ContentSha256 = hash, ContentByteLength = bytes.Length,
+                    ExtractedCharCount = 1, PageCount = 2 };
+                var message = new ChatMessage { Role = "user", Attachments = new List<ChatAttachment> { attachment } };
+                var artifact = new ChatArtifact { Kind = ChatArtifactKinds.Attachment, Title = "pages.pdf",
+                    MimeType = "application/pdf", SourceMessageId = message.Id,
+                    ContentSha256 = hash, ContentByteLength = bytes.Length,
+                    MetadataJson = "{\"attachmentId\":\"pdf-page-source\"}" };
+                var session = new ChatSession(); session.Messages.Add(message); session.Artifacts.Add(artifact);
+                var payloads = new ChatBlobStore(paths);
+                var authorityStore = new ResourceAuthorityStore(paths);
+                var authority = new ResourceAuthorityService(authorityStore, authorityStore,
+                    new ResourceMutationJournal(paths), payloads);
+                var readBytes = bytes;
+                var gateway = new ResourceGatewayService(null, null, null, authority: authority,
+                    readAttachmentBytes: item => readBytes);
+                var target = ResourceGatewayService.IntentTarget(gateway.Resolve(session,
+                    ChatResourceUri.CreateArtifactRevision(session, artifact).Uri).Resource);
+                var handler = new ResourceReadToolHandler(gateway, session, null, new AppSettings());
+                var execution = new ToolRuntimeFixture().Context(toolId: ResourceToolCatalog.ReadToolId);
+                Func<IDictionary<string, object>, ToolHandlerResult> read = args => handler.ExecuteAsync(
+                    new ToolHandlerContext(execution, args), System.Threading.CancellationToken.None)
+                    .GetAwaiter().GetResult();
+                var selected = read(new Dictionary<string, object> {
+                    ["target"] = target, ["representation"] = "text", ["pageIndex"] = 1 });
+                AssertEqual(ToolResultStatus.Ok, selected.Result.Status, "page text read succeeds");
+                var body = JObject.Parse(selected.Result.DataJson);
+                AssertContains((string)body["text"], "beta page only", "selected page text");
+                AssertTrue(((string)body["text"]).IndexOf("alpha", StringComparison.Ordinal) < 0,
+                    "unselected page text is absent");
+                AssertEqual(1, (int)body["pageIndex"], "page index reaches model");
+                AssertEqual(2, (int)body["pageCount"], "page count comes from exact PDF");
+                AssertEqual(ResourceCoverageKinds.CharacterRange, (string)body["coverage"]["kind"],
+                    "text offset is scoped to page");
+                AssertEqual("pdf-page:1", (string)body["coverage"]["address"], "character coordinates name page");
+                AssertEqual(ResourceCoverageKinds.PageRange, (string)body["sourceCoverage"]["kind"],
+                    "source coverage names original page");
+                AssertTrue((bool)body["selectionComplete"] && !(bool)body["complete"] &&
+                    !(bool)body["sourceComplete"], "full extracted page is not whole PDF or visual completeness");
+                AssertEqual(ResourceCoverageKinds.PageRange,
+                    selected.ResourceEvidence.Single().ReadMetadata.RequestedCoverage.Kind,
+                    "page intent is retained separately from selected characters");
+                var exact = ChatResourceUri.CreateArtifactRevision(session, artifact);
+                var scope = authority.Scope(session, false);
+                AssertTrue(authorityStore.GetView(scope, exact, PdfAttachmentTextExtractor.PageViewProfile + ":1:0:" +
+                    ((string)body["text"]).Length) != null &&
+                    authorityStore.GetView(scope, exact, "text") == null,
+                    "page extract is retained separately from flattened document text");
+                var visible = ModelResultProjection.ProjectResourceData(ResourceToolCatalog.ReadToolId, body);
+                AssertEqual(1, (int)visible["pageIndex"], "final model projection keeps page selector");
+                var candidate = gateway.Find(session, "pages.pdf", "all").Items
+                    .Single(item => item.Target == target);
+                AssertContains(candidate.Usage, "pageIndex", "PDF candidate explains exact page text selector");
+                var bounded = gateway.Read(session, new ResourceReadRequest {
+                    Reference = exact, Representation = ResourceRepresentations.Text,
+                    PageIndex = 1, PageStartChar = 0, PageCharCount = 4
+                }).Result;
+                AssertTrue(ResourceReadProjection.FromPdfPage(bounded, target, "attachment", "conversation",
+                    1, 0, 4, false).SelectionComplete == false,
+                    "automatic first page window does not claim the whole page");
+                var text = (string)body["text"];
+                var window = read(new Dictionary<string, object> {
+                    ["target"] = target, ["representation"] = "text", ["pageIndex"] = 1,
+                    ["startChar"] = 5, ["charCount"] = 4 });
+                var fragment = JObject.Parse(window.Result.DataJson);
+                AssertEqual(text.Substring(5, 4), (string)fragment["text"], "page character window is exact");
+                AssertEqual(5, (int)fragment["coverage"]["start"], "window starts at requested page offset");
+                AssertTrue((bool)fragment["selectionComplete"] && !(bool)fragment["complete"],
+                    "window completion never claims whole page");
+                AssertTrue(fragment["sourceCoverage"] == null &&
+                    window.ResourceEvidence.Single().ReadMetadata.RequestedCoverage.Kind == ResourceCoverageKinds.CharacterRange,
+                    "partial page window reports only its exact requested character range");
+                var schema = JObject.Parse(ResourceReadToolHandler.Descriptor.ParametersJson);
+                string schemaError;
+                AssertTrue(ToolSchemaSupport.ValidateArguments(new JObject {
+                    ["target"] = target, ["representation"] = "text", ["pageIndex"] = 1,
+                    ["startChar"] = 5, ["charCount"] = 4
+                }, schema, false, out schemaError), "schema accepts page window");
+                AssertTrue(!ToolSchemaSupport.ValidateArguments(new JObject {
+                    ["target"] = target, ["representation"] = "text", ["pageIndex"] = 1,
+                    ["startChar"] = 5
+                }, schema, false, out schemaError), "schema rejects incomplete page window");
+                var outside = read(new Dictionary<string, object> {
+                    ["target"] = target, ["representation"] = "text", ["pageIndex"] = 2 });
+                AssertTrue(outside.Result.Status != ToolResultStatus.Ok,
+                    "out-of-bounds page fails explicitly");
+                readBytes = new byte[] { 1, 2, 3 };
+                var changed = read(new Dictionary<string, object> {
+                    ["target"] = target, ["representation"] = "text", ["pageIndex"] = 0 });
+                AssertTrue(changed.Result.Status != ToolResultStatus.Ok,
+                    "mismatched original bytes cannot produce page evidence");
+            });
+        }
+
+        private static void ResourceWorkspacePdfPageTextUsesSharedSelector()
+        {
+            WithTempPaths(paths =>
+            {
+                var builder = new PdfDocumentBuilder();
+                var font = builder.AddStandard14Font(Standard14Font.Helvetica);
+                builder.AddPage(300, 300).AddText("workspace first", 12, new PdfPoint(20, 250), font);
+                builder.AddPage(300, 300).AddText("workspace second" + new string('x', 1200),
+                    12, new PdfPoint(20, 250), font);
+                var workspace = new WorkspaceStore(paths).Open(System.IO.Path.Combine(paths.Root, "pdf-workspace"));
+                System.IO.File.WriteAllBytes(System.IO.Path.Combine(workspace.RootPath, "pages.pdf"), builder.Build());
+                var provider = new WorkspaceFileResourceProvider(new WorkspaceFileService(paths), workspace);
+                var observed = new Dictionary<string, ResourceEvidence>();
+                var handler = new WorkspaceResourceHandler(provider, null, () => null, observed, false, null, 1000);
+                var execution = new ToolRuntimeFixture().Context(toolId: ResourceToolCatalog.ReadToolId);
+                var read = handler.ExecuteAsync(new ToolHandlerContext(execution,
+                    new Dictionary<string, object> { ["target"] = "pages.pdf", ["representation"] = "text",
+                        ["pageIndex"] = 1, ["startChar"] = 10, ["charCount"] = 6 }),
+                    System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+                AssertEqual(ToolResultStatus.Ok, read.Result.Status, "workspace page selection succeeds");
+                var body = JObject.Parse(read.Result.DataJson);
+                AssertEqual("second", (string)body["text"], "workspace page window uses exact page text");
+                AssertEqual(1, (int)body["pageIndex"], "workspace page index reaches model");
+                AssertEqual(2, (int)body["pageCount"], "workspace page count reaches model");
+                AssertEqual("pdf-page:1", (string)body["coverage"]["address"],
+                    "workspace character window is page-local");
+                AssertTrue(body["sourceCoverage"] == null,
+                    "partial page window does not claim a complete page range");
+                AssertTrue((bool)body["selectionComplete"] && !(bool)body["complete"] &&
+                    !(bool)body["sourceComplete"], "workspace page evidence remains partial");
+                AssertEqual("second", new ChatBlobStore(paths).ReadText(read.ResourceEvidence.Single().Payload.ToBlobReference()),
+                    "workspace page window has exact retained bytes");
+                AssertEqual(ResourceCoverageKinds.CharacterRange, observed["pages.pdf"].Coverage.Kind,
+                    "workspace observation never claims whole PDF");
+                var automatic = handler.ExecuteAsync(new ToolHandlerContext(execution,
+                    new Dictionary<string, object> { ["target"] = "pages.pdf", ["representation"] = "text",
+                        ["pageIndex"] = 1 }), System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+                var firstWindow = JObject.Parse(automatic.Result.DataJson);
+                AssertEqual(1000, (int)firstWindow["returnedCharacters"],
+                    "automatic page read respects model context window");
+                AssertTrue(!(bool)firstWindow["selectionComplete"] &&
+                    (int)firstWindow["totalCharacters"] > 1000 &&
+                    !(bool)firstWindow["complete"] && firstWindow["sourceCoverage"] == null,
+                    "incomplete automatic page read exposes continuation bounds");
+                var find = new WorkspaceResourceHandler(provider, null, () => null, observed, true, null, 1000);
+                var found = find.ExecuteAsync(new ToolHandlerContext(
+                    new ToolRuntimeFixture().Context(toolId: ResourceToolCatalog.FindToolId),
+                    new Dictionary<string, object> { ["query"] = "pages.pdf" }),
+                    System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+                AssertContains((string)JObject.Parse(found.Result.DataJson)["items"][0]["usage"],
+                    "pageIndex", "workspace discovery explains PDF selector");
+                var ports = typeof(WorkspaceConversationService).GetNestedType("WorkspacePorts",
+                    System.Reflection.BindingFlags.NonPublic);
+                var schema = JObject.Parse((string)ports.GetMethod("ResourceSchema",
+                    System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)
+                    .Invoke(null, new object[] { false, true, true, 1000 }));
+                string error;
+                AssertTrue(ToolSchemaSupport.ValidateArguments(new JObject {
+                    ["target"] = "pages.pdf", ["representation"] = "text", ["pageIndex"] = 1,
+                    ["startChar"] = 10, ["charCount"] = 6
+                }, schema, false, out error), "CLI file schema accepts PDF page window");
+                AssertTrue(ToolSchemaSupport.ValidateArguments(new JObject {
+                    ["type"] = "office", ["target"] = "attachment: pages.pdf",
+                    ["representation"] = "text", ["pageIndex"] = 1
+                }, schema, false, out error), "CLI Office binding accepts PDF page selector");
+                AssertTrue(!ToolSchemaSupport.ValidateArguments(new JObject {
+                    ["target"] = "pages.pdf", ["representation"] = "text", ["pageIndex"] = 1,
+                    ["startChar"] = 10
+                }, schema, false, out error), "CLI schema rejects incomplete PDF page window");
+                var outside = handler.ExecuteAsync(new ToolHandlerContext(execution,
+                    new Dictionary<string, object> { ["target"] = "pages.pdf", ["representation"] = "text",
+                        ["pageIndex"] = 2 }), System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+                AssertTrue(outside.Result.Status != ToolResultStatus.Ok, "workspace invalid page fails explicitly");
+            });
+        }
+
         private static void ResourceBinaryLeaseUsesCanonicalViews()
         {
             WithTempPaths(paths =>

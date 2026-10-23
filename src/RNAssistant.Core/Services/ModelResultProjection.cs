@@ -195,7 +195,7 @@ namespace RNAssistant.Core.Services
                 ? SelectFields(data, "target", "query", "matches", "totalMatches", "scanComplete", "sourceComplete", "code", "retryable")
                 : name == "common.resources_outline"
                 ? SelectFields(data, "target", "partCount", "totalLines", "nextPart", "sourceComplete", "symbolLanguage", "symbolsComplete", "parts", "code", "retryable")
-                : SelectFields(data, "version", "historical", "startLine", "requestedLines", "startChar", "requestedCharacters", "requestedOffset", "requestedRows", "selectionComplete", "section", "procedure", "partNumber", "partCount", "kind", "target", "type", "scope",
+                : SelectFields(data, "version", "historical", "startLine", "requestedLines", "startChar", "requestedCharacters", "requestedOffset", "requestedRows", "selectionComplete", "section", "procedure", "partNumber", "partCount", "pageIndex", "pageCount", "kind", "target", "type", "scope",
                     "representation", "text", "table", "tree", "coverage", "sourceCoverage", "sourceEndChar", "sourceTotalLines",
                     "returnedCharacters", "totalCharacters", "complete", "sourceComplete",
                     "rawContentIncluded", "references", "claims", "claimsUnavailable", "usage", "code", "retryable");

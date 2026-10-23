@@ -81,6 +81,8 @@ namespace RNAssistant.Core.Models
         [JsonProperty("procedure", NullValueHandling = NullValueHandling.Ignore)] public ResourceProcedureSelection Procedure { get; set; }
         [JsonProperty("partNumber", NullValueHandling = NullValueHandling.Ignore)] public int? PartNumber { get; set; }
         [JsonProperty("partCount", NullValueHandling = NullValueHandling.Ignore)] public int? PartCount { get; set; }
+        [JsonProperty("pageIndex", NullValueHandling = NullValueHandling.Ignore)] public int? PageIndex { get; set; }
+        [JsonProperty("pageCount", NullValueHandling = NullValueHandling.Ignore)] public int? PageCount { get; set; }
         [JsonProperty("kind")] public string Kind { get; set; } = "resource-read";
         [JsonProperty("target")] public string Target { get; set; }
         [JsonProperty("snapshotTarget", NullValueHandling = NullValueHandling.Ignore)] public string SnapshotTarget { get; set; }
@@ -214,6 +216,41 @@ namespace RNAssistant.Core.Models
             projection.StartChar = startChar;
             projection.RequestedCharacters = requestedCharacters;
             projection.SelectionComplete = true;
+            return projection;
+        }
+
+        public static ResourceReadProjection FromPdfPage(ResourceReadResult result, string target,
+            string type, string scope, int pageIndex, int startChar, int requestedCharacters,
+            bool explicitWindow)
+        {
+            if (pageIndex < 0 || startChar < 0 || requestedCharacters < 1 ||
+                result?.Resource?.Reference?.IsExact != true ||
+                result.Representation != ResourceRepresentations.Text || result.Complete ||
+                result.SourceComplete != false || result.Text == null ||
+                result.PageIndex != pageIndex || !result.PageCount.HasValue ||
+                result.PageCount.Value <= pageIndex ||
+                (startChar == 0 && result.Coverage?.End == result.TotalCharacters
+                    ? result.SourceCoverage?.Kind != ResourceCoverageKinds.PageRange ||
+                      result.SourceCoverage.Start != pageIndex ||
+                      result.SourceCoverage.End != (long)pageIndex + 1
+                    : result.SourceCoverage != null) ||
+                result.Coverage?.Kind != ResourceCoverageKinds.CharacterRange ||
+                result.Coverage.Address != "pdf-page:" + pageIndex.ToString(System.Globalization.CultureInfo.InvariantCulture) ||
+                result.Coverage.Start != startChar ||
+                result.Coverage.End != System.Math.Min((long)result.TotalCharacters,
+                    (long)startChar + requestedCharacters) ||
+                result.Offset != startChar || result.TotalCharacters < startChar ||
+                result.ReturnedCharacters != result.Text.Length ||
+                result.ReturnedCharacters != result.Coverage.End - result.Coverage.Start)
+                throw new System.InvalidOperationException("A PDF page requires exact text from the selected original page and character window.");
+            var projection = From(result, target, type, scope);
+            projection.PageIndex = pageIndex;
+            projection.PageCount = result.PageCount;
+            projection.SourceCoverage = result.SourceCoverage;
+            projection.StartChar = startChar;
+            projection.RequestedCharacters = requestedCharacters;
+            projection.SelectionComplete = explicitWindow || startChar == 0 &&
+                result.ReturnedCharacters == result.TotalCharacters;
             return projection;
         }
 

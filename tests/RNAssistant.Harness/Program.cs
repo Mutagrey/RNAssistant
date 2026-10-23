@@ -1006,6 +1006,8 @@ namespace RNAssistant.Harness
                 Test("resource cutover: runtime payload storage and exact hydration", ResourceRuntimePayloadStorage),
                 Test("resource cutover: unpublished revision retention roots", ResourceUnpublishedRevisionRetention),
                 Test("resource cutover: canonical binary data plane", ResourceBinaryLeaseUsesCanonicalViews),
+                Test("resource context: exact PDF page text", ResourcePdfPageTextUsesExactOriginal),
+                Test("resource context: workspace PDF page text", ResourceWorkspacePdfPageTextUsesSharedSelector),
                 Test("resource cutover: binary capabilities and retained bounds", ResourceBinaryCapabilitiesAndRetainedBounds),
                 Test("resource cutover: binary metadata unavailable without recapture", ResourceBinaryMetadataUnavailable),
                 Test("resource cutover: raw original bytes", ResourceRawOriginalBytes),

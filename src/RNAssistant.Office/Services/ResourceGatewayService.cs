@@ -268,6 +268,14 @@ namespace RNAssistant.Office.Services
                     ? "Live VBA modules have no indexed parts. Omit partNumber; read representation=source, then use startLine/lineCount and sourceTotalLines for further excerpts."
                     : "Part reads require a positive partNumber on an indexed text/source artifact.",
                     "resource_part_unsupported", false);
+            if (request.PageIndex.HasValue && (!(provider is ChatArtifactResourceProvider) ||
+                request.PageIndex.Value < 0 || request.Representation != ResourceRepresentations.Text ||
+                request.PageStartChar < 0 || request.PageCharCount < 1 || request.Section != null ||
+                request.PartNumber.HasValue || !string.IsNullOrEmpty(request.Cursor) || request.ViewPath != null ||
+                request.Fields != null || request.RowOffset != 0 || request.MaxRows != 0) ||
+                !request.PageIndex.HasValue && (request.PageStartChar != 0 || request.PageCharCount != 0))
+                throw new ResourceRequestException("PDF page text requires pageIndex and a bounded character window on an attachment text view.",
+                    "resource_page_selector_invalid", false);
             var outlook = provider as LiveDocumentResourceProvider;
             if (outlook?.IsOutlookAttachment(request.Reference.Uri) == true)
                 return ReadOutlookAttachment(session, request, outlook);
@@ -287,7 +295,8 @@ namespace RNAssistant.Office.Services
                     Section = request.Section,
                     Representation = request.Representation, Cursor = request.Cursor, MaxChars = request.MaxChars,
                     MaxRows = request.MaxRows, RowOffset = request.RowOffset, ViewPath = request.ViewPath, Fields = request.Fields,
-                    PartNumber = request.PartNumber };
+                    PartNumber = request.PartNumber, PageIndex = request.PageIndex,
+                    PageStartChar = request.PageStartChar, PageCharCount = request.PageCharCount };
             }
             if (IsBinaryView(request.Representation)) return ReadBinaryView(session, request);
             var retained = _authority == null || request.PartNumber.HasValue ? null : _authority.ReadRetained(session, request, live);

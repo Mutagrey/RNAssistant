@@ -123,6 +123,12 @@ namespace RNAssistant.Core.Models
         public string Section { get; set; }
         [Newtonsoft.Json.JsonIgnore]
         public int? PartNumber { get; set; }
+        [Newtonsoft.Json.JsonIgnore]
+        public int? PageIndex { get; set; }
+        [Newtonsoft.Json.JsonIgnore]
+        public int PageStartChar { get; set; }
+        [Newtonsoft.Json.JsonIgnore]
+        public int PageCharCount { get; set; }
         public const int MinimumCharacters = 128;
         public const int DefaultCharacters = 2048;
         public const int MaximumCharacters = 32000;
@@ -157,6 +163,8 @@ namespace RNAssistant.Core.Models
         public PayloadRef CompleteViewPayload { get; set; }
         [Newtonsoft.Json.JsonIgnore]
         public IReadOnlyList<PayloadRef> CompleteViewParts { get; set; }
+        [Newtonsoft.Json.JsonIgnore]
+        public string RetainedViewKey { get; set; }
         [Newtonsoft.Json.JsonProperty("resource")]
         public ResourceDescriptor Resource { get; set; }
         [Newtonsoft.Json.JsonProperty("representation")]
@@ -193,6 +201,10 @@ namespace RNAssistant.Core.Models
         public int? PartNumber { get; set; }
         [Newtonsoft.Json.JsonIgnore]
         public int? PartCount { get; set; }
+        [Newtonsoft.Json.JsonIgnore]
+        public int? PageIndex { get; set; }
+        [Newtonsoft.Json.JsonIgnore]
+        public int? PageCount { get; set; }
         [Newtonsoft.Json.JsonProperty("returnedCharacters")]
         public int ReturnedCharacters { get; set; }
         [Newtonsoft.Json.JsonProperty("totalCharacters")]
