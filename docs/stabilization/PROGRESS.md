@@ -1,5 +1,15 @@
 # Stabilization progress
 
+## Unified Shell application input identity on replay — 2026-10-23
+
+Owner: Core `ConversationInputJournal`. Office inbox recovery and workspace/CLI
+receipt lookup now reject operation-ID collisions and changed immutable input
+identity in the same append-only event stream. The workspace-local duplicate
+identity scan is removed. Nine inbox Harness cases and the CLI application-request
+smoke pass host-neutral, including a forged collision and crash/retry receipts.
+Full accepted-input and context-preparation parity remain open; Windows/Office/
+WebView2 are not qualified.
+
 ## Unified Shell application/resource parity: Office read descriptor — 2026-10-23
 
 Owner: Core resource-read schema. Direct Office and workspace/CLI `type=office`

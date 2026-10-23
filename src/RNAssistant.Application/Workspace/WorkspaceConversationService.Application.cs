@@ -156,9 +156,7 @@ namespace RNAssistant.Runtime
             var first = records[0];
             var input = first.Change.Input;
             if (input.Revision != 1 || string.IsNullOrEmpty(input.AcceptedRunId) ||
-                string.IsNullOrEmpty(input.RequestFingerprint) || records.Any(item =>
-                    item.Change.Input.Id != input.Id || item.Change.Input.AcceptedRunId != input.AcceptedRunId ||
-                    item.Change.Input.RequestFingerprint != input.RequestFingerprint))
+                string.IsNullOrEmpty(input.RequestFingerprint))
                 throw new InvalidOperationException("The accepted input receipt is unavailable; inspect the session without replaying input.");
             ConversationInputJournal.RequireSameRequest(input, fingerprint);
             return Receipt(first.Event, input, records[records.Length - 1].Change.Input.Status == ConversationInputStatus.Applied);

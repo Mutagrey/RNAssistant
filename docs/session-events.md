@@ -568,7 +568,10 @@ Only the run owner projects consumed user messages. A claim precedes delivery;
 `applied` follows durable user-message persistence. After interruption, explicit
 resume reconciles claimed IDs against persisted messages and never reruns an already
 recorded input. Restart pauses retained input independently of the last saved pause
-flag. Missing CAS input bodies fail explicitly. Old event streams need no backfill;
+flag. Replay rejects one operation ID assigned to multiple inputs or changes to an
+input's immutable request fingerprint, run/question IDs or runtime target across
+transitions; neither Office nor workspace may acknowledge that history as accepted.
+Missing CAS input bodies fail explicitly. Old event streams need no backfill;
 absence of input events means an empty queue.
 
 ### Application input receipts and event reconnect

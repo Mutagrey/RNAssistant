@@ -29,7 +29,7 @@ namespace RNAssistant.Core.Services
 
         public IReadOnlyList<ConversationInputRecord> Read(ChatSession session, bool includeText = true)
         {
-            return _events.Read(session, SessionEventReadMode.RequireComplete)
+            var records = _events.Read(session, SessionEventReadMode.RequireComplete)
                 .Where(fact => fact.Type == SessionEventTypes.ConversationInputChanged).Select(fact =>
                 {
                     var change = fact.Data.ToObject<ConversationInputEvent>();
@@ -39,6 +39,40 @@ namespace RNAssistant.Core.Services
                             throw new InvalidOperationException("Conversation input body is missing.");
                     return new ConversationInputRecord(fact, change);
                 }).ToArray();
+            RequireStableIdentity(records);
+            return records;
+        }
+
+        private static void RequireStableIdentity(IEnumerable<ConversationInputRecord> records)
+        {
+            var byId = new Dictionary<string, ConversationInput>(StringComparer.Ordinal);
+            var byOperation = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var record in records)
+            {
+                var input = record.Change.Input;
+                if (input == null) continue;
+                if (string.IsNullOrWhiteSpace(input.Id) || string.IsNullOrWhiteSpace(input.OperationId))
+                    throw new InvalidOperationException("Accepted input identity is incomplete; inspect the conversation without replaying input.");
+                ConversationInput prior;
+                if (byId.TryGetValue(input.Id, out prior))
+                {
+                    if (prior.OperationId != input.OperationId ||
+                        prior.RequestFingerprint != input.RequestFingerprint ||
+                        prior.AcceptedRunId != input.AcceptedRunId ||
+                        prior.AnswerRunId != input.AnswerRunId ||
+                        prior.QuestionSetId != input.QuestionSetId ||
+                        prior.DocumentRuntimeKey != input.DocumentRuntimeKey)
+                        throw new InvalidOperationException("Accepted input identity changed; inspect the conversation without replaying input.");
+                }
+                else byId.Add(input.Id, input);
+                string priorId;
+                if (byOperation.TryGetValue(input.OperationId, out priorId))
+                {
+                    if (priorId != input.Id)
+                        throw new InvalidOperationException("An operation ID belongs to multiple inputs; inspect the conversation without replaying input.");
+                }
+                else byOperation.Add(input.OperationId, input.Id);
+            }
         }
 
         public SessionEvent Append(ChatSession session, ConversationInputEvent change)

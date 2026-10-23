@@ -159,6 +159,15 @@ namespace RNAssistant.Harness
                     "replay retains the original request fingerprint across edits");
                 recovered.Resume(session);
                 AssertEqual("edited", recovered.TakeNext(session, false).Text, "edit survives replay");
+                var shadow = InboxInput("shadow", "second", InputDelivery.Queue);
+                shadow.OperationId = "b";
+                shadow.RequestFingerprint = InboxInput("b", "second", InputDelivery.Queue).RequestFingerprint;
+                shadow.Revision = 1;
+                new ConversationInputJournal(events).Append(session, new ConversationInputEvent { Input = shadow });
+                var ambiguous = false;
+                try { new ConversationInboxService(events).FindOperation(session, "b", shadow.RequestFingerprint); }
+                catch (InvalidOperationException) { ambiguous = true; }
+                AssertTrue(ambiguous, "replay refuses one operation ID assigned to two inputs");
             });
         }
         private static void InboxSharedLifetimeAndRecovery()
