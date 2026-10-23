@@ -1,5 +1,21 @@
 # Stabilization progress
 
+## Unified Shell shared workspace view (1b project/plugin slice) — 2026-10-23
+
+Owner: application/chat UI. Project and Plugin now mount the same transcript,
+composer, status, approval and question DOM. The plugin-specific form and message
+list were removed; both surfaces keep their own navigation and workspace actions.
+Background updates cannot write into the other surface's mounted chat, and source
+history remains available during a run. The current view still uses the project
+DOM IDs through a temporary plugin adapter recorded in
+[MIGRATION_MAP](MIGRATION_MAP.md). Office retains its richer, separate ChatView;
+full 1b consolidation, host-recreation draft recovery and later shell work remain open.
+
+Chrome checks pass for shared draft/mount, workspace layout and history navigation,
+plugin preview, product mock and Office input delivery. The screenshots were
+visually reviewed. This is browser evidence only; Windows/Office/WebView2 remain
+unqualified.
+
 ## Resource Context read-time descriptor in Inspector — 2026-10-23
 
 Owner: shared resource-read evidence and Model Context Inspector. Accepted Office
@@ -32,9 +48,10 @@ version, so later input survives even when its text matches the sent text.
 The focused `workspace-shared-draft.test.js` passes in Chrome with the actual
 mock UI: cross-screen state, file link, failed retry ID, double submit and late
 acknowledgement. `chat-input-delivery.test.js` passes for the Office inbox.
-The existing `workspace-chat-layout.test.js` history-control mismatch remains
-open in [BACKLOG](BACKLOG.md); Windows/Office/WebView2 are unqualified. Draft
-recovery after host recreation and the full common ChatView are later gates.
+The former `workspace-chat-layout.test.js` history-control mismatch is resolved in
+the project/plugin view slice above. Draft recovery after host recreation and the
+Office/common ChatView cutover remain later gates. Windows/Office/WebView2 are
+unqualified.
 The original user plans are preserved in [docs/proposals](../proposals/RNAssistant_Unified_Shell_Plan.md).
 
 ## Unified Shell / Visual Annotator Phase 0 — 2026-10-23

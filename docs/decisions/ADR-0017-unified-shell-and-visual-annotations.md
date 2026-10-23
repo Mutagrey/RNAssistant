@@ -190,5 +190,7 @@ runtime или блокировки конкретного исправлени�
 Project и Plugin теперь читают одно состояние по `workspaceId/sessionId` в
 существующем `state.chatDrafts`. Browser-проверка охватывает общий текст,
 mode/reasoning, файловую ссылку, retry с тем же request ID, двойной submit и
-поздний acknowledgement. Следующий шаг — 1b; оставшиеся этапы выполняются
+поздний acknowledgement. Первый срез 1b перенёс Project и Plugin на один
+физический workspace transcript/composer; Office ChatView, owner-neutral
+selectors и остальная часть 1b ещё открыты. Остальные этапы выполняются
 последовательно по своим gates. Текущее evidence — в [PROGRESS](../stabilization/PROGRESS.md).

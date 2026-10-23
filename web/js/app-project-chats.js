@@ -3,7 +3,9 @@
   var scope = "office", catalog = null, active = null, busy = false, serial = 0, poll = null, pendingSend = null, stopTitleWatch = null;
   var composer = null, uploadingFiles = false;
   var selectedWorkspaceId = null, expanded = {}, query = "", connectionMode = "connect";
+  var noticeText = "", noticeError = false, fileNotice = null;
   function el(id) { return document.getElementById("projectChat" + id); }
+  function ownsView() { return window.RNAssistantWorkspaceChat.owner() === "project"; }
   function node(tag, className, text) {
     var result = document.createElement(tag);
     result.className = className || "";
@@ -17,11 +19,15 @@
   function field(value, lower, upper) { return value && (value[lower] !== undefined ? value[lower] : value[upper]); }
   function runState() { return active && active.state; }
   function notice(text, error) {
-    el("Notice").textContent = text || "";
-    el("Notice").dataset.error = error ? "true" : "false";
+    noticeText = text || ""; noticeError = !!error;
+    if (!ownsView()) return;
+    el("Notice").textContent = noticeText;
+    el("Notice").dataset.error = noticeError ? "true" : "false";
   }
   function fileStatus(target, message, error) {
     if (projectId() !== target.workspaceId || currentId() !== target.sessionId) return;
+    fileNotice = { target: target, message: message || "", error: !!error };
+    if (!ownsView()) return;
     var box = el("FileStatus");
     box.textContent = message || ""; box.hidden = !message;
     box.classList.toggle("is-error", !!error);
@@ -143,6 +149,12 @@
     });
   }
   function render() {
+    el("New").disabled = busy || !project() || !project().available;
+    el("Connect").disabled = busy;
+    el("Create").disabled = busy;
+    el("ConnectionSubmit").disabled = busy;
+    renderTree();
+    if (!ownsView()) return;
     if (composer) {
       composer.select({ workspaceId: projectId(), sessionId: currentId() }, active && active.state);
       composer.lock(busy || uploadingFiles || !active || !!active.pendingId || field(runState(), "status", "Status") === "running");
@@ -150,12 +162,11 @@
 
     el("Context").textContent = project() ? "Проекты / " + project().name : "Проект не выбран";
     el("Title").textContent = active && active.state ? field(active.state, "title", "Title") : "Чат проекта";
-    el("New").disabled = busy || !project() || !project().available;
-    el("Connect").disabled = busy;
-    el("Create").disabled = busy;
-    el("ConnectionSubmit").disabled = busy;
     el("Send").disabled = busy || uploadingFiles || !project() || !project().available || !active || !el("Input").value.trim() || !!(active && active.pendingId) || field(runState(), "status", "Status") === "running";
-    el("FileStatus").hidden = el("FileStatus").dataset.session !== currentId() || !el("FileStatus").textContent;
+    var visibleFile = fileNotice && fileNotice.target.workspaceId === projectId() && fileNotice.target.sessionId === currentId();
+    el("FileStatus").textContent = visibleFile ? fileNotice.message : "";
+    el("FileStatus").classList.toggle("is-error", !!(visibleFile && fileNotice.error));
+    el("FileStatus").hidden = !visibleFile || !fileNotice.message;
     el("Stop").hidden = !(active && active.state && field(active.state, "status", "Status") === "running");
     el("Control").hidden = !(active && active.pendingId);
     el("Pending").textContent = active && active.pendingId ? (active.pendingTool || "Действие") + "\n" + (active.pendingArguments || "") : "";
@@ -186,7 +197,7 @@
       }));
     } else window.RNAssistantWorkspaceChat.renderMessages(messages, active);
     if (!busy && statusText()) notice(statusText());
-    renderTree();
+    else notice(noticeText, noticeError);
   }
   async function refresh(target) {
     var version = ++serial, result;
@@ -313,6 +324,10 @@
     scope = next; ++serial;
     document.getElementById("chatLayout").hidden = next === "projects";
     el("Layout").hidden = next !== "projects";
+    if (next === "projects") {
+      window.RNAssistantWorkspaceChat.mount("project", el("Layout"));
+      render();
+    }
     document.querySelectorAll(".chat-scope-switcher").forEach(function (picker) { picker.open = false; });
     var loaded;
     if (next === "projects") loaded = refresh(target);
@@ -321,22 +336,26 @@
     return loaded;
   }
   function bind() {
+    window.RNAssistantWorkspaceChat.mount("project", el("Layout"));
     composer = window.RNAssistantWorkspaceChat.bindComposer(el("Form"), {
       fileTarget: function () { return { workspaceId: projectId(), sessionId: currentId() }; },
       onFiles: addProjectFiles
     });
     var dropZone = el("Layout").querySelector(".project-chat-main");
     dropZone.addEventListener("dragover", function (event) {
+      if (!ownsView()) return;
       if (event.dataTransfer && Array.from(event.dataTransfer.types || []).includes("Files")) {
         event.preventDefault(); event.dataTransfer.dropEffect = active && !uploadingFiles ? "copy" : "none";
       }
     });
     dropZone.addEventListener("drop", function (event) {
+      if (!ownsView()) return;
       var files = Array.from(event.dataTransfer && event.dataTransfer.files || []);
       if (files.length) { event.preventDefault(); addProjectFiles(files,
         { workspaceId: projectId(), sessionId: currentId() }); }
     });
     el("Input").addEventListener("paste", function (event) {
+      if (!ownsView()) return;
       var files = Array.from(event.clipboardData && event.clipboardData.files || []);
       if (files.length) { event.preventDefault(); addProjectFiles(files,
         { workspaceId: projectId(), sessionId: currentId() }); }
@@ -370,9 +389,11 @@
       finally { busy = false; render(); }
     });
     el("Input").addEventListener("input", function () {
+      if (!ownsView()) return;
       el("Send").disabled = busy || uploadingFiles || !project() || !project().available || !active || !el("Input").value.trim() || !!active.pendingId || field(runState(), "status", "Status") === "running";
     });
     el("Form").addEventListener("submit", function (event) {
+      if (!ownsView()) return;
       event.preventDefault(); var text = el("Input").value.trim(); if (!text || !active || uploadingFiles) return;
       var pid = projectId(), sid = currentId();
       var preferences = composer.options();
@@ -387,6 +408,7 @@
       }); });
     });
     el("Stop").addEventListener("click", async function () {
+      if (!ownsView()) return;
       var state = runState(), pid = projectId(), sid = currentId();
       if (!state || !pid || !sid) return;
       el("Stop").disabled = true;
@@ -402,12 +424,13 @@
       finally { el("Stop").disabled = false; }
     });
     [["Approve", true], ["Reject", false]].forEach(function (entry) { el(entry[0]).addEventListener("click", function () {
+      if (!ownsView()) return;
       var pendingId = active && active.pendingId;
       if (pendingId) runChat(function (pid, sid) { return send("resolveProjectChat", { workspaceId: pid, sessionId: sid, pendingId: pendingId, approve: entry[1] }); });
     }); });
     render();
   }
   document.addEventListener("DOMContentLoaded", bind);
-  window.RNAssistantProjectChats = { show: function () { if (scope === "projects") refresh(); }, scope: function () { return scope; }, setScope: setScope,
+  window.RNAssistantProjectChats = { show: function () { if (scope === "projects") { window.RNAssistantWorkspaceChat.mount("project", el("Layout")); render(); refresh(); } }, scope: function () { return scope; }, setScope: setScope,
     open: function (workspaceId, sessionId) { switchTab("chat"); return setScope("projects", { workspaceId: workspaceId, sessionId: sessionId }); } };
 }());

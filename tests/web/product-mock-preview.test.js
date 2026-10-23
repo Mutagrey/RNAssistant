@@ -511,7 +511,7 @@ async function serve() {
     const drawnIcons = await normal.evaluate(() => send('getPluginIcons', {}));
     assert.equal(drawnIcons.items.length, 1, 'preview saves a simulated drawing immediately');
     await normal.locator('#pluginCreateSubmit').click();
-    await normal.locator('#pluginChatMessages .message.assistant').getByText('Изменение исходников смоделировано в preview. Файлы плагина не менялись.', { exact: true }).waitFor();
+    await normal.locator('#projectChatMessages .message.assistant').getByText('Изменение исходников смоделировано в preview. Файлы плагина не менялись.', { exact: true }).waitFor();
     assert.match(await normal.locator('#pluginSource').textContent(), /plugin-workspaces[\\/]Сводка продаж-/, 'preview uses the default source folder');
     await normal.locator('#pluginPreview').click();
     await normal.frameLocator('#pluginPreviewMount iframe').getByRole('heading', { name: 'Сводка продаж' }).waitFor();

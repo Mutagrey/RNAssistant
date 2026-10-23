@@ -109,15 +109,6 @@ Owner: Harness / conversation-response schema and artifact ingestion tests.
 Согласовать обе проверки с текущими контрактами отдельно, не менять
 resource-read поведение ради устаревших ожиданий.
 
-## История source-чата во время выполнения — 2026-10-21
-
-Owner: `web/js/app-plugins.js` и `tests/web/workspace-chat-layout.test.js`.
-Тест дважды отдельно остановился на открытии истории второго чата во время
-незавершённого run: `#pluginChatHistory` отключён правилом `chatBusy`, а тест
-ожидает переключения и проверки изоляции позднего ответа. Согласовать поведение
-навигации во время run и тест в отдельной правке; сценарии загрузки файлов
-проектного чата проходят в `product-mock-preview.test.js`.
-
 ## Чтение нетекстовых файлов проектным чатом — 2026-10-21
 
 Owner: workspace resource provider и conversation input. Проектный чат теперь
@@ -181,16 +172,15 @@ Owner: `tests/web/skills-contract.test.js`. Выборочный запуск п
 
 ## UI fixtures настроек модели — 2026-10-20
 
-Owner: web tests / model settings UI. В текущем рабочем дереве `plugins.test.js`
-останавливается до сценариев плагина: подпись общего меню настроек теперь содержит
-статус модели (`Настройки—`), а assertion ожидает только `Настройки`.
+Owner: web tests / model settings UI. `plugins.test.js` проходит на текущем
+срезе; ранее зафиксированный сбой подписи настроек больше не воспроизводится.
 `chat-composer-layout.test.js` проходит начальные проверки composer, затем fixture
 настроек не предоставляет `formModel`, используемый `renderContextWindowSummary`.
 `prompt-review.test.js` также останавливается до проверок редактора: fixture не
 предоставляет `renderModelCapabilityList` для `app-settings.js`.
 Согласовать fixtures с текущим UI настроек отдельной правкой. Адресные
 `splitter-preferences.test.js` и `product-shell-parity.test.js` проходили;
-текущий сбой `workspace-chat-layout.test.js` записан выше. Это не результат
+прежний сбой `workspace-chat-layout.test.js` закрыт срезом 1b. Это не результат
 полного web suite.
 
 ## CLI smoke fixtures lag current admission contracts — 2026-10-14

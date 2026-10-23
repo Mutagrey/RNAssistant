@@ -1,6 +1,30 @@
 (function () {
   "use strict";
   var selectedSessions = new Map();
+  var activeOwner = "project", sharedComposer = null;
+  function mount(owner, container) {
+    var view = document.getElementById("workspaceChatView");
+    if (!view || !container || (owner !== "project" && owner !== "plugin")) return;
+    if (view.parentNode !== container) container.appendChild(view);
+    activeOwner = owner;
+    var plugin = owner === "plugin";
+    view.dataset.owner = owner;
+    view.classList.toggle("chat-main", !plugin);
+    view.classList.toggle("plugin-workspace-chat-view", plugin);
+    view.querySelector(".workspace-chat-head").classList.toggle("plugin-chat-head", plugin);
+    ["projectChatTitleBlock", "projectChatContextNote"].forEach(function (id) {
+      document.getElementById(id).hidden = plugin;
+    });
+    ["pluginChatTitle", "pluginDevelopmentActions", "pluginChatSource"].forEach(function (id) {
+      document.getElementById(id).hidden = !plugin;
+    });
+    if (plugin) document.getElementById("projectChatFileStatus").hidden = true;
+    var input = document.getElementById("projectChatInput");
+    input.placeholder = plugin ? "Опишите изменение плагина" : "Спросите о проекте…";
+    input.setAttribute("aria-label", plugin ? "Сообщение в чат исходников" : "Сообщение в чат проекта");
+    document.getElementById("projectChatMessages").setAttribute("aria-label", plugin ? "Сообщения чата исходников" : "Сообщения чата проекта");
+    if (sharedComposer) sharedComposer.refresh();
+  }
   function rememberSession(workspaceId, sessionId) {
     if (!workspaceId) return;
     if (sessionId) selectedSessions.set(workspaceId, sessionId); else selectedSessions.delete(workspaceId);
@@ -12,7 +36,7 @@
     node.innerHTML = window.RNAssistantIcons.render(icon); node.onclick = action; return node;
   }
   function renderMessages(list, chat) {
-    var key = chat.sessionId || chat.pluginId || "", changed = list.dataset.session !== key;
+    var key = JSON.stringify([field(field(chat, "project"), "workspaceId") || "", chat.sessionId || chat.pluginId || ""]), changed = list.dataset.session !== key;
     var following = changed || list.scrollHeight - list.scrollTop - list.clientHeight < 64;
     var signature = JSON.stringify(chat.messages || []);
     if (!changed && list._chatSignature === signature) return;
@@ -42,22 +66,26 @@
   }
   function renderQuestions(form, input, submit) {
     var set = field(input, "questionSet");
-    if (!set) { form.hidden = true; form.replaceChildren(); delete form.dataset.questionSet; return; }
+    if (!set) { form.hidden = true; form.replaceChildren(); delete form.dataset.questionSet; delete form._questionFields; delete form._questionSend; return; }
     var key = field(input, "runId") + ":" + set.questionSetId;
-    if (form.dataset.questionSet === key) return;
-    form.dataset.questionSet = key; form.hidden = false; form.classList.add("plan-question-cards"); form.replaceChildren();
-    var fields = set.questions.map(function (question) {
-      var group = document.createElement("fieldset"), legend = document.createElement("legend"); legend.textContent = question.prompt; group.appendChild(legend);
-      var choices = (question.options || []).map(function (option) {
-        var label = document.createElement("label"), choice = document.createElement("input");
-        choice.type = question.selection === "multiple" ? "checkbox" : "radio"; choice.name = question.id; choice.value = option.id;
-        var copy = document.createElement("span"); copy.textContent = option.label;
-        label.append(choice, copy); group.appendChild(label); return choice;
+    if (form.dataset.questionSet !== key) {
+      form.dataset.questionSet = key; form.hidden = false; form.classList.add("plan-question-cards"); form.replaceChildren();
+      form._questionFields = set.questions.map(function (question) {
+        var group = document.createElement("fieldset"), legend = document.createElement("legend"); legend.textContent = question.prompt; group.appendChild(legend);
+        var choices = (question.options || []).map(function (option) {
+          var label = document.createElement("label"), choice = document.createElement("input");
+          choice.type = question.selection === "multiple" ? "checkbox" : "radio"; choice.name = question.id; choice.value = option.id;
+          var copy = document.createElement("span"); copy.textContent = option.label;
+          label.append(choice, copy); group.appendChild(label); return choice;
+        });
+        var free = document.createElement("textarea"); free.rows = 2; free.placeholder = "Ваш ответ"; free.hidden = !question.allowFreeText;
+        group.appendChild(free); form.appendChild(group); return { question: question, choices: choices, free: free };
       });
-      var free = document.createElement("textarea"); free.rows = 2; free.placeholder = "Ваш ответ"; free.hidden = !question.allowFreeText;
-      group.appendChild(free); form.appendChild(group); return { question: question, choices: choices, free: free };
-    });
-    var send = document.createElement("button"); send.type = "submit"; send.className = "agent-action-button primary"; send.textContent = "Ответить"; form.appendChild(send);
+      form._questionSend = document.createElement("button"); form._questionSend.type = "submit";
+      form._questionSend.className = "agent-action-button primary"; form._questionSend.textContent = "Ответить";
+      form.appendChild(form._questionSend);
+    }
+    var fields = form._questionFields, send = form._questionSend;
     form.onsubmit = async function (event) {
       event.preventDefault(); if (send.disabled) return;
       var answers = fields.map(function (item) { return { questionId: item.question.id,
@@ -69,6 +97,7 @@
     };
   }
   function bindComposer(form, options) {
+    if (sharedComposer) { if (options && options.onFiles) sharedComposer.attachFiles(options); return sharedComposer; }
     var input = form.querySelector("textarea"), toolbar = form.querySelector(".composer-toolbar"), actions = form.querySelector(".composer-actions");
     var current = null, loaded = null, mode = "agent", reasoning = false, locked = false;
     var draftStore = window.RNAssistantChatDrafts;
@@ -83,7 +112,7 @@
       if (!note) return;
       var office = field(snapshot, "office"), status = String(field(snapshot, "status") || "").toLowerCase();
       var activeRun = status === "running" || status === "awaitingconfirmation", pinned = office && activeRun;
-      note.hidden = false;
+      note.hidden = activeOwner !== "project";
       note.textContent = pinned ? "Office: " + field(office, "host") + " · " + (field(office, "documentTitle") || "документ") :
         activeRun ? "Office: документ не привязан" : "Office: текущий документ при отправке, если открыт";
       note.title = pinned ? "Документ закреплён за этим запуском, включая подтверждение действий" :
@@ -96,21 +125,25 @@
     var trigger = document.createElement("summary"); trigger.className = "composer-picker-trigger composer-add-trigger";
     trigger.setAttribute("aria-label", "Действия чата"); trigger.title = "Действия чата"; trigger.innerHTML = window.RNAssistantIcons.render("plus");
     var menu = document.createElement("div"); menu.className = "composer-picker-menu composer-add-menu";
-    var fileAction = null, fileInput = null, fileTarget = null;
-    if (options && options.onFiles) {
+    var fileAction = null, fileInput = null, fileTarget = null, fileOptions = null;
+    function attachFiles(nextOptions) {
+      if (!nextOptions || !nextOptions.onFiles) return;
+      fileOptions = nextOptions;
+      if (fileAction) { update(); return; }
       fileAction = document.getElementById("attachFileButton").cloneNode(true); fileAction.removeAttribute("id");
       fileInput = document.createElement("input"); fileInput.type = "file"; fileInput.multiple = true; fileInput.hidden = true;
       fileAction.onclick = function () { if (locked || !current) return;
-        fileTarget = options.fileTarget ? options.fileTarget() : current;
+        fileTarget = fileOptions.fileTarget ? fileOptions.fileTarget() : current;
         picker.open = false; fileInput.click(); };
       fileInput.onchange = function () {
         var files = Array.from(fileInput.files || []), target = fileTarget;
         fileInput.value = "";
-        if (files.length && target) options.onFiles(files, target);
+        if (files.length && target) fileOptions.onFiles(files, target);
       };
       menu.appendChild(fileAction);
       var divider = document.createElement("hr"); menu.appendChild(divider);
       quick.appendChild(fileInput);
+      if (sharedComposer) update();
     }
     var plan = document.getElementById("chatPlanButton").cloneNode(true); plan.removeAttribute("id");
     plan.onclick = function () { if (!locked) { mode = mode === "plan" ? "agent" : "plan"; save(); update(); picker.open = false; } };
@@ -123,7 +156,7 @@
     function update() {
       clear.hidden = !input.value; resizeComposerInput(input);
       plan.classList.toggle("is-selected", mode === "plan"); plan.setAttribute("aria-pressed", String(mode === "plan")); plan.disabled = locked;
-      if (fileAction) fileAction.disabled = locked || !current;
+      if (fileAction) { fileAction.hidden = activeOwner !== "project"; fileAction.disabled = locked || !current || activeOwner !== "project"; }
       think.setAttribute("aria-pressed", String(reasoning)); think.title = reasoning ? "Reasoning включён" : "Reasoning выключен";
       think.setAttribute("aria-label", reasoning ? "Выключить reasoning" : "Включить reasoning"); think.disabled = locked;
       label.textContent = field(state.settings, "model") || "Модель";
@@ -137,8 +170,11 @@
     form.addEventListener("keydown", function (event) { if (event.key === "Escape" && picker.open) { picker.open = false; trigger.focus(); } });
     document.addEventListener("pointerdown", function (event) { if (!picker.contains(event.target)) picker.open = false; });
     window.addEventListener("resize", update);
+    attachFiles(options);
     update();
-    return {
+    sharedComposer = {
+      attachFiles: attachFiles,
+      refresh: update,
       select: function (target, snapshot) {
         showOfficeContext(snapshot);
         var next = target && target.workspaceId && target.sessionId
@@ -179,6 +215,7 @@
         }
       }
     };
+    return sharedComposer;
   }
   function watchTitle(snapshot, read, complete) {
     if (!field(field(snapshot, "state"), "titleGenerationPending")) return function () {};
@@ -198,6 +235,7 @@
     return stop;
   }
   window.RNAssistantWorkspaceChat = { renderMessages: renderMessages, renderQuestions: renderQuestions, bindComposer: bindComposer,
+    mount: mount, owner: function () { return activeOwner; },
     rememberSession: rememberSession, selectedSession: function (workspaceId) { return selectedSessions.get(workspaceId); },
     watchTitle: watchTitle };
 }());

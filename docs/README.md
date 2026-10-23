@@ -78,8 +78,9 @@ Owner — Core ModelProtocol / AgentKernel. Это evidence фазы 0 и пре
 [Visual Annotator](proposals/RNAssistant_Visual_Annotator_Plan.md) подготовлены
 [аудит Unified Shell / Visual Annotator](architecture/visual-annotator-audit.md)
 и [RFC / ADR-0017](decisions/ADR-0017-unified-shell-and-visual-annotations.md).
-Owner — application/chat UI. Фаза 0 завершена, RFC принят, срез 1a общего
-черновика реализован; следующие этапы остаются в RFC. После реализации документы остаются
+Owner — application/chat UI. Фаза 0 завершена, RFC принят; срез 1a общего
+черновика и общий mount проектного/плагинового чата в 1b реализованы. Office
+ChatView и остальные этапы остаются в RFC. После реализации документы остаются
 историей решения; текущие контракты переходят в UI design, Plugins, Resource Fabric
 и Session events, статус — в PROGRESS.
 

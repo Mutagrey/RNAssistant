@@ -158,7 +158,7 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
     await page.locator('#pluginSourceChange').click();
     assert.equal(await page.locator('#pluginRoot').isVisible(),false,'returning to the default path hides the custom input');
     await page.locator('#pluginCreateForm button[type=submit]').click();
-    await page.waitForFunction(()=>document.querySelector('#pluginChatMessages')?.textContent.includes('SVG-иконка смоделирована.'));
+    await page.waitForFunction(()=>document.querySelector('#projectChatMessages')?.textContent.includes('SVG-иконка смоделирована.'));
     assert.equal(await page.locator('#pluginCheck').count(),0,'package check is integrated into preview refresh');
     assert.equal(await page.locator('#pluginPreview').getAttribute('aria-label'),'Обновить предпросмотр');
     const splitter=page.locator('#pluginDevelopmentSplitter');
@@ -204,7 +204,7 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
     await page.screenshot({path:path.join(captures,'plugins-desktop.png')});
     await page.setViewportSize({width:390,height:844});await page.screenshot({path:path.join(captures,'plugins-narrow.png')});
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'no page overflow at 390px');
-    assert.ok(await page.locator('#pluginChatMessages').innerText(),'development chat rendered');
+    assert.ok(await page.locator('#projectChatMessages').innerText(),'development chat rendered');
     await page.locator('.plugin-toolbar-actions summary').click();await page.locator('#pluginDisable').click();await page.waitForFunction(()=>!document.querySelector('#pluginPreviewMount iframe'));
     await page.setViewportSize({width:1280,height:800});
     await page.locator('#pluginRail [data-plugin-id="example"]').hover();

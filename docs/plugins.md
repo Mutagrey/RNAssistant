@@ -130,6 +130,9 @@ Scaffold содержит `plugin.json`, UI, CSS, пример Worker-коман
 
 Чаты исходников и workspaces используют `app-workspace-chat.js`, общий
 `renderMessageArticle`, Markdown, пустое состояние и размеры composer с Office-чатом.
+Проект и плагин монтируют один workspace transcript/composer; их навигация и
+действия остаются у тематических controllers. История плагина доступна во время
+выполнения, а переход к другой сессии не направляет в неё поздний ответ.
 Копирование, раскрытие действий, ввод Enter/Shift+Enter, рост до шести строк и
 вопросы общие; работа с Office-вложениями и document history остаётся у Office owner.
 Принятый workspace-ответ v7 хранится как envelope с отдельными runtime ID вызовов;

@@ -1,6 +1,6 @@
 (function () {
   'use strict';
-  var items=[],selected=null,candidate=null,view=null,chat=null,busy=false,chatBusy=false,poll=null,epoch=0;
+  var items=[],selected=null,candidate=null,view=null,chat=null,busy=false,chatBusy=false,epoch=0;
   var previewBusy=false,selecting=false,sourceStamp=null,candidateStamp=null,sourceTimer=null,sourceDebounce=null;
   var chatComposer=null,pendingChatSend=null,chatEpoch=0,stopTitleWatch=null;
   var developmentOpen=false,developmentToggle=null;
@@ -8,7 +8,11 @@
   var frameReady=false,pendingNavigation=null;
   var browsingRelease=null,publishedSourceStamps=Object.create(null),versionCursor=null,versionEpoch=0;
   var navigation={projectName:'Проект данных',view:'sources',templateId:'',templates:[],expanded:{project:true,templates:true,dictionary:true}};
-  function el(id){return document.getElementById('plugin'+id);}
+  var sharedChatIds={ChatMessages:'Messages',Message:'Input',ChatForm:'Form',Send:'Send',Stop:'Stop',
+    ChatStatus:'Notice',Approval:'Control',ApprovalText:'Pending',Approve:'Approve',Reject:'Reject',Questions:'Questions'};
+  function el(id){return document.getElementById((sharedChatIds[id]?'projectChat':'plugin')+(sharedChatIds[id]||id));}
+  function ownsChat(){return window.RNAssistantWorkspaceChat.owner()==='plugin';}
+  function chatStatus(text){if(ownsChat())el('ChatStatus').textContent=text||'';}
   var statusTimer=null;
   function status(text,error){clearTimeout(statusTimer);el('Status').textContent=text || '';el('Status').setAttribute('role',error?'alert':'status');
     if(text&&!error)statusTimer=setTimeout(function(){el('Status').textContent='';},4500);}
@@ -86,9 +90,12 @@
     id==='Apply'&&(!candidate||!candidate.hasChanges||!!browsingRelease)||(id==='Reopen'||id==='Disable')&&!selected.enabled;});
     el('Apply').hidden=!candidate||!candidate.hasChanges||!selected||!!browsingRelease;
     el('RestoreVersion').hidden=!browsingRelease;el('RestoreVersion').disabled=busy||previewBusy||!selected;
-    if(chatComposer)chatComposer.lock(chatBusy||!chat||!!chat.pendingId||!!(chat.state&&(chat.state.Status||chat.state.status)==='running'));
-    el('ChatNew').disabled=busy||chatBusy||!selected;el('ChatHistory').disabled=busy||chatBusy||!chat;
-    el('Send').disabled=chatBusy||!selected||!chat||!el('Message').value.trim()||!!(chat&&chat.pendingId)||!!(chat&&chat.state&&(chat.state.Status||chat.state.status)==='running');el('CreateSubmit').disabled=busy;}
+    if(ownsChat()){
+      if(chatComposer)chatComposer.lock(chatBusy||!chat||!!chat.pendingId||!!(chat.state&&(chat.state.Status||chat.state.status)==='running'));
+      el('ChatNew').disabled=busy||chatBusy||!selected;el('ChatHistory').disabled=busy||!chat;
+      el('Send').disabled=chatBusy||!selected||!chat||!el('Message').value.trim()||!!(chat&&chat.pendingId)||!!(chat&&chat.state&&(chat.state.Status||chat.state.status)==='running');
+    }
+    el('CreateSubmit').disabled=busy;}
   async function refresh(){var result=await send('getPlugins',{});items=result.items;var rail=el('Rail');
     if(result.defaultSourceParent)el('DefaultSourcePath').textContent=result.defaultSourceParent;
     if(window.RNAssistantRailPopovers)window.RNAssistantRailPopovers.hide();rail.replaceChildren();items.forEach(function(item){
@@ -121,14 +128,21 @@
   function updateDevelopment(refresh){var open=developmentOpen;el('Chat').hidden=!open;el('DevelopmentSplitter').hidden=!open;
     developmentToggle.sync();
     el('Workbench').classList.toggle('plugin-developing',open);
-    if(open)refreshSplitPanes();
+    if(open){window.RNAssistantWorkspaceChat.mount('plugin',el('Chat'));
+      if(chat)renderChat();
+      else{chatComposer.select(null);chatComposer.lock(true);el('ChatMessages').replaceChildren();el('ChatMessages')._chatSignature=null;
+        el('ChatTitle').textContent='Чат исходников';el('Stop').hidden=true;el('Approval').hidden=true;
+        window.RNAssistantWorkspaceChat.renderQuestions(el('Questions'),null,function(){});
+        el('Send').disabled=true;chatStatus('Загружаю чат…');}
+      refreshSplitPanes();}
     if(refresh&&open&&!browsingRelease){if(!view||!view.preview)checkAndPreview();else pollSource();}}
   async function select(id,sessionId){selecting=true;switchTab('plugins');try{await run(async function(){epoch++;stopSourceWatch();await closeView();selected=items.find(function(item){return item.pluginId===id;});candidate=null;candidateStamp=null;browsingRelease=null;versionEpoch++;versionCursor=null;el('Versions').open=false;chat=null;chatEpoch++;
     closeHistory();
     if(stopTitleWatch){stopTitleWatch();stopTitleWatch=null;}
     if(sessionId){window.RNAssistantWorkspaceChat.rememberSession(selected.sourceWorkspaceId,sessionId);developmentOpen=true;}
     switchTab('plugins');el('Manager').hidden=true;el('Workbench').hidden=false;el('Title').textContent=dataPlugin()?navigation.projectName:selected.name;el('Source').textContent=selected.sourceRoot;
-    el('ChatSource').textContent=selected.sourceRoot;el('ChatSource').title=selected.sourceRoot;el('ChatMessages').replaceChildren();el('ChatMessages')._chatSignature=null;
+    el('ChatSource').textContent=selected.sourceRoot;el('ChatSource').title=selected.sourceRoot;
+    if(ownsChat()){el('ChatMessages').replaceChildren();el('ChatMessages')._chatSignature=null;}
     el('Workbench').classList.toggle('plugin-data-templates',dataPlugin());el('Workbench').classList.toggle('split-layout',dataPlugin());
     if(typeof refreshSplitPanes==='function')refreshSplitPanes();
     navigation={projectName:'Проект данных',view:'sources',templateId:'',templates:[],expanded:{project:true,templates:true,dictionary:true}};el('ProjectName').textContent=dataPlugin()?selected.name:'';el('Title').textContent=dataPlugin()?navigation.projectName:selected.name;renderNavigation();
@@ -139,14 +153,14 @@
     if(developmentOpen&&publishedSourceStamps[id]!==sourceStamp)await checkAndPreview(sourceStamp);
     startSourceWatch();await readChat();});}finally{selecting=false;
       if(selected&&!el('Workbench').hidden&&developmentOpen&&(!view||!view.preview)&&publishedSourceStamps[id]!==sourceStamp)checkAndPreview(sourceStamp);}}
-  function renderChat(){if(!chat)return;
+  function renderChat(){if(!chat||!ownsChat())return;
     el('ChatTitle').textContent=chat.state.title||chat.state.Title||'Чат исходников';
     el('ChatTitle').title=el('ChatTitle').textContent;
     window.RNAssistantWorkspaceChat.renderMessages(el('ChatMessages'),chat);
     var s=chat.state||{},running=(s.Status||s.status)==='running';
-    el('ChatStatus').textContent=chat.pendingId?'Нужно подтвердить действие агента.':
+    chatStatus(chat.pendingId?'Нужно подтвердить действие агента.':
       s.interruptedEffectPossible?'Возможное изменение требует проверки. Не повторяйте действие автоматически.':
-      (s.Status||s.status)==='interrupted'?'Выполнение прервано. Проверьте ход работы.':running?'Агент работает…':'';
+      (s.Status||s.status)==='interrupted'?'Выполнение прервано. Проверьте ход работы.':running?'Агент работает…':'');
     el('Stop').hidden=!running;el('Approval').hidden=!chat.pendingId;
     el('ApprovalText').textContent=chat.pendingId ? chat.pendingTool+'\n'+chat.pendingArguments : '';
     chatComposer.select({workspaceId:chat.project.workspaceId,sessionId:chat.sessionId},s);
@@ -162,7 +176,7 @@
       if(remember)window.RNAssistantWorkspaceChat.rememberSession(workspaceId,value.sessionId);renderChat();}}
   function closeHistory(){el('ChatHistoryList').hidden=true;el('ChatHistory').setAttribute('aria-expanded','false');}
   async function openHistory(){
-    if(!chat||!selected||chatBusy)return;
+    if(!chat||!selected||!ownsChat())return;
     var list=el('ChatHistoryList'),button=el('ChatHistory'),id=selected.pluginId;
     if(!list.hidden){closeHistory();return;}
     list.replaceChildren();list.appendChild(document.createTextNode('Загружаю чаты…'));
@@ -187,7 +201,7 @@
       if(stopTitleWatch){stopTitleWatch();stopTitleWatch=null;}
       try{await readChat(item.Id);
         if(chat&&chat.sessionId===item.Id)window.RNAssistantWorkspaceChat.rememberSession(selected.sourceWorkspaceId,item.Id);
-      }catch(error){el('ChatStatus').textContent=error.detail||error.message;}
+      }catch(error){chatStatus(error.detail||error.message);}
       finally{chatBusy=false;controls();}
     });
     option.className=chat&&chat.sessionId===item.Id?'is-current':'';
@@ -236,20 +250,20 @@
     try{var value=await send('createProjectChat',{workspaceId:workspaceId,title:'Новый чат'});
       if(selected&&selected.pluginId===id&&current===chatEpoch){chat=value;pendingChatSend=null;
         window.RNAssistantWorkspaceChat.rememberSession(workspaceId,value.sessionId);renderChat();el('Message').focus();}}
-    catch(error){if(current===chatEpoch)el('ChatStatus').textContent=error.message;}
+    catch(error){if(current===chatEpoch)chatStatus(error.message);}
     finally{chatBusy=false;controls();}}
   async function chatAction(action){if(chatBusy||!selected||!chat)return;
     var id=selected.pluginId,workspaceId=chat.project.workspaceId,sessionId=chat.sessionId,current=chatEpoch;
     function active(){return selected&&selected.pluginId===id&&chat&&chat.sessionId===sessionId&&current===chatEpoch;}
     chatBusy=true;controls();
-    poll=setInterval(function(){if(active())readChat(sessionId).catch(function(error){if(active())el('ChatStatus').textContent=error.message;});},1200);
+    var timer=setInterval(function(){if(active())readChat(sessionId).catch(function(error){if(active())chatStatus(error.message);});},1200);
     try{var result=await action(workspaceId,sessionId);if(active()){chat=result;renderChat();
       if(stopTitleWatch)stopTitleWatch();
       stopTitleWatch=window.RNAssistantWorkspaceChat.watchTitle(result,
         function(){return send('getProjectChat',{workspaceId:workspaceId,sessionId:sessionId});},
         function(latest){if(active()){chat=latest;renderChat();}});}}
-    catch(error){if(active())el('ChatStatus').textContent=error.message;}
-    finally{clearInterval(poll);chatBusy=false;controls();}}
+    catch(error){if(active())chatStatus(error.message);}
+    finally{clearInterval(timer);if(active()){chatBusy=false;controls();}}}
   function setIconEditor(open){el('IconEditor').hidden=!open;el('IconTrigger').setAttribute('aria-expanded',String(open));
     if(!open&&el('IconEditor').contains(document.activeElement))el('IconTrigger').focus();}
   function updateSourceLocation(){var connecting=el('Connect').checked,manual=connecting||customSource;
@@ -399,11 +413,11 @@
       event.preventDefault();event.stopPropagation();
     });
     chatComposer=window.RNAssistantWorkspaceChat.bindComposer(el('ChatForm'));
-    el('Message').addEventListener('input',controls);
+    el('Message').addEventListener('input',function(){if(ownsChat())controls();});
     el('ChatNew').onclick=createChat;
     el('ChatHistory').onclick=openHistory;
     document.addEventListener('pointerdown',function(event){if(!event.target.closest('.plugin-history-menu'))closeHistory();});
-    el('ChatForm').onsubmit=function(event){event.preventDefault();var message=el('Message').value.trim();
+    el('ChatForm').onsubmit=function(event){if(!ownsChat())return;event.preventDefault();var message=el('Message').value.trim();
       if(!message||el('Send').disabled||!chat)return;
       var sessionId=chat.sessionId,workspaceId=chat.project.workspaceId,options=chatComposer.options(),draftVersion=chatComposer.draftVersion();
       if(!pendingChatSend||pendingChatSend.sessionId!==sessionId||pendingChatSend.message!==message||JSON.stringify(pendingChatSend.options)!==JSON.stringify(options))
@@ -413,15 +427,15 @@
         input:Object.assign({sessionId:sessionId,message:message,requestId:request.requestId},request.options)}).then(function(result){
         chatComposer.accepted({workspaceId:workspaceId,sessionId:sessionId},message,draftVersion);
         if(pendingChatSend===request)pendingChatSend=null;return result;});});};
-    el('Stop').onclick=async function(){if(!chat||!selected)return;
+    el('Stop').onclick=async function(){if(!ownsChat()||!chat||!selected)return;
       var sessionId=chat.sessionId,workspaceId=chat.project.workspaceId,current=chatEpoch,s=chat.state;
       try{var result=await send('cancelProjectChat',{workspaceId:workspaceId,sessionId:sessionId,runId:s.RunId||s.runId,cursor:s.Cursor||s.cursor});
         if(chat&&chat.sessionId===sessionId&&current===chatEpoch){chat=result;renderChat();}}
-      catch(error){if(current===chatEpoch)el('ChatStatus').textContent=error.message;}};
-    ['Approve','Reject'].forEach(function(id){el(id).onclick=function(){if(!chat)return;var pending=chat.pendingId;
+      catch(error){if(current===chatEpoch)chatStatus(error.message);}};
+    ['Approve','Reject'].forEach(function(id){el(id).onclick=function(){if(!ownsChat()||!chat)return;var pending=chat.pendingId;
       chatAction(function(workspaceId,sessionId){return send('resolveProjectChat',{workspaceId:workspaceId,sessionId:sessionId,pendingId:pending,approve:id==='Approve'});});};});
     el('VendorsRefresh').onclick=function(){run(async function(){var catalog=await send('getPluginVendors',{});el('Vendors').replaceChildren();catalog.items.forEach(function(item){var row=document.createElement('p');row.textContent=item.id+' @ '+item.version+' · '+item.license;el('Vendors').appendChild(row);});status('Каталог обновлён. Проверка хешей выполняется при разрешении зависимости.');});};
     el('VendorImport').onclick=function(){run(async function(){var result=await send('importPluginVendor',{rootPath:el('VendorRoot').value});status('Добавлен '+result.id+' @ '+result.version);});};controls();
   }
-  window.RNAssistantPlugins={bind:bind,refresh:refresh,show:function(){if(!selected){el('Manager').hidden=false;el('Workbench').hidden=true;}},select:select,selectedId:function(){return selected&&selected.pluginId;}};
+  window.RNAssistantPlugins={bind:bind,refresh:refresh,show:function(){if(!selected){el('Manager').hidden=false;el('Workbench').hidden=true;}else if(developmentOpen)updateDevelopment(false);},select:select,selectedId:function(){return selected&&selected.pluginId;}};
 })();
