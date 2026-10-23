@@ -634,6 +634,7 @@ namespace RNAssistant.Office.Services
                     Text = selected, Offset = start,
                     ReturnedCharacters = end - start, TotalCharacters = page.Text.Length,
                     PageIndex = request.PageIndex, PageCount = page.PageCount,
+                    ExtractionProfile = PdfAttachmentTextExtractor.PageViewProfile,
                     RetainedViewKey = PdfAttachmentTextExtractor.PageViewProfile + ":" +
                         request.PageIndex.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) +
                         ":" + start.ToString(System.Globalization.CultureInfo.InvariantCulture) +
@@ -688,6 +689,7 @@ namespace RNAssistant.Office.Services
                     ContentSha256 = artifact.ContentSha256, Text = pages.Text,
                     ReturnedCharacters = pages.Text.Length, TotalCharacters = pages.Text.Length,
                     PageCount = pages.PageCount,
+                    ExtractionProfile = PdfAttachmentTextExtractor.RangeViewProfile,
                     RetainedViewKey = PdfAttachmentTextExtractor.RangeViewProfile + ":" +
                         request.PageStart.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) + ":" +
                         pages.EndPage.ToString(System.Globalization.CultureInfo.InvariantCulture),

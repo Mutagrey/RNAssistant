@@ -779,7 +779,10 @@ The inspector does not perform a live provider reread or grant mutation authorit
 Read diagnostics also retain the accepted read's requested coverage/section/part,
 JSON Pointer child range/depth and VBA procedure name/kind,
 actual source coordinates and independent selection, representation and source
-completeness from `ResourceEvidence.ReadMetadata`. Compiler receipt links, including
+completeness from `ResourceEvidence.ReadMetadata`. Exact PDF page/range text reads
+also retain their content-order extraction profile and original page count there;
+the enclosing evidence pins the original revision and actual coverage. Compiler
+receipt links, including
 excluded bodies, carry these immutable facts into the saved wire manifest and the
 Resources tab. A later transport rewrite can make body delivery unknown without
 changing read completeness. A requested window may extend past EOF while its actual

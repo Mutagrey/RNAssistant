@@ -163,7 +163,7 @@ namespace RNAssistant.Core.Services
             var coverage = new ResourceCoverage(ResourceCoverageKinds.CharacterRange,
                 address: "pdf-page:" + pageIndex.ToString(System.Globalization.CultureInfo.InvariantCulture),
                 start: startChar, end: end);
-            var evidence = _files.PublishPdfPageText(snapshot, pageIndex, selected, coverage);
+            var evidence = _files.PublishPdfPageText(snapshot, pageIndex, selected, coverage, page.PageCount);
             var descriptor = new ResourceDescriptor { Reference = snapshot.Reference, Provider = Id,
                 Kind = "file", Title = Path.GetFileName(relativePath), Mutable = !_workspace.ReadOnly,
                 Tracking = "current", ByteLength = snapshot.ByteLength,
@@ -175,6 +175,7 @@ namespace RNAssistant.Core.Services
             var result = new ResourceReadResult { Resource = descriptor,
                 Representation = ResourceRepresentations.Text, Text = selected,
                 ContentSha256 = snapshot.ContentSha256, Payload = evidence.Payload,
+                ExtractionProfile = PdfAttachmentTextExtractor.PageViewProfile,
                 RetainedViewKey = PdfAttachmentTextExtractor.PageViewProfile + ":" +
                     pageIndex.ToString(System.Globalization.CultureInfo.InvariantCulture) +
                     ":" + startChar.ToString(System.Globalization.CultureInfo.InvariantCulture) +
@@ -216,7 +217,7 @@ namespace RNAssistant.Core.Services
             token.ThrowIfCancellationRequested();
             var coverage = new ResourceCoverage(ResourceCoverageKinds.PageRange,
                 start: startPage, end: pages.EndPage);
-            var evidence = _files.PublishPdfPageRangeText(snapshot, pages.Text, coverage);
+            var evidence = _files.PublishPdfPageRangeText(snapshot, pages.Text, coverage, pages.PageCount);
             var descriptor = new ResourceDescriptor { Reference = snapshot.Reference, Provider = Id,
                 Kind = "file", Title = Path.GetFileName(relativePath), Mutable = !_workspace.ReadOnly,
                 Tracking = "current", ByteLength = snapshot.ByteLength,
@@ -228,6 +229,7 @@ namespace RNAssistant.Core.Services
             var result = new ResourceReadResult { Resource = descriptor,
                 Representation = ResourceRepresentations.Text, Text = pages.Text,
                 ContentSha256 = snapshot.ContentSha256, Payload = evidence.Payload,
+                ExtractionProfile = PdfAttachmentTextExtractor.RangeViewProfile,
                 RetainedViewKey = PdfAttachmentTextExtractor.RangeViewProfile + ":" +
                     startPage.ToString(System.Globalization.CultureInfo.InvariantCulture) + ":" +
                     pages.EndPage.ToString(System.Globalization.CultureInfo.InvariantCulture),

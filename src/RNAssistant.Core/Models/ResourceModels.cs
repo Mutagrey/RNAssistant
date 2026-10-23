@@ -169,6 +169,8 @@ namespace RNAssistant.Core.Models
         public IReadOnlyList<PayloadRef> CompleteViewParts { get; set; }
         [Newtonsoft.Json.JsonIgnore]
         public string RetainedViewKey { get; set; }
+        [Newtonsoft.Json.JsonIgnore]
+        public string ExtractionProfile { get; set; }
         [Newtonsoft.Json.JsonProperty("resource")]
         public ResourceDescriptor Resource { get; set; }
         [Newtonsoft.Json.JsonProperty("representation")]

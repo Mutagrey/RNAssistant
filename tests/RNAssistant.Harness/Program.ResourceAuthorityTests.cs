@@ -73,6 +73,17 @@ namespace RNAssistant.Harness
                 AssertEqual(ResourceCoverageKinds.PageRange,
                     selected.ResourceEvidence.Single().ReadMetadata.RequestedCoverage.Kind,
                     "page intent is retained separately from selected characters");
+                AssertEqual(PdfAttachmentTextExtractor.PageViewProfile,
+                    selected.ResourceEvidence.Single().ReadMetadata.ExtractionProfile,
+                    "exact page evidence retains its extractor profile");
+                AssertEqual(2, selected.ResourceEvidence.Single().ReadMetadata.SourcePageCount.Value,
+                    "exact page evidence retains the original PDF page count");
+                var reopenedEvidence = Newtonsoft.Json.JsonConvert.DeserializeObject<ResourceEvidence>(
+                    Newtonsoft.Json.JsonConvert.SerializeObject(selected.ResourceEvidence.Single()));
+                AssertEqual(PdfAttachmentTextExtractor.PageViewProfile, reopenedEvidence.ReadMetadata.ExtractionProfile,
+                    "PDF extraction provenance survives the durable evidence format");
+                AssertTrue(body["extractionProfile"] == null,
+                    "extractor provenance stays in evidence rather than model result data");
                 var exact = ChatResourceUri.CreateArtifactRevision(session, artifact);
                 var scope = authority.Scope(session, false);
                 AssertTrue(authorityStore.GetView(scope, exact, PdfAttachmentTextExtractor.PageViewProfile + ":1:0:" +
@@ -95,6 +106,11 @@ namespace RNAssistant.Harness
                     "complete requested text range is still not whole visual PDF evidence");
                 AssertEqual(2L, rangeRead.ResourceEvidence.Single().ReadMetadata.RequestedCoverage.End.Value,
                     "requested page range survives in read evidence");
+                AssertEqual(PdfAttachmentTextExtractor.RangeViewProfile,
+                    rangeRead.ResourceEvidence.Single().ReadMetadata.ExtractionProfile,
+                    "exact range evidence retains its extractor profile");
+                AssertEqual(2, rangeRead.ResourceEvidence.Single().ReadMetadata.SourcePageCount.Value,
+                    "exact range evidence retains the original PDF page count");
                 AssertTrue(authorityStore.GetView(scope, exact,
                     PdfAttachmentTextExtractor.RangeViewProfile + ":0:2") != null &&
                     authorityStore.GetView(scope, exact, "text") == null,
@@ -213,6 +229,11 @@ namespace RNAssistant.Harness
                     !(bool)body["sourceComplete"], "workspace page evidence remains partial");
                 AssertEqual("second", new ChatBlobStore(paths).ReadText(read.ResourceEvidence.Single().Payload.ToBlobReference()),
                     "workspace page window has exact retained bytes");
+                AssertEqual(PdfAttachmentTextExtractor.PageViewProfile,
+                    read.ResourceEvidence.Single().ReadMetadata.ExtractionProfile,
+                    "workspace page evidence retains the shared extractor profile");
+                AssertEqual(2, read.ResourceEvidence.Single().ReadMetadata.SourcePageCount.Value,
+                    "workspace page evidence retains the original PDF page count");
                 AssertEqual(ResourceCoverageKinds.CharacterRange, observed["pages.pdf"].Coverage.Kind,
                     "workspace observation never claims whole PDF");
                 var automatic = handler.ExecuteAsync(new ToolHandlerContext(execution,
@@ -241,13 +262,25 @@ namespace RNAssistant.Harness
                     "workspace evidence covers only whole returned pages");
                 AssertEqual(2L, rangeRead.ResourceEvidence.Single().ReadMetadata.RequestedCoverage.End.Value,
                     "workspace evidence retains the requested range separately");
+                AssertEqual(PdfAttachmentTextExtractor.RangeViewProfile,
+                    rangeRead.ResourceEvidence.Single().ReadMetadata.ExtractionProfile,
+                    "workspace range evidence retains the shared extractor profile");
+                AssertEqual(2, rangeRead.ResourceEvidence.Single().ReadMetadata.SourcePageCount.Value,
+                    "workspace range evidence retains the original PDF page count");
                 AssertEqual((string)range["text"], new ChatBlobStore(paths).ReadText(
                     rangeRead.ResourceEvidence.Single().Payload.ToBlobReference()),
                     "workspace range retains exact selected bytes");
-                var completeRange = provider.ReadPdfPageRangeText("pages.pdf", 0, 2, 4000).Result;
-                AssertTrue(ResourceReadProjection.FromPdfRange(completeRange, "pages.pdf", "file", "workspace", 0, 2)
-                    .SelectionComplete == true && completeRange.Coverage.End == 2,
+                var directRange = provider.ReadPdfPageRangeText("pages.pdf", 0, 2, 4000);
+                AssertTrue(ResourceReadProjection.FromPdfRange(directRange.Result, "pages.pdf", "file", "workspace", 0, 2)
+                    .SelectionComplete == true && directRange.Result.Coverage.End == 2,
                     "shared selector completes when both extracted pages fit");
+                AssertEqual(PdfAttachmentTextExtractor.RangeViewProfile, directRange.Result.ExtractionProfile,
+                    "direct workspace provider reports the same derived view profile");
+                AssertEqual(PdfAttachmentTextExtractor.RangeViewProfile,
+                    directRange.Evidence.Single().ReadMetadata.ExtractionProfile,
+                    "direct workspace observation retains the extraction profile before model projection");
+                AssertEqual(2, directRange.Evidence.Single().ReadMetadata.SourcePageCount.Value,
+                    "direct workspace observation retains source page count before model projection");
                 var oversizedRange = handler.ExecuteAsync(new ToolHandlerContext(execution,
                     new Dictionary<string, object> { ["target"] = "pages.pdf", ["representation"] = "text",
                         ["startPage"] = 1, ["pageCount"] = 1 }),

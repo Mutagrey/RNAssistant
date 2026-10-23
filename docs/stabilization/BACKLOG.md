@@ -95,8 +95,8 @@ page errors. Причина не установлена; при следующе
    streaming selector; aliases, merge/complex keys и multi-document требуют
    отдельной семантики. PDF page text для chat attachment и workspace file с
    ограниченными символьными окнами и диапазоны полных извлечённых страниц
-   реализованы по точному оригиналу; остались image crop, PDF table/figure/bbox и
-   extractor provenance; исходная
+   реализованы по точному оригиналу; их профиль извлечения сохраняется с evidence.
+   Остались image crop, PDF table/figure/bbox и provenance будущих derived views; исходная
    таблица включает также дополнительные Word/Excel/HTML semantic views. Наличие
    raw text/media/pageIndex не закрывает эту матрицу. Каждый slice требует своего
    typed contract, exact revision/coverage, unsupported recovery и теста; OCR не

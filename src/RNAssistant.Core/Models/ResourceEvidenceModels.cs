@@ -82,13 +82,20 @@ namespace RNAssistant.Core.Models
         public bool? SourceComplete { get; private set; }
         [JsonProperty("descriptorAtRead", NullValueHandling = NullValueHandling.Ignore)]
         public ResourceReadDescriptorSnapshot DescriptorAtRead { get; private set; }
+        // Stable extractor/selection profile for derived text. The exact source
+        // revision and selected coverage remain on the enclosing evidence.
+        [JsonProperty("extractionProfile", NullValueHandling = NullValueHandling.Ignore)]
+        public string ExtractionProfile { get; private set; }
+        [JsonProperty("sourcePageCount", NullValueHandling = NullValueHandling.Ignore)]
+        public int? SourcePageCount { get; private set; }
 
         [JsonConstructor]
         public ResourceReadMetadata(ResourceCoverage requestedCoverage = null, string requestedSection = null,
             int? requestedPartNumber = null, ResourceCoverage sourceCoverage = null,
             bool? selectionComplete = null, bool? representationComplete = null, bool? sourceComplete = null,
             string requestedProcedure = null, string requestedProcedureKind = null,
-            int? requestedDepth = null, ResourceReadDescriptorSnapshot descriptorAtRead = null)
+            int? requestedDepth = null, ResourceReadDescriptorSnapshot descriptorAtRead = null,
+            string extractionProfile = null, int? sourcePageCount = null)
         {
             RequestedCoverage = requestedCoverage; RequestedSection = requestedSection;
             RequestedPartNumber = requestedPartNumber; SourceCoverage = sourceCoverage;
@@ -97,6 +104,8 @@ namespace RNAssistant.Core.Models
             RequestedProcedure = requestedProcedure; RequestedProcedureKind = requestedProcedureKind;
             RequestedDepth = requestedDepth;
             DescriptorAtRead = descriptorAtRead;
+            ExtractionProfile = extractionProfile;
+            SourcePageCount = sourcePageCount;
         }
     }
 

@@ -860,7 +860,8 @@ namespace RNAssistant.Harness
                 descriptor.ViewCapabilities.Add(new ResourceViewCapability("source", supportsOffset: true,
                     maxBatchBytes: 65536));
                 var selectedRead = new ResourceReadResult { Resource = descriptor,
-                    Representation = "source", Coverage = fragmentEvidence.Coverage, Complete = true };
+                    Representation = "source", Coverage = fragmentEvidence.Coverage, Complete = true,
+                    ExtractionProfile = "fixture:extractor-v1" };
                 var readProjection = ResourceReadProjection.From(selectedRead, "Module1", "VBA", "document");
                 readProjection.SelectionComplete = true;
                 readProjection.SourceComplete = false;
@@ -915,6 +916,8 @@ namespace RNAssistant.Harness
                     "source byte length is diagnostic metadata, not a measured token cost");
                 AssertEqual(65536, link.ReadMetadata.DescriptorAtRead.ViewCapabilities.Single().MaxBatchBytes.Value,
                     "saved receipt retains declared view bounds");
+                AssertEqual("fixture:extractor-v1", link.ReadMetadata.ExtractionProfile,
+                    "saved receipt retains derived-view extraction provenance");
                 AssertTrue(snapshot.Receipt.Messages.Single(e => e.SourceMessageId == excluded.Id)
                     .EvidenceLinks.Single().ReadMetadata.SourceComplete == false, "excluded body retains read metadata");
                 AssertEqual(true, link.BodyIncludedInMessage.Value, "verified synthetic payload hydration proves body delivery");
@@ -923,7 +926,8 @@ namespace RNAssistant.Harness
                 AssertTrue(!wire.Contains("\"EvidenceLinks\"") && !wire.Contains("\"ObservedCoverage\"") &&
                     !wire.Contains("\"ScopeId\"") && !wire.Contains("\"ObservationComplete\"") &&
                     !wire.Contains("\"ExclusionKind\"") && !wire.Contains("\"ReadMetadata\"") &&
-                    !wire.Contains("\"descriptorAtRead\""), "typed diagnostics do not enter provider messages");
+                    !wire.Contains("\"descriptorAtRead\"") && !wire.Contains("fixture:extractor-v1"),
+                    "typed diagnostics do not enter provider messages");
                 var changed = LlmClient.DescribeWireMessages(new[] { snapshot.Messages.First(m => m.Id == fragment.Id) },
                     snapshot.Receipt, new[] { true });
                 AssertTrue(!changed.Single(e => e.MessageIndex.HasValue).EvidenceLinks.Single().BodyIncludedInMessage.HasValue,
@@ -951,6 +955,8 @@ namespace RNAssistant.Harness
                         "inspector receives the accepted read's provider claim after restart");
                     AssertEqual("source", observation.ReadMetadata.DescriptorAtRead.ViewCapabilities.Single().View,
                         "inspector receives the accepted read's declared view after restart");
+                    AssertEqual("fixture:extractor-v1", observation.ReadMetadata.ExtractionProfile,
+                        "inspector receives the saved extraction profile after restart");
                 }
                 var mutation = ContinuityResult("saved", "common.vba_write_module", RNAssistant.Core.Tools.Contracts.ToolResult.Ok("Saved", "{\"changed\":true}"));
                 mutation.ResourceEffect = new ResourceEffect("effect", "write", ResourceEffectOutcome.VerifiedChanged, verification: "read-back");

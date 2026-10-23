@@ -681,6 +681,13 @@ window is bounded by the model context; explicit windows can continue through
 `totalCharacters`. Page views retain distinct CAS keys from flattened `text`.
 Range views also retain distinct CAS keys; coverage proves only the returned
 extracted pages and never the complete visual PDF.
+Accepted page/window and range reads carry the stable PDF content-order
+extraction profile and original page count in `ResourceReadMetadata`. The
+enclosing evidence supplies the exact original revision and actual coverage;
+requested coverage records
+the caller's page/window intent. Together these facts identify the derived
+text without treating extraction as OCR or visual completeness. Older evidence
+without a profile leaves extractor provenance unknown.
 PDF rendering remains an application data-plane view. The CLI Office binding
 uses the direct Office model-read schema with a required `type=office` discriminator,
 including the same page, section, tree, table, procedure and text-window alternatives.

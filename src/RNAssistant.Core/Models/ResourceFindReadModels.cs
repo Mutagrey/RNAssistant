@@ -400,7 +400,8 @@ namespace RNAssistant.Core.Models
             var metadata = new ResourceReadMetadata(requestedCoverage, requestedSection, requestedPartNumber,
                 projection.SourceCoverage, projection.SelectionComplete, projection.Complete, projection.SourceComplete,
                 requestedProcedure, requestedProcedureKind, requestedDepth,
-                ResourceReadDescriptorSnapshot.From(Result.Resource));
+                ResourceReadDescriptorSnapshot.From(Result.Resource), Result.ExtractionProfile,
+                Result.ExtractionProfile == null ? null : Result.PageCount);
             return new ResourceReadObservation(Result, Evidence.Select(item =>
                 item.Resource.Uri == Result.Resource.Reference.Uri && item.Resource.Revision == Result.Resource.Reference.Revision &&
                 item.View == Result.Representation

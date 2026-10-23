@@ -573,9 +573,9 @@ namespace RNAssistant.Core.Storage
         }
 
         public ResourceEvidence PublishPdfPageText(WorkspaceFileSnapshot snapshot, int pageIndex,
-            string body, ResourceCoverage coverage)
+            string body, ResourceCoverage coverage, int pageCount)
         {
-            if (snapshot == null || body == null || pageIndex < 0 ||
+            if (snapshot == null || body == null || pageIndex < 0 || pageCount <= pageIndex ||
                 coverage?.Kind != ResourceCoverageKinds.CharacterRange ||
                 coverage.Address != "pdf-page:" + pageIndex.ToString(System.Globalization.CultureInfo.InvariantCulture) ||
                 !coverage.Start.HasValue || !coverage.End.HasValue ||
@@ -593,14 +593,17 @@ namespace RNAssistant.Core.Storage
                 key, snapshot.ContentSha256, payload, coverage));
             return new ResourceEvidence("ev_" + Guid.NewGuid().ToString("N"), raw.ScopeId,
                 snapshot.Reference, ResourceRepresentations.Text, coverage, false, raw.AuthorityGeneration,
-                payload, raw.Dependencies, contentSha256: snapshot.ContentSha256);
+                payload, raw.Dependencies, contentSha256: snapshot.ContentSha256,
+                readMetadata: new ResourceReadMetadata(extractionProfile: PdfAttachmentTextExtractor.PageViewProfile,
+                    sourcePageCount: pageCount));
         }
 
         public ResourceEvidence PublishPdfPageRangeText(WorkspaceFileSnapshot snapshot, string body,
-            ResourceCoverage coverage)
+            ResourceCoverage coverage, int pageCount)
         {
             if (snapshot == null || body == null || coverage?.Kind != ResourceCoverageKinds.PageRange ||
-                !coverage.Start.HasValue || !coverage.End.HasValue || coverage.End.Value <= coverage.Start.Value)
+                !coverage.Start.HasValue || !coverage.End.HasValue || coverage.End.Value <= coverage.Start.Value ||
+                pageCount < coverage.End.Value)
                 throw new ArgumentException("An exact PDF page range is required.");
             var raw = PublishedEvidence(snapshot.Reference, ResourceRepresentations.Raw);
             if (raw.ContentSha256 != snapshot.ContentSha256)
@@ -613,7 +616,9 @@ namespace RNAssistant.Core.Storage
                 key, snapshot.ContentSha256, payload, coverage));
             return new ResourceEvidence("ev_" + Guid.NewGuid().ToString("N"), raw.ScopeId,
                 snapshot.Reference, ResourceRepresentations.Text, coverage, false, raw.AuthorityGeneration,
-                payload, raw.Dependencies, contentSha256: snapshot.ContentSha256);
+                payload, raw.Dependencies, contentSha256: snapshot.ContentSha256,
+                readMetadata: new ResourceReadMetadata(extractionProfile: PdfAttachmentTextExtractor.RangeViewProfile,
+                    sourcePageCount: pageCount));
         }
 
         private Stream OpenRetainedStream(PayloadRef payload, long maximumBytes, CancellationToken token,
