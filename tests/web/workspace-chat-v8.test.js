@@ -84,4 +84,16 @@ assert.equal(list.childNodes[0], firstNode, "accepted reflection stays attached 
 assert.equal(list.childNodes[1], answerNode, "unchanged answer preserves focus and disclosure nodes");
 assert.equal(context.RNAssistantWorkspaceChat.readOnly({ state: { readOnly: true } }), true);
 assert.match(context.RNAssistantWorkspaceChat.runNotice({ state: { readOnly: true } }).text, /Старый протокол/);
-console.log("PASS workspace: shared message views, stable nodes and explicit read-only history");
+const loaded = { project: { workspaceId: "project-1" }, sessionId: "chat-1",
+  state: { revision: 5 }, messageStartIndex: 0, messageTotalCount: 3,
+  messages: [{ Id: "old" }, { Id: "middle" }, { Id: "latest" }] };
+const refreshed = context.RNAssistantWorkspaceChat.latestSnapshot(loaded, {
+  project: { workspaceId: "project-1" }, sessionId: "chat-1", state: { revision: 6 },
+  messageStartIndex: 2, messageTotalCount: 4, messages: [{ Id: "latest" }, { Id: "new" }] });
+assert.deepEqual(Array.from(refreshed.messages, item => item.Id), ["old", "middle", "latest", "new"],
+  "fresh snapshots retain loaded older pages without duplicating overlap");
+assert.equal(refreshed.messageStartIndex, 0);
+assert.throws(() => context.RNAssistantWorkspaceChat.prependMessages(refreshed, {
+  chatId: "chat-1", sessionRevision: 5, startIndex: 0, totalCount: 4, messages: []
+}), /История изменилась/, "stale history pages cannot overwrite a newer session");
+console.log("PASS workspace: shared views, stable nodes, paging and read-only history");

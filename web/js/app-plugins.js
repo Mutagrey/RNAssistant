@@ -416,6 +416,12 @@
     el('ChatHistory').onclick=openHistory;
     document.addEventListener('pointerdown',function(event){if(!event.target.closest('.plugin-history-menu'))closeHistory();});
     window.RNAssistantWorkspaceChat.registerActions('plugin',{
+      loadPrevious: async function(){if(!chat||!chat.messageStartIndex)return;
+        var workspaceId=chat.project.workspaceId,sessionId=chat.sessionId,beforeIndex=chat.messageStartIndex,current=chatEpoch;
+        try{var page=await send('getPreviousProjectChatMessages',{workspaceId:workspaceId,sessionId:sessionId,beforeIndex:beforeIndex});
+          if(chat&&chatEpoch===current&&chat.sessionId===sessionId&&chat.messageStartIndex===beforeIndex){
+            window.RNAssistantWorkspaceChat.prependMessages(chat,page);renderChat();}}
+        catch(error){if(chatEpoch===current)chatStatus(error.detail||error.message,true);}},
       input: function(){controls();},
       submit: function(){var message=el('Input').value.trim();
         if(!message||el('Send').disabled||!chat)return;

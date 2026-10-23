@@ -223,7 +223,9 @@ read-only polling in both project and plugin views.
 `node tests/web/workspace-chat-run-notice.test.js` presents a failed typed run
 through the real project and plugin panels, checks their common Office notice,
 and verifies shared message rendering of reflection, tool activity and finish
-evidence without exposing hidden v8 bodies.
+evidence without exposing hidden v8 bodies. It also loads an older history page
+through each panel. Harness `plugins: project chat history uses shared pages`
+checks the 80-message window, raw indexes, hidden protocol bodies and workspace scope.
 `node tests/web/splitter-preferences.test.js` checks the shared divider interaction:
 frame coalescing, commit/cancel, capture cleanup, keyboard controls and ARIA values.
 

@@ -1,5 +1,21 @@
 # Stabilization progress
 
+## Unified chat message views and history — 2026-10-24
+
+Owner: Core browser projection / Application workspace chat / shared Web ChatView.
+Project and plugin chats now use the Office `ChatMessageViewDto` and
+`renderMessageArticle`; `PluginChatMessageDto` and its separate action/result
+renderer are removed. Accepted v8 narration, reflection, reasoning, finish
+claims and saved tool activity are shown without sending raw protocol bodies or
+runtime guards to the browser. Office and workspace history use one 80-record
+window contract; project and plugin can load earlier pages. Current snapshots
+retain already loaded pages, and a stale page cannot replace a newer revision.
+
+Focused Harness projection/history and v8 recovery checks, Node reconciliation
+checks and Chrome project/plugin layout, paging, progress and reconnect checks
+pass after rebasing onto `25dd095b`. Full Office/WebView2 qualification and
+cross-process live token delivery remain open.
+
 ## Conversation v8 recovery and reflection settings — 2026-10-24
 
 Owners: Core ModelProtocol/AgentKernel, Office adapter, Application workspace and Web
@@ -20,7 +36,7 @@ Scripted CLI `conversation_v8_finish_smoke.py` and `response_mode_smoke.py` pass
 Web stream handoff, workspace message retention/live progress, shared run notices
 and run-state ordering passed, including browser focus/disclosure checks. No full
 suite, paid model calls or Office validation. Open: actual target-provider support, Windows/WebView2/Office evidence,
-workspace history paging and cross-process live token delivery. The dated audit below
+and cross-process live token delivery. The dated audit below
 describes its earlier baseline, not the status of every current implementation.
 
 

@@ -645,6 +645,16 @@ namespace RNAssistant.Application
                     Content = "Сообщение использует неподдерживаемый протокол и пропущено. Исходная запись сохранена." };
             return ChatMessageViewDto.From(message);
         }
+        private static ChatMessageWindowViewDto PresentWorkspaceWindow(ChatSession session, int beforeIndex)
+        {
+            try
+            {
+                return ChatMessageWindowProjector.Project<ChatMessageWindowViewDto>(session, beforeIndex,
+                    (owner, messages) => messages.Select(PresentWorkspaceMessage).ToArray());
+            }
+            catch (ArgumentOutOfRangeException)
+            { throw new PluginException("project_chat_invalid", "The history cursor is outside this chat."); }
+        }
         private WorkspaceDescriptor RequireProjectWorkspace(string workspaceId)
         {
             if (string.IsNullOrWhiteSpace(workspaceId))
@@ -720,14 +730,27 @@ namespace RNAssistant.Application
             var session = Conversations.GetSession(workspace, request.SessionId);
             if (session == null) throw new PluginException("project_chat_missing", "The chat is not in this workspace.");
             var snapshot = Conversations.ReadState(workspace, session);
+            var messages = PresentWorkspaceWindow(session, session.Messages.Count);
             return new ProjectChatStateDto { Project = ProjectChatProject(workspace), SessionId = session.Id,
                 State = snapshot,
                 PendingId = session.LastRun?.KernelState?.Summary?.PendingConfirmation?.PendingId,
                 PendingTool = session.LastRun?.KernelState?.Summary?.PendingConfirmation?.Call?.Name,
                 PendingArguments = session.LastRun?.KernelState?.Summary?.PendingConfirmation?.Call?.ArgumentsJson,
-                Messages = session.Messages.Where(message => message.Role == "assistant" ||
-                        message.Role == "user" && !message.ProtocolMessage)
-                    .Reverse().Take(100).Reverse().Select(PresentWorkspaceMessage).ToArray() };
+                Messages = messages.Messages, MessageStartIndex = messages.StartIndex,
+                MessageTotalCount = messages.TotalCount };
+            }
+        }
+
+        public ChatMessageWindowViewDto ProjectChatMessages(ProjectChatHistoryRequest request)
+        {
+            using (PluginStore.AcquireRuntimeUse(_paths))
+            {
+                if (request == null || string.IsNullOrWhiteSpace(request.SessionId))
+                    throw new PluginException("project_chat_invalid", "A project chat is required.");
+                var workspace = RequireProjectWorkspace(request.WorkspaceId);
+                var session = Conversations.GetSession(workspace, request.SessionId);
+                if (session == null) throw new PluginException("project_chat_missing", "The chat is not in this workspace.");
+                return PresentWorkspaceWindow(session, request.BeforeIndex);
             }
         }
 

@@ -231,7 +231,7 @@ namespace RNAssistant.Harness
             AssertEqual("Read before changing.", view.ReflectionDecision, "reflection survives projection");
             message.ResponseProtocolVersion = 7;
             view = PluginApplicationService.PresentWorkspaceMessage(message);
-            AssertTrue(!view.Text.Contains("\"action\"") && view.Text.Contains("неподдерживаемый"), "old JSON is explicitly skipped without migration");
+            AssertTrue(!view.Content.Contains("\"action\"") && view.Content.Contains("неподдерживаемый"), "old JSON is explicitly skipped without migration");
             AssertEqual(RecoveryReflection(), message.Content, "presentation cannot rewrite historical bytes");
         }
     }

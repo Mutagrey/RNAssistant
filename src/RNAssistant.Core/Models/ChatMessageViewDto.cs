@@ -133,4 +133,37 @@ namespace RNAssistant.Core.Models
             };
         }
     }
+
+    // Shared history window shape; host-specific responses may add artifact data.
+    public class ChatMessageWindowViewDto
+    {
+        public const int PageSize = 80;
+        [JsonProperty("chatId")] public string ChatId { get; set; }
+        [JsonProperty("sessionRevision")] public long SessionRevision { get; set; }
+        [JsonProperty("startIndex")] public int StartIndex { get; set; }
+        [JsonProperty("totalCount")] public int TotalCount { get; set; }
+        [JsonProperty("messages")] public IReadOnlyList<ChatMessageViewDto> Messages { get; set; }
+    }
+
+    public static class ChatMessageWindowProjector
+    {
+        public static T Project<T>(ChatSession session, int beforeIndex,
+            Func<ChatSession, IEnumerable<ChatMessage>, IReadOnlyList<ChatMessageViewDto>> project)
+            where T : ChatMessageWindowViewDto, new()
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            var messages = session?.Messages ?? new List<ChatMessage>();
+            if (beforeIndex < 0 || beforeIndex > messages.Count)
+                throw new ArgumentOutOfRangeException(nameof(beforeIndex));
+            var start = Math.Max(0, beforeIndex - ChatMessageWindowViewDto.PageSize);
+            return new T
+            {
+                ChatId = session?.Id,
+                SessionRevision = session?.Revision ?? 0,
+                StartIndex = start,
+                TotalCount = messages.Count,
+                Messages = project(session, messages.Skip(start).Take(beforeIndex - start))
+            };
+        }
+    }
 }

@@ -151,6 +151,12 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("pendingId")] public string PendingId { get; set; }
         [JsonProperty("approve")] public bool Approve { get; set; }
     }
+    public sealed class ProjectChatHistoryRequest
+    {
+        [JsonProperty("workspaceId", Required = Required.Always)] public string WorkspaceId { get; set; }
+        [JsonProperty("sessionId", Required = Required.Always)] public string SessionId { get; set; }
+        [JsonProperty("beforeIndex", Required = Required.Always)] public int BeforeIndex { get; set; }
+    }
     public sealed class ProjectChatUploadOpenRequest
     {
         [JsonProperty("workspaceId", Required = Required.Always)] public string WorkspaceId { get; set; }
@@ -216,6 +222,8 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("pendingArguments")] public string PendingArguments { get; set; }
         [JsonProperty("cancelStatus", NullValueHandling = NullValueHandling.Ignore)] public WorkspaceCancellationStatus? CancelStatus { get; set; }
         [JsonProperty("messages")] public IReadOnlyList<ChatMessageViewDto> Messages { get; set; }
+        [JsonProperty("messageStartIndex")] public int MessageStartIndex { get; set; }
+        [JsonProperty("messageTotalCount")] public int MessageTotalCount { get; set; }
     }
     public sealed class PluginDataSelection
     {

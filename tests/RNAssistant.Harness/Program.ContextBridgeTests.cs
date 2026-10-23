@@ -982,6 +982,11 @@ namespace RNAssistant.Harness
             var session = new ChatSession { Id = "chat-1" };
             session.Artifacts.Add(new ChatArtifact { Id = "a", Revision = 1 });
             var projected = ChatCloneService.CloneMessagesForBridge(session, messages);
+            session.Messages.AddRange(messages);
+            var page = ChatCloneService.ClonePreviousMessagesForBridge(session, session.Messages.Count);
+            AssertEqual(0, page.StartIndex, "Office history uses the shared window indexes");
+            AssertEqual(2, page.TotalCount, "Office history counts the durable transcript");
+            AssertEqual("protocol", page.Messages[0].Id, "Office history retains hidden record positions");
             var json = JsonConvert.SerializeObject(projected);
             var wire = JArray.Parse(json);
 

@@ -11,35 +11,20 @@ namespace RNAssistant.Office.Services
 {
     public static class ChatCloneService
     {
-        private const int BridgeMessagePageSize = 80;
-
         public static IReadOnlyList<ChatMessageViewDto> CloneRecentMessagesForBridge(
             ChatSession session, out int startIndex)
         {
-            var messages = session == null ? null : session.Messages;
-            var count = messages == null ? 0 : messages.Count;
-            startIndex = Math.Max(0, count - BridgeMessagePageSize);
-            return CloneMessagesForBridge(session, messages == null
-                ? null : messages.Skip(startIndex));
+            var page = ChatMessageWindowProjector.Project<ChatMessagePageDto>(session,
+                session?.Messages?.Count ?? 0, CloneMessagesForBridge);
+            startIndex = page.StartIndex;
+            return page.Messages;
         }
 
         public static ChatMessagePageDto ClonePreviousMessagesForBridge(
             ChatSession session, int beforeIndex)
         {
-            var messages = session == null ? null : session.Messages;
-            var count = messages == null ? 0 : messages.Count;
-            if (beforeIndex < 0 || beforeIndex > count)
-                throw new ArgumentOutOfRangeException(nameof(beforeIndex));
-            var start = Math.Max(0, beforeIndex - BridgeMessagePageSize);
-            return new ChatMessagePageDto
-            {
-                ChatId = session == null ? null : session.Id,
-                SessionRevision = session == null ? 0 : session.Revision,
-                StartIndex = start,
-                TotalCount = count,
-                Messages = CloneMessagesForBridge(session, messages == null
-                    ? null : messages.Skip(start).Take(beforeIndex - start))
-            };
+            return ChatMessageWindowProjector.Project<ChatMessagePageDto>(session, beforeIndex,
+                CloneMessagesForBridge);
         }
 
         public static ChatSession CloneSessionSnapshot(ChatSession session)

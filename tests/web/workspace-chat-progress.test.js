@@ -18,7 +18,7 @@ const { chromium } = require('playwright');
     await page.waitForFunction(() => state.activeChatId === 'preview-chat' && !state.initializePromise);
     const checks = await page.evaluate(() => {
       const list = document.createElement('section'); document.body.appendChild(list);
-      const first = { id: 'reflection', runId: 'run', role: 'assistant', text: '', reflectionDecision: 'Read the procedure.', reasoningContent: 'Accepted reasoning.' };
+      const first = { Id: 'reflection', RunId: 'run', Role: 'assistant', Content: '', ReflectionDecision: 'Read the procedure.', ReasoningContent: 'Accepted reasoning.' };
       const chat = { sessionId: 'progress-test', project: { workspaceId: 'workspace' }, messages: [first], state: { status: 'running', runId: 'run' } };
       RNAssistantWorkspaceChat.renderMessages(list, chat);
       const saved = list.querySelector('.reasoning-block'), step = list.querySelector('.workspace-reflection-step');
@@ -33,7 +33,7 @@ const { chromium } = require('playwright');
       chat.state.modelProgress = { RunId: 'run', StepId: 'step-2', AttemptId: 'b', Message: '', Reasoning: '', Retrying: true };
       RNAssistantWorkspaceChat.renderMessages(list, chat);
       const reset = !live.textContent.includes('New reasoning.') && !live.textContent.includes('Longer preview.') && live.textContent.includes('Повторная попытка');
-      chat.messages.push({ id: 'finish', runId: 'run', role: 'assistant', text: 'Final answer.', reasoningContent: 'Accepted final reasoning.' });
+      chat.messages.push({ Id: 'finish', RunId: 'run', Role: 'assistant', Content: 'Final answer.', ReasoningContent: 'Accepted final reasoning.' });
       chat.state = { runId: 'run', status: 'completed' };
       RNAssistantWorkspaceChat.renderMessages(list, chat);
       const finished = !list.querySelector('.agent-stream-step') && list.textContent.includes('Accepted final reasoning.') && saved.isConnected;

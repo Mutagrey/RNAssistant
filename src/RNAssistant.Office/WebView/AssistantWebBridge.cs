@@ -174,6 +174,7 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.GetPluginVendors: case BridgeOperationId.ImportPluginVendor: case BridgeOperationId.ResolveHtmlVendor:
                     case BridgeOperationId.GetProjectChats: case BridgeOperationId.ConnectProjectWorkspace: case BridgeOperationId.CreateProjectWorkspace:
                     case BridgeOperationId.CreateProjectChat: case BridgeOperationId.GetProjectChat:
+                    case BridgeOperationId.GetPreviousProjectChatMessages:
                     case BridgeOperationId.RenameProjectChat: case BridgeOperationId.DeleteProjectChat: case BridgeOperationId.DeleteProjectHistory:
                     case BridgeOperationId.SubmitProjectChat:
                     case BridgeOperationId.ResolveProjectChat: case BridgeOperationId.CancelProjectChat:

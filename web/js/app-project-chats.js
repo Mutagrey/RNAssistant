@@ -389,6 +389,17 @@
       finally { busy = false; render(); }
     });
     window.RNAssistantWorkspaceChat.registerActions("project", {
+      loadPrevious: async function () {
+        if (!active || !active.messageStartIndex) return;
+        var pid = projectId(), sid = currentId(), beforeIndex = active.messageStartIndex;
+        try {
+          var page = await send("getPreviousProjectChatMessages", {
+            workspaceId: pid, sessionId: sid, beforeIndex: beforeIndex });
+          if (projectId() === pid && currentId() === sid && active.messageStartIndex === beforeIndex) {
+            window.RNAssistantWorkspaceChat.prependMessages(active, page); render();
+          }
+        } catch (error) { if (projectId() === pid && currentId() === sid) notice(error.detail || error.message, true); }
+      },
       input: function () {
         el("Send").disabled = window.RNAssistantWorkspaceChat.readOnly(active) || busy || uploadingFiles || !project() || !project().available || !active || !el("Input").value.trim() || !!active.pendingId || field(runState(), "status", "Status") === "running";
       },

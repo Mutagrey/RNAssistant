@@ -27,9 +27,19 @@ const root = path.resolve(__dirname, '../..');
       await page.evaluate(() => {
         const original = send;
         window.send = async function (type, payload) {
+          if (type === 'getPreviousProjectChatMessages') return {
+            chatId: payload.sessionId, sessionRevision: 5, startIndex: 0, totalCount: 7,
+            messages: [
+              { Id: 'old-user', Role: 'user', Content: 'Earlier question.' },
+              { Id: 'old-answer', Role: 'assistant', Content: 'Earlier answer.' }
+            ]
+          };
           const result = await original(type, payload);
           if ((type === 'getProjectChat' || type === 'getPluginChat') && result && result.state) {
             result.state.status = 'failed';
+            result.state.revision = 5;
+            result.messageStartIndex = 2;
+            result.messageTotalCount = 7;
             result.messages = [
               { Id: 'user', Role: 'user', Content: 'Check the chart.' },
               { Id: 'reflection', Role: 'assistant', Content: '',
@@ -69,6 +79,10 @@ const root = path.resolve(__dirname, '../..');
         owner + ': saved tool activity uses the common message renderer');
       assert.equal((await page.locator('#messages').textContent()).includes('private v8 JSON'), false,
         owner + ': protocol body stays hidden');
+      await page.locator('#messages .chat-history-more').click();
+      await page.locator('#messages').getByText('Earlier answer.').waitFor();
+      assert.equal(await page.locator('#messages .chat-history-more').count(), 0,
+        owner + ': oldest page removes the history control');
       assert.deepEqual(errors, [], owner + ': no page errors');
       await page.close();
     }

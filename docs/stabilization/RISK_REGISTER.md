@@ -15,10 +15,12 @@ working change fixes strict root/wire admission, configurable/proactive reflecti
 budget, accepted Office handoff/reasoning, typed output truncation recovery,
 workspace accepted metadata and stable rendering, local-run preview and explicit
 read-only/unsupported history. Shared typed terminal run notices and the composer
-anchor were fixed independently in the shared-shell commits. Remaining: actual
-reported endpoint/model evidence, Windows/Office/WebView2 qualification, workspace
-paging beyond 100 messages, and live token delivery between processes. Full Office /
-workspace chat presentation parity is not claimed by these targeted repairs.
+anchor were fixed independently in the shared-shell commits. The subsequent
+shared-chat cutover removed `PluginChatMessageDto` and added common browser message
+views and 80-record history pages for project/plugin. Remaining: actual reported
+endpoint/model evidence, Windows/Office/WebView2 qualification and live token
+delivery between processes. Full Office/workspace delivery and action parity is
+not claimed by these targeted repairs.
 
 
 Baseline: `7a627c44`; user reports Office reflection-limit stops, format failures,

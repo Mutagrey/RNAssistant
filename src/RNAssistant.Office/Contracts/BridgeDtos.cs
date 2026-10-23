@@ -806,23 +806,8 @@ namespace RNAssistant.Office.Contracts
         public string BridgeToken { get; set; }
     }
 
-    public sealed class ChatMessagePageDto
+    public sealed class ChatMessagePageDto : ChatMessageWindowViewDto
     {
-        [JsonProperty("chatId")]
-        public string ChatId { get; set; }
-
-        [JsonProperty("sessionRevision")]
-        public long SessionRevision { get; set; }
-
-        [JsonProperty("startIndex")]
-        public int StartIndex { get; set; }
-
-        [JsonProperty("totalCount")]
-        public int TotalCount { get; set; }
-
-        [JsonProperty("messages")]
-        public IReadOnlyList<ChatMessageViewDto> Messages { get; set; }
-
         [JsonProperty("artifacts", NullValueHandling = NullValueHandling.Ignore)]
         public IReadOnlyList<ChatArtifactDto> Artifacts { get; set; }
 

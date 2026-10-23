@@ -364,7 +364,7 @@ namespace RNAssistant.Office
                 throw new ArgumentException("A chat id is required.", nameof(chatId));
             if (!_chatRuns.IsRunning(chatId) && !_inbox.HasActiveWork(chatId))
             {
-                var window = _conversationStore.ReadMessageWindow(chatId, beforeIndex, 80);
+                var window = _conversationStore.ReadMessageWindow(chatId, beforeIndex, ChatMessageWindowViewDto.PageSize);
                 if (window != null)
                 {
                     var visible = ChatCloneService.CloneMessagesForBridge(window.Session, window.PageMessages);

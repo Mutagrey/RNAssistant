@@ -13,7 +13,7 @@
   }
   function dispatch(name, value) {
     var handler = actions[activeOwner] && actions[activeOwner][name];
-    if (handler) handler(value);
+    if (handler) return handler(value);
   }
   function bindActions() {
     if (actionsBound) return;
@@ -124,8 +124,29 @@
         field(field(current, "project"), "workspaceId") !== field(field(incoming, "project"), "workspaceId")) return incoming;
     var previousRevision = field(field(current, "state"), "revision");
     var nextRevision = field(field(incoming, "state"), "revision");
-    return Number.isSafeInteger(previousRevision) && (!Number.isSafeInteger(nextRevision) || nextRevision < previousRevision)
-      ? current : incoming;
+    if (Number.isSafeInteger(previousRevision) && (!Number.isSafeInteger(nextRevision) || nextRevision < previousRevision))
+      return current;
+    var currentStart = field(current, "messageStartIndex"), incomingStart = field(incoming, "messageStartIndex");
+    var currentTotal = field(current, "messageTotalCount"), incomingTotal = field(incoming, "messageTotalCount");
+    if (Number.isSafeInteger(currentStart) && Number.isSafeInteger(incomingStart) &&
+        currentStart < incomingStart && Number.isSafeInteger(currentTotal) &&
+        Number.isSafeInteger(incomingTotal) && incomingTotal >= currentTotal &&
+        Array.isArray(current.messages) && current.messages.length >= incomingStart - currentStart) {
+      incoming.messages = current.messages.slice(0, incomingStart - currentStart).concat(incoming.messages || []);
+      incoming.messageStartIndex = currentStart;
+    }
+    return incoming;
+  }
+  function prependMessages(current, page) {
+    var start = field(current, "messageStartIndex"), total = field(current, "messageTotalCount");
+    var revision = field(field(current, "state"), "revision");
+    if (!current || !page || field(page, "chatId") !== field(current, "sessionId") ||
+        field(page, "sessionRevision") !== revision || field(page, "totalCount") !== total ||
+        field(page, "startIndex") + (page.messages || []).length !== start)
+      throw new Error("История изменилась. Обновите чат и повторите загрузку.");
+    current.messages = page.messages.concat(current.messages || []);
+    current.messageStartIndex = page.startIndex;
+    return current;
   }
   function createRunObserver(read, changed, failed) {
     var target = null, timer = null;
@@ -159,19 +180,34 @@
     var following = changed || list.scrollHeight - list.scrollTop - list.clientHeight < 64;
     var snapshot = field(chat, "state"), live = field(snapshot, "modelProgress");
     if (field(snapshot, "status") !== "running" || field(live, "runId") !== field(snapshot, "runId")) live = null;
-    var signature = JSON.stringify([chat.messages || [], live]);
+    var start = field(chat, "messageStartIndex") || 0;
+    var signature = JSON.stringify([chat.messages || [], live, start, field(chat, "messageTotalCount")]);
     if (!changed && list._chatSignature === signature) return;
     var expanded = new Set(Array.from(list.querySelectorAll("details[open][data-message-key]")).map(function (item) { return item.dataset.messageKey; }));
-    var scroll = list.scrollTop;
+    var scroll = list.scrollTop, height = list.scrollHeight;
+    var oldStart = changed ? null : Number(list.dataset.startIndex);
     if (changed) { list.replaceChildren(); list._workspaceEntries = Object.create(null); }
-    list.dataset.session = key; list._chatSignature = signature;
+    list.dataset.session = key; list.dataset.startIndex = String(start); list._chatSignature = signature;
     var previous = list._workspaceEntries || Object.create(null), next = Object.create(null), ordered = [];
+    if (start > 0) {
+      var historyKey = "history:older", saved = previous[historyKey];
+      var more = saved ? saved.nodes[0] : document.createElement("button");
+      if (!saved) {
+        more.type = "button"; more.className = "chat-history-more";
+        more.textContent = "Показать предыдущие сообщения";
+        more.onclick = function () {
+          more.disabled = true;
+          Promise.resolve(dispatch("loadPrevious")).finally(function () { more.disabled = false; });
+        };
+      }
+      next[historyKey] = saved || { nodes: [more] }; ordered.push(more);
+    }
     var visible = (chat.messages || []).filter(function (message) {
       return !message.ProtocolMessage && (!!(message.Content || "").trim() || !!message.Activity ||
         !!message.ReflectionDecision || !!message.ReasoningContent ||
         !!(message.Results && message.Results.length));
     });
-    if (!visible.length) {
+    if (!visible.length && !start && !live) {
       var empty = previous.empty || { signature: "empty", nodes: [renderChatEmptyState({ title: "С чего начнём?",
         text: "Опишите изменение плагина или задайте вопрос об исходниках." })] };
       next.empty = empty; ordered.push.apply(ordered, empty.nodes);
@@ -225,7 +261,8 @@
       else list.insertBefore(node, cursor);
     });
     list._workspaceEntries = next;
-    list.scrollTop = following ? list.scrollHeight : scroll;
+    list.scrollTop = !changed && Number.isSafeInteger(oldStart) && start < oldStart
+      ? scroll + list.scrollHeight - height : following ? list.scrollHeight : scroll;
   }
   function renderWorkspaceControls(chat, submitQuestions) {
     if (activeOwner === "office") return;
@@ -385,6 +422,6 @@
     mount: mount, owner: function () { return activeOwner; }, node: node, messages: function () { return node("Messages"); },
     registerActions: registerActions, bindActions: bindActions,
     rememberSession: rememberSession, selectedSession: function (workspaceId) { return selectedSessions.get(workspaceId); },
-    watchTitle: watchTitle, latestSnapshot: latestSnapshot, createRunObserver: createRunObserver,
-    readOnly: readOnly, runNotice: runNotice };
+    watchTitle: watchTitle, latestSnapshot: latestSnapshot, prependMessages: prependMessages,
+    createRunObserver: createRunObserver, readOnly: readOnly, runNotice: runNotice };
 }());

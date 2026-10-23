@@ -440,6 +440,50 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void PluginsProjectChatHistoryPages()
+        {
+            WithPluginPaths(paths => {
+                using (var service = new PluginApplicationService(paths))
+                {
+                    var workspaceId = service.CreateProjectWorkspace(new ProjectConnectionRequest {
+                        RootPath = Path.Combine(paths.Root, "paged-project") }).SelectedWorkspaceId;
+                    var created = service.CreateProjectChat(new ProjectChatRequest { WorkspaceId = workspaceId });
+                    var workspace = new WorkspaceStore(paths).OpenConnected(workspaceId);
+                    var session = service.Conversations.GetSession(workspace, created.SessionId);
+                    var messages = Enumerable.Range(0, 170).Select(index => new ChatMessage {
+                        Role = "user", Content = "Message " + index }).ToList();
+                    messages.Insert(30, new ChatMessage { Role = "tool", ProtocolMessage = true,
+                        Content = "private protocol body" });
+                    session.Messages.AddRange(messages);
+                    new ChatStore(paths).Commit(session, new ConversationCommit(messages));
+
+                    var latest = service.ProjectChat(new ProjectChatRequest { WorkspaceId = workspaceId,
+                        SessionId = created.SessionId });
+                    AssertEqual(171, latest.MessageTotalCount, "workspace history counts durable message indexes");
+                    AssertEqual(91, latest.MessageStartIndex, "workspace opens the shared 80-message window");
+                    AssertEqual("Message 169", latest.Messages.Last().Content, "latest answer stays in the first page");
+                    var middle = service.ProjectChatMessages(new ProjectChatHistoryRequest {
+                        WorkspaceId = workspaceId, SessionId = created.SessionId,
+                        BeforeIndex = latest.MessageStartIndex });
+                    AssertEqual(11, middle.StartIndex, "previous page follows raw indexes");
+                    AssertTrue(middle.Messages.Single(item => item.Role == "tool").ProtocolMessage &&
+                        middle.Messages.Single(item => item.Role == "tool").Content == null,
+                        "paged protocol body remains hidden without shifting indexes");
+                    var oldest = service.ProjectChatMessages(new ProjectChatHistoryRequest {
+                        WorkspaceId = workspaceId, SessionId = created.SessionId,
+                        BeforeIndex = middle.StartIndex });
+                    AssertEqual(0, oldest.StartIndex, "oldest page remains reachable");
+                    AssertEqual("Message 0", oldest.Messages.First().Content, "oldest user message survives paging");
+                    PluginFailure(() => service.ProjectChatMessages(new ProjectChatHistoryRequest {
+                        WorkspaceId = workspaceId, SessionId = created.SessionId, BeforeIndex = 172 }), "project_chat_invalid");
+                    var other = service.CreateProjectWorkspace(new ProjectConnectionRequest {
+                        RootPath = Path.Combine(paths.Root, "foreign-project") }).SelectedWorkspaceId;
+                    PluginFailure(() => service.ProjectChatMessages(new ProjectChatHistoryRequest {
+                        WorkspaceId = other, SessionId = created.SessionId, BeforeIndex = 91 }), "project_chat_missing");
+                }
+            });
+        }
+
         private static void PluginsProjectChatBusyLeaseIsTyped()
         {
             WithPluginPaths(paths =>

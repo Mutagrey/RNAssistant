@@ -216,7 +216,8 @@
         status: run ? "running" : chat.RunStatus, runId: run && run.runId || null,
         cursor: run && run.cursor || "preview-project-cursor", userInput: null },
       pendingId: null, pendingTool: null, pendingArguments: null,
-      messages: clone(projectMessages[chat.Id] || []) };
+      messages: clone(projectMessages[chat.Id] || []), messageStartIndex: 0,
+      messageTotalCount: (projectMessages[chat.Id] || []).length };
   }
   function pluginChatState(pluginId) {
     var plugin = [pluginItem].concat(extraPlugins).find(function (item) { return item.pluginId === pluginId && !item.hidden; });
