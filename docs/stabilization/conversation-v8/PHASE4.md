@@ -107,6 +107,10 @@ an irreparable obstacle without reporting success or replaying a tool.
   model-facing read window and leaves claims explicitly unavailable; the
   [open risk](../RISK_REGISTER.md#shared-context-archive-read-limit--2026-10-23)
   records that limitation.
+- Workspace accepted-call history and plugin publication checks pass with v8
+  per-call records. Plugin chat presentation now uses the strict v8 history
+  reader, so a valid non-native call shows its narration and action, while
+  missing runtime call metadata is refused before the next model request.
 
 The full Harness still has legacy v7 wire bodies and assertions outside these
 migrated groups; its complete test suite is not yet green.

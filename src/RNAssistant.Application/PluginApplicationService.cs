@@ -621,19 +621,12 @@ namespace RNAssistant.Application
         {
             if (message.Role == "assistant" && message.ResponseProtocolVersion == ConversationResponse.ProtocolVersion)
             {
-                // Workspace stores the accepted v7 envelope and its runtime IDs as
-                // one record per call. Office's native-history reader expects a
-                // different projection and rejects valid workspace records.
-                var parsed = ConversationResponseJson.Read(message.Content);
-                var saved = message.ToolCalls ?? new List<LlmToolCall>();
-                if (!parsed.Success || saved.Count != parsed.Response.ToolCalls.Count ||
-                    saved.Where((call, index) => call == null || string.IsNullOrWhiteSpace(call.Id) ||
-                        call.Type != "function" || call.Name != parsed.Response.ToolCalls[index].Name ||
-                        call.ArgumentsJson != parsed.Response.ToolCalls[index].Arguments.ToString(Formatting.None)).Any())
+                var accepted = ConversationResponseHistoryReader.Read(message);
+                if (!accepted.Success)
                     return new PluginChatMessageDto { Role = "assistant",
                         Text = "Сообщение модели не удалось отобразить: запись принятого вызова неполная." };
-                return new PluginChatMessageDto { Role = "assistant", Text = parsed.Response.Message,
-                    Actions = parsed.Response.ToolCalls.Select(call => call.Name).ToArray() };
+                return new PluginChatMessageDto { Role = "assistant", Text = accepted.Response.Message,
+                    Actions = accepted.Response.ToolCalls.Select(call => call.Name).ToArray() };
             }
             return new PluginChatMessageDto { Role = message.Role, Text = message.Content };
         }

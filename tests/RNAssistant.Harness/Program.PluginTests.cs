@@ -15,6 +15,7 @@ using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.Llm;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Persistence;
 using RNAssistant.Runtime.Contracts;
 
@@ -295,15 +296,18 @@ namespace RNAssistant.Harness
         private static void PluginsPublishAndSeparateAuthority()
         {
             WithPluginPaths(paths=>{
-                var wire = new ChatMessage { Role = "assistant", ProtocolMessage = true, ResponseProtocolVersion = 7,
-                    Content = "{\"message\":\"Читаю исходник\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.resources_read\",\"arguments\":{\"target\":\"README.md\"}}]}",
-                    ToolCalls = new System.Collections.Generic.List<LlmToolCall> { new LlmToolCall {
-                        Id = "call-1", Type = "function", Name = "common.resources_read",
-                        ArgumentsJson = "{\"target\":\"README.md\"}" } } };
+                var wire = new ChatMessage { Role = "assistant", ProtocolMessage = true,
+                    ResponseProtocolVersion = ConversationResponse.ProtocolVersion,
+                    Content = ModelProtocolWire.WriteAcceptedCall("Read the source.", "Читаю исходник",
+                        new ConversationToolCall { Name = "common.resources_read", Arguments = new JObject { ["target"] = "README.md" } }),
+                    ToolCallId = "call-1", ToolName = "common.resources_read",
+                    ToolResultProtocolVersion = ToolResultWire.CurrentVersion,
+                    ToolResultRole = ToolResultRoles.User,
+                    AcceptedCallOrigin = new AcceptedToolCallOrigin("step-1", "attempt-1", 0) };
                 var presented = PluginApplicationService.PresentWorkspaceMessage(wire);
                 AssertEqual("Читаю исходник", presented.Text, "source chat presents the model message, not protocol JSON");
                 AssertEqual("common.resources_read", presented.Actions.Single(), "source chat retains the action name without arguments");
-                wire.ToolCalls[0].Id = null;
+                wire.ToolCallId = null;
                 AssertTrue(PluginApplicationService.PresentWorkspaceMessage(wire).Text.Contains("неполная"),
                     "source chat does not present an unpaired model action as accepted history");
                 using(var service=new PluginApplicationService(paths))
