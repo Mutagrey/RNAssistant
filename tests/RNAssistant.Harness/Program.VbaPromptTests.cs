@@ -2689,7 +2689,7 @@ namespace RNAssistant.Harness
                 "VBA discovery fallback selects the aggregate project target");
             AssertContains(editing.BodyMarkdown, "whole reads are complete only when the source body is included",
                 "VBA skill distinguishes a successful read from source omitted by the context budget");
-            AssertContains(editing.BodyMarkdown, "one ordered patch call",
+            AssertContains(editing.BodyMarkdown, "one ordered `common.vba_apply_patch` call",
                 "VBA skill batches same-snapshot hunks into one atomic mutation");
             AssertContains(editing.BodyMarkdown, "Exact patches can use relevant excerpts",
                 "VBA skill does not require whole-source observation for focused patches");
@@ -2700,7 +2700,8 @@ namespace RNAssistant.Harness
             AssertContains(editing.BodyMarkdown, "never backslash escaping",
                 "VBA skill distinguishes JSON transport escaping from VBA string syntax");
             AssertContains(editing.BodyMarkdown, "never creates a missing module", "patch remains existing-only");
-            AssertContains(editing.BodyMarkdown, "repeat the exact anchor block", "insertions use explicit exact replacement text");
+            AssertContains(editing.BodyMarkdown, "Follow the supplied hunk-field schema for matching, context, positions, insertion and deletion",
+                "insertions follow the current patch schema");
             AssertContains(editing.BodyMarkdown, "common.vba_rename_module", "skill explains the strict rename intent");
             AssertTrue(editing.BodyMarkdown.IndexOf("mode=rename", StringComparison.Ordinal) < 0,
                 "skill no longer teaches the retired write branch");
