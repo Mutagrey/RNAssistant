@@ -82,6 +82,11 @@ namespace RNAssistant.Harness
                                 SessionId = sessionId, Message = "Посмотри ресурсы", Mode = ChatModes.Agent
                             }, settings, () => "test-key").GetAwaiter().GetResult();
                             AssertEqual(RunLifecycle.Completed, first.Summary.Lifecycle, "first workspace turn completes");
+                            var runView = service.ReadState(workspace, sessionId).RunViewState;
+                            AssertEqual(first.Summary.RunId, runView.RunId,
+                                "workspace chat exposes the same typed run state as Office");
+                            AssertEqual(RunViewLifecycles.Completed, runView.Lifecycle,
+                                "workspace presentation uses kernel lifecycle");
                             var calls = service.GetSession(workspace, sessionId).Messages.Where(message =>
                                 message.Role == "assistant" && message.AcceptedCallOrigin != null &&
                                 message.ToolName == "common.resources_find").ToArray();

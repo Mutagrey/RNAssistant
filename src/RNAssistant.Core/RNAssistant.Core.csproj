@@ -127,6 +127,7 @@
     <Compile Include="Services\StrictJsonSourceReader.cs" />
     <Compile Include="Models\AgentResponseModels.cs" />
     <Compile Include="Models\ChatModels.cs" />
+    <Compile Include="Models\ChatMessageViewDto.cs" />
     <Compile Include="Models\PluginModels.cs" />
     <Compile Include="Models\WorkspaceModels.cs" />
     <Compile Include="Models\TabularProjectModels.cs" />

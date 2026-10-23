@@ -36,6 +36,7 @@ namespace RNAssistant.Runtime.Contracts
         public string WorkspaceId { get; set; }
         public string Title { get; set; }
         public bool TitleGenerationPending { get; set; }
+        [JsonProperty("readOnly")] public bool ReadOnly { get; set; }
         public string Model { get; set; }
         public string Mode { get; set; }
         public MutationPolicy? MutationPolicy { get; set; }
@@ -43,6 +44,8 @@ namespace RNAssistant.Runtime.Contracts
         public long Revision { get; set; }
         public string Cursor { get; set; }
         public string Status { get; set; }
+        [JsonProperty("runViewState", NullValueHandling = NullValueHandling.Ignore)]
+        public RunViewState RunViewState { get; set; }
         public string RunId { get; set; }
         public int? IterationsUsed { get; set; }
         public int? ToolStepsUsed { get; set; }

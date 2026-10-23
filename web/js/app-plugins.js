@@ -14,7 +14,7 @@
   var navigation={projectName:'Проект данных',view:'sources',templateId:'',templates:[],expanded:{project:true,templates:true,dictionary:true}};
   function el(id){return window.RNAssistantWorkspaceChat.node(id)||document.getElementById('plugin'+id);}
   function ownsChat(){return window.RNAssistantWorkspaceChat.owner()==='plugin';}
-  function chatStatus(text){if(ownsChat())el('Notice').textContent=text||'';}
+  function chatStatus(text,error){if(ownsChat()){el('Notice').textContent=text||'';el('Notice').dataset.error=error?'true':'false';}}
   var statusTimer=null;
   function status(text,error){clearTimeout(statusTimer);el('Status').textContent=text || '';el('Status').setAttribute('role',error?'alert':'status');
     if(text&&!error)statusTimer=setTimeout(function(){el('Status').textContent='';},4500);}
@@ -159,9 +159,10 @@
     el('ChatTitle').title=el('ChatTitle').textContent;
     window.RNAssistantWorkspaceChat.renderMessages(el('Messages'),chat);
     var s=chat.state||{},running=(s.Status||s.status)==='running';
-    chatStatus(chat.pendingId?'Нужно подтвердить действие агента.':
+    var runNotice=window.RNAssistantWorkspaceChat.runNotice(chat);
+    chatStatus((runNotice ? runNotice.title+'. '+runNotice.text : '')|| (chat.pendingId?'Нужно подтвердить действие агента.':
       s.interruptedEffectPossible?'Возможное изменение требует проверки. Не повторяйте действие автоматически.':
-      (s.Status||s.status)==='interrupted'?'Выполнение прервано. Проверьте ход работы.':running?'Агент работает…':'');
+      (s.Status||s.status)==='interrupted'?'Выполнение прервано. Проверьте ход работы.':running?'Агент работает…':''),!!runNotice);
     chatComposer.select({workspaceId:chat.project.workspaceId,sessionId:chat.sessionId},s);
     window.RNAssistantWorkspaceChat.renderWorkspaceControls(chat,function(answers,requestId){
       return chatAction(function(workspaceId,sessionId){return send('submitProjectChat',{workspaceId:workspaceId,sessionId:sessionId,input:{sessionId:sessionId,requestId:requestId,answers:answers}});},true);});

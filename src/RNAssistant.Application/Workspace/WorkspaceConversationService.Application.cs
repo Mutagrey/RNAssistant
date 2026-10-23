@@ -85,9 +85,11 @@ namespace RNAssistant.Runtime
             {
                 Id = session.Id, WorkspaceId = session.WorkspaceId, Title = session.Title,
                 TitleGenerationPending = _pendingTitles.ContainsKey(session.Id), Model = session.Model,
+                ReadOnly = session.FormatVersion != ChatSession.CurrentFormatVersion,
                 Mode = session.Mode, MutationPolicy = session.MutationPolicy, Revision = session.Revision, Cursor = ConversationEventFeed.Cursor(session),
                 ConversationPolicy = session.LastRun?.ConversationPolicy,
                 Status = session.LastRun?.Status, ModelConfiguration = session.LastRun?.ModelConfiguration,
+                RunViewState = RunViewStateProjector.Create(session),
                 Office = IsPluginSource(workspace) || session.LastRun?.OfficeTarget == null ? null : new WorkspaceOfficeContext {
                     Host = session.LastRun.OfficeTarget.Host,
                     DocumentTitle = session.LastRun.OfficeTarget.DocumentTitle },

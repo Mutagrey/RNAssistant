@@ -185,10 +185,21 @@
       iteration_limit: "Достигнут лимит шагов выполнения.",
       tool_step_limit: "Достигнут лимит действий.",
       step_limit_reached: "Достигнут лимит шагов выполнения.",
+      reflection_limit: "Модель не смогла перейти от промежуточных решений к ответу. Запуск остановлен.",
       no_tool_progress: "Модель повторила описание прогресса без действия или завершения. Запуск остановлен.",
       repeated_unknown_tool_call: "Результат предыдущего действия неизвестен — проверьте документ перед повтором."
     };
     return labels[String(reason || "").toLowerCase()] || "Выполнение остановлено из-за ошибки. Подробности — в диагностике.";
+  }
+
+  function runNotice(viewState) {
+    if (!viewState) return null;
+    if (viewState.executionHealth === "unknown" && viewState.unknownEffects > 0)
+      return { title: "Результат изменений не подтверждён",
+        text: "Проверьте фактическое состояние перед повторной записью.", warning: true };
+    if (viewState.lifecycle === "failed")
+      return { title: "Работа остановлена", text: failureReasonLabel(viewState.reason), warning: false };
+    return null;
   }
 
   function outcomeLabel(viewState) {
@@ -222,6 +233,7 @@
     mergeCatalog: mergeCatalog,
     displayStatus: displayStatus,
     failureReasonLabel: failureReasonLabel,
+    runNotice: runNotice,
     outcomeLabel: outcomeLabel
   });
 }());

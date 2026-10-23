@@ -112,6 +112,11 @@
     if (sessionId) selectedSessions.set(workspaceId, sessionId); else selectedSessions.delete(workspaceId);
   }
   function field(value, key) { return value && (value[key] !== undefined ? value[key] : value[key[0].toUpperCase() + key.slice(1)]); }
+  function runNotice(snapshot) {
+    var state = field(snapshot, "state");
+    return window.RNAssistantRunViewState.runNotice(
+      window.RNAssistantRunViewState.normalize(field(state, "runViewState")));
+  }
   function latestSnapshot(current, incoming) {
     if (!current || field(current, "sessionId") !== field(incoming, "sessionId") ||
         field(field(current, "project"), "workspaceId") !== field(field(incoming, "project"), "workspaceId")) return incoming;
@@ -384,5 +389,6 @@
     mount: mount, owner: function () { return activeOwner; }, node: node, messages: function () { return node("Messages"); },
     registerActions: registerActions, bindActions: bindActions,
     rememberSession: rememberSession, selectedSession: function (workspaceId) { return selectedSessions.get(workspaceId); },
-    watchTitle: watchTitle, latestSnapshot: latestSnapshot, createRunObserver: createRunObserver };
+    watchTitle: watchTitle, latestSnapshot: latestSnapshot, createRunObserver: createRunObserver,
+    runNotice: runNotice };
 }());

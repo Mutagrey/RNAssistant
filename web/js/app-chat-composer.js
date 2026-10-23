@@ -85,21 +85,19 @@ function renderChatRunNotice() {
   var root = $("chatRunNotice");
   if (!root) return;
   var run = state.activeRunViewState;
-  var unknown = run && run.executionHealth === "unknown" && run.unknownEffects > 0;
-  var failed = run && run.lifecycle === "failed";
+  var runNotice = window.RNAssistantRunViewState.runNotice(run);
   var sendError = state.failedSend && state.failedSend.error;
-  var title = unknown ? "Результат изменений не подтверждён" : failed ? "Работа остановлена" : "Не удалось выполнить действие";
-  var text = unknown ? "Проверьте фактическое состояние перед повторной записью." : failed
-    ? window.RNAssistantRunViewState.failureReasonLabel(run.reason) : String(sendError || "");
-  var signature = JSON.stringify([state.activeChatId, run && run.runId, unknown, failed, text]);
+  var title = runNotice ? runNotice.title : "Не удалось выполнить действие";
+  var text = runNotice ? runNotice.text : String(sendError || "");
+  var signature = JSON.stringify([state.activeChatId, run && run.runId, runNotice, text]);
   if (root.noticeSignature === signature) return;
   root.noticeSignature = signature;
   root.replaceChildren();
-  root.hidden = !(unknown || failed || sendError);
+  root.hidden = !(runNotice || sendError);
   if (root.hidden) return;
   root.setAttribute("role", "alert");
   var notice = document.createElement("div");
-  notice.className = "chat-notice-content" + (unknown ? "" : " is-danger");
+  notice.className = "chat-notice-content" + (runNotice && runNotice.warning ? "" : " is-danger");
   if (window.RNAssistantIcons) notice.innerHTML = window.RNAssistantIcons.render("warning");
   var copy = document.createElement("div");
   copy.className = "chat-notice-copy";

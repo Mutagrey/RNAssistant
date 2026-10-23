@@ -45,7 +45,16 @@ context.renderMessageArticle = function (message) {
 context.renderChatEmptyState = () => new Element("empty");
 context.agentActionCountText = count => String(count);
 const source = fs.readFileSync(path.join(__dirname, "../../web/js/app-workspace-chat.js"), "utf8");
+vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-run-view-state.js"), "utf8"), context,
+  { filename: "app-run-view-state.js" });
 vm.runInContext(source, context, { filename: "app-workspace-chat.js" });
+
+const failedRun = { RunId: "run-1", TurnId: "turn-1", Lifecycle: "failed", ExecutionHealth: "clean",
+  SuccessfulReads: 0, VerifiedWrites: 0, NoChangeWrites: 0, UnverifiedWrites: 0,
+  FailedCalls: 0, UnknownEffects: 0, Reason: "provider", StartedUtc: "2026-10-23T00:00:00Z" };
+assert.equal(context.RNAssistantWorkspaceChat.runNotice({ state: { runViewState: failedRun } }).text,
+  context.RNAssistantRunViewState.failureReasonLabel("provider"),
+  "project and plugin state reuse the Office run notice");
 
 const list = new Element("section");
 context.RNAssistantWorkspaceChat.renderMessages(list, { sessionId: "chat-1", messages: [

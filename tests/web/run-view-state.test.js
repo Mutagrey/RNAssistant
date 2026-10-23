@@ -54,6 +54,11 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
   assert.equal(runView.fromChatSummary({ RunViewState: state("summary") }).runId, "summary");
   assert.equal(runView.fromMessage({ runViewState: state("wrong-case") }), null);
   assert.equal(runView.fromChatSummary({ runViewState: state("wrong-case") }), null);
+  const failed = runView.normalize(Object.assign(state("failure", "failed"), { Reason: "provider" }));
+  assert.equal(runView.runNotice(failed).text, runView.failureReasonLabel("provider"),
+    "all chat surfaces use the same terminal failure text");
+  assert.match(runView.failureReasonLabel("reflection_limit"), /промежуточных решений/);
+  assert.equal(runView.runNotice(runView.normalize(state("completed"))), null);
   assert.equal(runView.sessionRevision({ sessionRevision: 0 }), 0);
   assert.equal(runView.sessionRevision({ SessionRevision: 4 }), null);
   assert.equal(runView.chatRevision({ Revision: 0 }), 0);

@@ -96,6 +96,8 @@
   function statusText() {
     var state = active && active.state;
     if (!state) return "";
+    var runNotice = window.RNAssistantWorkspaceChat.runNotice(active);
+    if (runNotice) return runNotice.title + ". " + runNotice.text;
     if (active.pendingId) return "Нужно подтвердить действие агента.";
     if (state.userInput) return "Нужен ваш ответ.";
     if (field(state, "interruptedEffectPossible", "InterruptedEffectPossible")) return "Возможное изменение требует проверки. Не повторяйте действие автоматически.";
@@ -197,7 +199,8 @@
         buttons: suggestions
       }));
     } else window.RNAssistantWorkspaceChat.renderMessages(messages, active);
-    if (!busy && !noticeError && statusText()) notice(statusText());
+    if (!busy && window.RNAssistantWorkspaceChat.runNotice(active)) notice(statusText(), true);
+    else if (!busy && !noticeError && statusText()) notice(statusText());
     else notice(noticeText, noticeError);
   }
   async function refresh(target) {
