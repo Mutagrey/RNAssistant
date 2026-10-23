@@ -922,24 +922,12 @@ and answer/restart on the candidate branch. The full Harness still contains v7 t
 not compile in the candidate branch; these focused checks do not replace its
 integration coverage at cutover.
 
-Conversation v8 phase-0 red regression runs separately from the default suite:
-
-```bash
-dotnet run --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj -- \
-  --conversation-v8-audit artifacts/conversation-v8-repro
-```
-
-Use a new or empty output directory. The fixture sends scripted responses through
-real loopback HTTP and the production parser/kernel/store with fake Excel. It saves
-exact request/response bodies, decoded event export and the replayed UI projection.
-This historical v7 reproducer is not runnable in the v8 candidate until its
-scripted responses and assertions migrate. It previously exited **1** with
-`FAIL conversation v8 admission`: v7 accepted `done` after a verified sheet
-write, without creating requested data/chart or presenting results/evidence.
-The v8 regression must assert rejection/continuation without repeating the
-mutation. This does not call a
-real model or qualify Office/COM. Scope and retained evidence:
-[Conversation v8 audit](../../docs/stabilization/conversation-v8/AUDIT.md).
+The phase-0 v7 red audit route has been retired after its failure was covered
+by the v8 fake-Excel HTTP scenario in `RNAssistant.V8KernelSmoke/run.sh`.
+The original request/response bodies, decoded event export and UI projection
+remain in [Conversation v8 audit](../../docs/stabilization/conversation-v8/AUDIT.md).
+The green scenario checks rejection, continuation and replay without repeating
+the verified sheet mutation. Neither scenario qualifies real Office/COM.
 
 For large-chat storage profiling, run
 `RNA_CHAT_PERF=1 dotnet run --no-build --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj -- "storage perf:"`

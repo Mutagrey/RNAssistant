@@ -53,7 +53,8 @@ an irreparable obstacle without reporting success or replaying a tool.
   finishes with both terminal IDs, without replaying the first write.
 
 The full Harness still has legacy v7 fixtures and cannot compile as a whole.
-The original v7 red audit remains historical. The full Harness suite and Office
+The original v7 red audit and its route have been retired; its captured evidence
+remains historical. The full Harness suite and Office
 steer/UI integration checks are not yet migrated. Playwright layout qualification is
 unavailable in this worktree (`playwright` module absent); Windows x64 +
 Office x64 + WebView2 and real-model comparisons remain open.

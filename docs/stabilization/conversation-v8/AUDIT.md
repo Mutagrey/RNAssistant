@@ -12,15 +12,20 @@ Workspace. База: `523ec66e2c3a6cf2b1829c51b669f3623e443523`.
 
 **Фаза 0: путь преждевременного завершения воспроизведён host-neutral.** Добавлены
 красная регрессия и [ADR-0016](../../decisions/ADR-0016-conversation-v8-admission.md).
-Production остаётся на v7; исправление и фазы 1–5 ещё не выполнены.
+На момент аудита production оставался на v7; исправление и фазы 1–5 ещё не были выполнены.
 Это не доказательство поведения реальной модели или исходного инцидента DeepSeek.
 После cutover этот аудит становится историей; текущий контракт остаётся в
 [Conversation protocol](../../conversation-protocol.md), статус — в
 [PROGRESS](../PROGRESS.md), риск — в [RISK_REGISTER](../RISK_REGISTER.md#premature-terminal-narration--2026-10-13).
 
+Статус в кандидате v8: исходный красный route и его v7-файл удалены после
+замены [зелёной fake-Excel HTTP-проверкой](../../../tests/RNAssistant.V8KernelSmoke/run.sh).
+Ниже сохранено историческое описание запуска на указанной базе и evidence;
+команда больше не существует в текущем дереве.
+
 ## Воспроизведение
 
-Команда использует production `LlmClient` и HTTP loopback, production
+Историческая команда использовала production `LlmClient` и HTTP loopback, production
 `ConversationRunService`/kernel/store, `FakeOfficeAdapter` для Excel. Ни Office/COM,
 ни внешний endpoint, ни пользовательские settings/данные не используются.
 Output должен быть новым или пустым каталогом:
