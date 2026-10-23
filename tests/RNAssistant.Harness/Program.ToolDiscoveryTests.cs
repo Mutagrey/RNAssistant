@@ -231,7 +231,7 @@ namespace RNAssistant.Harness
                 }
             };
             var semanticAccepted = AgentJsonProtocol.CreateToolCallMessage(
-                semanticCall, "Reading source.", null, ToolResultRoles.Tool,
+                semanticCall, "Reading source.", "Inspect the requested source.", null, ToolResultRoles.Tool,
                 FixtureCallOrigin("semantic-resource-step"));
             var semanticResult = AgentJsonProtocol.CreateToolResultMessage(
                 new ToolInvocation
@@ -281,7 +281,7 @@ namespace RNAssistant.Harness
                 }
             };
             var obsoleteAccepted = AgentJsonProtocol.CreateToolCallMessage(
-                obsoleteCall, "Reading old state.", null, ToolResultRoles.Tool,
+                obsoleteCall, "Reading old state.", "Inspect the old resource request.", null, ToolResultRoles.Tool,
                 FixtureCallOrigin("obsolete-resource-step"));
             var obsoleteResult = AgentJsonProtocol.CreateToolResultMessage(
                 new ToolInvocation
@@ -728,20 +728,29 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 const string optionalId = "common.html_workspace_write_file";
+                var earlyWrite = ModelProtocolWire.WriteAcceptedCall("Attempt the tool before admission.",
+                    "Создаю сразу.", new ConversationToolCall { Name = optionalId,
+                        Arguments = new JObject { ["path"] = "progressive.html", ["content"] = "<main>Ready</main>" } });
+                var write = ModelProtocolWire.WriteAcceptedCall("Create the requested HTML file.",
+                    "Создаю после admission.", new ConversationToolCall { Name = optionalId,
+                        Arguments = new JObject { ["path"] = "progressive.html", ["content"] = "<main>Ready</main>" } });
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"message\":\"Создаю сразу.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.html_workspace_write_file\",\"arguments\":{\"path\":\"progressive.html\",\"content\":\"<main>Ready</main>\"}}]}",
+                    earlyWrite,
                     LoadSkillResponse("common.html_workspace_authoring"),
-                    "{\"message\":\"Создаю после admission.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.html_workspace_write_file\",\"arguments\":{\"path\":\"progressive.html\",\"content\":\"<main>Ready</main>\"}}]}",
-                    "{\"message\":\"HTML создан.\",\"action\":\"done\",\"tool_calls\":[]}"
+                    write,
+                    null
                 });
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 var options = new List<LlmRequestOptions>();
+                var session = NewSession(adapter);
                 LlmCompletionDelegate completion = (completionSettings, messages, requestOptions, stream, cancellationToken) =>
                 {
                     requests.Add(messages.ToList());
                     options.Add(requestOptions);
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() ??
+                        ScriptedVerifiedFinish(session, "The admitted HTML write completed.", "HTML создан.",
+                            "The requested HTML file was created.", optionalId) });
                 };
                 var settings = new AppSettings
                 {
@@ -751,7 +760,6 @@ namespace RNAssistant.Harness
                     AutoConfirmToolActions = true
                 };
                 var catalog = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
-                var session = NewSession(adapter);
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteWithApprovalsAsync(
                     ChatModes.Agent,
                     "Создай progressive.html.",
@@ -805,17 +813,20 @@ namespace RNAssistant.Harness
                     DocumentRuntimeKey = adapter.RuntimeDocumentKey, StartedUtc = DateTime.UtcNow };
                 Func<string, JObject, ConversationToolCall> call = (name, arguments) =>
                     new ConversationToolCall { Name = name, Arguments = arguments };
-                var write = ModelProtocolWire.Write("", new[] { call("excel.write_range", new JObject {
-                    ["kind"] = "value", ["sheet"] = "Data", ["address"] = "D1", ["value"] = "42" }) });
+                var write = ModelProtocolWire.WriteAcceptedCall("Write the requested value.", "",
+                    call("excel.write_range", new JObject {
+                        ["kind"] = "value", ["sheet"] = "Data", ["address"] = "D1", ["value"] = "42" }));
                 var script = new Queue<string>(new[] {
                     write,
-                    ModelProtocolWire.Write("", new[] {
+                    ModelProtocolWire.Write(new ConversationResponse(ConversationResponse.ExecuteAction,
+                        "Read both independent tool schemas.", "", new[] {
                         call(CapabilityToolCatalog.ReadToolId, new JObject { ["id"] = "excel.write_range" }),
-                        call(CapabilityToolCatalog.ReadToolId, new JObject { ["id"] = "excel.format_range" }) }),
+                        call(CapabilityToolCatalog.ReadToolId, new JObject { ["id"] = "excel.format_range" }) })),
                     write,
-                    ModelProtocolWire.Write("", new[] { call("excel.format_range", new JObject {
-                        ["sheet"] = "Data", ["address"] = "D1", ["bold"] = true }) }),
-                    ModelProtocolWire.Write("Ячейка записана и отформатирована.", new ConversationToolCall[0])
+                    ModelProtocolWire.WriteAcceptedCall("Format the written cell.", "",
+                        call("excel.format_range", new JObject {
+                            ["sheet"] = "Data", ["address"] = "D1", ["bold"] = true })),
+                    null // Generate finish after terminal call IDs are assigned.
                 });
                 var requests = 0;
                 LlmCompletionDelegate complete = (config, messages, options, stream, token) =>
@@ -846,7 +857,10 @@ namespace RNAssistant.Harness
                         }
                         AssertEqual(2, receipts, "both schema reads remain as compact result receipts");
                     }
-                    return Task.FromResult(new LlmCompletionResult { Content = script.Dequeue() });
+                    var scriptedResponse = script.Dequeue() ?? ScriptedVerifiedFinish(session,
+                        "The write and format have terminal results.", "Ячейка записана и отформатирована.",
+                        "The requested cell was written and formatted.", "excel.write_range", "excel.format_range");
+                    return Task.FromResult(new LlmCompletionResult { Content = scriptedResponse });
                 };
                 var settings = new AppSettings { AgentResponseMode = responseMode, AutoConfirmToolActions = true,
                     ContextWindowOverrideTokens = 65536, MaxAgentFormatRetries = 2 };
@@ -923,7 +937,7 @@ namespace RNAssistant.Harness
                         Id = callId,
                         Name = CapabilityToolCatalog.ReadToolId,
                         Arguments = new Dictionary<string, object> { { "id", skillId } }
-                    }, string.Empty, null, FixtureCallOrigin("oversized-capability-step"));
+                    }, string.Empty, "Read the requested capability.", null, FixtureCallOrigin("oversized-capability-step"));
                     session.Messages[session.Messages.Count - 1].RunId =
                         session.LastRun.RunId;
                     var command = Command(CapabilityToolCatalog.ReadToolId, "id", skillId);
@@ -1363,7 +1377,7 @@ namespace RNAssistant.Harness
                             Id = callId,
                             Name = CapabilityToolCatalog.ReadToolId,
                             Arguments = new Dictionary<string, object> { { "id", tool.Id } }
-                        }, string.Empty, null, FixtureCallOrigin("overflow-step"));
+                        }, string.Empty, "Read the requested capability.", null, FixtureCallOrigin("overflow-step"));
                         var command = Command(CapabilityToolCatalog.ReadToolId, "id", tool.Id);
                         command.ToolCallId = callId;
                         var result = executor.ExecuteManual(command, catalog, settings, false, false);
@@ -1518,7 +1532,7 @@ namespace RNAssistant.Harness
                     Id = "read_before_compaction",
                     Name = CapabilityToolCatalog.ReadToolId,
                     Arguments = new Dictionary<string, object> { { "id", optional.Id } }
-                }, string.Empty, null, ToolResultRoles.User, FixtureCallOrigin("before-compaction-step")));
+                }, string.Empty, "Read the capability before compaction.", null, ToolResultRoles.User, FixtureCallOrigin("before-compaction-step")));
                 var evidence = ReadSchemaEvidence(executor, catalog, optional.Id, "read_before_compaction");
                 evidence.RunId = session.LastRun.RunId;
                 session.Messages.Add(evidence);

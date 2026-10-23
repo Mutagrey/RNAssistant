@@ -1274,8 +1274,8 @@ namespace RNAssistant.Harness
         private static IEnumerable<string> ResponseSchemaCallNames(string schemaJson)
         {
             var schema = JObject.Parse(schemaJson);
-            return schema.SelectTokens("properties.tool_calls.items.anyOf[*].properties.name.const")
-                .Concat(schema.SelectTokens("properties.tool_calls.anyOf[*].items.anyOf[*].properties.name.const"))
+            return schema.SelectTokens("anyOf[*].properties.tool_calls.items.anyOf[*].properties.name.const")
+                .Concat(schema.SelectTokens("anyOf[*].properties.tool_calls.anyOf[*].items.anyOf[*].properties.name.const"))
                 .Select(token => (string)token);
         }
 
