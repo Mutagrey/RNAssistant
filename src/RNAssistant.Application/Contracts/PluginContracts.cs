@@ -140,6 +140,10 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("role")] public string Role { get; set; }
         [JsonProperty("text")] public string Text { get; set; }
         [JsonProperty("actions")] public IReadOnlyList<string> Actions { get; set; }
+        [JsonProperty("reflectionDecision", NullValueHandling = NullValueHandling.Ignore)]
+        public string ReflectionDecision { get; set; }
+        [JsonProperty("results", NullValueHandling = NullValueHandling.Ignore)]
+        public IReadOnlyList<ModelResultViewState> Results { get; set; }
     }
     public sealed class PluginSourceStateDto
     {

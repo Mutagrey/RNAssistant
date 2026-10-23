@@ -81,7 +81,8 @@ namespace RNAssistant.Harness
                                     requests[index] = await reader.ReadToEndAsync().ConfigureAwait(false);
                                 var response = new JObject { ["choices"] = new JArray(new JObject {
                                     ["message"] = new JObject { ["content"] =
-                                        "{\"message\":\"Готово.\",\"action\":\"done\",\"tool_calls\":[]}" } })
+                                        ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                                            "The reply needs no tools.", "Готово.", results: new ConversationResultClaim[0]) } })
                                 }.ToString(Formatting.None);
                                 var bytes = Encoding.UTF8.GetBytes(response);
                                 context.Response.ContentType = "application/json";
@@ -310,6 +311,27 @@ namespace RNAssistant.Harness
                 wire.ToolCallId = null;
                 AssertTrue(PluginApplicationService.PresentWorkspaceMessage(wire).Text.Contains("неполная"),
                     "source chat does not present an unpaired model action as accepted history");
+                var reflection = new ChatMessage { Role = "assistant", ProtocolMessage = true,
+                    ResponseProtocolVersion = ConversationResponse.ProtocolVersion,
+                    ResponseModelAttemptId = "attempt-reflection",
+                    Content = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.ReflectionAction,
+                        "Review source first.", "", decision: "Inspect the exact file before editing.") };
+                var reflected = PluginApplicationService.PresentWorkspaceMessage(reflection);
+                AssertEqual("", reflected.Text, "empty reflection has no user-facing narration");
+                AssertEqual("Inspect the exact file before editing.", reflected.ReflectionDecision,
+                    "workspace reflection retains its saved decision for a separate step");
+                var finish = new ChatMessage { Role = "assistant", ProtocolMessage = true,
+                    ResponseProtocolVersion = ConversationResponse.ProtocolVersion,
+                    ResponseModelAttemptId = "attempt-finish",
+                    Content = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                        "The chart is not present.", "The chart remains unfinished.", results:
+                        new[] { new ConversationResultClaim("Chart absent", new[] { "call-1" },
+                            ConversationAssessment.PartiallySatisfied) }) };
+                var finished = PluginApplicationService.PresentWorkspaceMessage(finish);
+                AssertEqual("partially_satisfied", finished.Results.Single().Assessment,
+                    "workspace chat retains incomplete model assessment");
+                AssertEqual("call-1", finished.Results.Single().Evidence.Single(),
+                    "workspace chat retains the exact terminal evidence id");
                 using(var service=new PluginApplicationService(paths))
                 {
                     var item=PluginFixture(service,paths);var active=PluginOpen(service,item.PluginId);

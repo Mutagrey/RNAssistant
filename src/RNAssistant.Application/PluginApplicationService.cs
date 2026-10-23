@@ -626,7 +626,12 @@ namespace RNAssistant.Application
                     return new PluginChatMessageDto { Role = "assistant",
                         Text = "Сообщение модели не удалось отобразить: запись принятого вызова неполная." };
                 return new PluginChatMessageDto { Role = "assistant", Text = accepted.Response.Message,
-                    Actions = accepted.Response.ToolCalls.Select(call => call.Name).ToArray() };
+                    Actions = accepted.Response.ToolCalls.Select(call => call.Name).ToArray(),
+                    ReflectionDecision = accepted.Response.Action == ConversationResponse.ReflectionAction
+                        ? accepted.Response.Decision : null,
+                    Results = accepted.Response.Action == ConversationResponse.FinishAction
+                        ? accepted.Response.Results.Select(claim => new ModelResultViewState(
+                            claim.Summary, claim.AssessmentName, claim.Evidence)).ToArray() : null };
             }
             return new PluginChatMessageDto { Role = message.Role, Text = message.Content };
         }
