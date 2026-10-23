@@ -101,7 +101,10 @@ function bindChatActions() {
   $("clearInputButton").addEventListener("click", function () { setChatInputText("", true); });
   $("focusReplyButton").addEventListener("click", function () { $("chatInput").focus(); });
   $("cancelMessageEditButton").addEventListener("click", cancelMessageEdit);
-  $("chatInput").addEventListener("input", updateComposerInputState);
+  $("chatInput").addEventListener("input", function () {
+    updateComposerInputState();
+    if (!hasActiveMessageEdit()) captureChatDraft(state.activeChatId, true);
+  });
   window.addEventListener("resize", resizeChatInput);
   $("chatInput").addEventListener("keydown", function (event) {
     if (event.key === "Escape" && hasActiveMessageEdit() && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {

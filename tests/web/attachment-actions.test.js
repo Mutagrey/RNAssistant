@@ -58,7 +58,7 @@ const read = file => fs.readFileSync(path.join(root, "web", file), "utf8");
         return { ok: true, json: async () => ({ leaseId: id, nextOffset: upload.size }) };
       };
     });
-    for (const file of ["app-chat-composer.js", "app-resource-upload.js", "app-attachments.js"])
+    for (const file of ["app-chat-state.js", "app-chat-composer.js", "app-resource-upload.js", "app-attachments.js"])
       await page.addScriptTag({ content: read("js/" + file) });
     await page.evaluate(() => {
       window.updateComposerInputState = () => {};
@@ -127,7 +127,7 @@ const read = file => fs.readFileSync(path.join(root, "web", file), "utf8");
     await page.waitForFunction(() => !!window.finishUpload);
     assert.match(await page.locator("#attachmentStatus").textContent(), /Добавление.*slow\.css/);
     await page.evaluate(() => {
-      chatDraftStore()["chat-a"] = { text: "", attachments: state.draftAttachments.slice() };
+      saveOfficeDraft("chat-a", "", state.draftAttachments);
       state.activeChatId = "chat-b"; state.draftAttachments = []; renderAttachmentDrafts();
       finishUpload();
     });
@@ -135,7 +135,7 @@ const read = file => fs.readFileSync(path.join(root, "web", file), "utf8");
     assert.equal(await page.locator(".attachment-name").count(), 0);
     assert.equal(await page.locator("#attachmentStatus").isVisible(), false);
     await page.evaluate(() => {
-      state.activeChatId = "chat-a"; state.draftAttachments = chatDraftStore()["chat-a"].attachments;
+      state.activeChatId = "chat-a"; state.draftAttachments = readOfficeDraft("chat-a").attachments;
       renderAttachmentDrafts();
     });
     assert.equal(await page.locator(".attachment-name").last().textContent(), "slow.css");

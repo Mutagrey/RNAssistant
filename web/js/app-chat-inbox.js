@@ -92,13 +92,6 @@ function inboxOperationId() {
   return "input-" + (window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() :
     Date.now().toString(36) + "-" + Math.random().toString(36).slice(2));
 }
-function retainUnsentInputAttachments(drafts, sent) {
-  return (drafts || []).filter(function (item) {
-    var submitted = sent.some(function (attachment) { return attachmentId(attachment) === attachmentId(item); });
-    if (submitted && item.previewUrl) URL.revokeObjectURL(item.previewUrl);
-    return !submitted;
-  });
-}
 async function submitInboxMessage(text, attachments, chatId, delivery, answers) {
   if (isPendingChatSubmit(chatId)) return;
   attachments = (attachments || []).slice();
@@ -117,7 +110,7 @@ async function submitInboxMessage(text, attachments, chatId, delivery, answers) 
   }
   state.inboxSubmissions[chatId] = pending;
   pending.localStatus = "submitting";
-  var submittedDraft = state.activeChatId === chatId ? $("chatInput").value : null;
+  var submittedDraft = !answers && state.activeChatId === chatId ? captureChatDraft(chatId) : readOfficeDraft(chatId);
   if (state.activeChatId === chatId) renderChatInbox({ forceScroll: true });
   try {
     var inbox = await send("submitChatInput", { chatId: chatId, operationId: pending.OperationId,
@@ -126,19 +119,17 @@ async function submitInboxMessage(text, attachments, chatId, delivery, answers) 
     applyChatInbox(inbox);
     delete state.inboxSubmissions[chatId];
     if (state.activeChatId === chatId) {
-      if (!answers && $("chatInput").value === submittedDraft && submittedDraft.trim() === text) setChatInputText("", false);
-      state.draftAttachments = retainUnsentInputAttachments(state.draftAttachments, attachments);
-      if (typeof renderAttachmentDrafts === "function") renderAttachmentDrafts();
-      if (typeof captureChatDraft === "function") captureChatDraft(chatId);
+      if (!answers) {
+        captureChatDraft(chatId);
+        var acceptedDraft = acceptOfficeDraft(chatId, text, submittedDraft && submittedDraft.version, attachments);
+        state.draftAttachments = acceptedDraft ? acceptedDraft.attachments.slice() : [];
+        setChatInputText(acceptedDraft ? acceptedDraft.text : "", false, false);
+        if (typeof renderAttachmentDrafts === "function") renderAttachmentDrafts();
+      }
       clearSendError();
       if ($("inboxStatus")) $("inboxStatus").textContent = "";
     } else if (!answers) {
-      var draft = state.chatDrafts && state.chatDrafts[chatId];
-      if (draft) {
-        if (draft.text === submittedDraft) draft.text = "";
-        draft.attachments = retainUnsentInputAttachments(draft.attachments, attachments);
-        if (!draft.text && !draft.attachments.length) delete state.chatDrafts[chatId];
-      }
+      acceptOfficeDraft(chatId, text, submittedDraft && submittedDraft.version, attachments);
     }
     if (chatInboxNeedsHistory(chatId)) refreshInboxChat(chatId);
     return true;

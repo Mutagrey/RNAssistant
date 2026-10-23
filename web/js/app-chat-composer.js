@@ -279,13 +279,14 @@ function resizeComposerInput(input) {
   input.style.overflowY = contentHeight > maxHeight ? "auto" : "hidden";
 }
 
-function setChatInputText(text, shouldFocus) {
+function setChatInputText(text, shouldFocus, saveDraft) {
   var input = $("chatInput");
   if (!input) {
     return;
   }
 
   input.value = text || "";
+  if (saveDraft !== false && !hasActiveMessageEdit()) captureChatDraft(state.activeChatId, true);
   updateComposerInputState();
   window.requestAnimationFrame(resizeChatInput);
   if (shouldFocus) {

@@ -110,7 +110,21 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       assert.equal(await page.locator(".message.user .markdown").filter({ hasText: "Уточнение во время работы: " + delivery }).count(), 1,
         "the exact persisted message replaces its echo once");
     }
+    await page.evaluate(() => { window.acknowledge = null; });
+    await page.locator("#chatInput").fill("Тот же текст");
+    await page.locator("#sendButton").click();
+    await page.waitForFunction(() => !!window.acknowledge);
+    await page.locator("#chatInput").fill("Новый ввод");
+    await page.locator("#chatInput").fill("Тот же текст");
+    await page.evaluate(() => {
+      acknowledge({ chatId: "chat", epoch: "e", revision: 3, items: [], running: true,
+        acceptedInput: { Id: "same-text", OperationId: submitted.operationId, Text: submitted.text,
+          Status: "Applied", Delivery: submitted.delivery, Revision: 3, Attachments: [] } });
+    });
+    await page.waitForFunction(() => !isPendingChatSubmit("chat"));
+    assert.equal(await page.locator("#chatInput").inputValue(), "Тот же текст",
+      "late acknowledgement keeps a later draft with identical text");
     assert.deepEqual(errors, []);
-    console.log("PASS chat input delivery: actual Send button, visible pre-ack echo, delayed history, exact handoff and manual scroll");
+    console.log("PASS chat input delivery: pre-ack echo, history handoff, manual scroll and versioned Office draft");
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

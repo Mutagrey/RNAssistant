@@ -94,7 +94,7 @@ function chatDraftStore() {
   return state.chatDrafts;
 }
 
-var workspaceDraftVersion = 0;
+var chatDraftVersion = 0;
 function workspaceDraftKey(target) {
   return target && target.workspaceId && target.sessionId
     ? "workspace:" + JSON.stringify([target.workspaceId, target.sessionId]) : null;
@@ -107,7 +107,7 @@ function saveWorkspaceDraft(target, draft) {
   var key = workspaceDraftKey(target);
   if (!key) return null;
   var saved = { text: draft.text || "", mode: draft.mode === "plan" ? "plan" : "agent",
-    reasoning: !!draft.reasoning, version: ++workspaceDraftVersion };
+    reasoning: !!draft.reasoning, version: ++chatDraftVersion };
   chatDraftStore()[key] = saved;
   return saved;
 }
@@ -123,30 +123,72 @@ function forgetWorkspaceDraft(target) {
 window.RNAssistantChatDrafts = { readWorkspace: readWorkspaceDraft, saveWorkspace: saveWorkspaceDraft,
   acceptWorkspace: acceptWorkspaceDraft, forgetWorkspace: forgetWorkspaceDraft };
 
-function captureChatDraft(chatIdValue) {
-  if (!chatIdValue) return;
+function officeDraftKey(chatIdValue) { return chatIdValue ? "office:" + chatIdValue : null; }
+function readOfficeDraft(chatIdValue) {
+  var key = officeDraftKey(chatIdValue);
+  return key ? chatDraftStore()[key] || null : null;
+}
+
+function officeDraftAttachmentId(item) { return item && (item.Id || item.id) || ""; }
+
+function retainUnsentInputAttachments(drafts, sent) {
+  return (drafts || []).filter(function (item) {
+    var submitted = (sent || []).some(function (attachment) {
+      return officeDraftAttachmentId(attachment) === officeDraftAttachmentId(item);
+    });
+    if (submitted && item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+    return !submitted;
+  });
+}
+
+function saveOfficeDraft(chatIdValue, text, attachments, changed) {
+  var key = officeDraftKey(chatIdValue);
+  if (!key) return null;
+  var drafts = chatDraftStore();
+  var previous = drafts[key];
+  attachments = (attachments || []).slice();
+  if (!text && !attachments.length) {
+    delete drafts[key];
+    return null;
+  }
+  if (!changed && previous && previous.text === text &&
+      (previous.attachments || []).length === attachments.length &&
+      (previous.attachments || []).every(function (item, index) {
+        return officeDraftAttachmentId(item) === officeDraftAttachmentId(attachments[index]);
+      })) return previous;
+  return drafts[key] = { text: text, attachments: attachments, version: ++chatDraftVersion };
+}
+
+function acceptOfficeDraft(chatIdValue, text, version, sentAttachments) {
+  var draft = readOfficeDraft(chatIdValue);
+  if (!draft) return null;
+  return saveOfficeDraft(chatIdValue, draft.version === version && draft.text.trim() === text ? "" : draft.text,
+    retainUnsentInputAttachments(draft.attachments, sentAttachments), false);
+}
+
+window.RNAssistantChatDrafts.readOffice = readOfficeDraft;
+window.RNAssistantChatDrafts.saveOffice = saveOfficeDraft;
+window.RNAssistantChatDrafts.acceptOffice = acceptOfficeDraft;
+
+function captureChatDraft(chatIdValue, changed) {
+  if (!chatIdValue) return null;
   var input = $("chatInput");
   var editing = typeof hasActiveMessageEdit === "function" && hasActiveMessageEdit();
   var text = editing && state.editingDraftCaptured
     ? (state.editingDraftText || "")
     : (input ? input.value : "");
   var attachments = (state.draftAttachments || []).slice();
-  var drafts = chatDraftStore();
-  if (!text && !attachments.length) {
-    delete drafts[chatIdValue];
-    return;
-  }
-  drafts[chatIdValue] = { text: text, attachments: attachments };
+  return saveOfficeDraft(chatIdValue, text, attachments, changed);
 }
 
 function restoreChatDraft(chatIdValue) {
-  var draft = chatIdValue ? chatDraftStore()[chatIdValue] : null;
+  var draft = readOfficeDraft(chatIdValue);
   state.draftAttachments = draft && draft.attachments ? draft.attachments.slice() : [];
   if (typeof renderAttachmentDrafts === "function") {
     renderAttachmentDrafts();
   }
   if (typeof setChatInputText === "function") {
-    setChatInputText(draft ? draft.text : "", false);
+    setChatInputText(draft ? draft.text : "", false, false);
   } else if ($("chatInput")) {
     $("chatInput").value = draft ? draft.text : "";
   }

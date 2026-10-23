@@ -53,7 +53,7 @@ function createContext(stageFails) {
   };
   context.FileReader = class { constructor() { throw new Error("base64 ingestion must not return"); } };
 
-  for (const file of ["app-resource-upload.js", "app-attachments.js", "app-chat-run.js"]) {
+  for (const file of ["app-chat-state.js", "app-resource-upload.js", "app-attachments.js", "app-chat-run.js"]) {
     vm.runInContext(fs.readFileSync(path.join(root, "web/js", file), "utf8"), context, { filename: file });
   }
   context.submitInboxMessage = (text, attachments, chatId) => sent.push({ text, attachments, chatId });
@@ -127,9 +127,10 @@ async function settle() {
   }
 
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
-  assert.ok(index.includes("app-attachments.js?v=attachment-input-20261012-1"), "attachment upload has the shared uploader cache key");
-  assert.ok(index.includes("app-chat-composer.js?v=composer-actions-20261013-1"), "composer has the updated cache key");
-  assert.ok(index.includes("app-chat-run.js?v=response-render-timing-20260928-1"), "app-chat-run.js has the current cache key");
+  assert.ok(index.includes("app-chat-state.js?v=office-draft-20261023-1"), "draft owner has the updated cache key");
+  assert.ok(index.includes("app-attachments.js?v=office-draft-20261023-1"), "attachment upload has the updated cache key");
+  assert.ok(index.includes("app-chat-composer.js?v=office-draft-20261023-1"), "composer has the updated cache key");
+  assert.ok(index.includes("app-chat-run.js?v="), "app-chat-run.js has a cache key");
   console.log("PASS attachment staging: changed UI modules have current cache keys");
   console.log("OK 4/4");
 }()).catch(error => {

@@ -191,6 +191,8 @@ Project и Plugin теперь читают одно состояние по `wo
 существующем `state.chatDrafts`. Browser-проверка охватывает общий текст,
 mode/reasoning, файловую ссылку, retry с тем же request ID, двойной submit и
 поздний acknowledgement. Первый срез 1b перенёс Project и Plugin на один
-физический workspace transcript/composer; Office ChatView, owner-neutral
-selectors и остальная часть 1b ещё открыты. Остальные этапы выполняются
+физический workspace transcript/composer. Следующий срез подключил Office к
+тому же in-memory draft owner и versioned acknowledgement: late ack не стирает
+поздний ввод, включая идентичный текст и переключение чатов. Office ChatView,
+owner-neutral selectors и остальная часть 1b ещё открыты. Остальные этапы выполняются
 последовательно по своим gates. Текущее evidence — в [PROGRESS](../stabilization/PROGRESS.md).

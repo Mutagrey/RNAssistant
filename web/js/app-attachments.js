@@ -76,7 +76,7 @@ function pendingChatResourceIngestion(chatId) {
 
 function draftAttachmentsForChat(chatId) {
   if (state.activeChatId === chatId) return state.draftAttachments || [];
-  var draft = chatDraftStore()[chatId];
+  var draft = readOfficeDraft(chatId);
   return draft && draft.attachments ? draft.attachments : [];
 }
 
@@ -128,13 +128,12 @@ async function stageChatResourceFiles(targetChatId, files) {
       if (file.type.indexOf("image/") === 0) attachment.previewUrl = URL.createObjectURL(file);
       if (state.activeChatId === targetChatId) {
         state.draftAttachments.push(attachment);
+        captureChatDraft(targetChatId, true);
         renderAttachmentDrafts();
       } else {
-        var drafts = chatDraftStore();
-        var draft = drafts[targetChatId] || { text: "", attachments: [] };
-        draft.attachments = draft.attachments || [];
-        draft.attachments.push(attachment);
-        drafts[targetChatId] = draft;
+        var draft = readOfficeDraft(targetChatId);
+        saveOfficeDraft(targetChatId, draft ? draft.text : "",
+          (draft && draft.attachments || []).concat(attachment), true);
       }
     }
     setAttachmentStatus(targetChatId, "");
@@ -189,12 +188,13 @@ async function removeDraftAttachment(item) {
   if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
   if (state.activeChatId === targetChatId) {
     state.draftAttachments = state.draftAttachments.filter(function (candidate) { return attachmentId(candidate) !== attachmentId(item); });
+    captureChatDraft(targetChatId, true);
     renderAttachmentDrafts();
   } else {
-    var draft = chatDraftStore()[targetChatId];
-    if (draft && draft.attachments) {
-      draft.attachments = draft.attachments.filter(function (candidate) { return attachmentId(candidate) !== attachmentId(item); });
-    }
+    var draft = readOfficeDraft(targetChatId);
+    if (draft) saveOfficeDraft(targetChatId, draft.text, draft.attachments.filter(function (candidate) {
+      return attachmentId(candidate) !== attachmentId(item);
+    }), true);
   }
 }
 
@@ -248,13 +248,6 @@ function renderAttachmentDrafts() {
   box.classList.toggle("hidden", !state.draftAttachments.length);
   state.draftAttachments.forEach(function (item) { box.appendChild(attachmentCard(item, true, "draft")); });
   updateComposerInputState();
-}
-
-function clearDraftAttachments() {
-  state.draftAttachments.forEach(function (item) { if (item.previewUrl) URL.revokeObjectURL(item.previewUrl); });
-  state.draftAttachments = [];
-  if (state.activeChatId) delete chatDraftStore()[state.activeChatId];
-  renderAttachmentDrafts();
 }
 
 function attachmentTransferFiles(transfer) {

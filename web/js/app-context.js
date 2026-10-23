@@ -233,12 +233,13 @@ async function addSelectionContext(mode) {
       var attachment = staged.resource || staged.Resource;
       if (state.activeChatId === targetChatId) {
         state.draftAttachments.push(attachment);
+        captureChatDraft(targetChatId, true);
         renderAttachmentDrafts();
         updateComposerInputState();
       } else {
-        var drafts = chatDraftStore();
-        var draft = drafts[targetChatId] || { text: "", attachments: [] };
-        draft.attachments.push(attachment); drafts[targetChatId] = draft;
+        var draft = readOfficeDraft(targetChatId);
+        saveOfficeDraft(targetChatId, draft ? draft.text : "",
+          (draft && draft.attachments || []).concat(attachment), true);
       }
       log("Снимок выделения прикреплён к следующему сообщению.");
       return;

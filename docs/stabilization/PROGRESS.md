@@ -1,5 +1,16 @@
 # Stabilization progress
 
+## Unified Shell Office draft acknowledgement (1b continuation) — 2026-10-23
+
+Owner: application/chat UI. Office and workspace drafts now use the same in-memory
+draft owner and version sequence, with separate Office chat and workspace session
+identities. Office input and attachment changes advance the draft version;
+accepted sends clear only the submitted version and remove only submitted
+attachments. Late acknowledgements preserve later text even when it is identical,
+including after switching chats. Focused inbox, attachment, chat-navigation and
+Chrome delivery checks pass. The physical Office ChatView is still separate and
+the full 1b mount remains open. Windows/Office/WebView2 remain unqualified.
+
 ## Resource Context retained view checks in Inspector — 2026-10-23
 
 Owner: Model Context Inspector and existing revision/CAS stores. For an exact

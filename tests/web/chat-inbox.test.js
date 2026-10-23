@@ -28,7 +28,9 @@ const context = vm.createContext({
   applyChatStateForChat() {}, loadChatState: () => Promise.resolve({}),
   window: { requestAnimationFrame(fn) { fn(); } }
 });
+vm.runInContext(fs.readFileSync("web/js/app-chat-state.js", "utf8"), context);
 vm.runInContext(fs.readFileSync("web/js/app-chat-inbox.js", "utf8"), context);
+context.renderChatSessions = () => {};
 (async () => {
   assert.equal(context.runningMessageDelivery(), "Steer");
   context.state.settings.RunningMessageDelivery = "Queue";
@@ -91,6 +93,32 @@ vm.runInContext(fs.readFileSync("web/js/app-chat-inbox.js", "utf8"), context);
   assert.equal(context.$("chatInput").value, "new draft typed while sending", "late ack preserves new text in the same chat");
   assert.equal(context.state.draftAttachments.length, 1);
   assert.equal(context.state.draftAttachments[0].Id, "second", "late ack preserves new attachments");
+
+  transport = () => new Promise(resolve => { resolveSend = resolve; });
+  context.$("chatInput").value = "same text";
+  const sameTextSend = context.submitInboxMessage("same text", [], "b", "Queue");
+  context.$("chatInput").value = "new work";
+  context.captureChatDraft("b", true);
+  context.$("chatInput").value = "same text";
+  context.captureChatDraft("b", true);
+  resolveSend({ chatId: "b", revision: 8, items: [], acceptedInput: {
+    Id: "same-text", OperationId: calls.at(-1).payload.operationId, Text: "same text", Status: "Applied", Revision: 1 } });
+  await sameTextSend;
+  assert.equal(context.$("chatInput").value, "same text", "late ack preserves a newer draft even with identical text");
+
+  context.captureChatDraft("b");
+  transport = () => new Promise(resolve => { resolveSend = resolve; });
+  const backgroundSend = context.submitInboxMessage("same text", [], "b", "Queue");
+  context.state.activeChatId = "other";
+  context.$("chatInput").value = "other chat";
+  context.saveOfficeDraft("b", "new work", [], true);
+  context.saveOfficeDraft("b", "same text", [], true);
+  resolveSend({ chatId: "b", revision: 9, items: [], acceptedInput: {
+    Id: "background", OperationId: calls.at(-1).payload.operationId, Text: "same text", Status: "Applied", Revision: 1 } });
+  await backgroundSend;
+  assert.equal(context.readOfficeDraft("b").text, "same text", "background ack preserves the newer source-chat draft");
+  assert.equal(context.$("chatInput").value, "other chat", "background ack leaves the selected chat alone");
+  context.state.activeChatId = "b";
 
   // A push can acknowledge delivery even when the original intake response is lost.
   context.$("chatInput").value = "uncertain";
