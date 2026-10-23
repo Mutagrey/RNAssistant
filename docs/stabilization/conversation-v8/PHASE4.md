@@ -88,6 +88,10 @@ an irreparable obstacle without reporting success or replaying a tool.
 - The cancellation-after-unknown and three tool-result prompt-budget checks
   pass with v8 execute calls and a terminal-evidence finish; the budget checks
   still verify complete result delivery or refusal before model dispatch.
+- The `kernel replay:` group passes 10/10, `kernel recovery:` 2/2, and the
+  optional causal-trace failure check passes. Confirmation keeps the accepted
+  run identity through the v8 finish; interrupted recovery retains a complete
+  schema-read pair but excludes the unpaired write call from model context.
 
 The full Harness still has legacy v7 wire bodies and assertions outside these
 migrated groups; its complete test suite is not yet green.
