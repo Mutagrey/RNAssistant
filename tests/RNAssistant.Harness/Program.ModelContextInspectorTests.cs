@@ -19,6 +19,107 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void ModelContextExactReadMessageCost()
+        {
+            WithTempPaths(paths =>
+            {
+                var chats = new ChatStore(paths);
+                var session = chats.Create("Word", "read-cost", "Cost.docx", "Cost");
+                var scope = new ResourceAuthorityScopeId("conversation", session.Id);
+                var reference = new ResourceRef(ResourceStateProvider.Identity(scope, "read-cost").Uri, "r1");
+                var message = new ChatMessage { Id = "read-cost-result", Role = "tool",
+                    ToolCallId = "read-cost-call", ToolName = "common.resources_read",
+                    Content = "{\"text\":\"Ω😀\",\"coverage\":{\"kind\":\"line-range\"}}" };
+                var source = new ContextMessagePresentation { SourceMessageId = message.Id,
+                    MessageIndex = 0, Role = "tool", ToolCallId = message.ToolCallId,
+                    Presentation = ContextPresentationKind.Fragment,
+                    EvidenceLinks = new System.Collections.Generic.List<ContextEvidenceLink> {
+                        new ContextEvidenceLink { EvidenceId = "read-cost-evidence", ScopeId = scope,
+                            Resource = reference, View = "source",
+                            ObservedCoverage = new ResourceCoverage(ResourceCoverageKinds.LineRange, start: 1, end: 2) } } };
+                var receipt = new ContextReceipt { Messages = new System.Collections.Generic.List<ContextMessagePresentation> { source } };
+                var settings = new AppSettings { BaseUrl = "https://example.invalid", Model = "cost-fixture",
+                    StreamResponses = false };
+                var options = new LlmRequestOptions { TraceSession = session, TraceContextReceipt = receipt,
+                    TraceMessageContentChanged = new bool[0] };
+                new ModelTracePersistenceService(new ChatEventStoreAdapter(chats)).Configure(options);
+                var persist = options.TraceSink;
+                LlmTraceRecord trace = null;
+                options.TraceSink = record => { persist(record); trace = record;
+                    throw new InvalidOperationException("stop-after-saved-request"); };
+                try { new LlmClient(() => "key").CompleteAsync(settings, new[] { message }, options, null)
+                    .GetAwaiter().GetResult(); }
+                catch (InvalidOperationException error)
+                { AssertEqual("stop-after-saved-request", error.Message, "request is saved before network dispatch"); }
+                AssertTrue(trace?.PayloadUtf8Bytes != null, "exact read request was serialized");
+                var saved = chats.ReadEvents(session.Host, session.DocumentKey, session.Id)
+                    .Single(item => item.Type == SessionEventTypes.LlmRequest);
+                var savedBytes = Encoding.UTF8.GetBytes(chats.ReadEventPayload(saved));
+                AssertTrue(trace.PayloadUtf8Bytes.SequenceEqual(savedBytes), "cost uses the saved request bytes");
+                var wire = (JArray)JObject.Parse(Encoding.UTF8.GetString(savedBytes))["messages"];
+                var exact = (JObject)wire.Single();
+                var expected = ModelContextBudget.EstimateMessageTokens(new ChatMessage {
+                    Role = (string)exact["role"], Content = (string)exact["content"],
+                    ToolCallId = (string)exact["tool_call_id"] }, settings, includeExtractedAttachments: false);
+                AssertEqual(expected, trace.ContextMessages.Single().EstimatedWireMessageTokens.Value,
+                    "single-view read cost estimates the entire exact serialized tool message");
+                AssertTrue(source.EstimatedWireMessageTokens == null,
+                    "wire estimate does not modify the frozen compiler receipt");
+                AssertTrue(JToken.DeepEquals(JToken.FromObject(trace.ContextMessages), saved.Data["ContextMessages"]),
+                    "read-message cost is retained in the request trace, outside provider JSON");
+                using (var plane = new ResourceDataPlaneService(new ResourceGatewayService()))
+                {
+                    var inspector = new ModelContextInspectorService(new ChatEventStoreAdapter(chats),
+                        new ChatBlobStore(paths), plane);
+                    var selected = inspector.Query(session, new ModelContextQuery { RequestEventId = saved.EventId },
+                        CancellationToken.None).Resources.Single().Observations.Single();
+                    AssertEqual(expected, selected.EstimatedWireMessageTokens.Value,
+                        "Inspector associates the whole-message estimate with the sole exact read view");
+                }
+                source.EstimatedWireMessageTokens = 1;
+                var unproved = LlmClient.DescribeWireMessages(new[] { message }, receipt, null, null, wire, settings);
+                AssertTrue(unproved.Single().EstimatedWireMessageTokens == null,
+                    "a missing projection comparison cannot prove exact read-view attribution");
+                var altered = LlmClient.DescribeWireMessages(new[] { message }, receipt, new[] { true }, null,
+                    wire, settings);
+                AssertTrue(altered.Single().EstimatedWireMessageTokens == null,
+                    "a changed post-compiler message cannot inherit a stale read-view cost");
+                source.EstimatedWireMessageTokens = null;
+                source.EvidenceLinks.Add(new ContextEvidenceLink { EvidenceId = "second", ScopeId = scope,
+                    Resource = reference, View = "source" });
+                var ambiguous = LlmClient.DescribeWireMessages(new[] { message }, receipt, new bool[0], null, wire, settings);
+                AssertTrue(ambiguous.Single().EstimatedWireMessageTokens == null,
+                    "one model message is not charged independently to multiple evidence links");
+                source.EvidenceLinks.RemoveAt(1);
+                receipt.Messages.Add(source);
+                var duplicate = LlmClient.DescribeWireMessages(new[] { message }, receipt, new bool[0], null, wire, settings);
+                AssertTrue(duplicate.Single().EstimatedWireMessageTokens == null,
+                    "duplicate source-message mapping cannot assign a view cost");
+                receipt.Messages.RemoveAt(1);
+                source.MessageIndex = 1;
+                var reordered = LlmClient.DescribeWireMessages(new[] { message }, receipt, new bool[0], null, wire, settings);
+                AssertTrue(reordered.Single().EstimatedWireMessageTokens == null,
+                    "a shifted source index cannot assign the view cost");
+                source.MessageIndex = 0;
+                var changedMessage = (JObject)exact.DeepClone();
+                changedMessage["content"] = "different";
+                var changedWire = new JArray(changedMessage);
+                var mismatched = LlmClient.DescribeWireMessages(new[] { message }, receipt, new bool[0], null,
+                    changedWire, settings);
+                AssertTrue(mismatched.Single().EstimatedWireMessageTokens == null,
+                    "a final wire text mismatch cannot assign the view cost");
+                message.ToolName = "common.resources_search";
+                var otherTool = LlmClient.DescribeWireMessages(new[] { message }, receipt, new bool[0], null, wire, settings);
+                AssertTrue(otherTool.Single().EstimatedWireMessageTokens == null,
+                    "an unrelated tool result cannot inherit the read-view estimate");
+                source.MessageIndex = null;
+                source.EstimatedWireMessageTokens = 1;
+                var omitted = LlmClient.DescribeWireMessages(new[] { message }, receipt, new bool[0], null, wire, settings);
+                AssertTrue(omitted.Single(item => !item.MessageIndex.HasValue).EstimatedWireMessageTokens == null,
+                    "an excluded receipt entry cannot retain a request-specific read-view estimate");
+            });
+        }
+
         private static void ModelRequestSchemaDuplicationModesAndFallback()
         {
             var tool = V4ReadTool();

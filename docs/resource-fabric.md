@@ -751,6 +751,12 @@ message or total prompt cost. MIME and length are retained metadata claims until
 CAS verification, and the estimate does not establish live availability or
 delivery. Indexed/multipart, binary, non-UTF-8 and unclassified views keep an
 unknown token estimate rather than treating their metadata payload as model text.
+An accepted text-serialized `common.resources_read` with one exact evidence link can also
+show an estimate for its whole serialized model-facing tool message in the saved
+request trace. This is request-specific and includes the tool-result envelope;
+it does not turn retained-body estimates into prompt costs or split a message
+among multiple views. The [conversation contract](conversation-protocol.md)
+defines its attribution guard.
 
 An adaptive first window retains the original whole-read intent rather than
 rewriting it to the provider's chosen window. Completeness of that chosen fragment

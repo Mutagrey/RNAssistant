@@ -246,6 +246,9 @@
           if (entry && entry.Reason) body.appendChild(el("p", entry.Reason, "model-context-note"));
           if (entry && entry.ToolCallId) body.appendChild(el("p", "Операция: " +
             (alias(c, "operations", entry.ToolCallId) ? alias(c, "operations", entry.ToolCallId) + " · " : "") + entry.ToolCallId));
+          if (Number.isSafeInteger(entry && entry.EstimatedWireMessageTokens) && entry.EstimatedWireMessageTokens >= 0)
+            body.appendChild(el("p", "Оценка всего сериализованного read-сообщения: ≈ " +
+              entry.EstimatedWireMessageTokens + " токенов (не измеренное usage)."));
           (entry && entry.EvidenceLinks || []).forEach(function (link) {
             if (!link) return;
             body.appendChild(el("p", evidenceNote(c, link)));
@@ -501,6 +504,10 @@
           item.bodyIncludedInMessage === true ? "тело включено" :
             item.bodyIncludedInMessage === false ? "тело не включено" : "доставка неизвестна"].filter(Boolean);
         body.appendChild(el("p", details.join(" · ")));
+        body.appendChild(el("p", Number.isSafeInteger(item.estimatedWireMessageTokens) && item.estimatedWireMessageTokens >= 0 ?
+          "Оценка всего сериализованного read-сообщения для этого view: ≈ " +
+            item.estimatedWireMessageTokens + " токенов (не измеренное usage)." :
+          "Оценка сериализованного read-сообщения для этого view неизвестна."));
         body.appendChild(el("p", readMetadataText(item.readMetadata)));
       });
     });

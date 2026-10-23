@@ -114,12 +114,14 @@ namespace RNAssistant.Core.Llm
                 var requestPayloadBytes = LlmHttpTransport.SerializeJson(body);
                 traceMessageCount = apiMessages.Count;
                 traceEstimatedPromptTokens = estimatedRequestTokens;
+                var wireMessages = DescribeWireMessages(messageList, requestOptions.TraceContextReceipt,
+                    requestOptions.TraceMessageContentChanged, apiBuild.MessageParts,
+                    body["messages"] as JArray, settings);
                 Trace(requestOptions, new LlmTraceRecord
                 {
                     Type = "request",
                     Streaming = settings.StreamResponses,
-                    ContextMessages = DescribeWireMessages(messageList, requestOptions.TraceContextReceipt,
-                        requestOptions.TraceMessageContentChanged, apiBuild.MessageParts),
+                    ContextMessages = wireMessages,
                     RequestId = requestDiagnostics.RequestId,
                     Purpose = requestOptions.TracePurpose,
                     Endpoint = traceEndpoint,
@@ -643,19 +645,22 @@ namespace RNAssistant.Core.Llm
 
         internal static List<ContextMessagePresentation> DescribeWireMessages(IList<ChatMessage> messages,
             ContextReceipt receipt, bool[] changedContent = null,
-            IList<List<ContextMessagePresentation>> wireParts = null)
+            IList<List<ContextMessagePresentation>> wireParts = null,
+            JArray serializedMessages = null, AppSettings settings = null)
         {
             var entries = new List<ContextMessagePresentation>();
             var visibleCount = messages.Count(m => m != null && !m.ExcludeFromModelContext &&
                 !string.IsNullOrWhiteSpace(m.Role));
             var alignedParts = wireParts != null && wireParts.Count == visibleCount;
+            var alignedWire = serializedMessages != null && serializedMessages.Count == visibleCount;
             foreach (var message in messages.Where(m => m != null && !m.ExcludeFromModelContext && !string.IsNullOrWhiteSpace(m.Role)))
             {
-                var source = receipt?.Messages?.FirstOrDefault(m => m.SourceMessageId == message.Id && m.MessageIndex.HasValue);
+                var source = receipt?.Messages?.FirstOrDefault(m => m != null && m.SourceMessageId == message.Id && m.MessageIndex.HasValue);
                 var entry = source == null ? new ContextMessagePresentation { SourceMessageId = message.Id,
                     Role = message.Role, Presentation = ContextPresentationKind.Unknown, Reason = "Нет сведений сборщика для этого сообщения." }
                     : JsonConvert.DeserializeObject<ContextMessagePresentation>(JsonConvert.SerializeObject(source));
                 entry.MessageIndex = entries.Count;
+                entry.EstimatedWireMessageTokens = null;
                 if (entry.Parts == null) entry.Parts = new List<ContextMessagePresentation>();
                 if (changedContent != null && entries.Count < changedContent.Length && changedContent[entries.Count])
                 {
@@ -675,9 +680,43 @@ namespace RNAssistant.Core.Llm
                             Reason = "Текст и медиа выбраны transport; точные переданные части доступны в JSON запроса." });
                     entry.Presentation = ContextPresentationKind.Unknown;
                 }
+                if (alignedWire && source != null && source.MessageIndex == entries.Count &&
+                    receipt.Messages.Count(item => item != null && item.SourceMessageId == message.Id && item.MessageIndex.HasValue) == 1 &&
+                    changedContent != null && (changedContent.Length == 0 || changedContent.Length == visibleCount) &&
+                    (entry.Presentation == ContextPresentationKind.Full ||
+                     entry.Presentation == ContextPresentationKind.Fragment) &&
+                    entry.EvidenceLinks?.Count == 1 &&
+                    entry.EvidenceLinks[0]?.Resource?.IsExact == true &&
+                    entry.EvidenceLinks[0].ScopeId != null &&
+                    !string.IsNullOrWhiteSpace(entry.EvidenceLinks[0].EvidenceId) &&
+                    !string.IsNullOrWhiteSpace(entry.EvidenceLinks[0].View) &&
+                    entry.EvidenceLinks[0].ObservedCoverage != null &&
+                    string.Equals(message.ToolName, "common.resources_read", StringComparison.Ordinal) &&
+                    string.Equals(message.Role, "tool", StringComparison.Ordinal) &&
+                    string.Equals(entry.SourceMessageId, message.Id, StringComparison.Ordinal) &&
+                    string.Equals(entry.ToolCallId, message.ToolCallId, StringComparison.Ordinal) &&
+                    !string.IsNullOrWhiteSpace(message.ToolCallId) &&
+                    (message.Attachments?.Count ?? 0) == 0 && message.AttachmentAnalysis == null &&
+                    (changedContent.Length == 0 || !changedContent[entries.Count]))
+                {
+                    var wire = serializedMessages[entries.Count] as JObject;
+                    if (wire != null && wire["content"]?.Type == JTokenType.String &&
+                        string.Equals((string)wire["role"], "tool", StringComparison.Ordinal) &&
+                        string.Equals((string)wire["tool_call_id"], message.ToolCallId, StringComparison.Ordinal) &&
+                        string.Equals((string)wire["content"], message.Content ?? string.Empty, StringComparison.Ordinal))
+                        entry.EstimatedWireMessageTokens = ModelContextBudget.EstimateMessageTokens(
+                            new ChatMessage { Role = "tool", ToolCallId = message.ToolCallId,
+                                Content = (string)wire["content"] }, settings, includeExtractedAttachments: false);
+                }
                 entries.Add(entry);
             }
-            entries.AddRange((receipt?.Messages ?? new List<ContextMessagePresentation>()).Where(m => !m.MessageIndex.HasValue));
+            foreach (var omitted in (receipt?.Messages ?? new List<ContextMessagePresentation>())
+                .Where(m => m != null && !m.MessageIndex.HasValue))
+            {
+                var entry = JsonConvert.DeserializeObject<ContextMessagePresentation>(JsonConvert.SerializeObject(omitted));
+                entry.EstimatedWireMessageTokens = null;
+                entries.Add(entry);
+            }
             return entries;
         }
 

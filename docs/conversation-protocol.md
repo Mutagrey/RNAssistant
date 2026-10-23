@@ -809,6 +809,17 @@ Strict-schema wire projection invalidates any earlier positive body claim while
 retaining the source link. The inspector displays the distinction. Known compiler
 exclusions carry typed decisions; unattributed transformations remain `Unknown`.
 
+For an unchanged text-serialized `common.resources_read` tool result with one uniquely
+mapped exact evidence/view/coverage link, the saved request trace estimates the
+entire final serialized tool message from its actual `role`, `tool_call_id` and
+`content` using `ModelContextBudget`. Inspector displays that message estimate
+beside the linked observation. It is an estimate for this request attempt, not
+measured provider usage, the view body alone, or a share of the global request
+intercept/options. Multiple evidence links, ambiguous source IDs, changed wire
+content, missing projection comparison, attachments and unproved presentations
+leave this attribution unknown;
+the estimate never changes `BodyIncludedInMessage` or mutation authority.
+
 At each protocol attempt, transport compares visible messages with the frozen
 compiler messages. If strict-schema projection changed content while retaining
 its source ID, the request trace labels

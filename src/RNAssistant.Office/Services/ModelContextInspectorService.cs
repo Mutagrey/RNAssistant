@@ -194,7 +194,9 @@ namespace RNAssistant.Office.Services
                         EvidenceAlias = aliases.Evidence(link.EvidenceId), View = link.View,
                         Coverage = link.ObservedCoverage, ObservationComplete = link.ObservationComplete,
                         ReadMetadata = link.ReadMetadata,
-                        BodyIncludedInMessage = link.BodyIncludedInMessage });
+                        BodyIncludedInMessage = link.BodyIncludedInMessage,
+                        EstimatedWireMessageTokens = entry.EvidenceLinks?.Count == 1
+                            ? entry.EstimatedWireMessageTokens : null });
                 }
             foreach (var row in rows.Values)
                 DescribeAuthority(session, row);

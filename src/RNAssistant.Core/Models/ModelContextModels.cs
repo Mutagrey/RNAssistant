@@ -110,6 +110,10 @@ namespace RNAssistant.Core.Models
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string ToolCallId { get; set; }
         public List<ContextEvidenceLink> EvidenceLinks { get; set; } = new List<ContextEvidenceLink>();
+        // Estimate of the entire serialized read-result message, not its source
+        // body or measured provider usage. Set only on an exact wire request.
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public int? EstimatedWireMessageTokens { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public int? PartIndex { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]

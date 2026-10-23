@@ -51,6 +51,8 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("observationComplete")] public bool? ObservationComplete { get; set; }
         [JsonProperty("readMetadata")] public ResourceReadMetadata ReadMetadata { get; set; }
         [JsonProperty("bodyIncludedInMessage")] public bool? BodyIncludedInMessage { get; set; }
+        [JsonProperty("estimatedWireMessageTokens", NullValueHandling = NullValueHandling.Ignore)]
+        public int? EstimatedWireMessageTokens { get; set; }
     }
 
     public sealed class ModelContextIdentityDto

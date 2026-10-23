@@ -48,6 +48,7 @@ function fixture(withAliases = false) {
             partsCount: 2, partsAvailability: "Unchecked" }],
           observations: [{ requestAlias: "Q1", operationAlias: "O1", evidenceAlias: "E1", view: "source",
             coverage: { kind: "line-range", start: 1, end: 2 }, observationComplete: false, bodyIncludedInMessage: null,
+            estimatedWireMessageTokens: 72,
             readMetadata: { requestedCoverage: { kind: "line-range", start: 1, end: 6 },
               sourceCoverage: { kind: "line-range", start: 1, end: 2 }, selectionComplete: true,
               representationComplete: false, sourceComplete: null,
@@ -277,6 +278,7 @@ function fixture(withAliases = false) {
   const linked = fixture(true);
   linked.events[0].alias = "Q1";
   linked.events[0].trace.ContextMessages = [{ MessageIndex: 0, Presentation: "Full", ToolCallId: "call-1",
+    EstimatedWireMessageTokens: 72,
     EvidenceLinks: [{ EvidenceId: "evidence-1", ScopeId: { kind: "conversation", id: "chat" },
       Resource: { uri: "rna://vba/module", revision: "r1" }, View: "source",
       ObservedCoverage: { kind: "line-range", start: 1, end: 2 }, BodyIncludedInMessage: null }] }];
@@ -290,6 +292,8 @@ function fixture(withAliases = false) {
     /Q1 · O1 · E1 · source.*частичное наблюдение.*доставка неизвестна/);
   const resourceText = () => linked.get("modelContextBody").children.find(node => node.tag === "details")
     .children[1].children.map(node => node.textContent).join(" ");
+  assert.match(resourceText(), /Оценка всего сериализованного read-сообщения для этого view: ≈ 72 токенов/);
+  assert.match(resourceText(), /Оценка сериализованного read-сообщения для этого view неизвестна/);
   const checkButton = f => f.get("modelContextBody").children.find(node => node.tag === "details")
     .children[1].children.find(node => node.tag === "button" && node.textContent === "Проверить сохранённое тело");
   const viewButton = f => f.get("modelContextBody").children.find(node => node.tag === "details")

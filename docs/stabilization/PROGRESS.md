@@ -1,5 +1,16 @@
 # Stabilization progress
 
+## Resource Context exact read-message cost — 2026-10-23
+
+Owner: Core LLM request trace and Model Context Inspector. After final request
+serialization, one unchanged text-serialized `common.resources_read` result with a unique
+exact evidence/view/coverage link now records a model-calibrated estimate for
+its entire wire tool message. Inspector shows it on the linked observation.
+Ambiguous links, changed content and unproved presentations stay unknown;
+the estimate neither proves view-body delivery nor allocates global request
+overhead or measured provider usage. Focused Harness/Web checks pass
+host-neutral. Windows/Office/WebView2 and remaining attribution cases are open.
+
 ## Unified Shell single composer (1b continuation) — 2026-10-23
 
 Owner: application/chat UI. Office, Project and Plugin now move one physical
