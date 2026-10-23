@@ -95,6 +95,9 @@ an irreparable obstacle without reporting success or replaying a tool.
 - Two `agent continuity:` workflow checks pass with v8 calls and cited finish
   evidence: an unfinished task list remains available to the next run, and a
   CSS edit closes the plan without inventing a redundant JS edit.
+- The complete `agent continuity:` group passes 5/5 after updating the resource
+  presentation fixture to the current `unavailableScopes` wire and runtime-owned
+  media hydration evidence.
 
 The full Harness still has legacy v7 wire bodies and assertions outside these
 migrated groups; its complete test suite is not yet green.

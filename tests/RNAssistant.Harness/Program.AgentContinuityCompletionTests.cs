@@ -53,10 +53,11 @@ namespace RNAssistant.Harness
                 }
                 var cases = new[] {
                     new { Tool = "common.resources_find", Name = "find-empty", Data = JsonConvert.SerializeObject(new
-                        { items = new object[0], total = 0, complete = true, partial = false }), Count = (int?)0, Rows = (int?)null,
+                        { items = new object[0], total = 0, complete = true }), Count = (int?)0, Rows = (int?)null,
                         Complete = true, Partial = false, Representation = (string)null },
                     new { Tool = "common.resources_find", Name = "find-partial", Data = JsonConvert.SerializeObject(new
-                        { items = new[] { new { target = "document: A" } }, total = 1, complete = false, partial = true }), Count = (int?)1, Rows = (int?)null,
+                        { items = new[] { new { target = "document: A" } }, total = 1, complete = false,
+                            unavailableScopes = new[] { "document" } }), Count = (int?)1, Rows = (int?)null,
                         Complete = false, Partial = true, Representation = (string)null },
                     new { Tool = "common.resources_read", Name = "read-empty", Data = JsonConvert.SerializeObject(new
                         { kind = "resource-read", representation = "text", text = "", returnedCharacters = 0, complete = true }), Count = (int?)null, Rows = (int?)null,
@@ -90,7 +91,8 @@ namespace RNAssistant.Harness
                 }
                 var large = new[] {
                     new { Tool = "common.resources_find", Name = "large-find", Data = JsonConvert.SerializeObject(new
-                        { items = new[] { new { target = "document: A" } }, total = 1, complete = false, partial = true, padding = new string('x', 130000) }) },
+                        { items = new[] { new { target = "document: A" } }, total = 1, complete = false,
+                            unavailableScopes = new[] { "document" }, padding = new string('x', 130000) }) },
                     new { Tool = "common.resources_read", Name = "large-read", Data = JsonConvert.SerializeObject(new
                         { kind = "resource-read", representation = "source", text = new string('x', 130000), returnedCharacters = 130000, complete = false }) },
                     new { Tool = "common.capabilities_search", Name = "large-cap-search", Data = JsonConvert.SerializeObject(new
@@ -118,9 +120,21 @@ namespace RNAssistant.Harness
                 AssertEqual("{\"externalized\":true}", projectedRead.DataJson,
                     "request-local data remains separate from summary");
                 AssertEqual(large[1].Data, readRecord.Result.DataJson, "durable terminal data stays exact");
-                var media = SummaryActivity("common.resources_read", JsonConvert.SerializeObject(new
-                    { kind = "resource-read", representation = "media", complete = true, hydratedForNextModelStep = true }), "media");
-                AssertTrue(media.ResultSummary.HydratedForNextModelStep, "media preparation is retained separately from effects");
+                var mediaData = JsonConvert.SerializeObject(new
+                    { kind = "resource-read", representation = "media", complete = true, hydratedForNextModelStep = true });
+                var media = SummaryActivity("common.resources_read", mediaData, "media");
+                AssertTrue(!media.ResultSummary.HydratedForNextModelStep,
+                    "raw result data cannot claim request-local media hydration");
+                var mediaContext = new ToolRuntimeFixture().Context(toolId: "common.resources_read");
+                var mediaResult = ToolResult.Ok("Read", mediaData);
+                var mediaRecord = new ToolExecutionRecord(mediaContext, ToolExecutionOutcome.Ok,
+                    mediaContext.StartedUtc, "Read", result: mediaResult);
+                var mediaPrepared = new ToolResultMaterialization(mediaResult, new[] { new ChatAttachment {
+                    Kind = "image", FileName = "pixel.png", ContentType = "image/png" } });
+                media = AgentTranscript.CreateToolActivity(new ToolInvocation { ToolId = "common.resources_read",
+                    ToolCallId = "media" }, ToolRunResultFactory.Create(mediaRecord, mediaPrepared), "tool");
+                AssertTrue(media.ResultSummary.HydratedForNextModelStep,
+                    "actual request-local attachment is retained separately from effects");
                 AssertTrue(media.ExecutionEvidence == null, "summary does not invent effect evidence");
                 var legacy = new ChatActivity { Kind = "tool", ToolId = "common.resources_read", ToolCallId = "legacy",
                     ReadSummary = new ResourceReadSummary { Representation = "source", ReturnedCharacters = 12, Complete = false } };
