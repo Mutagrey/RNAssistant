@@ -3082,26 +3082,43 @@ namespace RNAssistant.Harness
             {
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"message\":\"Очищаю ячейку.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"excel.clear_range\",\"arguments\":{\"address\":\"A1\",\"clearWhat\":\"values\"}}]}",
-                    "{\"message\":\"Определение инструмента изменилось; действие не выполнено.\",\"action\":\"done\",\"tool_calls\":[]}"
+                    LoadToolSchemaResponse("excel.clear_range"),
+                    ModelProtocolWire.WriteAcceptedCall("Clear the requested cell.", "Очищаю ячейку.",
+                        new ConversationToolCall { Name = "excel.clear_range",
+                            Arguments = new JObject { ["address"] = "A1", ["clearWhat"] = "values" } }),
+                    "__FINISH__"
                 });
                 var calls = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>
                 {
                     calls.Add(messages.ToList());
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    var response = responses.Dequeue();
+                    if (response == "__FINISH__")
+                    {
+                        var callId = messages.Single(message => message.Role == "assistant" &&
+                            message.ToolName == "excel.clear_range" &&
+                            message.AcceptedCallOrigin != null).ToolCallId;
+                        response = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                            "Report the confirmed policy drift.",
+                            "Определение инструмента изменилось; действие не выполнено.",
+                            results: new[] { new ConversationResultClaim("The clear was not dispatched.",
+                                new[] { callId }, ConversationAssessment.NotSatisfied) });
+                    }
+                    return Task.FromResult(new LlmCompletionResult { Content = response });
                 };
                 var service = CreateConversationRunService(adapter, executor, completion);
                 var session = NewSession(adapter);
-                session.LastRun = new ChatRunRecord { Status = "running", ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion };
                 var settings = new AppSettings { AutoConfirmToolActions = false };
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 tools.Single(tool => tool.Id == "excel.clear_range").Scope = "document";
-                service.ExecuteAsync(
+                var pendingTurn = service.ExecuteAsync(
                     ChatModes.Agent,
                     "Очисти A1.", session, NewContext(adapter), settings, tools,
                     (Action<string, string, ChatActivity>)null,
                     (pendingSession, pendingCommand, result) => "pending_failure").GetAwaiter().GetResult();
+                AssertTrue(pendingTurn.WaitingForConfirmation,
+                    "the clear pauses before confirmation: " + pendingTurn.RunViewState?.Reason +
+                    " / " + pendingTurn.AssistantText);
 
                 var command = PendingCommand(session);
                 var callsBeforeConfirmation = adapter.TotalBackendCallCount;
@@ -3113,8 +3130,8 @@ namespace RNAssistant.Harness
                 AssertContains(final.AssistantText,
                     "Определение инструмента изменилось; действие не выполнено.",
                     "agent continues after confirmed policy drift");
-                AssertEqual(2, calls.Count, "confirmed policy drift triggers the next model turn");
-                var replay = FlattenSimple(calls[1]);
+                AssertEqual(3, calls.Count, "confirmed policy drift triggers the next model turn");
+                var replay = FlattenSimple(calls[2]);
                 AssertContains(replay, "Tool policy changed; request a new call.",
                     "fingerprint failure is replayed without dispatch");
                 AssertTrue(replay.IndexOf("waiting_confirmation", StringComparison.OrdinalIgnoreCase) < 0, "waiting result is not replayed after failure");
