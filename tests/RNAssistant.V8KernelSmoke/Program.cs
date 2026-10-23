@@ -86,6 +86,7 @@ internal static class Program
         RNAssistant.Harness.V8OfficeFinishBridge.Run();
         Console.WriteLine("PASS Office HTTP premature finish rejected; partial claim survives replay");
         RNAssistant.Harness.V8AgentKernelFixtureBridge.RunAsync().GetAwaiter().GetResult();
+        RNAssistant.Harness.V8ContextContinuityFixtureBridge.RunAsync().GetAwaiter().GetResult();
     }
 
     private static void PromptSmoke()

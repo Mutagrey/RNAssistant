@@ -914,7 +914,8 @@ Filtering limits executed tests. The harness source-links Core and Office-neutra
 Conversation v8 has narrow [protocol checks](../RNAssistant.ProtocolTests/README.md)
 and [source-linked kernel/prompt checks](../RNAssistant.V8KernelSmoke/run.sh).
 The latter builds host-neutral Core, Office and Workspace sources and runs the
-migrated `AgentKernel` fixtures while other Harness sources still use v7. The controlled
+migrated `AgentKernel` and context-continuity fixtures while other Harness sources
+still use v7. The controlled
 `python3 -B tests/cli/response_mode_smoke.py` exercises v8 through actual
 CLI/HTTP requests. `interrupted_run_smoke.py`, `compaction_resume_smoke.py`
 and `run_control_smoke.py` cover process loss, compaction, confirmation and

@@ -36,7 +36,7 @@ namespace RNAssistant.Harness
                     ? ResourceEffectOutcome.FailedNoEffect : ResourceEffectOutcome.UnknownAfterDispatch);
                 var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = "recent", Name = "files.create",
                     Arguments = new Dictionary<string, object> { { "relativePath", "index.html" }, { "content", "<p>exact body</p>" } } },
-                    "Create the page.", null, role, FixtureCallOrigin("recent"));
+                    "Create the page.", "Create the requested page.", null, role, FixtureCallOrigin("recent"));
                 var snapshot = compiler.Compile(authority, new ChatMessage[0], new[] { call, result }, null,
                     new ToolCatalogEntry[0], new AppSettings(), 10000);
                 AssertEqual(2, snapshot.Messages.Count, "recent mutation remains a call/result pair");
@@ -55,7 +55,7 @@ namespace RNAssistant.Harness
                     AssertEqual("recent", (string)request[1]["tool_call_id"], "native result reaches wire");
                     AssertContains((string)request[0]["tool_calls"][0]["function"]["arguments"], "<p>exact body</p>", "native arguments are exact");
                 }
-                else AssertContains((string)request[0]["content"], "<p>exact body</p>", "v7 accepted arguments are exact");
+                else AssertContains((string)request[0]["content"], "<p>exact body</p>", "v8 accepted arguments are exact");
                 AssertEqual(result.Content, snapshot.Messages[1].Content, "short result is unchanged");
                 var repaired = new LlmMessageBuilder().Build(compiler.CompileRepair(snapshot,
                     new ChatMessage { Role = "user", Content = "Repair format only." }), new AppSettings()).Messages;
@@ -88,11 +88,11 @@ namespace RNAssistant.Harness
                 old.ResourceEffect = new ResourceEffect("effect", "create", ResourceEffectOutcome.FailedNoEffect);
                 var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = "old", Name = "files.create",
                     Arguments = new Dictionary<string, object> { { "relativePath", "index.html" }, { "content", new string('x', 20000) } } },
-                    "Attempted create.", null, role, FixtureCallOrigin("old"));
+                    "Attempted create.", "Try the requested create.", null, role, FixtureCallOrigin("old"));
                 var latest = ContinuityResult("last", "files.patch", ToolResult.Error("Ambiguous patch.", "{\"code\":\"patch_ambiguous\"}"), role);
                 var latestCall = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = "last", Name = "files.patch",
                     Arguments = new Dictionary<string, object> { { "relativePath", "index.html" } } },
-                    "Attempted patch.", null, role, FixtureCallOrigin("last"));
+                    "Attempted patch.", "Try the requested patch.", null, role, FixtureCallOrigin("last"));
                 var facts = new[] { call, old, latestCall, latest };
                 var compiler = new ModelContextCompiler();
                 var roomy = compiler.Compile(authority, new ChatMessage[0], facts, null, new ToolCatalogEntry[0], new AppSettings(), 20000);
@@ -204,7 +204,7 @@ namespace RNAssistant.Harness
                     var id = "read-" + index;
                     var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = id,
                         Name = "common.resources_read", Arguments = new Dictionary<string, object> { { "target", "notes.txt" } } },
-                        index == 0 ? finding : "", null, role, FixtureCallOrigin(id));
+                        index == 0 ? finding : "", "Read the requested notes.", null, role, FixtureCallOrigin(id));
                     call.RunId = "continuity";
                     var result = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolId = call.ToolName, ToolCallId = id },
                         new ToolResultMaterialization(ToolResult.Ok("Read", "{\"target\":\"notes.txt\",\"text\":\"42 and 43\"}"),
@@ -441,7 +441,8 @@ namespace RNAssistant.Harness
                 var arguments = new Dictionary<string, object> { { "relativePath", "index.html" } };
                 arguments.Add(tool == "files.move" ? "targetPath" : "text", tool == "files.move" ? "archive/index.html" : new string('x', 10000));
                 var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall {
-                    Id = result.ToolCallId, Name = tool, Arguments = arguments }, "Attempted write.", null, role, FixtureCallOrigin("target"));
+                    Id = result.ToolCallId, Name = tool, Arguments = arguments }, "Attempted write.",
+                    "Try the requested write.", null, role, FixtureCallOrigin("target"));
                 call.RunId = result.RunId;
                 if (externalized)
                 {
@@ -653,7 +654,8 @@ namespace RNAssistant.Harness
             var durable = Newtonsoft.Json.JsonConvert.DeserializeObject<ChatMessage>(Newtonsoft.Json.JsonConvert.SerializeObject(
                 new ChatMessage { ExecutionProgress = progress }));
             var tracker = new AgentProgressTracker();
-            tracker.Restore(new[] { AgentMessage.Assistant(new AgentResponse("", new[] { call })),
+            tracker.Restore(new[] { AgentMessage.Assistant(new AgentResponse(ConversationResponse.ExecuteAction,
+                    "Track the uncertain call.", "", new[] { call })),
                 AgentMessage.AcceptedToolResult(call.Id, "unknown", "{}", durable.ExecutionProgress) });
             string reason, message; int delay;
             AssertTrue(!tracker.CanDispatch(new ToolCall("new_call", "write", "{}"), out reason, out message, out delay),
@@ -669,7 +671,8 @@ namespace RNAssistant.Harness
             {
                 var restored = Newtonsoft.Json.JsonConvert.DeserializeObject<ToolExecutionProgress>(
                     Newtonsoft.Json.JsonConvert.SerializeObject(new ToolExecutionProgress(ToolExecutionOutcome.Error, recovery)));
-                var history = new[] { AgentMessage.Assistant(new AgentResponse("try", new[] { call })),
+                var history = new[] { AgentMessage.Assistant(new AgentResponse(ConversationResponse.ExecuteAction,
+                        "Track the failed call.", "try", new[] { call })),
                     AgentMessage.AcceptedToolResult(call.Id, "state refused", "{}", restored) };
                 tracker = new AgentProgressTracker();
                 tracker.Restore(history);
@@ -700,7 +703,8 @@ namespace RNAssistant.Harness
                         tracker.CanDispatch(call, out reason, out message, out delay),
                         "only a verified change of the declared dependency releases the failed call");
                     var replay = new AgentProgressTracker();
-                    replay.Restore(history.Concat(new[] { AgentMessage.Assistant(new AgentResponse("repair", new[] { change })),
+                    replay.Restore(history.Concat(new[] { AgentMessage.Assistant(new AgentResponse(
+                            ConversationResponse.ExecuteAction, "Track the repair.", "repair", new[] { change })),
                         AgentMessage.AcceptedToolResult(change.Id, "changed", "{}", new ToolExecutionProgress(ToolExecutionOutcome.Ok), effect: effect) }));
                     AssertEqual(allowed, replay.CanDispatch(call, out reason, out message, out delay),
                         "restoring canonical recovery facts retains the same retry decision");
@@ -725,7 +729,8 @@ namespace RNAssistant.Harness
             AssertContains(model, "ChangeRequired", "model receives a repair condition");
             AssertTrue(!model.Contains("rna://") && !model.Contains("ChangeDependencies"), "dependency authority remains runtime-only");
             var failed = new ToolCall("verify", "read", "{}");
-            var history = new[] { AgentMessage.Assistant(new AgentResponse("verify", new[] { failed })),
+            var history = new[] { AgentMessage.Assistant(new AgentResponse(ConversationResponse.ExecuteAction,
+                    "Track the failed verification.", "verify", new[] { failed })),
                 AgentMessage.AcceptedToolResult(failed.Id, "snapshot failed", "{}", restored) };
             Func<AgentProgressTracker> tracker = () => { var value = new AgentProgressTracker(); value.Restore(history); return value; };
             string reason, message; int delay;
@@ -770,7 +775,8 @@ namespace RNAssistant.Harness
             var acceptedRepair = AgentMessage.AcceptedToolResult("repair", "verified", "{}",
                 new ToolExecutionProgress(ToolExecutionOutcome.Ok), effect: repair);
             var continued = new AgentProgressTracker();
-            continued.Restore(history.Concat(new[] { AgentMessage.Assistant(new AgentResponse("repair",
+            continued.Restore(history.Concat(new[] { AgentMessage.Assistant(new AgentResponse(
+                ConversationResponse.ExecuteAction, "Track the repair.", "repair",
                 new[] { new ToolCall("repair", "write", "{}") })), acceptedRepair }));
             AssertTrue(continued.CanDispatch(failed, out reason, out message, out delay), "verified dependency repair permits explicit retry after restore");
             var unknown = new AgentProgressTracker();
@@ -786,22 +792,32 @@ namespace RNAssistant.Harness
             {
                 adapter.VbaModuleCode = "Sub Main()\nDebug.Print \"CURRENT_BODY\"\nEnd Sub";
                 Func<string, JObject, string> response = (tool, arguments) => new JObject {
-                    ["message"] = "Читаю модуль.", ["action"] = "tool",
-                    ["tool_calls"] = new JArray(new JObject { ["name"] = tool, ["arguments"] = arguments })
+                    ["action"] = ConversationResponse.ExecuteAction,
+                    ["reason"] = "Read the requested module or discover its target.",
+                    ["tool_calls"] = new JArray(new JObject { ["name"] = tool, ["arguments"] = arguments }),
+                    ["message"] = "Читаю модуль."
                 }.ToString();
                 var invalidRead = response("common.resources_read", new JObject {
                     ["target"] = "VBA module: Module1", ["representation"] = "table" });
                 var responses = new Queue<string>(new[] { invalidRead, invalidRead,
                     response("common.resources_find", new JObject { ["scope"] = "vba", ["query"] = "Module1" }),
-                    response("common.resources_read", new JObject { ["target"] = "VBA module: Module1", ["representation"] = "source" }),
-                    "{\"message\":\"Прочитано.\",\"action\":\"done\",\"tool_calls\":[]}" });
+                    response("common.resources_read", new JObject { ["target"] = "VBA module: Module1", ["representation"] = "source" }) });
                 var requests = new List<IReadOnlyList<ChatMessage>>();
+                ChatSession session = null;
                 var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
                 {
                     requests.Add(messages.ToList());
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    if (responses.Count > 0)
+                        return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    var read = session.Messages.Last(item => item.ToolName == "common.resources_read" &&
+                        item.ExecutionProgress?.Outcome == ToolExecutionOutcome.Ok);
+                    var finish = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                        "The corrected read returned the current module source.", "Прочитано.",
+                        results: new[] { new ConversationResultClaim("Module source read.",
+                            new[] { read.ToolCallId }, ConversationAssessment.Satisfied) });
+                    return Task.FromResult(new LlmCompletionResult { Content = finish });
                 });
-                var session = NewSession(adapter);
+                session = NewSession(adapter);
                 var completed = service.ExecuteAsync(ChatModes.Agent, "Прочитай Module1.", session,
                     NewContext(adapter), new AppSettings(), OfficeToolCatalog.ForHost(adapter.HostName)
                         .Concat(executor.GetControllerTools()).ToList(),
@@ -815,8 +831,9 @@ namespace RNAssistant.Harness
                     "actionable recovery reaches the actual next request");
                 AssertContains(FlattenSimple(requests.Last()), "CURRENT_BODY",
                     "the alternative route delivers the source to the model");
-                AssertEqual(1, session.Messages.Count(m => m.ExecutionProgress?.Outcome == ToolExecutionOutcome.NotDispatched),
-                    "only the duplicate is suppressed; corrected reads are executed");
+                AssertEqual(1, session.Messages.Where(m => m.ExecutionProgress?.Outcome == ToolExecutionOutcome.NotDispatched)
+                    .Select(m => m.ToolCallId ?? m.Activity?.ToolCallId).Distinct(StringComparer.Ordinal).Count(),
+                    "only one accepted duplicate is suppressed; corrected reads are executed");
             });
         }
 
@@ -850,7 +867,7 @@ namespace RNAssistant.Harness
                 write.ResourceEffect = new ResourceEffect("fx", "files.create", ResourceEffectOutcome.VerifiedChanged);
                 var writeCall = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = "large_write", Name = "files.create",
                     Arguments = new Dictionary<string, object> { ["text"] = new string('x', 12000) } },
-                    "Saved another file.", null, "tool", FixtureCallOrigin("large_write"));
+                    "Saved another file.", "Save the requested file.", null, "tool", FixtureCallOrigin("large_write"));
                 var latest = ContinuityResult("latest", "fixture.read", ToolResult.Ok("Small result.", "{}"));
                 var withLargeFrame = new[] { writeCall, write, ContinuityCall(latest), latest };
                 var enoughRoom = compiler.Compile(authority, new ChatMessage[0], withLargeFrame, null,
@@ -970,15 +987,19 @@ namespace RNAssistant.Harness
                 workingSet: restored);
             AssertTrue(compiled.Messages.Any(m => m.CompletedOperation?.ToolCallId == "write_done" &&
                 m.CompletedOperation.Status == ToolResultStatus.Ok), "mutation receipt survives independently of LLM summary");
+            var operationCallReceipts = compiled.Receipt.Messages.Where(item =>
+                item.SourceMessageId == session.Messages[4].Id).ToArray();
+            AssertEqual(1, operationCallReceipts.Length, "one archived call receipt");
             AssertEqual(ContextExclusionKind.OperationReceipt,
-                compiled.Receipt.Messages.Single(item => item.SourceMessageId == session.Messages[4].Id).ExclusionKind.Value,
+                operationCallReceipts.Single().ExclusionKind.Value,
                 "retained archived operation explains why its original call is not a separate message");
             Func<ContextWorkingSet, IReadOnlyList<ChatMessage>> compileSet = set => new ModelContextCompiler().Compile(authority,
                 new ChatMessage[0], active, null, new ToolCatalogEntry[0], new AppSettings(),
                 6000, workingSet: set).Messages;
             AssertEqual(2, compiled.Receipt.RetainedBodies, "receipt exposes real retention");
             AssertContains(string.Join("\n", compiled.Messages.Select(m => m.Content)), "KEEP_COMPLETE_BODY", "model receives the still current complete skill after compaction");
-            var retainedRows = compiled.Messages.Single(m => m.ToolCallId == "rows" && m.ToolResultProtocolVersion == ToolResultWire.CurrentVersion);
+            var retainedRows = compiled.Messages.Single(m => m.ToolCallId == "rows" && m.Role != "assistant" &&
+                m.ToolResultProtocolVersion == ToolResultWire.CurrentVersion);
             ToolResultWireReadResult rowWire; string rowError;
             AssertTrue(ToolResultHistoryReader.TryRead(retainedRows, out rowWire, out rowError), "restored row result retains its protocol frame");
             AssertEqual("business value", (string)JObject.Parse(rowWire.Result.DataJson).SelectToken("table.rows[0].revision"), "business field names are unchanged");
@@ -1057,9 +1078,11 @@ namespace RNAssistant.Harness
 
         private static ChatMessage ContinuityCall(ChatMessage result)
         {
-            return new ChatMessage { Role = "assistant", RunId = result.RunId, ProtocolMessage = true, ToolCallId = result.ToolCallId,
-                ToolName = result.ToolName, ToolCalls = new List<LlmToolCall> {
-                    new LlmToolCall { Id = result.ToolCallId, Name = result.ToolName, Type = "function", ArgumentsJson = "{}" } } };
+            var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall {
+                Id = result.ToolCallId, Name = result.ToolName, Arguments = new Dictionary<string, object>() },
+                "", "Read the recorded tool result.", null, result.ToolResultRole, FixtureCallOrigin(result.ToolCallId));
+            call.RunId = result.RunId;
+            return call;
         }
     }
 }

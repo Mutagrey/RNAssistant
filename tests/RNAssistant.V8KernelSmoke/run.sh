@@ -13,6 +13,8 @@ cat > "$scratch/production.targets" <<EOF
     <Compile Include="$root/tests/RNAssistant.V8KernelSmoke/OfficeFinishBridge.cs" />
     <Compile Include="$root/tests/RNAssistant.Harness/Program.AgentKernelTests.cs" />
     <Compile Include="$root/tests/RNAssistant.V8KernelSmoke/AgentKernelFixtureBridge.cs" />
+    <Compile Include="$root/tests/RNAssistant.Harness/Program.ContextContinuityTests.cs" />
+    <Compile Include="$root/tests/RNAssistant.V8KernelSmoke/ContextContinuityFixtureBridge.cs" />
   </ItemGroup>
 </Project>
 EOF
