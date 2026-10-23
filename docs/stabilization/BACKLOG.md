@@ -12,6 +12,14 @@
 новая возможность требует явной задачи, scope и owner; дефекты работающей системы
 приоритетнее расширения без конкретного пользовательского результата.
 
+## CLI interactive smoke: подтверждение перед вопросом — 2026-10-23
+
+Owner: CLI interactive test fixture. Полный `tests/cli/interactive_smoke.py`
+останавливается в `questions_case`: после `files.create` CLI ожидает подтверждение
+записи, а тест сразу ждёт `Choice number`. Проверить нужную политику подтверждения
+для этого сценария и согласовать фикстуру отдельно; read-acceptance и browser
+acceptance smoke проходят. Это не evidence отказа восстановления результатов tools.
+
 ## Plan prompt: устаревшая точная проверка текста — 2026-10-23
 
 Owner: planning prompt tests. Harness `plan mode: filters mutations and keeps
