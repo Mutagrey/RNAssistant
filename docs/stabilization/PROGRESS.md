@@ -1,5 +1,16 @@
 # Stabilization progress
 
+## Conversation v8 phase-1 candidate — 2026-10-23
+
+Core ModelProtocol now has the v8 closed forms, typed format errors, canonical
+writer/repair guidance and a source-linked protocol runner in the isolated
+`conversation-v8` worktree. Codec checks pass; see [phase-1 evidence and gaps](conversation-v8/PHASE1.md).
+This intermediate candidate is not an integrated application: kernel/adapters/history
+still call the removed v7 API, so a full candidate build is not ready. Main remains
+on v7. Owner: Core ModelProtocol / AgentKernel. Next: phase-2 evidence admission and
+reflection lifecycle, then atomic consumer/persistence/UI migration. Frozen repair
+integration, real-model comparison and Windows/Office qualification remain open.
+
 ## Conversation v8.1 admission audit — 2026-10-23
 
 Phase 0 reproduces premature v7 `done` through real loopback HTTP and the

@@ -3,8 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 
@@ -12,7 +10,6 @@ namespace RNAssistant.Core.ModelProtocol
 {
     public sealed class ModelProtocolClient : IMaterializedModelProtocol
     {
-        private const int MaximumFormatRepairErrorCharacters = 1024;
         private readonly LlmCompletionDelegate _completeAsync;
         private readonly Func<TimeSpan, CancellationToken, Task> _delayAsync;
         private bool _useJsonObject;
@@ -48,6 +45,7 @@ namespace RNAssistant.Core.ModelProtocol
                 var budget = new ModelProtocolRetryBudget(settings);
                 var fallbackUsed = false;
                 string lastError = null;
+                var lastErrorKind = ConversationResponseError.None;
                 for (var attempt = 1; attempt <= budget.ProtocolAttemptLimit; attempt++)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
@@ -56,7 +54,7 @@ namespace RNAssistant.Core.ModelProtocol
                     {
                         if (request.CompileRepair == null)
                             throw new InvalidOperationException("Protocol repair requires the owning frozen context compiler.");
-                        attemptMessages = request.CompileRepair(CreateFormatRepairMessage(lastError, attempt, budget.ProtocolAttemptLimit));
+                        attemptMessages = request.CompileRepair(CreateFormatRepairMessage(lastErrorKind, lastError, attempt, budget.ProtocolAttemptLimit));
                     }
                     LlmCompletionResult completion;
                     IReadOnlyList<ChatMessage> wireMessages;
@@ -122,9 +120,10 @@ namespace RNAssistant.Core.ModelProtocol
                         return ModelProtocolResult.Accepted(parsed.Response, completion, contextUsage, sourceModelAttemptId);
                     }
                     lastError = parsed.Error;
+                    lastErrorKind = parsed.ErrorKind;
                     // Preserve the existing zero-based diagnostic index; the limit and
                     // repair instruction count total protocol responses, starting at one.
-                    TraceRejected(options, completion, lastError, attempt - 1, progress);
+                    TraceRejected(options, completion, parsed.ErrorCode + ": " + lastError, attempt - 1, progress);
                     cancellationToken.ThrowIfCancellationRequested();
                 }
                 return ModelProtocolResult.Failed(new ModelProtocolFailure(ModelProtocolFailureKind.ProtocolExhausted,
@@ -219,30 +218,13 @@ namespace RNAssistant.Core.ModelProtocol
             return false;
         }
 
-        private static ChatMessage CreateFormatRepairMessage(string error, int attempt, int maxAttempts)
+        private static ChatMessage CreateFormatRepairMessage(ConversationResponseError kind, string error, int attempt, int maxAttempts)
         {
-            var boundedError = string.IsNullOrWhiteSpace(error)
-                ? "Invalid Agent JSON response."
-                : error.Trim();
-            if (boundedError.Length > MaximumFormatRepairErrorCharacters)
-                boundedError = boundedError.Substring(0, MaximumFormatRepairErrorCharacters) + "...[truncated]";
-            var root = new JObject
+            return new ChatMessage
             {
-                ["error"] = boundedError,
-                ["attempt"] = attempt,
-                ["max_attempts"] = maxAttempts,
-                ["instruction"] =
-                    "Return a new response to the current user request as exactly one conversation-response-v7 JSON object " +
-                    "containing only message (string), action (tool, done, blocked, or needs_input), and tool_calls (array). No extra root field, Markdown, fences, or surrounding prose. " +
-                    ModelProtocolWire.ActionGuidance + " " + ModelProtocolWire.MessageGuidance + " " +
-                    "Repair the format while preserving the unfinished task: supply a missing callable step or deliver the complete answer now. Never relabel a promise as done merely to fix an empty tool_calls array. " +
-                    "Every call contains only an exact name and object arguments. Do not include id; runtime assigns call IDs. " +
-                    "Inside a call, arguments is already the root object described by the tool schema; never nest another arguments, parameters, schema, or wrapper inside it. If the error says $ contains unsupported property arguments, remove that undeclared property; only when declared fields exist inside it, move those fields up one level first. For any unsupported property, remove it instead of repeating the rejected object unchanged. " +
-                    "Every string, including nested arguments, uses one JSON escaping layer: use \\n for a real line break and \\\\ for one literal source backslash; never drop or pre-decode a backslash. " +
-                    "Batch only independent local reads. Return every mutation and other call alone, then wait for its result before proposing another mutation; unknown effects remain cumulative run evidence. " +
-                    "Follow the error action exactly. Use a tool only when its schema is in the current callable set."
+                Role = "user", ProtocolMessage = true,
+                Content = ModelProtocolWire.FormatRepairContent(kind, error, attempt, maxAttempts)
             };
-            return new ChatMessage { Role = "user", Content = "FORMAT_REPAIR:\n" + root.ToString(Formatting.None), ProtocolMessage = true };
         }
 
         public static int EstimateFormatRepairOverheadTokens(AppSettings settings)
@@ -251,9 +233,9 @@ namespace RNAssistant.Core.ModelProtocol
             if (attempts <= 1) return 0;
             // Three-byte BMP characters are the maximum UTF-8 cost per valid
             // UTF-16 code unit; include the truncation suffix used at the bound.
-            var maximumError = new string('\u4e00', MaximumFormatRepairErrorCharacters) + "...[truncated]";
+            var maximumError = new string('\u4e00', ModelProtocolWire.MaximumFormatRepairErrorCharacters) + "...[truncated]";
             return ModelContextBudget.EstimateMessageTokens(
-                CreateFormatRepairMessage(maximumError, attempts, attempts), settings);
+                CreateFormatRepairMessage(ConversationResponseError.MissingFinishResults, maximumError, attempts, attempts), settings);
         }
 
         private static void TraceRejected(LlmRequestOptions options, LlmCompletionResult completion, string error, int attempt, ModelProtocolProgress progress)

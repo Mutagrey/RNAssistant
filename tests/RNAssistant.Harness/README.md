@@ -906,6 +906,11 @@ dotnet run --no-build --project tests/RNAssistant.Harness/RNAssistant.Harness.cs
 
 Filtering limits executed tests. The harness source-links Core and Office-neutral production files, so a normal run still compiles that full linked source set. Compilation does not require reading every test file into agent context.
 
+Conversation v8 phase-1 candidate codec checks have a separate narrow
+[source-linked runner](../RNAssistant.ProtocolTests/README.md). They do not build
+Office or the not-yet-migrated v7 kernel/adapters/history and do not replace the
+full frozen-context/repair/kernel integration checks at cutover.
+
 Conversation v8 phase-0 red regression runs separately from the default suite:
 
 ```bash

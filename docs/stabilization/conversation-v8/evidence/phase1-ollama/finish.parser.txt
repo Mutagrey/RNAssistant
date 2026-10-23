@@ -1,0 +1,1 @@
+{"action":"finish","reason":"The synthetic protocol test encountered a terminal failure.","results":[{"summary":"The operation failed during the synthetic protocol test.","evidence":["call-1"],"assessment":"not_satisfied"}],"message":"The operation failed."}

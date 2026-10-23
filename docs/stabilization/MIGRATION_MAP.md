@@ -18,6 +18,12 @@ gates; active tool compatibility adapter отсутствует. Windows/Office 
 проверкой resource-consumer cleanup (2026-09-07). Порядок задаёт
 [Resource MASTER](resource-cutover/MASTER.md), владельцев — [Resource Fabric](../resource-fabric.md).
 
+## Conversation v8 candidate integration — 2026-10-23
+
+| Temporary boundary | Owner / current consumers | Removal gate |
+|---|---|---|
+| Isolated v8 codec with remaining v7 runtime/history callers | Core ModelProtocol / AgentKernel, Office/Workspace adapters and model-context/history owners. The candidate does not compile as a full app; main stays v7. Narrow protocol tests source-link production codec files without an alternate implementation. | Migrate kernel admission/reflection, every writer/prompt/adapter/history consumer and UI in phases 2–4, restore full Harness checks including frozen repair, then qualify pinned real models before main's atomic cutover. No aliases, dual protocol or automatic history conversion. See [phase-1 record](conversation-v8/PHASE1.md). |
+
 ## Historical structural `records` view — 2026-10-21
 
 | Temporary seam | Owner / current consumers | Removal gate |

@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>7.3</LangVersion>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>../../packages/Newtonsoft.Json.13.0.3/lib/net6.0/Newtonsoft.Json.dll</HintPath>
+    </Reference>
+    <Compile Include="../../src/RNAssistant.Core/ModelProtocol/ConversationResponse.cs" Link="Core/ConversationResponse.cs" />
+    <Compile Include="../../src/RNAssistant.Core/ModelProtocol/ConversationResponseJson.cs" Link="Core/ConversationResponseJson.cs" />
+    <Compile Include="../../src/RNAssistant.Core/ModelProtocol/ConversationResponseParser.cs" Link="Core/ConversationResponseParser.cs" />
+    <Compile Include="../../src/RNAssistant.Core/ModelProtocol/ConversationResponseSchemaBuilder.cs" Link="Core/ConversationResponseSchemaBuilder.cs" />
+    <Compile Include="../../src/RNAssistant.Core/ModelProtocol/ModelProtocolCallContext.cs" Link="Core/ModelProtocolCallContext.cs" />
+    <Compile Include="../../src/RNAssistant.Core/ModelProtocol/ModelProtocolWire.cs" Link="Core/ModelProtocolWire.cs" />
+    <Compile Include="../../src/RNAssistant.Core/Tools/ToolSchemaSupport.cs" Link="Core/ToolSchemaSupport.cs" />
+    <Compile Include="../../src/RNAssistant.Core/Tools/ToolCatalogEntry.cs" Link="Core/ToolCatalogEntry.cs" />
+    <Compile Include="../../src/RNAssistant.Core/Tools/ToolContracts.cs" Link="Core/ToolContracts.cs" />
+    <Compile Include="../../src/RNAssistant.Core/Tools/ToolDisplayMetadata.cs" Link="Core/ToolDisplayMetadata.cs" />
+    <Compile Include="../../src/RNAssistant.Core/Tools/ConversationMessageStreamExtractor.cs" Link="Core/ConversationMessageStreamExtractor.cs" />
+  </ItemGroup>
+</Project>

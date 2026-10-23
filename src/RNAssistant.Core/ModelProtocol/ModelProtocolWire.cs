@@ -1,53 +1,39 @@
-using RNAssistant.Core.Tools;
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using RNAssistant.Core.Llm;
-using RNAssistant.Core.Models;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Core.ModelProtocol
 {
-    // One active wire contract for model attempts, transcript envelopes and probes.
-    // No version selection or historical fallback: all active responses use v7.
-    public static class ModelProtocolWire
+    // One logical wire contract for model attempts, transcript envelopes and probes.
+    // Candidate v8 replaces v7; no aliases or version-selecting decoder.
+    public static partial class ModelProtocolWire
     {
+        internal const int MaximumFormatRepairErrorCharacters = 1024;
+
         public const string UnknownEffectGuidance =
-            "An unknown effect is a reason to investigate, not to stop the task. Before done, make a successful read of the affected current state after the unconfirmed operation. " +
+            "An unknown effect requires investigation. Before finish, successfully read the affected current state after the unconfirmed operation. " +
             "Compare it with the requested outcome, then continue feasible authorized work. Do not repeat the uncertain call unchanged or disguise a retry by changing arguments. " +
             "A read alone does not prove the intended change, and an unrelated success does not resolve it. " +
-            "Use blocked only for a concrete obstacle that prevents further safe progress, or needs_input for an indispensable user decision; explain the unfinished outcome. " +
+            "Report concrete obstacles and unfinished outcomes honestly; unverified does not waive required inspection. " +
             "Do not ask the user to verify state that available read tools can inspect.";
 
         public const string ActionGuidance =
-            "Choose action from the remaining work before writing message. Use action=tool with nonempty tool_calls when a needed, authorized tool step remains; its result triggers the next model request. " +
-            "If no tool is needed, deliver the complete requested answer or code in message now and use done with empty tool_calls. " +
-            "done ends the run: a plan, promise, partial result or offer to continue is not completion. " +
-            "Use needs_input only when an indispensable user answer is missing, or blocked only when a concrete obstacle prevents further authorized progress. Unfinished work alone is not a blocker. " +
-            "A no-call message cannot schedule another model request. " +
-            "Actions do not prove execution or effects.";
+            "Return exactly one conversation-response-v8 JSON object. Order fields: action, reason, action-specific fields, message last. " +
+            "reason is a brief decision basis, not private reasoning. Choose execute with nonempty tool_calls when an authorized tool step remains. " +
+            "Each call has only name and object arguments; runtime assigns IDs. Batch only independent local reads; return other calls alone and wait for their results. " +
+            "Choose reflection with a nonblank decision only when a useful interpretation is needed before the next model request. Reflection executes nothing, creates no tool result and grants no permissions; it is optional and bounded. " +
+            "Choose finish with a results array to end the run; deliver the answer or outcomes now, not a promise. Each result has summary, evidence (terminal runtime tool_call_id strings), and assessment (satisfied, partially_satisfied, unverified or not_satisfied). " +
+            "Without accepted calls results may be empty. After accepted calls include results and at least one real terminal reference. Never invent evidence or convert failed/unknown outcomes into verified effects. " +
+            "execute forbids decision/results; reflection forbids tool_calls/results; finish forbids tool_calls/decision. No extra root fields. " +
+            "Assessments are model claims, not runtime success. Ask indispensable questions through the available question tool; explain unresolved outcomes truthfully.";
 
         public const string MessageGuidance =
-            "Message is for useful user-facing updates, independently of tool-call or task-note frequency. " +
-            "On the first tool response of a substantial task, briefly state the approach once and include the next concrete call in that same response. For a direct answer, give the answer without a progress preamble. " +
-            "On later tool turns, report only a new relevant finding, decision, contradiction, blocker or meaningful stage change. " +
-            "Connect the changed understanding to its evidence or uncertainty and the next needed action; include only relevant parts. " +
-            "Use message=\"\" when continuing an already explained operation without useful new information, including routine skill/schema loading or task-note updates. " +
-            "Do not repeat or paraphrase earlier progress, tool arguments or the full plan. Reconcile new evidence with earlier assumptions; your own prior wording is not evidence. " +
-            "Give concise decision reasons, not private reasoning or invented findings. " +
-            "For done, report the answer or delivered outcomes and verification limits. For blocked or needs_input, state the unfinished outcome and concrete blocker or question.";
-
-        public static LlmRequestOptions CreateRequestOptions(string responseMode, IEnumerable<ToolCatalogEntry> tools,
-            ModelProtocolCallContext context)
-        {
-            var jsonSchema = string.Equals(AgentResponseModes.Normalize(responseMode),
-                AgentResponseModes.JsonSchema, StringComparison.Ordinal);
-            return new LlmRequestOptions
-            {
-                ResponseFormat = jsonSchema ? LlmResponseFormats.JsonSchema : LlmResponseFormats.JsonObject,
-                ResponseSchemaName = jsonSchema ? ConversationResponseSchemaBuilder.SchemaName : null,
-                ResponseSchemaJson = jsonSchema ? ConversationResponseSchemaBuilder.Build(tools, context) : null
-            };
-        }
+            "message is useful user-facing text; an empty string is allowed. On the first execute of a substantial task, state the approach briefly and include the next concrete call. " +
+            "On later turns report only new relevant findings, decisions, contradictions, blockers or meaningful stage changes. " +
+            "Use message=\"\" for routine continuation, including skill/schema loading. Do not repeat earlier progress, arguments or the plan. " +
+            "For finish, deliver the answer or outcomes and verification limits. Give concise decision reasons, not private reasoning or invented findings.";
 
         public static ConversationResponseParseResult Parse(string content, IEnumerable<ToolCatalogEntry> callableTools,
             IEnumerable<ToolCatalogEntry> runnableCatalog, ModelProtocolCallContext context)
@@ -55,16 +41,29 @@ namespace RNAssistant.Core.ModelProtocol
             return new ConversationResponseParser().Parse(content, callableTools, runnableCatalog, context);
         }
 
-        public static string Write(string message, IEnumerable<ConversationToolCall> calls)
+        public static string Write(ConversationResponse response)
         {
-            var snapshot = (calls ?? new ConversationToolCall[0]).ToArray();
-            var action = snapshot.Length > 0 ? ConversationResponse.ToolAction : ConversationResponse.DoneAction;
-            return new ConversationResponse(message ?? string.Empty, snapshot, action).ToJson();
+            if (response == null) throw new ArgumentNullException(nameof(response));
+            return response.ToJson();
         }
 
-        public static string WriteAction(string message, string action)
+        internal static string FormatRepairContent(ConversationResponseError kind, string error, int attempt, int maxAttempts)
         {
-            return new ConversationResponse(message ?? string.Empty, new ConversationToolCall[0], action).ToJson();
+            if (kind == ConversationResponseError.None) throw new ArgumentException("A format error is required.", nameof(kind));
+            var boundedError = string.IsNullOrWhiteSpace(error) ? "Invalid conversation response." : error.Trim();
+            if (boundedError.Length > MaximumFormatRepairErrorCharacters)
+                boundedError = boundedError.Substring(0, MaximumFormatRepairErrorCharacters) + "...[truncated]";
+            return "FORMAT_REPAIR:\n" + new JObject
+            {
+                ["code"] = ConversationResponseParseResult.Code(kind),
+                ["error"] = boundedError, ["attempt"] = attempt, ["max_attempts"] = maxAttempts,
+                ["instruction"] = ActionGuidance + " " + MessageGuidance + " " +
+                    "Repair only the rejected proposal against the same current task and callable schemas. No call from the rejected response was accepted or executed. " +
+                    "Do not replay previously accepted operations. Never relabel a promise as finish to repair empty_execute_calls. " +
+                    "Inside a call, arguments is already the root object described by its schema; do not nest arguments, parameters or a wrapper. " +
+                    "For an undeclared property, remove it; if it wrongly wraps declared fields, move those fields up first. " +
+                    "Use one JSON escaping layer: \\n for a real line break and \\\\ for one literal source backslash. No Markdown or surrounding prose."
+            }.ToString(Formatting.None);
         }
     }
 }

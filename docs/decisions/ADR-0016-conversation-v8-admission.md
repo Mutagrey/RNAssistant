@@ -1,7 +1,8 @@
 # ADR-0016: Conversation v8 — admission завершения и reflection
 
-Дата: 2026-10-23. Статус: **предложено для реализации после фазы 0**;
-активный контракт остаётся v7. Owner: Core ModelProtocol / AgentKernel.
+Дата: 2026-10-23. Статус: **реализация codec в изолированном кандидате фазы 1**;
+активный контракт main остаётся v7. Полная интеграция кандидата ещё не собирается;
+[проверки и открытые gates](../stabilization/conversation-v8/PHASE1.md). Owner: Core ModelProtocol / AgentKernel.
 Основание: [аудит HEAD и красная регрессия](../stabilization/conversation-v8/AUDIT.md).
 `v8.1` — редакция пользовательской спецификации; планируемый целочисленный
 `ResponseProtocolVersion` — **8**, product version отдельно и здесь не меняется.
