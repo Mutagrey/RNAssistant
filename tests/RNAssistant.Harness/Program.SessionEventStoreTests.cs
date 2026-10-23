@@ -484,8 +484,6 @@ namespace RNAssistant.Harness
                 var pending = AssertKernelReplay(session);
                 var pendingId = pending.LastRun.KernelState.Summary.PendingConfirmation.PendingId;
                 var command = PendingCommand(pending);
-                pending.LastRun.RunId = "confirmation-fault-run";
-
                 var registry = new ChatRunRegistry(paths);
                 var recovery = CreateTargetedRunRecovery(adapter, paths, registry);
                 var runLease = registry.Start(pending.Id, "controller-confirmation", pending);
