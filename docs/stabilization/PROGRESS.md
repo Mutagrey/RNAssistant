@@ -18,11 +18,17 @@ run with fake Excel now rejects the phase-0 premature finish and replays an
 honest partial claim after the verified sheet write. Workspace permits
 honest incomplete finish with failed acceptance; satisfied finish still
 requires explicit criteria. See [phase-4 evidence and gaps](conversation-v8/PHASE4.md).
-The host-neutral Harness now builds and focused v8 workflow/replay scenarios
-pass; the full suite still contains red v7 fixtures. Full Harness migration,
-steer/UI integration, real-model comparison and
-Windows/Office gates remain open. Main remains v7. Owner: Core chat/run
-projection, Office transcript and Workspace/CLI recovery.
+The host-neutral Harness builds and focused v8 workflow/replay scenarios pass.
+The last complete run had 975 passed / 29 failed / 1004 total; seven of those
+failures subsequently passed focused checks, but the full suite was not rerun.
+Three failures depend on a missing local Data Templates package; other red
+cases still need triage. An [isolated pinned real-model pilot](conversation-v8/PHASE5_PILOT.md)
+passed all three synthetic tasks on v8 after a workspace read-selector fix,
+while v7 completed none. This is not the required three-way/ablation benchmark
+or Windows/Office qualification. Accepted v8 replay now sanitizes runtime
+references in model-visible prose while preserving exact call arguments.
+Main remains v7. Owner: Core chat/run projection, Office transcript and
+Workspace/CLI recovery. Formal phase-5, steer/UI and target-host gates remain open.
 
 ## Conversation v8 phase-3 adapter/prompt candidate — 2026-10-23
 

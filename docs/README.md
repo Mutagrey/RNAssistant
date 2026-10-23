@@ -73,8 +73,11 @@ Owner — Core ModelProtocol / AgentKernel. [Фаза 1](stabilization/conversat
 проверяет codec, [фаза 2](stabilization/conversation-v8/PHASE2.md) —
 kernel и admission по журналу, [кандидат фазы 3](stabilization/conversation-v8/PHASE3.md) —
 prompts, adapters и CLI, [срез фазы 4](stabilization/conversation-v8/PHASE4.md) —
-format-8 persistence/UI и восстановление в отдельном worktree. Host-neutral source
-собирается, включая Harness; его полный набор тестов ещё содержит v7 фикстуры.
+format-8 persistence/UI и восстановление в отдельном worktree.
+[Изолированный пилот фазы 5](stabilization/conversation-v8/PHASE5_PILOT.md)
+сохраняет точные HTTP-запросы, результаты задач и открытые условия квалификации.
+Host-neutral source собирается, включая Harness; его полный набор тестов ещё
+содержит красные фикстуры.
 Действующий контракт main остаётся v7. После переключения аудит
 становится историей, текущие правила переходят в canonical protocol docs.
 

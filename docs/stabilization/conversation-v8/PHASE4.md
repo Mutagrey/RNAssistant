@@ -166,15 +166,22 @@ an irreparable obstacle without reporting success or replaying a tool.
   chat fixture; Core smoke covers direct claims and foreign citation rejection.
   The context-continuity Harness fixture checks reflection compaction and reload.
 
-The full Harness still has legacy v7 wire bodies and assertions outside these
-migrated groups; its complete test suite is not yet green. An interrupted
-full-run attempt completed 1206 cases with 41 failures, largely unmigrated v7
-fixtures; this is not a full-suite result. Since that attempt, targeted checks
-pass for the steered confirmation using the original run ID, the Office sheet
-write with a terminal evidence citation, direct no-call finish, format repair,
-and project-chat file upload. The full suite has not been rerun after these fixes.
-The original v7 red audit and its route have been retired; its captured evidence
-remains historical. The full Harness suite and target-host Office
-steer/UI integration checks are not yet qualified. Playwright layout qualification is
-unavailable in this worktree (`playwright` module absent); Windows x64 +
-Office x64 + WebView2 and real-model comparisons remain open.
+The full host-neutral Harness completed after the v8 fixture migration through
+`99bf54b0`: 975 passed, 29 failed, 1004 total. Three failures need the absent
+pinned Data Templates native package on this Mac. Other failures include
+unmigrated v7 fixtures, stale assertions and separate resource/host-neutral
+investigations; the full suite is not qualified. After that run, seven formerly
+failing cases passed individually: failed/unknown write characterization,
+mixed VBA batch refusal, large accepted-call replay, accepted-prose projection,
+active HTML target and VBA skill guidance. The full suite was not repeated after
+those changes. One bridge cancellation check failed in the full run but passed
+immediately when run alone; its reproducibility is tracked in the
+[risk register](../RISK_REGISTER.md#harness-bridge-cancellation-flake--2026-10-23).
+
+The [isolated real-model pilot](PHASE5_PILOT.md) compares exact file tasks on a
+pinned local endpoint and retains exact HTTP bodies. It does not close the
+three-way phase-5 comparison or ablations. The original v7 red audit and its
+route have been retired; captured evidence remains historical. Target-host
+Office steer/UI checks, Windows x64 + Office x64 + WebView2 and formal release
+qualification remain open. Playwright layout qualification is unavailable in
+this worktree (`playwright` module absent).
