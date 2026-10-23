@@ -98,9 +98,9 @@ namespace RNAssistant.Harness
                                 (JObject)arguments.DeepClone(), contract,
                                 applyDefaults, out error),
                                 "every schema rejects omitted/null/blank table source");
-                        var wire = ModelProtocolWire.Write("", new[] {
+                        var wire = ModelProtocolWire.WriteAcceptedCall("Validate table source.", "",
                             new ConversationToolCall { Name = definition.Id,
-                                Arguments = arguments } });
+                                Arguments = arguments });
                         AssertTrue(!parser.Parse(wire, new[] { definition },
                             new[] { definition }, context).Success,
                             "parser cannot supply a default table source");

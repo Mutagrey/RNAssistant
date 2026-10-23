@@ -57,7 +57,8 @@ namespace RNAssistant.Harness
                         foreach (var defaults in new[] { false, true })
                             AssertTrue(!ToolSchemaSupport.ValidateArguments((JObject)arguments.DeepClone(), contract, defaults, out error),
                                 "every schema rejects absent/blank " + field + " for " + payload["kind"]);
-                        var wire = ModelProtocolWire.Write("", new[] { new ConversationToolCall { Name = definition.Id, Arguments = arguments } });
+                        var wire = ModelProtocolWire.WriteAcceptedCall("Validate write target.", "",
+                            new ConversationToolCall { Name = definition.Id, Arguments = arguments });
                         AssertTrue(!parser.Parse(wire, new[] { definition }, new[] { definition }, context).Success,
                             "parser cannot normalize a missing target into a default");
 

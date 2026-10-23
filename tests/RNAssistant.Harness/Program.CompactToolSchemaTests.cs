@@ -58,7 +58,8 @@ namespace RNAssistant.Harness
                     AssertEqual(oldValid, newValid, "runtime acceptance unchanged: " + arguments);
                     if (oldValid) AssertTrue(JToken.DeepEquals(oldArgs, newArgs), "accepted arguments/defaults unchanged");
                 }
-                var wire = ModelProtocolWire.Write("", new[] { new ConversationToolCall { Name = tool.Id, Arguments = arguments } });
+                var wire = ModelProtocolWire.WriteAcceptedCall("Validate format arguments.", "",
+                    new ConversationToolCall { Name = tool.Id, Arguments = arguments });
                 var oldParsed = parser.Parse(wire, new[] { legacyTool }, new[] { legacyTool }, context);
                 var newParsed = parser.Parse(wire, new[] { tool }, new[] { tool }, context);
                 AssertEqual(oldParsed.Success, newParsed.Success, "parser acceptance unchanged: " + arguments);
