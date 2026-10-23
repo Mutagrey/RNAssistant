@@ -1476,7 +1476,9 @@ namespace RNAssistant.Harness
                 var responses = new Queue<LlmCompletionResult>(new[]
                 {
                     new LlmCompletionResult { Content = invalid, ReasoningContent = "INVALID_REASONING_SENTINEL" },
-                    new LlmCompletionResult { Content = "{\"message\":\"Не могу выполнить этот запрос.\",\"action\":\"done\",\"tool_calls\":[]}" }
+                    new LlmCompletionResult { Content = ModelProtocolWire.WriteAcceptedDecision(
+                        ConversationResponse.FinishAction, "Explain the refusal.",
+                        "Не могу выполнить этот запрос.", results: new ConversationResultClaim[0]) }
                 });
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
@@ -1495,7 +1497,8 @@ namespace RNAssistant.Harness
                 AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "model-authored refusal text only ends its loop; it is not provider refusal");
                 var repair = requests[1].Last();
                 AssertContains(repair.Content, "FORMAT_REPAIR", "repair instruction added");
-                AssertContains(repair.Content, "message (string)", "refusal can remain final message text without a status field");
+                AssertContains(repair.Content, "Keep the envelope even when the task cannot be fulfilled",
+                    "v8 format repair permits a truthful refusal in finish");
                 AssertTrue(FlattenSimple(requests[1]).IndexOf(invalid, StringComparison.Ordinal) < 0,
                     "invalid raw response is not copied into repair prompt");
                 AssertTrue(!session.Messages.Any(message =>
