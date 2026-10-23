@@ -60,10 +60,11 @@ as model history. Ordinary completed answers need no service card; partial,
 unverified and unsatisfied claims receive a separate notice. The run journal
 retains the exact accepted wire and tool-result correlation.
 
-These claim/notice presentation rules currently apply to the Office run view.
-Workspace project/plugin chat still omits claims and renders empty reflection
-messages; the candidate's [open readiness gaps](../stabilization/RISK_REGISTER.md#conversation-v8-readiness-review--2026-10-23)
-also record its stricter-than-specified direct-finish admission.
+Workspace project/plugin chat also presents accepted finish claims and exact
+evidence IDs as model assessments. It shows reflection decisions as saved steps;
+an empty `message` does not create an answer bubble. A direct finish may include
+evidence-free claims when this run accepted no calls; any cited foreign ID is
+still rejected. Target WebView2 and full integration qualification remain open.
 
 History readers require `ResponseProtocolVersion=8` and exact accepted
 metadata. Format-7 chats are read-only in this candidate; no v7 inference,

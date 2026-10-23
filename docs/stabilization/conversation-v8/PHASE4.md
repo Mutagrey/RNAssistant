@@ -40,6 +40,17 @@ completion date follows from the current focused test counts. The separate
 large shared-archive limitation remains open and is not repaired by narrowing
 its fixture.
 
+Follow-up at `1ee68c62`: both code gaps above are fixed host-neutral.
+Workspace project/plugin chat now presents typed reflection decisions and finish
+claims, including partial/unverified assessments and exact evidence IDs; an
+empty reflection message creates no answer bubble. Direct finish permits
+evidence-free claims while foreign citations remain rejected. Focused UI,
+plugin projection and kernel smoke checks pass. The context-continuity fixture
+now preserves a real accepted reflection decision and its assistant provenance
+through two compactions and ChatStore reload; separate UI rendering coverage
+checks the saved step. These checks do not replace a full Office/Workspace
+browser or real-model run.
+
 New chats use stream format 8. Formats 6 and 7 remain readable, but run policy
 refuses execution in them; no history is rewritten or deleted. The
 [candidate wire contract](../../protocols/CONVERSATION_RESPONSE_V8.md) owns
@@ -148,9 +159,18 @@ an irreparable obstacle without reporting success or replaying a tool.
   per-call records. Plugin chat presentation now uses the strict v8 history
   reader, so a valid non-native call shows its narration and action, while
   missing runtime call metadata is refused before the next model request.
+- `node tests/web/workspace-chat-v8.test.js` checks that an empty reflection
+  creates a saved step without an answer bubble and that an incomplete finish
+  displays its assessment and terminal evidence ID. The focused plugin Harness
+  check covers the typed persisted-message projection and the updated v8 source
+  chat fixture; Core smoke covers direct claims and foreign citation rejection.
+  The context-continuity Harness fixture checks reflection compaction and reload.
 
 The full Harness still has legacy v7 wire bodies and assertions outside these
-migrated groups; its complete test suite is not yet green.
+migrated groups; its complete test suite is not yet green. A full-run attempt
+reached a v7-only plugin source-chat fixture after four passes; that fixture
+was migrated and passes in isolation. Do not count that interrupted run as a
+full-suite result.
 The original v7 red audit and its route have been retired; its captured evidence
 remains historical. The full Harness suite and Office
 steer/UI integration checks are not yet migrated. Playwright layout qualification is

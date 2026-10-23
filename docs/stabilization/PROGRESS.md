@@ -3,10 +3,12 @@
 ## Conversation v8 phase-4 persistence/UI slice — 2026-10-23
 
 The [specification reconciliation](conversation-v8/PHASE4.md#specification-reconciliation--2026-10-23)
-at `02872af0` found remaining implementation work: Workspace chat drops finish
-claims and renders empty reflections, and direct-finish admission adds a
-restriction absent from spec §C.3. These have explicit owners and closure checks
-in the [risk register](RISK_REGISTER.md#conversation-v8-readiness-review--2026-10-23).
+at `02872af0` found two implementation gaps. Through `1ee68c62`, both are
+fixed host-neutral: Workspace chat shows saved reflection decisions and finish
+claims with evidence, and direct finish permits evidence-free claims while
+rejecting foreign citations. Focused Core, plugin, Node UI and reflection
+compaction/reload checks pass. The [risk register](RISK_REGISTER.md#conversation-v8-readiness-review--2026-10-23)
+retains the history and remaining target-host evidence.
 
 The candidate branch now creates format-8 chats, keeps v7 readable but
 read-only, projects finish claims without upgrading task verification, and
