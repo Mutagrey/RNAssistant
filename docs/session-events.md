@@ -568,8 +568,12 @@ persistence serialization. The inbox never concurrently edits the run's message 
 Only the run owner projects consumed user messages. A claim precedes delivery;
 `applied` follows durable user-message persistence. After interruption, explicit
 resume reconciles claimed IDs against persisted messages and never reruns an already
-recorded input. Restart pauses retained input independently of the last saved pause
-flag. Replay rejects one operation ID assigned to multiple inputs or changes to an
+recorded input. Shared replay refuses an `applied` event without exactly one
+persisted, ordinary user message matching its input ID and accepted run (when set);
+a colliding non-user/duplicate ID is not delivery evidence. Office resume uses the
+same check before resolving `delivering` and before writing `applied`. Restart
+pauses retained input independently of the last saved pause flag. Replay rejects
+one operation ID assigned to multiple inputs or changes to an
 input's immutable request fingerprint, run/question IDs or runtime target across
 transitions; neither Office nor workspace may acknowledge that history as accepted.
 Missing CAS input bodies fail explicitly. Old event streams need no backfill;

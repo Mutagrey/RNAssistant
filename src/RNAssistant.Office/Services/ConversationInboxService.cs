@@ -233,7 +233,7 @@ namespace RNAssistant.Office.Services
                 foreach (var item in box.Inputs.Where(i => !box.Running && !box.Worker && i.Status == ConversationInputStatus.Delivering).ToArray())
                 {
                     var copy = Clone(item);
-                    copy.Status = box.Session.Messages.Any(m => m.Id == item.Id)
+                    copy.Status = ConversationInputJournal.HasPersistedUserMessage(box.Session, item)
                         ? ConversationInputStatus.Applied : ConversationInputStatus.Pending;
                     copy.Revision++;
                     Write(box, copy);
@@ -286,7 +286,10 @@ namespace RNAssistant.Office.Services
             lock (box.Sync)
             {
                 var item = Clone(box.Inputs.FirstOrDefault(i => i.Id == id));
-                if (item == null || item.Status == ConversationInputStatus.Applied) return;
+                if (item == null) return;
+                if (!ConversationInputJournal.HasPersistedUserMessage(box.Session, item))
+                    throw new InvalidOperationException("Input cannot be marked applied before its user message is persisted.");
+                if (item.Status == ConversationInputStatus.Applied) return;
                 item.Status = ConversationInputStatus.Applied; item.Revision++;
                 Write(box, item);
             }

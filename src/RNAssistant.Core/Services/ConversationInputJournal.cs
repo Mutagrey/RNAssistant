@@ -40,7 +40,43 @@ namespace RNAssistant.Core.Services
                     return new ConversationInputRecord(fact, change);
                 }).ToArray();
             RequireStableIdentity(records);
+            var applied = records.Select(record => record.Change.Input)
+                .Where(input => input?.Status == ConversationInputStatus.Applied).ToArray();
+            if (applied.Length == 0) return records;
+            var appliedIds = new HashSet<string>(applied.Select(input => input.Id), StringComparer.Ordinal);
+            var messages = (session.Messages ?? new List<ChatMessage>())
+                .Where(message => message != null && message.Id != null && appliedIds.Contains(message.Id))
+                .ToLookup(message => message.Id, StringComparer.Ordinal);
+            foreach (var input in applied)
+                if (!HasPersistedUserMessage(input, messages[input.Id]))
+                    throw new InvalidOperationException("Applied input has no persisted user message; inspect the conversation without replaying input.");
             return records;
+        }
+
+        // Missing is recoverable only through explicit input resume. A colliding
+        // message ID is not proof of delivery and must never become a receipt.
+        public static bool HasPersistedUserMessage(ChatSession session, ConversationInput input)
+        {
+            if (session == null) throw new ArgumentNullException(nameof(session));
+            if (input == null || string.IsNullOrWhiteSpace(input.Id)) throw new ArgumentException("Input ID is required.", nameof(input));
+            return HasPersistedUserMessage(input, (session.Messages ?? new List<ChatMessage>())
+                .Where(message => message != null && message.Id == input.Id));
+        }
+
+        private static bool HasPersistedUserMessage(ConversationInput input, IEnumerable<ChatMessage> matches)
+        {
+            ChatMessage found = null;
+            foreach (var message in matches)
+            {
+                if (found != null)
+                    throw new InvalidOperationException("Input ID matches multiple messages; inspect the conversation without replaying input.");
+                found = message;
+            }
+            if (found == null) return false;
+            if (found.Role != "user" || found.ProtocolMessage ||
+                input.AcceptedRunId != null && found.RunId != input.AcceptedRunId)
+                throw new InvalidOperationException("Input ID does not identify its persisted user message; inspect the conversation without replaying input.");
+            return true;
         }
 
         private static void RequireStableIdentity(IEnumerable<ConversationInputRecord> records)

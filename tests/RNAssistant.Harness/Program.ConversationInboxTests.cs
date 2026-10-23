@@ -136,6 +136,9 @@ namespace RNAssistant.Harness
                 AssertTrue(accepted.Data["Input"]["Text"].Type == Newtonsoft.Json.Linq.JTokenType.Null, "body is not duplicated in metadata");
                 inbox.Update(session, new UpdateChatInputPayload { InputId = "b", ExpectedRevision = 1, Text = "edited" }, "edit");
                 AssertEqual("a", inbox.TakeNext(session, false).Id, "FIFO claim");
+                var delivered = new ChatMessage { Id = "a", Role = "user", Content = "first" };
+                session.Messages.Add(delivered);
+                store.Commit(session, ConversationCommit.UserInput(delivered));
                 inbox.Applied(session, "a");
                 inbox.Submit(session, InboxInput("removed", "discard", InputDelivery.Queue));
                 var removed = inbox.Update(session, new UpdateChatInputPayload { InputId = "removed", ExpectedRevision = 1 }, "remove");
@@ -168,6 +171,33 @@ namespace RNAssistant.Harness
                 try { new ConversationInboxService(events).FindOperation(session, "b", shadow.RequestFingerprint); }
                 catch (InvalidOperationException) { ambiguous = true; }
                 AssertTrue(ambiguous, "replay refuses one operation ID assigned to two inputs");
+            });
+            WithTempPaths(paths =>
+            {
+                var store = new ChatStore(paths); var events = new ChatEventStoreAdapter(store);
+                var session = NewSession(FakeOfficeAdapter.ForHost("Excel")); store.Save(session);
+                var inbox = new ConversationInboxService(events);
+                inbox.Submit(session, InboxInput("missing", "retained", InputDelivery.Queue));
+                var claimed = inbox.TakeNext(session, false);
+                var premature = false;
+                try { inbox.Applied(session, claimed.Id); }
+                catch (InvalidOperationException) { premature = true; }
+                AssertTrue(premature, "input cannot be marked applied before its user message is saved");
+                claimed.Status = ConversationInputStatus.Applied; claimed.Revision++;
+                new ConversationInputJournal(events).Append(session, new ConversationInputEvent { Input = claimed });
+                var falseReceipt = false;
+                try { new ConversationInboxService(events).Snapshot(session, new[] { claimed.OperationId }); }
+                catch (InvalidOperationException error)
+                { falseReceipt = error.Message.Contains("no persisted user message"); }
+                AssertTrue(falseReceipt, "replay rejects an applied event with no durable user message");
+                var wrongRole = new ChatMessage { Id = claimed.Id, Role = "assistant", Content = "not input" };
+                session.Messages.Add(wrongRole);
+                store.Commit(session, new ConversationCommit(new[] { wrongRole }));
+                var idCollision = false;
+                try { new ConversationInputJournal(events).Read(session); }
+                catch (InvalidOperationException error)
+                { idCollision = error.Message.Contains("does not identify its persisted user message"); }
+                AssertTrue(idCollision, "a non-user message with the input ID cannot authorize applied replay");
             });
         }
         private static void InboxSharedLifetimeAndRecovery()
