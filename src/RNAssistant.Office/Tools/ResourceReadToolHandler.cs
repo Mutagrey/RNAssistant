@@ -6,6 +6,7 @@ using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Services;
 using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
@@ -54,38 +55,22 @@ namespace RNAssistant.Office.Tools
                 throw new ResourceRequestException(
                     "Use representation=table for structural reads; records is retained only for saved bindings.",
                     "RESOURCE_VIEW_UNSUPPORTED", false);
+            var pdfSelection = ResourcePdfPageSelectorContract.Validate(context.Arguments,
+                representation, true, _maximumTextCharacters);
             var structured = representation == "table";
             var tree = representation == ResourceRepresentations.Tree;
             var section = ToolArgumentReader.String(context.Arguments, "section", null);
             var lines = context.Arguments.ContainsKey("startLine") || context.Arguments.ContainsKey("lineCount");
             var chars = context.Arguments.ContainsKey("startChar") || context.Arguments.ContainsKey("charCount");
             var parts = context.Arguments.ContainsKey("partNumber");
-            var page = context.Arguments.ContainsKey("pageIndex");
-            var pageRange = context.Arguments.ContainsKey("startPage") || context.Arguments.ContainsKey("pageCount");
+            var page = pdfSelection == ResourcePdfPageSelectionKind.Page;
+            var pageRange = pdfSelection == ResourcePdfPageSelectionKind.Range;
             var procedure = ToolArgumentReader.String(context.Arguments, "procedure", null);
             var procedureKind = ToolArgumentReader.String(context.Arguments, "procedureKind", null);
             var pointer = ToolArgumentReader.String(context.Arguments, "pointer", null);
             var depth = ToolArgumentReader.Int32(context.Arguments, "depth", 1);
             var treeOffset = ToolArgumentReader.Int32(context.Arguments, "offset", 0);
             var treeLimit = ToolArgumentReader.Int32(context.Arguments, "limit", 100);
-            if (pageRange && (representation != ResourceRepresentations.Text || page ||
-                !context.Arguments.ContainsKey("startPage") || !context.Arguments.ContainsKey("pageCount") ||
-                ToolArgumentReader.Int32(context.Arguments, "startPage", -1) < 0 ||
-                ToolArgumentReader.Int32(context.Arguments, "pageCount", 0) < 1 ||
-                section != null || lines || chars || parts || procedure != null || procedureKind != null || tree ||
-                context.Arguments.ContainsKey("path") || context.Arguments.ContainsKey("fields") ||
-                context.Arguments.ContainsKey("offset") || context.Arguments.ContainsKey("limit")))
-                throw new ResourceRequestException("PDF page ranges require startPage and positive pageCount without other selectors.",
-                    "resource_page_selector_invalid", false);
-            if (page && (representation != ResourceRepresentations.Text || pageRange ||
-                ToolArgumentReader.Int32(context.Arguments, "pageIndex", -1) < 0 ||
-                chars && ToolArgumentReader.Int32(context.Arguments, "charCount", 0) > _maximumTextCharacters ||
-                section != null || lines || parts || procedure != null || procedureKind != null || tree ||
-                context.Arguments.ContainsKey("path") || context.Arguments.ContainsKey("fields") ||
-                context.Arguments.ContainsKey("offset") || context.Arguments.ContainsKey("limit") ||
-                (context.Arguments.ContainsKey("startChar") != context.Arguments.ContainsKey("charCount"))))
-                throw new ResourceRequestException("PDF page text requires pageIndex and optional paired startChar/charCount only.",
-                    "resource_page_selector_invalid", false);
             if (tree && (!context.Arguments.ContainsKey("pointer") || pointer == null || depth < 0 || treeOffset < 0 || treeLimit < 1 ||
                 section != null || lines || chars || parts || procedure != null || procedureKind != null ||
                 context.Arguments.ContainsKey("path") || context.Arguments.ContainsKey("fields")) ||

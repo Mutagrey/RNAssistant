@@ -666,6 +666,10 @@ the actual exclusive-end `page-range`, `selectionComplete`, and `nextPageIndex` 
 another page is needed. If the first page cannot fit, the read fails explicitly;
 use `pageIndex` with `startChar`/`charCount` to continue within that page. Range
 and page-local selectors cannot be combined.
+Office and workspace/CLI use one Core admission rule for PDF page selectors:
+only target, optional resource type, text representation and the selected page
+or range/window fields may be present. Extra structural or other selectors fail
+with `resource_page_selector_invalid` before provider read.
 Both providers re-extract the selected page or pages from the hash-checked original of the
 exact revision, independently of the flattened extraction and `PageTextLengths`.
 The result reports page-local `character-range` coverage, page count and separate

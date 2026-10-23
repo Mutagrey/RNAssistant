@@ -73,6 +73,8 @@ namespace RNAssistant.Runtime
                     return Return(ToolResult.Ok(ResourceFindProjection.Message(page), ResourceFindProjection.Serialize(page), page.ResourceRefs));
                 }
                 var target = Value(context, "target");
+                var pdfSelection = ResourcePdfPageSelectorContract.Validate(context.Arguments,
+                    Value(context, "representation"), type == "file", _maximumTextReadCharacters);
                 ResourceReadObservation read;
                 SkillDefinition skill = null;
                 var referencePath = Value(context, "referencePath");
@@ -83,7 +85,7 @@ namespace RNAssistant.Runtime
                 var pageIndex = Number(context, "pageIndex");
                 var startPage = Number(context, "startPage");
                 var requestedPages = Number(context, "pageCount");
-                var pageRange = context.Arguments.ContainsKey("startPage") || context.Arguments.ContainsKey("pageCount");
+                var pageRange = pdfSelection == ResourcePdfPageSelectionKind.Range;
                 var procedure = Value(context, "procedure");
                 var procedureKind = Value(context, "procedureKind");
                 var isTree = Value(context, "representation") == ResourceRepresentations.Tree;
@@ -92,29 +94,6 @@ namespace RNAssistant.Runtime
                 var depth = Number(context, "depth") ?? 1;
                 var treeOffset = Number(context, "offset") ?? 0;
                 var treeLimit = Number(context, "limit") ?? 100;
-                if (pageRange && (type != "file" || !startPage.HasValue || !requestedPages.HasValue ||
-                    startPage.Value < 0 || requestedPages.Value < 1 || pageIndex.HasValue ||
-                    Value(context, "representation") != ResourceRepresentations.Text ||
-                    startLine.HasValue || lineCount.HasValue || startChar.HasValue || charCount.HasValue ||
-                    context.Arguments.ContainsKey("procedure") || context.Arguments.ContainsKey("procedureKind") || isTree ||
-                    !string.IsNullOrEmpty(referencePath) || context.Arguments.ContainsKey("version") ||
-                    context.Arguments.ContainsKey("pointer") || context.Arguments.ContainsKey("depth") ||
-                    context.Arguments.ContainsKey("offset") || context.Arguments.ContainsKey("limit") ||
-                    context.Arguments.ContainsKey("fields") || context.Arguments.ContainsKey("path")))
-                    throw Error("PDF page ranges require startPage and positive pageCount without other selectors.",
-                        "resource_page_selector_invalid");
-                if (pageIndex.HasValue && (type != "file" || pageRange || pageIndex.Value < 0 ||
-                    Value(context, "representation") != ResourceRepresentations.Text ||
-                    startLine.HasValue || lineCount.HasValue ||
-                    context.Arguments.ContainsKey("procedure") ||
-                    context.Arguments.ContainsKey("procedureKind") || isTree ||
-                    startChar.HasValue != charCount.HasValue ||
-                    charCount.HasValue && charCount.Value > _maximumTextReadCharacters ||
-                    !string.IsNullOrEmpty(referencePath) || context.Arguments.ContainsKey("version") ||
-                    context.Arguments.ContainsKey("pointer") || context.Arguments.ContainsKey("depth") ||
-                    context.Arguments.ContainsKey("offset") || context.Arguments.ContainsKey("limit")))
-                    throw Error("PDF page text requires pageIndex and optional paired startChar/charCount only.",
-                        "resource_page_selector_invalid");
                 if (isTree && (type != "file" || !hasPointer || depth < 0 || treeOffset < 0 || treeLimit < 1 ||
                     startLine.HasValue || lineCount.HasValue || startChar.HasValue || charCount.HasValue ||
                     context.Arguments.ContainsKey("procedure") || context.Arguments.ContainsKey("procedureKind") ||

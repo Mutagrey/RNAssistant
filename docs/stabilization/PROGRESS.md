@@ -1,5 +1,15 @@
 # Stabilization progress
 
+## Unified Shell application/resource parity: PDF selectors — 2026-10-23
+
+Owner: Core model-facing resource selector contract. Office and workspace/CLI
+PDF page reads now use one admission rule for page, range and optional character
+window fields. Both reject extra selectors before provider read; the previous
+workspace page path could accept `path` while Office rejected it. The existing
+two-page Office/workspace Harness cases cover the shared refusal and successful
+reads host-neutral. Descriptor and broader context-preparation parity remain
+open; Windows/Office/WebView2 are not qualified.
+
 ## Resource Context exact read-message cost — 2026-10-23
 
 Owner: Core LLM request trace and Model Context Inspector. After final request

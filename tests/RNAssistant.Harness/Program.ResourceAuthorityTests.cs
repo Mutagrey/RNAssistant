@@ -158,6 +158,12 @@ namespace RNAssistant.Harness
                     ["target"] = target, ["representation"] = "text", ["pageIndex"] = 1,
                     ["startChar"] = 5
                 }, schema, false, out schemaError), "schema rejects incomplete page window");
+                var mixedOffice = read(new Dictionary<string, object> {
+                    ["type"] = "office", ["target"] = target, ["representation"] = "text",
+                    ["pageIndex"] = 1, ["path"] = "rows" });
+                AssertEqual("resource_page_selector_invalid",
+                    (string)JObject.Parse(mixedOffice.Result.DataJson)["code"],
+                    "Office PDF page rejects a structural selector even through CLI binding");
                 var outside = read(new Dictionary<string, object> {
                     ["target"] = target, ["representation"] = "text", ["pageIndex"] = 2 });
                 AssertTrue(outside.Result.Status != ToolResultStatus.Ok,
@@ -290,6 +296,13 @@ namespace RNAssistant.Harness
                     ["target"] = "pages.pdf", ["representation"] = "text", ["pageIndex"] = 1,
                     ["startChar"] = 10
                 }, schema, false, out error), "CLI schema rejects incomplete PDF page window");
+                var mixedWorkspace = handler.ExecuteAsync(new ToolHandlerContext(execution,
+                    new Dictionary<string, object> { ["target"] = "pages.pdf", ["representation"] = "text",
+                        ["pageIndex"] = 1, ["path"] = "rows" }),
+                    System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+                AssertEqual("resource_page_selector_invalid",
+                    (string)JObject.Parse(mixedWorkspace.Result.DataJson)["code"],
+                    "workspace PDF page rejects the same structural selector");
                 var outside = handler.ExecuteAsync(new ToolHandlerContext(execution,
                     new Dictionary<string, object> { ["target"] = "pages.pdf", ["representation"] = "text",
                         ["pageIndex"] = 2 }), System.Threading.CancellationToken.None).GetAwaiter().GetResult();
