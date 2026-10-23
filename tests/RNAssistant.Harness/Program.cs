@@ -121,6 +121,7 @@ namespace RNAssistant.Harness
                 Test("tool runtime: resources and awaiting user", ToolRuntimePreservesResourcesAndAwaitingUser),
                 Test("tool runtime: contracts and evidence replay", ToolRuntimeContractsRoundTrip),
                 Test("workspace: create reopen session and relocate", WorkspaceCreatesAndRelocates),
+                Test("workspace: explicit resume records persisted input delivery", WorkspaceResumeRecordsPersistedInputDelivery),
                 Test("workspace: Office target stays pinned across document and host switches", WorkspaceOfficeTargetStaysPinned),
                 Test("workspace: first message names the chat and smart title updates it", WorkspaceChatAutoTitle),
                 Test("workspace: accepted call history survives a new turn", WorkspaceAcceptedCallHistory),

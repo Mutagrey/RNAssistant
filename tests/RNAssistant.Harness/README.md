@@ -178,6 +178,10 @@ durable project header and manual rename priority.
 `workspace: accepted call history survives a new turn` checks a two-call read
 batch, exact runtime/model-attempt origins after restart, the next model turn,
 legacy narration display and explicit refusal of an origin-less old record.
+`workspace: explicit resume records persisted input delivery` checks the crash
+boundary between durable user-message persistence and the `applied` input event:
+resume records the missing transition once, while a missing message and duplicate
+lookup never replay input or start the model.
 `node tests/web/plugins.test.js` checks creation/automatic check/preview/apply/reopen/disable,
 immediate SVG drawing, reusable rail hover menus and remove/restore,
 source chat presentation, actual Chromium Worker and native-protocol XLSX extraction

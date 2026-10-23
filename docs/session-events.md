@@ -624,9 +624,12 @@ not mere queue edits/removals. Absence from the queue is never proof of delivery
 Receipt `DeliveryRecorded` means the `applied` event was persisted, not that a run
 completed or a tool had an effect. It may advance from false to true. A receipt
 survives an interrupted process or a crash before delivery; false leaves delivery
-unconfirmed and never authorizes automatic resubmission. Inspect state and use
-explicit recovery/new input. These receipts are rebuilt from canonical events,
-including after deletion of the disposable SQLite projection.
+unconfirmed and never authorizes automatic resubmission. Explicit workspace
+`resume` checks a `delivering` input against its exact persisted user message and
+records the missing `applied` transition once, without restarting the run. If the
+message is absent, the receipt stays unconfirmed; inspect state and submit new
+input explicitly. Duplicate lookup remains read-only. These receipts are rebuilt
+from canonical events, including after deletion of the disposable SQLite projection.
 
 `ReadState` returns the canonical conversation snapshot's opaque `Cursor`, binding
 session ID, event sequence and hash. Resource availability hints are checked by

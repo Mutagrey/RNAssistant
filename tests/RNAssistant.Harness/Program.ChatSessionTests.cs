@@ -60,6 +60,60 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void WorkspaceResumeRecordsPersistedInputDelivery()
+        {
+            WithTempPaths(paths =>
+            {
+                var workspace = new WorkspaceStore(paths).Open(Path.Combine(paths.Root, "resume-input"));
+                var chats = new ChatStore(paths);
+                using (var service = new WorkspaceConversationService(paths))
+                {
+                    var session = service.CreateSession(workspace, "Interrupted input");
+                    var request = new RNAssistant.Runtime.Contracts.WorkspaceSubmitInputRequest {
+                        SessionId = session.Id, RequestId = "resume-once", Message = "Keep this input"
+                    };
+                    var input = new ConversationInput {
+                        Id = Guid.NewGuid().ToString("N"), OperationId = request.RequestId,
+                        AcceptedRunId = Guid.NewGuid().ToString("N"),
+                        RequestFingerprint = ConversationInputJournal.Fingerprint(
+                            new RNAssistant.Runtime.Contracts.WorkspaceSubmitInputRequest {
+                                Message = request.Message, Acceptance = new WorkspaceRunAcceptance()
+                            }),
+                        Revision = 1, Text = request.Message, Delivery = InputDelivery.Queue,
+                        Status = ConversationInputStatus.Delivering, DocumentRuntimeKey = workspace.WorkspaceId,
+                        CreatedUtc = DateTime.UtcNow
+                    };
+                    var journal = new ConversationInputJournal(new ChatEventStoreAdapter(chats));
+                    var accepted = journal.Append(session, new ConversationInputEvent { Input = input });
+                    var pending = service.FindAcceptedInput(workspace, request);
+                    AssertEqual(accepted.Sequence, pending.AcceptedSequence, "retry retains the original accepted event");
+                    AssertTrue(!pending.DeliveryRecorded, "accepted input alone is not delivery");
+                    var withoutMessage = service.PrepareResume(workspace, session.Id);
+                    AssertEqual(1, journal.Read(withoutMessage).Count, "resume does not invent a missing user message");
+
+                    var user = new ChatMessage { Id = input.Id, Role = "user", Content = request.Message,
+                        RunId = input.AcceptedRunId };
+                    withoutMessage.Messages.Add(user);
+                    chats.Commit(withoutMessage, ConversationCommit.UserInput(user));
+                    AssertTrue(!service.FindAcceptedInput(workspace, request).DeliveryRecorded,
+                        "duplicate lookup remains read-only before recovery");
+                    var recovered = service.PrepareResume(workspace, session.Id);
+                    var records = journal.Read(recovered);
+                    AssertEqual(2, records.Count, "explicit resume records the missing delivery transition once");
+                    AssertEqual(ConversationInputStatus.Applied, records[1].Change.Input.Status,
+                        "persisted user message proves delivery");
+                    AssertEqual(2L, records[1].Change.Input.Revision, "recovered transition advances input revision");
+                    var delivered = service.FindAcceptedInput(workspace, request);
+                    AssertTrue(delivered.DeliveryRecorded && delivered.AcceptedCursor == pending.AcceptedCursor,
+                        "retry reports delivery under the original accepted identity");
+                    AssertEqual(1, recovered.Messages.Count(message => message.Id == input.Id),
+                        "resume does not replay user input");
+                    AssertEqual(2, journal.Read(service.PrepareResume(workspace, session.Id)).Count,
+                        "repeated resume does not append another transition");
+                }
+            });
+        }
+
         private static void WorkspaceRejectsCopyConflict()
         {
             WithTempPaths(paths =>
