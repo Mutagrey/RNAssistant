@@ -8,6 +8,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Agent;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Tools;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
@@ -2732,7 +2733,13 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 session.Model = "omni";
                 session.Messages.Add(source);
-                session.Messages.Add(new ChatMessage { Role = "assistant", Content = "Stored.", ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion });
+                var priorAnswer = AgentTranscript.CreateAssistantMessage(
+                    ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                        "Acknowledge the prior image.", "Stored.", results: new ConversationResultClaim[0]),
+                    null, responseStatus: AgentResponseStatuses.Completed);
+                priorAnswer.ProtocolMessage = true;
+                priorAnswer.ResponseModelAttemptId = "prior_image_answer";
+                session.Messages.Add(priorAnswer);
                 session.Artifacts.Add(new ChatArtifact
                 {
                     Id = "attachment_historic-image",
@@ -2768,7 +2775,9 @@ namespace RNAssistant.Harness
                         AssertEqual(0, mediaMessages.Count, "historical media is absent before explicit read");
                         return Task.FromResult(new LlmCompletionResult
                         {
-                            Content = "{\"message\":\"Читаю изображение.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.resources_read\",\"arguments\":{\"target\":\"" + resourceTarget + "\",\"representation\":\"media\"}}]}"
+                            Content = ModelProtocolWire.WriteAcceptedCall("Read the requested image.",
+                                "Читаю изображение.", new ConversationToolCall { Name = ResourceToolCatalog.ReadToolId,
+                                    Arguments = new JObject { ["target"] = resourceTarget, ["representation"] = "media" } })
                         });
                     }
                     if (calls == 2)
@@ -2802,7 +2811,8 @@ namespace RNAssistant.Harness
                         "media stays available until the logical model step accepts or fails");
                     return Task.FromResult(new LlmCompletionResult
                     {
-                        Content = "{\"message\":\"Изображение прочитано.\",\"action\":\"done\",\"tool_calls\":[]}"
+                        Content = ScriptedVerifiedFinish(session, "The image read has a terminal result.",
+                            "Изображение прочитано.", "The requested image was read.", ResourceToolCatalog.ReadToolId)
                     });
                 };
                 var tools = executor.GetControllerTools().ToList();
@@ -2971,7 +2981,13 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 session.Model = "text-only";
                 session.Messages.Add(source);
-                session.Messages.Add(new ChatMessage { Role = "assistant", Content = "Stored.", ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion });
+                var priorAnswer = AgentTranscript.CreateAssistantMessage(
+                    ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                        "Acknowledge the prior scan.", "Stored.", results: new ConversationResultClaim[0]),
+                    null, responseStatus: AgentResponseStatuses.Completed);
+                priorAnswer.ProtocolMessage = true;
+                priorAnswer.ResponseModelAttemptId = "prior_scan_answer";
+                session.Messages.Add(priorAnswer);
                 session.Artifacts.Add(new ChatArtifact
                 {
                     Id = "attachment_helper-image",
@@ -3017,7 +3033,9 @@ namespace RNAssistant.Harness
                     {
                         return Task.FromResult(new LlmCompletionResult
                         {
-                            Content = "{\"message\":\"Читаю скан.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.resources_read\",\"arguments\":{\"target\":\"" + resourceTarget + "\",\"representation\":\"media\"}}]}"
+                            Content = ModelProtocolWire.WriteAcceptedCall("Read the requested scan.",
+                                "Читаю скан.", new ConversationToolCall { Name = ResourceToolCatalog.ReadToolId,
+                                    Arguments = new JObject { ["target"] = resourceTarget, ["representation"] = "media" } })
                         });
                     }
                     var evidenceMessage = messages.First(message => message != null && message.ProtocolMessage &&
@@ -3041,7 +3059,8 @@ namespace RNAssistant.Harness
                     AssertTrue(!rawRead, "text-only primary does not reload helper-routed raw media");
                     return Task.FromResult(new LlmCompletionResult
                     {
-                        Content = "{\"message\":\"На скане указано 42.\",\"action\":\"done\",\"tool_calls\":[]}"
+                        Content = ScriptedVerifiedFinish(session, "The scan read has a terminal result.",
+                            "На скане указано 42.", "The scan was read through the helper.", ResourceToolCatalog.ReadToolId)
                     });
                 };
 
