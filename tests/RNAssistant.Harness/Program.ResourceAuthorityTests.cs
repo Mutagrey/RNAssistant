@@ -81,9 +81,46 @@ namespace RNAssistant.Harness
                     "page extract is retained separately from flattened document text");
                 var visible = ModelResultProjection.ProjectResourceData(ResourceToolCatalog.ReadToolId, body);
                 AssertEqual(1, (int)visible["pageIndex"], "final model projection keeps page selector");
+                var rangeRead = read(new Dictionary<string, object> {
+                    ["target"] = target, ["representation"] = "text", ["startPage"] = 0, ["pageCount"] = 2 });
+                AssertEqual(ToolResultStatus.Ok, rangeRead.Result.Status, "exact PDF range read succeeds");
+                var range = JObject.Parse(rangeRead.Result.DataJson);
+                AssertContains((string)range["text"], "alpha page only", "range includes first extracted page");
+                AssertContains((string)range["text"], "beta page only", "range includes second extracted page");
+                AssertEqual(ResourceCoverageKinds.PageRange, (string)range["coverage"]["kind"],
+                    "range evidence covers only complete extracted pages");
+                AssertEqual(2L, (long)range["coverage"]["end"], "range end is exclusive");
+                AssertTrue((bool)range["selectionComplete"] && !(bool)range["complete"] &&
+                    !(bool)range["sourceComplete"] && range["nextPageIndex"] == null,
+                    "complete requested text range is still not whole visual PDF evidence");
+                AssertEqual(2L, rangeRead.ResourceEvidence.Single().ReadMetadata.RequestedCoverage.End.Value,
+                    "requested page range survives in read evidence");
+                AssertTrue(authorityStore.GetView(scope, exact,
+                    PdfAttachmentTextExtractor.RangeViewProfile + ":0:2") != null &&
+                    authorityStore.GetView(scope, exact, "text") == null,
+                    "range extraction retains its own partial view, never flattened text");
                 var candidate = gateway.Find(session, "pages.pdf", "all").Items
                     .Single(item => item.Target == target);
-                AssertContains(candidate.Usage, "pageIndex", "PDF candidate explains exact page text selector");
+                AssertContains(candidate.Usage, "startPage/pageCount", "PDF candidate explains range selector");
+                var boundedRange = gateway.Read(session, new ResourceReadRequest {
+                    Reference = exact, Representation = ResourceRepresentations.Text,
+                    PageStart = 0, PageRangeCount = 2, MaxChars = 40
+                }).Result;
+                var continuation = ResourceReadProjection.FromPdfRange(boundedRange, target,
+                    "attachment", "conversation", 0, 2);
+                AssertEqual(1, continuation.NextPageIndex.Value,
+                    "range stops before the next full page when the model budget fills");
+                AssertTrue(!continuation.SelectionComplete.Value && boundedRange.Coverage.End == 1,
+                    "partial range never claims the skipped page");
+                var modelRange = ModelResultProjection.ProjectResourceData(ResourceToolCatalog.ReadToolId,
+                    JObject.FromObject(continuation));
+                AssertEqual(1, (int)modelRange["nextPageIndex"],
+                    "final model projection preserves exact range continuation");
+                AssertEqual("resource_page_window_required", RuntimeThrows<ResourceRequestException>(() =>
+                    gateway.Read(session, new ResourceReadRequest { Reference = exact,
+                        Representation = ResourceRepresentations.Text, PageStart = 0,
+                        PageRangeCount = 2, MaxChars = 10 })).ErrorCode,
+                    "a single oversized page directs the caller to character windows");
                 var bounded = gateway.Read(session, new ResourceReadRequest {
                     Reference = exact, Representation = ResourceRepresentations.Text,
                     PageIndex = 1, PageStartChar = 0, PageCharCount = 4
@@ -109,6 +146,14 @@ namespace RNAssistant.Harness
                     ["target"] = target, ["representation"] = "text", ["pageIndex"] = 1,
                     ["startChar"] = 5, ["charCount"] = 4
                 }, schema, false, out schemaError), "schema accepts page window");
+                AssertTrue(ToolSchemaSupport.ValidateArguments(new JObject {
+                    ["target"] = target, ["representation"] = "text", ["startPage"] = 0,
+                    ["pageCount"] = 2
+                }, schema, false, out schemaError), "schema accepts exact page range");
+                AssertTrue(!ToolSchemaSupport.ValidateArguments(new JObject {
+                    ["target"] = target, ["representation"] = "text", ["startPage"] = 0,
+                    ["pageCount"] = 2, ["pageIndex"] = 1
+                }, schema, false, out schemaError), "schema rejects mixed page selectors");
                 AssertTrue(!ToolSchemaSupport.ValidateArguments(new JObject {
                     ["target"] = target, ["representation"] = "text", ["pageIndex"] = 1,
                     ["startChar"] = 5
@@ -117,6 +162,11 @@ namespace RNAssistant.Harness
                     ["target"] = target, ["representation"] = "text", ["pageIndex"] = 2 });
                 AssertTrue(outside.Result.Status != ToolResultStatus.Ok,
                     "out-of-bounds page fails explicitly");
+                var outsideRange = read(new Dictionary<string, object> {
+                    ["target"] = target, ["representation"] = "text", ["startPage"] = 2,
+                    ["pageCount"] = 1 });
+                AssertTrue(outsideRange.Result.Status != ToolResultStatus.Ok,
+                    "out-of-bounds page range fails explicitly");
                 readBytes = new byte[] { 1, 2, 3 };
                 var changed = read(new Dictionary<string, object> {
                     ["target"] = target, ["representation"] = "text", ["pageIndex"] = 0 });
@@ -169,6 +219,35 @@ namespace RNAssistant.Harness
                     (int)firstWindow["totalCharacters"] > 1000 &&
                     !(bool)firstWindow["complete"] && firstWindow["sourceCoverage"] == null,
                     "incomplete automatic page read exposes continuation bounds");
+                var rangeRead = handler.ExecuteAsync(new ToolHandlerContext(execution,
+                    new Dictionary<string, object> { ["target"] = "pages.pdf", ["representation"] = "text",
+                        ["startPage"] = 0, ["pageCount"] = 2 }),
+                    System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+                AssertEqual(ToolResultStatus.Ok, rangeRead.Result.Status, "workspace PDF range read succeeds");
+                var range = JObject.Parse(rangeRead.Result.DataJson);
+                AssertContains((string)range["text"], "workspace first", "range includes first full page");
+                AssertTrue(((string)range["text"]).IndexOf("workspace second", StringComparison.Ordinal) < 0,
+                    "range stops before a page that does not fit the model budget");
+                AssertEqual(1, (int)range["nextPageIndex"], "next page is an exact continuation");
+                AssertTrue(!(bool)range["selectionComplete"] &&
+                    (string)range["coverage"]["kind"] == ResourceCoverageKinds.PageRange &&
+                    (long)range["coverage"]["end"] == 1,
+                    "workspace evidence covers only whole returned pages");
+                AssertEqual(2L, rangeRead.ResourceEvidence.Single().ReadMetadata.RequestedCoverage.End.Value,
+                    "workspace evidence retains the requested range separately");
+                AssertEqual((string)range["text"], new ChatBlobStore(paths).ReadText(
+                    rangeRead.ResourceEvidence.Single().Payload.ToBlobReference()),
+                    "workspace range retains exact selected bytes");
+                var completeRange = provider.ReadPdfPageRangeText("pages.pdf", 0, 2, 4000).Result;
+                AssertTrue(ResourceReadProjection.FromPdfRange(completeRange, "pages.pdf", "file", "workspace", 0, 2)
+                    .SelectionComplete == true && completeRange.Coverage.End == 2,
+                    "shared selector completes when both extracted pages fit");
+                var oversizedRange = handler.ExecuteAsync(new ToolHandlerContext(execution,
+                    new Dictionary<string, object> { ["target"] = "pages.pdf", ["representation"] = "text",
+                        ["startPage"] = 1, ["pageCount"] = 1 }),
+                    System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+                AssertEqual("resource_page_window_required", (string)JObject.Parse(oversizedRange.Result.DataJson)["code"],
+                    "one oversized page requires the existing character window");
                 var find = new WorkspaceResourceHandler(provider, null, () => null, observed, true, null, 1000);
                 var found = find.ExecuteAsync(new ToolHandlerContext(
                     new ToolRuntimeFixture().Context(toolId: ResourceToolCatalog.FindToolId),
@@ -190,6 +269,23 @@ namespace RNAssistant.Harness
                     ["type"] = "office", ["target"] = "attachment: pages.pdf",
                     ["representation"] = "text", ["pageIndex"] = 1
                 }, schema, false, out error), "CLI Office binding accepts PDF page selector");
+                var rangeArguments = new JObject {
+                    ["target"] = "pages.pdf", ["representation"] = "text",
+                    ["startPage"] = 0, ["pageCount"] = 2
+                };
+                AssertTrue(ToolSchemaSupport.ValidateArguments(rangeArguments,
+                    (JObject)schema["anyOf"][0], false, out error),
+                    "CLI file range variant accepts PDF page range: " + error);
+                AssertTrue(ToolSchemaSupport.ValidateArguments(rangeArguments,
+                    schema, false, out error), "CLI file schema accepts PDF page range: " + error);
+                AssertTrue(ToolSchemaSupport.ValidateArguments(new JObject {
+                    ["type"] = "office", ["target"] = "attachment: pages.pdf",
+                    ["representation"] = "text", ["startPage"] = 0, ["pageCount"] = 2
+                }, schema, false, out error), "CLI Office binding accepts PDF page range");
+                AssertTrue(!ToolSchemaSupport.ValidateArguments(new JObject {
+                    ["target"] = "pages.pdf", ["representation"] = "text",
+                    ["startPage"] = 0, ["pageCount"] = 2, ["startChar"] = 0, ["charCount"] = 5
+                }, schema, false, out error), "CLI schema rejects mixing range and character selectors");
                 AssertTrue(!ToolSchemaSupport.ValidateArguments(new JObject {
                     ["target"] = "pages.pdf", ["representation"] = "text", ["pageIndex"] = 1,
                     ["startChar"] = 10

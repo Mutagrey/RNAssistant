@@ -64,8 +64,8 @@ page errors. Причина не установлена; при следующе
    однодокументных источников с адресуемыми scalar keys также реализован общим
    streaming selector; aliases, merge/complex keys и multi-document требуют
    отдельной семантики. PDF page text для chat attachment и workspace file с
-   ограниченными символьными окнами реализован по точному оригиналу; остались
-   image crop, обобщённые PDF page ranges, table/figure/bbox и
+   ограниченными символьными окнами и диапазоны полных извлечённых страниц
+   реализованы по точному оригиналу; остались image crop, PDF table/figure/bbox и
    extractor provenance; исходная
    таблица включает также дополнительные Word/Excel/HTML semantic views. Наличие
    raw text/media/pageIndex не закрывает эту матрицу. Каждый slice требует своего
@@ -643,9 +643,10 @@ The PDF-specific bounded-view extension below remains a separate Resource Fabric
 Owner: Resource Fabric / model context compiler / context compaction. A model-facing
 `common.resources_read` assembles a complete text view when it fits the model
 request budget. A direct exact-original `pageIndex` selector now supplies bounded
-PDF page text and character windows in Office and workspace. Search matches remain
+PDF page text and character windows in Office and workspace; `startPage`/`pageCount`
+supplies consecutive complete extracted pages with continuation. Search matches remain
 discovery evidence, not a substitute for an exact selected text view. Remaining work is
-cross-provider PDF ranges, visual/table/figure selection and budgeted working-set
+visual/table/figure selection and budgeted working-set
 policy. Keep extracted originals in CAS and older read findings in
 provenance-checked claims; never label an excerpt as the entire PDF or silently
 drop a selected view.

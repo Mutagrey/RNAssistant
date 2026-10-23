@@ -66,7 +66,7 @@ namespace RNAssistant.Runtime
                                 item.Target.EndsWith(".yml", StringComparison.OrdinalIgnoreCase)))
                                 item.Representations.Add(ResourceRepresentations.Tree);
                             if (item.Type == "file" && item.Target.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
-                                item.Usage = "Use representation=text with zero-based pageIndex for exact PDF page extraction; continue a long page with startChar/charCount. Visual or scanned content may be absent from text.";
+                                item.Usage = "Use representation=text with startPage/pageCount for consecutive complete PDF pages, or pageIndex with startChar/charCount for a long page. Visual or scanned content may be absent from text.";
                             if (item.Type == "file" && !item.Representations.Contains(ResourceRepresentations.Text))
                                 item.Usage = "Binary source; model text reading is unavailable. Application raw/image views can inspect it.";
                         }
@@ -81,6 +81,9 @@ namespace RNAssistant.Runtime
                 var startChar = Number(context, "startChar");
                 var charCount = Number(context, "charCount");
                 var pageIndex = Number(context, "pageIndex");
+                var startPage = Number(context, "startPage");
+                var requestedPages = Number(context, "pageCount");
+                var pageRange = context.Arguments.ContainsKey("startPage") || context.Arguments.ContainsKey("pageCount");
                 var procedure = Value(context, "procedure");
                 var procedureKind = Value(context, "procedureKind");
                 var isTree = Value(context, "representation") == ResourceRepresentations.Tree;
@@ -89,7 +92,18 @@ namespace RNAssistant.Runtime
                 var depth = Number(context, "depth") ?? 1;
                 var treeOffset = Number(context, "offset") ?? 0;
                 var treeLimit = Number(context, "limit") ?? 100;
-                if (pageIndex.HasValue && (type != "file" || pageIndex.Value < 0 ||
+                if (pageRange && (type != "file" || !startPage.HasValue || !requestedPages.HasValue ||
+                    startPage.Value < 0 || requestedPages.Value < 1 || pageIndex.HasValue ||
+                    Value(context, "representation") != ResourceRepresentations.Text ||
+                    startLine.HasValue || lineCount.HasValue || startChar.HasValue || charCount.HasValue ||
+                    context.Arguments.ContainsKey("procedure") || context.Arguments.ContainsKey("procedureKind") || isTree ||
+                    !string.IsNullOrEmpty(referencePath) || context.Arguments.ContainsKey("version") ||
+                    context.Arguments.ContainsKey("pointer") || context.Arguments.ContainsKey("depth") ||
+                    context.Arguments.ContainsKey("offset") || context.Arguments.ContainsKey("limit") ||
+                    context.Arguments.ContainsKey("fields") || context.Arguments.ContainsKey("path")))
+                    throw Error("PDF page ranges require startPage and positive pageCount without other selectors.",
+                        "resource_page_selector_invalid");
+                if (pageIndex.HasValue && (type != "file" || pageRange || pageIndex.Value < 0 ||
                     Value(context, "representation") != ResourceRepresentations.Text ||
                     startLine.HasValue || lineCount.HasValue ||
                     context.Arguments.ContainsKey("procedure") ||
@@ -122,6 +136,9 @@ namespace RNAssistant.Runtime
                     read = isTree
                         ? _files.ReadTree(target, pointer, depth, treeOffset, treeLimit,
                             Math.Max(1, _maximumTextReadCharacters - 512), cancellationToken)
+                        : pageRange
+                        ? _files.ReadPdfPageRangeText(target, startPage.Value, requestedPages.Value,
+                            _maximumTextReadCharacters, cancellationToken)
                         : pageIndex.HasValue
                         ? _files.ReadPdfPageText(target, pageIndex.Value, startChar ?? 0,
                             charCount ?? _maximumTextReadCharacters, cancellationToken)
@@ -157,6 +174,9 @@ namespace RNAssistant.Runtime
                 var projection = isTree
                     ? ResourceReadProjection.FromTree(read.Result, target, type, "workspace", pointer,
                         depth, treeOffset, treeLimit)
+                    : pageRange
+                    ? ResourceReadProjection.FromPdfRange(read.Result, target, type, "workspace",
+                        startPage.Value, requestedPages.Value)
                     : pageIndex.HasValue
                     ? ResourceReadProjection.FromPdfPage(read.Result, target, type, "workspace",
                         pageIndex.Value, startChar ?? 0, charCount ?? _maximumTextReadCharacters,
@@ -168,7 +188,7 @@ namespace RNAssistant.Runtime
                     : startLine.HasValue
                     ? ResourceReadProjection.FromLines(read.Result, target, type, type == "skill" ? "catalog" : "workspace", startLine.Value, lineCount.Value)
                     : ResourceReadProjection.From(read.Result, target, type, type == "skill" ? "catalog" : "workspace");
-                if (!isTree && !pageIndex.HasValue && (type == "file" || !read.Result.Complete))
+                if (!isTree && !pageRange && !pageIndex.HasValue && (type == "file" || !read.Result.Complete))
                 {
                     projection.SourceComplete = read.Result.Complete;
                     if (!read.Result.Complete)
@@ -201,6 +221,9 @@ namespace RNAssistant.Runtime
                     ? new ResourceCoverage(read.Result.Tree.Coverage().Kind,
                         address: "depth=" + depth + ";limit=" + treeLimit,
                         start: treeOffset, end: (long)treeOffset + treeLimit, path: pointer)
+                    : pageRange
+                    ? new ResourceCoverage(ResourceCoverageKinds.PageRange,
+                        start: startPage, end: (long)startPage.Value + requestedPages.Value)
                     : pageIndex.HasValue
                     ? startChar.HasValue
                         ? new ResourceCoverage(ResourceCoverageKinds.CharacterRange,
@@ -220,6 +243,7 @@ namespace RNAssistant.Runtime
                     requestedDepth: isTree ? (int?)depth : null);
                 if (type == "file") _observed[target] = read.Evidence.Single();
                 var message = isTree ? "Exact structured tree read; navigate with pointer, depth and child offset. Values are decoded previews, not raw source lexemes." :
+                    pageRange ? "Exact PDF page range extraction; only complete extracted pages are covered. Continue at nextPageIndex when present; visual content may require media inspection." :
                     pageIndex.HasValue ? "Exact PDF page text extraction; coverage is limited to this page and character window. Visual content may require media inspection." :
                     read.Result.Complete ? "Complete resource representation read." :
                     "Exact text excerpt read from the current version; other regions are not observed. Read another bounded range as needed; each read rechecks the current source.";

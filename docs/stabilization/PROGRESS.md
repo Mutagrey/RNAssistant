@@ -43,6 +43,18 @@ invalid page.
 Visual/scanned completeness, PDF table/figure/bbox and general provider navigation
 remain open; Windows/Office/WebView2 qualification is still outstanding.
 
+## Resource Context exact PDF text page ranges — 2026-10-23
+
+Owner: Core PDF extractor, workspace file and Office artifact providers, shared
+resource-read contract. `common.resources_read` accepts `startPage`/`pageCount` for
+consecutive complete extracted pages of an exact PDF original. Returned text has
+actual `page-range` coverage and a separate retained view; `nextPageIndex` continues
+when another whole page would exceed the model budget. An oversized first page
+fails with the existing page-local character-window route. Office and workspace
+Harness cases cover full and partial ranges, exact evidence, schemas and invalid
+selectors. This does not establish visual/scanned completeness or Windows/Office
+qualification.
+
 ## Resource Context model read offers — 2026-10-23
 
 Owner: Core model result projection. `common.resources_find` now shows only views

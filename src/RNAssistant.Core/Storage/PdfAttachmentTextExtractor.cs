@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
+using System.Globalization;
 using System.Text;
 using UglyToad.PdfPig;
 using UglyToad.PdfPig.DocumentLayoutAnalysis.TextExtractor;
@@ -32,9 +33,23 @@ namespace RNAssistant.Core.Storage
         }
     }
 
+    internal sealed class PdfAttachmentPageRangeText
+    {
+        public string Text { get; set; }
+        public int PageCount { get; set; }
+        public int EndPage { get; set; }
+    }
+
+    internal sealed class PdfPageWindowRequiredException : System.Exception
+    {
+        public PdfPageWindowRequiredException()
+            : base("The first selected PDF page exceeds the model read budget; use pageIndex with startChar/charCount.") { }
+    }
+
     internal static class PdfAttachmentTextExtractor
     {
         public const string PageViewProfile = "pdf-page-text:content-order-v1";
+        public const string RangeViewProfile = "pdf-page-range-text:content-order-v1";
 
         public static PdfAttachmentTextExtraction Extract(string path, int maxCharacters)
         {
@@ -54,6 +69,44 @@ namespace RNAssistant.Core.Storage
         public static PdfAttachmentPageText ExtractPage(Stream stream, int pageIndex)
         {
             using (var document = PdfDocument.Open(stream)) return ExtractPage(document, pageIndex);
+        }
+
+        public static PdfAttachmentPageRangeText ExtractRange(byte[] bytes, int startPage, int requestedPages,
+            int maximumCharacters)
+        {
+            using (var document = PdfDocument.Open(bytes))
+                return ExtractRange(document, startPage, requestedPages, maximumCharacters);
+        }
+
+        public static PdfAttachmentPageRangeText ExtractRange(Stream stream, int startPage, int requestedPages,
+            int maximumCharacters)
+        {
+            using (var document = PdfDocument.Open(stream))
+                return ExtractRange(document, startPage, requestedPages, maximumCharacters);
+        }
+
+        private static PdfAttachmentPageRangeText ExtractRange(PdfDocument document, int startPage,
+            int requestedPages, int maximumCharacters)
+        {
+            if (startPage < 0 || startPage >= document.NumberOfPages || requestedPages < 1 || maximumCharacters < 1)
+                throw new System.ArgumentOutOfRangeException(nameof(startPage));
+            var requestedEnd = (int)System.Math.Min((long)document.NumberOfPages, (long)startPage + requestedPages);
+            var builder = new StringBuilder();
+            var end = startPage;
+            while (end < requestedEnd)
+            {
+                var text = ContentOrderTextExtractor.GetText(document.GetPage(end + 1)) ?? string.Empty;
+                var heading = "[PDF page " + (end + 1).ToString(CultureInfo.InvariantCulture) + "]\n";
+                if ((long)heading.Length + text.Length + 1 > maximumCharacters - builder.Length)
+                {
+                    if (end == startPage) throw new PdfPageWindowRequiredException();
+                    break;
+                }
+                builder.Append(heading).Append(text).Append('\n');
+                end++;
+            }
+            return new PdfAttachmentPageRangeText { Text = builder.ToString(), PageCount = document.NumberOfPages,
+                EndPage = end };
         }
 
         private static PdfAttachmentPageText ExtractPage(PdfDocument document, int pageIndex)

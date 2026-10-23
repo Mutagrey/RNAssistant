@@ -656,7 +656,13 @@ navigation contract.
 workspace PDF text can now be read through `common.resources_read` with
 `representation=text` and zero-based `pageIndex`; optional `startChar`/`charCount`
 select UTF-16 text within that page.
-Both providers re-extract the selected page from the hash-checked original of the
+`startPage`/`pageCount` instead selects consecutive complete extracted page texts
+within the current model read budget. The response reports the requested interval,
+the actual exclusive-end `page-range`, `selectionComplete`, and `nextPageIndex` when
+another page is needed. If the first page cannot fit, the read fails explicitly;
+use `pageIndex` with `startChar`/`charCount` to continue within that page. Range
+and page-local selectors cannot be combined.
+Both providers re-extract the selected page or pages from the hash-checked original of the
 exact revision, independently of the flattened extraction and `PageTextLengths`.
 The result reports page-local `character-range` coverage, page count and separate
 selection/whole-source completeness. A parent `page-range` is reported only when
@@ -665,10 +671,11 @@ its `pageIndex` and page-local coverage address. It never treats
 extracted text as proof of visual or scanned content. The automatic first page
 window is bounded by the model context; explicit windows can continue through
 `totalCharacters`. Page views retain distinct CAS keys from flattened `text`.
+Range views also retain distinct CAS keys; coverage proves only the returned
+extracted pages and never the complete visual PDF.
 PDF rendering remains an application data-plane view. The CLI Office binding
-accepts the same page selector. A general navigation capability for cross-provider
-page/range discovery and bounded continuation is
-still open.
+accepts the same page selectors. General navigation and available-view discovery
+across providers remain open.
 
 `sourceComplete` distinguishes a complete retained text representation from a
 complete original. A clipped extraction or PDF with unextracted pages cannot

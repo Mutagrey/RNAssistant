@@ -596,6 +596,26 @@ namespace RNAssistant.Core.Storage
                 payload, raw.Dependencies, contentSha256: snapshot.ContentSha256);
         }
 
+        public ResourceEvidence PublishPdfPageRangeText(WorkspaceFileSnapshot snapshot, string body,
+            ResourceCoverage coverage)
+        {
+            if (snapshot == null || body == null || coverage?.Kind != ResourceCoverageKinds.PageRange ||
+                !coverage.Start.HasValue || !coverage.End.HasValue || coverage.End.Value <= coverage.Start.Value)
+                throw new ArgumentException("An exact PDF page range is required.");
+            var raw = PublishedEvidence(snapshot.Reference, ResourceRepresentations.Raw);
+            if (raw.ContentSha256 != snapshot.ContentSha256)
+                throw new WorkspaceFileException("snapshot_unavailable", "Exact PDF original changed.");
+            var payload = PayloadRef.FromBlob(_blobs.StoreText(body, "text/plain; charset=utf-8"));
+            var key = PdfAttachmentTextExtractor.RangeViewProfile + ":" +
+                coverage.Start.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) + ":" +
+                coverage.End.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            _authority.RegisterView(raw.ScopeId, new ResourceRevisionView(snapshot.Reference,
+                key, snapshot.ContentSha256, payload, coverage));
+            return new ResourceEvidence("ev_" + Guid.NewGuid().ToString("N"), raw.ScopeId,
+                snapshot.Reference, ResourceRepresentations.Text, coverage, false, raw.AuthorityGeneration,
+                payload, raw.Dependencies, contentSha256: snapshot.ContentSha256);
+        }
+
         private Stream OpenRetainedStream(PayloadRef payload, long maximumBytes, CancellationToken token,
             Action<FileTransferProgress> progress, bool requireSeek = false)
         {

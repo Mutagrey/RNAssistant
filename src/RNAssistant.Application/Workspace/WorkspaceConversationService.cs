@@ -823,7 +823,7 @@ namespace RNAssistant.Runtime
                         office?.ResourceFind));
                 Register(registry, entries, "common.resources_read", (_mode.AllowsSkills ? "Read a UTF-8 file (default type=file, target is its workspace-relative path) or published skill instructions (type=skill, target is the skill ID). referencePath belongs only to a listed skill reference. For a workspace Plan use type=plan, omit target for the selected plan or supply an exact unique title. Optional version reads history without selecting it; a current read selects its exact revision. File text delivery follows this run's model input budget; Plans and published skill sources use the same budget and excerpt selectors; reading an excerpt does not activate a skill. For large files use startLine and positive lineCount, or zero-based UTF-16 startChar and charCount for a long single line; each slice observes the current version. files.patch accepts a unique anchor from an observed excerpt of a UTF-8 source. No partial skill activation." : "Read UTF-8 text by workspace-relative target. File text delivery follows this run's model input budget; use startLine/positive lineCount or zero-based UTF-16 startChar/charCount for bounded excerpts of files.") +
                     " For VBA files, procedure selects a unique procedure by name; optional procedureKind=sub/function/property-get/property-let/property-set disambiguates accessors. Do not combine with line/character selectors." +
-                    " For PDF files or PDF attachments, representation=text with zero-based pageIndex extracts one exact page; optional startChar/charCount continues a long page. Extracted text may omit visual or scanned content." +
+                    " For PDF files or PDF attachments, representation=text with startPage/pageCount reads consecutive complete pages within the model budget; nextPageIndex continues the range. Use pageIndex with optional startChar/charCount for a long page. Extracted text may omit visual or scanned content." +
                     (office == null ? string.Empty : " Use type=office and a semantic target to read the pinned Office document; VBA source supports the same procedure selector with representation=source."),
                     ResourceSchema(false, _mode.AllowsSkills, office != null, maximumFileReadCharacters), false,
                     new WorkspaceResourceHandler(_resources.Select("file"), _skillPublications, () => _skills, _observed, false, _plans,
@@ -1054,8 +1054,21 @@ namespace RNAssistant.Runtime
                 ((JArray)window["required"]).Add("startChar");
                 ((JArray)window["required"]).Add("charCount");
                 common["pageIndex"] = properties["pageIndex"].DeepClone();
+                var range = (JObject)page.DeepClone();
+                var rangeProperties = (JObject)range["properties"];
+                rangeProperties.Remove("pageIndex");
+                rangeProperties["startPage"] = new JObject { ["type"] = "integer", ["minimum"] = 0,
+                    ["description"] = "Zero-based first PDF page." };
+                rangeProperties["pageCount"] = new JObject { ["type"] = "integer", ["minimum"] = 1,
+                    ["description"] = "Consecutive complete pages; nextPageIndex continues when the model budget fills." };
+                ((JArray)range["required"]).Single(item => (string)item == "pageIndex").Remove();
+                ((JArray)range["required"]).Add("startPage");
+                ((JArray)range["required"]).Add("pageCount");
+                common["startPage"] = rangeProperties["startPage"].DeepClone();
+                common["pageCount"] = rangeProperties["pageCount"].DeepClone();
                 variants.Add(page);
                 variants.Add(window);
+                variants.Add(range);
             }
 
             private static void AddProcedureSelectors(JObject properties)

@@ -189,6 +189,54 @@ namespace RNAssistant.Core.Services
             return new ResourceReadObservation(result, new[] { evidence });
         }
 
+        public ResourceReadObservation ReadPdfPageRangeText(string relativePath, int startPage,
+            int requestedPages, int maximumCharacters, CancellationToken token = default(CancellationToken))
+        {
+            if (string.IsNullOrWhiteSpace(relativePath) ||
+                !relativePath.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase) ||
+                startPage < 0 || requestedPages < 1 || maximumCharacters < 1)
+                throw new WorkspaceFileException("resource_page_selector_invalid",
+                    "PDF page ranges require a .pdf file, startPage and positive pageCount.");
+            var snapshot = _files.CaptureFile(_workspace, relativePath, long.MaxValue, token);
+            PdfAttachmentPageRangeText pages;
+            try
+            {
+                using (var input = _files.OpenExactRead(_workspace, relativePath, snapshot.Reference,
+                    long.MaxValue, token, requireSeek: true))
+                    pages = PdfAttachmentTextExtractor.ExtractRange(input, startPage, requestedPages, maximumCharacters);
+            }
+            catch (ArgumentOutOfRangeException)
+            { throw new WorkspaceFileException("resource_page_selector_invalid", "startPage is outside the PDF's exact page bounds."); }
+            catch (PdfPageWindowRequiredException error)
+            { throw new WorkspaceFileException("resource_page_window_required", error.Message); }
+            catch (Exception error) when (!(error is OperationCanceledException) &&
+                                          !(error is OutOfMemoryException) &&
+                                          !(error is WorkspaceFileException))
+            { throw new WorkspaceFileException("resource_page_unavailable", "The exact PDF page range could not be extracted: " + error.Message); }
+            token.ThrowIfCancellationRequested();
+            var coverage = new ResourceCoverage(ResourceCoverageKinds.PageRange,
+                start: startPage, end: pages.EndPage);
+            var evidence = _files.PublishPdfPageRangeText(snapshot, pages.Text, coverage);
+            var descriptor = new ResourceDescriptor { Reference = snapshot.Reference, Provider = Id,
+                Kind = "file", Title = Path.GetFileName(relativePath), Mutable = !_workspace.ReadOnly,
+                Tracking = "current", ByteLength = snapshot.ByteLength,
+                ContentSha256 = snapshot.ContentSha256, Coverage = coverage,
+                MimeType = "application/pdf" };
+            descriptor.Representations.Add(ResourceRepresentations.Metadata);
+            descriptor.Representations.Add(ResourceRepresentations.Text);
+            descriptor.Metadata["relativePath"] = relativePath;
+            var result = new ResourceReadResult { Resource = descriptor,
+                Representation = ResourceRepresentations.Text, Text = pages.Text,
+                ContentSha256 = snapshot.ContentSha256, Payload = evidence.Payload,
+                RetainedViewKey = PdfAttachmentTextExtractor.RangeViewProfile + ":" +
+                    startPage.ToString(System.Globalization.CultureInfo.InvariantCulture) + ":" +
+                    pages.EndPage.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                Coverage = coverage, SourceCoverage = coverage, PageCount = pages.PageCount,
+                ReturnedCharacters = pages.Text.Length, TotalCharacters = pages.Text.Length,
+                Complete = false, SourceComplete = false, Truncated = true, RawContentIncluded = true };
+            return new ResourceReadObservation(result, new[] { evidence });
+        }
+
         public ResourceReadObservation ReadViewCharacters(string relativePath, int startChar, int charCount,
             ResourceRef exact = null, CancellationToken token = default(CancellationToken))
         { return Project(_files.ReadTextViewCharacters(_workspace, relativePath, startChar, charCount, exact, token), exact != null); }

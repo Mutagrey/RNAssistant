@@ -82,6 +82,9 @@ namespace RNAssistant.Core.Models
         [JsonProperty("partNumber", NullValueHandling = NullValueHandling.Ignore)] public int? PartNumber { get; set; }
         [JsonProperty("partCount", NullValueHandling = NullValueHandling.Ignore)] public int? PartCount { get; set; }
         [JsonProperty("pageIndex", NullValueHandling = NullValueHandling.Ignore)] public int? PageIndex { get; set; }
+        [JsonProperty("startPage", NullValueHandling = NullValueHandling.Ignore)] public int? StartPage { get; set; }
+        [JsonProperty("requestedPages", NullValueHandling = NullValueHandling.Ignore)] public int? RequestedPages { get; set; }
+        [JsonProperty("nextPageIndex", NullValueHandling = NullValueHandling.Ignore)] public int? NextPageIndex { get; set; }
         [JsonProperty("pageCount", NullValueHandling = NullValueHandling.Ignore)] public int? PageCount { get; set; }
         [JsonProperty("kind")] public string Kind { get; set; } = "resource-read";
         [JsonProperty("target")] public string Target { get; set; }
@@ -251,6 +254,30 @@ namespace RNAssistant.Core.Models
             projection.RequestedCharacters = requestedCharacters;
             projection.SelectionComplete = explicitWindow || startChar == 0 &&
                 result.ReturnedCharacters == result.TotalCharacters;
+            return projection;
+        }
+
+        public static ResourceReadProjection FromPdfRange(ResourceReadResult result, string target,
+            string type, string scope, int startPage, int requestedPages)
+        {
+            var actual = result?.Coverage;
+            if (startPage < 0 || requestedPages < 1 || result?.Resource?.Reference?.IsExact != true ||
+                result.Representation != ResourceRepresentations.Text || result.Complete ||
+                result.SourceComplete != false || result.Text == null || !result.PageCount.HasValue ||
+                startPage >= result.PageCount.Value || actual?.Kind != ResourceCoverageKinds.PageRange ||
+                actual.Start != startPage || !actual.End.HasValue || actual.End.Value <= startPage ||
+                actual.End.Value > System.Math.Min((long)result.PageCount.Value, (long)startPage + requestedPages) ||
+                result.ReturnedCharacters != result.Text.Length || result.SourceCoverage?.Kind != ResourceCoverageKinds.PageRange ||
+                result.SourceCoverage.Start != actual.Start || result.SourceCoverage.End != actual.End)
+                throw new System.InvalidOperationException("A PDF page range requires complete extracted text for each reported page.");
+            var projection = From(result, target, type, scope);
+            projection.StartPage = startPage;
+            projection.RequestedPages = requestedPages;
+            projection.PageCount = result.PageCount;
+            projection.SourceCoverage = actual;
+            var requestedEnd = System.Math.Min((long)result.PageCount.Value, (long)startPage + requestedPages);
+            projection.SelectionComplete = actual.End.Value == requestedEnd;
+            if (!projection.SelectionComplete.Value) projection.NextPageIndex = (int)actual.End.Value;
             return projection;
         }
 

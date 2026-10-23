@@ -854,7 +854,7 @@ namespace RNAssistant.Office.Services
                 return "Read text for PDF/text files or media for images/scanned PDFs (vision model). Filename discovery covers selected/open mail only; read another mail with structure for its attachment targets.";
             if (descriptor.Kind == ChatArtifactKinds.Attachment &&
                 string.Equals(descriptor.MimeType, "application/pdf", StringComparison.OrdinalIgnoreCase))
-                return "Use representation=text with zero-based pageIndex to extract one exact PDF page. For a long page, continue with startChar/charCount within that page. Extraction may omit scanned or visual content; media can inspect the original PDF.";
+                return "Use representation=text with startPage/pageCount for consecutive complete PDF pages, or zero-based pageIndex with startChar/charCount for a long page. Extraction may omit scanned or visual content; media can inspect the original PDF.";
             if (type == "Outlook archive page")
                 return "Read text for full indexed mail records and coverage. If a row has bodyTarget, discover that exact Outlook archive mail target and read its complete body separately. Rows expose exact Outlook attachment targets for on-demand text or media reads. Count duplicate=true rows once; unread attachments remain unexamined.";
             if (type == "Outlook archive digest")

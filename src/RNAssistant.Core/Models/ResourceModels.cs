@@ -126,6 +126,10 @@ namespace RNAssistant.Core.Models
         [Newtonsoft.Json.JsonIgnore]
         public int? PageIndex { get; set; }
         [Newtonsoft.Json.JsonIgnore]
+        public int? PageStart { get; set; }
+        [Newtonsoft.Json.JsonIgnore]
+        public int PageRangeCount { get; set; }
+        [Newtonsoft.Json.JsonIgnore]
         public int PageStartChar { get; set; }
         [Newtonsoft.Json.JsonIgnore]
         public int PageCharCount { get; set; }

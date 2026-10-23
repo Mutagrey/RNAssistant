@@ -17,7 +17,7 @@ namespace RNAssistant.Office.Tools
         private const int InternalReadCharacters = ResourceReadRequest.MaximumCharacters;
         internal static readonly ToolDescriptor Descriptor = new ToolDescriptor(
             ResourceToolCatalog.ReadToolId,
-            "Read-only: Read a semantic target supplied by RUNTIME_CONTEXT, common.resources_find, workspace member results or binding sourceTarget. Copy supplied targets verbatim; they never contain :// and must not be constructed from display titles. For known Excel cells, use target=Excel range: Sheet!A1:B10 with representation=text directly; discovery is unnecessary. Do not read an Excel search scope to enumerate worksheet data: use excel.find_cells for text discovery or an Excel range/table/name target for values. table returns bounded row coverage with optional fields, offset and limit; omit path for Office targets because runtime applies their canonical record view. For a complete JSON or YAML text artifact, representation=tree with pointer (empty root or RFC 6901-style path) returns typed nodes; depth controls expansion and offset/limit page immediate children. Numeric and YAML scalar values are decoded previews, not exact source lexemes. YAML aliases, merge keys, complex keys and multi-document streams fail explicitly. Text/source return a complete representation when available within the configured model context; large Word, VBA and PowerPoint slide text return an exact first excerpt with sourceCoverage. Continue with startChar/charCount for Word and PowerPoint slide text or speaker notes (PowerPoint notes: N), or startLine/lineCount for live VBA modules. Word structure gives main-story bounds; an explicit Word range: start:end is also available. For an indexed uploaded or authored artifact text/source, supply partNumber to read at most 32000 characters, including files written as one line; partNumber is unsupported for live VBA modules. For PDF attachments, representation=text with zero-based pageIndex extracts that exact original page; optional startChar/charCount selects a bounded window within that page. Page text is extraction, not a guarantee that visual content or OCR was captured. For VBA source, procedure selects one unique Sub/Function/Property by name; optional procedureKind=sub/function/property-get/property-let/property-set disambiguates accessors. Conditional branches are not evaluated; duplicate names require line/character selectors. Only the selected body must fit the model read budget. For source at any size positive startLine and lineCount within the configured model read budget select an exact excerpt; a long single line can use zero-based startChar and positive charCount within that budget. Excerpts cannot authorize a whole-file overwrite. For document Markdown/Plans, section with representation=text selects a unique ATX heading and its nested subsections, bounded to 32000 characters. Section coverage never proves a whole-resource read; duplicate/missing/oversized sections fail explicitly. For a project-wide VBA request, read RUNTIME_CONTEXT.document.vba_project_target with representation=structure first. Exact URI, revision, cursor and guards remain runtime-owned. Media is hydrated only for the next model step; base64 is never embedded in JSON.",
+            "Read-only: Read a semantic target supplied by RUNTIME_CONTEXT, common.resources_find, workspace member results or binding sourceTarget. Copy supplied targets verbatim; they never contain :// and must not be constructed from display titles. For known Excel cells, use target=Excel range: Sheet!A1:B10 with representation=text directly; discovery is unnecessary. Do not read an Excel search scope to enumerate worksheet data: use excel.find_cells for text discovery or an Excel range/table/name target for values. table returns bounded row coverage with optional fields, offset and limit; omit path for Office targets because runtime applies their canonical record view. For a complete JSON or YAML text artifact, representation=tree with pointer (empty root or RFC 6901-style path) returns typed nodes; depth controls expansion and offset/limit page immediate children. Numeric and YAML scalar values are decoded previews, not exact source lexemes. YAML aliases, merge keys, complex keys and multi-document streams fail explicitly. Text/source return a complete representation when available within the configured model context; large Word, VBA and PowerPoint slide text return an exact first excerpt with sourceCoverage. Continue with startChar/charCount for Word and PowerPoint slide text or speaker notes (PowerPoint notes: N), or startLine/lineCount for live VBA modules. Word structure gives main-story bounds; an explicit Word range: start:end is also available. For an indexed uploaded or authored artifact text/source, supply partNumber to read at most 32000 characters, including files written as one line; partNumber is unsupported for live VBA modules. For PDF attachments, representation=text with startPage/pageCount extracts consecutive complete pages within the model budget and nextPageIndex continues; pageIndex with optional startChar/charCount selects a long page. Page text is extraction, not a guarantee that visual content or OCR was captured. For VBA source, procedure selects one unique Sub/Function/Property by name; optional procedureKind=sub/function/property-get/property-let/property-set disambiguates accessors. Conditional branches are not evaluated; duplicate names require line/character selectors. Only the selected body must fit the model read budget. For source at any size positive startLine and lineCount within the configured model read budget select an exact excerpt; a long single line can use zero-based startChar and positive charCount within that budget. Excerpts cannot authorize a whole-file overwrite. For document Markdown/Plans, section with representation=text selects a unique ATX heading and its nested subsections, bounded to 32000 characters. Section coverage never proves a whole-resource read; duplicate/missing/oversized sections fail explicitly. For a project-wide VBA request, read RUNTIME_CONTEXT.document.vba_project_target with representation=structure first. Exact URI, revision, cursor and guards remain runtime-owned. Media is hydrated only for the next model step; base64 is never embedded in JSON.",
             Parameters());
         internal static readonly ToolPolicy Policy = new ToolPolicy(ToolEffect.Read, ToolVerification.None,
             false, true, new[] { "agent", "plan", "chat" });
@@ -61,13 +61,23 @@ namespace RNAssistant.Office.Tools
             var chars = context.Arguments.ContainsKey("startChar") || context.Arguments.ContainsKey("charCount");
             var parts = context.Arguments.ContainsKey("partNumber");
             var page = context.Arguments.ContainsKey("pageIndex");
+            var pageRange = context.Arguments.ContainsKey("startPage") || context.Arguments.ContainsKey("pageCount");
             var procedure = ToolArgumentReader.String(context.Arguments, "procedure", null);
             var procedureKind = ToolArgumentReader.String(context.Arguments, "procedureKind", null);
             var pointer = ToolArgumentReader.String(context.Arguments, "pointer", null);
             var depth = ToolArgumentReader.Int32(context.Arguments, "depth", 1);
             var treeOffset = ToolArgumentReader.Int32(context.Arguments, "offset", 0);
             var treeLimit = ToolArgumentReader.Int32(context.Arguments, "limit", 100);
-            if (page && (representation != ResourceRepresentations.Text ||
+            if (pageRange && (representation != ResourceRepresentations.Text || page ||
+                !context.Arguments.ContainsKey("startPage") || !context.Arguments.ContainsKey("pageCount") ||
+                ToolArgumentReader.Int32(context.Arguments, "startPage", -1) < 0 ||
+                ToolArgumentReader.Int32(context.Arguments, "pageCount", 0) < 1 ||
+                section != null || lines || chars || parts || procedure != null || procedureKind != null || tree ||
+                context.Arguments.ContainsKey("path") || context.Arguments.ContainsKey("fields") ||
+                context.Arguments.ContainsKey("offset") || context.Arguments.ContainsKey("limit")))
+                throw new ResourceRequestException("PDF page ranges require startPage and positive pageCount without other selectors.",
+                    "resource_page_selector_invalid", false);
+            if (page && (representation != ResourceRepresentations.Text || pageRange ||
                 ToolArgumentReader.Int32(context.Arguments, "pageIndex", -1) < 0 ||
                 chars && ToolArgumentReader.Int32(context.Arguments, "charCount", 0) > _maximumTextCharacters ||
                 section != null || lines || parts || procedure != null || procedureKind != null || tree ||
@@ -108,6 +118,12 @@ namespace RNAssistant.Office.Tools
             var selection = tree
                 ? Gateway.ReadTree(Session, reference, selected.Descriptor, pointer, depth, treeOffset,
                     treeLimit, Math.Max(1, _maximumTextCharacters - 512), cancellationToken)
+                : pageRange
+                ? Gateway.Read(Session, new ResourceReadRequest { Reference = reference,
+                    Representation = ResourceRepresentations.Text,
+                    PageStart = ToolArgumentReader.Int32(context.Arguments, "startPage", -1),
+                    PageRangeCount = ToolArgumentReader.Int32(context.Arguments, "pageCount", 0),
+                    MaxChars = _maximumTextCharacters }, cancellationToken)
                 : page
                 ? Gateway.Read(Session, new ResourceReadRequest { Reference = reference,
                     Representation = ResourceRepresentations.Text,
@@ -155,6 +171,10 @@ namespace RNAssistant.Office.Tools
             var projection = tree
                 ? ResourceReadProjection.FromTree(observation.Result, selected.Target, selected.Type,
                     selected.Scope, pointer, depth, treeOffset, treeLimit)
+                : pageRange
+                ? ResourceReadProjection.FromPdfRange(observation.Result, selected.Target, selected.Type,
+                    selected.Scope, ToolArgumentReader.Int32(context.Arguments, "startPage", -1),
+                    ToolArgumentReader.Int32(context.Arguments, "pageCount", 0))
                 : page
                 ? ResourceReadProjection.FromPdfPage(observation.Result, selected.Target, selected.Type,
                     selected.Scope, ToolArgumentReader.Int32(context.Arguments, "pageIndex", -1),
@@ -208,6 +228,9 @@ namespace RNAssistant.Office.Tools
                 ? new ResourceCoverage(selection.Result.Tree.Coverage().Kind,
                     address: "depth=" + depth + ";limit=" + treeLimit, start: treeOffset,
                     end: (long)treeOffset + treeLimit, path: pointer)
+                : pageRange
+                ? new ResourceCoverage(ResourceCoverageKinds.PageRange,
+                    start: projection.StartPage, end: (long)projection.StartPage.Value + projection.RequestedPages.Value)
                 : page
                 ? chars
                     ? new ResourceCoverage(ResourceCoverageKinds.CharacterRange,
@@ -294,9 +317,10 @@ namespace RNAssistant.Office.Tools
             const string lines = "\"startLine\":{\"type\":\"integer\",\"minimum\":1,\"description\":\"1-based first source/text line. Use with lineCount for an exact excerpt.\"},\"lineCount\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":2147483647,\"description\":\"Maximum selected lines; the excerpt must fit the configured model read budget. Not whole-file observation.\"}";
             const string chars = "\"startChar\":{\"type\":\"integer\",\"minimum\":0,\"description\":\"Zero-based UTF-16 character offset in source/text. Use with charCount for a long line.\"},\"charCount\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":2147483647,\"description\":\"Maximum selected UTF-16 characters within the configured model read budget; do not split a surrogate pair. Not whole-file observation.\"}";
             const string page = "\"pageIndex\":{\"type\":\"integer\",\"minimum\":0,\"description\":\"Zero-based page in an exact PDF attachment original. Text extraction may omit visual or scanned content.\"}";
+            const string pageRange = "\"startPage\":{\"type\":\"integer\",\"minimum\":0,\"description\":\"Zero-based first PDF page.\"},\"pageCount\":{\"type\":\"integer\",\"minimum\":1,\"description\":\"Requested number of consecutive complete extracted pages; nextPageIndex continues if the model budget fills.\"}";
             const string treeSelector = "\"pointer\":{\"type\":\"string\",\"description\":\"RFC 6901-style pointer for JSON/YAML, empty string for root; copy exact key spelling and escape ~ as ~0, / as ~1.\"},\"depth\":{\"type\":\"integer\",\"minimum\":0,\"description\":\"Levels of descendants to return, default 1.\"}";
             var selectors = "\"limit\":{\"type\":\"integer\",\"description\":\"Maximum rows in this table batch.\",\"minimum\":1,\"maximum\":5000},\"offset\":{\"type\":\"integer\",\"description\":\"Zero-based table row offset.\",\"minimum\":0}" + ",\"path\":" + ResourceSelectorContract.RecordPath().ToString(Formatting.None) + ",\"fields\":{\"type\":\"array\",\"description\":\"Exact column keys from returned columns metadata, not display headings or translated aliases.\",\"maxItems\":128,\"items\":{\"type\":\"string\",\"maxLength\":128}}";
-            return "{\"type\":\"object\",\"properties\":{" + target + "," + representation + "," + section + "," + procedure + "," + part + "," + page + "," + selectors + "," + lines + "," + chars + "," + treeSelector +
+            return "{\"type\":\"object\",\"properties\":{" + target + "," + representation + "," + section + "," + procedure + "," + part + "," + page + "," + pageRange + "," + selectors + "," + lines + "," + chars + "," + treeSelector +
                 "},\"required\":[\"target\"],\"additionalProperties\":false,\"anyOf\":[" +
                 "{\"type\":\"object\",\"description\":\"Read one complete metadata, text, structure, source, media, or formulas representation. Do not send limit, offset, path, or fields.\",\"properties\":{" + target + "," +
                 "\"representation\":{\"type\":\"string\",\"description\":\"Complete representation to read; omit for provider-selected auto.\",\"enum\":[\"metadata\",\"text\",\"structure\",\"source\",\"media\",\"formulas\"]}},\"required\":[\"target\"],\"additionalProperties\":false}," +
@@ -311,6 +335,7 @@ namespace RNAssistant.Office.Tools
                 "{\"type\":\"object\",\"description\":\"Read exact bounded UTF-16 characters from source/text. No other selectors.\",\"properties\":{" + target + "," + chars + ",\"representation\":{\"type\":\"string\",\"enum\":[\"source\",\"text\"]}},\"required\":[\"target\",\"representation\",\"startChar\",\"charCount\"],\"additionalProperties\":false}," +
                 "{\"type\":\"object\",\"description\":\"Extract text from one exact PDF attachment page within the model budget. Continue with pageIndex, startChar and charCount.\",\"properties\":{" + target + "," + page + ",\"representation\":{\"type\":\"string\",\"enum\":[\"text\"]}},\"required\":[\"target\",\"representation\",\"pageIndex\"],\"additionalProperties\":false}," +
                 "{\"type\":\"object\",\"description\":\"Read an exact UTF-16 window within one PDF attachment page.\",\"properties\":{" + target + "," + page + "," + chars + ",\"representation\":{\"type\":\"string\",\"enum\":[\"text\"]}},\"required\":[\"target\",\"representation\",\"pageIndex\",\"startChar\",\"charCount\"],\"additionalProperties\":false}," +
+                "{\"type\":\"object\",\"description\":\"Read consecutive complete extracted PDF pages within the model budget; continue at nextPageIndex or use one-page character windows.\",\"properties\":{" + target + "," + pageRange + ",\"representation\":{\"type\":\"string\",\"enum\":[\"text\"]}},\"required\":[\"target\",\"representation\",\"startPage\",\"pageCount\"],\"additionalProperties\":false}," +
                 "{\"type\":\"object\",\"description\":\"Read one unique VBA procedure from source; no other selectors.\",\"properties\":{" + target + "," + procedure + ",\"representation\":{\"type\":\"string\",\"enum\":[\"source\"]}},\"required\":[\"target\",\"representation\",\"procedure\"],\"additionalProperties\":false}," +
                 "{\"type\":\"object\",\"description\":\"Read one bounded text/source part.\",\"properties\":{" + target + "," + part + ",\"representation\":{\"type\":\"string\",\"enum\":[\"source\",\"text\"]}},\"required\":[\"target\",\"representation\",\"partNumber\"],\"additionalProperties\":false}," +
                 "{\"type\":\"object\",\"description\":\"Read one uniquely named document Markdown/Plan section.\",\"properties\":{" + target + "," + section + "," +

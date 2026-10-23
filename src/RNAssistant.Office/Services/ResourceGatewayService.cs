@@ -268,8 +268,18 @@ namespace RNAssistant.Office.Services
                     ? "Live VBA modules have no indexed parts. Omit partNumber; read representation=source, then use startLine/lineCount and sourceTotalLines for further excerpts."
                     : "Part reads require a positive partNumber on an indexed text/source artifact.",
                     "resource_part_unsupported", false);
+            if (request.PageStart.HasValue && (!(provider is ChatArtifactResourceProvider) ||
+                request.PageStart.Value < 0 || request.PageRangeCount < 1 || request.MaxChars < 1 ||
+                request.PageIndex.HasValue || request.PageStartChar != 0 || request.PageCharCount != 0 ||
+                request.Representation != ResourceRepresentations.Text || request.Section != null ||
+                request.PartNumber.HasValue || !string.IsNullOrEmpty(request.Cursor) || request.ViewPath != null ||
+                request.Fields != null || request.RowOffset != 0 || request.MaxRows != 0) ||
+                !request.PageStart.HasValue && request.PageRangeCount != 0)
+                throw new ResourceRequestException("PDF page ranges require startPage, positive pageCount and a bounded model read budget on an attachment text view.",
+                    "resource_page_selector_invalid", false);
             if (request.PageIndex.HasValue && (!(provider is ChatArtifactResourceProvider) ||
                 request.PageIndex.Value < 0 || request.Representation != ResourceRepresentations.Text ||
+                request.PageStart.HasValue ||
                 request.PageStartChar < 0 || request.PageCharCount < 1 || request.Section != null ||
                 request.PartNumber.HasValue || !string.IsNullOrEmpty(request.Cursor) || request.ViewPath != null ||
                 request.Fields != null || request.RowOffset != 0 || request.MaxRows != 0) ||

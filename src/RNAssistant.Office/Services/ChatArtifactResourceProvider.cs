@@ -401,6 +401,8 @@ namespace RNAssistant.Office.Services
             var artifact = FindExactArtifact(session, address.ArtifactId);
             EnsureRevision(artifact, address.Revision);
             _htmlResources.ValidateRevision(session, artifact);
+            if (request.PageStart.HasValue)
+                return ReadPdfPageRangeText(session, request, artifact, address.IsMember, resourceUri, cancellationToken);
             if (request.PageIndex.HasValue)
                 return ReadPdfPageText(session, request, artifact, address.IsMember, resourceUri, cancellationToken);
             if (request.Section != null)
@@ -641,6 +643,55 @@ namespace RNAssistant.Office.Services
                         ? new ResourceCoverage(ResourceCoverageKinds.PageRange,
                             start: request.PageIndex.Value, end: (long)request.PageIndex.Value + 1)
                         : null,
+                    Complete = false, SourceComplete = false, Truncated = true, RawContentIncluded = true
+                },
+                ResourceRefs = new[] { exact }
+            };
+        }
+
+        private ResourceReadSelection ReadPdfPageRangeText(ChatSession session, ResourceReadRequest request,
+            ChatArtifact artifact, bool isMember, string resourceUri,
+            System.Threading.CancellationToken cancellationToken)
+        {
+            if (isMember || artifact.Kind != ChatArtifactKinds.Attachment)
+                throw new ResourceRequestException("Page ranges are available only for an exact PDF attachment.",
+                    "resource_page_unsupported", false);
+            EnsureNotRemoved(session, artifact, resourceUri);
+            var original = FindExactAttachment(session, artifact);
+            if (original?.Kind != "pdf" ||
+                ArtifactViewerService.NormalizeMimeType(original.ContentType) != "application/pdf" ||
+                ArtifactViewerService.NormalizeMimeType(artifact.MimeType) != "application/pdf")
+                throw new ResourceRequestException("Page ranges are available only for a PDF original.",
+                    "resource_page_unsupported", false);
+            var exact = ChatResourceUri.CreateArtifactRevision(session, artifact);
+            ResourceReadCursor.ValidatePinned(request, exact.Revision);
+            cancellationToken.ThrowIfCancellationRequested();
+            var source = ReadRawSource(session, exact);
+            PdfAttachmentPageRangeText pages;
+            try { pages = PdfAttachmentTextExtractor.ExtractRange(source, request.PageStart.Value,
+                request.PageRangeCount, request.MaxChars); }
+            catch (ArgumentOutOfRangeException)
+            { throw new ResourceRequestException("startPage is outside the PDF's exact page bounds.",
+                "resource_page_selector_invalid", false); }
+            catch (PdfPageWindowRequiredException error)
+            { throw new ResourceRequestException(error.Message, "resource_page_window_required", false); }
+            catch (Exception error) when (!(error is OperationCanceledException) &&
+                                          !(error is OutOfMemoryException))
+            { throw new ResourceRequestException("The exact PDF page range could not be extracted: " + error.Message,
+                "resource_page_unavailable", false); }
+            cancellationToken.ThrowIfCancellationRequested();
+            var coverage = new ResourceCoverage(ResourceCoverageKinds.PageRange,
+                start: request.PageStart.Value, end: pages.EndPage);
+            return new ResourceReadSelection {
+                Result = new ResourceReadResult {
+                    Resource = Describe(session, artifact, false), Representation = ResourceRepresentations.Text,
+                    ContentSha256 = artifact.ContentSha256, Text = pages.Text,
+                    ReturnedCharacters = pages.Text.Length, TotalCharacters = pages.Text.Length,
+                    PageCount = pages.PageCount,
+                    RetainedViewKey = PdfAttachmentTextExtractor.RangeViewProfile + ":" +
+                        request.PageStart.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) + ":" +
+                        pages.EndPage.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    Coverage = coverage, SourceCoverage = coverage,
                     Complete = false, SourceComplete = false, Truncated = true, RawContentIncluded = true
                 },
                 ResourceRefs = new[] { exact }
