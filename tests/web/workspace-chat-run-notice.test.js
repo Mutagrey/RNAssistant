@@ -30,6 +30,19 @@ const root = path.resolve(__dirname, '../..');
           const result = await original(type, payload);
           if ((type === 'getProjectChat' || type === 'getPluginChat') && result && result.state) {
             result.state.status = 'failed';
+            result.messages = [
+              { Id: 'user', Role: 'user', Content: 'Check the chart.' },
+              { Id: 'reflection', Role: 'assistant', Content: '',
+                ReflectionDecision: 'Inspect the exact source first.' },
+              { Id: 'activity', Role: 'assistant', Content: '', RunId: 'failed-run', Activity: {
+                RunId: 'failed-run', Kind: 'tool', Title: 'common.resources_read',
+                ToolId: 'common.resources_read', ToolCallId: 'call-1', Status: 'completed',
+                ResultMessage: 'Source read.' } },
+              { Id: 'finish', Role: 'assistant', Content: 'Chart remains unfinished.', Results: [
+                { Summary: 'Chart absent', Assessment: 'partially_satisfied', Evidence: ['call-1'] }
+              ] },
+              { Id: 'protocol', Role: 'assistant', ProtocolMessage: true, Content: 'private v8 JSON' }
+            ];
             result.state.runViewState = {
               RunId: 'failed-run', TurnId: 'failed-turn', Narrative: 'The model claimed success.',
               Lifecycle: 'failed', ExecutionHealth: 'clean', GoalVerification: 'not_assessed',
@@ -50,6 +63,12 @@ const root = path.resolve(__dirname, '../..');
       await page.waitForFunction(() => document.querySelector('#workspaceChatNotice').textContent ===
         'Работа остановлена. Не удалось получить ответ от сервиса модели.');
       assert.equal(await notice.getAttribute('data-error'), 'true', owner + ': terminal failure is an alert');
+      await page.locator('#messages .workspace-reflection-step').getByText('Inspect the exact source first.').waitFor();
+      await page.locator('#messages .agent-model-results').getByText('Chart absent', { exact: false }).waitFor();
+      assert.equal(await page.locator('#messages').getByText('common.resources_read').count() > 0, true,
+        owner + ': saved tool activity uses the common message renderer');
+      assert.equal((await page.locator('#messages').textContent()).includes('private v8 JSON'), false,
+        owner + ': protocol body stays hidden');
       assert.deepEqual(errors, [], owner + ': no page errors');
       await page.close();
     }

@@ -130,7 +130,7 @@ const root = path.resolve(__dirname, '../..');
         'cross-surface retry preserves accepted input identity: ' + destination);
       const count = await page.evaluate(async ({workspaceId, sessionId, message}) => {
         const snapshot = await draftTest.original('getProjectChat', {workspaceId, sessionId});
-        return snapshot.messages.filter(item => item.role === 'user' && item.text === message).length;
+        return snapshot.messages.filter(item => item.Role === 'user' && item.Content === message).length;
       }, {workspaceId, sessionId, message});
       assert.equal(count, 1, 'lost acknowledgement must not execute the input twice');
       await page.waitForFunction(() => !document.querySelector('#chatInput').value);

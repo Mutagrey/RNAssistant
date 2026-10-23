@@ -670,13 +670,13 @@
       if (!accepted) {
         if (projectRuns[submitting.Id]) fail("Дождитесь ответа примера.", "preview_run_busy");
         projectRequests[input.requestId] = { sessionId: submitting.Id, message: input.message };
-        projectMessages[submitting.Id].push({ role: "user", text: input.message });
+        projectMessages[submitting.Id].push({ Id: input.requestId, Role: "user", Content: input.message });
         var run = { runId: "preview-project-run-" + input.requestId, cursor: "preview-project-cursor-" + input.requestId };
         projectRuns[submitting.Id] = run; submitting.RunStatus = "running";
         await new Promise(function (resolve) { setTimeout(resolve, 1800); });
         if (projectRuns[submitting.Id] === run) {
           var sourcePlugin = requireWorkspace(payload).pluginId;
-          projectMessages[submitting.Id].push({ role: "assistant", text: sourcePlugin
+          projectMessages[submitting.Id].push({ Id: run.runId + "-answer", Role: "assistant", Content: sourcePlugin
             ? "Изменение исходников смоделировано в preview. Файлы плагина не менялись."
             : "Проектный пример: план и файлы проекта можно обсудить здесь. Модель в preview не запускалась." });
           if (sourcePlugin) pluginSourceRevision[sourcePlugin] = (pluginSourceRevision[sourcePlugin] || 0) + 1;

@@ -458,7 +458,7 @@ function renderActivityArticle(message, index, activity, options) {
   }));
   node.appendChild(body);
 
-  if (message && !options.live) {
+  if (message && !options.live && !options.workspace) {
     appendMessageFooter(node, message, index, activity);
   }
 
@@ -525,20 +525,13 @@ function renderMessageArticle(message, index, options) {
   node.className = "message " + messageRole(message) + (message.Pending ? " pending" : "") +
     (message.Failed ? " failed" : "");
   if (messageRole(message) === "assistant") node.setAttribute("aria-label", "Ответ агента");
-  if (options.workspace) {
-    appendChatMessageText(node, message);
-    var footer = document.createElement("div"); footer.className = "message-footer";
-    var actions = document.createElement("div"); actions.className = "message-actions";
-    actions.appendChild(smallIconButton("Копировать сообщение", "copy", function () { copyChatMessage(messageContent(message)); }));
-    footer.appendChild(actions); node.appendChild(footer);
-    return node;
-  }
   var activity = messageActivity(message);
   if (activity) {
     if (activityKind(activity) === "compaction" && activityStatus(activity) === "completed") {
       return renderCompactionArticle(message, activity);
     }
-    var activityArticle = renderActivityArticle(message, index, activity, { live: false, current: false });
+    var activityArticle = renderActivityArticle(message, index, activity,
+      { live: false, current: false, workspace: !!options.workspace });
     if (typeof appendMessageReasoning === "function") {
       var activityReasoning = reasoningBlock(
         reasoningValue(message, "ReasoningContent", "reasoningContent", ""),
@@ -568,9 +561,56 @@ function renderMessageArticle(message, index, options) {
 
   if (typeof appendMessageReasoning === "function") appendMessageReasoning(node, message);
 
-  appendChatMessageText(node, message);
-  appendMessageFooter(node, message, index, null);
+  if (!options.workspace || messageContent(message).trim()) appendChatMessageText(node, message);
+  appendAcceptedResponseDetails(node, message);
+  if (options.workspace) {
+    if (messageContent(message).trim()) {
+      var footer = document.createElement("div"); footer.className = "message-footer";
+      var actions = document.createElement("div"); actions.className = "message-actions";
+      actions.appendChild(smallIconButton("Копировать сообщение", "copy", function () { copyChatMessage(messageContent(message)); }));
+      footer.appendChild(actions); node.appendChild(footer);
+    }
+  } else appendMessageFooter(node, message, index, null);
   return node;
+}
+
+function appendAcceptedResponseDetails(node, message) {
+  if (message.ReflectionDecision) {
+    var step = document.createElement("div"); step.className = "workspace-reflection-step";
+    var title = document.createElement("strong"); title.textContent = "Промежуточное решение";
+    var decision = document.createElement("span"); decision.textContent = message.ReflectionDecision;
+    step.append(title, decision); node.appendChild(step);
+  }
+  if (message.Results && message.Results.length) node.appendChild(renderModelResultsNotice(message.Results));
+}
+
+function renderModelResultsNotice(results) {
+  var labels = { satisfied: "выполнено", partially_satisfied: "частично",
+    unverified: "не подтверждено", not_satisfied: "не выполнено" };
+  var incomplete = results.some(function (item) { return item.Assessment !== "satisfied"; });
+  var note = document.createElement("div");
+  note.className = "message-outcome agent-run-notice " + (incomplete ? "status-warning" : "status-history");
+  note.setAttribute("role", "status");
+  var copy = document.createElement("div"); copy.className = "agent-run-notice-copy";
+  var heading = document.createElement("span");
+  heading.textContent = "Итоги по оценке модели. Достижение цели отдельно не проверено.";
+  copy.appendChild(heading);
+  var details = document.createElement("details"); details.className = "agent-model-results";
+  details.open = incomplete;
+  var summary = document.createElement("summary"); summary.textContent = "Утверждения и ссылки на результаты";
+  details.appendChild(summary);
+  var list = document.createElement("ol");
+  results.forEach(function (item) {
+    var row = document.createElement("li");
+    row.textContent = item.Summary + " · " + (labels[item.Assessment] || "оценка неизвестна");
+    if (Array.isArray(item.Evidence) && item.Evidence.length) {
+      var refs = document.createElement("small"); refs.textContent = " · результаты: " + item.Evidence.join(", ");
+      row.appendChild(refs);
+    }
+    list.appendChild(row);
+  });
+  details.appendChild(list); copy.appendChild(details); note.appendChild(copy);
+  return note;
 }
 
 function appendChatMessageText(node, message) {

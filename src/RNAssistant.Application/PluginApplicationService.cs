@@ -617,39 +617,33 @@ namespace RNAssistant.Application
                 return ProjectChat(new ProjectChatRequest { WorkspaceId = workspace.WorkspaceId, SessionId = sessionId });
             }
         }
-        internal static PluginChatMessageDto PresentWorkspaceMessage(ChatMessage message)
+        internal static ChatMessageViewDto PresentWorkspaceMessage(ChatMessage message)
         {
-            var view = new PluginChatMessageDto { Id = message.Id, RunId = message.RunId,
-                StepId = message.AcceptedCallOrigin?.StepId ?? message.Activity?.StepId,
-                Role = message.Role, ReasoningContent = message.ReasoningContent,
-                ReasoningTokens = message.ReasoningTokens, ReasoningTruncated = message.ReasoningTruncated };
             if (message.Role == "assistant" && message.ResponseProtocolVersion == ConversationResponse.ProtocolVersion)
             {
                 var accepted = ConversationResponseHistoryReader.Read(message);
                 if (!accepted.Success)
-                {
-                    view.Text = "Сообщение модели не удалось отобразить: запись принятого вызова неполная.";
-                    return view;
-                }
-                view.Text = accepted.Response.Message;
-                view.Actions = accepted.Response.ToolCalls.Select(call => call.Name).ToArray();
-                view.ReflectionDecision = accepted.Response.Action == ConversationResponse.ReflectionAction ? accepted.Response.Decision : null;
-                view.Results = accepted.Response.Action == ConversationResponse.FinishAction
-                    ? accepted.Response.Results.Select(claim => new ModelResultViewState(claim.Summary, claim.AssessmentName, claim.Evidence)).ToArray() : null;
-                return view;
+                    return new ChatMessageViewDto { Id = message.Id, Role = "assistant", RunId = message.RunId,
+                        Content = "Сообщение модели не удалось отобразить: запись принятого вызова неполная." };
+                return new ChatMessageViewDto { Id = message.Id, Role = "assistant", RunId = message.RunId,
+                    StepId = message.AcceptedCallOrigin?.StepId,
+                    CreatedUtc = message.CreatedUtc, Content = accepted.Response.Message,
+                    ReasoningContent = message.ReasoningContent, ReasoningTokens = message.ReasoningTokens,
+                    ReasoningTruncated = message.ReasoningTruncated,
+                    ReflectionDecision = accepted.Response.Action == ConversationResponse.ReflectionAction
+                        ? accepted.Response.Decision : null,
+                    Results = accepted.Response.Action == ConversationResponse.FinishAction
+                        ? accepted.Response.Results.Select(claim => new ModelResultViewState(
+                            claim.Summary, claim.AssessmentName, claim.Evidence)).ToArray() : null };
             }
+            if (message.Role != "assistant" && message.Role != "user")
+                return new ChatMessageViewDto { Id = message.Id, Role = message.Role,
+                    RunId = message.RunId, ProtocolMessage = true };
             if (message.ProtocolMessage || message.ResponseProtocolVersion != 0 || message.ToolCalls?.Count > 0)
-            {
-                view.Text = "Сообщение использует неподдерживаемый протокол и пропущено. Исходная запись сохранена.";
-                return view;
-            }
-            view.Text = message.Content;
-            if (message.Activity != null)
-                view.Activity = new ChatActivity { Kind = message.Activity.Kind, Title = message.Activity.Title,
-                    Status = message.Activity.Status, ResultMessage = message.Activity.ResultMessage,
-                    ErrorCode = message.Activity.ErrorCode, StepId = message.Activity.StepId,
-                    RunId = message.Activity.RunId, ToolId = message.Activity.ToolId, ToolCallId = message.Activity.ToolCallId };
-            return view;
+                return new ChatMessageViewDto { Id = message.Id, Role = "assistant", RunId = message.RunId,
+                    StepId = message.AcceptedCallOrigin?.StepId,
+                    Content = "Сообщение использует неподдерживаемый протокол и пропущено. Исходная запись сохранена." };
+            return ChatMessageViewDto.From(message);
         }
         private WorkspaceDescriptor RequireProjectWorkspace(string workspaceId)
         {
@@ -731,7 +725,8 @@ namespace RNAssistant.Application
                 PendingId = session.LastRun?.KernelState?.Summary?.PendingConfirmation?.PendingId,
                 PendingTool = session.LastRun?.KernelState?.Summary?.PendingConfirmation?.Call?.Name,
                 PendingArguments = session.LastRun?.KernelState?.Summary?.PendingConfirmation?.Call?.ArgumentsJson,
-                Messages = session.Messages.Where(message => message.Role == "assistant" || message.Role == "user" && !message.ProtocolMessage)
+                Messages = session.Messages.Where(message => message.Role == "assistant" ||
+                        message.Role == "user" && !message.ProtocolMessage)
                     .Reverse().Take(100).Reverse().Select(PresentWorkspaceMessage).ToArray() };
             }
         }

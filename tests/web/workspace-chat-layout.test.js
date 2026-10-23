@@ -84,9 +84,12 @@ fs.mkdirSync(captures, {recursive:true});
         const result=await original(type,payload);
         if(type==='submitProjectChat'&&chatTest.hold)await new Promise(resolve=>{chatTest.release=resolve;});
         if(chatTest.transcript&&(type==='getProjectChat'||type==='getPluginChat'))result.messages=[
-          {role:'user',text:'Проверь структуру проекта и подготовь краткую сводку.'},
-          {role:'assistant',text:'Проверяю состав исходников.',actions:['common.resources_find','common.resources_read']},
-          {role:'assistant',text:'Исходники доступны.\n\n| Файл | Назначение |\n| --- | --- |\n| plugin.json | Описание плагина |\n| index.html | Интерфейс |\n\nЭто пример для проверки интерфейса; модель не запускалась.'}
+          {Id:'user',Role:'user',Content:'Проверь структуру проекта и подготовь краткую сводку.'},
+          {Id:'step',Role:'assistant',Content:'Проверяю состав исходников.'},
+          {Id:'read',Role:'assistant',Content:'',RunId:'preview-run',Activity:{
+            RunId:'preview-run',Kind:'tool',Title:'common.resources_read',ToolId:'common.resources_read',
+            ToolCallId:'preview-call',Status:'completed',ResultMessage:'Исходник прочитан.'}},
+          {Id:'finish',Role:'assistant',Content:'Исходники доступны.\n\n| Файл | Назначение |\n| --- | --- |\n| plugin.json | Описание плагина |\n| index.html | Интерфейс |\n\nЭто пример для проверки интерфейса; модель не запускалась.'}
         ];
         return result;
       };
@@ -206,8 +209,8 @@ fs.mkdirSync(captures, {recursive:true});
     assert.equal(await pluginToggle.getAttribute('aria-expanded'),'true','Space opens the right panel once');
     await page.locator('#productMobileMenuButton').click();
     await page.waitForFunction(() => !document.querySelector('.shell').classList.contains('navigation-transition'));
-    const history=page.locator('#messages .agent-run-history');
-    await history.locator('summary').click();
+    const history=page.locator('#messages .is-activity-message');
+    assert.match(await history.textContent(),/common.resources_read/,'saved tool activity uses the common renderer');
     await page.locator('#chatInput').fill('Черновик плагина');
     await page.locator('#chatInput').press('Escape');
     assert.equal(await page.locator('#pluginChat').isVisible(),false,'Escape from the chat closes its panel');
@@ -219,7 +222,7 @@ fs.mkdirSync(captures, {recursive:true});
     await page.locator('#chatInput').press('Enter');
     await page.locator('#workspaceChatNotice').getByText('Проверка ошибки отправки').waitFor();
     assert.equal((await page.locator('#chatInput').inputValue()).trim(),'Черновик плагина','plugin failure preserves input');
-    assert.equal(await history.getAttribute('open'),'','failure does not reset action disclosure');
+    assert.equal(await history.count(),1,'failure keeps the saved tool activity visible');
     const firstRequest=await page.evaluate(() => chatTest.requests.at(-1).payload.input.requestId);
     await page.locator('#chatInput').press('Enter');
     await page.waitForFunction(id => chatTest.requests.filter(item => item.payload.input.requestId===id).length===2,firstRequest);

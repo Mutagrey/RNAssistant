@@ -308,10 +308,12 @@ namespace RNAssistant.Harness
                     ToolResultRole = ToolResultRoles.User,
                     AcceptedCallOrigin = new AcceptedToolCallOrigin("step-1", "attempt-1", 0) };
                 var presented = PluginApplicationService.PresentWorkspaceMessage(wire);
-                AssertEqual("Читаю исходник", presented.Text, "source chat presents the model message, not protocol JSON");
-                AssertEqual("common.resources_read", presented.Actions.Single(), "source chat retains the action name without arguments");
+                AssertEqual("Читаю исходник", presented.Content, "source chat presents the model message, not protocol JSON");
+                AssertEqual(wire.Id, presented.Id, "workspace uses the shared message identity");
+                AssertTrue(!JsonConvert.SerializeObject(presented).Contains("README.md"),
+                    "workspace browser view never exposes accepted call arguments");
                 wire.ToolCallId = null;
-                AssertTrue(PluginApplicationService.PresentWorkspaceMessage(wire).Text.Contains("неполная"),
+                AssertTrue(PluginApplicationService.PresentWorkspaceMessage(wire).Content.Contains("неполная"),
                     "source chat does not present an unpaired model action as accepted history");
                 var reflection = new ChatMessage { Role = "assistant", ProtocolMessage = true,
                     ResponseProtocolVersion = ConversationResponse.ProtocolVersion,
@@ -319,7 +321,7 @@ namespace RNAssistant.Harness
                     Content = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.ReflectionAction,
                         "Review source first.", "", decision: "Inspect the exact file before editing.") };
                 var reflected = PluginApplicationService.PresentWorkspaceMessage(reflection);
-                AssertEqual("", reflected.Text, "empty reflection has no user-facing narration");
+                AssertEqual("", reflected.Content, "empty reflection has no user-facing narration");
                 AssertEqual("Inspect the exact file before editing.", reflected.ReflectionDecision,
                     "workspace reflection retains its saved decision for a separate step");
                 var finish = new ChatMessage { Role = "assistant", ProtocolMessage = true,
@@ -334,6 +336,16 @@ namespace RNAssistant.Harness
                     "workspace chat retains incomplete model assessment");
                 AssertEqual("call-1", finished.Results.Single().Evidence.Single(),
                     "workspace chat retains the exact terminal evidence id");
+                var activity = PluginApplicationService.PresentWorkspaceMessage(new ChatMessage {
+                    Role = "assistant", Content = "", Activity = new ChatActivity {
+                        Kind = "tool", Title = "common.resources_read", ToolCallId = "call-1",
+                        RuntimeGuardJson = "private-guard", ConfirmationCatalogSha256 = "private-catalog"
+                    }
+                });
+                AssertEqual("common.resources_read", activity.Activity.Title,
+                    "workspace shows the saved tool activity through the shared message view");
+                AssertTrue(activity.Activity.RuntimeGuardJson == null && activity.Activity.ConfirmationCatalogSha256 == null,
+                    "workspace browser activity omits runtime-only guard data");
                 using(var service=new PluginApplicationService(paths))
                 {
                     var item=PluginFixture(service,paths);var active=PluginOpen(service,item.PluginId);
@@ -405,7 +417,7 @@ namespace RNAssistant.Harness
                     AssertEqual(item.Name, project.Name, "common tree labels source history with the plugin name");
                     AssertEqual(2, project.Chats.Count, "both conversations appear in the main tree");
                     AssertEqual(message.Content, service.ProjectChat(new ProjectChatRequest { WorkspaceId = item.SourceWorkspaceId,
-                        SessionId = firstId }).Messages.Single().Text, "creating another chat preserves the first history");
+                        SessionId = firstId }).Messages.Single().Content, "creating another chat preserves the first history");
                     var other = service.CreateProjectWorkspace(new ProjectConnectionRequest { RootPath = Path.Combine(paths.Root, "other") }).SelectedWorkspaceId;
                     PluginFailure(() => service.ProjectChat(new ProjectChatRequest { WorkspaceId = other, SessionId = secondId }), "project_chat_missing");
                     PluginFailure(() => service.SubmitProjectChatAsync(new ProjectChatRequest { WorkspaceId = item.SourceWorkspaceId,

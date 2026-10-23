@@ -137,9 +137,13 @@ runtime-запросы остаются у тематических controllers.
 Копирование, раскрытие действий, ввод Enter/Shift+Enter, рост до шести строк и
 вопросы общие; работа с Office-вложениями и document history остаётся у Office owner.
 Принятый workspace-ответ v8 хранится в общем event stream; runtime связывает
-вызовы с точными ID. Project и Plugin показывают терминальное состояние через
-тот же Core `RunViewState` и общие подписи ошибок, что Office. Проекция самих
-сообщений и постраничная история пока отличаются от Office-чата.
+вызовы с точными ID. Project и Plugin используют общий с Office
+`ChatMessageViewDto` и `renderMessageArticle`: сохранённые tool activity,
+reflection, narration и model results проецируются без сырого protocol body
+и runtime guards. Tool activity содержит свой разрешённый UI-описатель действия.
+Терминальное состояние идёт через
+тот же Core `RunViewState` и общие подписи ошибок. Чтение workspace-истории
+пока ограничено последними 100 сообщениями; Office имеет постраничное чтение.
 Планирование и reasoning передаются в существующий workspace input contract;
 модель берётся из общих настроек. Черновики раздельны по сессиям и сохраняются при
 ошибке доставки; повтор того же ввода использует тот же request ID.

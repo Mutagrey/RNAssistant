@@ -135,23 +135,6 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("entryUrl")] public string EntryUrl { get; set; }
         [JsonProperty("preview")] public bool Preview { get; set; }
     }
-    public sealed class PluginChatMessageDto
-    {
-        [JsonProperty("id")] public string Id { get; set; }
-        [JsonProperty("runId")] public string RunId { get; set; }
-        [JsonProperty("stepId")] public string StepId { get; set; }
-        [JsonProperty("reasoningContent", NullValueHandling = NullValueHandling.Ignore)] public string ReasoningContent { get; set; }
-        [JsonProperty("reasoningTokens", NullValueHandling = NullValueHandling.Ignore)] public int? ReasoningTokens { get; set; }
-        [JsonProperty("reasoningTruncated")] public bool ReasoningTruncated { get; set; }
-        [JsonProperty("activity", NullValueHandling = NullValueHandling.Ignore)] public ChatActivity Activity { get; set; }
-        [JsonProperty("role")] public string Role { get; set; }
-        [JsonProperty("text")] public string Text { get; set; }
-        [JsonProperty("actions")] public IReadOnlyList<string> Actions { get; set; }
-        [JsonProperty("reflectionDecision", NullValueHandling = NullValueHandling.Ignore)]
-        public string ReflectionDecision { get; set; }
-        [JsonProperty("results", NullValueHandling = NullValueHandling.Ignore)]
-        public IReadOnlyList<ModelResultViewState> Results { get; set; }
-    }
     public sealed class PluginSourceStateDto
     {
         [JsonProperty("pluginId")] public string PluginId { get; set; }
@@ -232,7 +215,7 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("pendingTool")] public string PendingTool { get; set; }
         [JsonProperty("pendingArguments")] public string PendingArguments { get; set; }
         [JsonProperty("cancelStatus", NullValueHandling = NullValueHandling.Ignore)] public WorkspaceCancellationStatus? CancelStatus { get; set; }
-        [JsonProperty("messages")] public IReadOnlyList<PluginChatMessageDto> Messages { get; set; }
+        [JsonProperty("messages")] public IReadOnlyList<ChatMessageViewDto> Messages { get; set; }
     }
     public sealed class PluginDataSelection
     {

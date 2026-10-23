@@ -18,6 +18,8 @@ namespace RNAssistant.Core.Models
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public IReadOnlyList<ChatAttachmentViewDto> Attachments { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public IReadOnlyList<string> ArtifactIds { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public ChatActivity Activity { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string ReflectionDecision { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public IReadOnlyList<ModelResultViewState> Results { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public int? PromptTokens { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public int? CompletionTokens { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public int? TotalTokens { get; set; }
@@ -25,6 +27,7 @@ namespace RNAssistant.Core.Models
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public int? ReasoningTokens { get; set; }
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool ReasoningTruncated { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string RunId { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string StepId { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public DateTime? CreatedUtc { get; set; }
 
         public static ChatMessageViewDto From(ChatMessage message)
@@ -35,7 +38,8 @@ namespace RNAssistant.Core.Models
                 Id = message.Id,
                 Role = message.Role,
                 ProtocolMessage = message.ProtocolMessage,
-                RunId = message.RunId
+                RunId = message.RunId,
+                StepId = message.Activity?.StepId
             };
             if (message.ProtocolMessage) return view;
             view.Content = message.Content;
@@ -43,6 +47,7 @@ namespace RNAssistant.Core.Models
             view.RunViewState = message.RunViewState;
             view.Attachments = message.Attachments == null || message.Attachments.Count == 0
                 ? null : message.Attachments.Select(ChatAttachmentViewDto.From).ToList();
+            view.Activity = ChatActivityViewProjector.From(message.Activity);
             view.PromptTokens = message.PromptTokens;
             view.CompletionTokens = message.CompletionTokens;
             view.TotalTokens = message.TotalTokens;
@@ -51,6 +56,59 @@ namespace RNAssistant.Core.Models
             view.ReasoningTruncated = message.ReasoningTruncated;
             view.CreatedUtc = message.CreatedUtc;
             return view;
+        }
+    }
+
+    // One browser projection for Office and workspace activities. Runtime guards
+    // and payload references never enter the WebView state.
+    public static class ChatActivityViewProjector
+    {
+        public static ChatActivity From(ChatActivity activity)
+        {
+            if (activity == null) return null;
+            return new ChatActivity
+            {
+                RunId = activity.RunId,
+                Sequence = activity.Sequence,
+                StepId = activity.StepId,
+                StepMessage = activity.StepMessage,
+                Kind = activity.Kind,
+                Title = activity.Title,
+                Display = activity.Display,
+                Subtitle = activity.Subtitle,
+                Status = activity.Status,
+                ExecutionStatus = activity.ExecutionStatus,
+                ExecutionEvidence = activity.ExecutionEvidence,
+                ErrorCode = activity.ErrorCode,
+                Retryable = activity.Retryable,
+                PendingId = activity.PendingId,
+                ToolId = activity.ToolId,
+                ToolCallId = activity.ToolCallId,
+                ArgumentsJson = activity.ArgumentsJson,
+                ResultMessage = activity.ResultMessage,
+                DataJson = activity.DataJson,
+                ResultSummary = activity.ResultSummary == null ? null : new ToolResultSummary
+                {
+                    Kind = activity.ResultSummary.Kind,
+                    Representation = activity.ResultSummary.Representation,
+                    ReturnedItems = activity.ResultSummary.ReturnedItems,
+                    TotalItems = activity.ResultSummary.TotalItems,
+                    ReturnedCharacters = activity.ResultSummary.ReturnedCharacters,
+                    ReturnedRows = activity.ResultSummary.ReturnedRows,
+                    Complete = activity.ResultSummary.Complete,
+                    Partial = activity.ResultSummary.Partial,
+                    HydratedForNextModelStep = activity.ResultSummary.HydratedForNextModelStep
+                },
+                ReadSummary = activity.ReadSummary == null ? null : new ResourceReadSummary
+                {
+                    Representation = activity.ReadSummary.Representation,
+                    ReturnedCharacters = activity.ReadSummary.ReturnedCharacters,
+                    ReturnedRows = activity.ReadSummary.ReturnedRows,
+                    Complete = activity.ReadSummary.Complete,
+                    HydratedForNextModelStep = activity.ReadSummary.HydratedForNextModelStep
+                },
+                Children = activity.Children == null ? null : activity.Children.Select(From).ToList()
+            };
         }
     }
 

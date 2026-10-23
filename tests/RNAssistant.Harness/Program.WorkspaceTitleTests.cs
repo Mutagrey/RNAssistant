@@ -100,7 +100,7 @@ namespace RNAssistant.Harness
                                 calls[0].AcceptedCallOrigin.ModelAttemptId == calls[1].AcceptedCallOrigin.ModelAttemptId &&
                                 calls.Select(call => call.AcceptedCallOrigin.CallIndex).SequenceEqual(new[] { 0, 1 }),
                                 "batch calls keep one exact model attempt and their original positions");
-                            AssertEqual("Смотрю ресурсы.", PluginApplicationService.PresentWorkspaceMessage(calls[0]).Text,
+                            AssertEqual("Смотрю ресурсы.", PluginApplicationService.PresentWorkspaceMessage(calls[0]).Content,
                                 "plugin chat presents the accepted narration after a tool call");
                         }
                         string oldCallMessageId = null, oldCallId = null, oldToolName = null;
@@ -127,7 +127,7 @@ namespace RNAssistant.Harness
                             oldToolName = oldCall.ToolName;
                             oldOrigin = oldCall.AcceptedCallOrigin;
                             oldCall.ToolCallId = null; oldCall.ToolName = null; oldCall.AcceptedCallOrigin = null;
-                            AssertContains(PluginApplicationService.PresentWorkspaceMessage(oldCall).Text, "неполная",
+                            AssertContains(PluginApplicationService.PresentWorkspaceMessage(oldCall).Content, "неполная",
                                 "a corrupted v8 call is not presented as accepted history");
                             new ChatStore(paths).Commit(corrupted,
                                 new RNAssistant.Core.Persistence.ConversationCommit(new[] { oldCall }));

@@ -38,9 +38,9 @@ class Element {
 
 const context = vm.createContext({ document: { createElement: tag => new Element(tag) } });
 context.window = context;
-let bubbles = 0;
+const rendered = [];
 context.renderMessageArticle = function (message) {
-  bubbles += 1;
+  rendered.push(message);
   const article = new Element("article");
   article.textContent = message.Content;
   const footer = new Element("div"); footer.className = "message-footer";
@@ -63,31 +63,25 @@ assert.equal(context.RNAssistantWorkspaceChat.runNotice({ state: { runViewState:
 
 const list = new Element("section");
 context.RNAssistantWorkspaceChat.renderMessages(list, { sessionId: "chat-1", messages: [
-  { role: "assistant", text: "", reflectionDecision: "Inspect the exact file first." },
-  { role: "assistant", text: "Chart remains unfinished.", results: [
+  { Id: "reflection", Role: "assistant", Content: "", ReflectionDecision: "Inspect the exact file first." },
+  { Id: "finish", Role: "assistant", Content: "Chart remains unfinished.", Results: [
     { Summary: "Chart absent", Assessment: "partially_satisfied", Evidence: ["call-1"] }
-  ] }
+  ] },
+  { Id: "hidden", Role: "assistant", ProtocolMessage: true, Content: "private v8 JSON" }
 ] });
 
-assert.equal(bubbles, 1, "empty reflection has a saved step but no assistant bubble");
+assert.equal(rendered.length, 2, "one shared renderer receives both visible v8 projections");
 assert.equal(list.childNodes.length, 2);
-assert.equal(list.childNodes[0].className, "workspace-reflection-step");
-assert.equal(list.childNodes[0].childNodes[1].textContent, "Inspect the exact file first.");
-const article = list.childNodes[1];
-const outcome = article.childNodes.find(item => item.className.includes("agent-run-notice"));
-assert.ok(outcome && outcome.className.includes("status-warning"), "partial finish stays visible");
-const details = outcome.childNodes[0].childNodes[1];
-assert.equal(details.open, true);
-assert.match(details.childNodes[1].childNodes[0].textContent, /Chart absent · частично/);
-assert.match(details.childNodes[1].childNodes[0].childNodes[0].textContent, /call-1/);
-console.log("PASS workspace v8: reflection step and incomplete finish evidence survive chat rendering");
-
+assert.equal(rendered[0].ReflectionDecision, "Inspect the exact file first.");
+assert.equal(rendered[1].Results[0].Assessment, "partially_satisfied");
+assert.equal(rendered[1].Results[0].Evidence[0], "call-1");
+assert.ok(!rendered.some(message => message.Id === "hidden"), "raw protocol bodies stay out of transcript");
 const firstNode = list.childNodes[0], answerNode = list.childNodes[1];
 const sameMessages = JSON.parse(list._chatSignature)[0];
-sameMessages.push({ id: "new", role: "assistant", text: "New step" });
+sameMessages.push({ Id: "new", Role: "assistant", Content: "New step" });
 context.RNAssistantWorkspaceChat.renderMessages(list, { sessionId: "chat-1", messages: sameMessages });
 assert.equal(list.childNodes[0], firstNode, "accepted reflection stays attached when new messages arrive");
 assert.equal(list.childNodes[1], answerNode, "unchanged answer preserves focus and disclosure nodes");
 assert.equal(context.RNAssistantWorkspaceChat.readOnly({ state: { readOnly: true } }), true);
 assert.match(context.RNAssistantWorkspaceChat.runNotice({ state: { readOnly: true } }).text, /Старый протокол/);
-console.log("PASS workspace: stable message nodes and explicit read-only history");
+console.log("PASS workspace: shared message views, stable nodes and explicit read-only history");

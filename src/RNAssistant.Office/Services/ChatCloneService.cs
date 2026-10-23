@@ -132,7 +132,6 @@ namespace RNAssistant.Office.Services
                     var ids = ChatResourceUri.CurrentArtifactIds(session,
                         (message.ResourceRefs ?? new List<ResourceRef>()).Concat(new[] { message.HtmlWorkspaceCheckpoint }));
                     view.ArtifactIds = ids.Count == 0 ? null : ids;
-                    view.Activity = CloneActivity(message.Activity, true);
                     return view;
                 })
                 .ToList();
@@ -494,7 +493,7 @@ namespace RNAssistant.Office.Services
             };
         }
 
-        private static ChatActivity CloneActivity(ChatActivity activity, bool forBridge = false)
+        private static ChatActivity CloneActivity(ChatActivity activity)
         {
             if (activity == null)
             {
@@ -517,13 +516,13 @@ namespace RNAssistant.Office.Services
                 ErrorCode = activity.ErrorCode,
                 Retryable = activity.Retryable,
                 PendingId = activity.PendingId,
-                ConfirmationCatalogSha256 = forBridge ? null : activity.ConfirmationCatalogSha256,
+                ConfirmationCatalogSha256 = activity.ConfirmationCatalogSha256,
                 ToolId = activity.ToolId,
                 ToolCallId = activity.ToolCallId,
                 ArgumentsJson = activity.ArgumentsJson,
-                ArgumentsPayload = forBridge ? null : activity.ArgumentsPayload,
-                ResultPayload = forBridge ? null : activity.ResultPayload,
-                RuntimeGuardJson = forBridge ? null : activity.RuntimeGuardJson,
+                ArgumentsPayload = activity.ArgumentsPayload,
+                ResultPayload = activity.ResultPayload,
+                RuntimeGuardJson = activity.RuntimeGuardJson,
                 ResultMessage = activity.ResultMessage,
                 DataJson = activity.DataJson,
                 ResultSummary = activity.ResultSummary == null ? null : new ToolResultSummary {
@@ -544,7 +543,7 @@ namespace RNAssistant.Office.Services
                     Complete = activity.ReadSummary.Complete,
                     HydratedForNextModelStep = activity.ReadSummary.HydratedForNextModelStep
                 },
-                Children = activity.Children == null ? null : activity.Children.Select(child => CloneActivity(child, forBridge)).ToList()
+                Children = activity.Children == null ? null : activity.Children.Select(CloneActivity).ToList()
             };
         }
 

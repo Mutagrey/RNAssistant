@@ -221,7 +221,9 @@ reply arrives; completed chats must remain writable without stale busy state.
 It also opens a run started outside the panel and observes completion through
 read-only polling in both project and plugin views.
 `node tests/web/workspace-chat-run-notice.test.js` presents a failed typed run
-through the real project and plugin panels and checks their common Office notice.
+through the real project and plugin panels, checks their common Office notice,
+and verifies shared message rendering of reflection, tool activity and finish
+evidence without exposing hidden v8 bodies.
 `node tests/web/splitter-preferences.test.js` checks the shared divider interaction:
 frame coalescing, commit/cancel, capture cleanup, keyboard controls and ARIA values.
 
