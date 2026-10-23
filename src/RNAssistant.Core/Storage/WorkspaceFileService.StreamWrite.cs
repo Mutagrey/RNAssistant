@@ -259,7 +259,9 @@ namespace RNAssistant.Core.Storage
             if (copySource != null && (expected != null || !textSource))
                 throw new ArgumentException("A copied text source requires a new text target.", nameof(copySource));
             var path = ResolvePath(workspace, relativePath, false, true);
-            if (maximumBytes < 1 || !textSource && maximumBytes > 256L * 1024 * 1024)
+            // Each caller supplies its own publication budget. Plugin result writers
+            // pass their 256-MiB limit; project-chat uploads admit larger staged files.
+            if (maximumBytes < 1)
                 throw new ArgumentOutOfRangeException(nameof(maximumBytes));
             if (StorageFileSystem.IsReparsePoint(stagedPath)) throw new WorkspaceFileException("invalid_staging", "Staging cannot be a link.");
             using (AcquireFileScope(path, out var id, out var scope, token))
