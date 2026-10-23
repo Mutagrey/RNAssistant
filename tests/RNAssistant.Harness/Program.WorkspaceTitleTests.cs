@@ -32,6 +32,7 @@ namespace RNAssistant.Harness
                     listener.Prefixes.Add("http://127.0.0.1:" + port + "/");
                     listener.Start();
                     var served = 0;
+                    var requests = new string[3];
                     var server = Task.Run(async () =>
                     {
                         try
@@ -41,7 +42,7 @@ namespace RNAssistant.Harness
                                 var context = await listener.GetContextAsync().ConfigureAwait(false);
                                 var number = Interlocked.Increment(ref served);
                                 using (var reader = new StreamReader(context.Request.InputStream))
-                                    await reader.ReadToEndAsync().ConfigureAwait(false);
+                                    requests[number - 1] = await reader.ReadToEndAsync().ConfigureAwait(false);
                                 var content = number == 1
                                     ? "{\"message\":\"Смотрю ресурсы.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.resources_find\",\"arguments\":{}},{\"name\":\"common.resources_find\",\"arguments\":{\"query\":\"missing\"}}]}"
                                     : number == 2
@@ -92,7 +93,14 @@ namespace RNAssistant.Harness
                             }, settings, () => "test-key").GetAwaiter().GetResult();
                             AssertEqual(RunLifecycle.Completed, next.Summary.Lifecycle, "next turn reads durable call history");
                             AssertEqual("История читается.", next.Summary.AssistantMessage, "next turn receives model answer");
+                            var modelMessages = (JArray)JObject.Parse(requests[2])["messages"];
+                            AssertTrue(modelMessages.Any(item => (string)item["role"] == "assistant" &&
+                                (string)item["content"] == "Первый ответ."),
+                                "next request contains accepted final narration without a v7 JSON envelope");
                             var legacy = reopened.GetSession(workspace, sessionId);
+                            AssertTrue(legacy.Messages.Any(item => item.Role == "assistant" && item.ProtocolMessage &&
+                                item.Content.Contains("\"message\":\"Первый ответ.\"")),
+                                "model projection leaves the durable v7 response intact");
                             var oldCall = legacy.Messages.First(message => message.Role == "assistant" &&
                                 message.ToolCalls != null && message.ToolCalls.Count > 0);
                             oldCall.ToolCallId = null; oldCall.ToolName = null; oldCall.AcceptedCallOrigin = null;

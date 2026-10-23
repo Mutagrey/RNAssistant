@@ -1347,7 +1347,13 @@ namespace RNAssistant.Runtime
                         if (!parsed.Success) throw new InvalidOperationException(
                             "История чата содержит неполную запись вызова. Создайте новый чат; старая история сохранена. " + parsed.Error);
                         var calls = parsed.Response.ToolCalls;
-                        if (calls.Count == 0) facts.Add(HistoricalContextProjector.Project(item));
+                        if (calls.Count == 0)
+                        {
+                            var final = HistoricalContextProjector.Project(item);
+                            final.Content = parsed.Response.Message;
+                            final.ProtocolMessage = false;
+                            facts.Add(final);
+                        }
                         for (var index = 0; index < calls.Count; index++)
                         {
                             var call = calls[index];

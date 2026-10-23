@@ -2007,6 +2007,9 @@ Owner: Conversation/model context; совместные границы — Core 
   общий `ConversationResponseHistoryReader`: JSON envelope с runtime call metadata
   отличается от native tool-call transport ролью и версией результата. Narration,
   имена, аргументы и runtime IDs должны совпадать; неполная запись отклоняется.
+  No-call ответ остаётся в durable истории как v7 JSON, но в model-context
+  поступает только проверенный текст `message` как обычная реплика assistant.
+  Подготовка запроса не переписывает сохранённое событие.
 - Core `ContextWorkingSet` общий для Office request/preview и CLI. Он передаёт
   исходные архивные кандидаты compiler, без provider calls и второго store.
   `ModelContextCompiler` единолично проверяет актуальность, устраняет дубликаты

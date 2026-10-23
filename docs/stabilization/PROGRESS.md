@@ -1,5 +1,14 @@
 # Stabilization progress
 
+## Unified Shell model-context no-call narration — 2026-10-23
+
+Owner: workspace application context preparation. A completed v7 response now
+enters the next model request as its validated assistant `message` text, matching
+Office dialogue, while the original JSON envelope stays in durable history.
+The workspace restart/batch Harness case checks the actual next HTTP request and
+unchanged saved response. Other context-preparation differences remain open;
+Windows/Office/WebView2 are not qualified.
+
 ## Unified Shell model-context accepted-call admission — 2026-10-23
 
 Owner: Core `ConversationResponseHistoryReader` and workspace context preparation.
