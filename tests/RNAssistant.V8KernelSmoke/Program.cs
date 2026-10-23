@@ -82,6 +82,7 @@ internal static class Program
             new string[0], new[] { new ConversationResultClaim("x", new string[0], ConversationAssessment.Unverified) }, null).Code == "unknown_evidence", "old-run claim rejected");
         PromptSmoke();
         KernelSmoke();
+        SteerSmoke();
     }
 
     private static void PromptSmoke()
@@ -222,13 +223,83 @@ internal static class Program
     { return AgentModelResult.Accepted(new AgentResponseDraft(ConversationResponse.ReflectionAction,
         "Consider next step.", "", decision: "Read before acting."), "attempt_reflection"); }
 
+    private static void SteerSmoke()
+    {
+        var lateInput = new SteeringInput();
+        var lateModel = new QueueModel(new[] {
+            AgentModelResult.Accepted(new AgentResponseDraft(ConversationResponse.ExecuteAction,
+                "Read stale source.", "", calls: new[] { new ToolCallDraft(Tool, "{}") }), "attempt_stale"),
+            AgentModelResult.Accepted(new AgentResponseDraft(ConversationResponse.FinishAction,
+                "Answer revised request.", "done", results: new ConversationResultClaim[0]), "attempt_revised") });
+        lateModel.BeforeSend = (request, token) => {
+            if (request.StepId == "run_steer_late:1") lateInput.Add("Do not read the source.");
+        };
+        var lateTools = new OneTool();
+        var late = new AgentKernel(lateModel, lateTools, new KernelStore(), input: lateInput)
+            .RunAsync(new AgentRunRequest("run_steer_late", "run_steer_late", "Read source.",
+                new AgentRunLimits(4, 2)), CancellationToken.None).GetAwaiter().GetResult();
+        Expect(late.Summary.Lifecycle == RunLifecycle.Completed && lateTools.Executions == 0 &&
+            lateModel.Requests[1].AcceptedMessages.Any(item => item.Kind == AgentMessageKind.User &&
+                item.Text == "Do not read the source."),
+            "steer discards stale execute before dispatch");
+
+        var batchInput = new SteeringInput();
+        var batchStore = new KernelStore();
+        var batchTools = new OneTool { OnExecute = context => batchInput.Add("Use only the first read.") };
+        var batchModel = new QueueModel(new[] {
+            AgentModelResult.Accepted(new AgentResponseDraft(ConversationResponse.ExecuteAction,
+                "Read two independent sources.", "", calls: new[] {
+                    new ToolCallDraft(Tool, "{}"), new ToolCallDraft(Tool, "{\"x\":2}") }), "attempt_batch"),
+            AgentModelResult.Accepted(new AgentResponseDraft(ConversationResponse.FinishAction,
+                "Report first result.", "done", results: new[] {
+                    new ConversationResultClaim("First read is available.",
+                        new[] { "call_steer_1" }, ConversationAssessment.Satisfied) }), "attempt_after_steer") });
+        var nextCall = 0;
+        var batch = new AgentKernel(batchModel, batchTools, batchStore,
+            newCallId: () => "call_steer_" + ++nextCall, input: batchInput)
+            .RunAsync(new AgentRunRequest("run_steer_batch", "run_steer_batch", "Read both.",
+                new AgentRunLimits(4, 3)), CancellationToken.None).GetAwaiter().GetResult();
+        var afterSteer = batchModel.Requests[1].AcceptedMessages;
+        Expect(batch.Summary.Lifecycle == RunLifecycle.Completed && batchTools.Executions == 1 &&
+            batch.Summary.ToolCounts.ReadOk == 1 &&
+            batchStore.Events.Any(item => item.Kind == AgentRunEventKind.ToolCompleted &&
+                item.Execution.Context.Call.Id == "call_steer_2" &&
+                item.Execution.Outcome == ToolExecutionOutcome.NotDispatched) &&
+            afterSteer.Any(item => item.Kind == AgentMessageKind.User && item.Text == "Use only the first read.") &&
+            afterSteer.Any(item => item.Kind == AgentMessageKind.ToolResult &&
+                item.ToolCallId == "call_steer_1") &&
+            afterSteer.Any(item => item.Kind == AgentMessageKind.ToolResult &&
+                item.ToolCallId == "call_steer_2"),
+            "steer closes batch and retains exact terminal IDs for finish");
+    }
+
+    private sealed class SteeringInput : IRunInputChannel
+    {
+        private CancellationTokenSource _signal = new CancellationTokenSource();
+        private readonly List<AgentMessage> _pending = new List<AgentMessage>();
+        public CancellationToken InterruptToken { get { return _signal.Token; } }
+        public bool HasPendingInput { get { return _pending.Count != 0; } }
+        internal void Add(string text) { _pending.Add(AgentMessage.User(text)); _signal.Cancel(); }
+        public Task<IReadOnlyList<AgentMessage>> TakeInputAsync(CancellationToken token)
+        {
+            var messages = _pending.ToArray(); _pending.Clear();
+            _signal.Dispose(); _signal = new CancellationTokenSource();
+            return Task.FromResult<IReadOnlyList<AgentMessage>>(messages);
+        }
+        public bool TryCloseInput() { return !HasPendingInput; }
+    }
+
     private sealed class QueueModel : IModelProtocol
     {
         private readonly Queue<AgentModelResult> _items;
         internal readonly List<string> Feedback = new List<string>();
+        internal readonly List<AgentModelRequest> Requests = new List<AgentModelRequest>();
+        internal Action<AgentModelRequest, CancellationToken> BeforeSend;
         internal QueueModel(IEnumerable<AgentModelResult> items) { _items = new Queue<AgentModelResult>(items); }
         public Task<AgentModelResult> SendAsync(AgentModelRequest request, CancellationToken token)
         {
+            Requests.Add(request);
+            if (BeforeSend != null) BeforeSend(request, token);
             Feedback.Add(request.CompletionFeedback ?? "");
             var next = _items.Dequeue();
             if (next == null) throw new OperationCanceledException();
@@ -244,11 +315,13 @@ internal static class Program
     private sealed class OneTool : IToolRuntime
     {
         internal int Executions;
+        internal Action<ToolExecutionContext> OnExecute;
         public ToolPolicySnapshot Describe(ToolCall call)
         { return new ToolPolicySnapshot("test.read", "rev1", false, independentLocalRead: true); }
         public Task<ToolExecutionRecord> ExecuteAsync(ToolExecutionContext context, CancellationToken token)
         {
             Executions++;
+            if (OnExecute != null) OnExecute(context);
             return Task.FromResult(new ToolExecutionRecord(context, ToolExecutionOutcome.Ok,
                 DateTime.UtcNow, "ok", result: ToolResult.Ok("ok", "{}")));
         }

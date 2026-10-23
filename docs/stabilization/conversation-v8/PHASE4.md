@@ -27,8 +27,9 @@ an irreparable obstacle without reporting success or replaying a tool.
 ## Host-neutral checks
 
 - `sh tests/RNAssistant.V8KernelSmoke/run.sh`: source-linked production build
-  and 23 focused passing checks, including format-7 read-only policy and
-  finish-claim projection/serialization.
+  and 25 focused passing checks, including format-7 read-only policy,
+  finish-claim projection/serialization, stale-response discard on steer and
+  closure of a steered read batch with exact terminal IDs.
 - `node tests/web/run-view-state.test.js`: 7/7, including immutable model
   results, a visible partial outcome and no card for an ordinary answer.
 - `dotnet build src/RNAssistant.Cli/RNAssistant.Cli.csproj --no-restore`:
@@ -47,7 +48,7 @@ an irreparable obstacle without reporting success or replaying a tool.
   finishes with both terminal IDs, without replaying the first write.
 
 The full Harness still has legacy v7 fixtures and cannot compile as a whole.
-The original phase-0 fake-Excel premature-finish reproducer and a focused steer/UI
-integration check are not yet migrated. Playwright layout qualification is
+The original phase-0 fake-Excel premature-finish reproducer and Office steer/UI
+integration checks are not yet migrated. Playwright layout qualification is
 unavailable in this worktree (`playwright` module absent); Windows x64 +
 Office x64 + WebView2 and real-model comparisons remain open.
