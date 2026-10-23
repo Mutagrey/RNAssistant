@@ -60,6 +60,8 @@ context; its accepted protocol record retains the decision and attempt origin
 as model history. Ordinary completed answers need no service card; partial,
 unverified and unsatisfied claims receive a separate notice. The run journal
 retains the exact accepted wire and tool-result correlation.
+Model-context replay sanitizes runtime identifiers from accepted `reason` and
+`message` without changing literal text in `tool_calls.arguments`.
 
 Workspace project/plugin chat also presents accepted finish claims and exact
 evidence IDs as model assessments. It shows reflection decisions as saved steps;

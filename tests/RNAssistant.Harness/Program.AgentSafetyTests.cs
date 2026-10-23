@@ -2021,13 +2021,24 @@ namespace RNAssistant.Harness
                         Arguments = new Dictionary<string, object>()
                     },
                     "Inspecting " + genericReference.Uri + ".",
-                    "Find the requested resource.",
+                    "Find " + genericReference.Uri + " with a semantic target.",
                     null,
                     ToolResultRoles.User,
                     FixtureCallOrigin()));
             AssertTrue(acceptedProjection.Content.IndexOf(
                     genericReference.Uri, StringComparison.Ordinal) < 0,
-                "accepted assistant prose cannot replay an exact resource reference");
+                "accepted v8 reason and message cannot replay an exact resource reference");
+            var literalCall = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall
+            {
+                Id = "source_literal", Name = "files.create",
+                Arguments = new Dictionary<string, object> { { "relativePath", "note.txt" },
+                    { "text", genericReference.Uri } }
+            }, "Store the supplied literal.", "Keep source bytes exact.", null,
+                ToolResultRoles.User, FixtureCallOrigin());
+            var literalProjection = ModelToolResultProjection.Project(literalCall);
+            AssertEqual(genericReference.Uri,
+                (string)JObject.Parse(literalProjection.Content)["tool_calls"][0]["arguments"]["text"],
+                "v8 projection preserves a URI-shaped literal inside exact tool arguments");
 
             var oldHtmlMessage = "HTML workspace file saved: index.html. Current files (1): index.html." +
                 " Source SHA-256: " + runtimeHash + ". Continue from this saved state.";
@@ -2097,8 +2108,12 @@ namespace RNAssistant.Harness
             AssertEqual("Literal " + genericReference.Uri + " " + runtimeHash,
                 (string)replayedEnvelope.SelectToken("tool_calls[0].arguments.query"),
                 "semantic tool arguments keep their exact literal content");
-            AssertEqual(replayCall.Content.Substring(replayCall.Content.IndexOf("\"tool_calls\":", StringComparison.Ordinal)),
-                replayedCall.Content.Substring(replayedCall.Content.IndexOf("\"tool_calls\":", StringComparison.Ordinal)),
+            var rawCallsStart = replayCall.Content.IndexOf("\"tool_calls\":", StringComparison.Ordinal);
+            var replayedCallsStart = replayedCall.Content.IndexOf("\"tool_calls\":", StringComparison.Ordinal);
+            AssertEqual(replayCall.Content.Substring(rawCallsStart,
+                    replayCall.Content.LastIndexOf(",\"message\":", StringComparison.Ordinal) - rawCallsStart),
+                replayedCall.Content.Substring(replayedCallsStart,
+                    replayedCall.Content.LastIndexOf(",\"message\":", StringComparison.Ordinal) - replayedCallsStart),
                 "model projection does not rewrite accepted call arguments");
 
             var malformedGeneric = AgentJsonProtocol.CreateToolResultMessage(
