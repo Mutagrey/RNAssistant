@@ -414,16 +414,16 @@ async function serve() {
     assert.equal(await normal.locator('#projectChatSearch').inputValue(), '', 'Escape clears project search');
     await normal.locator('#projectChatTree [data-tree-key="project:preview-data-workspace"] > .navigation-tree-row > .navigation-tree-label').click();
     await normal.locator("#projectChatTitle").getByText("Подготовка отчёта").waitFor();
-    assert.equal(await normal.locator("#projectChatMessages .chat-empty-suggestion").count(), 3,
+    assert.equal(await normal.locator("#messages .chat-empty-suggestion").count(), 3,
       'project chat uses the three shared empty-state suggestions');
-    assert.equal(await normal.locator("#projectChatMessages .chat-empty-mark svg").evaluate(svg => svg.outerHTML),
+    assert.equal(await normal.locator("#messages .chat-empty-mark svg").evaluate(svg => svg.outerHTML),
       await normal.evaluate(() => renderChatEmptyState().querySelector(".chat-empty-mark svg").outerHTML),
       'project chat uses the exact Office empty-state icon');
-    assert.equal(await normal.locator("#projectChatMessages .chat-empty-suggestion svg").count(), 0,
+    assert.equal(await normal.locator("#messages .chat-empty-suggestion svg").count(), 0,
       'project suggestion buttons keep the Office chip style without a chart icon');
     assert.equal(await normal.locator('#projectChatOpenData').count(), 0,
       'project chat no longer repeats the Data Templates button');
-    await normal.locator("#projectChatMessages .chat-empty-suggestion").first().click();
+    await normal.locator("#messages .chat-empty-suggestion").first().click();
     assert.match(await normal.locator("#projectChatInput").inputValue(), /Сравни сентябрь с августом/);
     await normal.locator("#projectChatInput").fill("");
     await normal.locator('#projectChatForm .composer-add-trigger').click();
@@ -451,7 +451,7 @@ async function serve() {
     await normal.locator("#projectChatStop").waitFor({ state: "visible" });
     await normal.locator("#projectChatStop").click();
     await normal.waitForFunction(() => document.querySelector("#projectChatNotice").textContent.includes("прервано"));
-    assert.match(await normal.locator("#projectChatMessages").textContent(), /Проверь источники/);
+    assert.match(await normal.locator("#messages").textContent(), /Проверь источники/);
     await normal.locator('#projectChatWorkspaceMenu summary').click();
     await normal.locator('#projectChatConnect').click();
     await normal.locator('#projectChatConnectionPath').fill('C:\\Projects\\Archive');
@@ -511,7 +511,7 @@ async function serve() {
     const drawnIcons = await normal.evaluate(() => send('getPluginIcons', {}));
     assert.equal(drawnIcons.items.length, 1, 'preview saves a simulated drawing immediately');
     await normal.locator('#pluginCreateSubmit').click();
-    await normal.locator('#projectChatMessages .message.assistant').getByText('Изменение исходников смоделировано в preview. Файлы плагина не менялись.', { exact: true }).waitFor();
+    await normal.locator('#messages .message.assistant').getByText('Изменение исходников смоделировано в preview. Файлы плагина не менялись.', { exact: true }).waitFor();
     assert.match(await normal.locator('#pluginSource').textContent(), /plugin-workspaces[\\/]Сводка продаж-/, 'preview uses the default source folder');
     await normal.locator('#pluginPreview').click();
     await normal.frameLocator('#pluginPreviewMount iframe').getByRole('heading', { name: 'Сводка продаж' }).waitFor();

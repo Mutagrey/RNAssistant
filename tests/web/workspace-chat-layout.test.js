@@ -40,6 +40,19 @@ fs.mkdirSync(captures, {recursive:true});
         messages:styles(document.querySelector(list))};
     },[form,list]);
     const office = await dimensions('#chatForm','#messages');
+    const transcriptIdentity = await page.evaluate(() => {
+      const list = document.querySelector('#messages'); list.dataset.testIdentity = crypto.randomUUID();
+      return list.dataset.testIdentity;
+    });
+    await page.evaluate(() => {
+      state.messages = Array.from({length:30}, (_,index) => ({Id:'office-scroll-'+index,
+        Role:'user', Content:'Сообщение Office '+index+' — '+('Проверка прокрутки. '.repeat(8))}));
+      state.messageStartIndex = 0; state.messageTotalCount = state.messages.length;
+      renderMessages({fullReset:true,forceScroll:true});
+      const list = document.querySelector('#messages');
+      list.scrollTop = Math.floor((list.scrollHeight-list.clientHeight)/3);
+      list.dispatchEvent(new Event('scroll'));
+    });
     const toggleMetrics = selector => page.locator(selector).evaluate(node => {
       const css=getComputedStyle(node),svg=node.querySelector('svg');
       return [node.tagName,css.width,css.height,css.borderRadius,css.color,css.backgroundColor,
@@ -73,9 +86,37 @@ fs.mkdirSync(captures, {recursive:true});
         return result;
       };
     });
+    const officeScroll = await page.evaluate(() => {
+      const list = document.querySelector('#messages');
+      list.scrollTop = Math.floor((list.scrollHeight-list.clientHeight)/3);
+      list.dispatchEvent(new Event('scroll'));
+      const top = list.scrollTop;
+      RNAssistantProjectChats.setScope('projects');
+      return {top:top,viewport:suspendedOfficeTranscript.viewport};
+    });
+    assert.ok(officeScroll.top>0,'Office transcript is scrolled before navigation');
+    await page.locator('#messages .message.user').first().waitFor();
+    assert.deepEqual(await page.evaluate(() => [document.querySelectorAll('#messages').length,
+      document.querySelector('#messages').parentElement.id, document.querySelector('#messages').dataset.testIdentity]),
+      [1,'workspaceChatTranscriptMount',transcriptIdentity],'project mounts the same physical transcript');
+    const projectTranscript = await page.locator('#messages').textContent();
+    await page.evaluate(() => { renderMessages({fullReset:true}); renderStreamingMessages(true); });
+    assert.equal(await page.locator('#messages').textContent(),projectTranscript,
+      'background Office render cannot replace the project transcript');
+    assert.deepEqual(await dimensions('#projectChatForm','#messages'), office, 'workspace uses the same message/composer metrics');
+    await page.evaluate(() => RNAssistantProjectChats.setScope('office'));
+    await page.locator('#messages .message.user').first().waitFor();
+    assert.deepEqual(await page.evaluate(() => [document.querySelector('#messages').parentElement.id,
+      document.querySelector('#messages').dataset.testIdentity]), ['officeChatTranscriptMount',transcriptIdentity],
+      'return to Office restores its history in the same transcript');
+    const restoredOfficeAnchor = await page.evaluate(key => {
+      const list=document.querySelector('#messages'),unit=renderedMessageUnits[key];
+      return unit&&unit.node.parentNode===list ? unit.node.getBoundingClientRect().top-list.getBoundingClientRect().top : null;
+    },officeScroll.viewport.key);
+    assert.ok(restoredOfficeAnchor!==null && Math.abs(restoredOfficeAnchor-officeScroll.viewport.offset)<4,
+      'return to Office restores the anchored reading position');
     await page.evaluate(() => RNAssistantProjectChats.setScope('projects'));
-    await page.locator('#projectChatMessages .message.user').waitFor();
-    assert.deepEqual(await dimensions('#projectChatForm','#projectChatMessages'), office, 'workspace uses the same message/composer metrics');
+    await page.locator('#messages .message.user').first().waitFor();
     await page.screenshot({animations:'disabled',path:path.join(captures,'chat-workspace.png')});
     await page.locator('#projectChatInput').fill('Черновик рабочего проекта');
     await page.locator('#projectChatTree [data-tree-key="project:preview-plan-workspace"] > .navigation-tree-row > .navigation-tree-label').click();
@@ -99,10 +140,13 @@ fs.mkdirSync(captures, {recursive:true});
     await pluginToggle.press('Enter');
     assert.equal(await pluginToggle.getAttribute('aria-expanded'),'true','Enter opens the right panel once');
     await page.waitForFunction(() => RNAssistantWorkspaceChat.owner()==='plugin' && document.querySelector('#workspaceChatView').parentElement.id==='pluginChat');
-    await page.locator('#projectChatMessages .message.user').waitFor();
+    await page.locator('#messages .message.user').first().waitFor();
+    assert.deepEqual(await page.evaluate(() => [document.querySelector('#messages').parentElement.id,
+      document.querySelector('#messages').dataset.testIdentity]), ['workspaceChatTranscriptMount',transcriptIdentity],
+      'plugin mounts the same physical transcript');
     await page.frameLocator('#pluginPreviewMount iframe').locator('#dtViewSources h3').waitFor({state:'visible'});
     await page.waitForFunction(() => !document.querySelector('.shell').classList.contains('navigation-transition'));
-    assert.deepEqual(await dimensions('#projectChatForm','#projectChatMessages'), office, 'plugin uses the same message/composer metrics');
+    assert.deepEqual(await dimensions('#projectChatForm','#messages'), office, 'plugin uses the same message/composer metrics');
     const pluginTitleInset = () => page.locator('#pluginChatTitle').evaluate(node => node.getBoundingClientRect().left-node.parentElement.getBoundingClientRect().left);
     assert.equal(await pluginTitleInset(),12,'nested chat header has no navigation-toggle reservation on desktop');
     await page.locator('.plugin-toolbar').screenshot({animations:'disabled',path:path.join(captures,'plugin-panel-open.png')});
@@ -137,7 +181,7 @@ fs.mkdirSync(captures, {recursive:true});
     assert.equal(await pluginToggle.getAttribute('aria-expanded'),'true','Space opens the right panel once');
     await page.locator('#productMobileMenuButton').click();
     await page.waitForFunction(() => !document.querySelector('.shell').classList.contains('navigation-transition'));
-    const history=page.locator('#projectChatMessages .agent-run-history');
+    const history=page.locator('#messages .agent-run-history');
     await history.locator('summary').click();
     await page.locator('#projectChatInput').fill('Черновик плагина');
     await page.locator('#projectChatInput').press('Escape');
@@ -175,12 +219,12 @@ fs.mkdirSync(captures, {recursive:true});
     await page.evaluate(() => {chatTest.fail=false;chatTest.transcript=false;});
     await page.locator('#projectChatInput').fill('Первое обсуждение плагина');
     await page.locator('#projectChatInput').press('Enter');
-    await page.locator('#projectChatMessages').getByText('Изменение исходников смоделировано в preview. Файлы плагина не менялись.',{exact:true}).waitFor();
+    await page.locator('#messages').getByText('Изменение исходников смоделировано в preview. Файлы плагина не менялись.',{exact:true}).waitFor();
     const sourceWorkspace='preview-plugin-workspace';
     const firstSession=await page.evaluate(id=>RNAssistantWorkspaceChat.selectedSession(id),sourceWorkspace);
     await page.locator('#projectChatInput').fill('Неотправленный черновик первой беседы');
     await page.locator('#pluginChatNew').click();
-    await page.locator('#projectChatMessages .chat-empty').waitFor();
+    await page.locator('#messages .chat-empty').waitFor();
     const secondSession=await page.evaluate(id=>RNAssistantWorkspaceChat.selectedSession(id),sourceWorkspace);
     assert.notEqual(secondSession,firstSession,'plus creates a separate workspace session');
     assert.equal(await page.locator('#projectChatInput').inputValue(),'','new chat starts with an empty draft');
@@ -199,25 +243,25 @@ fs.mkdirSync(captures, {recursive:true});
     await page.locator('#pluginChatHistoryList > button').first().waitFor();
     assert.equal(await page.locator('#pluginChatHistoryList > button').count(),2,'history remains available during a run');
     await page.evaluate(([workspace,session])=>RNAssistantProjectChats.open(workspace,session),[sourceWorkspace,secondSession]);
-    await page.locator('#projectChatMessages').getByText('Второе обсуждение плагина',{exact:true}).waitFor();
+    await page.locator('#messages').getByText('Второе обсуждение плагина',{exact:true}).waitFor();
     const sourceTree=page.locator('[data-tree-key="project:'+sourceWorkspace+'"]');
     await page.waitForFunction(workspace=>document.querySelectorAll('[data-tree-key^="project-chat:'+workspace+':"]').length===2,sourceWorkspace);
     assert.equal(await sourceTree.locator('[data-tree-key^="project-chat:"]').count(),2,'main tree lists both source chats');
     await page.screenshot({animations:'disabled',path:path.join(captures,'plugin-chat-history.png')});
     const firstRow=page.locator('[data-tree-key="project-chat:'+sourceWorkspace+':'+firstSession+'"]');
     await firstRow.locator('> .navigation-tree-row > .navigation-tree-label').click();
-    await page.locator('#projectChatMessages').getByText('Первое обсуждение плагина',{exact:true}).waitFor();
-    assert.equal(await page.locator('#projectChatMessages').getByText('Второе обсуждение плагина',{exact:true}).count(),0,'older chat has its own history');
+    await page.locator('#messages').getByText('Первое обсуждение плагина',{exact:true}).waitFor();
+    assert.equal(await page.locator('#messages').getByText('Второе обсуждение плагина',{exact:true}).count(),0,'older chat has its own history');
     await page.evaluate(() => {chatTest.hold=false;chatTest.release();});
     assert.equal(await page.evaluate(id=>RNAssistantWorkspaceChat.selectedSession(id),sourceWorkspace),firstSession,'late reply cannot replace the selected history session');
     await firstRow.hover();
     await firstRow.getByRole('button',{name:'Открыть чат в плагине',exact:true}).click();
-    await page.locator('#projectChatMessages').getByText('Первое обсуждение плагина',{exact:true}).waitFor();
+    await page.locator('#messages').getByText('Первое обсуждение плагина',{exact:true}).waitFor();
     assert.equal(await page.locator('#projectChatInput').inputValue(),'Неотправленный черновик первой беседы','returning to a source chat restores its own draft');
     await page.locator('#pluginChatHistory').click();
-    await page.locator('#projectChatMessages').getByText('Первое обсуждение плагина',{exact:true}).waitFor();
+    await page.locator('#messages').getByText('Первое обсуждение плагина',{exact:true}).waitFor();
     await page.locator('[data-plugin-id="data-templates"]').click();
-    await page.locator('#projectChatMessages').getByText('Первое обсуждение плагина',{exact:true}).waitFor();
+    await page.locator('#messages').getByText('Первое обсуждение плагина',{exact:true}).waitFor();
     // Reopening the same session must also restore the transcript after its DOM was cleared.
     await page.mouse.move(680,500);
     await page.locator('[data-plugin-id="data-templates"]').hover();

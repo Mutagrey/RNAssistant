@@ -1,12 +1,27 @@
 (function () {
   "use strict";
   var selectedSessions = new Map();
-  var activeOwner = "project", sharedComposer = null;
+  var activeOwner = "office", sharedComposer = null;
   function mount(owner, container) {
     var view = document.getElementById("workspaceChatView");
-    if (!view || !container || (owner !== "project" && owner !== "plugin")) return;
-    if (view.parentNode !== container) container.appendChild(view);
+    var list = document.getElementById("messages");
+    if (!view || !list || (owner !== "office" && owner !== "project" && owner !== "plugin")) return false;
+    if (owner !== "office" && !container) return false;
+    var changed = activeOwner !== owner;
+    if (activeOwner === "office" && owner !== "office") {
+      suspendOfficeTranscript();
+      list._chatSignature = null;
+      delete list.dataset.session;
+    }
+    var transcriptMount = document.getElementById(owner === "office" ? "officeChatTranscriptMount" : "workspaceChatTranscriptMount");
+    if (list.parentNode !== transcriptMount) {
+      if (owner === "office") transcriptMount.insertBefore(list, document.getElementById("chatScrollBottomButton"));
+      else transcriptMount.appendChild(list);
+      changed = true;
+    }
     activeOwner = owner;
+    if (owner === "office") { list.setAttribute("aria-label", "Сообщения чата"); return changed; }
+    if (view.parentNode !== container) container.appendChild(view);
     var plugin = owner === "plugin";
     view.dataset.owner = owner;
     view.classList.toggle("chat-main", !plugin);
@@ -22,8 +37,9 @@
     var input = document.getElementById("projectChatInput");
     input.placeholder = plugin ? "Опишите изменение плагина" : "Спросите о проекте…";
     input.setAttribute("aria-label", plugin ? "Сообщение в чат исходников" : "Сообщение в чат проекта");
-    document.getElementById("projectChatMessages").setAttribute("aria-label", plugin ? "Сообщения чата исходников" : "Сообщения чата проекта");
+    list.setAttribute("aria-label", plugin ? "Сообщения чата исходников" : "Сообщения чата проекта");
     if (sharedComposer) sharedComposer.refresh();
+    return changed;
   }
   function rememberSession(workspaceId, sessionId) {
     if (!workspaceId) return;
@@ -235,7 +251,7 @@
     return stop;
   }
   window.RNAssistantWorkspaceChat = { renderMessages: renderMessages, renderQuestions: renderQuestions, bindComposer: bindComposer,
-    mount: mount, owner: function () { return activeOwner; },
+    mount: mount, owner: function () { return activeOwner; }, messages: function () { return document.getElementById("messages"); },
     rememberSession: rememberSession, selectedSession: function (workspaceId) { return selectedSessions.get(workspaceId); },
     watchTitle: watchTitle };
 }());

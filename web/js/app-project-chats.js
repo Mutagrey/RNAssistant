@@ -4,7 +4,7 @@
   var composer = null, uploadingFiles = false;
   var selectedWorkspaceId = null, expanded = {}, query = "", connectionMode = "connect";
   var noticeText = "", noticeError = false, fileNotice = null;
-  function el(id) { return document.getElementById("projectChat" + id); }
+  function el(id) { return id === "Messages" ? window.RNAssistantWorkspaceChat.messages() : document.getElementById("projectChat" + id); }
   function ownsView() { return window.RNAssistantWorkspaceChat.owner() === "project"; }
   function node(tag, className, text) {
     var result = document.createElement(tag);
@@ -322,11 +322,13 @@
   }
   function setScope(next, target) {
     scope = next; ++serial;
+    if (next === "projects") window.RNAssistantWorkspaceChat.mount("project", el("Layout"));
     document.getElementById("chatLayout").hidden = next === "projects";
     el("Layout").hidden = next !== "projects";
     if (next === "projects") {
-      window.RNAssistantWorkspaceChat.mount("project", el("Layout"));
       render();
+    } else if (window.RNAssistantWorkspaceChat.mount("office")) {
+      resumeOfficeTranscript();
     }
     document.querySelectorAll(".chat-scope-switcher").forEach(function (picker) { picker.open = false; });
     var loaded;
@@ -336,7 +338,7 @@
     return loaded;
   }
   function bind() {
-    window.RNAssistantWorkspaceChat.mount("project", el("Layout"));
+    window.RNAssistantWorkspaceChat.mount("office");
     composer = window.RNAssistantWorkspaceChat.bindComposer(el("Form"), {
       fileTarget: function () { return { workspaceId: projectId(), sessionId: currentId() }; },
       onFiles: addProjectFiles
@@ -431,6 +433,9 @@
     render();
   }
   document.addEventListener("DOMContentLoaded", bind);
-  window.RNAssistantProjectChats = { show: function () { if (scope === "projects") { window.RNAssistantWorkspaceChat.mount("project", el("Layout")); render(); refresh(); } }, scope: function () { return scope; }, setScope: setScope,
+  window.RNAssistantProjectChats = { show: function () {
+    if (scope === "projects") { window.RNAssistantWorkspaceChat.mount("project", el("Layout")); render(); refresh(); }
+    else if (window.RNAssistantWorkspaceChat.mount("office")) resumeOfficeTranscript();
+  }, scope: function () { return scope; }, setScope: setScope,
     open: function (workspaceId, sessionId) { switchTab("chat"); return setScope("projects", { workspaceId: workspaceId, sessionId: sessionId }); } };
 }());

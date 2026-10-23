@@ -22,7 +22,7 @@ gates; active tool compatibility adapter отсутствует. Windows/Office 
 
 | Temporary seam | Owner / current consumers | Removal gate |
 |---|---|---|
-| Plugin chat IDs mapped to the single `projectChat*` DOM in `app-plugins.js` | Web chat UI; project and plugin controllers mount one workspace transcript/composer through `app-workspace-chat.js`. Their navigation and send adapters still own surface-specific actions. | Introduce owner-neutral ChatView selectors/contracts while incorporating the Office feature set; switch both workspace consumers and Office, remove the ID alias and obsolete project-prefixed shared markup. Preserve history, attachments, approvals, questions, draft identity and late-response isolation in browser checks; qualify Office/WebView2 separately. |
+| Plugin chat IDs mapped to the single `projectChat*` composer/control DOM in `app-plugins.js` | Web chat UI; Office, project and plugin mount one message list through `app-workspace-chat.js`, while project/plugin share a workspace composer and Office retains a separate richer composer. Their navigation and send adapters own surface-specific actions. | Introduce owner-neutral ChatView selectors/contracts and one composer while preserving the Office feature set; remove the ID alias and obsolete project-prefixed shared markup. Preserve history, attachments, approvals, questions, draft identity and late-response isolation in browser checks; qualify Office/WebView2 separately. |
 
 ## Historical structural `records` view — 2026-10-21
 

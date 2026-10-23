@@ -9,6 +9,10 @@ var renderedLiveRunPastSteps = {};
 var chatScrollFollowing = true;
 var chatScrollInteraction = 0;
 var chatScrollPosition = 0;
+var suspendedOfficeTranscript = null;
+function officeTranscriptActive() {
+  return !window.RNAssistantWorkspaceChat || window.RNAssistantWorkspaceChat.owner() === "office";
+}
 
 function resetRenderedMessageUnits(box) {
   if (typeof resetMessageMediaThumbnails === "function") resetMessageMediaThumbnails();
@@ -53,6 +57,7 @@ function shouldFollowChatScroll(box) {
 }
 
 function updateChatScrollButton() {
+  if (!officeTranscriptActive()) return;
   var box = $("messages");
   var button = $("chatScrollBottomButton");
   if (!box || !button) {
@@ -67,6 +72,7 @@ function updateChatScrollButton() {
 }
 
 function scrollMessagesToBottom(smooth) {
+  if (!officeTranscriptActive()) return;
   var box = $("messages");
   if (!box) {
     return;
@@ -105,6 +111,7 @@ function bindMessageScrollControls() {
   var button = $("chatScrollBottomButton");
   if (box) {
     box.addEventListener("scroll", function () {
+      if (!officeTranscriptActive()) return;
       if (box.scrollTop !== chatScrollPosition) {
         chatScrollInteraction += 1;
         shouldFollowChatScroll(box);
@@ -113,6 +120,7 @@ function bindMessageScrollControls() {
       updateChatScrollButton();
     }, { passive: true });
     function interrupt(upward) {
+      if (!officeTranscriptActive()) return;
       chatScrollInteraction += 1;
       if (upward) chatScrollFollowing = false;
     }
@@ -174,6 +182,25 @@ function restoreMessageViewport(box, snapshot) {
     box.scrollTop += unit.node.getBoundingClientRect().top - box.getBoundingClientRect().top - snapshot.offset;
   } else box.scrollTop = snapshot.top;
   chatScrollPosition = box.scrollTop;
+}
+
+function suspendOfficeTranscript() {
+  var box = $("messages");
+  var visible = box.getBoundingClientRect().height > 0;
+  suspendedOfficeTranscript = { chatId: state.activeChatId, following: chatScrollFollowing,
+    viewport: visible ? captureMessageViewport(box) : { top: chatScrollPosition } };
+  resetRenderedMessageUnits(box);
+}
+
+function resumeOfficeTranscript() {
+  var saved = suspendedOfficeTranscript;
+  suspendedOfficeTranscript = null;
+  renderMessages({ fullReset: true, forceScroll: true });
+  if (saved && saved.chatId === state.activeChatId && !saved.following) {
+    restoreMessageViewport($("messages"), saved.viewport);
+    chatScrollFollowing = false;
+    updateChatScrollButton();
+  }
 }
 
 function messageUsageText(message) {
@@ -940,6 +967,7 @@ function scheduleLiveStreamRender(fullProjection) {
 
 function renderStreamingMessages(outputOnly) {
   if (typeof isPanelActive === "function" && !isPanelActive("chat")) return;
+  if (!officeTranscriptActive()) return;
   var live = renderedMessageUnits["live:agent-run"];
   if (renderedMessagesChatId !== state.activeChatId || !live && !Object.keys(renderedMessageUnits).length) {
     renderMessages();
@@ -962,6 +990,7 @@ function renderStreamingMessages(outputOnly) {
 
 function renderMessages(options) {
   if (typeof isPanelActive === "function" && !isPanelActive("chat")) return;
+  if (!officeTranscriptActive()) return;
   options = options || {};
   if (window.RNAssistantArtifactCatalog) window.RNAssistantArtifactCatalog.sync();
   var box = $("messages");

@@ -12,6 +12,18 @@ Focused Harness/Web checks pass host-neutral. Windows/Office/WebView2 remain
 unqualified; view-specific cost, live availability and transformation provenance
 remain open in BACKLOG.
 
+## Unified Shell single transcript (1b continuation) — 2026-10-23
+
+Owner: application/chat UI. Office, Project and Plugin now mount one physical
+message list. Returning to Office rebuilds its history and restores the reading
+anchor; its renderer keeps paging and live output. Background Office updates
+cannot replace a mounted workspace transcript. Project/plugin retain their
+shared composer, while Office still has its richer separate composer and controls.
+Focused Chrome chat layout, plugin,
+product preview and Office transcript/delivery checks pass. The remaining 1b
+composer/view-controller consolidation and Windows/Office/WebView2 qualification
+are open.
+
 ## Unified Shell Office draft acknowledgement (1b continuation) — 2026-10-23
 
 Owner: application/chat UI. Office and workspace drafts now use the same in-memory

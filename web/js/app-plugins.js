@@ -8,9 +8,10 @@
   var frameReady=false,pendingNavigation=null;
   var browsingRelease=null,publishedSourceStamps=Object.create(null),versionCursor=null,versionEpoch=0;
   var navigation={projectName:'Проект данных',view:'sources',templateId:'',templates:[],expanded:{project:true,templates:true,dictionary:true}};
-  var sharedChatIds={ChatMessages:'Messages',Message:'Input',ChatForm:'Form',Send:'Send',Stop:'Stop',
+  var sharedChatIds={Message:'Input',ChatForm:'Form',Send:'Send',Stop:'Stop',
     ChatStatus:'Notice',Approval:'Control',ApprovalText:'Pending',Approve:'Approve',Reject:'Reject',Questions:'Questions'};
-  function el(id){return document.getElementById((sharedChatIds[id]?'projectChat':'plugin')+(sharedChatIds[id]||id));}
+  function el(id){return id==='ChatMessages' ? window.RNAssistantWorkspaceChat.messages() :
+    document.getElementById((sharedChatIds[id]?'projectChat':'plugin')+(sharedChatIds[id]||id));}
   function ownsChat(){return window.RNAssistantWorkspaceChat.owner()==='plugin';}
   function chatStatus(text){if(ownsChat())el('ChatStatus').textContent=text||'';}
   var statusTimer=null;
