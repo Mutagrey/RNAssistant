@@ -2622,12 +2622,16 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     LoadToolSchemaResponse("excel.add_sheet"),
-                    "{\"message\":\"Создаю первый лист.\",\"action\":\"tool\",\"tool_calls\":[" +
-                    "{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"First\"}}]}",
-                    "{\"message\":\"Первый лист создан; создаю второй.\",\"action\":\"tool\",\"tool_calls\":[" +
-                    "{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Second\"}}]}",
-                    "{\"message\":\"Оба листа созданы.\",\"action\":\"done\",\"tool_calls\":[]}"
+                    ModelProtocolWire.WriteAcceptedCall("Create the first sheet.", "Создаю первый лист.",
+                        new ConversationToolCall { Name = "excel.add_sheet",
+                            Arguments = new JObject { ["name"] = "First" } }),
+                    ModelProtocolWire.WriteAcceptedCall("Create the second sheet.",
+                        "Первый лист создан; создаю второй.",
+                        new ConversationToolCall { Name = "excel.add_sheet",
+                            Arguments = new JObject { ["name"] = "Second" } }),
+                    null
                 });
+                var session = NewSession(adapter);
                 IReadOnlyList<ChatMessage> beforeSecondWrite = null;
                 IReadOnlyList<ChatMessage> finalRequest = null;
                 var progressActivities = new List<ChatActivity>();
@@ -2637,9 +2641,11 @@ namespace RNAssistant.Harness
                     callCount += 1;
                     if (callCount == 3) beforeSecondWrite = messages.ToList();
                     if (callCount == 4) finalRequest = messages.ToList();
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    var response = responses.Dequeue() ?? ScriptedVerifiedFinish(session,
+                        "Both sheet writes have terminal results.", "Оба листа созданы.",
+                        "The two requested sheets were created.", "excel.add_sheet", "excel.add_sheet");
+                    return Task.FromResult(new LlmCompletionResult { Content = response });
                 };
-                var session = NewSession(adapter);
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
                     "Создай листы First и Second.", session, NewContext(adapter),
@@ -2669,6 +2675,8 @@ namespace RNAssistant.Harness
                 AssertEqual(2, activities.Count, "two visible tool activities");
                 var executedIds = activities.Select(activity => activity.ToolCallId).ToArray();
                 AssertEqual(2, executedIds.Distinct().Count(), "separate writes receive different runtime IDs");
+                AssertEqual(2, result.RunViewState.ModelResults.Single().Evidence.Count,
+                    "finish cites both distinct accepted sheet writes");
                 AssertContains(replay, "Added sheet: First", "first committed mutation is folded into model history");
                 AssertContains(replay, "Added sheet: Second", "second committed mutation is folded into model history");
                 AssertTrue(!string.IsNullOrWhiteSpace(activities[0].StepId), "model step id stored");
