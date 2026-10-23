@@ -80,7 +80,7 @@ const root = path.resolve(__dirname, '../..');
     });
     await page.locator('#chatInput').fill('Тот же текст');
     await page.locator('#chatInput').press('Enter');
-    await page.locator('#projectChatNotice').getByText('Expected transport failure').waitFor();
+    await page.locator('#workspaceChatNotice').getByText('Expected transport failure').waitFor();
     assert.equal(await page.locator('#chatInput').inputValue(), 'Тот же текст',
       'failed delivery keeps the draft');
     await page.evaluate(() => {

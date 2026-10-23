@@ -108,6 +108,8 @@ textarea/Send/Stop. Черновик и доступные действия пе
 Office сохраняет history/attachment/edit/queue действия, проект — загрузку
 файлов, плагин — source chat. Обработчики отправки и состояния пока принадлежат
 соответствующим владельцам; единый ChatView controller остаётся этапом 1b.
+Общие workspace status/approval/question controls имеют нейтральные ID и один
+lookup в `app-workspace-chat.js`; временный plugin alias к `projectChat*` удалён.
 Разрозненные простые рендереры сообщений и вопросов в
 `app-plugins.js`/`app-project-chats.js` удалены.
 Разделитель предпросмотра и чата плагина использует общий `.splitter` и

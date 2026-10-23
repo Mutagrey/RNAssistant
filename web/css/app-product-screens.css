@@ -22,16 +22,16 @@
 .shell #tab-chat .project-workspace-connection label { display: grid; gap: 5px; color: var(--ink-muted); font-size: 11px; }
 .shell #tab-chat .project-chat-main .chatbar { flex-shrink: 0; }
 .shell #tab-chat .project-chat-main .chatbar > .icon-btn { flex: 0 0 auto; }
-.shell #tab-chat .project-chat-notice { min-height: 0; padding: 0 20px; color: var(--ink-muted); font-size: 12px; }
-.shell #tab-chat .project-chat-notice:not(:empty) { padding-top: 12px; }
-.shell #tab-chat .project-chat-notice[data-error="true"] { color: var(--danger); }
-.shell #tab-chat .project-chat-control,
-.shell #tab-chat .project-chat-questions { width: calc(100% - 36px); margin: 0 auto 12px; padding: 14px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface-subtle); }
-.shell #tab-chat .project-chat-control pre { overflow-wrap: anywhere; white-space: pre-wrap; }
-.shell #tab-chat .project-chat-control button { margin-right: 8px; }
-.shell #tab-chat .project-chat-questions fieldset { margin: 0 0 10px; border: 0; }
-.shell #tab-chat .project-chat-questions label { display: block; margin: 6px 0; }
-.shell #tab-chat .project-chat-questions textarea { display: block; width: 100%; }
+.shell #tab-chat .workspace-chat-notice { min-height: 0; padding: 0 20px; color: var(--ink-muted); font-size: 12px; }
+.shell #tab-chat .workspace-chat-notice:not(:empty) { padding-top: 12px; }
+.shell #tab-chat .workspace-chat-notice[data-error="true"] { color: var(--danger); }
+.shell #tab-chat .workspace-chat-control,
+.shell #tab-chat .workspace-chat-questions { width: calc(100% - 36px); margin: 0 auto 12px; padding: 14px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface-subtle); }
+.shell #tab-chat .workspace-chat-control pre { overflow-wrap: anywhere; white-space: pre-wrap; }
+.shell #tab-chat .workspace-chat-control button { margin-right: 8px; }
+.shell #tab-chat .workspace-chat-questions fieldset { margin: 0 0 10px; border: 0; }
+.shell #tab-chat .workspace-chat-questions label { display: block; margin: 6px 0; }
+.shell #tab-chat .workspace-chat-questions textarea { display: block; width: 100%; }
 .shell #tab-chat .project-chat-composer .composer-input-wrap { width: 100%; }
 .shell #tab-chat .project-chat-composer textarea { resize: none; }
 .shell #tab-chat .project-chat-context-note { flex: 1; min-width: 0; overflow: hidden; color: var(--ink-muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }

@@ -18,12 +18,6 @@ gates; active tool compatibility adapter отсутствует. Windows/Office 
 проверкой resource-consumer cleanup (2026-09-07). Порядок задаёт
 [Resource MASTER](resource-cutover/MASTER.md), владельцев — [Resource Fabric](../resource-fabric.md).
 
-## Unified Shell workspace ChatView transition — 2026-10-23
-
-| Temporary seam | Owner / current consumers | Removal gate |
-|---|---|---|
-| Plugin status/approval/question IDs mapped to shared `projectChat*` controls in `app-plugins.js` | Web chat UI; Office, project and plugin mount one message list and composer form through `app-workspace-chat.js`. Project/plugin share workspace status, approval and questions; their navigation and send adapters still own surface-specific actions. | Introduce one owner-neutral ChatView controller and selectors, then remove the ID alias and project-prefixed shared control markup. Preserve history, attachments, approvals, questions, draft identity and late-response isolation in browser checks; qualify Office/WebView2 separately. |
-
 ## Historical structural `records` view — 2026-10-21
 
 | Temporary seam | Owner / current consumers | Removal gate |

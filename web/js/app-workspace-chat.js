@@ -2,6 +2,10 @@
   "use strict";
   var selectedSessions = new Map();
   var activeOwner = "office", sharedComposer = null;
+  var viewNodes = { Messages: "messages", Form: "chatForm", Input: "chatInput", Send: "sendButton", Stop: "stopButton",
+    Notice: "workspaceChatNotice", Control: "workspaceChatControl", Pending: "workspaceChatPending",
+    Approve: "workspaceChatApprove", Reject: "workspaceChatReject", Questions: "workspaceChatQuestions" };
+  function node(name) { return viewNodes[name] ? document.getElementById(viewNodes[name]) : null; }
   function mount(owner, container) {
     var view = document.getElementById("workspaceChatView");
     var list = document.getElementById("messages");
@@ -289,7 +293,7 @@
     return stop;
   }
   window.RNAssistantWorkspaceChat = { renderMessages: renderMessages, renderQuestions: renderQuestions, bindComposer: bindComposer,
-    mount: mount, owner: function () { return activeOwner; }, messages: function () { return document.getElementById("messages"); },
+    mount: mount, owner: function () { return activeOwner; }, node: node, messages: function () { return node("Messages"); },
     rememberSession: rememberSession, selectedSession: function (workspaceId) { return selectedSessions.get(workspaceId); },
     watchTitle: watchTitle };
 }());

@@ -17,10 +17,12 @@ Owner: application/chat UI. Office, Project and Plugin now move one physical
 composer form and input with their shared transcript. Owner-scoped handlers keep
 Office edit, attachments and queue/steer, project file upload and plugin source
 chat; switching preserves separate draft identities, and background Office
-rendering cannot overwrite workspace input. Focused Chrome layout, draft,
-delivery, attachment and product-preview checks pass. The separate send/view
-controllers and project-prefixed status/approval/question IDs remain for the
-next 1b cutover. Windows/Office/WebView2 are not qualified.
+rendering cannot overwrite workspace input. Shared workspace status, approval
+and question controls now have owner-neutral IDs and one lookup in
+`app-workspace-chat.js`; the plugin ID alias is removed. Focused Chrome layout,
+draft, delivery, attachment and product-preview checks pass. Separate send/view
+controllers remain for the next 1b cutover. Windows/Office/WebView2 are not
+qualified.
 
 ## Resource Context retained text-body estimates — 2026-10-23
 
@@ -100,10 +102,10 @@ Owner: application/chat UI. Project and Plugin now mount the same transcript,
 composer, status, approval and question DOM. The plugin-specific form and message
 list were removed; both surfaces keep their own navigation and workspace actions.
 Background updates cannot write into the other surface's mounted chat, and source
-history remains available during a run. The current view still uses the project
-DOM IDs through a temporary plugin adapter recorded in
-[MIGRATION_MAP](MIGRATION_MAP.md). Office retains its richer, separate ChatView;
-full 1b consolidation, host-recreation draft recovery and later shell work remain open.
+history remains available during a run. The shared status, approval and question
+controls now use workspace IDs; the temporary plugin ID adapter is removed.
+Office retains its richer actions; full 1b controller consolidation,
+host-recreation draft recovery and later shell work remain open.
 
 Chrome checks pass for shared draft/mount, workspace layout and history navigation,
 plugin preview, product mock and Office input delivery. The screenshots were

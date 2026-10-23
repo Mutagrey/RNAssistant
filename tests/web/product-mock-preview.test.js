@@ -450,7 +450,7 @@ async function serve() {
     await normal.locator("#sendButton").click();
     await normal.locator("#stopButton").waitFor({ state: "visible" });
     await normal.locator("#stopButton").click();
-    await normal.waitForFunction(() => document.querySelector("#projectChatNotice").textContent.includes("прервано"));
+    await normal.waitForFunction(() => document.querySelector("#workspaceChatNotice").textContent.includes("прервано"));
     assert.match(await normal.locator("#messages").textContent(), /Проверь источники/);
     await normal.locator('#projectChatWorkspaceMenu summary').click();
     await normal.locator('#projectChatConnect').click();

@@ -8,12 +8,9 @@
   var frameReady=false,pendingNavigation=null;
   var browsingRelease=null,publishedSourceStamps=Object.create(null),versionCursor=null,versionEpoch=0;
   var navigation={projectName:'Проект данных',view:'sources',templateId:'',templates:[],expanded:{project:true,templates:true,dictionary:true}};
-  var sharedChatIds={ChatStatus:'Notice',Approval:'Control',ApprovalText:'Pending',Approve:'Approve',Reject:'Reject',Questions:'Questions'};
-  var composerIds={Message:'chatInput',ChatForm:'chatForm',Send:'sendButton',Stop:'stopButton'};
-  function el(id){return id==='ChatMessages' ? window.RNAssistantWorkspaceChat.messages() :
-    document.getElementById(composerIds[id]||(sharedChatIds[id]?'projectChat'+sharedChatIds[id]:'plugin'+id));}
+  function el(id){return window.RNAssistantWorkspaceChat.node(id)||document.getElementById('plugin'+id);}
   function ownsChat(){return window.RNAssistantWorkspaceChat.owner()==='plugin';}
-  function chatStatus(text){if(ownsChat())el('ChatStatus').textContent=text||'';}
+  function chatStatus(text){if(ownsChat())el('Notice').textContent=text||'';}
   var statusTimer=null;
   function status(text,error){clearTimeout(statusTimer);el('Status').textContent=text || '';el('Status').setAttribute('role',error?'alert':'status');
     if(text&&!error)statusTimer=setTimeout(function(){el('Status').textContent='';},4500);}
@@ -94,7 +91,7 @@
     if(ownsChat()){
       if(chatComposer)chatComposer.lock(chatBusy||!chat||!!chat.pendingId||!!(chat.state&&(chat.state.Status||chat.state.status)==='running'));
       el('ChatNew').disabled=busy||chatBusy||!selected;el('ChatHistory').disabled=busy||!chat;
-      el('Send').disabled=chatBusy||!selected||!chat||!el('Message').value.trim()||!!(chat&&chat.pendingId)||!!(chat&&chat.state&&(chat.state.Status||chat.state.status)==='running');
+      el('Send').disabled=chatBusy||!selected||!chat||!el('Input').value.trim()||!!(chat&&chat.pendingId)||!!(chat&&chat.state&&(chat.state.Status||chat.state.status)==='running');
     }
     el('CreateSubmit').disabled=busy;}
   async function refresh(){var result=await send('getPlugins',{});items=result.items;var rail=el('Rail');
@@ -131,8 +128,8 @@
     el('Workbench').classList.toggle('plugin-developing',open);
     if(open){window.RNAssistantWorkspaceChat.mount('plugin',el('Chat'));
       if(chat)renderChat();
-      else{chatComposer.select(null);chatComposer.lock(true);el('ChatMessages').replaceChildren();el('ChatMessages')._chatSignature=null;
-        el('ChatTitle').textContent='Чат исходников';el('Stop').hidden=true;el('Approval').hidden=true;
+      else{chatComposer.select(null);chatComposer.lock(true);el('Messages').replaceChildren();el('Messages')._chatSignature=null;
+        el('ChatTitle').textContent='Чат исходников';el('Stop').hidden=true;el('Control').hidden=true;
         window.RNAssistantWorkspaceChat.renderQuestions(el('Questions'),null,function(){});
         el('Send').disabled=true;chatStatus('Загружаю чат…');}
       refreshSplitPanes();}
@@ -143,7 +140,7 @@
     if(sessionId){window.RNAssistantWorkspaceChat.rememberSession(selected.sourceWorkspaceId,sessionId);developmentOpen=true;}
     switchTab('plugins');el('Manager').hidden=true;el('Workbench').hidden=false;el('Title').textContent=dataPlugin()?navigation.projectName:selected.name;el('Source').textContent=selected.sourceRoot;
     el('ChatSource').textContent=selected.sourceRoot;el('ChatSource').title=selected.sourceRoot;
-    if(ownsChat()){el('ChatMessages').replaceChildren();el('ChatMessages')._chatSignature=null;}
+    if(ownsChat()){el('Messages').replaceChildren();el('Messages')._chatSignature=null;}
     el('Workbench').classList.toggle('plugin-data-templates',dataPlugin());el('Workbench').classList.toggle('split-layout',dataPlugin());
     if(typeof refreshSplitPanes==='function')refreshSplitPanes();
     navigation={projectName:'Проект данных',view:'sources',templateId:'',templates:[],expanded:{project:true,templates:true,dictionary:true}};el('ProjectName').textContent=dataPlugin()?selected.name:'';el('Title').textContent=dataPlugin()?navigation.projectName:selected.name;renderNavigation();
@@ -157,13 +154,13 @@
   function renderChat(){if(!chat||!ownsChat())return;
     el('ChatTitle').textContent=chat.state.title||chat.state.Title||'Чат исходников';
     el('ChatTitle').title=el('ChatTitle').textContent;
-    window.RNAssistantWorkspaceChat.renderMessages(el('ChatMessages'),chat);
+    window.RNAssistantWorkspaceChat.renderMessages(el('Messages'),chat);
     var s=chat.state||{},running=(s.Status||s.status)==='running';
     chatStatus(chat.pendingId?'Нужно подтвердить действие агента.':
       s.interruptedEffectPossible?'Возможное изменение требует проверки. Не повторяйте действие автоматически.':
       (s.Status||s.status)==='interrupted'?'Выполнение прервано. Проверьте ход работы.':running?'Агент работает…':'');
-    el('Stop').hidden=!running;el('Approval').hidden=!chat.pendingId;
-    el('ApprovalText').textContent=chat.pendingId ? chat.pendingTool+'\n'+chat.pendingArguments : '';
+    el('Stop').hidden=!running;el('Control').hidden=!chat.pendingId;
+    el('Pending').textContent=chat.pendingId ? chat.pendingTool+'\n'+chat.pendingArguments : '';
     chatComposer.select({workspaceId:chat.project.workspaceId,sessionId:chat.sessionId},s);
     window.RNAssistantWorkspaceChat.renderQuestions(el('Questions'),s.userInput||s.UserInput,function(answers){
       return chatAction(function(workspaceId,sessionId){return send('submitProjectChat',{workspaceId:workspaceId,sessionId:sessionId,input:{sessionId:sessionId,requestId:crypto.randomUUID(),answers:answers}});});});
@@ -250,7 +247,7 @@
     chatBusy=true;controls();
     try{var value=await send('createProjectChat',{workspaceId:workspaceId,title:'Новый чат'});
       if(selected&&selected.pluginId===id&&current===chatEpoch){chat=value;pendingChatSend=null;
-        window.RNAssistantWorkspaceChat.rememberSession(workspaceId,value.sessionId);renderChat();el('Message').focus();}}
+        window.RNAssistantWorkspaceChat.rememberSession(workspaceId,value.sessionId);renderChat();el('Input').focus();}}
     catch(error){if(current===chatEpoch)chatStatus(error.message);}
     finally{chatBusy=false;controls();}}
   async function chatAction(action){if(chatBusy||!selected||!chat)return;
@@ -373,7 +370,7 @@
         if(task)message+='Создай плагин по задаче: '+task+'. ';
         if(iconBrief)message+='Нарисуй SVG-иконку по описанию: '+iconBrief+'. Создай icon.svg, добавь его в files и укажи в plugin.json. ';
         message+='После изменений проверь пакет и предпросмотр; применяй только после подтверждения.';
-        el('Message').value=message;el('Message').dispatchEvent(new Event('input',{bubbles:true}));el('ChatForm').requestSubmit();}
+        el('Input').value=message;el('Input').dispatchEvent(new Event('input',{bubbles:true}));el('Form').requestSubmit();}
       el('CreateForm').reset();el('IconDescription').value='';el('IconImportName').value='';el('IconImportSvg').value='';
       selectedIconId='puzzle';customSource=false;renderIconChoices();el('Connect').onchange();
     });};
@@ -413,12 +410,12 @@
       else developmentToggle.setOpen(false);
       event.preventDefault();event.stopPropagation();
     });
-    chatComposer=window.RNAssistantWorkspaceChat.bindComposer(el('ChatForm'));
-    el('Message').addEventListener('input',function(){if(ownsChat())controls();});
+    chatComposer=window.RNAssistantWorkspaceChat.bindComposer(el('Form'));
+    el('Input').addEventListener('input',function(){if(ownsChat())controls();});
     el('ChatNew').onclick=createChat;
     el('ChatHistory').onclick=openHistory;
     document.addEventListener('pointerdown',function(event){if(!event.target.closest('.plugin-history-menu'))closeHistory();});
-    el('ChatForm').onsubmit=function(event){if(!ownsChat())return;event.preventDefault();var message=el('Message').value.trim();
+    el('Form').onsubmit=function(event){if(!ownsChat())return;event.preventDefault();var message=el('Input').value.trim();
       if(!message||el('Send').disabled||!chat)return;
       var sessionId=chat.sessionId,workspaceId=chat.project.workspaceId,options=chatComposer.options(),draftVersion=chatComposer.draftVersion();
       if(!pendingChatSend||pendingChatSend.sessionId!==sessionId||pendingChatSend.message!==message||JSON.stringify(pendingChatSend.options)!==JSON.stringify(options))
