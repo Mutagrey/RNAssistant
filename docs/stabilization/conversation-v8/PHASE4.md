@@ -102,6 +102,11 @@ an irreparable obstacle without reporting success or replaying a tool.
   chunked escaped messages and provider reasoning remain separate, while a
   rejected finish with an extra field resets the visible stream and reasoning
   before its accepted repair.
+- The `shared context:` group passes 2/2 with an accepted v8 read and
+  evidence-citing finish. An oversized shared archive still exceeds one
+  model-facing read window and leaves claims explicitly unavailable; the
+  [open risk](../RISK_REGISTER.md#shared-context-archive-read-limit--2026-10-23)
+  records that limitation.
 
 The full Harness still has legacy v7 wire bodies and assertions outside these
 migrated groups; its complete test suite is not yet green.

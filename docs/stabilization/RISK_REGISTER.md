@@ -8,6 +8,19 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## Shared context archive read limit — 2026-10-23
+
+The v8 Harness migration exposed a host-neutral gap in explicit shared-context
+reads. A published archive with an 80000-character source transcript yielded a
+JSON body larger than one `common.resources_read` window (at most 32000
+characters). The model-facing read contained truncated JSON, so
+`ModelContextCompiler` marked claims unavailable and exposed no raw source text.
+The bounded fixture with a 12000-character source passes after externalized
+payload hydration and authority filtering. Owner: resource read gateway and
+model context compiler. A complete internal archive read with bounded claim
+projection remains needed for larger valid archives; this gap is open and is
+not Windows/Office qualification evidence.
+
 ## Source-size audit — 2026-10-22
 
 Fixed source limits were removed across live text captures, HTML and file import,

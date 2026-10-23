@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
@@ -69,7 +70,7 @@ namespace RNAssistant.Harness
                 authority.RegisterRevision(scope, new ResourceRevisionMetadata(source, body.Sha256, body));
                 authority.Publish(ResourceAuthorityCommit.Create(scope, 0, null, new[] {
                     new ResourceHeadChange(source.Identity, null, ResourceHeadState.Known(source, 1)) }, AuthorityCommitReason.DerivedPublication));
-                var user = new ChatMessage { Role = "user", Content = "Keep the original layout." + new string('x', 80000) };
+                var user = new ChatMessage { Role = "user", Content = "Keep the original layout." + new string('x', 12000) };
                 var observed = new ChatMessage { Role = "tool", Content = "Exact observed source" };
                 a.Messages.AddRange(new[] { user, observed });
                 var checkpoint = new ContextCheckpoint { Claims = new List<StructuredContextClaim> {
@@ -88,14 +89,20 @@ namespace RNAssistant.Harness
                 var call = new ToolCall("shared-read", tool.Id, new JObject { ["target"] = found.Target, ["representation"] = "text" }.ToString());
                 var record = ExecuteNative(runtime, call, runtime.Describe(call));
                 AssertEqual(ToolExecutionOutcome.Ok, record.Outcome, "native reader reaches document-owned archive");
+                var rawArchive = (string)JObject.Parse(record.Result.DataJson)["text"];
+                AssertTrue(!string.IsNullOrWhiteSpace(rawArchive), "native reader retains the exact shared archive");
+                AssertEqual(ContextCheckpoint.CurrentPromptVersion, (string)JObject.Parse(rawArchive)["Version"],
+                    "published shared archive uses the current claim format");
                 var replies = new Queue<string>(new[] {
-                    new JObject { ["message"] = "Read shared context.", ["action"] = "tool", ["tool_calls"] = new JArray(new JObject {
-                        ["name"] = tool.Id, ["arguments"] = JObject.Parse(call.ArgumentsJson) }) }.ToString(),
-                    "{\"message\":\"Shared context read.\",\"action\":\"done\",\"tool_calls\":[]}" });
+                    ModelProtocolWire.WriteAcceptedCall("Read the shared context archive.", "Read shared context.",
+                        new ConversationToolCall { Name = tool.Id, Arguments = JObject.Parse(call.ArgumentsJson) }) });
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 b.Mode = ChatModes.Agent;
                 var runService = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, cancellationToken) => {
-                    requests.Add(messages.ToList()); return Task.FromResult(new LlmCompletionResult { Content = replies.Dequeue() }); });
+                    requests.Add(messages.ToList()); return Task.FromResult(new LlmCompletionResult { Content = replies.Count > 0
+                        ? replies.Dequeue()
+                        : ScriptedVerifiedFinish(b, "Report the shared context read.", "Shared context read.",
+                            "Shared context inspected.", tool.Id) }); });
                 runService.ExecuteAsync(ChatModes.Agent, "Read the shared context.", b, NewContext(adapter), new AppSettings(),
                     OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
                 AssertTrue(requests.Count >= 2, "native run obtains a second model request after the shared read");

@@ -782,10 +782,12 @@ Shared archives do not replace the append-only chat history or create another st
 Another chat uses `common.resources_find` with document scope and query
 `Shared context`, then copies the returned target into `common.resources_read`
 with `representation=text`. Discovery searches titles only: unfiltered claims and
-raw transcripts never become snippets. The ordinary paged reader assembles the
-complete archive; the compiler can hydrate bounded externalized archives before
-selecting compact claims for the model budget. Metadata remains available; alternate
-row/source views cannot bypass this projection.
+raw transcripts never become snippets. For archives fitting one model-facing
+read window, the compiler hydrates externalized result bodies before selecting
+compact claims for the model budget. Larger valid JSON archives can currently
+exceed the 32000-character read ceiling and become explicitly unavailable; see
+the [open read-limit risk](stabilization/RISK_REGISTER.md#shared-context-archive-read-limit--2026-10-23).
+Metadata remains available; alternate row/source views cannot bypass this projection.
 
 Before each model request, the compiler checks each claim's source evidence,
 logical source heads, catalog generations and payload availability against frozen
