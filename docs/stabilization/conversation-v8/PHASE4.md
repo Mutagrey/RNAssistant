@@ -92,6 +92,9 @@ an irreparable obstacle without reporting success or replaying a tool.
   optional causal-trace failure check passes. Confirmation keeps the accepted
   run identity through the v8 finish; interrupted recovery retains a complete
   schema-read pair but excludes the unpaired write call from model context.
+- Two `agent continuity:` workflow checks pass with v8 calls and cited finish
+  evidence: an unfinished task list remains available to the next run, and a
+  CSS edit closes the plan without inventing a redundant JS edit.
 
 The full Harness still has legacy v7 wire bodies and assertions outside these
 migrated groups; its complete test suite is not yet green.
