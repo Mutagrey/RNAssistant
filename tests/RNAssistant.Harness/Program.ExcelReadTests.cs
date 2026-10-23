@@ -173,15 +173,20 @@ namespace RNAssistant.Harness
                 AssertEqual(calls, adapter.ExcelBackendCalls.Count, "retained overview performs no Office reads");
                 AssertTrue(gateway.Evidence(session, retained).All(item => item.View == "structure"),
                     "overview evidence never claims a values or formulas read");
-                foreach (var view in new[] { "text", "formulas", "table", "records" })
+                foreach (var view in new[] { "text", "formulas", "table" })
                 {
-                    var command = view == "table" || view == "records"
+                    var command = view == "table"
                         ? Command(ResourceToolCatalog.ReadToolId, "target", large.Target, "representation", view, "limit", 1)
                         : Command(ResourceToolCatalog.ReadToolId, "target", large.Target, "representation", view);
                     var refused = executor.ExecuteManual(command, tools, new AppSettings(), false, false, session);
                     AssertEqual("RESOURCE_SNAPSHOT_TOO_LARGE", refused.ErrorCode, "raw large " + view + " remains bounded before capture");
                     AssertContains(refused.Message, "structure", "refusal offers a useful next step");
                 }
+                var records = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                    "target", large.Target, "representation", "records", "limit", 1),
+                    tools, new AppSettings(), false, false, session);
+                AssertEqual("invalid_arguments", records.ErrorCode,
+                    "model-facing reads reject the binding-only records representation before capture");
                 AssertEqual(calls, adapter.ExcelBackendCalls.Count, "even a one-row selector cannot trigger whole-range materialization");
                 var sampleRead = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
                     "target", (string)samples.Last["target"], "representation", "text"), tools, new AppSettings(), false, false, session);

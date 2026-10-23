@@ -607,7 +607,7 @@ namespace RNAssistant.Harness
                     JsonConvert.SerializeObject(new { target = htmlTarget, representation = "structure" }));
                 AssertEqual(ToolExecutionOutcome.Ok, htmlRead.Outcome,
                     "workspace structure selection on an exact HTML file does not stall the run");
-                AssertContains(htmlRead.Message, "returned its complete source",
+                AssertContains(htmlRead.Message, "returned source text with the reported coverage",
                     "representation negotiation is visible to the model");
                 var htmlReadData = JObject.Parse(htmlRead.Result.DataJson);
                 AssertEqual(ResourceRepresentations.Source, (string)htmlReadData["representation"],
