@@ -1513,28 +1513,34 @@ namespace RNAssistant.Harness
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
-                const string invalidPair = "{\"status\":\"in_progress\",\"message\":\"Проверяю листы...\",\"action\":\"done\",\"tool_calls\":[]}";
+                const string invalidPair = "{\"status\":\"in_progress\",\"action\":\"finish\",\"reason\":\"Inspect sheets.\",\"results\":[],\"message\":\"Проверяю листы...\"}";
                 var responses = new Queue<string>(new[]
                 {
                     invalidPair,
                     LoadToolSchemaResponse("excel.inspect"),
-                    "{\"message\":\"Проверяю листы.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
-                    "{\"message\":\"Список листов проверен.\",\"action\":\"done\",\"tool_calls\":[]}"
+                    ModelProtocolWire.WriteAcceptedCall("Inspect the sheet list.", "Проверяю листы.",
+                        new ConversationToolCall { Name = "excel.inspect",
+                            Arguments = new JObject { ["kind"] = "sheets" } }),
+                    null
                 });
+                var session = NewSession(adapter);
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
                 {
                     requests.Add(messages.ToList());
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    var response = responses.Dequeue() ?? ScriptedVerifiedFinish(session,
+                        "The sheet inspection returned.", "Список листов проверен.",
+                        "The sheet list was inspected.", "excel.inspect");
+                    return Task.FromResult(new LlmCompletionResult { Content = response });
                 };
-                var session = NewSession(adapter);
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
                     "Проверь листы.", session, NewContext(adapter), new AppSettings(),
                     OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
 
                 AssertEqual(4, requests.Count, "structural repair, schema discovery, and tool continuation");
-                AssertContains(requests[1].Last().Content, "unsupported root field: status", "repair rejects the old envelope instead of adapting it");
+                AssertContains(requests[1].Last().Content, "action=finish forbids root field status",
+                    "repair rejects the old status field instead of adapting it");
                 AssertEqual("Список листов проверен.", result.AssistantText, "run completes after the actual tool call");
                 AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "legacy lifecycle projection means only model loop ended");
                 AssertEqual(AgentResponseProtocol.CurrentVersion, session.Messages.Last().ResponseProtocolVersion,
@@ -1557,12 +1563,9 @@ namespace RNAssistant.Harness
                         (settings, messages, options, stream, cancellationToken) => Task.FromResult(
                             new LlmCompletionResult
                             {
-                                Content = JsonConvert.SerializeObject(new
-                                {
-                                    message = terminalCase,
-                                    action = "done",
-                                    tool_calls = new object[0]
-                                })
+                                Content = ModelProtocolWire.WriteAcceptedDecision(
+                                    ConversationResponse.FinishAction, "Answer directly.", terminalCase,
+                                    results: new ConversationResultClaim[0])
                             }));
                     var terminalResult = terminalService.ExecuteAsync(
                         ChatModes.Agent,
@@ -1579,8 +1582,10 @@ namespace RNAssistant.Harness
                         "final empty calls end the model loop");
                     AssertEqual(AgentResponseProtocol.CurrentVersion, terminalResult.ResponseProtocolVersion,
                         "final record carries the active protocol version");
-                    AssertTrue(ConversationResponseHistoryReader.Read(terminalSession.Messages.Last()).Success,
-                        "actual final history is a valid v7 form even with empty or question-like text");
+                    var terminalHistory = terminalSession.Messages.Last(message => message.ProtocolMessage);
+                    var terminalRead = ConversationResponseHistoryReader.Read(terminalHistory);
+                    AssertTrue(terminalRead.Success,
+                        "actual final history is a valid v8 form for '" + terminalCase + "': " + terminalRead.Error);
                 }
 
                 var limitedSession = NewSession(adapter);
@@ -1590,7 +1595,9 @@ namespace RNAssistant.Harness
                     (settings, messages, options, stream, cancellationToken) => Task.FromResult(
                         new LlmCompletionResult
                         {
-                            Content = "{\"message\":\"Проверяю ресурсы.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.resources_find\",\"arguments\":{}}]}",
+                            Content = ModelProtocolWire.WriteAcceptedDecision(
+                                ConversationResponse.ReflectionAction, "Consider resource discovery.",
+                                "Проверяю ресурсы.", decision: "Inspect the available resources next."),
                             PromptTokens = 5
                         }));
                 var limitedResult = limitedService.ExecuteAsync(
