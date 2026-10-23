@@ -2752,19 +2752,23 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     LoadSkillResponse("common.skill_authoring"),
-                    "{\"message\":\"Создаю skill.\",\"action\":\"tool\",\"tool_calls\":[" +
-                    "{\"name\":\"common.skills_upsert\",\"arguments\":{\"id\":\"common.test\",\"description\":\"Test\",\"bodyMarkdown\":\"# Test\"}}]}",
-                    "{\"message\":\"Skill сохранён.\",\"action\":\"done\",\"tool_calls\":[]}"
+                    ModelProtocolWire.WriteAcceptedCall("Save the requested skill.", "Создаю skill.",
+                        new ConversationToolCall { Name = "common.skills_upsert", Arguments = new JObject {
+                            ["id"] = "common.test", ["description"] = "Test", ["bodyMarkdown"] = "# Test" } }),
+                    null
                 });
+                var session = NewSession(adapter);
+                session.LastRun = new ChatRunRecord { Status = "running", ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion };
                 var calls = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>
                 {
                     calls.Add(messages.ToList());
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    var response = responses.Dequeue() ?? ScriptedVerifiedFinish(session,
+                        "The confirmed skill save has a terminal result.", "Skill сохранён.",
+                        "The requested skill was saved.", "common.skills_upsert");
+                    return Task.FromResult(new LlmCompletionResult { Content = response });
                 };
                 var service = CreateConversationRunService(adapter, executor, completion);
-                var session = NewSession(adapter);
-                session.LastRun = new ChatRunRecord { Status = "running", ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion };
                 var settings = new AppSettings { AutoConfirmToolActions = false, SystemPromptRole = "user" };
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var first = service.ExecuteAsync(
@@ -2806,6 +2810,8 @@ namespace RNAssistant.Harness
                     new ConversationRunInput(settings, NewContext(adapter), tools), null).GetAwaiter().GetResult();
 
                 AssertEqual("Skill сохранён.", final.AssistantText, "continued final response");
+                AssertEqual(skillCallId, final.RunViewState.ModelResults.Single().Evidence.Single(),
+                    "finish cites the original confirmed call ID");
                 AssertRunViewState(final, session, "clean", 1, 0, 0);
                 AssertEqual(3, session.LastRun.IterationsUsed, "confirmation continuation keeps cumulative iteration budget");
                 AssertEqual(2, session.LastRun.ToolStepsUsed, "confirmed result replaces reserved logical tool step");
