@@ -1437,6 +1437,11 @@ The built-in Excel/Word/PowerPoint replacement results remove their internal
 `scopeSha256` from the model projection. Outlook draft/update results likewise
 remove `EntryId` and state-token fields. Semantic outcome fields remain, while
 durable tool records retain exact diagnostic data.
+Workspace chats with a bound Office document use this same pure Office result
+projection for saved and current tool results. The Office capability supplies it
+to the shared workspace request compiler and compaction runtime; a missing
+projection refuses the run before input acceptance. CLI and plugin source chats
+keep the Core projection without acquiring Office dependencies.
 Excel and native VBA model projections build detached results directly from the
 parsed source. VBA selects permitted fields and sanitizes diagnostic text in one
 recursive pass, without cloning intermediate subtrees. Field selection, nested

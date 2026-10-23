@@ -61,7 +61,7 @@ namespace RNAssistant.Office.Services
             var tools = OfficeToolCatalog.ForHost(target.Host)
                 .Where(item => item.Id != "excel.create_chat_chart").ToArray();
             var result = new WorkspaceOfficeCapabilitySet { Target = target, Available = available,
-                Tools = new WorkspaceToolContribution[0] };
+                Tools = new WorkspaceToolContribution[0], ModelProjection = ModelToolResultProjection.Instance };
             if (!string.Equals(_adapter.HostName, target.Host, StringComparison.OrdinalIgnoreCase))
             {
                 result.Tools = tools.Select(item => new WorkspaceToolContribution { Entry = item,

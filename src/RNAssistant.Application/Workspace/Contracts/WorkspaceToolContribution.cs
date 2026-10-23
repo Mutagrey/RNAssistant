@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
 namespace RNAssistant.Runtime.Contracts
 {
@@ -25,5 +26,7 @@ namespace RNAssistant.Runtime.Contracts
         public IReadOnlyToolHandler ResourceFind { get; set; }
         public IReadOnlyToolHandler ResourceRead { get; set; }
         public IToolMutationObserver MutationObserver { get; set; }
+        // Pure model projection for the bound host's tool results; no live host reads.
+        public ModelResultProjection ModelProjection { get; set; }
     }
 }

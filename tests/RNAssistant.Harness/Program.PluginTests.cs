@@ -16,6 +16,7 @@ using RNAssistant.Core.Tools;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Persistence;
+using RNAssistant.Core.Services;
 using RNAssistant.Runtime.Contracts;
 
 namespace RNAssistant.Harness
@@ -52,7 +53,8 @@ namespace RNAssistant.Harness
                 AppSettings settings, string runId)
             {
                 Interlocked.Increment(ref Binds);
-                return new WorkspaceOfficeCapabilitySet { Target = target, Available = false };
+                return new WorkspaceOfficeCapabilitySet { Target = target, Available = false,
+                    ModelProjection = new ModelResultProjection() };
             }
         }
 

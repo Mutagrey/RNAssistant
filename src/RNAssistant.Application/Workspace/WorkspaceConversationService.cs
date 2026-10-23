@@ -818,7 +818,9 @@ namespace RNAssistant.Runtime
                 _settings = settings.Clone(); _progress = progress; _acceptance = acceptance; _office = office;
                 _pluginSource = pluginSource;
                 _mode = runPolicy ?? ConversationRunPolicy.ForAcceptedRun(session);
-                _compiler = new ModelContextCompiler(payloads);
+                if (office != null && office.ModelProjection == null)
+                    throw new InvalidOperationException("The bound Office result projection is unavailable.");
+                _compiler = new ModelContextCompiler(payloads, office?.ModelProjection);
                 _taskLists = new WorkspaceTaskListObserver(paths, chats, payloads, session);
                 _plans = new WorkspacePlanService(paths, chats, payloads, workspace, session);
                 _modelTrace = new ModelTracePersistenceService(new ChatEventStoreAdapter(chats));
@@ -831,7 +833,7 @@ namespace RNAssistant.Runtime
                     options.TraceModelAttemptId = "attempt_" + Guid.NewGuid().ToString("N");
                     _modelTrace.Configure(options);
                     return client.CompleteAsync(configuration, messages, options, stream, token);
-                }, payloads);
+                }, payloads, office?.ModelProjection);
                 _protocol = new ModelProtocolClient(client.CompleteAsync);
                 var registry = new ToolHandlerRegistry();
                 var entries = new List<ToolCatalogEntry>();

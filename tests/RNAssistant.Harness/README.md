@@ -178,6 +178,9 @@ durable project header and manual rename priority.
 `workspace: accepted call history survives a new turn` checks a two-call read
 batch, exact runtime/model-attempt origins after restart, the next model turn,
 legacy narration display and explicit refusal of an origin-less old record.
+`workspace: saved Office results use host projection` checks that a project chat
+with a bound Office document removes an archived Word scope hash from the next
+model request, including after restart, while preserving the durable result.
 `workspace: explicit resume records persisted input delivery` checks the crash
 boundary between durable user-message persistence and the `applied` input event:
 resume records the missing transition once, while a missing message and duplicate

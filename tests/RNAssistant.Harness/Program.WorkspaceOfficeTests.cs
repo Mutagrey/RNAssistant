@@ -1,15 +1,26 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
+using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Core.Tools.Contracts;
 using RNAssistant.Office;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
+using RNAssistant.Runtime;
+using RNAssistant.Runtime.Contracts;
 
 namespace RNAssistant.Harness
 {
@@ -34,6 +45,8 @@ namespace RNAssistant.Harness
                         initial.Tools.Any(item => item.Entry.Id == "excel.write_range") &&
                         initial.Tools.All(item => item.Entry.Id != "excel.create_chat_chart"),
                         "workspace run receives document tools without chat-owned chart artifacts");
+                    AssertTrue(ReferenceEquals(ModelToolResultProjection.Instance, initial.ModelProjection),
+                        "workspace Office capabilities carry the same model result projection as Office chat");
                     var registry = RegisterOfficeContributions(initial);
                     var runtime = new ToolRuntime(registry, "agent", true, true,
                         mutationObserver: initial.MutationObserver);
@@ -111,6 +124,124 @@ namespace RNAssistant.Harness
                         { rejected = error.Code == "active_document_changed"; }
                         AssertTrue(rejected, "confirmed write cannot prepare against another host");
                     }
+                }
+            });
+        }
+
+        private sealed class WorkspaceOfficeProjectionProbe : IWorkspaceOfficeCapabilities
+        {
+            private readonly bool _omitProjection;
+            public WorkspaceOfficeProjectionProbe(bool omitProjection = false)
+            { _omitProjection = omitProjection; }
+
+            public WorkspaceOfficeRunTarget CaptureCurrentTarget()
+            {
+                return new WorkspaceOfficeRunTarget { Host = "Word", DocumentKey = "document",
+                    RuntimeDocumentKey = "runtime", DocumentAuthorityId = "authority", DocumentTitle = "Document" };
+            }
+
+            public WorkspaceOfficeCapabilitySet ForTarget(WorkspaceOfficeRunTarget target,
+                ChatSession session, AppSettings settings, string runId)
+            {
+                return new WorkspaceOfficeCapabilitySet { Target = target, Available = true,
+                    ModelProjection = _omitProjection ? null : ModelToolResultProjection.Instance,
+                    Tools = new[] { new WorkspaceToolContribution {
+                        Entry = OfficeToolCatalog.ForHost("Word").Single(item => item.Id == WordToolIds.ReplaceText),
+                        Handler = new RuntimeTestHandler()
+                    } } };
+            }
+        }
+
+        private static void WorkspaceOfficeHistoryUsesHostProjection()
+        {
+            WithTempPaths(paths =>
+            {
+                var probe = new TcpListener(IPAddress.Loopback, 0);
+                probe.Start();
+                var port = ((IPEndPoint)probe.LocalEndpoint).Port;
+                probe.Stop();
+                using (var listener = new HttpListener())
+                {
+                    listener.Prefixes.Add("http://127.0.0.1:" + port + "/");
+                    listener.Start();
+                    var requests = new string[2];
+                    var server = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            for (var index = 0; index < requests.Length; index++)
+                            {
+                                var context = await listener.GetContextAsync().ConfigureAwait(false);
+                                using (var reader = new StreamReader(context.Request.InputStream))
+                                    requests[index] = await reader.ReadToEndAsync().ConfigureAwait(false);
+                                var reply = new JObject { ["choices"] = new JArray(new JObject {
+                                    ["message"] = new JObject { ["content"] =
+                                        "{\"message\":\"Done.\",\"action\":\"done\",\"tool_calls\":[]}" } }) };
+                                var bytes = Encoding.UTF8.GetBytes(reply.ToString(Formatting.None));
+                                context.Response.ContentType = "application/json";
+                                context.Response.ContentLength64 = bytes.Length;
+                                await context.Response.OutputStream.WriteAsync(bytes, 0, bytes.Length).ConfigureAwait(false);
+                                context.Response.Close();
+                            }
+                        }
+                        catch (HttpListenerException) { }
+                    });
+                    try
+                    {
+                        var workspace = new WorkspaceStore(paths).Open(Path.Combine(paths.Root, "office-projection"));
+                        var settings = new AppSettings { BaseUrl = "http://127.0.0.1:" + port,
+                            Model = "test-model", StreamResponses = false, AutoCompressContext = false,
+                            SmartChatTitles = false, ToolResultRole = ToolResultRoles.User };
+                        var office = new WorkspaceOfficeProjectionProbe();
+                        string sessionId;
+                        using (var service = new WorkspaceConversationService(paths, officeCapabilities: office))
+                        {
+                            var session = service.CreateSession(workspace, "Office result history");
+                            sessionId = session.Id;
+                            var original = new ChatMessage { Role = "user", Content = "Replace text", RunId = "prior-run" };
+                            var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall {
+                                Id = "prior-call", Name = WordToolIds.ReplaceText,
+                                Arguments = new Dictionary<string, object> { ["find"] = "old", ["replace"] = "new" }
+                            }, "Replacing.", null, ToolResultRoles.User, FixtureCallOrigin("prior-step"));
+                            call.RunId = "prior-run";
+                            var result = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation {
+                                ToolCallId = "prior-call", ToolId = WordToolIds.ReplaceText
+                            }, ToolResult.Ok("Replaced.", "{\"replacements\":2,\"scopeSha256\":\"private-scope-hash\"}"), ToolResultRoles.User);
+                            result.RunId = "prior-run";
+                            AssertTrue(new ModelResultProjection().Project(result).Content.Contains("scopeSha256"),
+                                "the generic workspace projection would expose the Office-only scope field");
+                            session.Messages.AddRange(new[] { original, call, result });
+                            new ChatStore(paths).Commit(session, new ConversationCommit(session.Messages));
+                            var rejectedInput = new WorkspaceSubmitInputRequest { SessionId = sessionId,
+                                RequestId = "missing-projection", Message = "Do not send", Mode = ChatModes.Agent };
+                            using (var incomplete = new WorkspaceConversationService(paths,
+                                officeCapabilities: new WorkspaceOfficeProjectionProbe(true)))
+                            {
+                                RuntimeThrows<InvalidOperationException>(() => incomplete.SubmitInputAsync(workspace,
+                                    rejectedInput, settings, () => "test-key").GetAwaiter().GetResult());
+                                AssertTrue(incomplete.FindAcceptedInput(workspace, rejectedInput) == null,
+                                    "missing host projection refuses before input acceptance");
+                            }
+                            var first = service.SubmitInputAsync(workspace, new WorkspaceSubmitInputRequest {
+                                SessionId = sessionId, Message = "What changed?", Mode = ChatModes.Agent
+                            }, settings, () => "test-key").GetAwaiter().GetResult();
+                            AssertEqual(RunLifecycle.Completed, first.Summary.Lifecycle, "workspace turn reads saved Office result");
+                        }
+                        using (var reopened = new WorkspaceConversationService(paths, officeCapabilities: office))
+                            reopened.SubmitInputAsync(workspace, new WorkspaceSubmitInputRequest {
+                                SessionId = sessionId, Message = "Continue", Mode = ChatModes.Agent
+                            }, settings, () => "test-key").GetAwaiter().GetResult();
+                        server.GetAwaiter().GetResult();
+                        var delivered = requests.Select(request => string.Join("\n",
+                            ((JArray)JObject.Parse(request)["messages"]).Select(message => (string)message["content"]))).ToArray();
+                        AssertTrue(delivered.All(content => content.Contains("replacements")) &&
+                            requests.All(request => !request.Contains("scopeSha256") && !request.Contains("private-scope-hash")),
+                            "workspace model requests use the Office projection before and after restart");
+                        AssertTrue(new ChatStore(paths).Load(sessionId).Messages.Any(message =>
+                            message.ToolCallId == "prior-call" && message.Content.Contains("scopeSha256")),
+                            "durable Office result keeps diagnostic fields");
+                    }
+                    finally { listener.Stop(); }
                 }
             });
         }
