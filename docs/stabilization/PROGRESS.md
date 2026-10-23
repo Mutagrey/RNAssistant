@@ -1,5 +1,16 @@
 # Stabilization progress
 
+## Resource Context model read offers — 2026-10-23
+
+Owner: Core model result projection. `common.resources_find` now shows only views
+accepted by `common.resources_read`. Runtime image/PDF/raw capabilities remain
+available to application consumers, but no longer appear as callable model read
+representations. Known MIME and physical byte length reach model discovery as
+source metadata, not a token estimate or read evidence. Two existing binary
+Harness cases cover image/PDF candidates and schema alignment. Windows/Office/
+WebView2 qualification remains open; per-view token estimates, image crop and
+semantic PDF selectors are still pending.
+
 ## Resource Context YAML tree — 2026-10-23
 
 Owner: Core YAML selector, Office Gateway artifact reads and workspace file provider.

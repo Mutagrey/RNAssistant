@@ -85,6 +85,11 @@ explicit alias/merge/complex-key/multi-document refusals, streamed 4-MiB workspa
 sources and paged Office artifacts with exact partial `yaml-path` evidence. It does
 not qualify real Windows/Office/WebView2 behavior or YAML schema resolution.
 
+`resource cutover: canonical binary data plane` and `resource cutover: binary
+capabilities and retained bounds` also check that model-facing find filters out
+application-only image/PDF/raw views while retaining known MIME/byte length; the
+runtime descriptors and binary consumers keep their full capabilities.
+
 `workspace files:` includes an actual 80-MiB source retained/read without a
 whole-body allocation, exact history after drift/deletion/restart, operation
 budgets, busy-file cancellation and missing/corrupt/unpublished source refusals.

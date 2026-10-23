@@ -779,6 +779,11 @@ tabular sources.
 Model-facing discovery marks Excel search scopes as discovery-only and points value
 reads to range/table/name targets. Oversized search reads carry the same explicit
 recovery route and prohibit an unchanged retry.
+`common.resources_find` projects only representations accepted by
+`common.resources_read`; application binary views (`raw`, `image`, thumbnails and
+PDF renders) remain on runtime descriptors but are not model read offers. Discovery
+also exposes reported MIME and byte length when known. These are source metadata,
+not measured token cost, verified bytes or an observation.
 `ResourceSnapshotReadService` reads state/context and retained Office views from
 whole captured views or the canonical revision payload. Partial views cannot substitute for whole bodies;
 continuations bind logical revision and URI/view, never an equal content hash.

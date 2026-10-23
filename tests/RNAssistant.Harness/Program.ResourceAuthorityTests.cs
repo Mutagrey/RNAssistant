@@ -40,6 +40,28 @@ namespace RNAssistant.Harness
                     var described = gateway.Resolve(session, exact.Uri).Resource;
                     AssertTrue(described.Representations.Contains("image") && described.Representations.Contains("thumbnail"),
                         "existing image views are discoverable before capture");
+                    var found = gateway.Find(session, "image.png", "all");
+                    AssertTrue(found.Items.Any(item => item.Representations.Contains("raw") &&
+                        item.Representations.Contains("image")), "runtime discovery keeps application binary views");
+                    var modelFind = ModelResultProjection.ProjectResourceData(ResourceToolCatalog.FindToolId,
+                        JObject.Parse(ResourceFindProjection.Serialize(found)));
+                    var modelItem = ((JArray)modelFind["items"]).OfType<JObject>()
+                        .First(item => (string)item["title"] == "image.png");
+                    var modelViews = ((JArray)modelItem["representations"]).Values<string>().ToArray();
+                    var readSchema = JObject.Parse(ResourceReadToolHandler.Descriptor.ParametersJson);
+                    string schemaError;
+                    AssertTrue(modelViews.Contains(ResourceRepresentations.Metadata) &&
+                        !modelViews.Contains("raw") && !modelViews.Contains("image") &&
+                        !modelViews.Contains("thumbnail") && !modelViews.Contains("render-page") &&
+                        modelViews.All(view => {
+                            var arguments = new JObject { ["target"] = (string)modelItem["target"],
+                                ["representation"] = view };
+                            if (view == ResourceRepresentations.Tree) arguments["pointer"] = "";
+                            return ToolSchemaSupport.ValidateArguments(arguments, readSchema, false, out schemaError);
+                        }),
+                        "model discovery offers only common.resources_read representations");
+                    AssertTrue((string)modelItem["mimeType"] == "image/png" && (long?)modelItem["byteLength"] == bytes.Length,
+                        "model receives known MIME and physical byte length without a token estimate");
                     var imageCapability = described.ViewCapabilities.Single(item => item.View == "image");
                     AssertEqual(ArtifactViewerService.MaximumImageBytes, imageCapability.MaxPayloadBytes.Value, "declared image bound");
                     AssertTrue(imageCapability.SupportsOffset && !imageCapability.SupportsFields && imageCapability.SupportsStream,
@@ -137,6 +159,15 @@ namespace RNAssistant.Harness
                 AssertEqual(ArtifactPdfViewerService.MaximumThumbnailImageBytes,
                     descriptor.ViewCapabilities.Single(item => item.View == "page-thumbnail").MaxPayloadBytes.Value, "PDF thumbnail bound");
                 AssertTrue(!descriptor.Representations.Contains("image"), "PDF original is not an image view");
+                var found = gateway.Find(session, string.Empty, "all");
+                var pdfCandidate = found.Items.First(item => item.Representations.Contains("render-page"));
+                var modelFind = ModelResultProjection.ProjectResourceData(ResourceToolCatalog.FindToolId,
+                    JObject.Parse(ResourceFindProjection.Serialize(found)));
+                var modelViews = ((JArray)((JArray)modelFind["items"]).OfType<JObject>()
+                    .First(item => (string)item["target"] == pdfCandidate.Target)["representations"]).Values<string>();
+                AssertTrue(modelViews.Contains(ResourceRepresentations.Metadata) &&
+                    !modelViews.Contains("render-page") && !modelViews.Contains("page-thumbnail") &&
+                    !modelViews.Contains("raw"), "model find does not advertise application-only PDF pages");
                 AssertEqual(0, new ResourceGatewayService(null, null, null, authority: authority)
                     .Resolve(session, exact.Uri).Resource.ViewCapabilities.Count, "unconfigured binary owner advertises no binary views");
                 attachment.ContentType = "text/html";

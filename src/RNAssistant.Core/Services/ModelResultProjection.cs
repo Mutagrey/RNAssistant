@@ -17,6 +17,12 @@ namespace RNAssistant.Core.Services
     public sealed class ModelResultProjection
     {
         private const string Prefix = "TOOL_RESULT:\n";
+        // Match common.resources_read; binary data-plane views stay runtime-only.
+        private static readonly HashSet<string> ModelReadRepresentations = new HashSet<string>(StringComparer.Ordinal) {
+            ResourceRepresentations.Metadata, ResourceRepresentations.Text, ResourceRepresentations.Structure,
+            ResourceRepresentations.Source, ResourceRepresentations.Media, ResourceRepresentations.Tree,
+            "formulas", "table"
+        };
         private readonly Func<string, ToolResultMaterialization, IEnumerable<ToolCatalogEntry>,
             IEnumerable<SkillDefinition>, IEnumerable<ToolCatalogEntry>, ToolResultMaterialization> _projectData;
 
@@ -217,8 +223,15 @@ namespace RNAssistant.Core.Services
                 }
             }
             if (name == "common.resources_find" && result["items"] is JArray)
-                result["items"] = new JArray(((JArray)result["items"]).Select(item => SelectFields(item,
-                    "target", "type", "title", "representations", "sectionTitle", "description", "usage", "snippet")));
+                result["items"] = new JArray(((JArray)result["items"]).Select(item =>
+                {
+                    var candidate = SelectFields(item, "target", "type", "title", "mimeType", "byteLength",
+                        "representations", "sectionTitle", "description", "usage", "snippet");
+                    if (candidate["representations"] is JArray views)
+                        candidate["representations"] = new JArray(views.Where(view => view.Type == JTokenType.String &&
+                            ModelReadRepresentations.Contains((string)view)));
+                    return candidate;
+                }));
             if (name == "common.resources_search" && result["matches"] is JArray)
                 result["matches"] = new JArray(((JArray)result["matches"]).Select(item => SelectFields(item,
                     "snippet", "partNumber", "sectionTitle")));

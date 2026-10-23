@@ -38,8 +38,10 @@
 2. **Полнота manifest и metadata.** Owner: Core model-context/LLM diagnostics и
    resource providers. Дополнять доказуемую атрибуцию преобразованных сообщений,
    coverage будущих специализированных selectors и cost/capabilities конкретных
-   views. Существующий `Unknown` сохранять, когда факт нельзя доказать; measured tokens не подменять
-   estimate. Проверка: точный serialized request плюс соответствующие golden fixtures.
+   views. Model find уже скрывает application-only binary views и сообщает известные
+   MIME/byteLength; per-view token cost всё ещё не оценён. Существующий `Unknown`
+   сохранять, когда факт нельзя доказать; measured tokens не подменять estimate.
+   Проверка: точный serialized request плюс соответствующие golden fixtures.
 3. **Специализированные selectors/views.** Owner: соответствующий provider через
    общий Gateway. VBA procedure name/kind с exact partial evidence реализован общим
    parser для Office и workspace/CLI. JSON Pointer/tree для полного JSON text
