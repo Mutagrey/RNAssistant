@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
@@ -816,8 +817,13 @@ namespace RNAssistant.Harness
                         return Task.FromResult(new LlmCompletionResult { Content = calls == 1
                             ? LoadSkillResponse("common.html_workspace_authoring")
                             : calls == 2
-                                ? "{\"message\":\"Creating HTML.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.html_workspace_write_file\",\"arguments\":{\"path\":\"index.html\",\"content\":\"<main>Offline</main>\"}}]}"
-                                : "{\"message\":\"Done.\",\"action\":\"done\",\"tool_calls\":[]}" });
+                                ? ModelProtocolWire.WriteAcceptedCall("Create local HTML after the document closed.",
+                                    "Creating HTML.", new ConversationToolCall { Name = "common.html_workspace_write_file",
+                                        Arguments = new JObject { ["path"] = "index.html",
+                                            ["content"] = "<main>Offline</main>" } })
+                                : ScriptedVerifiedFinish(selected, "The local HTML write has a terminal result.",
+                                    "Done.", "The HTML file was created in the selected chat.",
+                                    "common.html_workspace_write_file") });
                     };
                     var result = CreateConversationRunService(adapter, executor, completion).ExecuteWithApprovalsAsync(
                         ChatModes.Agent, "Create HTML", selected, new DocumentContext(), new AppSettings(),
