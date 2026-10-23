@@ -1220,23 +1220,21 @@ namespace RNAssistant.Harness
                     DocumentRuntimeKey = adapter.RuntimeDocumentKey, StartedUtc = DateTime.UtcNow
                 };
                 store.Save(session);
-                var responses = new Queue<string>(Enumerable.Repeat("REJECTED_TRACE_SENTINEL", invalidAttempts).Concat(new[]
+                var validResponses = new List<string>
                 {
                     LoadSkillResponse("common.vba_code_editing"),
-                    new JObject
-                    {
-                        ["message"] = "Update module.",
-                        ["action"] = "tool",
-                        ["tool_calls"] = new JArray(new JObject
-                        {
-                            ["name"] = "common.vba_write_module",
-                            ["arguments"] = new JObject { ["moduleName"] = "Module1", ["code"] = intended }
-                        })
-                    }.ToString(Formatting.None),
-                    ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
-                        "Report the observed write outcome.", "The target cannot be inspected with available tools.",
-                        results: new ConversationResultClaim[0])
-                }));
+                    ModelProtocolWire.WriteAcceptedCall("Apply the requested module source.", "Update module.",
+                        new ConversationToolCall { Name = VbaToolCatalog.WriteModule,
+                            Arguments = new JObject { ["moduleName"] = "Module1", ["code"] = intended } })
+                };
+                if (outcome == "unknown")
+                    validResponses.Add(ModelProtocolWire.WriteAcceptedCall(
+                        "Inspect the current source after the unverified write.", "Inspect module.",
+                        new ConversationToolCall { Name = ResourceToolCatalog.ReadToolId,
+                            Arguments = new JObject { ["target"] = "VBA module: Module1", ["representation"] = "source" } }));
+                validResponses.Add("__FINISH__");
+                var responses = new Queue<string>(Enumerable.Repeat("REJECTED_TRACE_SENTINEL", invalidAttempts)
+                    .Concat(validResponses));
                 var trace = new ModelTracePersistenceService(EventStore(store));
                 var requestCount = 0;
                 var rawByAttempt = new Dictionary<string, string>();
@@ -1253,6 +1251,21 @@ namespace RNAssistant.Harness
                         PayloadJson = "{\"fake_transport\":true}", PayloadContentType = "application/json"
                     });
                     var content = responses.Dequeue();
+                    if (content == "__FINISH__")
+                    {
+                        var evidence = session.Messages.Where(item => item.RunId == "trace-run" &&
+                            item.AcceptedCallOrigin != null &&
+                            (item.ToolName == VbaToolCatalog.WriteModule ||
+                             outcome == "unknown" && item.ToolName == ResourceToolCatalog.ReadToolId))
+                            .Select(item => item.ToolCallId).ToArray();
+                        AssertEqual(outcome == "unknown" ? 2 : 1, evidence.Length,
+                            "finish cites the accepted write and any required inspection");
+                        content = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                            "Report the observed write outcome.", "The write outcome is recorded.",
+                            results: new[] { new ConversationResultClaim("Module write assessment", evidence,
+                                outcome == "ok" ? ConversationAssessment.Satisfied :
+                                outcome == "unknown" ? ConversationAssessment.Unverified : ConversationAssessment.NotSatisfied) });
+                    }
                     rawByAttempt.Add(options.TraceModelAttemptId, content);
                     options.TraceSink(new LlmTraceRecord
                     {
@@ -1275,15 +1288,16 @@ namespace RNAssistant.Harness
                 var requests = events.Where(item => item.Type == SessionEventTypes.LlmRequest).ToList();
                 var rejected = events.Where(item => item.Type == SessionEventTypes.AgentResponseRejected).ToList();
                 var accepted = events.Where(item => item.Type == "model.response.accepted").ToList();
-                AssertEqual(invalidAttempts + 3, requestCount, "trace introduces no retry or model request");
+                var acceptedSteps = outcome == "unknown" ? 4 : 3;
+                AssertEqual(invalidAttempts + acceptedSteps, requestCount, "trace introduces no retry or model request");
                 AssertEqual(invalidAttempts, rejected.Count, "every rejected attempt has a diagnostic event");
-                AssertEqual(3, accepted.Count, "only valid skill/write/final responses are accepted");
+                AssertEqual(acceptedSteps, accepted.Count, "only valid skill/write/inspection/final responses are accepted");
                 AssertEqual(requestCount, requests.Select(item => (string)item.Data["ModelAttemptId"]).Distinct().Count(),
                     "each completion attempt has a distinct id");
                 AssertTrue(requests.All(item => !string.IsNullOrWhiteSpace((string)item.Data["ModelAttemptId"])), "attempt ids exist");
                 AssertEqual(1, requests.Take(invalidAttempts + 1).Select(item => (string)item.Data["StepId"]).Distinct().Count(),
                     "repair attempts keep the same logical step");
-                AssertEqual(3, requests.Select(item => (string)item.Data["StepId"]).Distinct().Count(), "next iteration starts a new step");
+                AssertEqual(acceptedSteps, requests.Select(item => (string)item.Data["StepId"]).Distinct().Count(), "next iteration starts a new step");
                 foreach (var verdict in rejected.Concat(accepted))
                 {
                     var request = requests.Single(item => item.StepId == (string)verdict.Data["RequestId"]);
