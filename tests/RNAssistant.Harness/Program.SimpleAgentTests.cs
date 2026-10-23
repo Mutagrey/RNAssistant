@@ -998,18 +998,23 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     LoadToolSchemaResponse("excel.add_sheet"),
-                    "{\"message\":\"Добавляю лист.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"}}]}",
-                    "{\"message\":\"Лист Report создан.\",\"action\":\"done\",\"tool_calls\":[]}"
+                    ModelProtocolWire.WriteAcceptedCall("Create the requested sheet.", "Добавляю лист.",
+                        new ConversationToolCall { Name = "excel.add_sheet",
+                            Arguments = new JObject { ["name"] = "Report" } }),
+                    null
                 });
+                var session = NewSession(adapter);
                 var calls = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>
                 {
                     calls.Add(messages.ToList());
                     AssertEqual(LlmResponseFormats.JsonObject, options.ResponseFormat, "single response format");
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    var response = responses.Dequeue() ?? ScriptedVerifiedFinish(session,
+                        "The sheet write has a terminal result.", "Лист Report создан.",
+                        "The requested sheet was created.", "excel.add_sheet");
+                    return Task.FromResult(new LlmCompletionResult { Content = response });
                 };
                 var service = CreateConversationRunService(adapter, executor, completion);
-                var session = NewSession(adapter);
                 var result = service.ExecuteWithApprovalsAsync(
                     ChatModes.Agent,
                     "Создай лист Report.", session, NewContext(adapter),
@@ -1019,14 +1024,21 @@ namespace RNAssistant.Harness
                 AssertEqual("Лист Report создан.", result.AssistantText, "final response");
                 AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "successful write keeps the accepted model status");
                 AssertEqual(RunViewLifecycles.Completed, result.RunViewState.Lifecycle, "successful write completes the current run");
+                AssertEqual("satisfied", result.RunViewState.ModelResults.Single().Assessment,
+                    "the model assessment is retained separately from runtime completion");
+                AssertEqual(RunGoalVerification.NotAssessed, result.RunViewState.GoalVerification,
+                    "the model assessment does not become independent goal verification");
                 AssertEqual(AgentResponseStatuses.Completed, session.Messages.Last().ResponseStatus, "final status enters accepted history");
                 AssertRunViewState(result, session, "clean", 1, 0, 0);
                 AssertTrue(adapter.HasSheet("Report"), "tool executed");
                 AssertEqual(1, adapter.ExcelSheetRequests.Count(command => command.ToolId == "excel.add_sheet"), "one write dispatch");
+                AssertEqual(session.Messages.Single(message => message.ToolName == "excel.add_sheet" &&
+                    message.AcceptedCallOrigin != null).ToolCallId,
+                    result.RunViewState.ModelResults.Single().Evidence.Single(),
+                    "the projected model claim cites the accepted write call");
                 AssertEqual(3, calls.Count, "schema read, execution, and final model turns");
-                AssertContains(FlattenSimple(calls[0]),
-                    "\"function\":{\"name\":\"excel.add_sheet\"",
-                    "Excel core schema is complete before optional discovery");
+                AssertContains(FlattenSimple(calls[0]), "\"id\":\"excel.add_sheet\"",
+                    "Excel tool is discoverable before schema admission");
                 AssertContains(FlattenSimple(calls[1]), "\"kind\":\"tool-schema\"", "schema evidence reaches model");
                 var finalRequest = FlattenSimple(calls[2]);
                 AssertContains(finalRequest, "TOOL_RESULT", "tool result label");
