@@ -5,7 +5,9 @@
 The candidate branch now creates format-8 chats, keeps v7 readable but
 read-only, projects finish claims without upgrading task verification, and
 persists visible reflection steps. Controlled CLI checks cover process death,
-confirmation, compaction and cancellation/continuation. Workspace permits
+confirmation, compaction and cancellation/continuation. A v8 production HTTP
+run with fake Excel now rejects the phase-0 premature finish and replays an
+honest partial claim after the verified sheet write. Workspace permits
 honest incomplete finish with failed acceptance; satisfied finish still
 requires explicit criteria. See [phase-4 evidence and gaps](conversation-v8/PHASE4.md).
 Full Harness migration, steer/UI integration, real-model comparison and

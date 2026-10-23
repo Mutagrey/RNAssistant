@@ -451,6 +451,9 @@ are not the new contract.
 `mode_questions_smoke.py` verifies Plan/Agent typed questions across processes.
 `conversation_v8_finish_smoke.py` checks rejection of an empty v8 finish after
 a verified CLI write, feedback to the model and continuation without write replay.
+`sh tests/RNAssistant.V8KernelSmoke/run.sh` also checks the production Office
+conversation service over controlled HTTP with fake Excel, including a rejected
+premature finish and a replayed partial outcome. It does not run Office/COM.
 `dotnet run --project demo/RNAssistant.MockDemo -- --unified-agent-test` exercises
 the actual controller with a fake host, including permission snapshot cloning,
 approval after settings changes/restart, AutoConfirm and planning wrappers.

@@ -83,6 +83,8 @@ internal static class Program
         PromptSmoke();
         KernelSmoke();
         SteerSmoke();
+        RNAssistant.Harness.V8OfficeFinishBridge.Run();
+        Console.WriteLine("PASS Office HTTP premature finish rejected; partial claim survives replay");
     }
 
     private static void PromptSmoke()

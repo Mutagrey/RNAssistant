@@ -27,9 +27,14 @@ an irreparable obstacle without reporting success or replaying a tool.
 ## Host-neutral checks
 
 - `sh tests/RNAssistant.V8KernelSmoke/run.sh`: source-linked production build
-  and 25 focused passing checks, including format-7 read-only policy,
+  and 26 focused passing checks, including format-7 read-only policy,
   finish-claim projection/serialization, stale-response discard on steer and
-  closure of a steered read batch with exact terminal IDs.
+  closure of a steered read batch with exact terminal IDs. A controlled HTTP
+  request through production `ConversationRunService` and fake Excel reproduces
+  the phase-0 sequence in v8: schema read, one verified sheet mutation,
+  rejected empty-results finish, then an honest partial finish. The rejected
+  promise is absent from accepted history; replay preserves the partial claim
+  and sheet evidence without presenting task verification.
 - `node tests/web/run-view-state.test.js`: 7/7, including immutable model
   results, a visible partial outcome and no card for an ordinary answer.
 - `dotnet build src/RNAssistant.Cli/RNAssistant.Cli.csproj --no-restore`:
@@ -48,7 +53,7 @@ an irreparable obstacle without reporting success or replaying a tool.
   finishes with both terminal IDs, without replaying the first write.
 
 The full Harness still has legacy v7 fixtures and cannot compile as a whole.
-The original phase-0 fake-Excel premature-finish reproducer and Office steer/UI
-integration checks are not yet migrated. Playwright layout qualification is
+The original v7 red audit remains historical. The full Harness suite and Office
+steer/UI integration checks are not yet migrated. Playwright layout qualification is
 unavailable in this worktree (`playwright` module absent); Windows x64 +
 Office x64 + WebView2 and real-model comparisons remain open.
