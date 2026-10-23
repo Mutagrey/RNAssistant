@@ -208,7 +208,13 @@ namespace RNAssistant.Harness
                 var current = NewSession(adapter);
                 current.LastRun = new ChatRunRecord(); // No accepted response in the last failed/unfinished run.
                 current.Messages.Add(new ChatMessage { Role = "user", Content = "Earlier request" });
-                current.Messages.Add(AgentTranscript.CreateAssistantMessage("{\"quoted\":\"text\"}", null, null, "completed"));
+                var quoted = AgentTranscript.CreateAssistantMessage(
+                    ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                        "Answer with quoted text.", "{\"quoted\":\"text\"}",
+                        results: new ConversationResultClaim[0]), null, responseStatus: "completed");
+                quoted.ProtocolMessage = true;
+                quoted.ResponseModelAttemptId = "prior_quoted_finish";
+                current.Messages.Add(quoted);
                 current.Messages.Add(new ChatMessage { Role = "assistant", Activity = new ChatActivity { Kind = "diagnostic" } });
                 current.Messages.Add(ContextAcceptedCall("result"));
                 current.Messages.Add(AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolCallId = "result", ToolId = "excel.inspect" }, TerminalToolResult.Ok("ok")));
