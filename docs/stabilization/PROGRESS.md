@@ -1,5 +1,16 @@
 # Stabilization progress
 
+## Unified Shell model-context accepted-call admission — 2026-10-23
+
+Owner: Core `ConversationResponseHistoryReader` and workspace context preparation.
+Workspace model facts now use the same accepted-response reader as Office instead
+of a second v7 call parser. The reader distinguishes a stored workspace JSON
+envelope with runtime call metadata from native tool transport, preserves only
+the accepted narration, and refuses missing or mismatched call identity and
+arguments. Focused v7, workspace restart/batch and context-continuity Harness
+checks pass host-neutral. Full input and context-preparation parity remains open;
+Windows/Office/WebView2 are not qualified.
+
 ## Unified Shell application input identity on replay — 2026-10-23
 
 Owner: Core `ConversationInputJournal`. Office inbox recovery and workspace/CLI

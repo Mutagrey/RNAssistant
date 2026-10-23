@@ -34,7 +34,11 @@ namespace RNAssistant.Core.ModelProtocol
                 return ConversationHistoryReadResult.Fail("History record is not an identified v7 assistant response.");
 
             var nativeCalls = message.ToolCalls;
-            if (nativeCalls != null && nativeCalls.Count > 0)
+            // Native tool transport stores plain narration plus a tool call. The
+            // workspace stream stores a v7 envelope and the same call metadata.
+            if (nativeCalls != null && nativeCalls.Count > 0 &&
+                message.ToolResultRole == ToolResultRoles.Tool &&
+                message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion)
             {
                 if (nativeCalls.Count != 1 || nativeCalls[0] == null || string.IsNullOrWhiteSpace(message.ToolName) ||
                     string.IsNullOrWhiteSpace(nativeCalls[0].ArgumentsJson) ||
@@ -62,8 +66,31 @@ namespace RNAssistant.Core.ModelProtocol
             if (message.ProtocolMessage)
             {
                 var parsed = ConversationResponseJson.Read(message.Content);
-                return parsed.Success ? FromMetadata(message, parsed.Response) : ConversationHistoryReadResult.Fail(parsed.Error);
+                if (!parsed.Success) return ConversationHistoryReadResult.Fail(parsed.Error);
+                if (string.IsNullOrEmpty(message.ToolResultRole) &&
+                    (nativeCalls == null ? 0 : nativeCalls.Count) != parsed.Response.ToolCalls.Count)
+                    return ConversationHistoryReadResult.Fail("Accepted-call metadata count differs from the response envelope.");
+                if (nativeCalls != null && nativeCalls.Count > 0)
+                {
+                    if (nativeCalls.Count != parsed.Response.ToolCalls.Count)
+                        return ConversationHistoryReadResult.Fail("Accepted-call metadata count differs from the response envelope.");
+                    for (var index = 0; index < nativeCalls.Count; index++)
+                    {
+                        var saved = nativeCalls[index];
+                        var proposed = parsed.Response.ToolCalls[index];
+                        if (saved == null || string.IsNullOrWhiteSpace(saved.Id) ||
+                            !string.Equals(saved.Id, message.ToolCallId, StringComparison.Ordinal))
+                            return ConversationHistoryReadResult.Fail("Accepted-call runtime ID differs from the response envelope metadata.");
+                        if (!string.Equals(saved.Name, proposed.Name, StringComparison.Ordinal))
+                            return ConversationHistoryReadResult.Fail("Accepted-call name differs from the response envelope.");
+                        if (!string.Equals(saved.ArgumentsJson, proposed.Arguments.ToString(Formatting.None), StringComparison.Ordinal))
+                            return ConversationHistoryReadResult.Fail("Accepted-call arguments differ from the response envelope.");
+                    }
+                }
+                return FromMetadata(message, parsed.Response);
             }
+            if (nativeCalls != null && nativeCalls.Count > 0)
+                return ConversationHistoryReadResult.Fail("Plain assistant history has unexpected tool calls.");
             if (!string.IsNullOrWhiteSpace(message.ToolCallId) || !string.IsNullOrWhiteSpace(message.ToolName) ||
                 message.AcceptedCallOrigin != null)
                 return ConversationHistoryReadResult.Fail("Plain assistant history has unexpected tool-call metadata.");

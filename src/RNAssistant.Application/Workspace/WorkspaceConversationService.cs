@@ -1343,22 +1343,14 @@ namespace RNAssistant.Runtime
                     if (!item.ProtocolMessage) { facts.Add(HistoricalContextProjector.Project(item)); continue; }
                     if (item.Role == "assistant")
                     {
-                        var parsed = ConversationResponseJson.Read(item.Content);
-                        if (!parsed.Success) throw new InvalidOperationException("Stored workspace response is invalid: " + parsed.Error);
-                        var calls = item.ToolCalls ?? new List<LlmToolCall>();
-                        if (calls.Count != parsed.Response.ToolCalls.Count)
-                            throw new InvalidOperationException("Stored workspace accepted-call IDs are incomplete.");
+                        var parsed = ConversationResponseHistoryReader.Read(item);
+                        if (!parsed.Success) throw new InvalidOperationException(
+                            "История чата содержит неполную запись вызова. Создайте новый чат; старая история сохранена. " + parsed.Error);
+                        var calls = parsed.Response.ToolCalls;
                         if (calls.Count == 0) facts.Add(HistoricalContextProjector.Project(item));
                         for (var index = 0; index < calls.Count; index++)
                         {
                             var call = calls[index];
-                            if (string.IsNullOrEmpty(call.Id) || call.Name != parsed.Response.ToolCalls[index].Name ||
-                                call.ArgumentsJson != parsed.Response.ToolCalls[index].Arguments.ToString(Formatting.None))
-                                throw new InvalidOperationException("Stored workspace accepted call differs from response.");
-                            if (calls.Count != 1 || item.ToolCallId != call.Id || item.ToolName != call.Name ||
-                                item.AcceptedCallOrigin == null)
-                                throw new InvalidOperationException(
-                                    "История чата содержит неполную запись вызова. Создайте новый чат; старая история сохранена.");
                             facts.Add(new ChatMessage { Id = calls.Count == 1 ? item.Id : item.Id + ":" + index,
                                 RunId = item.RunId, Role = "assistant", ProtocolMessage = true,
                                 ResponseProtocolVersion = ConversationResponse.ProtocolVersion,
@@ -1368,7 +1360,8 @@ namespace RNAssistant.Runtime
                                 ToolCalls = role == ToolResultRoles.Tool ? new List<LlmToolCall> { new LlmToolCall {
                                     Id = call.Id, Type = "function", Name = call.Name, ArgumentsJson = call.ArgumentsJson } } : new List<LlmToolCall>(),
                                 Content = role == ToolResultRoles.Tool ? parsed.Response.Message : new ConversationResponse(parsed.Response.Message,
-                                    new[] { parsed.Response.ToolCalls[index] }, parsed.Response.Action).ToJson() });
+                                    new[] { new ConversationToolCall { Name = call.Name, Arguments = JObject.Parse(call.ArgumentsJson) } },
+                                    parsed.Response.Action).ToJson() });
                         }
                     }
                     else if (!string.IsNullOrEmpty(item.ToolCallId))

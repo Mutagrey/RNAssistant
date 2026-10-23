@@ -47,6 +47,31 @@ namespace RNAssistant.Harness
             var plain = ConversationResponseHistoryReader.Read(final);
             AssertTrue(plain.Success && plain.Response.ToolCalls.Count == 0, "plain final text is not sniffed as a tool envelope");
             AssertEqual(final.Content, plain.Response.Message, "JSON-looking final text remains exact text");
+
+            var workspace = new ChatMessage {
+                Role = "assistant", ProtocolMessage = true,
+                ResponseProtocolVersion = ConversationResponse.ProtocolVersion,
+                Content = ModelProtocolWire.Write("Workspace finding.", new[] { new ConversationToolCall {
+                    Name = "common.resources_read", Arguments = JObject.Parse("{\"target\":\"notes.txt\"}") } }),
+                ToolCallId = "workspace_call", ToolName = "common.resources_read",
+                AcceptedCallOrigin = FixtureCallOrigin("workspace_call"),
+                ToolCalls = new List<LlmToolCall> { new LlmToolCall { Id = "workspace_call",
+                    Type = "function", Name = "common.resources_read", ArgumentsJson = "{\"target\":\"notes.txt\"}" } }
+            };
+            var workspaceRead = ConversationResponseHistoryReader.Read(workspace);
+            AssertTrue(workspaceRead.Success, "workspace v7 envelope with durable call metadata is accepted");
+            AssertEqual("Workspace finding.", workspaceRead.Response.Message,
+                "workspace narration is the response message, not its JSON envelope");
+            AssertEqual("workspace_call", workspaceRead.Response.ToolCalls.Single().Id,
+                "workspace call keeps the runtime identity");
+            var changedArguments = JsonConvert.DeserializeObject<ChatMessage>(JsonConvert.SerializeObject(workspace));
+            changedArguments.ToolCalls[0].ArgumentsJson = "{}";
+            AssertTrue(!ConversationResponseHistoryReader.Read(changedArguments).Success,
+                "workspace call metadata must match the accepted arguments");
+            var missingCall = JsonConvert.DeserializeObject<ChatMessage>(JsonConvert.SerializeObject(workspace));
+            missingCall.ToolCalls.Clear();
+            AssertTrue(!ConversationResponseHistoryReader.Read(missingCall).Success,
+                "workspace envelope cannot lose its durable call metadata");
         }
 
         private static void ConversationHistoryRejectsAmbiguousRecords()

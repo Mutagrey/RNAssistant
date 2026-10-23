@@ -1996,6 +1996,10 @@ Owner: Conversation/model context; совместные границы — Core 
   File owner сохраняет version guard, journal и read-back; typed recovery не
   разрешает повтор unknown effect. Pending-вызов без требуемого prepared state
   не исполняется через fallback: его следует отклонить и запросить операцию заново.
+- При подготовке model-context workspace проверяет сохранённые v7 ответы через
+  общий `ConversationResponseHistoryReader`: JSON envelope с runtime call metadata
+  отличается от native tool-call transport ролью и версией результата. Narration,
+  имена, аргументы и runtime IDs должны совпадать; неполная запись отклоняется.
 - Core `ContextWorkingSet` общий для Office request/preview и CLI. Он передаёт
   исходные архивные кандидаты compiler, без provider calls и второго store.
   `ModelContextCompiler` единолично проверяет актуальность, устраняет дубликаты
