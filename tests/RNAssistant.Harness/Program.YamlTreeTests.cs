@@ -38,6 +38,17 @@ namespace RNAssistant.Harness
             AssertEqual("resource_yaml_pointer_not_found", RuntimeThrows<ResourceRequestException>(() =>
                 ResourceYamlTreeSelector.Select(new StringReader(source), "/a~1b/~0/01", 0, 0, 1, 2000)).ErrorCode,
                 "noncanonical sequence index cannot select a value");
+            const string unrelatedAlias = "base: &b {x: 1}\nuse: *b\nother: ok\n";
+            var independent = ResourceYamlTreeSelector.Select(new StringReader(unrelatedAlias), "/other", 0, 0, 1, 2000);
+            AssertTrue(independent.Nodes.Count == 1 && independent.Nodes[0].Value == "ok" &&
+                independent.Coverage().Path == "/other",
+                "an alias outside the selected pointer does not block exact YAML navigation");
+            AssertEqual(3L, ResourceYamlTreeSelector.Select(new StringReader(unrelatedAlias), "", 0, 0, 1, 2000)
+                .TotalChildren, "depth-zero mapping counts explicit keys without expanding alias values");
+            foreach (var pointer in new[] { "/use", "/use/x" })
+                AssertEqual("resource_yaml_alias_unsupported", RuntimeThrows<ResourceRequestException>(() =>
+                    ResourceYamlTreeSelector.Select(new StringReader(unrelatedAlias), pointer, 0, 0, 1, 2000)).ErrorCode,
+                    "a selected alias still fails rather than claiming source content");
             foreach (var invalid in new[] { "x: 1\nx: 2\n", "base: &b {x: 1}\nuse: *b\n",
                 "base: &b {x: 1}\nuse:\n  <<: *b\n", "? [a, b]\n: c\n", "x: 1\n---\ny: 2\n" })
             {
@@ -76,7 +87,7 @@ namespace RNAssistant.Harness
                 {
                     var blank = new string(' ', 8192);
                     for (var i = 0; i < 512; i++) writer.Write(blank);
-                    writer.Write("data: [one, two, three]\n");
+                    writer.Write("\nbase: &b {x: 1}\ncopy: *b\ndata: [one, two, three]\n");
                 }
                 var allocated = GC.GetAllocatedBytesForCurrentThread();
                 var selected = provider.ReadTree("large.yaml", "/data", 1, 1, 1, 2000);
@@ -107,7 +118,8 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 var artifact = new ChatArtifact { Id = "yaml-tree-artifact", Kind = ChatArtifactKinds.File,
                     Title = "large.yml", MimeType = "application/yaml",
-                    InlineText = "padding: " + new string('q', 40000) + "\ndata: [one, two, three]\n" };
+                    InlineText = "padding: " + new string('q', 40000) +
+                        "\nbase: &b {x: 1}\ncopy: *b\ndata: [one, two, three]\n" };
                 session.Artifacts.Add(artifact);
                 executor.BindResourceAuthority(session);
                 var gateway = executor.ResourceGateway;

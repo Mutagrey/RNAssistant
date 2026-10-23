@@ -617,9 +617,11 @@ Complete YAML `.yaml`/`.yml` artifacts and workspace UTF-8 files use the same
 The tree declares `format=yaml` and retains `yaml-path` partial coverage. Mapping
 keys are decoded scalar text, with `~0`/`~1` pointer escaping; scalar values are
 decoded previews (`valueExact=false`), not YAML schema-resolved values or original
-source lexemes. Duplicate keys on a selected path, aliases, plain merge keys and
-complex keys in traversed mappings, and multiple documents fail explicitly
-instead of choosing or expanding a value. Raw source windows remain available.
+source lexemes. Duplicate keys on a selected path, aliases needed by the selected
+path or view, plain merge keys and complex keys in traversed mappings, and multiple
+documents fail explicitly instead of choosing or expanding a value. Unselected
+aliases are skipped; they do not become evidence for referenced content. Raw source
+windows remain available.
 The only size bound is the model output budget; source parsing itself is streamed.
 Provider-specific tree views remain separate work.
 

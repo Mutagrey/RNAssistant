@@ -92,8 +92,9 @@ page errors. Причина не установлена; при следующе
    parser для Office и workspace/CLI. JSON Pointer/tree для полного JSON text
    реализован общим streaming selector в Office и workspace/CLI. YAML tree для
    однодокументных источников с адресуемыми scalar keys также реализован общим
-   streaming selector; aliases, merge/complex keys и multi-document требуют
-   отдельной семантики. PDF page text для chat attachment и workspace file с
+   streaming selector; алиасы вне выбранного пути/view пропускаются без раскрытия,
+   а выбранные aliases, merge/complex keys и multi-document требуют отдельной
+   семантики. PDF page text для chat attachment и workspace file с
    ограниченными символьными окнами и диапазоны полных извлечённых страниц
    реализованы по точному оригиналу; их профиль извлечения сохраняется с evidence.
    Остались image crop, PDF table/figure/bbox и provenance будущих derived views; исходная

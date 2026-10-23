@@ -11,8 +11,8 @@ using YamlDotNet.Core.Events;
 
 namespace RNAssistant.Core.Services
 {
-    // YAML navigation uses literal decoded scalar keys. It never expands aliases
-    // or resolves YAML schemas, so ambiguous YAML cannot become exact evidence.
+    // YAML navigation uses literal decoded scalar keys. Unselected aliases can
+    // be skipped; selected aliases are never expanded into exact tree evidence.
     public sealed class ResourceYamlTreeSelector
     {
         private readonly IParser _parser;
@@ -109,6 +109,9 @@ namespace RNAssistant.Core.Services
                 NextRequired();
                 return found;
             }
+            if (_current is AnchorAlias)
+                throw Error("Selected YAML aliases cannot be expanded into exact tree pointers.",
+                    "resource_yaml_alias_unsupported");
             Skip();
             return false;
         }
@@ -179,6 +182,9 @@ namespace RNAssistant.Core.Services
             if (_current is Scalar scalar)
                 return new ResourceTreeNode { Pointer = pointer, Type = "scalar", Value = scalar.Value,
                     ValueExact = false };
+            if (_current is AnchorAlias)
+                throw Error("Selected YAML aliases cannot be expanded into exact tree pointers.",
+                    "resource_yaml_alias_unsupported");
             throw Error("Unsupported YAML node.", "resource_yaml_invalid");
         }
 
@@ -209,8 +215,6 @@ namespace RNAssistant.Core.Services
             _token.ThrowIfCancellationRequested();
             var next = _parser.MoveNext();
             _current = next ? _parser.Current : null;
-            if (_current is AnchorAlias)
-                throw Error("YAML aliases cannot be represented as exact tree pointers.", "resource_yaml_alias_unsupported");
             return next;
         }
 
