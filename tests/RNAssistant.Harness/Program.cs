@@ -810,6 +810,7 @@ namespace RNAssistant.Harness
                 Test("plan mode: filters mutations and keeps planning tools", PlanModeFiltersMutationsAndKeepsPlanningTools),
                 Test("plan mode: plan document revisions and questions", PlanModePersistsMarkdownAndAwaitsAnswers),
                 Test("plan mode: native question pauses kernel", PlanModeNativeQuestionPausesKernel),
+                Test("plan mode: question answers require explicit skip", QuestionAnswersRequireExplicitSkip),
                 Test("plan mode: question presentation survives storage", ToolPresentationQuestionsSurviveStorage),
                 Test("plan document: verified native runtime", PlanDocumentUsesVerifiedNativeRuntime),
                 Test("document Plan: shared publication and competing writers", DocumentPlanSharedPublication),

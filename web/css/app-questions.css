@@ -1,0 +1,37 @@
+/* One paged question card, using the same surfaces and controls as the demo. */
+.agent-question-slot, .agent-question-slot .tool-result-slot { min-width: 0; }
+.plan-question-cards { display: grid; gap: var(--space-3); box-sizing: border-box; min-width: 0; width: 100%; margin: var(--space-2) 0; padding: var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-subtle); color: var(--ink); font-size: var(--text-base); line-height: 1.4; }
+.plan-question-cards .question-header { display: flex; align-items: center; gap: var(--space-2); min-width: 0; color: var(--ink-muted); }
+.plan-question-cards .question-title { display: inline-flex; align-items: center; gap: var(--space-2); margin-right: auto; font-size: var(--text-sm); }
+.plan-question-cards .question-title svg { width: 16px; height: 16px; }
+.plan-question-cards .question-navigation { display: flex; align-items: center; gap: var(--space-1); }
+.plan-question-cards .question-counter { min-width: 36px; text-align: center; font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+.plan-question-cards .question-header .icon-btn { flex: 0 0 28px; width: 28px; height: 28px; min-height: 28px; }
+.plan-question-cards .question-header .icon-btn svg { width: 16px; height: 16px; }
+.plan-question-cards .question-card { min-width: 0; margin: 0; padding: 0; border: 0; }
+.plan-question-cards .question-card[hidden] { display: none; }
+.plan-question-cards .question-prompt { max-width: 100%; margin: 0; padding: 0; color: var(--ink); font-size: var(--text-base); font-weight: 500; white-space: pre-wrap; overflow-wrap: anywhere; }
+.plan-question-cards .question-hint { margin: var(--space-1) 0 0; color: var(--ink-muted); font-size: var(--text-xs); }
+.plan-question-cards .question-options { margin-top: var(--space-2); }
+.plan-question-cards .question-option { display: flex; position: relative; align-items: flex-start; gap: var(--space-2); min-height: 38px; margin: 0; padding: var(--space-2) 0; border: 0; border-radius: var(--radius-sm); background: transparent; cursor: pointer; }
+.plan-question-cards .question-option + .question-option::before { content: ""; position: absolute; top: 0; left: 26px; right: 0; height: 1px; background: var(--line); }
+.plan-question-cards .question-option:hover { background: var(--surface-hover); }
+.plan-question-cards .question-option:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
+.plan-question-cards .question-option input { appearance: none; display: grid; place-content: center; box-sizing: border-box; flex: 0 0 18px; width: 18px; height: 18px; min-height: 0; margin: 1px 0 0; padding: 0; border: 1px solid var(--line-strong); border-radius: 50%; background: transparent; }
+.plan-question-cards .question-option input[type="checkbox"] { border-radius: var(--space-1); }
+.plan-question-cards .question-option input:checked { border-color: var(--accent); background: var(--accent); }
+.plan-question-cards .question-option input:checked::after { content: ""; width: 4px; height: 8px; margin-top: -2px; border: solid var(--accent-ink); border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.plan-question-cards .question-option-copy { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.plan-question-cards .question-option-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-2); }
+.plan-question-cards .question-option strong { font-weight: 400; }
+.plan-question-cards .question-recommended { color: var(--accent); font-size: var(--text-xs); }
+.plan-question-cards .question-description { color: var(--ink-muted); font-size: var(--text-xs); line-height: 1.4; }
+.plan-question-cards .question-free { display: block; box-sizing: border-box; width: 100%; min-height: 36px; max-height: 160px; margin: var(--space-2) 0 0; padding: var(--space-2) var(--space-3); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--ink); font: inherit; resize: vertical; }
+.plan-question-cards .is-skipped .question-option, .plan-question-cards .is-skipped .question-free { opacity: .6; }
+.plan-question-cards .question-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); }
+.plan-question-cards .question-actions .button { min-height: 30px; padding-inline: var(--space-3); }
+.plan-question-cards .question-status { margin: 0; font-size: var(--text-sm); color: var(--ink-muted); overflow-wrap: anywhere; }
+.plan-question-cards .question-status.is-error, .plan-question-cards fieldset[aria-invalid="true"] .question-prompt { color: var(--danger); }
+.workspace-chat-questions { flex: 0 1 auto; min-height: 0; max-height: 55vh; overflow: auto; scrollbar-gutter: stable; }
+@media (pointer: coarse) { .plan-question-cards .question-option, .plan-question-cards .question-actions .button { min-height: 40px; } }
+@media (forced-colors: active) { .plan-question-cards .question-option input:checked { background: Highlight; border-color: Highlight; forced-color-adjust: none; } .plan-question-cards .question-option input:checked::after { border-color: HighlightText; } }

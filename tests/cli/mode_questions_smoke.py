@@ -146,8 +146,8 @@ def run_case(root, mode, role):
         assert completed["RunId"] != pending["RunId"] and completed["userInput"] is None
         continuation = requests[before]
         assert "Current mode: " + mode in continuation["messages"][0]["content"]
-        content = json.dumps(continuation["messages"])
-        assert "PLAN_ANSWERS:" in content and "Markdown" in content and "Include examples" in content
+        content = json.dumps(continuation["messages"], ensure_ascii=False)
+        assert "Ответы на вопросы:" in content and "Markdown" in content and "Include examples" in content
         for identity in [questions["questionSetId"], *[q["id"] for q in questions["questions"]],
                          *[o["id"] for q in questions["questions"] for o in q["options"]]]:
             assert identity not in content, "Runtime question identity leaked to model"

@@ -525,7 +525,8 @@ call/result and activity payloads retain the interaction body.
 Office and CLI use Core `UserQuestionAnswers` to resolve the accepted result,
 hydrate its CAS body and validate exact run/set/question/option identities. Web
 submits typed `answers` through `submitChatInput`, preserving the composer draft;
-only runtime creates the semantic `PLAN_ANSWERS` message. Office checks again under
+only runtime creates readable question/answer text (including explicit skips,
+without JSON or runtime IDs). Office checks again under
 the run reservation before appending queued answers. Stale/already-answered sets
 are rejected; answer inputs cannot be edited as arbitrary text. A protocol result
 with the `user` role does not count as a human answer when rendering question cards.

@@ -48,17 +48,6 @@ namespace RNAssistant.Core.Models
         [JsonProperty("questionId")] public string QuestionId { get; set; }
         [JsonProperty("optionIds")] public List<string> OptionIds { get; set; } = new List<string>();
         [JsonProperty("freeText")] public string FreeText { get; set; }
-    }
-
-    public sealed class UserQuestionAnswersProjection
-    {
-        [JsonProperty("answers")] public List<UserQuestionAnswerProjection> Answers { get; set; }
-    }
-
-    public sealed class UserQuestionAnswerProjection
-    {
-        [JsonProperty("question")] public string Question { get; set; }
-        [JsonProperty("selections")] public List<string> Selections { get; set; }
-        [JsonProperty("freeText")] public string FreeText { get; set; }
+        [JsonProperty("skipped", DefaultValueHandling = DefaultValueHandling.Ignore)] public bool Skipped { get; set; }
     }
 }

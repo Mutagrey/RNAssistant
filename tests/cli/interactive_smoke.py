@@ -162,7 +162,7 @@ def questions_case(s):
     assert after["modelConfiguration"]["ContextWindowTokens"] == 24000
     assert after["Presentation"]["Files"] == before["Presentation"]["Files"], "Lost prior-question file effects"
     assert (s.workspace / "once.txt").read_text() == "ONCE" and len(s.requests) == 4
-    assert "PLAN_ANSWERS:" in json.dumps(s.requests[2]) and "Risks" in json.dumps(s.requests[2])
+    assert "Ответы на вопросы:" in json.dumps(s.requests[2], ensure_ascii=False) and "Risks" in json.dumps(s.requests[2])
     assert "My explicit note" in json.dumps(s.requests[2])
     assert any(m["role"] == "tool" for m in s.requests[2]["messages"])
     assert "Acceptance: Passed" in output

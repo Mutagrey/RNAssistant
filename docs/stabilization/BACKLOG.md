@@ -12,6 +12,15 @@
 новая возможность требует явной задачи, scope и owner; дефекты работающей системы
 приоритетнее расширения без конкретного пользовательского результата.
 
+## Plan prompt: устаревшая точная проверка текста — 2026-10-23
+
+Owner: planning prompt tests. Harness `plan mode: filters mutations and keeps
+planning tools` ожидает прежнюю фразу `Never substitute chat prose or an HTML workspace`.
+Текущий prompt выражает то же ограничение через `chat prose or an HTML workspace
+cannot replace it`; обновить assertion отдельной правкой. При проверке Question
+остальные четыре случая `plan mode:` прошли; это расхождение текста, не закрытый
+Windows/Office gate.
+
 ## Shell audit: preview fixture и одиночная JS-ошибка — 2026-10-23
 
 Owner: HTML preview tests / plugin preview lifecycle. В

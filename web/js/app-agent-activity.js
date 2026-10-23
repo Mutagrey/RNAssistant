@@ -64,66 +64,10 @@ function appendQuestionCards(node, activity, context) {
 }
 
 function renderQuestionCards(node, data, source) {
-  var form = document.createElement("form");
-  form.className = "plan-question-cards";
-  data.questions.forEach(function (question) {
-    var fieldset = document.createElement("fieldset");
-    var legend = document.createElement("legend");
-    legend.textContent = question.header || question.prompt || "Вопрос";
-    fieldset.appendChild(legend);
-    if (question.prompt && question.prompt !== legend.textContent) {
-      var prompt = document.createElement("p");
-      prompt.textContent = question.prompt;
-      fieldset.appendChild(prompt);
-    }
-    (question.options || []).forEach(function (option) {
-      var label = document.createElement("label");
-      var input = document.createElement("input");
-      input.type = question.selection === "multiple" ? "checkbox" : "radio";
-      input.name = "q_" + question.id;
-      input.value = option.id;
-      var copy = document.createElement("span");
-      copy.innerHTML = "<strong></strong><small></small>";
-      copy.querySelector("strong").textContent = option.label + (option.recommended ? " · рекомендуется" : "");
-      copy.querySelector("small").textContent = option.description || "";
-      label.appendChild(input);
-      label.appendChild(copy);
-      fieldset.appendChild(label);
-    });
-    if (question.allowFreeText !== false) {
-      var free = document.createElement("textarea");
-      free.name = "free_" + question.id;
-      free.rows = 2;
-      free.maxLength = 4000;
-      free.placeholder = "Дополнение или свой вариант";
-      fieldset.appendChild(free);
-    }
-    form.appendChild(fieldset);
+  window.RNAssistantQuestions.render(node, data, {
+    scope: "office:" + source.chatId, runId: source.runId,
+    submit: function (answers) { return submitInboxMessage(null, [], source.chatId, "Steer", answers); }
   });
-  var submit = document.createElement("button");
-  submit.type = "submit";
-  submit.className = "agent-action-button primary";
-  submit.textContent = "Ответить";
-  form.appendChild(submit);
-  form.addEventListener("submit", async function (event) {
-    event.preventDefault();
-    var answers = data.questions.map(function (question) {
-      var selectedIds = Array.prototype.slice.call(form.querySelectorAll("[name='q_" + question.id + "']:checked")).map(function (input) { return input.value; });
-      var free = form.querySelector("[name='free_" + question.id + "']");
-      return { questionId: question.id, optionIds: selectedIds, freeText: free ? free.value.trim() : "" };
-    });
-    if (answers.some(function (answer) { return !answer.optionIds.length && !answer.freeText; })) {
-      window.alert("Ответьте на каждый вопрос.");
-      return;
-    }
-    submit.disabled = true;
-    var accepted = await submitInboxMessage(null, [], source.chatId, "Steer", {
-      runId: source.runId, questionSetId: data.questionSetId, answers: answers
-    });
-    submit.disabled = !!accepted;
-    if (accepted) submit.textContent = "Ответ отправлен";
-  });
-  node.appendChild(form);
 }
 
 function renderActivityRow(activity, current, expandable, context) {

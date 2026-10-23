@@ -250,6 +250,16 @@ and replay; `bridge: typed input` checks its addressed DTO. Web
 receipts and history ordering without redundant queue-only history fetches.
 These are fake-host/model checks, not Windows/Office qualification.
 
+Questions: `node tests/web/questions-interaction.test.js` exercises the product
+page in Chrome (Playwright / `BROWSER_EXECUTABLE`): shared Office/project/plugin
+forms, pagination/back navigation, single-choice advance, close after acceptance,
+stale pending snapshots, explicit skips, failed-send retry identity, draft retention,
+keyboard interaction, both themes and narrow layout. `tool-result-presentation.test.js`
+covers exact retained question delivery; `chat-inbox.test.js` covers intake
+receipts. Harness filters `plan mode: native question` and `plan mode: question`
+cover restored accepted questions, readable semantic answers and explicit-skip
+validation. These checks do not qualify Windows/Office/WebView2.
+
 `storage: CAS` covers misplaced/renamed published and unpublished resource journals,
 file/directory links and supported sibling cache/metadata paths.
 `resource cutover: frozen evidence` and `context continuity:` cover removed heads,

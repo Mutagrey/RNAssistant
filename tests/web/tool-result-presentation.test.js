@@ -58,7 +58,7 @@ const { chromium } = require("playwright");
     await page.waitForFunction(() => cancelled.includes("4"));
     await page.evaluate(() => requests[4].resolve({ chatId: "chat", runId: "run", toolCallId: "call", blocks: [{ kind: "text", title: "Late", text: "foreign", complete: true }] }));
     assert.equal(await page.locator(".tool-result-preview").count(), 0, "removed card never receives foreign chat delivery");
-    for (const file of ["app-agent-model.js", "app-agent-activity.js"])
+    for (const file of ["app-icons.js", "app-agent-model.js", "app-questions.js", "app-agent-activity.js"])
       await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, "../../web/js", file), "utf8") });
     await page.evaluate(() => {
       state.activeChatId = "chat"; state.messages = [{}, { Role: "user", ProtocolMessage: true }];
@@ -68,6 +68,7 @@ const { chromium } = require("playwright");
       document.body.innerHTML = '<div id="questions"></div><form id="chatForm"><textarea id="chatInput"></textarea></form>';
       document.getElementById("chatInput").value = "Unsent draft";
       window.submitInboxMessage = async (...args) => { window.submittedAnswer = args; return true; };
+      window.inboxOperationId = () => "answer-operation";
       appendQuestionCards(document.getElementById("questions"), {
         ToolId: "common.questions_ask", ToolCallId: "ask", RunId: "run", Status: "waiting", DataJson: null
       }, { index: 0 });
@@ -87,11 +88,11 @@ const { chromium } = require("playwright");
     } }));
     await page.locator(".plan-question-cards").waitFor();
     assert.equal(await page.locator("#questions img").count(), 0, "question text is inert");
-    assert.ok((await page.locator("#questions fieldset p").textContent()).length > 8192,
+    assert.ok((await page.locator("#questions .question-prompt").textContent()).length > 8192,
       "externalized question body remains visible outside action details");
-    await page.locator("#questions input[value=a]").check();
     await page.locator("#questions textarea").fill("Сначала Core");
-    await page.getByRole("button", { name: "Ответить", exact: true }).click();
+    await page.locator("#questions input[value=a]").click();
+    await page.locator(".plan-question-cards").waitFor({ state: "hidden" });
     const answer = await page.evaluate(() => submittedAnswer);
     assert.deepEqual(answer, [null, [], "chat", "Steer", { runId: "run", questionSetId: "set",
       answers: [{ questionId: "q1", optionIds: ["a"], freeText: "Сначала Core" }] }]);

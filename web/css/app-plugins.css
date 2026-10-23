@@ -150,13 +150,10 @@
 .plugin-workspace-chat-view .workspace-chat-notice{min-height:0;padding:0 14px;color:var(--ink-muted);font-size:11px}
 .plugin-workspace-chat-view .workspace-chat-notice:not(:empty){padding-top:8px}
 .plugin-workspace-chat-view .workspace-chat-notice[data-error="true"]{color:var(--danger)}
-.plugin-workspace-chat-view .workspace-chat-control,.plugin-workspace-chat-view .workspace-chat-questions{margin:0 12px 8px;padding:10px;border:1px solid var(--line-strong);border-radius:8px;background:var(--surface-subtle)}
+.plugin-workspace-chat-view .workspace-chat-control{margin:0 12px 8px;padding:10px;border:1px solid var(--line-strong);border-radius:8px;background:var(--surface-subtle)}
 .plugin-workspace-chat-view .workspace-chat-control pre{max-height:180px;margin:0 0 8px;overflow:auto;overflow-wrap:anywhere;white-space:pre-wrap;font-size:11px}
-.plugin-workspace-chat-view .workspace-chat-questions{display:grid;gap:8px}
+.plugin-workspace-chat-view .workspace-chat-questions{margin:0 12px 8px;padding:0 4px}
 .plugin-workspace-chat-view .workspace-chat-questions[hidden]{display:none}
-.plugin-workspace-chat-view .workspace-chat-questions fieldset{margin:8px 0;border:1px solid var(--line-strong);border-radius:6px}
-.plugin-workspace-chat-view .workspace-chat-questions label{display:block;margin:6px 0}
-.plugin-workspace-chat-view .workspace-chat-questions textarea{width:100%}
 .plugin-workspace-chat-view .project-chat-composer .composer-input-wrap{width:100%}
 .plugin-workspace-chat-view .project-chat-composer textarea{resize:none}
 .plugin-data-templates .plugin-chat{padding:0;border-left:0}

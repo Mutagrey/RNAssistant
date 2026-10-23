@@ -159,8 +159,8 @@
       s.interruptedEffectPossible?'Возможное изменение требует проверки. Не повторяйте действие автоматически.':
       (s.Status||s.status)==='interrupted'?'Выполнение прервано. Проверьте ход работы.':running?'Агент работает…':'');
     chatComposer.select({workspaceId:chat.project.workspaceId,sessionId:chat.sessionId},s);
-    window.RNAssistantWorkspaceChat.renderWorkspaceControls(chat,function(answers){
-      return chatAction(function(workspaceId,sessionId){return send('submitProjectChat',{workspaceId:workspaceId,sessionId:sessionId,input:{sessionId:sessionId,requestId:crypto.randomUUID(),answers:answers}});});});
+    window.RNAssistantWorkspaceChat.renderWorkspaceControls(chat,function(answers,requestId){
+      return chatAction(function(workspaceId,sessionId){return send('submitProjectChat',{workspaceId:workspaceId,sessionId:sessionId,input:{sessionId:sessionId,requestId:requestId,answers:answers}});},true);});
     controls();
   }
   async function readChat(sessionId){if(!selected)return;
@@ -247,7 +247,7 @@
         window.RNAssistantWorkspaceChat.rememberSession(workspaceId,value.sessionId);renderChat();el('Input').focus();}}
     catch(error){if(current===chatEpoch)chatStatus(error.message);}
     finally{chatBusy=false;controls();}}
-  async function chatAction(action){if(chatBusy||!selected||!chat)return;
+  async function chatAction(action,reportFailure){if(chatBusy||!selected||!chat)return false;
     var id=selected.pluginId,workspaceId=chat.project.workspaceId,sessionId=chat.sessionId,current=chatEpoch;
     function active(){return selected&&selected.pluginId===id&&chat&&chat.sessionId===sessionId&&current===chatEpoch;}
     chatBusy=true;controls();
@@ -256,8 +256,8 @@
       if(stopTitleWatch)stopTitleWatch();
       stopTitleWatch=window.RNAssistantWorkspaceChat.watchTitle(result,
         function(){return send('getProjectChat',{workspaceId:workspaceId,sessionId:sessionId});},
-        function(latest){if(active()){chat=latest;renderChat();}});}}
-    catch(error){if(active())chatStatus(error.message);}
+        function(latest){if(active()){chat=latest;renderChat();}});}return true;}
+    catch(error){if(active())chatStatus(error.message);if(reportFailure)throw error;return false;}
     finally{clearInterval(timer);if(active()){chatBusy=false;controls();}}}
   function setIconEditor(open){el('IconEditor').hidden=!open;el('IconTrigger').setAttribute('aria-expanded',String(open));
     if(!open&&el('IconEditor').contains(document.activeElement))el('IconTrigger').focus();}

@@ -61,7 +61,7 @@ namespace RNAssistant.Core.Services
                 command.Answers.Any(answer => answer == null || string.IsNullOrWhiteSpace(answer.QuestionId)) ||
                 command.Answers.Select(answer => answer.QuestionId).Distinct(StringComparer.Ordinal).Count() != command.Answers.Count)
                 throw new ArgumentException("Provide exactly one answer to each question.");
-            var projection = new UserQuestionAnswersProjection { Answers = new List<UserQuestionAnswerProjection>() };
+            var replies = new List<string>();
             foreach (var question in questions.Questions)
             {
                 var answer = command.Answers.SingleOrDefault(item => item.QuestionId == question.Id);
@@ -72,16 +72,15 @@ namespace RNAssistant.Core.Services
                     selected.Any(id => !question.Options.Any(option => option.Id == id)) ||
                     question.Selection == "single" && selected.Count > 1 ||
                     !question.AllowFreeText && text.Length > 0 || text.Length > 4000 ||
-                    selected.Count == 0 && text.Length == 0)
+                    (!answer.Skipped && selected.Count == 0 && text.Length == 0) ||
+                    (answer.Skipped && (selected.Count > 0 || text.Length > 0)))
                     throw new ArgumentException("Invalid choices or free text for question: " + question.Header);
-                projection.Answers.Add(new UserQuestionAnswerProjection
-                {
-                    Question = question.Prompt,
-                    Selections = question.Options.Where(option => selected.Contains(option.Id)).Select(option => option.Label).ToList(),
-                    FreeText = text
-                });
+                var selections = question.Options.Where(option => selected.Contains(option.Id)).Select(option => option.Label);
+                var reply = answer.Skipped ? "Пропущен пользователем — ответ не предоставлен." :
+                    string.Join("; ", selections.Concat(text.Length == 0 ? new string[0] : new[] { text }));
+                replies.Add("Вопрос: " + question.Prompt + "\nОтвет: " + reply);
             }
-            return "PLAN_ANSWERS:\n" + JsonConvert.SerializeObject(projection);
+            return "Ответы на вопросы:\n\n" + string.Join("\n\n", replies);
         }
     }
 }

@@ -45,6 +45,23 @@ CLI Office variants are removed. Focused PDF, VBA, JSON/YAML, gateway and
 workspace Office Harness checks pass host-neutral. Accepted-input and context
 preparation parity remain open; Windows/Office/WebView2 are not qualified.
 
+## Questions: shared form, explicit skip and readable answers — 2026-10-23
+
+Owner: application/chat UI and Core question admission. Office, Project and Plugin
+now share one rounded question card with the demo's surface/radius/control tokens,
+one question at a time, a counter and back/forward arrows. Single-choice clicks
+advance automatically; the final answer closes the card only after confirmed
+intake. Multiple choices/free text use Next/Done. Descriptions, explicit
+per-question/all skips and inline errors remain available. Transient drafts and
+the active page survive redraw/navigation; unchanged retries
+retain their request identity. Core validates explicit skips and emits readable
+question/answer text without a JSON envelope or runtime IDs. Chrome checks cover
+owner routing, pagination, final acceptance/stale snapshots, retry, Office inbox
+intake, draft retention, themes and narrow
+layout. Four relevant `plan mode:` Harness cases pass host-neutral; an unrelated
+stale prompt-text assertion is recorded in BACKLOG. Windows/Office/WebView2 remain
+unqualified.
+
 ## Unified Shell application/resource parity: PDF selectors — 2026-10-23
 
 Owner: Core model-facing resource selector contract. Office and workspace/CLI

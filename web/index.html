@@ -31,7 +31,7 @@
   <link rel="stylesheet" href="css/app-context-chips.css?v=theme-tokens-20261019-1">
   <link rel="stylesheet" href="css/app-models.css?v=model-tables-20260930-1">
   <link rel="stylesheet" href="css/app-workspace.css?v=theme-tokens-20261019-1">
-  <link rel="stylesheet" href="css/app-plugins.css?v=workspace-controls-20261023-1">
+  <link rel="stylesheet" href="css/app-plugins.css?v=questions-20261023-1">
   <link rel="stylesheet" href="css/app-json-viewer.css?v=json-height-20260929-1">
   <link rel="stylesheet" href="css/app-text-viewer.css?v=artifact-text-20260831-1">
   <link rel="stylesheet" href="css/app-sequence-viewer.css?v=theme-tokens-20261019-1">
@@ -47,7 +47,7 @@
   <link rel="stylesheet" href="css/app-artifacts.css?v=artifact-versions-20261014-1">
   <link rel="stylesheet" href="css/app-html-workspace.css?v=theme-tokens-20261019-1">
   <link rel="stylesheet" href="css/app-responsive.css?v=shared-action-menu-20261019-1">
-  <link rel="stylesheet" href="css/app-agent.css?v=composer-layers-20261015-1">
+  <link rel="stylesheet" href="css/app-agent.css?v=questions-20261023-1">
   <link rel="stylesheet" href="css/app-agent-data.css?v=json-height-20260929-1">
   <link rel="stylesheet" href="css/app-theme.css?v=theme-tokens-20261019-1">
   <link rel="stylesheet" href="css/app-product-tokens.css?v=neutral-theme-20261019-1">
@@ -55,7 +55,8 @@
   <link rel="stylesheet" href="css/app-product-components.css?v=theme-tokens-20261019-1">
   <link rel="stylesheet" href="css/app-product-viewers.css?v=product-ui-20261018-1">
   <link rel="stylesheet" href="css/app-product-materials.css?v=product-ui-20261018-1">
-  <link rel="stylesheet" href="css/app-product-screens.css?v=workspace-controls-20261023-1">
+  <link rel="stylesheet" href="css/app-product-screens.css?v=questions-20261023-1">
+  <link rel="stylesheet" href="css/app-questions.css?v=questions-pager-20261023-2">
 </head>
 <body>
   <div class="shell app-shell">
@@ -359,7 +360,7 @@
             <div class="workspace-chat-notice" id="workspaceChatNotice" role="status" aria-live="polite"></div>
             <div class="chat-scroll-region" id="workspaceChatTranscriptMount"></div>
             <div class="workspace-chat-control" id="workspaceChatControl" hidden><pre id="workspaceChatPending"></pre><button type="button" id="workspaceChatApprove">Разрешить</button><button type="button" id="workspaceChatReject">Отклонить</button></div>
-            <form class="workspace-chat-questions" id="workspaceChatQuestions" hidden></form>
+            <div class="workspace-chat-questions" id="workspaceChatQuestions" hidden></div>
           </div>
         </div>
       </section>
@@ -1165,7 +1166,8 @@
   <script src="js/app-artifact-versions.js?v=artifact-versions-20261014-1"></script>
   <script src="js/app-artifact-catalog.js?v=artifact-versions-20261014-1"></script>
   <script src="js/app-task-list.js?v=run-outcome-20261013-1"></script>
-  <script src="js/app-agent-activity.js?v=question-delivery-20261014-1"></script>
+  <script src="js/app-questions.js?v=questions-pager-20261023-2"></script>
+  <script src="js/app-agent-activity.js?v=questions-20261023-1"></script>
   <script src="js/app-agent-approval.js?v=run-view-state-20260830-1"></script>
   <script src="js/app-run-changes.js?v=source-comparison-status-20261014-1"></script>
   <script src="js/app-agent.js?v=step-disclosure-20261014-1"></script>
@@ -1178,9 +1180,9 @@
   <script src="js/app-chat-run.js?v=response-render-timing-20260928-1-usage-20261002-1-navigation-20261002-1-inbox-20261002-1-large-chat-1-run-isolation-1-transcript-20261012-1-settings-delivery-1"></script>
   <script src="js/app-chat.js?v=chat-view-actions-20261023-1"></script>
   <script src="js/app-chat-edit.js?v=single-composer-20261023-1"></script>
-  <script src="js/app-workspace-chat.js?v=chat-view-actions-20261023-1"></script>
-  <script src="js/app-plugins.js?v=chat-view-actions-20261023-1"></script>
-  <script src="js/app-project-chats.js?v=chat-view-actions-20261023-1"></script>
+  <script src="js/app-workspace-chat.js?v=questions-20261023-1"></script>
+  <script src="js/app-plugins.js?v=questions-20261023-1"></script>
+  <script src="js/app-project-chats.js?v=questions-20261023-1"></script>
   <script src="js/app.js?v=rail-popovers-20261019-1"></script>
 </body>
 </html>

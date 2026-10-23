@@ -109,7 +109,8 @@ It does not write a second Plan file or invent a document identity.
 
 Explicit uncertain Task List/Plan reconciliation and file-backed Plan authoring
 remain open. Typed Office answer admission is implemented: only the shared runtime
-validator creates semantic `PLAN_ANSWERS` text. Owner: conversation/planning application services.
+validator creates readable semantic question/answer text, including explicit skips.
+Owner: conversation/planning application services.
 Close each by reusing the existing publication/mutation owners, switching consumers
 and preserving read-back and append-only history.
 

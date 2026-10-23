@@ -141,38 +141,6 @@
     });
     list.scrollTop = following ? list.scrollHeight : scroll;
   }
-  function renderQuestions(form, input, submit) {
-    var set = field(input, "questionSet");
-    if (!set) { form.hidden = true; form.replaceChildren(); delete form.dataset.questionSet; delete form._questionFields; delete form._questionSend; return; }
-    var key = field(input, "runId") + ":" + set.questionSetId;
-    if (form.dataset.questionSet !== key) {
-      form.dataset.questionSet = key; form.hidden = false; form.classList.add("plan-question-cards"); form.replaceChildren();
-      form._questionFields = set.questions.map(function (question) {
-        var group = document.createElement("fieldset"), legend = document.createElement("legend"); legend.textContent = question.prompt; group.appendChild(legend);
-        var choices = (question.options || []).map(function (option) {
-          var label = document.createElement("label"), choice = document.createElement("input");
-          choice.type = question.selection === "multiple" ? "checkbox" : "radio"; choice.name = question.id; choice.value = option.id;
-          var copy = document.createElement("span"); copy.textContent = option.label;
-          label.append(choice, copy); group.appendChild(label); return choice;
-        });
-        var free = document.createElement("textarea"); free.rows = 2; free.placeholder = "Ваш ответ"; free.hidden = !question.allowFreeText;
-        group.appendChild(free); form.appendChild(group); return { question: question, choices: choices, free: free };
-      });
-      form._questionSend = document.createElement("button"); form._questionSend.type = "submit";
-      form._questionSend.className = "agent-action-button primary"; form._questionSend.textContent = "Ответить";
-      form.appendChild(form._questionSend);
-    }
-    var fields = form._questionFields, send = form._questionSend;
-    form.onsubmit = async function (event) {
-      event.preventDefault(); if (send.disabled) return;
-      var answers = fields.map(function (item) { return { questionId: item.question.id,
-        optionIds: item.choices.filter(function (choice) { return choice.checked; }).map(function (choice) { return choice.value; }), freeText: item.free.value }; });
-      if (answers.some(function (answer) { return !answer.optionIds.length && !answer.freeText.trim(); })) return;
-      send.disabled = true;
-      try { await submit({ runId: field(input, "runId"), questionSetId: set.questionSetId, answers: answers }); }
-      finally { send.disabled = false; }
-    };
-  }
   function renderWorkspaceControls(chat, submitQuestions) {
     if (activeOwner === "office") return;
     var snapshot = field(chat, "state") || {}, pending = field(chat, "pendingId");
@@ -180,7 +148,12 @@
     node("Control").hidden = !pending;
     node("Pending").textContent = pending ? (field(chat, "pendingTool") || "Действие") + "\n" +
       (field(chat, "pendingArguments") || "") : "";
-    renderQuestions(node("Questions"), field(snapshot, "userInput"), submitQuestions || function () {});
+    var input = field(snapshot, "userInput"), set = field(input, "questionSet"), container = node("Questions");
+    if (!set) { container.hidden = true; container.replaceChildren(); return; }
+    window.RNAssistantQuestions.render(container, set, {
+      scope: "workspace:" + field(field(chat, "project"), "workspaceId") + ":" + field(chat, "sessionId"),
+      runId: field(input, "runId"), submit: submitQuestions
+    });
   }
   function bindComposer(form, options) {
     if (sharedComposer) { if (options && options.onFiles) sharedComposer.attachFiles(options); return sharedComposer; }

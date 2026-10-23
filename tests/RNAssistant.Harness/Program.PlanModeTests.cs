@@ -372,9 +372,19 @@ namespace RNAssistant.Harness
                 AssertEqual(RunViewLifecycles.AwaitingUser, reloaded.Messages.Last(message =>
                     message.RunViewState != null).RunViewState.Lifecycle,
                     "the paused message projection is durable without a new terminal message");
+                var pending = UserQuestionAnswers.Pending(reloaded, executor.Payloads);
+                var question = pending.QuestionSet.Questions.Single();
+                var answer = UserQuestionAnswers.Accept(reloaded, new UserQuestionAnswerCommand {
+                    RunId = pending.RunId, QuestionSetId = pending.QuestionSet.QuestionSetId,
+                    Answers = new List<UserQuestionAnswer> { new UserQuestionAnswer {
+                        QuestionId = question.Id, OptionIds = new List<string> { question.Options[0].Id } } }
+                }, executor.Payloads);
+                AssertContains(answer, "Вопрос: Choose scope", "accepted answers retain the question as readable text");
+                AssertContains(answer, "Ответ: Core", "accepted answers contain selected labels without JSON");
+                AssertTrue(!answer.Contains(question.Id) && !answer.Contains("PLAN_ANSWERS"), "runtime IDs and raw JSON stay out of chat");
                 responses.Enqueue(ModelProtocolWire.WriteAction("Учту выбранную область Core.", ConversationResponse.DoneAction));
                 var resumed = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
-                    ChatModes.Plan, "Core", reloaded, NewContext(adapter),
+                    ChatModes.Plan, answer, reloaded, NewContext(adapter),
                     new AppSettings { ToolResultRole = resultRole, ContextWindowOverrideTokens = 65536 }, tools, null).GetAwaiter().GetResult();
                 AssertEqual(3, calls, "an answer after reload continues without a repeated question or protocol repair");
                 AssertEqual(AgentResponseStatuses.Completed, resumed.ResponseStatus, "answered question can complete");
@@ -386,6 +396,36 @@ namespace RNAssistant.Harness
                     replayed.Content.IndexOf("\"id\"", StringComparison.Ordinal) < 0,
                     "model replay omits runtime question and option ids");
             });
+        }
+
+        private static void QuestionAnswersRequireExplicitSkip()
+        {
+            var questions = new UserQuestionSet { QuestionSetId = "set", Questions = new List<UserQuestion> {
+                new UserQuestion { Id = "q", Prompt = "Какой формат?", Header = "Формат", Selection = "single", AllowFreeText = false,
+                    Options = new List<UserQuestionOption> { new UserQuestionOption { Id = "a", Label = "Markdown", Recommended = true } } },
+                new UserQuestion { Id = "q2", Prompt = "Какие разделы?", Header = "Разделы", Selection = "multiple",
+                    Options = new List<UserQuestionOption> { new UserQuestionOption { Id = "b", Label = "Шаги" },
+                        new UserQuestionOption { Id = "c", Label = "Риски" } } }
+            } };
+            var command = new UserQuestionAnswerCommand { RunId = "run", QuestionSetId = "set", Answers = new List<UserQuestionAnswer> {
+                new UserQuestionAnswer { QuestionId = "q", Skipped = true },
+                new UserQuestionAnswer { QuestionId = "q2", OptionIds = new List<string> { "b", "c" }, FreeText = " С примерами " }
+            } };
+            var text = UserQuestionAnswers.Accept(questions, command);
+            AssertEqual("Ответы на вопросы:\n\nВопрос: Какой формат?\nОтвет: Пропущен пользователем — ответ не предоставлен.\n\n" +
+                "Вопрос: Какие разделы?\nОтвет: Шаги; Риски; С примерами", text, "mixed answers and skips are readable semantic facts");
+            Action<Action> rejects = change => {
+                change(); bool rejected = false;
+                try { UserQuestionAnswers.Accept(questions, command); } catch (ArgumentException) { rejected = true; }
+                AssertTrue(rejected, "invalid skips and stale sets must not be accepted");
+            };
+            rejects(() => command.Answers[0].Skipped = false);
+            command.Answers[0].Skipped = true;
+            rejects(() => command.Answers[0].OptionIds.Add("a"));
+            command.Answers[0].OptionIds.Clear();
+            rejects(() => command.Answers[0].FreeText = "answer");
+            command.Answers[0].FreeText = "";
+            rejects(() => command.QuestionSetId = "stale");
         }
 
         private static void PlanDocumentUsesVerifiedNativeRuntime()

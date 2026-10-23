@@ -444,6 +444,10 @@ or multiple selection and an optional free-text answer. Runtime IDs are persiste
 in the accepted tool result for UI/CLI correlation. The shared model projector
 removes them; native `role: tool` still keeps the accepted call/result pairing.
 Recommended choices are display metadata and never submitted automatically.
+Each answer may explicitly set `skipped: true` with empty `optionIds` and
+`freeText`. Skipping is a user fact, not a selected recommendation or approval.
+An empty answer without that flag is invalid; skipped answers containing a
+choice or text are also rejected. A set may contain both answers and skips.
 
 The kernel terminates with typed reason `awaiting_user`. CLI returns
 `run.needs_input`, action `needs_input`, exit 3 and `userInput` containing `RunId`
@@ -469,7 +473,10 @@ question run under the session lease, before appending input or calling the mode
 Unknown/duplicate/missing questions or choices, stale/already answered sets,
 multiple choices for a single selection and disallowed free text fail explicitly.
 Input is bounded to 32 KiB; each free-text answer to 4000 characters. The accepted
-user fact contains semantic question/choice text (`PLAN_ANSWERS`), not runtime IDs.
+user fact is readable text: `Ответы на вопросы:`, then a `Вопрос:` and `Ответ:`
+pair per question. It contains semantic question/choice text and any free text,
+or an explicit statement that the user skipped the question. It contains no
+JSON envelope or runtime IDs; the same accepted text reaches history and model.
 It starts a new user turn through the same coordinator/kernel, inheriting the
 session mode and default instruction/result roles. No second loop or pending store
 is introduced. Ordinary explicit `run --message` starts a new task and supersedes

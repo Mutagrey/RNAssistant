@@ -163,9 +163,9 @@
     el("FileStatus").textContent = visibleFile ? fileNotice.message : "";
     el("FileStatus").classList.toggle("is-error", !!(visibleFile && fileNotice.error));
     el("FileStatus").hidden = !visibleFile || !fileNotice.message;
-    window.RNAssistantWorkspaceChat.renderWorkspaceControls(active, function (answers) {
+    window.RNAssistantWorkspaceChat.renderWorkspaceControls(active, function (answers, requestId) {
       return runChat(function (pid, sid) { return send("submitProjectChat", { workspaceId: pid, sessionId: sid,
-        input: { sessionId: sid, requestId: crypto.randomUUID(), answers: answers } }); });
+        input: { sessionId: sid, requestId: requestId, answers: answers } }); }, true);
     });
     var messages = el("Messages");
     if (!active || !(active.messages || []).length) {
@@ -295,8 +295,8 @@
       if (projectId() === pid && currentId() === sid) { active = result; notice(statusText()); render(); } }
     catch (error) { if (projectId() === pid && currentId() === sid) notice(error.detail || error.message, true); }
   }
-  async function runChat(action) {
-    if (busy || !active || !project() || !project().available) return;
+  async function runChat(action, reportFailure) {
+    if (busy || !active || !project() || !project().available) return false;
     busy = true; var pid = projectId(), sid = currentId(); render();
     poll = window.setInterval(function () { readCurrent(pid, sid); }, 1200);
     try { var result = await action(pid, sid); if (projectId() === pid && currentId() === sid) {
@@ -312,8 +312,9 @@
           try { catalog = await send("getProjectChats", {}); if (projectId() === pid && currentId() === sid) render(); }
           catch (_) { /* The refreshed title is still shown in the open chat. */ }
         });
-    } }
-    catch (error) { if (projectId() === pid && currentId() === sid) notice(error.detail || error.message, true); }
+    } return true; }
+    catch (error) { if (projectId() === pid && currentId() === sid) notice(error.detail || error.message, true);
+      if (reportFailure) throw error; return false; }
     finally { window.clearInterval(poll); poll = null; busy = false; render(); }
   }
   function setScope(next, target) {

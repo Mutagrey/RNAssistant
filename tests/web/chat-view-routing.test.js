@@ -65,8 +65,7 @@ const root = path.resolve(__dirname, '../..');
       return RNAssistantProjectChats.open('preview-data-workspace', 'preview-project-review');
     });
     await page.locator('#workspaceChatQuestions').waitFor({state:'visible'});
-    await page.locator('#workspaceChatQuestions input[value="yes"]').check();
-    await page.locator('#workspaceChatQuestions button[type="submit"]').click();
+    await page.locator('#workspaceChatQuestions input[value="yes"]').click();
     await page.waitForFunction(() => chatViewTest.calls.length === 2);
     assert.deepEqual(await page.evaluate(() => chatViewTest.calls[1].payload.input.answers),
       {runId:'preview-run', questionSetId:'preview-questions',
