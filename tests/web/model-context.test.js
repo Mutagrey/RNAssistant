@@ -149,6 +149,21 @@ function fixture(withAliases = false) {
   };
 }
 (async () => {
+  const scoped = fixture();
+  scoped.events[0].trace.RunId = "run-1"; scoped.events[0].trace.StepId = "step-1";
+  scoped.events.push({ ...scoped.events[0], eventId: "other", sequence: 4,
+    trace: { RunId: "run-2", StepId: "step-1", RequestId: "other" } });
+  scoped.c.RNAssistantModelContext.open({ chatId: "chat", runId: "run-1", stepId: "step-1" }); await flush();
+  assert.equal(scoped.get("modelContextAttempt").children.length, 1);
+  assert.equal(scoped.get("modelContextAttempt").value, "r1", "exact run+step never opens a newer unrelated request");
+  scoped.c.RNAssistantModelContext.close();
+  scoped.c.RNAssistantModelContext.open({ chatId: "chat", runId: "absent", stepId: "step-1" }); await flush();
+  assert.match(scoped.get("modelContextStatus").textContent, /Точный запрос этого шага не найден/);
+  assert.equal(scoped.get("modelContextAttempt").children.length, 0);
+  scoped.c.RNAssistantModelContext.close();
+  scoped.c.RNAssistantModelContext.open({ chatId: "foreign", runId: "run-1", stepId: "step-1" });
+  assert.equal(scoped.get("modelContextDialog").classList.contains("hidden"), true);
+  console.log("PASS model context: exact step navigation and missing/foreign request refusal");
   const history = fixture();
   history.c.state.chatReadOnly = true;
   history.c.RNAssistantModelContext.open(); await flush();

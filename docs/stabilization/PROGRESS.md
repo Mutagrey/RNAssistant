@@ -11,6 +11,20 @@ arguments. Focused v7, workspace restart/batch and context-continuity Harness
 checks pass host-neutral. Full input and context-preparation parity remains open;
 Windows/Office/WebView2 are not qualified.
 
+## Existing chat Inspector: composition, capabilities and step details — 2026-10-23
+
+Owner: application/chat UI. The user selected the existing four-view right panel
+as the diagnostics baseline; the separate prototype was rejected and removed.
+Menu entries now keep one icon. Usage adds an estimated next-request composition
+bar and expandable source groups, separately from measured last-request API usage.
+Capabilities use compact skill rows and existing library tool groups. Activity
+retains independent runtime steps and links each call to its exact journal
+correlation, and each step to saved requests filtered by run/step. Missing requests
+never fall back to another step. Focused browser/model-context/usage checks cover
+the change; no Office/VSTO build was run. Windows/Office/WebView2 remain unqualified.
+Exact attribution of all last-request tokens, Wide/Focus and later diagnostics
+features remain open in the [UI design](../ui-design.md).
+
 ## Unified Shell application input identity on replay — 2026-10-23
 
 Owner: Core `ConversationInputJournal`. Office inbox recovery and workspace/CLI

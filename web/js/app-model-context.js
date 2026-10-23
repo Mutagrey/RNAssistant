@@ -615,6 +615,9 @@
     try {
       var response = await call(c, "getModelContext", older ? { beforeSequence: c.before } : { knownRevision: c.revision });
       if (!valid(c, listVersion) || c.mode !== "actual" || response.unchanged) return;
+      if (c.scope) response.events = response.events.filter(function (event) {
+        return event.trace && event.trace.RunId === c.scope.runId && event.trace.StepId === c.scope.stepId;
+      });
       if (older) c.attempts = c.attempts.concat(response.events);
       else {
         c.revision = response.revision;
@@ -625,10 +628,10 @@
       c.before = response.nextBeforeSequence;
       var picker = attemptPicker(c);
       $("modelContextOlder").disabled = !c.before;
-      var chosen = c.follow ? c.attempts[0] && c.attempts[0].eventId : c.selected;
+      var chosen = c.follow || c.scope && !c.selected ? c.attempts[0] && c.attempts[0].eventId : c.selected;
       if (chosen) { picker.value = chosen; if (!older || chosen !== c.selected) await select(c, chosen); }
       else {
-        status(c, state.chatReadOnly ? "Сохранённых запросов нет. Для нового запроса создайте новый чат." :
+        status(c, c.scope ? "Точный запрос этого шага не найден в загруженной части истории." + (c.before ? " Нажмите «Ранее» для предыдущей страницы." : "") : state.chatReadOnly ? "Сохранённых запросов нет. Для нового запроса создайте новый чат." :
           "Сохранённых запросов пока нет. Доступен предварительный контекст.");
         await render(c);
       }
@@ -647,6 +650,7 @@
       if (!valid(c, version)) return;
       var request = (detail.events || []).find(function (event) { return event.type === "llm.request"; });
       if (!request || detail.selectedAlias !== name) throw new Error("Короткая ссылка не найдена в этом чате.");
+      c.scope = null;
       c.selected = request.eventId; c.detail = detail; c.inventory = {}; c.inventoryBusy = {};
       c.focusResource = detail.selectedResourceAlias || null;
       c.tab = c.focusResource ? "resources" : "messages";
@@ -690,17 +694,21 @@
     if (c.mode === "preview" && c.preview && c.previewDraft !== draft()) status(c, c.previewStatus + " · Снимок устарел — обновите.");
     c.timer = setTimeout(function () { tick(c); }, 2000);
   }
-  function open() {
+  function open(options) {
     if (!state.activeChatId || state.bridgeUnavailable) return;
+    var scope = options && options.runId && options.stepId ? options : null;
+    if (scope && scope.chatId !== state.activeChatId) return;
     if (current) close();
     if (typeof closePromptContextInspector === "function") closePromptContextInspector();
     current = { chatId: state.activeChatId, abort: new AbortController(), requests: new Set(), version: 0,
-      mounts: [], cache: {}, pending: {}, inventory: {}, inventoryBusy: {}, mode: "actual", tab: "messages", follow: true, attempts: [], returnFocus: $("contextMeter") };
+      mounts: [], cache: {}, pending: {}, inventory: {}, inventoryBusy: {}, mode: "actual", tab: "messages", follow: !scope, attempts: [],
+      scope: scope, returnFocus: document.activeElement && document.activeElement !== document.body ? document.activeElement : $("contextMeter") };
     $("modelContextDialog").classList.remove("hidden");
     $("openModelContextFromTokens").setAttribute("aria-expanded", "true");
     $("modelContextMode").value = "actual"; $("modelContextTab").value = "messages";
     previewAvailability(current);
     $("modelContextActualControls").classList.remove("hidden"); $("closeModelContextButton").focus();
+    if (scope) list(current, false);
     tick(current);
   }
   function bind() {

@@ -174,7 +174,8 @@
     return { sessionRevision: revision, activeChatId: activeChatId, activeChatMode: "agent",
       activeChatModel: "preview-model", activeChatReasoning: false, chats: clone(chats), documents: clone(documentItems),
       messages: clone(messages), messageStartIndex: 0, messageTotalCount: messages.length,
-      skills: skillLibrary(), tools: toolLibrary(), context: {}, contextUsage: {},
+      skills: skillLibrary(), tools: toolLibrary(), context: {},
+      contextUsage: { lastPromptTokens: 6200, lastCompletionTokens: 240, lastTotalTokens: 6440, contextWindowTokens: 32000 },
       runViewState: previewRuns[activeChatId] ? null : lastRunMessage && (lastRunMessage.RunViewState || lastRunMessage.runViewState) || null,
       artifacts: activeChatId === "preview-chat" && report ? [{ id: "report", kind: "markdown",
         title: fixtures.materials[0].name, mimeType: "text/markdown", sourceMessageId: "preview-answer",
@@ -912,6 +913,24 @@
       if (!messages.some(function (item) { return item.RunId === payload.runId && item.RunViewState; }))
         fail("Запуск примера отсутствует.", "preview_run_changed");
       return { chatId: activeChatId, runId: payload.runId, complete: true, items: [] };
+    }
+    if (type === "inspectPromptContext" && !payload.includeRaw) {
+      requireChat(payload);
+      var contextParts = [
+        ["history", "История чата", 2800, fixtures.chat.user],
+        ["current_request", "Текущий запрос", 200, payload.text || "Черновик пуст"],
+        ["instructions", "Инструкции", 900, "Демонстрационные правила помощника"],
+        ["tools", "Инструменты", 1200, "Поиск ресурсов, чтение таблиц, форматирование диапазонов"],
+        ["document_context", "Ресурсы", 700, "Демонстрационный фрагмент таблицы продаж"],
+        ["response_format", "Формат ответа", 200, "message, action, tool_calls"]
+      ];
+      return { chatId: activeChatId, sessionRevision: revision, estimated: true, usedTokens: 6000,
+        admissionTokens: 6500, inputLimitTokens: 28000, contextWindowTokens: 32000, reservedOutputTokens: 3500,
+        safetyTokens: 500, remainingInputTokens: 21500, generatedUtc: new Date().toISOString(),
+        lastPromptTokens: 6200, lastCompletionTokens: 240, lastTotalTokens: 6440, rawData: null,
+        notice: "Демонстрационная оценка; модель и compiler в preview не запускаются.",
+        sections: contextParts.map(function (part) { return { id: part[0], title: part[1], tokens: part[2], count: 1, included: true,
+          items: [{ id: part[0] + "-item", title: part[1], tokens: part[2], preview: part[3], reason: "Демонстрационный состав" }] }; }) };
     }
     if (type === "getAgentArsenal") {
       requireChat(payload);

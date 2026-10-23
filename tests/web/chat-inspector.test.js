@@ -1,0 +1,132 @@
+"use strict";
+// Real product DOM + preview bridge. No Office/VSTO or model calls.
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const { spawn } = require("node:child_process");
+const { chromium } = require("playwright");
+
+(async () => {
+  const server = spawn("python3", ["-B", "prototypes/serve_ui.py", "--port", "0"], { cwd: path.resolve(__dirname, "../..") });
+  let browser;
+  try {
+    const address = await new Promise((resolve, reject) => {
+      server.once("error", reject); server.once("exit", code => reject(new Error("preview exited " + code)));
+      server.stdout.on("data", bytes => { const match = /RNAssistant design: (http:\/\/127\.0\.0\.1:\d+\/)/.exec(String(bytes)); if (match) resolve(match[1]); });
+    });
+    browser = await chromium.launch({ headless: true,
+      ...(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : {}) });
+    const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    const errors = []; page.on("pageerror", error => errors.push(error.message));
+    await page.goto(address + "preview/web/?scenario=ready");
+    await page.waitForFunction(() => state.activeChatId === "preview-chat" && !state.initializePromise);
+    await page.locator("#toggleChatInspectorButton").click();
+    const view = async name => {
+      await page.locator("#chatInspectorSwitcher summary").click();
+      await page.locator('[data-chat-inspector-view="' + name + '"]').click();
+    };
+    const screenshot = async name => {
+      if (!process.env.INSPECTOR_SCREENSHOTS) return;
+      fs.mkdirSync(process.env.INSPECTOR_SCREENSHOTS, { recursive: true });
+      await page.locator("#chatInspectorBody").evaluate(node => Promise.all(node.getAnimations().map(animation => animation.finished.catch(() => {}))));
+      await page.screenshot({ path: path.join(process.env.INSPECTOR_SCREENSHOTS, name + ".png") });
+    };
+    assert.deepEqual(await page.locator("[data-chat-inspector-view]").evaluateAll(buttons => buttons.map(b => b.querySelectorAll("svg").length)), [1, 1, 1, 1]);
+    await page.locator("#chatInspectorSwitcher summary").click(); await screenshot("menu");
+    await page.locator('[data-chat-inspector-view="usage"]').click();
+    await page.locator(".chat-inspector-composition-chart").waitFor();
+    assert.equal(await page.locator(".chat-inspector-composition-chart > span").count(), 5);
+    assert.match(await page.locator("#chatInspectorBody").textContent(), /следующего запроса/);
+    assert.match(await page.locator("#chatInspectorBody .chat-inspector-info").textContent(), /6.200/);
+    const sum = await page.locator(".chat-inspector-composition-chart > span").evaluateAll(nodes => nodes.reduce((n, node) => n + Number(node.style.flexGrow), 0));
+    assert.equal(sum, 6000, "composition never rescales estimates to provider usage");
+    await screenshot("usage");
+    await page.locator('[data-inspector-key="composition:0"] > summary').click();
+    await page.locator('[data-inspector-key="composition:0"] .prompt-context-item > summary').first().click();
+    await screenshot("usage-details");
+    await page.evaluate(() => RNAssistantChatInspector.render());
+    assert.equal(await page.locator('[data-inspector-key="composition:0"]').evaluate(n => n.open), true);
+    await view("abilities");
+    await page.locator(".chat-inspector-tool-group").first().waitFor();
+    assert.equal(await page.locator(".chat-inspector-tool-group").count(), 2);
+    await page.locator(".chat-inspector-tool-group > summary").first().click();
+    const tool = page.locator('[data-inspector-key="tool:common.resources_find"]');
+    assert.equal(await tool.evaluate(n => n.open), false);
+    await screenshot("abilities");
+    await tool.locator("summary").click();
+    assert.match(await tool.locator("code").textContent(), /common.resources_find/);
+    await view("usage");
+    assert.equal(await page.locator('[data-inspector-key="composition:0"]').evaluate(n => n.open), true, "view switching preserves disclosure");
+    assert.equal(await page.locator('[data-inspector-key="context-item:history:history-item"]').evaluate(n => n.open), true, "nested source disclosure survives redraw");
+    await page.evaluate(() => {
+      const original = send;
+      send = (type, args) => {
+        if (type !== "inspectPromptContext") return original(type, args);
+        return Promise.resolve({ chatId: state.activeChatId, sections: [
+          { id: "history", title: "История", tokens: 90, included: true, items: [] },
+          { id: "document_context", title: "Неизвестно", tokens: null, included: true, items: [] },
+          { id: "format_repair_reserve", title: "Резерв", tokens: 2000, included: true, items: [] },
+          { id: "excluded", title: "Исключено", tokens: 4000, included: false, items: [] }
+        ] });
+      };
+      window.restoreInspectorPreview = () => { send = original; };
+    });
+    await page.getByRole("button", { name: "Обновить состав", exact: true }).click();
+    await page.waitForFunction(() => document.querySelector('[data-inspector-key="excluded"]'));
+    assert.equal(await page.locator(".chat-inspector-composition-chart > span").evaluateAll(nodes => nodes.reduce((n, node) => n + Number(node.style.flexGrow), 0)), 90, "reserves and excluded bodies never enter the shares");
+    assert.match(await page.locator('[data-inspector-key="composition:3"] > summary').textContent(), /неполная оценка/);
+    assert.doesNotMatch(await page.locator('[data-inspector-key="composition:3"] > summary').textContent(), /0%/);
+    await page.evaluate(() => restoreInspectorPreview());
+    await page.evaluate(() => {
+      window.savedInspectorSend = send;
+      window.inspectorCancelled = [];
+      window.savedInspectorCancel = cancelBridgeRequest;
+      cancelBridgeRequest = id => { inspectorCancelled.push(id); return Promise.resolve(); };
+      send = (type, args) => {
+        if (type !== "inspectPromptContext") return savedInspectorSend(type, args);
+        const promise = new Promise(resolve => { window.resolveInspectorPreview = resolve; });
+        promise.requestId = "pending-inspector"; return promise;
+      };
+    });
+    await page.getByRole("button", { name: "Обновить состав", exact: true }).click();
+    await view("context");
+    await page.evaluate(() => {
+      state.activeChatId = "another-chat"; RNAssistantChatInspector.render();
+      resolveInspectorPreview({ chatId: "preview-chat", sections: [{ id: "history", included: true, tokens: 999999, title: "STALE BODY", items: [] }] });
+    });
+    assert.ok((await page.evaluate(() => inspectorCancelled)).includes("pending-inspector"));
+    assert.doesNotMatch(await page.locator("#chatInspectorBody").textContent(), /STALE BODY/);
+    await page.evaluate(() => {
+      send = savedInspectorSend; cancelBridgeRequest = savedInspectorCancel; state.activeChatId = "preview-chat";
+      state.activeRunViewState = { lifecycle: "completed", executionHealth: "unknown", runId: "inspector-run", currentAction: "Проверка модулей завершена" };
+      state.messages = [];
+      state.liveAgentRun = [1, 2].map(i => ({ Id: "activity-" + i, Kind: "tool", RunId: "inspector-run", StepId: "step-" + i,
+        StepMessage: "Проверю содержимое модуля", ToolId: "common.resources_read", ToolCallId: "call-" + i,
+        Status: i === 1 ? "completed" : "unknown", ResultMessage: "Прочитан фрагмент " + i }));
+      window.inspectorRoutes = [];
+      openRunJournal = options => inspectorRoutes.push(options);
+      RNAssistantModelContext.open = options => inspectorRoutes.push(options);
+    });
+    await view("activity");
+    assert.equal(await page.locator(".chat-inspector-step").count(), 2, "same intention never merges separate runtime steps");
+    await page.locator(".chat-inspector-step-detail > summary").last().click();
+    await screenshot("activity");
+    await page.getByRole("button", { name: "События действия", exact: true }).click();
+    await page.getByRole("button", { name: "Запрос / ответ модели", exact: true }).click();
+    const routes = await page.evaluate(() => inspectorRoutes);
+    assert.deepEqual(routes, [
+      { chatId: "preview-chat", runId: "inspector-run", stepId: "step-2", toolCallId: "call-2" },
+      { chatId: "preview-chat", runId: "inspector-run", stepId: "step-2" }
+    ]);
+    await page.evaluate(() => document.documentElement.setAttribute("data-theme", "dark"));
+    await page.setViewportSize({ width: 420, height: 780 }); await screenshot("activity-narrow-dark");
+    assert.equal(await page.locator("#chatInspectorBody").evaluate(n => n.scrollWidth > n.clientWidth + 1), false);
+    await page.locator(".chat-inspector-step-detail > summary").last().focus();
+    await page.keyboard.press("Enter");
+    assert.equal(await page.locator(".chat-inspector-step-detail").last().evaluate(n => n.open), false);
+    await page.keyboard.press("Escape");
+    assert.equal(await page.locator("#toggleChatInspectorButton").getAttribute("aria-expanded"), "false");
+    assert.deepEqual(errors, []);
+    console.log("PASS chat inspector: one icon, estimated composition, disclosures, cancellation, exact step/call routes, light/dark and narrow keyboard layout");
+  } finally { if (browser) await browser.close(); server.kill(); }
+})().catch(error => { console.error(error); process.exitCode = 1; });
