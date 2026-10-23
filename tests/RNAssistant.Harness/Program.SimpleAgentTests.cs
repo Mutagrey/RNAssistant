@@ -1957,16 +1957,19 @@ namespace RNAssistant.Harness
                 const string userText = "List workbook sheets.";
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"message\":\"Читаю листы.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
-                    "{\"message\":\"Листы прочитаны.\",\"action\":\"done\",\"tool_calls\":[]}"
+                    "{\"action\":\"execute\",\"reason\":\"Нужно прочитать листы книги.\",\"tool_calls\":[{\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}],\"message\":\"Читаю листы.\"}",
+                    null
                 });
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 var requestOptions = new List<LlmRequestOptions>();
+                var session = NewSession(adapter);
                 LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>
                 {
                     requests.Add(messages.ToList());
                     requestOptions.Add(options);
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    var response = responses.Dequeue() ?? ScriptedVerifiedFinish(session,
+                        "Список листов получен.", "Листы прочитаны.", "Листы прочитаны.", "excel.inspect");
+                    return Task.FromResult(new LlmCompletionResult { Content = response });
                 };
                 var settings = new AppSettings
                 {
@@ -1976,7 +1979,6 @@ namespace RNAssistant.Harness
                 };
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName)
                     .Concat(executor.GetControllerTools()).ToList();
-                var session = NewSession(adapter);
                 var context = NewContext(adapter);
 
                 var runnable = ConversationRunService.PrepareToolsForMode(ChatModes.Agent, tools);
@@ -2010,8 +2012,8 @@ namespace RNAssistant.Harness
                     legacyMessages, legacyOptions, settings, repairReserve, continuationReserve);
                 AssertEqual(6, currentPack.Tools.Count,
                     "Excel Agent core contains five bootstrap tools and inspection");
-                AssertEqual(20, legacyCore.Length,
-                    "counterfactual Excel core retains all fifteen Excel schemas");
+                AssertEqual(21, legacyCore.Length,
+                    "counterfactual Excel core retains the current Excel schemas");
                 AssertTrue(currentTokens < legacyTokens,
                     "R61 core lowers deterministic initial input estimate; before=" +
                     legacyTokens + ", after=" + currentTokens);
