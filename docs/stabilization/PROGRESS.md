@@ -1,5 +1,15 @@
 # Stabilization progress
 
+## Unified Shell application/resource parity: Office read descriptor — 2026-10-23
+
+Owner: Core resource-read schema. Direct Office and workspace/CLI `type=office`
+now use the same closed selector alternatives; CLI adds only its route
+discriminator. This admits Office section reads in CLI and rejects incomplete
+line windows before dispatch. The replaced Office schema builder and duplicate
+CLI Office variants are removed. Focused PDF, VBA, JSON/YAML, gateway and
+workspace Office Harness checks pass host-neutral. Accepted-input and context
+preparation parity remain open; Windows/Office/WebView2 are not qualified.
+
 ## Unified Shell application/resource parity: PDF selectors — 2026-10-23
 
 Owner: Core model-facing resource selector contract. Office and workspace/CLI

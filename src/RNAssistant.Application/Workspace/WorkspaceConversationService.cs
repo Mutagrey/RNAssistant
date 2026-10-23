@@ -961,7 +961,7 @@ namespace RNAssistant.Runtime
 
             private static JObject OfficeResourceVariant(bool find)
             {
-                var schema = JObject.Parse(find ? Schema("query", false) : Schema("target", true));
+                var schema = JObject.Parse(find ? Schema("query", false) : ResourceModelReadSchema.Office());
                 var properties = (JObject)schema["properties"];
                 properties["type"] = new JObject { ["type"] = "string", ["enum"] = new JArray("office") };
                 ((JArray)schema["required"]).Add("type");
@@ -972,24 +972,16 @@ namespace RNAssistant.Runtime
                 }
                 else
                 {
-                    properties["target"]["description"] = "Exact semantic target from the bound Office document or its discovery result.";
-                    properties["representation"] = new JObject { ["type"] = "string",
-                        ["enum"] = new JArray("metadata", "text", "structure", "source", "media", "formulas", "table", "tree") };
-                    properties["partNumber"] = new JObject { ["type"] = "integer", ["minimum"] = 1 };
-                    properties["startLine"] = new JObject { ["type"] = "integer", ["minimum"] = 1 };
-                    properties["lineCount"] = new JObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = int.MaxValue };
-                    properties["startChar"] = new JObject { ["type"] = "integer", ["minimum"] = 0 };
-                    properties["charCount"] = new JObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = int.MaxValue };
-                    properties["limit"] = new JObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = 5000 };
-                    properties["offset"] = new JObject { ["type"] = "integer", ["minimum"] = 0 };
-                    properties["fields"] = new JObject { ["type"] = "array", ["maxItems"] = 128,
-                        ["items"] = new JObject { ["type"] = "string", ["maxLength"] = 128 } };
+                    foreach (var branch in ((JArray)schema["anyOf"]).OfType<JObject>())
+                    {
+                        ((JObject)branch["properties"])["type"] = properties["type"].DeepClone();
+                        ((JArray)branch["required"]).Add("type");
+                    }
                 }
-                if (!find) { AddProcedureVariant(schema, true); AddTreeVariant(schema); AddPdfPageVariant(schema); }
                 return schema;
             }
 
-            private static void AddProcedureVariant(JObject schema, bool office)
+            private static void AddProcedureVariant(JObject schema)
             {
                 var text = schema.DeepClone();
                 AddProcedureSelectors((JObject)schema["properties"]);
@@ -998,11 +990,6 @@ namespace RNAssistant.Runtime
                 foreach (var name in new[] { "startLine", "lineCount", "startChar", "charCount", "partNumber", "limit", "offset", "fields" })
                     properties.Remove(name);
                 ((JArray)procedure["required"]).Add("procedure");
-                if (office)
-                {
-                    properties["representation"]["enum"] = new JArray("source");
-                    ((JArray)procedure["required"]).Add("representation");
-                }
                 schema["anyOf"] = new JArray(text, procedure);
             }
 
@@ -1129,7 +1116,7 @@ namespace RNAssistant.Runtime
                             ["description"] = "Maximum UTF-16 characters in this excerpt, bounded by this run's model input budget. Each read checks the current version." };
                     }
                 }
-                if (!find && !skill) { AddProcedureVariant(schema, false); AddTreeVariant(schema); AddPdfPageVariant(schema); }
+                if (!find && !skill) { AddProcedureVariant(schema); AddTreeVariant(schema); AddPdfPageVariant(schema); }
                 return schema;
             }
 

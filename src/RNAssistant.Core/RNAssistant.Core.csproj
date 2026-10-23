@@ -119,6 +119,7 @@
     <Compile Include="Services\EvidenceStateReducer.cs" />
     <Compile Include="Services\ResourceSchemaValidator.cs" />
     <Compile Include="Services\ResourcePdfPageSelectorContract.cs" />
+    <Compile Include="Services\ResourceModelReadSchema.cs" />
     <Compile Include="Services\ResourceJsonTreeSelector.cs" />
     <Compile Include="Services\ResourceTreePointer.cs" />
     <Compile Include="Services\ResourceYamlTreeSelector.cs" />

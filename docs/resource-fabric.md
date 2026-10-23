@@ -682,7 +682,9 @@ window is bounded by the model context; explicit windows can continue through
 Range views also retain distinct CAS keys; coverage proves only the returned
 extracted pages and never the complete visual PDF.
 PDF rendering remains an application data-plane view. The CLI Office binding
-accepts the same page selectors. General navigation and available-view discovery
+uses the direct Office model-read schema with a required `type=office` discriminator,
+including the same page, section, tree, table, procedure and text-window alternatives.
+General navigation and available-view discovery
 across providers remain open.
 
 `sourceComplete` distinguishes a complete retained text representation from a

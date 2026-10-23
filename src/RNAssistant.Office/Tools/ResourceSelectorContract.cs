@@ -1,33 +1,25 @@
 using System;
 using System.Globalization;
-using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 using RNAssistant.Office.Services;
 
 namespace RNAssistant.Office.Tools
 {
-    // Shared model-facing selection contract; provider references stay in the gateway.
+    // Office named-input schema and view-path resolver; target/path shapes live in Core.
     internal static class ResourceSelectorContract
     {
-        internal static JObject Target()
-        { return new JObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 1024,
-            ["description"] = "Copy a semantic target verbatim from runtime context, discovery, a workspace member or binding sourceTarget. For a known Excel sheet and A1 address, use Excel range: Sheet!A1:B10 directly; discovery is optional. Never construct a target from a display title or pass a URI. HTML data names describe bindings; sourceTarget identifies their values." }; }
-
-        internal static JObject RecordPath()
-        { return new JObject { ["type"] = "string", ["maxLength"] = 256, ["pattern"] = @"^\$(?:\.[A-Za-z_][A-Za-z0-9_]*)*$",
-            ["description"] = "Optional JSON record-array path. Omit for Office targets: runtime selects the canonical view. For JSON use $ or a declared property such as $.records. This is not a page index, file path or worksheet address." }; }
-
         internal static JObject NamedInput(bool binding)
         {
             var properties = new JObject {
                 ["name"] = new JObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 128,
                     ["description"] = "Local name passed to RN.resources.open(name)." },
-                ["target"] = Target(),
+                ["target"] = ResourceModelReadSchema.SemanticTarget(),
                 ["view"] = new JObject { ["type"] = "string",
                     ["description"] = "Choose an advertised source view explicitly. table returns rows and columns; text/source return text chunks. raw is inert binary. Page views require pageIndex.",
                     ["enum"] = new JArray("text", "source", "table", "raw", "image", "thumbnail", "render-page", "page-thumbnail") },
-                ["path"] = RecordPath(),
+                ["path"] = ResourceModelReadSchema.RecordPath(),
                 ["pageIndex"] = new JObject { ["type"] = "integer", ["minimum"] = 0, ["maximum"] = 999999,
                     ["description"] = "Zero-based page number, only for render-page/page-thumbnail." }
             };

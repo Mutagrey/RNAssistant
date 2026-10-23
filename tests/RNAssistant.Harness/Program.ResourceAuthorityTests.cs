@@ -288,6 +288,21 @@ namespace RNAssistant.Harness
                     ["type"] = "office", ["target"] = "attachment: pages.pdf",
                     ["representation"] = "text", ["startPage"] = 0, ["pageCount"] = 2
                 }, schema, false, out error), "CLI Office binding accepts PDF page range");
+                var officeSchema = JObject.Parse(ResourceReadToolHandler.Descriptor.ParametersJson);
+                var section = new JObject { ["target"] = "document: notes.md",
+                    ["representation"] = "text", ["section"] = "Tasks" };
+                AssertTrue(ToolSchemaSupport.ValidateArguments(section, officeSchema, false, out error),
+                    "direct Office schema offers section selection");
+                section["type"] = "office";
+                AssertTrue(ToolSchemaSupport.ValidateArguments(section, schema, false, out error),
+                    "CLI Office binding offers the same section selection: " + error);
+                var incompleteLines = new JObject { ["target"] = "VBA module: Module1",
+                    ["representation"] = "source", ["startLine"] = 1 };
+                AssertTrue(!ToolSchemaSupport.ValidateArguments(incompleteLines, officeSchema, false, out error),
+                    "direct Office schema requires paired line selectors");
+                incompleteLines["type"] = "office";
+                AssertTrue(!ToolSchemaSupport.ValidateArguments(incompleteLines, schema, false, out error),
+                    "CLI Office binding rejects the same incomplete line selection");
                 AssertTrue(!ToolSchemaSupport.ValidateArguments(new JObject {
                     ["target"] = "pages.pdf", ["representation"] = "text",
                     ["startPage"] = 0, ["pageCount"] = 2, ["startChar"] = 0, ["charCount"] = 5

@@ -50,6 +50,13 @@ admission through `common.capabilities_read`; independent schema reads may share
 one batch. A selected skill can supply its declared tools in the next request.
 Neither route changes confirmation, execution policy or effect verification.
 
+The Office `common.resources_read` selector schema has one Core owner. The direct
+Office descriptor uses it unchanged; the workspace/CLI Office binding adds only
+its required `type=office` discriminator to each closed alternative. A section,
+PDF page/range, tree, table, procedure or paired text window therefore has the
+same admission shape in both routes. Provider availability and exact target
+binding remain separate runtime checks.
+
 Once a direct tool is in the frozen callable surface, its successful schema-read
 result is projected as a compact receipt with `schemaInRequest=true`. The compiler
 passes that surface separately from the discoverable catalog; the projection must
