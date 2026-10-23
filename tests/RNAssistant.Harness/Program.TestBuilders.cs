@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
@@ -141,28 +143,18 @@ namespace RNAssistant.Harness
 
         private static string LoadSkillResponse(string id)
         {
-            return JsonConvert.SerializeObject(new
-            {
-                message = "Подключаю навык.", action = "tool",
-                tool_calls = new[] { new { name = SkillLoadToolHandler.ToolId, arguments = new { id } } }
-            });
+            return ModelProtocolWire.WriteAcceptedCall("Load the relevant skill before using it.",
+                "Подключаю навык.", new ConversationToolCall {
+                    Name = SkillLoadToolHandler.ToolId, Arguments = new JObject { ["id"] = id }
+                });
         }
 
         private static string LoadToolSchemaResponse(string toolId)
         {
-            return JsonConvert.SerializeObject(new
-            {
-                message = "Загружаю схему инструмента.",
-                action = "tool",
-                tool_calls = new[]
-                {
-                    new
-                    {
-                        name = CapabilityToolCatalog.ReadToolId,
-                        arguments = new { id = toolId }
-                    }
-                }
-            });
+            return ModelProtocolWire.WriteAcceptedCall("Read the exact schema before calling this tool.",
+                "Загружаю схему инструмента.", new ConversationToolCall {
+                    Name = CapabilityToolCatalog.ReadToolId, Arguments = new JObject { ["id"] = toolId }
+                });
         }
 
         private static ChatSession NewSession(FakeOfficeAdapter adapter)
