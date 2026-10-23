@@ -73,6 +73,16 @@ Owner — Core ModelProtocol / AgentKernel. Это evidence фазы 0 и пре
 следующего cutover; действующий контракт остаётся v7. После переключения аудит
 становится историей, текущие правила переходят в canonical protocol docs.
 
+По сохранённым пользовательским планам
+[Unified Shell](proposals/RNAssistant_Unified_Shell_Plan.md) и
+[Visual Annotator](proposals/RNAssistant_Visual_Annotator_Plan.md) подготовлены
+[аудит Unified Shell / Visual Annotator](architecture/visual-annotator-audit.md)
+и [RFC / ADR-0017](decisions/ADR-0017-unified-shell-and-visual-annotations.md).
+Owner — application/chat UI. Это фаза 0 и предложение последовательной реализации;
+код не переключён, RFC ожидает принятия. После реализации документы остаются
+историей решения; текущие контракты переходят в UI design, Plugins, Resource Fabric
+и Session events, статус — в PROGRESS.
+
 ## Куда писать
 
 | Информация | Место |

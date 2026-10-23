@@ -12,6 +12,21 @@
 новая возможность требует явной задачи, scope и owner; дефекты работающей системы
 приоритетнее расширения без конкретного пользовательского результата.
 
+## Shell audit: preview fixture и одиночная JS-ошибка — 2026-10-23
+
+Owner: HTML preview tests / plugin preview lifecycle. В
+[аудите фазы 0](../architecture/visual-annotator-audit.md) существующий
+`tests/web/html-preview-reuse.test.js` падает до reuse assertions: его stub не
+задаёт `preview.missingVendors`, который читает editor. Обновить fixture отдельно,
+сохранив проверки reuse; этот сбой не доказывает дефект product lifecycle.
+
+Один полный rapid-navigation probe дал `Cannot read properties of undefined
+(reading 'create')` без stack. Повтор со stack-capture завершил 12 циклов без
+page errors. Причина не установлена; при следующей preview-правке сохранить
+полный stack и условия воспроизведения, не объявлять проблему исправленной.
+Ранее зарегистрированное расхождение history control во время source-chat run
+также повторено; отдельная запись ниже остаётся владельцем этого вопроса.
+
 ## Resource Context — остаток исходного предложения — 2026-10-23
 
 Основание — повторная сверка [исходного MD](resource-context/PLAN.md) на `3b865e14`.

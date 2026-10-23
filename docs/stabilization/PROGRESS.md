@@ -1,5 +1,22 @@
 # Stabilization progress
 
+## Unified Shell / Visual Annotator Phase 0 — 2026-10-23
+
+Owner: application/chat UI. [Audit](../architecture/visual-annotator-audit.md)
+maps three UI controllers, two preparation paths and one shared kernel/store;
+CLI already uses the workspace application service. Browser evidence reproduces
+separate drafts for the same project/plugin session and unconditional plugin
+preview replacement. Double-send and cancellation on Settings navigation were
+not reproduced. The bounded 12-cycle mock run has stable listener/node counts;
+native performance and Windows/Office/WebView2 behavior remain unqualified.
+
+[RFC / ADR-0017](../decisions/ADR-0017-unified-shell-and-visual-annotations.md)
+proposes shared drafts first, then one ChatView, application/resource parity,
+shell, browser lifecycle and annotations. The supplied plan requires RFC
+acceptance before implementation; no production code or storage format changed.
+The existing chat-input-delivery browser check passes; workspace history policy
+and HTML preview fixture failures remain open in [BACKLOG](BACKLOG.md).
+
 ## Resource Context streamed diagnostic body download — 2026-10-23
 
 Owner: Model Context Inspector and shared resource download data plane. Saved
