@@ -85,6 +85,9 @@ an irreparable obstacle without reporting success or replaying a tool.
 - Model compatibility probe fixtures pass in both response modes and all three
   result roles (2/2 cases): exact v8 sentinels qualify, while altered fields,
   model-owned IDs and loose responses remain rejected.
+- The cancellation-after-unknown and three tool-result prompt-budget checks
+  pass with v8 execute calls and a terminal-evidence finish; the budget checks
+  still verify complete result delivery or refusal before model dispatch.
 
 The full Harness still has legacy v7 wire bodies and assertions outside these
 migrated groups; its complete test suite is not yet green.

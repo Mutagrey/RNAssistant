@@ -1200,7 +1200,8 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     LoadToolSchemaResponse("excel.add_sheet"),
-                    "{\"message\":\"Создаю лист.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"}}]}"
+                    ModelProtocolWire.WriteAcceptedCall("Create the requested sheet.", "Создаю лист.",
+                        new ConversationToolCall { Name = "excel.add_sheet", Arguments = new JObject { ["name"] = "Report" } })
                 });
                 var session = NewSession(adapter);
                 session.LastRun = new ChatRunRecord { Status = "running" };
@@ -2364,14 +2365,19 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     LoadToolSchemaResponse("excel.inspect"),
-                    "{\"message\":\"Читаю.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"charts\",\"sheet\":\"Графики\"}}]}",
-                    "{\"message\":\"Получены данные графика.\",\"action\":\"done\",\"tool_calls\":[]}"
+                    ModelProtocolWire.WriteAcceptedCall("Inspect chart data.", "Читаю.",
+                        new ConversationToolCall { Name = "excel.inspect", Arguments = new JObject {
+                            ["kind"] = "charts", ["sheet"] = "Графики" } })
                 });
                 var calls = new List<Tuple<IReadOnlyList<ChatMessage>, LlmRequestOptions>>();
+                var session = NewSession(adapter);
                 LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>
                 {
                     calls.Add(Tuple.Create((IReadOnlyList<ChatMessage>)messages.ToList(), options));
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    return Task.FromResult(new LlmCompletionResult { Content = responses.Count > 0
+                        ? responses.Dequeue()
+                        : ScriptedVerifiedFinish(session, "Report the inspected charts.", "Получены данные графика.",
+                            "Chart data inspected.", "excel.inspect") });
                 };
                 var settings = new AppSettings
                 {
@@ -2383,7 +2389,6 @@ namespace RNAssistant.Harness
                     .Concat(executor.GetControllerTools())
                     .ToList();
 
-                var session = NewSession(adapter);
                 var turn = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
                     "Inspect charts.", session, NewContext(adapter), settings, tools,
