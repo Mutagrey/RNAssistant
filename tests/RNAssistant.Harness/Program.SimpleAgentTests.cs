@@ -700,20 +700,29 @@ namespace RNAssistant.Harness
                     BodyMarkdown = "Follow TEST_SKILL_SENTINEL.\n" + new string('x', 15000) + "\nTEST_SKILL_END.",
                     Enabled = true
                 };
+                var session = NewSession(adapter);
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"message\":\"Читаю подходящий skill.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.capabilities_read\",\"arguments\":{\"id\":\"common.test\"}}]}",
-                    "{\"message\":\"Повторное чтение для проверки контекста.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.capabilities_read\",\"arguments\":{\"id\":\"common.test\"}}]}",
-                    "{\"message\":\"Инструкции учтены.\",\"action\":\"done\",\"tool_calls\":[]}"
+                    ModelProtocolWire.WriteAcceptedCall("Read the selected skill.", "Читаю подходящий skill.",
+                        new ConversationToolCall { Name = CapabilityToolCatalog.ReadToolId,
+                            Arguments = new JObject { ["id"] = "common.test" } }),
+                    ModelProtocolWire.WriteAcceptedCall("Check the skill context again.",
+                        "Повторное чтение для проверки контекста.",
+                        new ConversationToolCall { Name = CapabilityToolCatalog.ReadToolId,
+                            Arguments = new JObject { ["id"] = "common.test" } }),
+                    null
                 });
                 var calls = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>
                 {
                     calls.Add(messages.ToList());
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    var response = responses.Dequeue() ?? ScriptedVerifiedFinish(session,
+                        "Both skill reads have terminal results.", "Инструкции учтены.",
+                        "The skill instructions were read.", CapabilityToolCatalog.ReadToolId,
+                        CapabilityToolCatalog.ReadToolId);
+                    return Task.FromResult(new LlmCompletionResult { Content = response });
                 };
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
-                var session = NewSession(adapter);
                 var published = executor.ExecuteManual(Command("common.skills_upsert", "id", skill.Id,
                     "host", "Common", "name", skill.Name, "description", skill.Description, "version", skill.Version,
                     "bodyMarkdown", skill.BodyMarkdown, "enabled", true), tools, new AppSettings(), false, true, session);
