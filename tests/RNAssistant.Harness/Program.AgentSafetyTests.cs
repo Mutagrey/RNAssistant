@@ -1474,7 +1474,7 @@ namespace RNAssistant.Harness
             var options = ModelProtocolWire.CreateRequestOptions(AgentResponseModes.JsonSchema, new[] { questions }, new ModelProtocolCallContext(new string[0]));
             var request = LlmClient.BuildRequestBody(new AppSettings(), new ChatMessage[0], 4096, options);
             var argumentsSchema = (JObject)request.SelectToken(
-                "response_format.json_schema.schema.properties.tool_calls.items.anyOf[0].properties.arguments");
+                "response_format.json_schema.schema.anyOf[0].properties.tool_calls.items.anyOf[0].properties.arguments");
             var valid = JObject.Parse("{\"questions\":[{\"header\":\"Layout\",\"prompt\":\"Choose the interface\",\"selection\":\"single\",\"allowFreeText\":null,\"options\":[" +
                 "{\"label\":\"List\",\"description\":\"Compact rows\",\"recommended\":null}," +
                 "{\"label\":\"Table\",\"description\":\"Comparable columns\",\"recommended\":true}]}]}");
@@ -1541,13 +1541,13 @@ namespace RNAssistant.Harness
                 };
                 var schema = JObject.Parse(ConversationResponseSchemaBuilder.Build(new[] { tool }, new ModelProtocolCallContext(new string[0])));
                 AssertEqual("string",
-                    (string)schema.SelectToken("properties.tool_calls.items.anyOf[0].properties.arguments.properties.type.type"),
+                    (string)schema.SelectToken("anyOf[0].properties.tool_calls.items.anyOf[0].properties.arguments.properties.type.type"),
                     "schema property named type");
 
                 var patchTool = executor.GetControllerTools().Single(candidate => candidate.Id == "common.vba_apply_patch");
                 var patchSchema = JObject.Parse(ConversationResponseSchemaBuilder.Build(new[] { patchTool }, new ModelProtocolCallContext(new string[0])));
                 var exactReplace = patchSchema.SelectToken(
-                    "properties.tool_calls.items.anyOf[0].properties.arguments.properties.patch.items") as JObject;
+                    "anyOf[0].properties.tool_calls.items.anyOf[0].properties.arguments.properties.patch.items") as JObject;
                 AssertTrue(exactReplace != null, "patch schema exposes one exact replacement contract");
                 AssertTrue(exactReplace.SelectToken("properties.op") == null,
                     "constant VBA patch operation is runtime-owned");
@@ -1563,7 +1563,7 @@ namespace RNAssistant.Harness
                 var restoreTool = executor.GetControllerTools().Single(candidate => candidate.Id == "common.vba_restore_backup");
                 var restoreSchema = JObject.Parse(ConversationResponseSchemaBuilder.Build(new[] { restoreTool }, new ModelProtocolCallContext(new string[0])));
                 var restoreVariants = restoreSchema.SelectToken(
-                    "properties.tool_calls.items.anyOf[0].properties.arguments.anyOf") as JArray;
+                    "anyOf[0].properties.tool_calls.items.anyOf[0].properties.arguments.anyOf") as JArray;
                 AssertEqual(2, restoreVariants == null ? 0 : restoreVariants.Count,
                     "restore schema requires either readable target or module name");
                 var targetVariant = restoreVariants.OfType<JObject>().Single(item =>
@@ -1571,7 +1571,7 @@ namespace RNAssistant.Harness
                 AssertTrue(targetVariant.SelectToken("properties.moduleName") == null,
                     "readable-target branch cannot mix the latest-module selector");
                 AssertTrue(restoreSchema.SelectToken(
-                        "properties.tool_calls.items.anyOf[0].properties.arguments.properties.backupId") == null,
+                        "anyOf[0].properties.tool_calls.items.anyOf[0].properties.arguments.properties.backupId") == null,
                     "raw backup id is absent from the model schema");
 
                 var strictPatchArguments = new JObject
@@ -1736,7 +1736,8 @@ namespace RNAssistant.Harness
                     }
                     return Task.FromResult(new LlmCompletionResult
                     {
-                        Content = "{\"message\":\"Done.\",\"action\":\"done\",\"tool_calls\":[]}"
+                        Content = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                            "Answer the request.", "Done.", results: new ConversationResultClaim[0])
                     });
                 };
                 var settings = new AppSettings
