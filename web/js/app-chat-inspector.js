@@ -14,6 +14,8 @@
   var usageKey = "", usageSnapshot = null, usageError = "", usageRequest = null;
   var presentationChat = "", viewState = {};
   var activitySelection = null, activityFocusPending = false, returnFocus = null;
+  var requestView = null, requestMode = "docked", requestRestoreMode = "docked", requestWidth = 640;
+  var requestIsolation = [], requestScroll = {}, requestContent = null;
 
   try {
     width = Number(window.localStorage.getItem(widthKey)) || width;
@@ -401,6 +403,10 @@
     var panel = document.getElementById("chatInspector");
     var body = document.getElementById("chatInspectorBody");
     if (!panel || !body || !open) return;
+    if (requestView) {
+      if (requestView.chatId !== state.activeChatId) window.RNAssistantModelContext.close();
+      return;
+    }
     if (presentationChat !== state.activeChatId) {
       presentationChat = state.activeChatId; viewState = {}; cancelUsage(); usageKey = ""; usageSnapshot = null;
       if (activitySelection && activitySelection.chatId !== state.activeChatId) {
@@ -457,17 +463,27 @@
     var toggle = document.getElementById("toggleChatInspectorButton");
     if (!layout || !panel || !divider || !toggle) return;
     layout.classList.toggle("with-inspector", open);
-    layout.style.setProperty("--inspector-width", width + "px");
+    panel.classList.toggle("is-request", !!requestView);
+    panel.classList.toggle("is-request-wide", !!requestView && requestMode === "wide");
+    panel.classList.toggle("is-request-focus", !!requestView && requestMode === "focus");
+    setWidth(requestView && requestMode === "wide" ? requestWidth : width, false, true);
     panel.hidden = false;
     panel.inert = !open;
     panel.setAttribute("aria-hidden", String(!open));
-    divider.hidden = window.innerWidth <= 1100;
+    divider.hidden = window.innerWidth <= 1100 || requestMode === "focus";
     divider.inert = !open;
     if (panelToggle) panelToggle.sync();
     if (open) render();
+    isolateRequest(!!requestView && requestMode === "focus");
   }
 
   function setOpen(value) {
+    if (!value && requestView) {
+      window.RNAssistantModelContext.close();
+      setOpen(false);
+      document.getElementById("toggleChatInspectorButton").focus({ preventScroll: true });
+      return;
+    }
     if (open === !!value) return;
     var layout = document.getElementById("chatLayout");
     clearTimeout(inspectorTransitionTimer);
@@ -484,32 +500,108 @@
   function widthBounds() {
     var layout = document.getElementById("chatLayout");
     var available = layout ? layout.clientWidth : window.innerWidth;
+    if (requestView && requestMode === "wide") {
+      var nav = layout && layout.querySelector(".chat-sidebar");
+      var navWidth = nav && window.RNAssistantShellLayout.isNavigationOpen() ? nav.getBoundingClientRect().width : 0;
+      return { min: 400, max: Math.max(400, Math.min(960, available - navWidth - 332)) };
+    }
     return { min: 220, max: Math.max(220, Math.min(480, available - 330)) };
   }
 
-  function setWidth(value, persist) {
+  function setWidth(value, persist, layoutOnly) {
     var layout = document.getElementById("chatLayout"), bounds = widthBounds();
-    width = Math.max(bounds.min, Math.min(bounds.max, value));
-    if (layout) layout.style.setProperty("--inspector-width", width + "px");
-    window.RNAssistantSplitter.update(document.getElementById("chatInspectorSplitter"), width, bounds);
-    if (persist) try { window.localStorage.setItem(widthKey, String(width)); } catch (error) { /* Optional. */ }
+    var next = Math.max(bounds.min, Math.min(bounds.max, value));
+    // Responsive clamping changes the visible size, not the user's chosen width.
+    if (!layoutOnly) { if (requestView && requestMode === "wide") requestWidth = next; else width = next; }
+    if (layout) layout.style.setProperty("--inspector-width", next + "px");
+    window.RNAssistantSplitter.update(document.getElementById("chatInspectorSplitter"), next, bounds);
+    if (persist && (!requestView || requestMode !== "wide")) try { window.localStorage.setItem(widthKey, String(width)); } catch (error) { /* Optional. */ }
   }
 
   function bindResize() {
     var divider = document.getElementById("chatInspectorSplitter");
     window.RNAssistantSplitter.bind(divider, {
-      getValue: function () { return width; },
+      getValue: function () {
+        var bounds = widthBounds(), value = requestView && requestMode === "wide" ? requestWidth : width;
+        return Math.max(bounds.min, Math.min(bounds.max, value));
+      },
       setValue: setWidth,
       bounds: widthBounds,
-      defaultValue: function () { return 292; },
+      defaultValue: function () { return requestView && requestMode === "wide" ? 640 : 292; },
       direction: -1,
-      enabled: function () { return open && window.innerWidth > 1100; }
+      enabled: function () { return open && requestMode !== "focus" && window.innerWidth > 1100; }
     });
+  }
+
+  function isolateRequest(enabled) {
+    if (!enabled) {
+      var hadIsolation = requestIsolation.length > 0;
+      requestIsolation.forEach(function (entry) { entry.node.inert = entry.inert; }); requestIsolation = [];
+      if (hadIsolation) window.RNAssistantShellLayout.refresh();
+      return;
+    }
+    if (!requestIsolation.length) {
+      var branch = document.getElementById("chatInspector");
+      while (branch && branch.parentElement) {
+        Array.from(branch.parentElement.children).forEach(function (sibling) {
+          if (sibling !== branch && !/^(SCRIPT|STYLE|LINK)$/.test(sibling.tagName))
+            requestIsolation.push({ node: sibling, inert: sibling.inert });
+        });
+        branch = branch.parentElement;
+        if (branch === document.body) break;
+      }
+    }
+    requestIsolation.forEach(function (entry) { entry.node.inert = true; });
+  }
+
+  function requestLayout(mode) {
+    if (!requestView || ["docked", "wide", "focus"].indexOf(mode) < 0) return;
+    var body = document.getElementById("modelContextBody");
+    if (requestContent !== body.firstElementChild) { requestContent = body.firstElementChild; requestScroll = {}; }
+    requestScroll[requestMode] = body.scrollTop;
+    var top = body.scrollTop;
+    if (mode === "focus" && requestMode !== "focus") requestRestoreMode = requestMode;
+    isolateRequest(false);
+    requestMode = mode;
+    document.getElementById("modelContextLayout").value = mode;
+    var viewer = document.getElementById("modelContextDialog");
+    viewer.setAttribute("role", mode === "focus" ? "dialog" : "region");
+    if (mode === "focus") viewer.setAttribute("aria-modal", "true"); else viewer.removeAttribute("aria-modal");
+    sync();
+    body.scrollTop = requestScroll[mode] === undefined ? top : requestScroll[mode];
+  }
+
+  function showRequest(trigger) {
+    var focused = trigger || document.activeElement, details = focused && focused.closest("[data-inspector-key]");
+    requestView = { open: open, chatId: state.activeChatId, focused: focused,
+      key: details && details.dataset.inspectorKey, label: focused && focused.textContent };
+    requestMode = "docked"; requestScroll = {}; requestContent = null;
+    cancelUsage();
+    setOpen(true); requestLayout("docked");
+  }
+
+  function hideRequest() {
+    if (!requestView) return;
+    var previous = requestView;
+    isolateRequest(false);
+    requestView = null; requestMode = "docked";
+    setOpen(previous.open); sync();
+    window.RNAssistantShellLayout.refresh();
+    var target = previous.focused;
+    if ((!target || !target.isConnected || !target.getClientRects().length) && previous.chatId === state.activeChatId && previous.key) {
+      var details = Array.from(document.querySelectorAll("#chatInspectorBody [data-inspector-key]")).find(function (item) {
+        return item.dataset.inspectorKey === previous.key;
+      });
+      target = details && Array.from(details.querySelectorAll("button, summary")).find(function (item) { return item.textContent === previous.label; });
+    }
+    if (!target || !target.isConnected || !target.getClientRects().length) target = document.getElementById("toggleChatInspectorButton");
+    target.focus({ preventScroll: true });
   }
 
   function openActivity(options, trigger) {
     if (!options || !options.runId || options.chatId !== state.activeChatId ||
         (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office")) return false;
+    if (requestView) window.RNAssistantModelContext.close();
     activitySelection = { chatId: options.chatId, runId: options.runId, stepId: options.stepId || "" };
     activityFocusPending = true;
     returnFocus = trigger || document.activeElement;
@@ -519,8 +611,11 @@
   }
 
   function restoreFocus() {
+    // Media queries can change before the queued resize event updates navigation.
+    window.RNAssistantShellLayout.refresh();
     var target = returnFocus && returnFocus.isConnected && activitySelection && activitySelection.chatId === state.activeChatId
       ? returnFocus : document.getElementById("toggleChatInspectorButton");
+    if (!target.getClientRects().length) target = document.getElementById("toggleChatInspectorButton");
     target.focus({ preventScroll: true });
   }
 
@@ -538,7 +633,7 @@
       restoreFocus();
     });
     panel.addEventListener("keydown", function (event) {
-      if (event.key !== "Escape" || !open) return;
+      if (event.key !== "Escape" || !open || requestView) return;
       var switcher = document.getElementById("chatInspectorSwitcher");
       if (switcher.open) {
         switcher.open = false;
@@ -569,5 +664,7 @@
     sync();
   }
 
-  window.RNAssistantChatInspector = { bind: bind, render: render, refreshLayout: sync, openActivity: openActivity };
+  window.RNAssistantChatInspector = { bind: bind, render: render, refreshLayout: sync, openActivity: openActivity,
+    showRequest: showRequest, hideRequest: hideRequest, setRequestLayout: requestLayout,
+    restoreRequestLayout: function () { requestLayout(requestRestoreMode); } };
 }());

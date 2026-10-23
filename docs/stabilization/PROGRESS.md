@@ -31,7 +31,7 @@ retains independent runtime steps and links each call to its exact journal
 correlation, and each step to saved requests filtered by run/step. Missing requests
 never fall back to another step. Focused browser/model-context/usage checks cover
 the change; no Office/VSTO build was run. Windows/Office/WebView2 remain unqualified.
-Exact attribution of all last-request tokens, Wide/Focus and later diagnostics
+Exact attribution of all last-request tokens and later diagnostics
 features remain open in the [UI design](../ui-design.md).
 
 Follow-up: Office message/activity actions now open that run or exact step in the
@@ -39,8 +39,24 @@ same panel. A selected older run remains pinned during updates; missing loaded
 steps stay explicit and link to the exact journal scope. Final answers without
 StepId do not borrow the last step. Close/Esc returns to the source control and
 chat changes reject stale navigation. The focused browser check covers these
-routes. Next: Wide/Focus request reading, followed by exact request composition;
-the updated sequence is in UI design. Workspace/plugin dock integration remains open.
+routes. Workspace/plugin dock integration remains open.
+
+Request reading now stays in that same dock with Docked/Wide/Focus layouts,
+without remounting or refetching the selected payload on resize. It uses shared
+controls, visible content tabs, readable ordered message previews and the shipped
+document viewers; history/search and message metadata expand on demand. Focus
+isolates background input, Escape restores size then the source step. Targeted
+browser/model-context checks cover state retention, keyboard navigation, themes
+and narrow layout. Next: the shared Office/project/plugin dock and exact request
+composition. Windows/Office/WebView2 evidence remains open.
+
+Follow-up regression checks cover delayed payloads versus tab changes, mode
+switches during history loading, failed selections, refresh of unopened bodies
+and stale export errors. The UI rejects superseded results, keeps old content
+out of a new failed selection, and preserves chosen panel widths across narrow
+windows. Closing also restores source focus while a responsive resize is pending.
+Compact message rows and bounded history controls were checked in light,
+dark, short-window and large-text layouts.
 
 ## Unified Shell application input identity on replay — 2026-10-23
 

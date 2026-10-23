@@ -151,11 +151,20 @@ const { chromium } = require("playwright");
     await page.evaluate(() => RNAssistantChatInspector.render());
     assert.equal(await page.locator(".chat-inspector-step.is-selected details").evaluate(n => n.open), true);
     await screenshot("activity-selected");
+    await page.evaluate(() => {
+      // Reproduce Escape between responsive CSS changing and the queued resize handler.
+      window.holdInspectorResize = event => event.stopImmediatePropagation();
+      window.addEventListener("resize", holdInspectorResize, { capture: true });
+    });
     await page.setViewportSize({ width: 420, height: 780 });
     await screenshot("activity-selected-narrow");
     assert.equal(await page.locator("#chatInspectorBody").evaluate(n => n.scrollWidth > n.clientWidth + 1), false);
     await page.keyboard.press("Escape");
-    assert.equal(await source.evaluate(n => n === document.activeElement), true, "Escape restores the exact source button");
+    assert.equal(await source.evaluate(n => n === document.activeElement), true, "Escape restores the source even before a pending resize handler");
+    await page.evaluate(() => {
+      window.removeEventListener("resize", holdInspectorResize, { capture: true });
+      window.dispatchEvent(new Event("resize"));
+    });
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.locator("#inspector-run-source .message-inspect-action").click();
     assert.match(await page.locator("#chatInspectorBody").textContent(), /Выбранный запуск/);

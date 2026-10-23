@@ -406,7 +406,7 @@ function appendMessageInspectorAction(parent, message, activity) {
   var runId = messageRunId(message) || (activity && activityValue(activity, "RunId", "runId", ""));
   if (!chatId || !runId) return;
   var stepId = activity ? activityStepId(activity) : "";
-  var button = smallIconButton(stepId ? "Открыть шаг" : "Открыть ход работы", "search", function (event) {
+  var button = smallIconButton(stepId ? "Открыть шаг" : "Открыть ход работы", "clock", function (event) {
     event.preventDefault(); event.stopPropagation();
     window.RNAssistantChatInspector.openActivity({ chatId: chatId, runId: runId, stepId: stepId }, button);
   });

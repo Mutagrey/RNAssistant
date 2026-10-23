@@ -3,6 +3,8 @@
   var current = null, limit = 50 * 1024 * 1024;
   var labels = { Full: "Полностью", Fragment: "Фрагмент", Summary: "Сводка / описание ресурса",
     Excluded: "Не включено", Unknown: "Нет сведений" };
+  var tabs = { messages: "modelContextMessagesTab", resources: "modelContextResourcesTab",
+    response: "modelContextResponseTab", json: "modelContextJsonTab" };
   function el(tag, text, cls) {
     var node = document.createElement(tag);
     if (text !== undefined) node.textContent = text;
@@ -10,7 +12,7 @@
     return node;
   }
   function button(text, action) {
-    var node = el("button", text, "secondary compact"); node.type = "button";
+    var node = el("button", text, "button secondary compact"); node.type = "button";
     node.addEventListener("click", action); return node;
   }
   // Split immediate members without reserializing numbers, duplicate keys or escapes.
@@ -37,12 +39,33 @@
   }
   function field(list, key) { var found = list.find(function (m) { return m.key === key; }); return found && found.raw; }
   function decoded(raw) { try { return JSON.parse(raw); } catch (_) { return null; } }
-  function live(c) { return current === c && state.activeChatId === c.chatId && !c.abort.signal.aborted; }
+  function live(c) { return current === c && state.activeChatId === c.chatId && !c.abort.signal.aborted &&
+    $("tab-chat").classList.contains("active") && (typeof officeTranscriptActive !== "function" || officeTranscriptActive()); }
   function valid(c, version) { return live(c) && c.version === version; }
   function status(c, text) { if (live(c)) $("modelContextStatus").textContent = text; }
+  function syncTabs(c) {
+    Object.keys(tabs).forEach(function (key) {
+      var control = $(tabs[key]), selected = c.tab === key;
+      control.classList.toggle("active", selected);
+      control.setAttribute("aria-selected", String(selected)); control.tabIndex = selected ? 0 : -1;
+      control.disabled = c.mode === "preview" && (key === "response" || key === "resources");
+    });
+    $("modelContextBody").setAttribute("aria-labelledby", tabs[c.tab]);
+  }
+  function dateText(value) {
+    return new Date(value).toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  }
   function clearView(c) {
+    c.viewVersion = (c.viewVersion || 0) + 1;
     c.mounts.forEach(function (node) { window.RNAssistantViewerRegistry.unmount(node); }); c.mounts = [];
-    $("modelContextBody").replaceChildren();
+    $("modelContextBody").replaceChildren(); $("modelContextBody").classList.remove("product-viewer");
+  }
+  function notice(c, title, detail, kind) {
+    clearView(c);
+    var card = el("div", undefined, "model-context-empty"); card.dataset.kind = kind || "empty";
+    card.appendChild(el("h3", title));
+    if (detail) card.appendChild(el("p", detail));
+    $("modelContextBody").appendChild(card);
   }
   function close() {
     var c = current; current = null;
@@ -53,7 +76,7 @@
     }
     $("modelContextDialog").classList.add("hidden");
     $("openModelContextFromTokens").setAttribute("aria-expanded", "false");
-    if (c && c.returnFocus && c.returnFocus.isConnected) c.returnFocus.focus();
+    window.RNAssistantChatInspector.hideRequest();
   }
   async function call(c, type, payload) {
     var pending = send(type, Object.assign({ chatId: c.chatId }, payload || {}));
@@ -111,6 +134,7 @@
       }
     }
     var kind = json || /^[\s]*[\[{]/.test(text) && decoded(text) !== null ? "json" : "markdown";
+    node.classList.add("product-viewer");
     window.RNAssistantViewerRegistry.mount(kind, node, { text: text, fullText: text, complete: true,
       completeness: "full", mode: "tree", limits: { maxChars: 2000000 }, onCopy: window.copyTextResult });
     c.mounts.push(node);
@@ -229,49 +253,65 @@
     var raw = field(fields, "messages");
     if (!raw) { root.appendChild(el("p", "В payload нет массива messages. Откройте JSON запроса.")); return; }
     var listRoot = el("section"); root.appendChild(listRoot);
-    var list = members(raw), count = 0, previousGroup = null;
+    var list = members(raw), count = 0;
+    var roles = { system: "Инструкции", developer: "Приложение",
+      user: "Пользователь", assistant: "Модель", tool: "Инструмент", function: "Функция" };
     var more = button("Показать ещё сообщения", page);
     function page() {
       more.remove();
       list.slice(count, count + 50).forEach(function (message, offset) {
         var index = count + offset, parts = members(message.raw), role = decoded(field(parts, "role")) || "message";
-        var group = role === "system" || role === "developer" ? "Инструкции" : role === "user" ? "Пользователь / контекст" : "Шаг модели / инструменты";
-        if (group !== previousGroup) { listRoot.appendChild(el("h3", group)); previousGroup = group; }
         var entry = (entries || []).find(function (item) { return item.MessageIndex === index; });
-        var detail = el("details", undefined, "model-context-message"), summary = el("summary");
-        summary.appendChild(el("span", (index + 1) + " · " + role + " · " + message.raw.length + " симв."));
-        var badge = el("span", note(entry), "model-context-badge"); badge.dataset.kind = entry && entry.Presentation || "Unknown";
-        summary.appendChild(badge); detail.appendChild(summary); listRoot.appendChild(detail);
+        var content = field(parts, "content"), contentValue = decoded(content);
+        var detail = el("details", undefined, "model-context-message is-message"), summary = el("summary");
+        summary.appendChild(el("span", String(index + 1), "model-context-message-number"));
+        var heading = el("span"), label = el("span", undefined, "model-context-message-label");
+        label.appendChild(el("span", roles[role] || role, "model-context-message-title"));
+        label.appendChild(el("span", message.raw.length.toLocaleString("ru-RU") + " симв. JSON", "model-context-message-size"));
+        heading.appendChild(label);
+        var excerpt = typeof contentValue === "string" ? contentValue.slice(0, 300).replace(/\s+/g, " ").trim() :
+          Array.isArray(contentValue) ? "Составное содержимое: текст и вложения" : "Служебные поля сообщения";
+        if (excerpt) heading.appendChild(el("span", excerpt, "model-context-message-preview"));
+        if (entry && entry.Presentation && entry.Presentation !== "Unknown") {
+          var meta = el("span", undefined, "model-context-message-meta");
+          var badge = el("span", note(entry), "model-context-badge"); badge.dataset.kind = entry.Presentation;
+          meta.appendChild(badge); heading.appendChild(meta);
+        }
+        summary.appendChild(heading); detail.appendChild(summary); listRoot.appendChild(detail);
         var body = el("div", undefined, "model-context-message-body"); detail.appendChild(body);
         var loaded = false;
         detail.addEventListener("toggle", function () {
           if (!detail.open || loaded) return; loaded = true;
-          if (entry && entry.Reason) body.appendChild(el("p", entry.Reason, "model-context-note"));
-          if (entry && entry.ToolCallId) body.appendChild(el("p", "Операция: " +
+          if (typeof contentValue === "string") {
+            var contentNode = el("div"); body.appendChild(contentNode); mount(c, contentNode, contentValue, false);
+          } else if (content) lazy(c, body, "Части содержимого · JSON", function () { return content; }, true);
+          var metadata = el("details", undefined, "model-context-meta");
+          metadata.appendChild(el("summary", "Данные сообщения")); body.appendChild(metadata);
+          metadata.appendChild(el("p", "Роль: " + role + " · " +
+            (entry && entry.Presentation && entry.Presentation !== "Unknown" ? note(entry) : "полнота исходных источников не сохранена")));
+          if (entry && entry.Reason) metadata.appendChild(el("p", entry.Reason, "model-context-note"));
+          if (entry && entry.ToolCallId) metadata.appendChild(el("p", "Операция: " +
             (alias(c, "operations", entry.ToolCallId) ? alias(c, "operations", entry.ToolCallId) + " · " : "") + entry.ToolCallId));
           if (Number.isSafeInteger(entry && entry.EstimatedWireMessageTokens) && entry.EstimatedWireMessageTokens >= 0)
-            body.appendChild(el("p", "Оценка всего сериализованного read-сообщения: ≈ " +
+            metadata.appendChild(el("p", "Оценка всего сериализованного read-сообщения: ≈ " +
               entry.EstimatedWireMessageTokens + " токенов (не измеренное usage)."));
           (entry && entry.EvidenceLinks || []).forEach(function (link) {
             if (!link) return;
-            body.appendChild(el("p", evidenceNote(c, link)));
+            metadata.appendChild(el("p", evidenceNote(c, link)));
             var selected = resourceFor(c, link);
-            if (selected) body.appendChild(button("Ресурс " + selected.alias, function () {
-              c.focusResource = selected.alias; c.tab = "resources"; $("modelContextTab").value = "resources"; render(c);
+            if (selected) metadata.appendChild(button("Ресурс " + selected.alias, function () {
+              c.focusResource = selected.alias; c.tab = "resources"; render(c);
             }));
           });
-          (entry && entry.Parts || []).forEach(function (part) { body.appendChild(el("p", partNote(part))); });
-          body.appendChild(button("Копировать сообщение JSON", function () { copyTextResult(message.raw); }));
-          var content = field(parts, "content"), contentValue = decoded(content);
-          if (typeof contentValue === "string") { var contentNode = el("div"); body.appendChild(contentNode); mount(c, contentNode, contentValue, false); }
-          else if (content) lazy(c, body, "Части содержимого · JSON", function () { return content; }, true);
+          (entry && entry.Parts || []).forEach(function (part) { metadata.appendChild(el("p", partNote(part))); });
+          metadata.appendChild(button("Копировать сообщение JSON", function () { copyTextResult(message.raw); }));
           parts.filter(function (part) { return part.key !== "role" && part.key !== "content"; }).forEach(function (part) {
-            lazy(c, body, part.key, function () { return part.raw; }, true);
+            lazy(c, metadata, part.key, function () { return part.raw; }, true);
           });
-          lazy(c, body, "Исходное сообщение JSON", function () { return message.raw; }, true);
+          lazy(c, metadata, "Исходное сообщение JSON", function () { return message.raw; }, true);
           if (entry && entry.OriginalPayload && c.selected && c.mode === "actual") {
             var originalIndex = entries.indexOf(entry), version = c.version;
-            lazy(c, body, "Локальный оригинал · не обязательно включён целиком", function () {
+            lazy(c, metadata, "Локальный оригинал · не обязательно включён целиком", function () {
               return payload(c, c.selected, originalIndex, version);
             }, false);
           }
@@ -279,13 +319,16 @@
       });
       count += 50; if (count < list.length) listRoot.appendChild(more);
     }
-    listRoot.appendChild(el("p", list.length + " сообщений · исходный порядок", "model-context-note")); page();
-    fields.filter(function (part) { return part.key !== "messages"; }).forEach(function (part) {
-      lazy(c, root, "Параметр запроса: " + part.key, function () { return part.raw; }, true);
-    });
+    listRoot.appendChild(el("p", list.length + " сообщений · порядок отправки", "model-context-note")); page();
+    var parameters = fields.filter(function (part) { return part.key !== "messages"; });
+    if (parameters.length) {
+      var settings = el("details", undefined, "model-context-meta");
+      settings.appendChild(el("summary", "Параметры запроса · " + parameters.length)); root.appendChild(settings);
+      parameters.forEach(function (part) { lazy(c, settings, "Параметр запроса: " + part.key, function () { return part.raw; }, true); });
+    }
     var excluded = (entries || []).filter(function (entry) { return entry.Presentation === "Excluded"; });
     if (excluded.length) {
-      var local = el("details"); local.appendChild(el("summary", "Не включено отдельными сообщениями · " + excluded.length)); root.appendChild(local);
+      var local = el("details", undefined, "model-context-message"); local.appendChild(el("summary", "Не включено отдельными сообщениями · " + excluded.length)); root.appendChild(local);
       excluded.forEach(function (entry) {
         var row = el("div", undefined, "model-context-message-body"); local.appendChild(row);
         row.appendChild(el("p", (entry.Role || "Источник") + " · " + (entry.Reason || "Не включено")));
@@ -305,8 +348,10 @@
     }
     var messageText = decoded(content);
     if (typeof messageText !== "string") { mount(c, body, text, true); return; }
-    body.appendChild(el("h3", "Сообщение модели"));
-    var view = el("div"); body.appendChild(view); mount(c, view, messageText, false);
+    var envelope = decoded(messageText), narration = envelope && envelope.message;
+    var view = el("div"); body.appendChild(view);
+    mount(c, view, typeof narration === "string" ? narration : messageText, false);
+    if (typeof narration === "string") lazy(c, body, "Сообщение модели · исходный JSON", function () { return messageText; }, true);
     lazy(c, body, "Полный ответ · исходный JSON", function () { return text; }, true);
   }
 
@@ -436,7 +481,7 @@
   }
   function resources(c, root) {
     var rows = c.detail && c.detail.resources || [];
-    if (!rows.length) { root.appendChild(el("p", "У этого запроса нет сохранённых связей с ресурсами.")); return; }
+    if (!rows.length) { notice(c, "Нет связей с ресурсами", "У этого запроса нет сохранённых связей с ресурсами."); return; }
     root.appendChild(el("p", "Ревизии из выбранного запроса. Views из наблюдений и descriptor — неполный список; полный список сохранённых вариантов загружается по страницам. CAS проверяется отдельно. Live-источник и зависимости не проверяются; доставка модели определяется наблюдениями ниже.", "model-context-note"));
     var currentness = { Current: "Текущая", Superseded: "Устаревшая", Removed: "Удалена",
       Unavailable: "Недоступна", Unknown: "Неизвестна" };
@@ -518,17 +563,26 @@
 
   async function render(c) {
     if (!live(c)) return;
+    syncTabs(c);
     clearView(c);
     var root = $("modelContextBody"), version = c.version;
     if (c.mode === "preview") {
-      if (!c.preview) return;
+      if (!c.preview) {
+        notice(c, state.chatReadOnly ? "Чат доступен только для чтения" : c.previewError ? "Предпросмотр недоступен" : "Подготовка предпросмотра…",
+          state.chatReadOnly ? "Для нового запроса создайте новый чат." : c.previewError || "Запрос ещё не отправляется.", c.previewError ? "error" : "loading");
+        return;
+      }
       if (c.tab === "response") { root.textContent = "Это предпросмотр — ответа ещё нет."; return; }
       if (c.tab === "resources") { root.textContent = "Сохранённые ревизии появятся после фактического запроса."; return; }
       if (c.tab === "json") mount(c, root, c.preview.text, true);
       else messages(c, c.preview.text, c.previewEntries);
       return;
     }
-    if (!c.detail || !c.selected) { root.textContent = "Сохранённых запросов пока нет."; return; }
+    if (!c.detail || !c.selected) {
+      notice(c, c.selectionError ? "Не удалось открыть запрос" : c.loading ? "Загрузка запроса…" : c.scope ? "Запрос шага не найден" : "Нет сохранённых запросов",
+        c.selectionError || c.emptyMessage, c.selectionError ? "error" : "empty");
+      return;
+    }
     if (c.tab === "resources") { resources(c, root); return; }
     var request = c.detail.events.find(function (e) { return e.eventId === c.selected; });
     if (c.tab === "response") {
@@ -539,7 +593,7 @@
         var title = event.type === "llm.response" ? (streaming ? "Собранный потоковый ответ" : request.trace.Streaming === false ? "Ответ провайдера" : "Сохранённый ответ · формат записи не указан") :
           event.type === "assistant.chunk" ? "Исходные SSE data-фрагменты" : event.type;
         var body = el("section"); root.appendChild(body);
-        body.appendChild(el("h3", title + " · " + new Date(event.createdUtc).toLocaleTimeString()));
+        body.appendChild(el("h3", title + " · " + new Date(event.createdUtc).toLocaleTimeString("ru-RU")));
         if (event.trace.Error) body.appendChild(el("p", event.trace.Error));
         if (event.hasPayload) {
           lazy(c, body, "Содержимое", function () { return payload(c, event.eventId, undefined, version); }, true, event.type === "llm.response" ? responseBody : null);
@@ -547,15 +601,19 @@
         } else body.appendChild(el("p", "Тело не сохранено."));
       }); return;
     }
-    if (!request.hasPayload) { root.textContent = "Точное тело запроса не сохранено."; return; }
-    root.textContent = "Загрузка запроса…";
+    if (!request.hasPayload) { notice(c, "Содержимое не сохранено", "Точное тело запроса не сохранено."); return; }
+    notice(c, "Загрузка запроса…", "Чтение сохранённого содержимого.", "loading");
+    var viewVersion = c.viewVersion;
     try {
       var value = await payload(c, request.eventId, undefined, version);
-      if (!valid(c, version)) return;
+      if (!valid(c, version) || c.viewVersion !== viewVersion) return;
       root.replaceChildren();
       if (c.tab === "json") mount(c, root, value.text, true);
       else messages(c, value.text, request.trace.ContextMessages);
-    } catch (error) { if (valid(c, version)) root.textContent = error.message || String(error); }
+    } catch (error) {
+      if (valid(c, version) && c.viewVersion === viewVersion)
+        notice(c, "Не удалось прочитать запрос", error.message || String(error), "error");
+    }
   }
   async function downloadEvent(c, eventId) {
     var version = c.version;
@@ -580,44 +638,61 @@
         if (valid(c, version)) save({ bytes: bytes, contentType: data.payload.contentType }, eventId + ".json");
       }
     }
-    catch (error) { status(c, error.message); }
+    catch (error) { if (valid(c, version)) status(c, error.message); }
     finally { if (data && data.leaseId) await send("resourceDataClose", { chatId: c.chatId,
       workspaceId: "model-context", leaseId: data.leaseId }).catch(function () {}); }
   }
-  async function select(c, eventId) {
+  async function select(c, eventId, forceRender) {
     var same = c.selected === eventId && c.detail;
     if (!same) { c.version++; c.cache = {}; c.pending = {}; c.inventory = {}; c.inventoryBusy = {}; c.selected = eventId; c.detail = null; c.focusResource = null; }
+    if (!same || forceRender) {
+      c.loading = true; c.emptyMessage = ""; c.selectionError = "";
+      notice(c, "Загрузка запроса…", "Чтение сохранённого обмена.", "loading");
+      previewAvailability(c);
+    }
     var version = c.version;
     status(c, "Чтение сохранённого обмена…");
     try {
       var detail = await call(c, "getModelContext", { requestEventId: eventId });
       if (!valid(c, version)) return;
+      var request = (detail.events || []).find(function (e) { return e.type === "llm.request" && e.eventId === eventId; });
+      if (detail.chatId !== c.chatId || !request || !request.trace || c.scope &&
+          (request.trace.RunId !== c.scope.runId || request.trace.StepId !== c.scope.stepId))
+        throw new Error("Сохранённый запрос не соответствует выбранному чату и шагу.");
       var changed = !c.detail || JSON.stringify(c.detail.events.map(function (e) { return e.eventId; })) !== JSON.stringify(detail.events.map(function (e) { return e.eventId; }));
       var resourcesChanged = !c.detail || JSON.stringify(c.detail.resources) !== JSON.stringify(detail.resources);
       c.detail = detail;
-      var request = detail.events.find(function (e) { return e.eventId === eventId; });
       var response = detail.events.find(function (e) { return e.type === "llm.response" || e.type === "llm.failure"; });
-      status(c, "Подготовлен " + (request.alias || "") + " · " + new Date(request.createdUtc).toLocaleString() + " · " + (request.trace.Model || "") +
-        " · " + (response ? response.type === "llm.response" ? "ответ сохранён" : "ошибка" : "ответ пока отсутствует") +
-        (request.trace.Streaming ? " · streaming" : "") + (c.follow ? " · слежение" : " · просмотр выбранного шага"));
-      if (!same || changed && c.tab === "response" || resourcesChanged && c.tab === "resources") await render(c);
-    } catch (error) { if (valid(c, version)) status(c, error.message); }
+      $("modelContextAttempt").title = request.trace.Purpose || "Сохранённый запрос";
+      status(c, (request.trace.Model || "Модель не указана") + " · " + dateText(request.createdUtc) + "\n" +
+        (response ? response.type === "llm.response" ? "Ответ сохранён" : "Ошибка запроса" : "Ответ пока не сохранён") +
+        (c.follow ? " · обновляется автоматически" : c.scope ? " · выбранный шаг" : " · выбранный запрос"));
+      c.loading = false; previewAvailability(c);
+      if (!same || forceRender || changed && c.tab === "response" || resourcesChanged && c.tab === "resources") await render(c);
+    } catch (error) {
+      if (valid(c, version)) {
+        status(c, error.message);
+        if (!same || forceRender) { c.detail = null; c.selectionError = error.message; notice(c, "Не удалось открыть запрос", error.message, "error"); }
+      }
+    } finally { if (valid(c, version)) { c.loading = false; previewAvailability(c); } }
   }
   function attemptPicker(c) {
     var picker = $("modelContextAttempt"); picker.replaceChildren();
     c.attempts.forEach(function (event) {
-      var option = el("option", (event.alias || "#" + event.sequence) + " · " + new Date(event.createdUtc).toLocaleTimeString() + " · " + (event.trace.Purpose || "model"));
+      var option = el("option", (event.alias || "#" + event.sequence) + " · " + dateText(event.createdUtc) +
+        (event.trace.Purpose ? " · " + event.trace.Purpose : ""));
       option.value = event.eventId; picker.appendChild(option);
     });
+    picker.disabled = !c.attempts.length;
     return picker;
   }
-  async function list(c, older) {
-    if (!live(c) || c.busy) return;
-    c.busy = true;
-    var listVersion = c.version;
+  async function list(c, older, forceRender) {
+    if (!live(c) || c.mode !== "actual" || c.listRequest && c.listRequest.version === c.version) return;
+    var operation = { version: c.version }; c.listRequest = operation;
     try {
       var response = await call(c, "getModelContext", older ? { beforeSequence: c.before } : { knownRevision: c.revision });
-      if (!valid(c, listVersion) || c.mode !== "actual" || response.unchanged) return;
+      if (!valid(c, operation.version) || c.mode !== "actual" || response.unchanged) return;
+      if (response.chatId !== c.chatId) throw new Error("История запросов не соответствует выбранному чату.");
       if (c.scope) response.events = response.events.filter(function (event) {
         return event.trace && event.trace.RunId === c.scope.runId && event.trace.StepId === c.scope.stepId;
       });
@@ -632,37 +707,57 @@
       var picker = attemptPicker(c);
       $("modelContextOlder").disabled = !c.before;
       var chosen = c.follow || c.scope && !c.selected ? c.attempts[0] && c.attempts[0].eventId : c.selected;
-      if (chosen) { picker.value = chosen; if (!older || chosen !== c.selected) await select(c, chosen); }
+      if (chosen) {
+        picker.value = chosen;
+        if (!older || chosen !== c.selected) {
+          var selecting = select(c, chosen, forceRender); operation.version = c.version; await selecting;
+        }
+      }
       else {
-        status(c, c.scope ? "Точный запрос этого шага не найден в загруженной части истории." + (c.before ? " Нажмите «Ранее» для предыдущей страницы." : "") : state.chatReadOnly ? "Сохранённых запросов нет. Для нового запроса создайте новый чат." :
-          "Сохранённых запросов пока нет. Доступен предварительный контекст.");
+        c.version++; operation.version = c.version;
+        c.selected = null; c.detail = null; c.loading = false; c.selectionError = ""; c.cache = {}; c.pending = {};
+        c.emptyMessage = c.scope ? "Точный запрос этого шага не найден в загруженной части истории." + (c.before ? " Нажмите «Ранее» для предыдущей страницы." : "") : state.chatReadOnly ? "Сохранённых запросов нет. Для нового запроса создайте новый чат." :
+          "Сохранённых запросов пока нет. Доступен предварительный контекст.";
+        status(c, c.emptyMessage); previewAvailability(c);
+        if (c.before) $("modelContextHistory").open = true;
         await render(c);
       }
-    } catch (error) { status(c, error.message || String(error)); }
-    finally { c.busy = false; }
+    } catch (error) {
+      if (valid(c, operation.version)) {
+        status(c, error.message || String(error));
+        if (!c.detail) {
+          c.selectionError = error.message || String(error);
+          notice(c, "Не удалось загрузить историю", c.selectionError, "error");
+        } else if (forceRender) await render(c);
+      }
+    } finally { if (c.listRequest === operation) c.listRequest = null; }
   }
   async function findAlias(c) {
     if (!c || !live(c) || c.mode !== "actual") return;
     var name = $("modelContextAliasSearch").value.trim();
     if (!name) return;
     c.version++; var version = c.version;
-    c.cache = {}; c.pending = {}; c.follow = false;
+    c.pending = {}; c.follow = false;
     status(c, "Поиск " + name + "…");
+    notice(c, "Поиск ссылки " + name, "В сохранённой истории этого чата.", "loading");
     try {
       var detail = await call(c, "getModelContext", { alias: name });
       if (!valid(c, version)) return;
       var request = (detail.events || []).find(function (event) { return event.type === "llm.request"; });
-      if (!request || detail.selectedAlias !== name) throw new Error("Короткая ссылка не найдена в этом чате.");
+      if (detail.chatId !== c.chatId || !request || detail.selectedAlias !== name) throw new Error("Короткая ссылка не найдена в этом чате.");
       c.scope = null;
+      c.cache = {}; c.loading = false; c.selectionError = "";
       c.selected = request.eventId; c.detail = detail; c.inventory = {}; c.inventoryBusy = {};
       c.focusResource = detail.selectedResourceAlias || null;
       c.tab = c.focusResource ? "resources" : "messages";
-      $("modelContextTab").value = c.tab;
       if (!c.attempts.some(function (event) { return event.eventId === request.eventId; })) c.attempts.push(request);
       attemptPicker(c).value = request.eventId;
+      previewAvailability(c);
       status(c, "Найдено " + name + " в " + (request.alias || "сохранённом запросе") + ".");
       await render(c);
-    } catch (error) { if (valid(c, version)) status(c, error.message || String(error)); }
+    } catch (error) {
+      if (valid(c, version)) { await render(c); if (valid(c, version)) status(c, error.message || String(error)); }
+    }
   }
   function composerText() { return typeof officeChatDraftText === "function" ? officeChatDraftText() : $("chatInput").value; }
   function draft() { var chat = activeChatSummary(); return JSON.stringify([composerText(), promptContextResourceDraftIds(), chat && (chat.revision || chat.Revision)]); }
@@ -670,26 +765,34 @@
     $("modelContextPreviewOption").disabled = !!state.chatReadOnly;
     var unavailable = !!state.chatReadOnly && c.mode === "preview";
     $("modelContextRefresh").disabled = unavailable;
-    $("modelContextDownload").disabled = unavailable;
+    var request = c.detail && (c.detail.events || []).find(function (event) { return event.eventId === c.selected; });
+    $("modelContextDownload").disabled = unavailable || (c.mode === "preview" ? !c.preview : c.loading || !request || !request.hasPayload);
   }
   async function preview(c) {
-    c.version++; var version = c.version; c.preview = null; clearView(c);
+    c.version++; var version = c.version; c.preview = null; c.previewError = ""; clearView(c);
     previewAvailability(c);
     if (state.chatReadOnly) {
       status(c, "Этот чат доступен только для чтения. Для нового запроса создайте новый чат.");
+      notice(c, "Чат доступен только для чтения", "Для нового запроса создайте новый чат.");
       return;
     }
     c.previewDraft = draft(); status(c, "Сборка предварительного контекста…");
+    notice(c, "Подготовка предпросмотра…", "Запрос ещё не отправляется.", "loading");
     try {
       var response = await call(c, "inspectModelContextPreview", { text: composerText(),
         resourceDraftIds: promptContextResourceDraftIds(), includeRaw: true });
       var value = await download(c, response, "context-inspector", version);
       if (!valid(c, version)) return;
       c.preview = value; c.previewEntries = response.resourceContextReceipt && response.resourceContextReceipt.Messages;
-      c.previewStatus = "Предпросмотр, ещё не отправлено · " + new Date(response.generatedUtc).toLocaleString() +
-        " · вложения представлены метаданными; transport материализует их при отправке";
-      status(c, c.previewStatus); await render(c);
-    } catch (error) { if (valid(c, version)) status(c, error.message || String(error)); }
+      c.previewStatus = "Предпросмотр, ещё не отправлено · " + dateText(response.generatedUtc) +
+        "\nВложения пока представлены сведениями о файлах.";
+      status(c, c.previewStatus); previewAvailability(c); await render(c);
+    } catch (error) {
+      if (valid(c, version)) {
+        c.previewError = error.message || String(error);
+        status(c, c.previewError); notice(c, "Предпросмотр недоступен", c.previewError, "error");
+      }
+    }
   }
   function tick(c) {
     if (!live(c)) { if (current === c) close(); return; }
@@ -701,14 +804,18 @@
     if (!state.activeChatId || state.bridgeUnavailable) return;
     var scope = options && options.runId && options.stepId ? options : null;
     if (scope && scope.chatId !== state.activeChatId) return;
+    var trigger = document.activeElement;
     if (current) close();
     if (typeof closePromptContextInspector === "function") closePromptContextInspector();
     current = { chatId: state.activeChatId, abort: new AbortController(), requests: new Set(), version: 0,
       mounts: [], cache: {}, pending: {}, inventory: {}, inventoryBusy: {}, mode: "actual", tab: "messages", follow: !scope, attempts: [],
-      scope: scope, returnFocus: document.activeElement && document.activeElement !== document.body ? document.activeElement : $("contextMeter") };
+      scope: scope };
     $("modelContextDialog").classList.remove("hidden");
+    window.RNAssistantChatInspector.showRequest(trigger);
     $("openModelContextFromTokens").setAttribute("aria-expanded", "true");
-    $("modelContextMode").value = "actual"; $("modelContextTab").value = "messages";
+    $("modelContextMode").value = "actual"; syncTabs(current); attemptPicker(current);
+    notice(current, "Загрузка запросов…", "Чтение истории этого чата.", "loading");
+    $("modelContextHistory").open = false;
     previewAvailability(current);
     $("modelContextActualControls").classList.remove("hidden"); $("closeModelContextButton").focus();
     if (scope) list(current, false);
@@ -717,13 +824,32 @@
   function bind() {
     $("openModelContextFromTokens").addEventListener("click", open);
     $("closeModelContextButton").addEventListener("click", close);
+    $("modelContextLayout").addEventListener("change", function () {
+      window.RNAssistantChatInspector.setRequestLayout(this.value);
+    });
     $("modelContextMode").addEventListener("change", function () {
       var c = current; c.mode = this.value; c.version++; c.revision = null; c.detail = null; c.cache = {}; c.pending = {}; c.inventory = {}; c.inventoryBusy = {};
+      c.loading = false; c.emptyMessage = ""; c.selectionError = ""; clearView(c);
+      if (c.mode === "preview" && (c.tab === "response" || c.tab === "resources")) c.tab = "messages";
+      syncTabs(c);
       $("modelContextActualControls").classList.toggle("hidden", c.mode !== "actual");
       previewAvailability(c);
-      if (c.mode === "preview") preview(c); else list(c, false);
+      if (c.mode === "preview") preview(c); else {
+        notice(c, "Загрузка запросов…", "Чтение сохранённой истории.", "loading"); list(c, false);
+      }
     });
-    $("modelContextTab").addEventListener("change", function () { var c = current; c.tab = this.value; render(c); });
+    Object.keys(tabs).forEach(function (key) {
+      var control = $(tabs[key]);
+      control.addEventListener("click", function () { current.tab = key; render(current); });
+      control.addEventListener("keydown", function (event) {
+        if (["ArrowLeft", "ArrowRight", "Home", "End"].indexOf(event.key) < 0) return;
+        event.preventDefault();
+        var available = Object.keys(tabs).filter(function (tab) { return !$(tabs[tab]).disabled; });
+        var index = available.indexOf(key), next = event.key === "Home" ? 0 : event.key === "End" ? available.length - 1 :
+          (index + (event.key === "ArrowRight" ? 1 : -1) + available.length) % available.length;
+        current.tab = available[next]; $(tabs[current.tab]).focus(); render(current);
+      });
+    });
     $("modelContextAttempt").addEventListener("change", function () { current.follow = false; select(current, this.value); });
     $("modelContextAliasFind").addEventListener("click", function () { findAlias(current); });
     $("modelContextAliasSearch").addEventListener("keydown", function (event) {
@@ -733,9 +859,8 @@
     $("modelContextOlder").addEventListener("click", function () { list(current, true); });
     $("modelContextRefresh").addEventListener("click", async function () {
       if (current.mode === "preview") { await preview(current); return; }
-      var c = current; c.version++; c.inventory = {}; c.inventoryBusy = {}; c.revision = null;
-      await list(c, false);
-      if (live(c) && c.tab === "resources") await render(c);
+      var c = current; c.version++; c.pending = {}; c.inventory = {}; c.inventoryBusy = {}; c.revision = null;
+      await list(c, false, true);
     });
     $("modelContextDownload").addEventListener("click", function () {
       var c = current;
@@ -745,9 +870,19 @@
       else if (c.selected) downloadEvent(c, c.selected);
     });
     $("modelContextDialog").addEventListener("keydown", function (event) {
-      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(); }
-      if (event.key === "Tab") {
-        var focusable = Array.from(this.querySelectorAll("button, select, summary, input, a[href]")).filter(function (node) { return !node.disabled && node.getClientRects().length; });
+      if (event.key === "Escape") {
+        event.preventDefault(); event.stopPropagation();
+        if ($("modelContextLayout").value === "focus") window.RNAssistantChatInspector.restoreRequestLayout(); else close();
+      }
+      if (event.key === "Tab" && $("modelContextLayout").value === "focus") {
+        var focusable = Array.from(this.querySelectorAll("button, select, summary, input, textarea, a[href], [tabindex]")).filter(function (node) {
+          if (node.disabled || node.tabIndex < 0 || !node.getClientRects().length) return false;
+          // Descendants of closed details can still have layout boxes, but cannot receive focus.
+          for (var parent = node.parentElement; parent; parent = parent.parentElement) {
+            if (parent.tagName === "DETAILS" && !parent.open && !parent.firstElementChild.contains(node)) return false;
+          }
+          return true;
+        });
         var first = focusable[0], last = focusable[focusable.length - 1];
         if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
         else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }

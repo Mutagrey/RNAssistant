@@ -20,6 +20,7 @@ class Node {
   querySelectorAll() { return []; }
 }
 async function flush() { for (let i = 0; i < 25; i++) await new Promise(resolve => setImmediate(resolve)); }
+function descendants(node) { return [node, ...node.children.flatMap(descendants)]; }
 function fixture(withAliases = false, pdf = false) {
   const nodes = new Map(), mounts = [], calls = [], closes = [], timers = new Map(), leases = new Map(); let timer = 0;
   const verification = { availability: "Verified", partsAvailability: "Verified", hold: null };
@@ -148,6 +149,8 @@ function fixture(withAliases = false, pdf = false) {
         "X-RNAssistant-Chunk-SHA256": crypto.createHash("sha256").update(chunk).digest("hex") } }); }
   });
   c.window = c;
+  get("tab-chat").classList.add("active");
+  c.RNAssistantChatInspector = { showRequest() {}, hideRequest() {}, setRequestLayout() {}, restoreRequestLayout() {} };
   c.RNAssistantViewerRegistry = { mount(kind, node, options) { mounts.push({ kind, node, options }); }, unmount() {} };
   for (const name of ["app-resource-download.js", "app-model-context.js"]) vm.runInContext(fs.readFileSync("web/js/" + name, "utf8"), c);
   c.bindModelContextActions();
@@ -255,12 +258,13 @@ function fixture(withAliases = false, pdf = false) {
   api.open(); await flush();
   const userMessage = f.get("modelContextBody").children[0].children.filter(node => node.tag === "details")[1];
   userMessage.open = true; await userMessage.fire("toggle");
-  assert.ok(userMessage.children[1].children.some(node => /Операция: call-1/.test(node.textContent)),
+  const userMetadata = userMessage.children[1].children.find(node => node.className === "model-context-meta");
+  assert.ok(userMetadata.children.some(node => /Операция: call-1/.test(node.textContent)),
     "typed operation link appears in request details");
-  assert.ok(userMessage.children[1].children.some(node => /evidence-1/.test(node.textContent) &&
+  assert.ok(userMetadata.children.some(node => /evidence-1/.test(node.textContent) &&
     /доставка тела в сообщении не установлена/.test(node.textContent)),
     "observed evidence does not claim unproved body delivery");
-  assert.ok(userMessage.children[1].children.some(node => /раздельная полнота не сохранены/.test(node.textContent)),
+  assert.ok(userMetadata.children.some(node => /раздельная полнота не сохранены/.test(node.textContent)),
     "old traces do not infer requested selectors or completeness");
   const excluded = f.get("modelContextBody").children.find(node => node.tag === "details" &&
     node.children.some(child => /Не включено отдельными сообщениями/.test(child.textContent)));
@@ -268,19 +272,19 @@ function fixture(withAliases = false, pdf = false) {
     /не вошло в бюджет/.test(child.textContent))), "inspector shows the compiler's recorded omission reason");
   assert.equal(f.closes.length, 1, "exact download lease closes after reading");
   assert.equal(f.get("modelContextAttempt").value, "r1");
-  f.get("modelContextTab").value = "json"; await f.get("modelContextTab").fire("change"); await flush();
+  await f.get("modelContextJsonTab").fire("click"); await flush();
   assert.equal(f.mounts.at(-1).options.text, f.requestText, "large request is not clipped or reserialized");
   const count = f.mounts.length;
   f.bump(); await f.tick();
   assert.equal(f.mounts.length, count, "same request keeps expanded viewers while other events arrive");
   f.events.push({ eventId: "response1", sequence: 6, type: "llm.response", hasPayload: true, createdUtc: "2026-10-02T10:00:30Z", trace: { RequestId: "one" } });
   f.bump(); await f.tick();
-  f.get("modelContextTab").value = "response"; await f.get("modelContextTab").fire("change"); await flush();
+  await f.get("modelContextResponseTab").fire("click"); await flush();
   const responseDetails = f.get("modelContextBody").children[0].children.find(n => n.tag === "details");
   responseDetails.open = true; await responseDetails.fire("toggle"); await flush();
   assert.equal(f.mounts.at(-1).kind, "markdown", "response message renders as Markdown independently of envelope");
   assert.equal(f.mounts.at(-1).options.fullText, "# Answer");
-  f.get("modelContextTab").value = "json"; await f.get("modelContextTab").fire("change"); await flush();
+  await f.get("modelContextJsonTab").fire("click"); await flush();
   f.events.push({ eventId: "r2", sequence: 9, type: "llm.request", hasPayload: true, createdUtc: "2026-10-02T10:01:00Z", trace: { RequestId: "two" } });
   f.bump(); await f.tick();
   assert.equal(f.get("modelContextAttempt").value, "r2", "follow newest attempt");
@@ -315,8 +319,7 @@ function fixture(withAliases = false, pdf = false) {
       ObservedCoverage: { kind: "line-range", start: 1, end: 2 }, BodyIncludedInMessage: null }] }];
   linked.c.RNAssistantModelContext.open(); await flush();
   assert.match(linked.get("modelContextAttempt").children[0].textContent, /Q1/);
-  linked.get("modelContextTab").value = "resources";
-  await linked.get("modelContextTab").fire("change"); await flush();
+  await linked.get("modelContextResourcesTab").fire("click"); await flush();
   let resource = linked.get("modelContextBody").children.find(node => node.tag === "details");
   assert.match(resource.children[0].textContent, /R1@v1 · Устаревшая/);
   assert.match(resource.children[1].children.map(node => node.textContent).join(" "),
@@ -401,7 +404,7 @@ function fixture(withAliases = false, pdf = false) {
   linked.get("modelContextAliasSearch").value = "E1";
   await linked.get("modelContextAliasFind").fire("click"); await flush();
   assert.equal(linked.calls.at(-1).query.alias, "E1", "search resolves through the typed bridge");
-  assert.equal(linked.get("modelContextTab").value, "resources");
+  assert.equal(linked.get("modelContextResourcesTab").classList.contains("active"), true);
   resource = linked.get("modelContextBody").children.find(node => node.tag === "details");
   assert.equal(resource.open, true, "evidence search focuses the linked resource revision");
   assert.match(linked.get("modelContextStatus").textContent, /Найдено E1 в Q1/);
@@ -412,8 +415,7 @@ function fixture(withAliases = false, pdf = false) {
 
   const leaving = fixture(true);
   leaving.c.RNAssistantModelContext.open(); await flush();
-  leaving.get("modelContextTab").value = "resources";
-  await leaving.get("modelContextTab").fire("change"); await flush();
+  await leaving.get("modelContextResourcesTab").fire("click"); await flush();
   let finishVerification;
   leaving.verification.hold = new Promise(resolve => finishVerification = resolve);
   const checking = checkButton(leaving).fire("click"); await flush();
@@ -422,4 +424,77 @@ function fixture(withAliases = false, pdf = false) {
   assert.equal(leaving.get("modelContextBody").children.length, 0, "late verification cannot render into another chat");
   assert.ok(leaving.get("modelContextDialog").classList.contains("hidden"));
   console.log("PASS model context: explicit payload verification, refresh and late-response isolation");
+
+  const switchingTab = fixture(true); let finishPayload;
+  switchingTab.hold(new Promise(resolve => finishPayload = resolve));
+  switchingTab.c.RNAssistantModelContext.open(); await flush();
+  await switchingTab.get("modelContextResourcesTab").fire("click"); await flush();
+  const resourceRows = switchingTab.get("modelContextBody").children.slice();
+  finishPayload(); await flush();
+  assert.equal(switchingTab.get("modelContextBody").children.length === resourceRows.length &&
+    resourceRows.every((node, index) => switchingTab.get("modelContextBody").children[index] === node), true,
+    "late message payload cannot replace the selected Resources tab");
+  assert.equal(switchingTab.closes.length, 1, "the superseded view still closes its payload lease");
+  switchingTab.c.RNAssistantModelContext.close();
+  console.log("PASS model context: late payload respects the selected tab");
+
+  const refreshed = fixture();
+  refreshed.c.RNAssistantModelContext.open(); await flush();
+  await refreshed.get("modelContextRefresh").fire("click"); await flush();
+  const parameter = descendants(refreshed.get("modelContextBody")).find(node => node.tag === "details" &&
+    node.children.some(child => child.textContent === "Параметр запроса: seed"));
+  parameter.open = true; await parameter.fire("toggle"); await flush();
+  assert.equal(refreshed.mounts.some(mount => mount.options.text === "9007199254740993123456789"), true,
+    "refresh keeps unopened lazy bodies readable and exact");
+  assert.equal(refreshed.calls.filter(call => call.type === "getModelContextPayload").length, 1,
+    "refresh reuses the selected immutable request payload");
+  refreshed.c.RNAssistantModelContext.close();
+
+  const changingMode = fixture();
+  changingMode.events[0].trace.RunId = "run"; changingMode.events[0].trace.StepId = "step";
+  const modeSend = changingMode.c.send; let rejectOldList, heldList = false;
+  changingMode.c.send = (type, query) => {
+    if (!heldList && type === "getModelContext" && !query.requestEventId) {
+      heldList = true; return new Promise((resolve, reject) => { rejectOldList = reject; });
+    }
+    return modeSend(type, query);
+  };
+  changingMode.c.RNAssistantModelContext.open({ chatId: "chat", runId: "run", stepId: "step" }); await flush();
+  changingMode.get("modelContextMode").value = "preview";
+  await changingMode.get("modelContextMode").fire("change"); await flush();
+  changingMode.get("modelContextMode").value = "actual";
+  await changingMode.get("modelContextMode").fire("change"); await flush();
+  assert.equal(changingMode.get("modelContextAttempt").value, "r1",
+    "an obsolete pending list cannot block returning to a scoped request");
+  const currentStatus = changingMode.get("modelContextStatus").textContent;
+  rejectOldList(new Error("old-list-failed")); await flush();
+  assert.equal(changingMode.get("modelContextStatus").textContent, currentStatus, "obsolete list errors stay out of the current view");
+  changingMode.c.RNAssistantModelContext.close();
+
+  const failedSelection = fixture();
+  failedSelection.c.RNAssistantModelContext.open(); await flush();
+  const oldContent = failedSelection.get("modelContextBody").children[0], selectionSend = failedSelection.c.send;
+  failedSelection.c.send = (type, query) => type === "getModelContext" && query.requestEventId === "r2"
+    ? Promise.reject(new Error("selected-request-missing")) : selectionSend(type, query);
+  failedSelection.events.push({ ...failedSelection.events[0], eventId: "r2", sequence: 4, trace: { RequestId: "two" } });
+  failedSelection.bump(); await failedSelection.tick();
+  assert.equal(failedSelection.get("modelContextAttempt").value, "r2");
+  assert.equal(failedSelection.get("modelContextBody").children.includes(oldContent), false,
+    "the failed selection never displays the old request beneath the new ID");
+  assert.equal(failedSelection.get("modelContextDownload").disabled, true);
+  assert.match(failedSelection.get("modelContextStatus").textContent, /selected-request-missing/);
+  failedSelection.c.RNAssistantModelContext.close();
+
+  const cancelledSave = fixture(); let cancelPicker;
+  cancelledSave.c.RNAssistantModelContext.open(); await flush();
+  cancelledSave.c.showSaveFilePicker = () => new Promise((resolve, reject) => { cancelPicker = reject; });
+  await cancelledSave.get("modelContextDownload").fire("click"); await flush();
+  cancelledSave.get("modelContextMode").value = "preview";
+  await cancelledSave.get("modelContextMode").fire("change"); await flush();
+  const previewStatus = cancelledSave.get("modelContextStatus").textContent;
+  cancelPicker(new Error("old-export-cancelled")); await flush();
+  assert.equal(cancelledSave.get("modelContextStatus").textContent, previewStatus,
+    "cancelling an old save dialog cannot replace the new preview status");
+  cancelledSave.c.RNAssistantModelContext.close();
+  console.log("PASS model context: refresh disclosures, mode-change races, stale errors and failed request selection");
 })().catch(error => { console.error(error); process.exitCode = 1; });

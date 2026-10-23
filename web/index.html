@@ -24,7 +24,7 @@
   <link rel="stylesheet" href="css/vendor/codemirror/addon/hint/show-hint.min.css">
   <link rel="stylesheet" href="css/vendor/viewer.min.css">
   <link rel="stylesheet" href="css/app.css?v=theme-tokens-20261019-1">
-  <link rel="stylesheet" href="css/app-chat.css?v=inspector-navigation-20261023-1">
+  <link rel="stylesheet" href="css/app-chat.css?v=inspector-icon-20261023-1">
   <link rel="stylesheet" href="css/app-markdown.css?v=theme-tokens-20261019-1">
   <link rel="stylesheet" href="css/app-composer.css?v=single-composer-20261023-1">
   <link rel="stylesheet" href="css/app-reasoning.css?v=accent-chat-20261012-1">
@@ -41,7 +41,7 @@
   <link rel="stylesheet" href="css/app-tools.css?v=theme-tokens-20261019-1">
   <link rel="stylesheet" href="css/app-vba.css?v=theme-tokens-20261019-1">
   <link rel="stylesheet" href="css/app-context-panel.css?v=json-height-20260929-1">
-  <link rel="stylesheet" href="css/app-model-context.css?v=resource-inspector-20261023-1">
+  <link rel="stylesheet" href="css/app-model-context.css?v=inspector-request-20261023-3">
   <link rel="stylesheet" href="css/app-context-inspector.css?v=composer-menu-20261013-1">
   <link rel="stylesheet" href="css/app-chart-artifacts.css?v=theme-tokens-20261019-1">
   <link rel="stylesheet" href="css/app-artifacts.css?v=artifact-versions-20261014-1">
@@ -230,24 +230,6 @@
             </div>
           </div>
         </form>
-        <section id="modelContextDialog" class="model-context-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="modelContextTitle">
-          <div class="model-context-head"><strong id="modelContextTitle">Контекст модели</strong><button type="button" class="secondary compact" id="closeModelContextButton">Закрыть</button></div>
-          <div class="model-context-toolbar">
-            <select id="modelContextMode" aria-label="Источник контекста"><option value="actual">Фактический запрос / ответ</option><option id="modelContextPreviewOption" value="preview">Предварительный контекст</option></select>
-            <button type="button" class="secondary compact" id="modelContextRefresh">Обновить</button>
-            <button type="button" class="secondary compact" id="modelContextDownload">Скачать запрос</button>
-          </div>
-          <div id="modelContextActualControls" class="model-context-toolbar">
-            <select id="modelContextAttempt" aria-label="Попытка запроса"></select>
-            <button type="button" class="secondary compact" id="modelContextLatest">К последнему</button>
-            <button type="button" class="secondary compact" id="modelContextOlder">Ранее</button>
-            <input id="modelContextAliasSearch" type="search" aria-label="Найти короткую ссылку" placeholder="R1@v1, E1, O1, Q1" autocomplete="off">
-            <button type="button" class="secondary compact" id="modelContextAliasFind">Найти</button>
-          </div>
-          <div class="model-context-toolbar"><select id="modelContextTab" aria-label="Представление"><option value="messages">Сообщения</option><option value="resources">Ресурсы</option><option value="json">Запрос JSON</option><option value="response">Ответ</option></select></div>
-          <div id="modelContextStatus" class="model-context-status" role="status"></div>
-          <div id="modelContextBody" class="model-context-body"></div>
-        </section>
         <aside class="prompt-context-inspector hidden" id="promptContextInspector" aria-hidden="true" aria-label="Состав контекста запроса">
           <div class="prompt-context-inspector-head">
             <div class="prompt-context-inspector-heading">
@@ -342,6 +324,43 @@
               </details>
             </div>
             <div class="chat-inspector-body" id="chatInspectorBody"></div>
+            <section id="modelContextDialog" class="model-context-dialog hidden" role="region" aria-labelledby="modelContextTitle">
+              <div class="model-context-head">
+                <button type="button" class="icon-btn" id="closeModelContextButton" aria-label="Вернуться к боковой панели" title="Вернуться к боковой панели"><svg data-rna-icon="left" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
+                <strong id="modelContextTitle">Запрос и ответ</strong>
+                <select id="modelContextLayout" aria-label="Размер просмотра"><option value="docked">В панели</option><option value="wide">Шире</option><option value="focus">На весь экран</option></select>
+              </div>
+              <div class="model-context-controls">
+                <div class="model-context-source-row">
+                  <select id="modelContextMode" aria-label="Источник контекста"><option value="actual">Сохранённый запрос</option><option id="modelContextPreviewOption" value="preview">Следующий запрос</option></select>
+                  <button type="button" class="icon-btn" id="modelContextRefresh" aria-label="Обновить" title="Обновить"><svg data-rna-icon="refresh" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
+                  <button type="button" class="icon-btn" id="modelContextDownload" aria-label="Скачать запрос" title="Скачать запрос"><svg data-rna-icon="download" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
+                </div>
+                <div id="modelContextActualControls" class="model-context-selection">
+                  <select id="modelContextAttempt" aria-label="Сохранённый запрос"></select>
+                  <details id="modelContextHistory" class="model-context-history">
+                    <summary>История и поиск</summary>
+                    <div class="model-context-toolbar">
+                      <button type="button" class="button compact" id="modelContextLatest">К последнему</button>
+                      <button type="button" class="button compact" id="modelContextOlder">Ранее</button>
+                    </div>
+                    <label for="modelContextAliasSearch">Найти по короткой ссылке</label>
+                    <div class="model-context-search">
+                      <input id="modelContextAliasSearch" type="search" placeholder="Например, Q1 или R1@v1" autocomplete="off">
+                      <button type="button" class="icon-btn" id="modelContextAliasFind" aria-label="Найти" title="Найти"><svg data-rna-icon="search" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
+                    </div>
+                  </details>
+                </div>
+              </div>
+              <div id="modelContextTabs" class="rna-editor-tabs model-context-tabs" role="tablist" aria-label="Содержимое запроса">
+                <button type="button" id="modelContextMessagesTab" role="tab" data-model-context-tab="messages" aria-selected="true" aria-controls="modelContextBody" class="active">Сообщения</button>
+                <button type="button" id="modelContextResourcesTab" role="tab" data-model-context-tab="resources" aria-selected="false" aria-controls="modelContextBody" tabindex="-1">Ресурсы</button>
+                <button type="button" id="modelContextResponseTab" role="tab" data-model-context-tab="response" aria-selected="false" aria-controls="modelContextBody" tabindex="-1">Ответ</button>
+                <button type="button" id="modelContextJsonTab" role="tab" data-model-context-tab="json" aria-selected="false" aria-controls="modelContextBody" tabindex="-1">JSON</button>
+              </div>
+              <div id="modelContextStatus" class="model-context-status" role="status"></div>
+              <div id="modelContextBody" class="model-context-body" role="tabpanel" aria-labelledby="modelContextMessagesTab" tabindex="0"></div>
+            </section>
           </aside>
         </div>
         <div class="project-chat-layout chat-workspace split-layout" id="projectChatLayout" data-default-left="310" data-min-left="240" hidden>
@@ -1109,7 +1128,7 @@
   <script src="js/app-utils.js?v=run-view-state-20260830-1"></script>
   <script src="js/app-run-view-state.js?v=run-view-contract-20261014-1"></script>
   <script src="js/app-layout.js"></script>
-  <script src="js/app-chat-inspector.js?v=inspector-navigation-20261023-1"></script>
+  <script src="js/app-chat-inspector.js?v=inspector-request-20261023-3"></script>
   <script src="js/app-vba-completion.js?v=vba-completion-20260903-1"></script>
   <script src="js/app-editors.js?v=html-memory-20261002-1"></script>
   <script src="js/app-markdown.js?v=accent-chat-20261012-1"></script>
@@ -1156,7 +1175,7 @@
   <script src="js/app-html-workspace-actions.js?v=html-action-guard-20260908-1-large-chat-1-artifact-tree-20261013-1"></script>
   <script src="js/app-html-workspace.js?v=single-composer-20261023-1"></script>
   <script src="js/app-context.js?v=office-draft-20261023-1"></script>
-  <script src="js/app-model-context.js?v=inspector-step-20261023-1"></script>
+  <script src="js/app-model-context.js?v=inspector-request-20261023-3"></script>
   <script src="js/app-context-inspector.js?v=single-composer-20261023-1"></script>
   <script src="js/app-tool-result-preview.js?v=question-delivery-20261014-1"></script>
   <script src="js/app-agent-data.js?v=step-results-20260908-1"></script>
@@ -1171,7 +1190,7 @@
   <script src="js/app-agent-approval.js?v=run-view-state-20260830-1"></script>
   <script src="js/app-run-changes.js?v=source-comparison-status-20261014-1"></script>
   <script src="js/app-agent.js?v=inspector-navigation-20261023-1"></script>
-  <script src="js/app-messages.js?v=inspector-navigation-20261023-1"></script>
+  <script src="js/app-messages.js?v=inspector-icon-20261023-1"></script>
   <script src="js/app-reasoning.js?v=chat-projection-20260907-1"></script>
   <script src="js/app-attachments.js?v=single-composer-20261023-1"></script>
   <script src="js/app-chat-session.js?v=bridge-contract-20261015-1"></script>
