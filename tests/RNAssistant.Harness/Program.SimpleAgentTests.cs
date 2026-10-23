@@ -1429,23 +1429,28 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), publishedSettings,
                 delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
-                var requests = new List<IReadOnlyList<ChatMessage>>();
-                var responses = new Queue<string>(new[]
-                {
-                    "{\"message\":\"Читаю листы.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
-                    "{\"message\":\"Готово.\",\"action\":\"done\",\"tool_calls\":[]}"
-                });
-                LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>
-                {
-                    requests.Add(messages.ToList());
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
-                };
                 var session = NewSession(adapter);
                 session.LastRun = new ChatRunRecord
                 {
                     RunId = Guid.NewGuid().ToString("N"),
                     DocumentRuntimeKey = adapter.RuntimeDocumentKey,
                     StartedUtc = DateTime.UtcNow
+                };
+                var requests = new List<IReadOnlyList<ChatMessage>>();
+                var responses = new Queue<string>(new[]
+                {
+                    ModelProtocolWire.WriteAcceptedCall("Inspect the sheet list.", "Читаю листы.",
+                        new ConversationToolCall { Name = "excel.inspect",
+                            Arguments = new JObject { ["kind"] = "sheets" } }),
+                    null
+                });
+                LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>
+                {
+                    requests.Add(messages.ToList());
+                    var response = responses.Dequeue() ?? ScriptedVerifiedFinish(session,
+                        "The sheet inspection has a terminal result.", "Готово.",
+                        "The sheet list was inspected.", "excel.inspect");
+                    return Task.FromResult(new LlmCompletionResult { Content = response });
                 };
                 var settings = publishedSettings.Clone();
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
