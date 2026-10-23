@@ -87,8 +87,10 @@ namespace RNAssistant.Office.Services
                 return AgentModelResult.Failed(_lastModel.Failure.Kind, _lastModel.Failure.Message);
             if (_lastModel.ProviderRefusal != null) return AgentModelResult.Refused(_lastModel.ProviderRefusal);
             var response = _lastModel.Response;
-            return AgentModelResult.Accepted(new AgentResponseDraft(response.Message, response.ToolCalls.Select(call =>
-                new ToolCallDraft(call.Name, call.Arguments.ToString(Formatting.None))), response.Action),
+            return AgentModelResult.Accepted(new AgentResponseDraft(response.Action, response.Reason, response.Message,
+                response.Action == ConversationResponse.ExecuteAction
+                    ? response.ToolCalls.Select(call => new ToolCallDraft(call.Name, call.Arguments.ToString(Formatting.None)))
+                    : null, response.Decision, response.Results),
                 _lastModel.SourceModelAttemptId);
         }
 

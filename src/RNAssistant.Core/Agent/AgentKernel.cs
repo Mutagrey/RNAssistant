@@ -78,7 +78,9 @@ namespace RNAssistant.Core.Agent
             // Revalidate even when called without the application factory. The
             // first append claims the supplied invocation cursor before any model call.
             var checkedContinuation = AgentRunContinuation.RestoreCheckpoint(
-                new AgentRunState(continuation.Summary, continuation.Limits), continuation.Revision, continuation.AcceptedMessages);
+                new AgentRunState(continuation.Summary, continuation.Limits, null,
+                    continuation.ConsecutiveReflections, continuation.ReflectionFeedbackIssued),
+                continuation.Revision, continuation.AcceptedMessages);
             var state = new State(checkedContinuation.Summary.RunId, checkedContinuation);
             await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.SummaryChanged, state.Summary())).ConfigureAwait(false);
             return await LoopAsync(state, cancellationToken).ConfigureAwait(false);
@@ -89,7 +91,7 @@ namespace RNAssistant.Core.Agent
             if (state.Progress.RecoveryIgnored)
                 return await FinishAsync(state, RunLifecycle.Failed, "restored_no_progress",
                     "The checkpoint already exhausted its no-progress allowance.").ConfigureAwait(false);
-            string completionFeedback = null;
+            string completionFeedback = state.ReflectionFeedbackIssued ? ReflectionFeedback : null;
             while (state.Iterations < state.Limits.MaxIterations)
             {
                 if (cancellationToken.IsCancellationRequested)
@@ -144,7 +146,7 @@ namespace RNAssistant.Core.Agent
                 AgentResponse response;
                 try
                 {
-                    response = AssignCallIds(state, model.Response);
+                    response = AssignCallIds(state, model.Response, model.SourceModelAttemptId);
                 }
                 catch (Exception ex)
                 {
@@ -161,26 +163,63 @@ namespace RNAssistant.Core.Agent
                 {
                     return await FinishAsync(state, RunLifecycle.Failed, "invalid_accepted_response", ex.Message).ConfigureAwait(false);
                 }
-                if (response.Action == ConversationResponse.DoneAction && state.Progress.InspectionRequired)
+                if (response.Action == ConversationResponse.ReflectionAction)
+                {
+                    if (state.ReflectionFeedbackIssued)
+                        return await FinishAsync(state, RunLifecycle.Failed, "reflection_limit",
+                            "Reflection limit reached without a new tool result or user input.").ConfigureAwait(false);
+                    if (state.ConsecutiveReflections >= 2)
+                    {
+                        state.ReflectionFeedbackIssued = true;
+                        completionFeedback = ReflectionFeedback;
+                        await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.SummaryChanged,
+                            state.Summary(reason: "reflection_limit_feedback", message: completionFeedback), stepId)).ConfigureAwait(false);
+                        continue;
+                    }
+                }
+                if (response.Final && state.Progress.InspectionRequired)
                 {
                     completionFeedback = ModelProtocolWire.UnknownEffectGuidance;
                     await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.SummaryChanged,
                         state.Summary(reason: "completion_requirements_unmet", message: completionFeedback), stepId)).ConfigureAwait(false);
                     continue;
                 }
+                if (response.Final)
+                {
+                    FinishAdmission admission;
+                    try
+                    {
+                        admission = await _store.EvaluateFinishAsync(state.RunId, state.TurnId,
+                            state.AcceptedIds.ToArray(), response.Results, state.Revision, CancellationToken.None).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        return await FinishAsync(state, RunLifecycle.Failed, "finish_evidence_unavailable", ex.Message).ConfigureAwait(false);
+                    }
+                    if (admission == null)
+                        return await FinishAsync(state, RunLifecycle.Failed, "finish_evidence_unavailable",
+                            "Finish evidence resolver returned no decision.").ConfigureAwait(false);
+                    if (!admission.Accepted)
+                    {
+                        completionFeedback = admission.Code + ": " + admission.Message;
+                        await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.SummaryChanged,
+                            state.Summary(reason: "completion_requirements_unmet", message: completionFeedback), stepId)).ConfigureAwait(false);
+                        continue;
+                    }
+                    if (_input != null && !_input.TryCloseInput()) continue;
+                }
+                if (response.Action == ConversationResponse.ReflectionAction) state.ConsecutiveReflections++;
                 foreach (var call in response.ToolCalls) state.AcceptedIds.Add(call.Id);
                 state.Messages.Add(AgentMessage.Assistant(response));
                 await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.ResponseAccepted,
                     state.Summary(), stepId, response: response,
                     sourceModelAttemptId: model.SourceModelAttemptId)).ConfigureAwait(false);
-                state.Progress.BeginStep();
+                if (response.Action != ConversationResponse.ReflectionAction) state.Progress.BeginStep();
                 if (response.Final)
                 {
-                    if (_input != null && !_input.TryCloseInput()) continue;
-                    var reason = response.Action == ConversationResponse.BlockedAction ? "model_blocked" :
-                        response.Action == ConversationResponse.NeedsInputAction ? "model_needs_input" : "model_done";
-                    return await FinishAsync(state, RunLifecycle.Completed, reason, response.Message).ConfigureAwait(false);
+                    return await FinishAsync(state, RunLifecycle.Completed, "model_finish", response.Message).ConfigureAwait(false);
                 }
+                if (response.Action == ConversationResponse.ReflectionAction) continue;
 
                 for (var index = 0; index < response.ToolCalls.Count; index++)
                 {
@@ -210,15 +249,19 @@ namespace RNAssistant.Core.Agent
             return await FinishAsync(state, RunLifecycle.Failed, "iteration_limit", "Model iteration limit reached.").ConfigureAwait(false);
         }
 
+        private const string ReflectionFeedback =
+            "reflection_limit_feedback: Two reflections were already accepted without a new terminal result or user input. Choose execute or finish next; another reflection ends the run.";
+
         private async Task TakeInputAsync(State state, CancellationToken token)
         {
             if (_input == null) return;
             var messages = await _input.TakeInputAsync(token).ConfigureAwait(false);
+            if (messages.Count > 0) { state.ConsecutiveReflections = 0; state.ReflectionFeedbackIssued = false; }
             foreach (var message in messages)
                 state.Messages.Add(message);
         }
 
-        private AgentResponse AssignCallIds(State state, AgentResponseDraft response)
+        private AgentResponse AssignCallIds(State state, AgentResponseDraft response, string sourceModelAttemptId)
         {
             var ids = new HashSet<string>(state.AcceptedIds, StringComparer.OrdinalIgnoreCase);
             var calls = new List<ToolCall>();
@@ -231,16 +274,17 @@ namespace RNAssistant.Core.Agent
                     throw new InvalidOperationException("Runtime call id allocation returned an invalid or duplicate identity.");
                 calls.Add(new ToolCall(id, draft.Name, draft.ArgumentsJson));
             }
-            return new AgentResponse(response.Message, calls, response.Action);
+            return new AgentResponse(response.Action, response.Reason, response.Message,
+                response.Action == ConversationResponse.ExecuteAction ? calls : null,
+                response.Decision, response.Results, sourceModelAttemptId);
         }
 
         private ToolPolicySnapshot[] ValidateResponse(AgentResponse response)
         {
             if (!ConversationResponse.IsValidAction(response.Action, response.ToolCalls.Count))
                 throw new InvalidOperationException("Accepted action and tool calls disagree.");
-            if ((response.Action == ConversationResponse.BlockedAction ||
-                response.Action == ConversationResponse.NeedsInputAction) && string.IsNullOrWhiteSpace(response.Message))
-                throw new InvalidOperationException("Unfinished outcomes require a concrete message.");
+            if (string.IsNullOrWhiteSpace(response.Reason))
+                throw new InvalidOperationException("Accepted response requires a reason.");
             var policies = new List<ToolPolicySnapshot>();
             foreach (var call in response.ToolCalls)
             {
@@ -334,6 +378,8 @@ namespace RNAssistant.Core.Agent
                 state.Pending = new PendingConfirmation(record);
             else
                 state.Messages.Add(AgentMessage.ToolResult(record));
+            if (record.Outcome != ToolExecutionOutcome.AwaitingConfirmation)
+            { state.ConsecutiveReflections = 0; state.ReflectionFeedbackIssued = false; }
             await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.ToolCompleted, state.Summary(),
                 stepId, execution: record)).ConfigureAwait(false);
             state.Progress.Observe(call, ToolExecutionProgress.Capture(record), record.Message,
@@ -367,6 +413,8 @@ namespace RNAssistant.Core.Agent
                 result: code == null ? null : RNAssistant.Core.Tools.Contracts.ToolResult.Error(message,
                     Newtonsoft.Json.JsonConvert.SerializeObject(new { code, dispatched = false })), wasCancelled: cancelled);
             state.Messages.Add(AgentMessage.ToolResult(record));
+            state.ConsecutiveReflections = 0;
+            state.ReflectionFeedbackIssued = false;
             await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.ToolCompleted, state.Summary(),
                 stepId, execution: record)).ConfigureAwait(false);
             state.Progress.Observe(call, ToolExecutionProgress.Capture(record), message, null, null);
@@ -377,7 +425,8 @@ namespace RNAssistant.Core.Agent
             if (lifecycle != RunLifecycle.AwaitingConfirmation) state.Pending = null;
             var summary = state.Summary(lifecycle, reason, message);
             await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.SummaryChanged, summary)).ConfigureAwait(false);
-            return new AgentRunResult(summary, state.Limits, state.Revision, state.Messages, state.AcceptedIds);
+            return new AgentRunResult(summary, state.Limits, state.Revision, state.Messages, state.AcceptedIds,
+                state.ConsecutiveReflections, state.ReflectionFeedbackIssued);
         }
 
         private DateTime CompletionTime(ToolExecutionContext context)
@@ -392,6 +441,7 @@ namespace RNAssistant.Core.Agent
             {
                 // Finish the mandatory append, then observe cancellation at the
                 // next dispatch boundary. Cancellation cannot discard evidence.
+                fact.SetReflectionState(state.ConsecutiveReflections, state.ReflectionFeedbackIssued);
                 var revision = await _store.AppendAsync(fact, state.Revision, CancellationToken.None).ConfigureAwait(false);
                 if (revision <= state.Revision) throw new InvalidOperationException("Run store did not advance its cursor.");
                 state.Revision = revision;
@@ -414,6 +464,8 @@ namespace RNAssistant.Core.Agent
             internal int ToolSteps;
             internal long Revision;
             internal PendingConfirmation Pending;
+            internal int ConsecutiveReflections;
+            internal bool ReflectionFeedbackIssued;
             internal readonly AgentProgressTracker Progress = new AgentProgressTracker();
 
             internal State(AgentRunRequest request)
@@ -438,6 +490,8 @@ namespace RNAssistant.Core.Agent
                 Iterations = continuation.Summary.IterationsUsed;
                 ToolSteps = continuation.Summary.ToolStepsUsed;
                 Revision = continuation.Revision;
+                ConsecutiveReflections = continuation.ConsecutiveReflections;
+                ReflectionFeedbackIssued = continuation.ReflectionFeedbackIssued;
             }
 
             internal RunSummary Summary(RunLifecycle lifecycle = RunLifecycle.Running, string reason = null, string message = null)

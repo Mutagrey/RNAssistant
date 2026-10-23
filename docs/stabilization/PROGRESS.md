@@ -1,5 +1,16 @@
 # Stabilization progress
 
+## Conversation v8 phase-2 kernel candidate — 2026-10-23
+
+The isolated `conversation-v8` branch now has bounded reflection continuation,
+an event-stream terminal-evidence gate for finish, and v8 history records in both
+Office and Workspace adapters. Source-linked host-neutral compilation and the
+[phase-2 focused runner](conversation-v8/PHASE2.md) pass. Main remains v7; the
+full Harness has unmigrated v7 tests, while prompts, process-level replay/UI,
+real-model comparison and Windows/Office gates remain open. Owner: Core
+AgentKernel / Office and Workspace adapters. Next: phase-3 consumer/prompt/test
+migration, then phase-4 history/UI cutover.
+
 ## Conversation v8 phase-1 candidate — 2026-10-23
 
 Core ModelProtocol now has the v8 closed forms, typed format errors, canonical

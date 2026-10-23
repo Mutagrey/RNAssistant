@@ -47,6 +47,24 @@ namespace RNAssistant.Core.ModelProtocol
             return response.ToJson();
         }
 
+        // Runtime splits a validated batch into per-call history records. Keep the
+        // same v8 shape and reason without making call IDs model-owned fields.
+        public static string WriteAcceptedCall(string reason, string message, ConversationToolCall call)
+        {
+            if (call == null) throw new ArgumentNullException(nameof(call));
+            return new ConversationResponse(ConversationResponse.ExecuteAction, reason,
+                message ?? string.Empty, calls: new[] { call }).ToJson();
+        }
+
+        public static string WriteAcceptedDecision(string action, string reason, string message,
+            string decision = null, IEnumerable<ConversationResultClaim> results = null)
+        {
+            if (action == ConversationResponse.ExecuteAction)
+                throw new ArgumentException("An accepted no-call decision is required.", nameof(action));
+            return new ConversationResponse(action, reason, message,
+                decision: decision, results: results).ToJson();
+        }
+
         internal static string FormatRepairContent(ConversationResponseError kind, string error, int attempt, int maxAttempts)
         {
             if (kind == ConversationResponseError.None) throw new ArgumentException("A format error is required.", nameof(kind));

@@ -1114,6 +1114,29 @@ namespace RNAssistant.Harness
             internal int FailedAppends;
             private long _revision;
 
+            public Task<FinishAdmission> EvaluateFinishAsync(string runId, string turnId,
+                IReadOnlyList<string> acceptedCallIds, IReadOnlyList<ConversationResultClaim> results,
+                long expectedRevision, CancellationToken token)
+            {
+                if (expectedRevision != _revision) throw new InvalidOperationException("Stale finish cursor.");
+                var accepted = Events.Where(item => item.Kind == AgentRunEventKind.ResponseAccepted &&
+                    item.Summary.RunId == runId && item.Summary.TurnId == turnId)
+                    .SelectMany(item => item.Response.ToolCalls).Select(item => item.Id).ToArray();
+                if (!accepted.OrderBy(id => id).SequenceEqual(acceptedCallIds.OrderBy(id => id)))
+                    throw new InvalidOperationException("Accepted call state disagrees with the fake event log.");
+                if (accepted.Length == 0)
+                    return Task.FromResult(results.Count == 0 ? FinishAdmission.Allow() :
+                        FinishAdmission.Reject("unknown_evidence", "No accepted calls belong to this run."));
+                var terminal = new HashSet<string>(Events.Where(item => item.Kind == AgentRunEventKind.ToolCompleted &&
+                    item.Summary.RunId == runId && item.Execution.Outcome != ToolExecutionOutcome.AwaitingConfirmation)
+                    .Select(item => item.Execution.Context.Call.Id), StringComparer.Ordinal);
+                var references = results.SelectMany(item => item.Evidence).ToArray();
+                if (results.Count == 0 || references.Length == 0)
+                    return Task.FromResult(FinishAdmission.Reject("missing_finish_evidence", "Terminal evidence is required."));
+                return Task.FromResult(references.All(id => terminal.Contains(id)) ? FinishAdmission.Allow() :
+                    FinishAdmission.Reject("nonterminal_evidence", "Evidence is not terminal in this run."));
+            }
+
             public Task<long> AppendAsync(AgentRunEvent fact, long expectedRevision, CancellationToken token)
             {
                 AssertTrue(!token.CanBeCanceled, "mandatory terminal evidence cannot be dropped by cancellation");

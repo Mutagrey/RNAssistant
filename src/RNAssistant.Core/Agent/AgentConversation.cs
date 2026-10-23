@@ -21,29 +21,33 @@ namespace RNAssistant.Core.Agent
         }
     }
 
-    // Validated model content has no execution identity. Only the kernel can
-    // turn this draft into an accepted response before persistence/dispatch.
+    // Validated model proposal has no call identity. Only kernel assigns IDs.
     public sealed class AgentResponseDraft
     {
-        public string Message { get; private set; }
         public string Action { get; private set; }
-        public bool Final { get; private set; }
+        public string Reason { get; private set; }
+        public string Message { get; private set; }
+        public string Decision { get; private set; }
+        public IReadOnlyList<ConversationResultClaim> Results { get; private set; }
         public IReadOnlyList<ToolCallDraft> ToolCalls { get; private set; }
 
-        public AgentResponseDraft(string message, IEnumerable<ToolCallDraft> calls)
-            : this(message, calls, (string)null)
+        public AgentResponseDraft(string action, string reason, string message,
+            IEnumerable<ToolCallDraft> calls = null, string decision = null,
+            IEnumerable<ConversationResultClaim> results = null)
         {
-        }
-
-        public AgentResponseDraft(string message, IEnumerable<ToolCallDraft> calls, string action)
-        {
-            var snapshot = (calls ?? throw new ArgumentNullException(nameof(calls))).ToArray();
-            if (snapshot.Any(call => call == null)) throw new ArgumentException("Calls cannot contain null.", nameof(calls));
-            action = action ?? (snapshot.Length == 0 ? ConversationResponse.DoneAction : ConversationResponse.ToolAction);
-            Message = message ?? string.Empty;
-            Action = action;
-            Final = action == ConversationResponse.DoneAction || action == ConversationResponse.BlockedAction ||
-                action == ConversationResponse.NeedsInputAction;
+            var snapshot = (calls ?? new ToolCallDraft[0]).ToArray();
+            if (!ConversationResponse.IsValidAction(action, snapshot.Length) ||
+                action == ConversationResponse.ExecuteAction && (decision != null || results != null) ||
+                action == ConversationResponse.ReflectionAction && (calls != null || results != null || string.IsNullOrWhiteSpace(decision)) ||
+                action == ConversationResponse.FinishAction && (calls != null || decision != null || results == null) ||
+                snapshot.Any(call => call == null))
+                throw new ArgumentException("Invalid v8 model proposal.");
+            if (string.IsNullOrWhiteSpace(reason)) throw new ArgumentException("A reason is required.", nameof(reason));
+            if (message == null) throw new ArgumentNullException(nameof(message));
+            var claims = results == null ? null : results.ToArray();
+            if (claims != null && claims.Any(claim => claim == null)) throw new ArgumentException("Null result claim.", nameof(results));
+            Action = action; Reason = reason; Message = message; Decision = decision;
+            Results = claims == null ? null : Array.AsReadOnly(claims);
             ToolCalls = Array.AsReadOnly(snapshot);
         }
     }
@@ -68,25 +72,33 @@ namespace RNAssistant.Core.Agent
 
     public sealed class AgentResponse
     {
-        public string Message { get; private set; }
         public string Action { get; private set; }
-        public bool Final { get; private set; }
+        public string Reason { get; private set; }
+        public string Message { get; private set; }
+        public string Decision { get; private set; }
+        public string SourceModelAttemptId { get; private set; }
+        public bool Final { get { return Action == ConversationResponse.FinishAction; } }
+        public IReadOnlyList<ConversationResultClaim> Results { get; private set; }
         public IReadOnlyList<ToolCall> ToolCalls { get; private set; }
 
-        public AgentResponse(string message, IEnumerable<ToolCall> calls)
-            : this(message, calls, (string)null)
+        public AgentResponse(string action, string reason, string message,
+            IEnumerable<ToolCall> calls = null, string decision = null,
+            IEnumerable<ConversationResultClaim> results = null, string sourceModelAttemptId = null)
         {
-        }
-
-        public AgentResponse(string message, IEnumerable<ToolCall> calls, string action)
-        {
-            var snapshot = (calls ?? throw new ArgumentNullException(nameof(calls))).ToArray();
-            if (snapshot.Any(call => call == null)) throw new ArgumentException("Calls cannot contain null.", nameof(calls));
-            action = action ?? (snapshot.Length == 0 ? ConversationResponse.DoneAction : ConversationResponse.ToolAction);
-            Message = message ?? string.Empty;
-            Action = action;
-            Final = action == ConversationResponse.DoneAction || action == ConversationResponse.BlockedAction ||
-                action == ConversationResponse.NeedsInputAction;
+            var snapshot = (calls ?? new ToolCall[0]).ToArray();
+            if (!ConversationResponse.IsValidAction(action, snapshot.Length) ||
+                action == ConversationResponse.ExecuteAction && (decision != null || results != null) ||
+                action == ConversationResponse.ReflectionAction && (calls != null || results != null || string.IsNullOrWhiteSpace(decision)) ||
+                action == ConversationResponse.FinishAction && (calls != null || decision != null || results == null) ||
+                snapshot.Any(call => call == null))
+                throw new ArgumentException("Invalid accepted v8 response.");
+            if (string.IsNullOrWhiteSpace(reason)) throw new ArgumentException("A reason is required.", nameof(reason));
+            if (message == null) throw new ArgumentNullException(nameof(message));
+            var claims = results == null ? null : results.ToArray();
+            if (claims != null && claims.Any(claim => claim == null)) throw new ArgumentException("Null result claim.", nameof(results));
+            Action = action; Reason = reason; Message = message; Decision = decision;
+            SourceModelAttemptId = sourceModelAttemptId;
+            Results = claims == null ? null : Array.AsReadOnly(claims);
             ToolCalls = Array.AsReadOnly(snapshot);
         }
     }
@@ -98,6 +110,10 @@ namespace RNAssistant.Core.Agent
         public AgentMessageKind Kind { get; private set; }
         public string Text { get; private set; }
         public string Action { get; private set; }
+        public string Reason { get; private set; }
+        public string Decision { get; private set; }
+        public string SourceModelAttemptId { get; private set; }
+        public IReadOnlyList<ConversationResultClaim> Results { get; private set; }
         public IReadOnlyList<ToolCall> ToolCalls { get; private set; }
         public string ToolCallId { get; private set; }
         public string ResultJson { get; private set; }
@@ -128,7 +144,8 @@ namespace RNAssistant.Core.Agent
         {
             if (response == null) throw new ArgumentNullException(nameof(response));
             return new AgentMessage(AgentMessageKind.Assistant, response.Message, response.ToolCalls,
-                action: response.Action);
+                action: response.Action) { Reason = response.Reason, Decision = response.Decision,
+                    Results = response.Results, SourceModelAttemptId = response.SourceModelAttemptId };
         }
 
         // Already validated, materialized history from an earlier user turn.

@@ -65,6 +65,8 @@ namespace RNAssistant.Core.Agent
         public string SourceModelAttemptId { get; private set; }
         public ToolExecutionContext ToolContext { get; private set; }
         public ToolExecutionRecord Execution { get; private set; }
+        public int ConsecutiveReflections { get; private set; }
+        public bool ReflectionFeedbackIssued { get; private set; }
 
         internal AgentRunEvent(AgentRunEventKind kind, RunSummary summary, string stepId = null,
             AgentRunLimits limits = null, AgentMessage userMessage = null, AgentResponse response = null,
@@ -81,6 +83,13 @@ namespace RNAssistant.Core.Agent
             ToolContext = toolContext;
             Execution = execution;
         }
+
+        internal void SetReflectionState(int consecutive, bool feedbackIssued)
+        {
+            if (consecutive < 0 || consecutive > 2) throw new ArgumentOutOfRangeException(nameof(consecutive));
+            ConsecutiveReflections = consecutive;
+            ReflectionFeedbackIssued = feedbackIssued;
+        }
     }
 
     // An immutable in-memory continuation, not a second durable authority.
@@ -92,20 +101,27 @@ namespace RNAssistant.Core.Agent
         public long Revision { get; private set; }
         public IReadOnlyList<AgentMessage> AcceptedMessages { get; private set; }
         public IReadOnlyList<string> AcceptedCallIds { get; private set; }
+        public int ConsecutiveReflections { get; private set; }
+        public bool ReflectionFeedbackIssued { get; private set; }
 
         internal AgentRunContinuation(RunSummary summary, AgentRunLimits limits, long revision,
-            IEnumerable<AgentMessage> messages, IEnumerable<string> ids)
+            IEnumerable<AgentMessage> messages, IEnumerable<string> ids,
+            int consecutiveReflections = 0, bool reflectionFeedbackIssued = false)
         {
             Summary = summary;
             Limits = limits;
             Revision = revision;
             AcceptedMessages = Array.AsReadOnly(messages.ToArray());
             AcceptedCallIds = Array.AsReadOnly(ids.OrderBy(id => id, StringComparer.Ordinal).ToArray());
+            ConsecutiveReflections = consecutiveReflections;
+            ReflectionFeedbackIssued = reflectionFeedbackIssued;
         }
 
-        public static AgentRunContinuation Restore(RunSummary summary, AgentRunLimits limits, long revision,
+        public static AgentRunContinuation Restore(AgentRunState checkpoint, long revision,
             IEnumerable<AgentMessage> acceptedMessages)
         {
+            var summary = checkpoint?.Summary;
+            var limits = checkpoint?.Limits;
             if (summary == null || summary.Lifecycle != RunLifecycle.AwaitingConfirmation || summary.PendingConfirmation == null ||
                 limits == null || revision < 0 || summary.IterationsUsed > limits.MaxIterations || summary.ToolStepsUsed > limits.MaxToolSteps)
                 throw new InvalidOperationException("A validated pending run summary is required; open a new chat or cancel the pending action.");
@@ -125,7 +141,8 @@ namespace RNAssistant.Core.Agent
             if (original == null || original.Name != pending.Name || original.ArgumentsJson != pending.ArgumentsJson ||
                 completed.Contains(pending.Id) || calls.Any(call => call.Id != pending.Id && !completed.Contains(call.Id)))
                 throw new InvalidOperationException("Pending call differs from accepted history or is already resolved.");
-            return new AgentRunContinuation(summary, limits, revision, messages, ids);
+            return new AgentRunContinuation(summary, limits, revision, messages, ids,
+                checkpoint.ConsecutiveReflections, checkpoint.ReflectionFeedbackIssued);
         }
 
         // The application must own the exact session lease. A Running checkpoint
@@ -170,9 +187,10 @@ namespace RNAssistant.Core.Agent
             }
             if (open.Count != 0) throw new InvalidOperationException("An accepted tool call is unresolved; it cannot be replayed.");
             var last = messages.Last();
-            if (last.Kind == AgentMessageKind.Assistant)
+            if (last.Kind == AgentMessageKind.Assistant && last.Action != ConversationResponse.ReflectionAction)
                 throw new InvalidOperationException("The accepted model decision cannot be continued.");
-            return new AgentRunContinuation(summary, limits, revision, messages, ids);
+            return new AgentRunContinuation(summary, limits, revision, messages, ids,
+                checkpoint.ConsecutiveReflections, checkpoint.ReflectionFeedbackIssued);
         }
     }
 
@@ -183,12 +201,14 @@ namespace RNAssistant.Core.Agent
         public AgentRunContinuation Continuation { get; private set; }
 
         internal AgentRunResult(RunSummary summary, AgentRunLimits limits, long revision,
-            IEnumerable<AgentMessage> messages, IEnumerable<string> ids)
+            IEnumerable<AgentMessage> messages, IEnumerable<string> ids,
+            int consecutiveReflections = 0, bool reflectionFeedbackIssued = false)
         {
             Summary = summary;
             AcceptedMessages = Array.AsReadOnly(messages.ToArray());
             if (summary.Lifecycle == RunLifecycle.AwaitingConfirmation)
-                Continuation = new AgentRunContinuation(summary, limits, revision, AcceptedMessages, ids);
+                Continuation = new AgentRunContinuation(summary, limits, revision, AcceptedMessages, ids,
+                    consecutiveReflections, reflectionFeedbackIssued);
         }
     }
 }

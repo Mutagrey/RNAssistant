@@ -69,8 +69,10 @@ canonical docs и существующим реестрам.
 
 По спецификации пользователя начат [аудит Conversation v8.1](stabilization/conversation-v8/AUDIT.md)
 и подготовлен [ADR-0016](decisions/ADR-0016-conversation-v8-admission.md).
-Owner — Core ModelProtocol / AgentKernel. [Кандидат фазы 1](stabilization/conversation-v8/PHASE1.md)
-проверяет codec в отдельном worktree; полная интеграция ещё не собирается.
+Owner — Core ModelProtocol / AgentKernel. [Фаза 1](stabilization/conversation-v8/PHASE1.md)
+проверяет codec, [кандидат фазы 2](stabilization/conversation-v8/PHASE2.md) —
+kernel и admission по журналу в отдельном worktree. Host-neutral source
+собирается; полный Harness ещё содержит v7 тестовые вызовы.
 Действующий контракт main остаётся v7. После переключения аудит
 становится историей, текущие правила переходят в canonical protocol docs.
 

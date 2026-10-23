@@ -99,6 +99,7 @@ namespace RNAssistant.Office.Services
             {
                 Role = normalizedRole,
                 ToolCallId = command.ToolCallId,
+                ResultStepId = command.RuntimeStepId,
                 ToolName = command.ToolId,
                 ToolResultRole = normalizedRole,
                 ToolResultProtocolVersion = ToolResultWire.CurrentVersion,
@@ -114,17 +115,20 @@ namespace RNAssistant.Office.Services
         public static ChatMessage CreateToolCallMessage(
             AgentToolCall call,
             string message,
+            string reason,
             RNAssistant.Core.Llm.LlmCompletionResult completion,
             string toolResultRole,
             AcceptedToolCallOrigin origin)
         {
-            if (call == null || string.IsNullOrWhiteSpace(call.Id) || string.IsNullOrWhiteSpace(call.Name) || origin == null)
+            if (call == null || string.IsNullOrWhiteSpace(call.Id) || string.IsNullOrWhiteSpace(call.Name) ||
+                string.IsNullOrWhiteSpace(reason) || origin == null)
                 throw new ArgumentException("Accepted runtime call identity and origin are required.");
             var normalizedRole = ToolResultRoles.Normalize(toolResultRole);
             if (string.Equals(normalizedRole, ToolResultRoles.Tool, StringComparison.Ordinal))
             {
                 var nativeMessage = AgentTranscript.CreateAssistantMessage(message ?? string.Empty, completion);
                 nativeMessage.ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion;
+                nativeMessage.ResponseReason = reason;
                 nativeMessage.ToolResultProtocolVersion = ToolResultWire.CurrentVersion;
                 nativeMessage.ResponseStatus = AgentResponseStatuses.InProgress;
                 nativeMessage.ToolResultRole = normalizedRole;
@@ -150,11 +154,11 @@ namespace RNAssistant.Office.Services
                 nativeMessage.ProtocolMessage = true;
                 return nativeMessage;
             }
-            var content = ModelProtocolWire.Write(message, new[] { new ConversationToolCall
+            var content = ModelProtocolWire.WriteAcceptedCall(reason, message, new ConversationToolCall
                 {
                     Name = call.Name,
                     Arguments = JObject.FromObject(call.Arguments ?? new Dictionary<string, object>())
-                } });
+                });
             var protocolMessage = AgentTranscript.CreateAssistantMessage(content, completion);
             protocolMessage.ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion;
             protocolMessage.ToolResultProtocolVersion = ToolResultWire.CurrentVersion;

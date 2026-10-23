@@ -176,6 +176,7 @@
     <Compile Include="Tools\Contracts\ToolResult.cs" />
     <Compile Include="Tools\IToolRuntime.cs" />
     <Compile Include="Persistence\IRunStore.cs" />
+    <Compile Include="Persistence\ConversationFinishEvidenceAdmission.cs" />
     <Compile Include="Persistence\IEventStore.cs" />
     <Compile Include="Persistence\IConversationStore.cs" />
     <Compile Include="Persistence\ConversationRunCommit.cs" />

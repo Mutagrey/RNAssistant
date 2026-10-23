@@ -39,7 +39,9 @@ The standalone runner does **not** compile ModelProtocolClient's full frozen
 compiler/request loop, kernel, adapters or history reader. Repair content and
 its typed error codes are checked here; frozen-context/retry/fallback integration
 and no-replay remain required in the integrated Harness after phases 2–4.
-The full candidate application cannot yet compile against the removed v7 writer
-and action API. Do not merge this intermediate source state into main or qualify
-Office/restart behavior from these tests. See
-[phase-1 record](../../docs/stabilization/conversation-v8/PHASE1.md).
+The phase-2 candidate compiles its host-neutral production sources through the
+[focused kernel runner](../RNAssistant.V8KernelSmoke/README.md); the full Harness
+still has unmigrated v7 test call sites. Do not merge this intermediate source
+state into main or qualify Office/restart behavior from these protocol tests.
+See the [phase-1 record](../../docs/stabilization/conversation-v8/PHASE1.md) and
+[phase-2 record](../../docs/stabilization/conversation-v8/PHASE2.md).

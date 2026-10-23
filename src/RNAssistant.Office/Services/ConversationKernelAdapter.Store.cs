@@ -19,6 +19,21 @@ namespace RNAssistant.Office.Services
 {
     internal sealed partial class ConversationKernelAdapter
     {
+        public Task<FinishAdmission> EvaluateFinishAsync(string runId, string turnId,
+            IReadOnlyList<string> acceptedCallIds, IReadOnlyList<ConversationResultClaim> results,
+            long expectedRevision, CancellationToken cancellationToken)
+        {
+            if (expectedRevision != _cursor || runId != _session.LastRun.RunId ||
+                turnId != _session.LastRun.TurnId)
+                throw new InvalidOperationException("Stale finish admission cursor or run/session identity.");
+            cancellationToken.ThrowIfCancellationRequested();
+            var events = _eventStore.Read(_session, SessionEventReadMode.RequireComplete);
+            if (events.Count == 0 || events[events.Count - 1].Sequence != _session.Revision)
+                throw new InvalidOperationException("Canonical finish evidence is not current.");
+            return Task.FromResult(ConversationFinishEvidenceAdmission.Evaluate(events,
+                _session.Id, runId, turnId, acceptedCallIds, results, _executor.Payloads));
+        }
+
         public async Task<long> AppendAsync(AgentRunEvent fact, long expectedRevision, CancellationToken cancellationToken)
         {
             if (expectedRevision != _cursor) throw new InvalidOperationException("Stale kernel continuation cursor.");
@@ -34,6 +49,21 @@ namespace RNAssistant.Office.Services
                     break;
                 case AgentRunEventKind.ResponseAccepted:
                     _stepMessage = fact.Response.Message;
+                    if (fact.Response.ToolCalls.Count == 0)
+                    {
+                        if (string.IsNullOrWhiteSpace(fact.SourceModelAttemptId))
+                            throw new InvalidOperationException("Accepted v8 decision lacks its model attempt origin.");
+                        var decision = AgentTranscript.CreateAssistantMessage(
+                            ModelProtocolWire.WriteAcceptedDecision(fact.Response.Action, fact.Response.Reason,
+                                fact.Response.Message, fact.Response.Decision, fact.Response.Results),
+                            _lastModel == null ? null : _lastModel.Completion,
+                            responseStatus: fact.Response.Final ? AgentResponseStatuses.Completed : AgentResponseStatuses.InProgress);
+                        decision.ProtocolMessage = true;
+                        decision.ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion;
+                        decision.ResponseModelAttemptId = fact.SourceModelAttemptId;
+                        if (_modelSession != null) _modelSession.AttachResponseEvidence(decision);
+                        _session.Messages.Add(decision);
+                    }
                     // Persist the entire accepted batch before any dispatch. Callable
                     // pack membership changes only at the next model-step boundary.
                     for (var index = 0; index < fact.Response.ToolCalls.Count; index++)
@@ -41,6 +71,7 @@ namespace RNAssistant.Office.Services
                             { Id = fact.Response.ToolCalls[index].Id, Name = fact.Response.ToolCalls[index].Name,
                                 Arguments = ReadArguments(fact.Response.ToolCalls[index]) },
                             index == 0 ? fact.Response.Message : string.Empty,
+                            fact.Response.Reason,
                             index == 0 ? _lastModel.Completion : null,
                             new AcceptedToolCallOrigin(fact.StepId, _lastModel.SourceModelAttemptId, index));
                     break;
@@ -53,6 +84,7 @@ namespace RNAssistant.Office.Services
                     if (!_session.Messages.Contains(activity)) _session.Messages.Add(activity);
                     activity.Activity = AgentTranscript.CreateRunningToolActivity(command, fact.StepId, _stepMessage);
                     activity.RunId = run.RunId;
+                    activity.Activity.RunId = run.RunId;
                     break;
                 case AgentRunEventKind.ToolCompleted:
                     activity = ProjectToolCompletion(fact);
@@ -109,6 +141,7 @@ namespace RNAssistant.Office.Services
             AgentTranscript.CompleteToolActivityMessage(_session, activity, command, result, record.Context.StepId, _stepMessage);
             activity.Activity.ExecutionEvidence = record.Evidence;
             activity.Activity.RunId = _session.LastRun.RunId;
+            activity.ExecutionProgress = ToolExecutionProgress.Capture(record);
             return activity;
         }
 
@@ -216,6 +249,8 @@ namespace RNAssistant.Office.Services
             var message = AgentTranscript.CreateAssistantMessage(
                 ConversationRunProjection.AssistantMessage(summary),
                 diagnostic != null || _lastModel == null ? null : _lastModel.Completion, diagnostic, responseStatus);
+            message.RuntimeProjection = true;
+            message.ExcludeFromModelContext = true;
             if (_modelSession != null) _modelSession.AttachResponseEvidence(message);
             _session.Messages.Add(message);
         }
@@ -234,6 +269,9 @@ namespace RNAssistant.Office.Services
             if (_progress == null) return;
             if (fact.Kind == AgentRunEventKind.ModelStepStarted)
                 _progress("thinking", "Модель выбирает следующий шаг...", null);
+            else if (fact.Kind == AgentRunEventKind.ResponseAccepted &&
+                fact.Response.Action == ConversationResponse.ReflectionAction && !string.IsNullOrWhiteSpace(_stepMessage))
+                _progress("thinking", _stepMessage, null);
             else if (fact.Kind == AgentRunEventKind.ResponseAccepted && !fact.Response.Final && !string.IsNullOrWhiteSpace(_stepMessage))
                 _progress("acting", _stepMessage, new ChatActivity { StepId = fact.StepId, StepMessage = _stepMessage,
                     Kind = "step", Title = _stepMessage, Status = "running" });

@@ -14,85 +14,75 @@ namespace RNAssistant.Core.ModelProtocol
 
         private ConversationHistoryReadResult() { }
         internal static ConversationHistoryReadResult Ok(AgentResponse response)
-        {
-            return new ConversationHistoryReadResult { Response = response };
-        }
+        { return new ConversationHistoryReadResult { Response = response }; }
         internal static ConversationHistoryReadResult Fail(string error)
-        {
-            return new ConversationHistoryReadResult { Error = error };
-        }
+        { return new ConversationHistoryReadResult { Error = error }; }
     }
 
-    // Current accepted history is not raw model wire: IDs come exclusively from
-    // durable runtime metadata. Neither this reader nor replay allocates them.
+    // Accepted history is a runtime fact with exact call IDs, never raw model
+    // authority. Old/unknown versions require explicit reset; no v7 inference.
     public static class ConversationResponseHistoryReader
     {
         public static ConversationHistoryReadResult Read(ChatMessage message)
         {
-            if (message == null || !string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase) ||
-                message.Activity != null || message.ResponseProtocolVersion != ConversationResponse.ProtocolVersion)
-                return ConversationHistoryReadResult.Fail("History record is not an identified v7 assistant response.");
-
+            if (message == null || message.Role != "assistant" || message.Activity != null ||
+                !message.ProtocolMessage || message.ResponseProtocolVersion != ConversationResponse.ProtocolVersion)
+                return ConversationHistoryReadResult.Fail("History record is not an identified v8 assistant response.");
+            ConversationResponseParseResult parsed;
             var nativeCalls = message.ToolCalls;
             if (nativeCalls != null && nativeCalls.Count > 0)
             {
-                if (nativeCalls.Count != 1 || nativeCalls[0] == null || string.IsNullOrWhiteSpace(message.ToolName) ||
+                if (nativeCalls.Count != 1 || nativeCalls[0] == null ||
+                    string.IsNullOrWhiteSpace(message.ResponseReason) ||
+                    string.IsNullOrWhiteSpace(message.ToolName) ||
                     string.IsNullOrWhiteSpace(nativeCalls[0].ArgumentsJson) ||
-                    !string.Equals(nativeCalls[0].Id, message.ToolCallId, StringComparison.Ordinal))
-                    return ConversationHistoryReadResult.Fail("Native history needs one matching runtime ID, canonical ToolName and object arguments.");
+                    nativeCalls[0].Type != "function" ||
+                    nativeCalls[0].Id != message.ToolCallId || nativeCalls[0].Name != message.ToolName)
+                    return ConversationHistoryReadResult.Fail("Native v8 call lacks reason, runtime ID, exact name or arguments.");
                 var envelope = new JObject
                 {
-                    ["message"] = message.Content ?? string.Empty,
-                    ["action"] = ConversationResponse.ToolAction,
+                    ["action"] = ConversationResponse.ExecuteAction,
+                    ["reason"] = message.ResponseReason,
                     ["tool_calls"] = new JArray(new JObject
                     {
                         ["name"] = message.ToolName,
                         ["arguments"] = new JRaw(nativeCalls[0].ArgumentsJson)
-                    })
+                    }),
+                    ["message"] = message.Content ?? string.Empty
                 }.ToString(Formatting.None);
-                var parsed = ConversationResponseJson.Read(envelope);
-                if (!parsed.Success) return ConversationHistoryReadResult.Fail(parsed.Error);
-                // A raw arguments string must not inject another call or change
-                // the accepted envelope. Native history keeps the exact public id.
-                if (parsed.Response.ToolCalls.Count != 1 || parsed.Response.ToolCalls[0].Name != message.ToolName ||
-                    parsed.Response.Message != (message.Content ?? string.Empty))
-                    return ConversationHistoryReadResult.Fail("Native argument JSON changed the response envelope.");
-                return FromMetadata(message, parsed.Response);
+                parsed = ConversationResponseJson.Read(envelope);
             }
-            if (message.ProtocolMessage)
+            else
             {
-                var parsed = ConversationResponseJson.Read(message.Content);
-                return parsed.Success ? FromMetadata(message, parsed.Response) : ConversationHistoryReadResult.Fail(parsed.Error);
+                parsed = ConversationResponseJson.Read(message.Content);
             }
-            if (!string.IsNullOrWhiteSpace(message.ToolCallId) || !string.IsNullOrWhiteSpace(message.ToolName) ||
-                message.AcceptedCallOrigin != null)
-                return ConversationHistoryReadResult.Fail("Plain assistant history has unexpected tool-call metadata.");
-            if (message.ResponseStatus == AgentResponseStatuses.InProgress)
-                return ConversationHistoryReadResult.Fail("No-call progress is not supported by v7.");
-            var action = message.ResponseStatus == AgentResponseStatuses.Blocked ? ConversationResponse.BlockedAction :
-                message.ResponseStatus == AgentResponseStatuses.AwaitingUser ? ConversationResponse.NeedsInputAction :
-                ConversationResponse.DoneAction;
-            return ConversationHistoryReadResult.Ok(new AgentResponse(message.Content ?? string.Empty, new ToolCall[0], action));
-        }
-
-        private static ConversationHistoryReadResult FromMetadata(ChatMessage message, ConversationResponse response)
-        {
-            if (response.ToolCalls.Count == 0)
+            if (!parsed.Success) return ConversationHistoryReadResult.Fail(parsed.Error);
+            var response = parsed.Response;
+            if (response.Action == ConversationResponse.ExecuteAction)
             {
-                if (!string.IsNullOrWhiteSpace(message.ToolCallId) || !string.IsNullOrWhiteSpace(message.ToolName) || message.AcceptedCallOrigin != null)
-                    return ConversationHistoryReadResult.Fail("Final history has unexpected tool-call metadata.");
-                return ConversationHistoryReadResult.Ok(new AgentResponse(response.Message, new ToolCall[0], response.Action));
+                if (response.ToolCalls.Count != 1 || string.IsNullOrWhiteSpace(message.ToolCallId) ||
+                    string.IsNullOrWhiteSpace(message.ToolName) || message.AcceptedCallOrigin == null ||
+                    string.IsNullOrWhiteSpace(message.AcceptedCallOrigin.ModelAttemptId) ||
+                    message.ToolResultProtocolVersion != ToolResultWire.CurrentVersion ||
+                    message.ToolResultRole != ToolResultRoles.User && message.ToolResultRole != ToolResultRoles.Developer &&
+                    message.ToolResultRole != ToolResultRoles.Tool ||
+                    (message.ToolResultRole == ToolResultRoles.Tool) != (nativeCalls != null && nativeCalls.Count == 1) ||
+                    response.ToolCalls[0].Name != message.ToolName)
+                    return ConversationHistoryReadResult.Fail("Accepted v8 call metadata disagrees with its envelope.");
+                return ConversationHistoryReadResult.Ok(new AgentResponse(
+                    response.Action, response.Reason, response.Message,
+                    calls: new[] { new ToolCall(message.ToolCallId, message.ToolName,
+                        response.ToolCalls[0].Arguments.ToString(Formatting.None)) },
+                    sourceModelAttemptId: message.AcceptedCallOrigin.ModelAttemptId));
             }
-            if (response.ToolCalls.Count != 1 || string.IsNullOrWhiteSpace(message.ToolCallId) ||
-                string.IsNullOrWhiteSpace(message.ToolName) || message.AcceptedCallOrigin == null)
-                return ConversationHistoryReadResult.Fail("Accepted history needs one runtime call ID, name and immutable model-attempt origin.");
-            var call = response.ToolCalls[0];
-            if (!string.Equals(call.Name, message.ToolName, StringComparison.Ordinal))
-                return ConversationHistoryReadResult.Fail("History tool-call metadata disagrees with the accepted envelope.");
-            return ConversationHistoryReadResult.Ok(new AgentResponse(response.Message, new[]
-            {
-                new ToolCall(message.ToolCallId, call.Name, call.Arguments.ToString(Formatting.None))
-            }, response.Action));
+            if (nativeCalls != null && nativeCalls.Count > 0 ||
+                !string.IsNullOrWhiteSpace(message.ToolCallId) || !string.IsNullOrWhiteSpace(message.ToolName) ||
+                message.AcceptedCallOrigin != null || message.ToolResultProtocolVersion != 0 ||
+                string.IsNullOrWhiteSpace(message.ResponseModelAttemptId))
+                return ConversationHistoryReadResult.Fail("No-call v8 response has tool metadata or lacks its model attempt origin.");
+            return ConversationHistoryReadResult.Ok(new AgentResponse(
+                response.Action, response.Reason, response.Message, decision: response.Decision,
+                results: response.Results, sourceModelAttemptId: message.ResponseModelAttemptId));
         }
     }
 }
