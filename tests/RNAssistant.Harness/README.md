@@ -916,14 +916,16 @@ and [source-linked kernel/prompt checks](../RNAssistant.V8KernelSmoke/run.sh).
 The latter builds host-neutral Core, Office and Workspace sources and runs the
 migrated `AgentKernel` and context-continuity fixtures while other Harness sources
 still use v7. It also runs the fake-Excel unknown-effect fixture in both response
-modes and result roles. The controlled
+modes and result roles. The full Harness now builds; targeted Plan, optional
+schema, Markdown/HTML, VBA, Excel-report, approval and replay cases also pass.
+The controlled
 `python3 -B tests/cli/response_mode_smoke.py` exercises v8 through actual
 CLI/HTTP requests. `interrupted_run_smoke.py`, `compaction_resume_smoke.py`
 and `run_control_smoke.py` cover process loss, compaction, confirmation and
 cancellation/continuation; `mode_questions_smoke.py` covers typed questions
-and answer/restart on the candidate branch. The full Harness still contains v7 test fixtures and does
-not compile in the candidate branch; these focused checks do not replace its
-integration coverage at cutover.
+and answer/restart on the candidate branch. The full Harness still contains v7
+wire bodies and assertions, so its complete suite is not yet green; these
+focused checks do not replace its integration coverage at cutover.
 
 The phase-0 v7 red audit route has been retired after its failure was covered
 by the v8 fake-Excel HTTP scenario in `RNAssistant.V8KernelSmoke/run.sh`.
@@ -1091,10 +1093,10 @@ compaction check rejects input-only references as substitutes for visible bytes
 and covers calibrated admission of complete mutation source.
 `agent: large VBA read and edit survive compaction` uses the production run service
 with a scripted model and fake host: create/read a CRLF module over the internal
-32K resource page, restore its source after a persisted checkpoint, then edit it.
-At 24K context it checks omitted-source overwrite refusal followed by an exact
-line read and patch, preserving all unrelated source. Large conflict recovery
-must not pin a stitched head/tail body that prevents the next request.
+32K resource page, explicitly reread the current source after a persisted
+checkpoint, then edit it without losing unrelated lines. A constrained 32K
+request refuses before model or tool dispatch when the complete causal context
+does not fit, preserving the exact source.
 `vba: patch disambiguates with exact context` also covers explicit line/column
 selection, duplicate procedures, stale-address refusal and candidate completeness.
 `vba: pure patch text contract` covers copied blocks in mixed-newline source.

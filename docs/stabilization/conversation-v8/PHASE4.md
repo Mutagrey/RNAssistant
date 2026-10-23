@@ -63,9 +63,17 @@ an irreparable obstacle without reporting success or replaying a tool.
   `finish.results` receives `missing_finish_results`; the rejected proposal is
   absent from accepted model context. The run then performs a second write and
   finishes with both terminal IDs, without replaying the first write.
+- The full host-neutral Harness now builds. Focused Harness runs pass for
+  Plan questions after restart, optional schema admission, Markdown/HTML
+  publication and replay, VBA source recovery, approval/unknown-effect
+  accounting, and event-store replay. Scripted VBA and Excel-report workflows
+  complete with runtime-assigned terminal IDs in their v8 finish claims.
+  A tight-context VBA continuation refuses before model/tool dispatch when
+  its complete causal context does not fit.
 
-The full Harness still has legacy v7 fixtures outside these migrated groups
-and cannot compile as a whole.
+The full Harness still has legacy v7 wire bodies and assertions outside these
+migrated groups; its complete test suite is not yet green. For example, the
+old no-call `continue`/`needs_input` fixtures still expect removed actions.
 The original v7 red audit and its route have been retired; its captured evidence
 remains historical. The full Harness suite and Office
 steer/UI integration checks are not yet migrated. Playwright layout qualification is

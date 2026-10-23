@@ -10,7 +10,9 @@ run with fake Excel now rejects the phase-0 premature finish and replays an
 honest partial claim after the verified sheet write. Workspace permits
 honest incomplete finish with failed acceptance; satisfied finish still
 requires explicit criteria. See [phase-4 evidence and gaps](conversation-v8/PHASE4.md).
-Full Harness migration, steer/UI integration, real-model comparison and
+The host-neutral Harness now builds and focused v8 workflow/replay scenarios
+pass; the full suite still contains red v7 fixtures. Full Harness migration,
+steer/UI integration, real-model comparison and
 Windows/Office gates remain open. Main remains v7. Owner: Core chat/run
 projection, Office transcript and Workspace/CLI recovery.
 
