@@ -197,7 +197,7 @@ namespace RNAssistant.Core.Services
             {
                 if (result["tree"] is JObject tree)
                 {
-                    var selectedTree = SelectFields(tree, "pointer", "depth", "offset", "limit",
+                    var selectedTree = SelectFields(tree, "format", "pointer", "depth", "offset", "limit",
                         "nodeType", "totalChildren", "returnedChildren", "nextOffset", "nodes");
                     if (selectedTree["nodes"] is JArray nodes)
                         selectedTree["nodes"] = new JArray(nodes.Select(node =>

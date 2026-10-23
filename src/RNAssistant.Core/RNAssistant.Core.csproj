@@ -29,6 +29,10 @@
       <HintPath>..\..\packages\Newtonsoft.Json.13.0.3\lib\net45\Newtonsoft.Json.dll</HintPath>
       <Private>True</Private>
     </Reference>
+    <Reference Include="YamlDotNet">
+      <HintPath>..\..\packages\YamlDotNet.18.1.0\lib\net47\YamlDotNet.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
     <Reference Include="Microsoft.Bcl.HashCode">
       <HintPath>..\..\packages\Microsoft.Bcl.HashCode.6.0.0\lib\net462\Microsoft.Bcl.HashCode.dll</HintPath>
       <Private>True</Private>
@@ -115,6 +119,8 @@
     <Compile Include="Services\EvidenceStateReducer.cs" />
     <Compile Include="Services\ResourceSchemaValidator.cs" />
     <Compile Include="Services\ResourceJsonTreeSelector.cs" />
+    <Compile Include="Services\ResourceTreePointer.cs" />
+    <Compile Include="Services\ResourceYamlTreeSelector.cs" />
     <Compile Include="Services\StrictJsonSourceReader.cs" />
     <Compile Include="Models\AgentResponseModels.cs" />
     <Compile Include="Models\ChatModels.cs" />
@@ -195,7 +201,7 @@
     <Compile Include="ModelProtocol\ConversationResponseHistoryReader.cs" />
     <Compile Include="Models\VbaModels.cs" />
     <Compile Include="Models\ResourceFindReadModels.cs" />
-    <Compile Include="Models\ResourceJsonTree.cs" />
+    <Compile Include="Models\ResourceTree.cs" />
     <Compile Include="Models\ResourceProcedureSelection.cs" />
     <Compile Include="Llm\LlmClient.cs" />
     <Compile Include="Llm\LlmHttpTransport.cs" />

@@ -15,9 +15,9 @@ namespace RNAssistant.Core.Services
     {
         private readonly JsonTextReader _reader;
         private readonly CancellationToken _token;
-        private readonly ResourceJsonTree _tree;
+        private readonly ResourceTree _tree;
         private readonly int _budget;
-        private int _used;
+        private long _used;
 
         private ResourceJsonTreeSelector(TextReader source, string pointer, int depth, int offset,
             int limit, int maximumCharacters, CancellationToken token)
@@ -25,15 +25,18 @@ namespace RNAssistant.Core.Services
             _reader = new JsonTextReader(source) { CloseInput = false, DateParseHandling = DateParseHandling.None,
                 MaxDepth = int.MaxValue };
             _token = token;
-            _tree = new ResourceJsonTree { Pointer = pointer, Depth = depth, Offset = offset, Limit = limit };
+            _tree = new ResourceTree { Format = "json", Pointer = pointer, Depth = depth, Offset = offset, Limit = limit };
             _budget = maximumCharacters;
         }
 
-        public static ResourceJsonTree Select(TextReader source, string pointer, int depth, int offset,
+        public static ResourceTree Select(TextReader source, string pointer, int depth, int offset,
             int limit, int maximumCharacters, CancellationToken token = default(CancellationToken))
         {
             if (source == null) throw new ArgumentNullException(nameof(source));
-            var tokens = ParsePointer(pointer);
+            List<string> tokens;
+            try { tokens = ResourceTreePointer.ParseTokens(pointer); }
+            catch (ResourceRequestException error) when (error.ErrorCode == "resource_tree_pointer_invalid")
+            { throw Error(error.Message, "resource_json_pointer_invalid"); }
             if (depth < 0 || offset < 0 || limit < 1 || maximumCharacters < 1)
                 throw Error("Use nonnegative depth/offset, positive limit and a model read budget.", "resource_json_selector_invalid");
             var scanner = new ResourceJsonTreeSelector(new StrictJsonSourceReader(source), pointer,
@@ -56,27 +59,6 @@ namespace RNAssistant.Core.Services
             catch (JsonReaderException error)
             { throw Error("JSON source is invalid: " + error.Message, "resource_json_invalid"); }
             finally { scanner._reader.Close(); }
-        }
-
-        private static List<string> ParsePointer(string pointer)
-        {
-            if (pointer == null || pointer.Length > 0 && pointer[0] != '/')
-                throw Error("Use an RFC 6901 JSON Pointer: empty root or slash-prefixed tokens.", "resource_json_pointer_invalid");
-            var tokens = new List<string>();
-            if (pointer.Length == 0) return tokens;
-            foreach (var encoded in pointer.Substring(1).Split('/'))
-            {
-                var decoded = new System.Text.StringBuilder();
-                for (var i = 0; i < encoded.Length; i++)
-                {
-                    if (encoded[i] != '~') { decoded.Append(encoded[i]); continue; }
-                    if (++i == encoded.Length || encoded[i] != '0' && encoded[i] != '1')
-                        throw Error("JSON Pointer contains an invalid escape.", "resource_json_pointer_invalid");
-                    decoded.Append(encoded[i] == '0' ? '~' : '/');
-                }
-                tokens.Add(decoded.ToString());
-            }
-            return tokens;
         }
 
         private bool Find(IReadOnlyList<string> tokens, int index)
@@ -106,7 +88,7 @@ namespace RNAssistant.Core.Services
             }
             if (_reader.TokenType == JsonToken.StartArray)
             {
-                var wanted = ArrayIndex(tokens[index]);
+                var wanted = ResourceTreePointer.ArrayIndex(tokens[index]);
                 long position = 0;
                 var found = false;
                 while (true)
@@ -143,7 +125,7 @@ namespace RNAssistant.Core.Services
                     if (!ReadNext()) throw Error("Incomplete JSON object.", "resource_json_invalid");
                     if (remainingDepth > 0 && (!root || position >= _tree.Offset && position < (long)_tree.Offset + _tree.Limit))
                     {
-                        Walk(pointer + "/" + Escape(name), remainingDepth - 1, false);
+                        Walk(pointer + "/" + ResourceTreePointer.Escape(name), remainingDepth - 1, false);
                         if (root) _tree.ReturnedChildren++;
                     }
                     else SkipValue();
@@ -171,7 +153,7 @@ namespace RNAssistant.Core.Services
             if (root) _tree.TotalChildren = node.ChildCount ?? 0;
         }
 
-        private void Add(ResourceJsonTreeNode node)
+        private void Add(ResourceTreeNode node)
         {
             if (node.Value != null && node.Value.Length > _budget ||
                 (_used += JsonConvert.SerializeObject(node).Length + 1) > _budget)
@@ -179,10 +161,10 @@ namespace RNAssistant.Core.Services
             _tree.Nodes.Add(node);
         }
 
-        private ResourceJsonTreeNode Node(string pointer)
+        private ResourceTreeNode Node(string pointer)
         {
             var type = _reader.TokenType;
-            var node = new ResourceJsonTreeNode { Pointer = pointer };
+            var node = new ResourceTreeNode { Pointer = pointer };
             switch (type)
             {
                 case JsonToken.StartObject: node.Type = "object"; break;
@@ -224,14 +206,6 @@ namespace RNAssistant.Core.Services
             }
         }
 
-        private static long ArrayIndex(string token)
-        {
-            if (token.Length == 0 || token.Length > 1 && token[0] == '0') return -1;
-            for (var i = 0; i < token.Length; i++) if (token[i] < '0' || token[i] > '9') return -1;
-            return long.TryParse(token, NumberStyles.None, CultureInfo.InvariantCulture, out var value) ? value : -1;
-        }
-
-        private static string Escape(string token) { return token.Replace("~", "~0").Replace("/", "~1"); }
         private static ResourceRequestException Error(string message, string code)
         { return new ResourceRequestException(message, code, false); }
     }

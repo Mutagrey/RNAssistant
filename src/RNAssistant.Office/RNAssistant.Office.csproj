@@ -247,7 +247,7 @@
     <Compile Include="Services\ChatResourceIngestionService.cs" />
     <Compile Include="Services\ResourceGatewayService.cs" />
     <Compile Include="Services\ResourceGatewayService.WholeRead.cs" />
-    <Compile Include="Services\ResourceGatewayService.JsonTree.cs" />
+    <Compile Include="Services\ResourceGatewayService.Tree.cs" />
     <Compile Include="Services\ResourceGatewayService.Binary.cs" />
     <Compile Include="Services\ResourceAuthorityService.cs" />
     <Compile Include="Services\WorkspaceOfficeCapabilityService.cs" />

@@ -56,7 +56,11 @@ function fixture(withAliases = false) {
             { requestAlias: "Q1", operationAlias: "O3", evidenceAlias: "E3", view: "tree",
               coverage: { kind: "json-path", path: "/data", start: 1, end: 2 }, observationComplete: false,
               readMetadata: { requestedCoverage: { kind: "json-path", path: "/data", start: 1, end: 3 },
-                requestedDepth: 2, selectionComplete: true, representationComplete: false, sourceComplete: false } }] }] : [];
+                requestedDepth: 2, selectionComplete: true, representationComplete: false, sourceComplete: false } },
+            { requestAlias: "Q1", operationAlias: "O4", evidenceAlias: "E4", view: "tree",
+              coverage: { kind: "yaml-path", path: "/config", start: 0, end: 1 }, observationComplete: false,
+              readMetadata: { requestedCoverage: { kind: "yaml-path", path: "/config", start: 0, end: 2 },
+                requestedDepth: 1, selectionComplete: true, representationComplete: false, sourceComplete: false } }] }] : [];
         if (query.verifyResourceAlias) {
           if (verification.hold) await verification.hold;
           assert.equal(query.requestEventId, "r1");
@@ -230,6 +234,7 @@ function fixture(withAliases = false) {
   assert.match(resourceText(), /Выбранный фрагмент: полностью.*Представление: не полностью.*Источник: неизвестно/);
   assert.match(resourceText(), /Запрошено: процедура Value \(property-get\)/);
   assert.match(resourceText(), /JSON Pointer "\/data", глубина 2, дети \[1, 3\)/);
+  assert.match(resourceText(), /YAML pointer "\/config", глубина 1, дети \[0, 2\)/);
   assert.equal(linked.calls.filter(call => call.query.verifyResourceAlias).length, 0, "opening resources does not start expensive verification");
   await checkButton(linked).fire("click"); await flush();
   assert.equal(linked.calls.at(-1).query.verifyResourceAlias, "R1@v1");

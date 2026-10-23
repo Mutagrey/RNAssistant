@@ -78,7 +78,12 @@ and duplicate keys, exact array slices and child paging, model budget, 4-MiB
 workspace source without whole-body allocation, multi-page Office artifact,
 typed schemas, partial CAS evidence and saved read metadata. The same Web check
 renders requested pointer/depth and completeness. It does not qualify real
-Windows/Office/WebView2 or YAML parsing.
+Windows/Office/WebView2.
+
+`resources: YAML` covers decoded scalar navigation, escaped and duplicate keys,
+explicit alias/merge/complex-key/multi-document refusals, streamed 4-MiB workspace
+sources and paged Office artifacts with exact partial `yaml-path` evidence. It does
+not qualify real Windows/Office/WebView2 behavior or YAML schema resolution.
 
 `workspace files:` includes an actual 80-MiB source retained/read without a
 whole-body allocation, exact history after drift/deletion/restart, operation

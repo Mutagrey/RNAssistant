@@ -610,8 +610,18 @@ Shared context and other service artifacts cannot use this selector. This is a
 navigation view, not a raw JSON rewrite surface. Evidence keeps the
 exact source revision, `json-path` coverage with selected child range, requested
 depth and distinct selection/representation/source completeness; it never grants
-whole-source mutation authority. YAML and provider-specific tree views remain
-separate work.
+whole-source mutation authority.
+
+Complete YAML `.yaml`/`.yml` artifacts and workspace UTF-8 files use the same
+`representation=tree`, pointer/depth/child paging and exact-revision read path.
+The tree declares `format=yaml` and retains `yaml-path` partial coverage. Mapping
+keys are decoded scalar text, with `~0`/`~1` pointer escaping; scalar values are
+decoded previews (`valueExact=false`), not YAML schema-resolved values or original
+source lexemes. Duplicate keys on a selected path, aliases, plain merge keys and
+complex keys in traversed mappings, and multiple documents fail explicitly
+instead of choosing or expanding a value. Raw source windows remain available.
+The only size bound is the model output budget; source parsing itself is streamed.
+Provider-specific tree views remain separate work.
 
 Within-target search requires an advertised `text` or `source` representation.
 A VBA project exposes its component inventory as `structure`; search its module
@@ -639,8 +649,9 @@ authored files use the same indexed parts for subsequent reads/search/outline.
 
 The shared layer currently owns identity, exact revision, view capabilities,
 coverage (`character-range`, `line-range`, `page-range`, `cell-range`,
-`record-range`, `json-path`), bounded reads and cursors. JSON tree is a typed
-selector for JSON text, not yet one provider-wide navigation contract.
+`record-range`, `json-path`, `yaml-path`), bounded reads and cursors. JSON/YAML
+tree is a typed selector for complete structured text, not yet one provider-wide
+navigation contract.
 `resources_outline` is an indexed document-text operation;
 PDF page rendering selects `pageIndex` separately, while PDF extracted text is
 one flattened text view. `PageTextLengths` is not an exact page-to-text offset map.

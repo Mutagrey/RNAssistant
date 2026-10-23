@@ -1017,7 +1017,7 @@ namespace RNAssistant.Runtime
                     properties.Remove(name);
                 properties["representation"] = new JObject { ["type"] = "string", ["enum"] = new JArray("tree") };
                 properties["pointer"] = new JObject { ["type"] = "string",
-                    ["description"] = "RFC 6901 JSON Pointer; empty string selects the root." };
+                    ["description"] = "RFC 6901-style JSON/YAML pointer; empty string selects the root." };
                 properties["depth"] = new JObject { ["type"] = "integer", ["minimum"] = 0 };
                 properties["offset"] = new JObject { ["type"] = "integer", ["minimum"] = 0 };
                 properties["limit"] = new JObject { ["type"] = "integer", ["minimum"] = 1 };

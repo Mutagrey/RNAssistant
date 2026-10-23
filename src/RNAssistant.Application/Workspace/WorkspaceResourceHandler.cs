@@ -59,9 +59,11 @@ namespace RNAssistant.Runtime
                         foreach (var item in page.Items)
                         {
                             // Binary delivery belongs to application/browser consumers;
-                            // model file reads admit UTF-8 text and JSON navigation.
+                            // model file reads admit UTF-8 text and structured navigation.
                             item.Representations.RemoveAll(view => view != ResourceRepresentations.Metadata && view != ResourceRepresentations.Text);
-                            if (item.Type == "file" && item.Target.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                            if (item.Type == "file" && (item.Target.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ||
+                                item.Target.EndsWith(".yaml", StringComparison.OrdinalIgnoreCase) ||
+                                item.Target.EndsWith(".yml", StringComparison.OrdinalIgnoreCase)))
                                 item.Representations.Add(ResourceRepresentations.Tree);
                             if (item.Type == "file" && !item.Representations.Contains(ResourceRepresentations.Text))
                                 item.Usage = "Binary source; model text reading is unavailable. Application raw/image views can inspect it.";
@@ -90,8 +92,8 @@ namespace RNAssistant.Runtime
                     !string.IsNullOrEmpty(referencePath) || context.Arguments.ContainsKey("version")) ||
                     !isTree && (hasPointer || context.Arguments.ContainsKey("depth") ||
                         context.Arguments.ContainsKey("offset") || context.Arguments.ContainsKey("limit")))
-                    throw Error("JSON tree requires a file, pointer, optional depth/offset/limit and no other selectors.",
-                        "resource_json_selector_invalid");
+                    throw Error("JSON/YAML tree requires a file, pointer, optional depth/offset/limit and no other selectors.",
+                        "resource_tree_selector_invalid");
                 if (string.IsNullOrEmpty(procedureKind)) procedureKind = null;
                 var hasProcedure = context.Arguments.ContainsKey("procedure") || context.Arguments.ContainsKey("procedureKind");
                 if (hasProcedure && (type != "file" || string.IsNullOrWhiteSpace(procedure) ||
@@ -103,7 +105,7 @@ namespace RNAssistant.Runtime
                         (startChar.HasValue && (startLine.HasValue || lineCount.HasValue)))
                         throw Error("Supply startChar and charCount together, without line selectors.", "resource_chars_invalid");
                     read = isTree
-                        ? _files.ReadJsonTree(target, pointer, depth, treeOffset, treeLimit,
+                        ? _files.ReadTree(target, pointer, depth, treeOffset, treeLimit,
                             Math.Max(1, _maximumTextReadCharacters - 512), cancellationToken)
                         : hasProcedure
                         ? _files.ReadProcedure(target, procedure, procedureKind, _maximumTextReadCharacters, cancellationToken)
@@ -171,10 +173,10 @@ namespace RNAssistant.Runtime
                         .Select(item => new SkillReferenceProjection { Path = item.Path, ByteLength = item.ByteLength }).ToArray();
                 }
                 if (isTree && JsonConvert.SerializeObject(projection).Length > _maximumTextReadCharacters)
-                    throw Error("Selected JSON tree exceeds the model read budget; narrow pointer, depth or limit.",
-                        "resource_json_view_too_large");
+                    throw Error("Selected tree exceeds the model read budget; narrow pointer, depth or limit.",
+                        "resource_tree_view_too_large");
                 var requestedCoverage = isTree
-                    ? new ResourceCoverage(ResourceCoverageKinds.JsonPath,
+                    ? new ResourceCoverage(read.Result.Tree.Coverage().Kind,
                         address: "depth=" + depth + ";limit=" + treeLimit,
                         start: treeOffset, end: (long)treeOffset + treeLimit, path: pointer)
                     : startChar.HasValue
@@ -188,7 +190,7 @@ namespace RNAssistant.Runtime
                     requestedProcedure: hasProcedure ? procedure : null, requestedProcedureKind: procedureKind,
                     requestedDepth: isTree ? (int?)depth : null);
                 if (type == "file") _observed[target] = read.Evidence.Single();
-                var message = isTree ? "Exact JSON Pointer tree read; navigate with pointer, depth and child offset. Values are not raw source lexemes." :
+                var message = isTree ? "Exact structured tree read; navigate with pointer, depth and child offset. Values are decoded previews, not raw source lexemes." :
                     read.Result.Complete ? "Complete resource representation read." :
                     "Exact text excerpt read from the current version; other regions are not observed. Read another bounded range as needed; each read rechecks the current source.";
                 return Return(ToolResult.Ok(message, JsonConvert.SerializeObject(projection),

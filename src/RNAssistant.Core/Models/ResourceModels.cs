@@ -166,7 +166,7 @@ namespace RNAssistant.Core.Models
         [Newtonsoft.Json.JsonProperty("table", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public ResourceTableBatch Table { get; set; }
         [Newtonsoft.Json.JsonProperty("tree", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        public ResourceJsonTree Tree { get; set; }
+        public ResourceTree Tree { get; set; }
         [Newtonsoft.Json.JsonProperty("binary", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public ResourceBinaryView Binary { get; set; }
         [Newtonsoft.Json.JsonProperty("contentSha256")]

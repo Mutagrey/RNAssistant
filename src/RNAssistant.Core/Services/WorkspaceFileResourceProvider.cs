@@ -92,26 +92,35 @@ namespace RNAssistant.Core.Services
             return read;
         }
 
-        public ResourceReadObservation ReadJsonTree(string relativePath, string pointer, int depth,
+        public ResourceReadObservation ReadTree(string relativePath, string pointer, int depth,
             int offset, int limit, int maximumCharacters, CancellationToken token = default(CancellationToken))
         {
+            if (string.IsNullOrEmpty(relativePath))
+                throw new WorkspaceFileException("resource_tree_view_unsupported", "Tree requires a JSON or YAML file.");
+            var yaml = relativePath.EndsWith(".yaml", StringComparison.OrdinalIgnoreCase) ||
+                relativePath.EndsWith(".yml", StringComparison.OrdinalIgnoreCase);
+            if (!yaml && !relativePath.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                throw new WorkspaceFileException("resource_tree_view_unsupported", "Tree requires a JSON or YAML file.");
             var snapshot = _files.CaptureFile(_workspace, relativePath, long.MaxValue, token);
-            ResourceJsonTree tree;
+            ResourceTree tree;
             try
             {
                 using (var input = _files.OpenExactRead(_workspace, relativePath, snapshot.Reference, long.MaxValue, token))
                 using (var reader = new StreamReader(input, new UTF8Encoding(false, true), false, 81920))
-                    tree = ResourceJsonTreeSelector.Select(reader, pointer, depth, offset, limit, maximumCharacters, token);
+                    tree = yaml
+                        ? ResourceYamlTreeSelector.Select(reader, pointer, depth, offset, limit, maximumCharacters, token)
+                        : ResourceJsonTreeSelector.Select(reader, pointer, depth, offset, limit, maximumCharacters, token);
             }
             catch (DecoderFallbackException)
-            { throw new WorkspaceFileException("encoding_ambiguous", "Only strict UTF-8 JSON is supported."); }
+            { throw new WorkspaceFileException("encoding_ambiguous", "Only strict UTF-8 JSON/YAML is supported."); }
             var body = Newtonsoft.Json.JsonConvert.SerializeObject(tree);
             var coverage = tree.Coverage();
-            var evidence = _files.PublishJsonTreeView(snapshot, body, coverage);
+            var evidence = _files.PublishTreeView(snapshot, body, coverage);
             var descriptor = new ResourceDescriptor { Reference = snapshot.Reference, Provider = Id,
                 Kind = "file", Title = Path.GetFileName(relativePath), Mutable = !_workspace.ReadOnly,
                 Tracking = "current", ByteLength = snapshot.ByteLength,
-                ContentSha256 = snapshot.ContentSha256, Coverage = coverage, MimeType = "application/json" };
+                ContentSha256 = snapshot.ContentSha256, Coverage = coverage,
+                MimeType = yaml ? "application/yaml" : "application/json" };
             descriptor.Representations.Add(ResourceRepresentations.Metadata);
             descriptor.Representations.Add(ResourceRepresentations.Text);
             descriptor.Representations.Add(ResourceRepresentations.Tree);

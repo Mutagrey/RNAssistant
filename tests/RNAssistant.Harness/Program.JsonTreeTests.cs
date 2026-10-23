@@ -78,7 +78,7 @@ namespace RNAssistant.Harness
                     writer.Write("{\"data\":[{\"x\":1},{\"x\":2},{\"x\":3}]}");
                 }
                 var allocated = GC.GetAllocatedBytesForCurrentThread();
-                var first = provider.ReadJsonTree("large.json", "/data", 2, 1, 1, 2000);
+                var first = provider.ReadTree("large.json", "/data", 2, 1, 1, 2000);
                 AssertTrue(GC.GetAllocatedBytesForCurrentThread() - allocated < 12L * 1024 * 1024,
                     "four-MiB workspace JSON scans without whole-source allocation");
                 AssertTrue(first.Result.Tree.Nodes.Any(node => node.Pointer == "/data/1/x") &&
@@ -108,7 +108,7 @@ namespace RNAssistant.Harness
                 var restored = JsonConvert.DeserializeObject<ResourceEvidence>(JsonConvert.SerializeObject(result.ResourceEvidence.Single()));
                 AssertEqual("/data", restored.ReadMetadata.RequestedCoverage.Path, "pointer survives durable metadata roundtrip");
                 File.WriteAllText(Path.Combine(workspace.RootPath, "large.json"), "{\"data\":[9]}");
-                var changed = provider.ReadJsonTree("large.json", "/data", 1, 0, 1, 2000);
+                var changed = provider.ReadTree("large.json", "/data", 1, 0, 1, 2000);
                 AssertTrue(changed.Result.Resource.Reference.Revision != first.Result.Resource.Reference.Revision &&
                     retained == new ChatBlobStore(paths).ReadText(first.Evidence.Single().Payload.ToBlobReference()),
                     "external drift creates a new exact revision without changing retained tree bytes");
@@ -143,7 +143,7 @@ namespace RNAssistant.Harness
                 var descriptor = gateway.Resolve(session, ChatResourceUri.CreateArtifactRevisionUri(session, artifact)).Resource;
                 AssertTrue(descriptor.Representations.Contains(ResourceRepresentations.Tree),
                     "JSON file discovery advertises its typed tree view");
-                var selection = gateway.ReadJsonTree(session, descriptor.Reference, descriptor, "/data", 1, 1, 1, 2000,
+                var selection = gateway.ReadTree(session, descriptor.Reference, descriptor, "/data", 1, 1, 1, 2000,
                     CancellationToken.None);
                 var evidence = gateway.Evidence(session, selection.Result).Single();
                 AssertTrue(selection.Result.Tree.Nodes.Any(node => node.Pointer == "/data/1") &&
@@ -192,7 +192,7 @@ namespace RNAssistant.Harness
                 AssertTrue(!clippedDescriptor.Representations.Contains(ResourceRepresentations.Tree),
                     "incomplete extracted JSON does not advertise an exact tree view");
                 AssertEqual("resource_json_source_incomplete", RuntimeThrows<ResourceRequestException>(() =>
-                    gateway.ReadJsonTree(session, clippedDescriptor.Reference, clippedDescriptor, "", 1, 0, 1, 2000,
+                    gateway.ReadTree(session, clippedDescriptor.Reference, clippedDescriptor, "", 1, 0, 1, 2000,
                         CancellationToken.None)).ErrorCode, "truncated extraction cannot prove a JSON tree");
                 var shared = new ChatArtifact { Id = "shared-json-artifact", Kind = DocumentArtifactStore.SharedContextKind,
                     Title = "private.json", MimeType = "application/json", InlineText = "{\"claim\":\"private\"}" };
@@ -201,7 +201,7 @@ namespace RNAssistant.Harness
                 AssertTrue(!sharedDescriptor.Representations.Contains(ResourceRepresentations.Tree),
                     "filtered shared context cannot advertise raw JSON navigation");
                 AssertEqual("resource_json_view_unsupported", RuntimeThrows<ResourceRequestException>(() =>
-                    gateway.ReadJsonTree(session, sharedDescriptor.Reference, sharedDescriptor, "", 1, 0, 1, 2000,
+                    gateway.ReadTree(session, sharedDescriptor.Reference, sharedDescriptor, "", 1, 0, 1, 2000,
                         CancellationToken.None)).ErrorCode, "tree selector cannot bypass shared-claim filtering");
             });
         }

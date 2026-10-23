@@ -11,19 +11,21 @@ namespace RNAssistant.Office.Services
 {
     internal sealed partial class ResourceGatewayService
     {
-        internal ResourceReadSelection ReadJsonTree(ChatSession session, ResourceRef reference,
+        internal ResourceReadSelection ReadTree(ChatSession session, ResourceRef reference,
             ResourceDescriptor descriptor, string pointer, int depth, int offset, int limit,
             int maximumCharacters, CancellationToken token)
         {
+            var format = TreeFormat(descriptor);
             if (!(ProviderFor(reference.Uri) is ChatArtifactResourceProvider) || descriptor == null ||
                 descriptor.Kind != ChatArtifactKinds.File && descriptor.Kind != ChatArtifactKinds.Attachment ||
-                !IsJsonSource(descriptor))
-                throw new ResourceRequestException("JSON tree requires a complete JSON file artifact or attachment.",
-                    "resource_json_view_unsupported", false);
-            using (var reader = new PagedJsonTextReader(this, session, reference, token))
+                format == null)
+                throw new ResourceRequestException("Tree requires a complete JSON or YAML file artifact or attachment.",
+                    format == "yaml" ? "resource_yaml_view_unsupported" : "resource_json_view_unsupported", false);
+            using (var reader = new PagedTreeTextReader(this, session, reference, format, token))
             {
-                var tree = ResourceJsonTreeSelector.Select(reader, pointer, depth, offset, limit,
-                    maximumCharacters, token);
+                var tree = format == "yaml"
+                    ? ResourceYamlTreeSelector.Select(reader, pointer, depth, offset, limit, maximumCharacters, token)
+                    : ResourceJsonTreeSelector.Select(reader, pointer, depth, offset, limit, maximumCharacters, token);
                 var source = reader.Source;
                 var body = JsonConvert.SerializeObject(tree);
                 var coverage = tree.Coverage();
@@ -37,22 +39,33 @@ namespace RNAssistant.Office.Services
             }
         }
 
-        internal static bool IsJsonSource(ResourceDescriptor descriptor)
+        internal static string TreeFormat(ResourceDescriptor descriptor)
         {
+            if (descriptor == null) return null;
             var mime = descriptor.MimeType ?? string.Empty;
             var mediaType = mime.Split(';')[0].Trim();
-            return string.Equals(mediaType, "application/json", StringComparison.OrdinalIgnoreCase) ||
-                mediaType.EndsWith("+json", StringComparison.OrdinalIgnoreCase) ||
-                (descriptor.Title ?? string.Empty).EndsWith(".json", StringComparison.OrdinalIgnoreCase);
+            if (string.Equals(mediaType, "application/json", StringComparison.OrdinalIgnoreCase) ||
+                mediaType.EndsWith("+json", StringComparison.OrdinalIgnoreCase)) return "json";
+            if (string.Equals(mediaType, "application/yaml", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(mediaType, "application/x-yaml", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(mediaType, "text/yaml", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(mediaType, "text/x-yaml", StringComparison.OrdinalIgnoreCase) ||
+                mediaType.EndsWith("+yaml", StringComparison.OrdinalIgnoreCase)) return "yaml";
+            var title = descriptor.Title ?? string.Empty;
+            if (title.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) return "json";
+            if (title.EndsWith(".yaml", StringComparison.OrdinalIgnoreCase) ||
+                title.EndsWith(".yml", StringComparison.OrdinalIgnoreCase)) return "yaml";
+            return null;
         }
 
         // Page through the provider's cursor while retaining one revision and
-        // physical text hash. JSON parsing never builds a whole-source string.
-        private sealed class PagedJsonTextReader : TextReader
+        // physical text hash. Tree parsing never builds a whole-source string.
+        private sealed class PagedTreeTextReader : TextReader
         {
             private readonly ResourceGatewayService _gateway;
             private readonly ChatSession _session;
             private readonly CancellationToken _token;
+            private readonly string _format;
             private readonly HashSet<string> _cursors = new HashSet<string>(StringComparer.Ordinal);
             private ResourceRef _reference;
             private ResourceReadResult _source;
@@ -64,9 +77,9 @@ namespace RNAssistant.Office.Services
 
             internal ResourceReadResult Source { get { return _source; } }
 
-            internal PagedJsonTextReader(ResourceGatewayService gateway, ChatSession session,
-                ResourceRef reference, CancellationToken token)
-            { _gateway = gateway; _session = session; _reference = reference; _token = token; }
+            internal PagedTreeTextReader(ResourceGatewayService gateway, ChatSession session,
+                ResourceRef reference, string format, CancellationToken token)
+            { _gateway = gateway; _session = session; _reference = reference; _format = format; _token = token; }
 
             public override int Read(char[] buffer, int index, int count)
             {
@@ -95,8 +108,8 @@ namespace RNAssistant.Office.Services
                     _source != null && (result.Resource.Reference.Uri != _source.Resource.Reference.Uri ||
                         result.Resource.Reference.Revision != _source.Resource.Reference.Revision ||
                         result.TotalCharacters != _source.TotalCharacters || result.ContentSha256 != _source.ContentSha256))
-                    throw new ResourceRequestException("JSON source pages are incomplete or crossed revisions.",
-                        "resource_json_source_incomplete", false);
+                    throw new ResourceRequestException("Tree source pages are incomplete or crossed revisions.",
+                        _format == "yaml" ? "resource_yaml_source_incomplete" : "resource_json_source_incomplete", false);
                 if (_source == null) { _source = result; _reference = result.Resource.Reference.Copy(); }
                 _page = result.Text;
                 _position = 0;
@@ -106,13 +119,13 @@ namespace RNAssistant.Office.Services
                 {
                     if (result.Truncated || _nextOffset != result.TotalCharacters ||
                         !string.IsNullOrEmpty(result.NextCursor))
-                        throw new ResourceRequestException("JSON source ended before the complete exact text view.",
-                            "resource_json_source_incomplete", false);
+                        throw new ResourceRequestException("Tree source ended before the complete exact text view.",
+                            _format == "yaml" ? "resource_yaml_source_incomplete" : "resource_json_source_incomplete", false);
                 }
                 else if (_page.Length == 0 || string.IsNullOrEmpty(result.NextCursor) ||
                     !_cursors.Add(result.NextCursor))
-                    throw new ResourceRequestException("JSON source continuation is unavailable.",
-                        "resource_json_source_incomplete", false);
+                    throw new ResourceRequestException("Tree source continuation is unavailable.",
+                        _format == "yaml" ? "resource_yaml_source_incomplete" : "resource_json_source_incomplete", false);
                 _cursor = result.NextCursor;
             }
         }

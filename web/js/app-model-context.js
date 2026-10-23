@@ -162,8 +162,10 @@
   }
   function readMetadataText(metadata) {
     if (!metadata) return "Запрошенный диапазон и раздельная полнота не сохранены.";
-    var requested = metadata.requestedCoverage && metadata.requestedCoverage.kind === "json-path" ?
-      "JSON Pointer " + JSON.stringify(metadata.requestedCoverage.path) +
+    var requested = metadata.requestedCoverage && (metadata.requestedCoverage.kind === "json-path" ||
+        metadata.requestedCoverage.kind === "yaml-path") ?
+      (metadata.requestedCoverage.kind === "yaml-path" ? "YAML pointer " : "JSON Pointer ") +
+        JSON.stringify(metadata.requestedCoverage.path) +
         (metadata.requestedDepth != null ? ", глубина " + metadata.requestedDepth : "") +
         (metadata.requestedCoverage.start != null ? ", дети [" + metadata.requestedCoverage.start +
           ", " + metadata.requestedCoverage.end + ")" : "") :

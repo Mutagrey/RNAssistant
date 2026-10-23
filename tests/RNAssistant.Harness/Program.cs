@@ -709,6 +709,8 @@ namespace RNAssistant.Harness
                 Test("resources: JSON Pointer tree semantics", JsonTreePointerAndBudget),
                 Test("resources: JSON tree workspace exact streaming", JsonTreeWorkspaceExactStreaming),
                 Test("resources: JSON tree Office artifact pages", JsonTreeOfficeArtifactPages),
+                Test("resources: YAML tree semantics", YamlTreePointerAndRefusals),
+                Test("resources: YAML tree workspace and Office", YamlTreeProviders),
                 Test("resources: VBA windows invalidate with module", VbaLineWindowsInvalidateWithModule),
                 Test("powerpoint resources: large slide text window", PowerPointLargeSlideTextWindow),
                 Test("powerpoint resources: large notes text window", PowerPointLargeNotesTextWindow),

@@ -116,6 +116,7 @@ namespace RNAssistant.Core.Models
         public const string PageRange = "page-range";
         public const string TimeRange = "time-range";
         public const string JsonPath = "json-path";
+        public const string YamlPath = "yaml-path";
         public const string RecordRange = "record-range";
         public const string FieldSet = "field-set";
     }
@@ -143,9 +144,9 @@ namespace RNAssistant.Core.Models
             Address = string.IsNullOrWhiteSpace(address) ? null : address.Trim();
             Start = start;
             End = end;
-            // JSON Pointer is an exact Unicode address: even an empty or
+            // Tree pointers are exact Unicode addresses: even an empty or
             // whitespace-bearing token must survive evidence serialization.
-            Path = Kind == ResourceCoverageKinds.JsonPath ? path :
+            Path = Kind == ResourceCoverageKinds.JsonPath || Kind == ResourceCoverageKinds.YamlPath ? path :
                 string.IsNullOrWhiteSpace(path) ? null : path.Trim();
             Fields = Array.AsReadOnly((fields ?? new string[0])
                 .Where(value => !string.IsNullOrWhiteSpace(value))
@@ -171,6 +172,7 @@ namespace RNAssistant.Core.Models
                 case ResourceCoverageKinds.PageRange:
                 case ResourceCoverageKinds.TimeRange:
                 case ResourceCoverageKinds.JsonPath:
+                case ResourceCoverageKinds.YamlPath:
                 case ResourceCoverageKinds.RecordRange:
                 case ResourceCoverageKinds.FieldSet:
                     return value;

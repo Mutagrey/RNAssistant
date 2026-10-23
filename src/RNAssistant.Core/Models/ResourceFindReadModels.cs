@@ -89,7 +89,7 @@ namespace RNAssistant.Core.Models
         [JsonProperty("representation")] public string Representation { get; set; }
         [JsonProperty("text")] public string Text { get; set; }
         [JsonProperty("table", NullValueHandling = NullValueHandling.Ignore)] public ResourceTableBatch Table { get; set; }
-        [JsonProperty("tree", NullValueHandling = NullValueHandling.Ignore)] public ResourceJsonTree Tree { get; set; }
+        [JsonProperty("tree", NullValueHandling = NullValueHandling.Ignore)] public ResourceTree Tree { get; set; }
         [JsonProperty("coverage")] public ResourceCoverage Coverage { get; set; }
         [JsonProperty("sourceCoverage", NullValueHandling = NullValueHandling.Ignore)] public ResourceCoverage SourceCoverage { get; set; }
         [JsonProperty("sourceEndChar", NullValueHandling = NullValueHandling.Ignore)] public int? SourceEndChar { get; set; }
@@ -187,15 +187,15 @@ namespace RNAssistant.Core.Models
             string type, string scope, string pointer, int depth, int offset, int limit)
         {
             if (result?.Resource?.Reference?.IsExact != true || result.Representation != ResourceRepresentations.Tree ||
-                result.Tree == null || result.Coverage?.Kind != ResourceCoverageKinds.JsonPath ||
+                result.Tree == null || result.Coverage?.Kind != result.Tree.Coverage().Kind ||
                 result.Coverage.Path != pointer || result.Coverage.Start != offset ||
                 result.Coverage.End != (long)offset + result.Tree.ReturnedChildren ||
                 result.Tree.Pointer != pointer || result.Tree.Depth != depth ||
                 result.Tree.Offset != offset || result.Tree.Limit != limit || result.Complete ||
                 result.SourceComplete != false)
-                throw new System.InvalidOperationException("A JSON tree requires exact partial pointer coverage.");
+                throw new System.InvalidOperationException("A structured tree requires exact partial pointer coverage.");
             var projection = From(result, target, type, scope);
-            projection.Text = null; // The retained JSON body is an internal evidence payload.
+            projection.Text = null; // The retained tree body is an internal evidence payload.
             projection.Tree = result.Tree;
             projection.SelectionComplete = true;
             return projection;
