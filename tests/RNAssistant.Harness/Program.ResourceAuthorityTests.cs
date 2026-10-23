@@ -1130,14 +1130,15 @@ namespace RNAssistant.Harness
             WithTempPaths(paths =>
             {
                 var payloads = new ChatBlobStore(paths);
-                var arguments = "{\"content\":\"" + new string('x', 17 * 1024 * 1024) + "\"}";
+                var content = new string('x', 17 * 1024 * 1024);
+                var arguments = "{\"content\":\"" + content + "\"}";
                 var invocation = new ToolInvocation { ToolCallId = "large", ToolId = "common.html_workspace_write_file" };
-                var call = new ChatMessage { Role = "assistant", ProtocolMessage = true, ToolCallId = invocation.ToolCallId, ToolName = invocation.ToolId,
-                    ResponseProtocolVersion = ConversationResponse.ProtocolVersion,
-                    Content = "Large accepted write.", ToolResultProtocolVersion = ToolResultWire.CurrentVersion, ToolResultRole = "tool",
-                    AcceptedCallOrigin = new AcceptedToolCallOrigin("step", "attempt", 0), ToolCalls = new List<RNAssistant.Core.Llm.LlmToolCall> {
-                        new RNAssistant.Core.Llm.LlmToolCall { Id = invocation.ToolCallId, Name = invocation.ToolId, Type = "function", ArgumentsJson = arguments } },
-                    ArgumentPayload = PayloadRef.FromBlob(payloads.StoreText(arguments, "application/json")) };
+                var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall {
+                    Id = invocation.ToolCallId, Name = invocation.ToolId,
+                    Arguments = new Dictionary<string, object> { { "content", content } }
+                }, "Large accepted write.", "Save the complete HTML file.", null, "tool",
+                    new AcceptedToolCallOrigin("step", "attempt", 0));
+                call.ArgumentPayload = PayloadRef.FromBlob(payloads.StoreText(arguments, "application/json"));
                 AcceptedCallPayloadService.Externalize(call, payloads);
                 AssertTrue(call.Content.Length < 256 && call.ToolCalls.Count == 0, "durable accepted fact contains metadata only");
                 AssertEqual("Large accepted write.", call.AcceptedCallNarration, "archived call header retains exact narration");
