@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
@@ -20,20 +21,31 @@ namespace RNAssistant.Harness
                 // Match the reported clear-range read-back mismatch: the clear
                 // takes effect, but the mutation's own verification is inconclusive.
                 adapter.ExcelRangeMutationReadTransform = snapshot => { snapshot.Satisfied = false; return snapshot; };
-                const string read = "{\"message\":\"Проверяю фактическое содержимое диапазона.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.resources_read\",\"arguments\":{\"target\":\"Excel range: Data!A2:B2\",\"representation\":\"text\"}}]}";
-                const string clear = "{\"message\":\"Очищаю диапазон.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"excel.clear_range\",\"arguments\":{\"sheet\":\"Data\",\"address\":\"A2:B2\"}}]}";
+                System.Func<string, JObject, string, string> execute = (tool, arguments, message) =>
+                    ModelProtocolWire.WriteAcceptedCall("Perform the next requested operation.", message,
+                        new ConversationToolCall { Name = tool, Arguments = arguments });
+                var read = execute("common.resources_read", new JObject {
+                    ["target"] = "Excel range: Data!A2:B2", ["representation"] = "text" },
+                    "Проверяю фактическое содержимое диапазона.");
+                var clear = execute("excel.clear_range", new JObject {
+                    ["sheet"] = "Data", ["address"] = "A2:B2" }, "Очищаю диапазон.");
+                System.Func<string, string> loadSchema = id => execute(CapabilityToolCatalog.ReadToolId,
+                    new JObject { ["id"] = id }, "Загружаю схему инструмента.");
+                var premature = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                    "The clear has not been inspected yet.", "", results: new ConversationResultClaim[0]);
                 var responses = new Queue<string>(new[] {
                     read,
-                    LoadToolSchemaResponse("excel.clear_range"),
+                    loadSchema("excel.clear_range"),
                     clear,
-                    ModelProtocolWire.WriteAction("", ConversationResponse.DoneAction),
+                    premature,
                     clear,
                     read,
-                    LoadToolSchemaResponse("excel.add_sheet"),
-                    "{\"message\":\"Диапазон пуст. Создаю оставшийся лист.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"}}]}",
-                    ModelProtocolWire.WriteAction("Диапазон проверен чтением; лист Report создан.", ConversationResponse.DoneAction)
+                    loadSchema("excel.add_sheet"),
+                    execute("excel.add_sheet", new JObject { ["name"] = "Report" },
+                        "Диапазон пуст. Создаю оставшийся лист.")
                 });
                 var requests = new List<IReadOnlyList<ChatMessage>>();
+                var finishCount = 0;
                 var settings = new AppSettings {
                     AutoConfirmToolActions = true, ToolResultRole = role, AgentResponseMode = format,
                     ContextWindowOverrideTokens = 65536,
@@ -42,7 +54,24 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 var service = CreateConversationRunService(adapter, executor, (configuration, messages, options, stream, token) => {
                     requests.Add(messages.ToList());
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    if (responses.Count > 0)
+                        return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    if (++finishCount != 1) throw new System.InvalidOperationException("Unexpected extra finish request.");
+                    var clearResult = session.Messages.Last(item => item.ToolName == "excel.clear_range" &&
+                        item.ExecutionProgress?.Outcome == RNAssistant.Core.Tools.ToolExecutionOutcome.Unknown);
+                    var inspected = session.Messages.Last(item => item.ToolName == "common.resources_read" &&
+                        item.ExecutionProgress?.Outcome == RNAssistant.Core.Tools.ToolExecutionOutcome.Ok);
+                    var sheet = session.Messages.Last(item => item.ToolName == "excel.add_sheet" &&
+                        item.ExecutionProgress?.Outcome == RNAssistant.Core.Tools.ToolExecutionOutcome.Ok);
+                    var finish = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                        "Inspection observed an empty range and the sheet write completed.",
+                        "Диапазон проверен чтением; лист Report создан.", results: new[] {
+                            new ConversationResultClaim("Direct clear verification was uncertain; a later read observed an empty range.",
+                                new[] { clearResult.ToolCallId, inspected.ToolCallId }, ConversationAssessment.Unverified),
+                            new ConversationResultClaim("Report sheet was created.",
+                                new[] { sheet.ToolCallId }, ConversationAssessment.Satisfied)
+                        });
+                    return Task.FromResult(new LlmCompletionResult { Content = finish });
                 });
                 var result = service.ExecuteAsync(ChatModes.Agent, "Очисти Data!A2:B2 и создай Report.",
                     session, NewContext(adapter), settings,
@@ -50,8 +79,16 @@ namespace RNAssistant.Harness
 
                 AssertEqual(0, responses.Count, "the production loop continues through inspection and remaining work: " +
                     result.RunViewState.Reason + " / " + result.AssistantText);
-                AssertEqual("model_done", result.RunViewState.Reason, "done follows successful inspection");
+                AssertEqual(1, finishCount, "one evidence-citing finish follows inspection");
+                AssertEqual("model_finish", result.RunViewState.Reason, "finish follows successful inspection");
                 AssertEqual(RunViewHealth.Unknown, result.RunViewState.ExecutionHealth, "inspection never erases attempt uncertainty");
+                AssertEqual(RunGoalVerification.NotAssessed, result.RunViewState.GoalVerification,
+                    "model claims do not certify the user goal");
+                AssertEqual(2, result.RunViewState.ModelResults.Count, "finish retains both model assessments");
+                AssertEqual("unverified", result.RunViewState.ModelResults[0].Assessment,
+                    "the clear's direct verification remains uncertain");
+                AssertEqual("satisfied", result.RunViewState.ModelResults[1].Assessment,
+                    "the separate sheet result cites its verified write");
                 AssertEqual(string.Empty, adapter.ExcelCellText("Data", "A2"), "clear took effect despite unknown verification");
                 AssertTrue(adapter.HasSheet("Report"), "the remaining requested mutation executes");
                 AssertEqual(1, adapter.ExcelBackendCalls.Count(call => call == FakeOfficeAdapter.ExcelRangeMutationApplyOperation),
@@ -71,7 +108,7 @@ namespace RNAssistant.Harness
                 AssertEqual(2, loaded.Messages.Count(message => message.ToolName == "common.resources_read" &&
                     message.ExecutionProgress?.IndependentLocalRead == true), "durable read policy supports continuation replay");
                 AssertTrue(!loaded.Messages.Any(message => message.Role == "assistant" && message.ProtocolMessage &&
-                    message.Content == ModelProtocolWire.WriteAction("", ConversationResponse.DoneAction)),
+                    message.Content == premature),
                     "the rejected empty completion is not accepted history");
             });
         }

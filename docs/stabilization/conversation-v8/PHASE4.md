@@ -43,6 +43,10 @@ an irreparable obstacle without reporting success or replaying a tool.
   Context fixtures preserve paired call/result bodies, bounded archived source
   selection and recovery facts; the controlled Office loop tests duplicate-read
   feedback followed by discovery, corrected read and evidence-citing finish.
+  The fake-Excel unknown-effect case runs in both response modes and result roles:
+  a clear with inconclusive read-back is not replayed, inspection clears the
+  workflow guard, the remaining sheet write executes, and finish keeps the
+  clear unverified while runtime health remains unknown.
 - `node tests/web/run-view-state.test.js`: 7/7, including immutable model
   results, a visible partial outcome and no card for an ordinary answer.
 - `dotnet build src/RNAssistant.Cli/RNAssistant.Cli.csproj --no-restore`:

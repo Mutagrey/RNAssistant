@@ -10,6 +10,7 @@
     <Compile Remove="OfficeFinishBridge.cs" />
     <Compile Remove="AgentKernelFixtureBridge.cs" />
     <Compile Remove="ContextContinuityFixtureBridge.cs" />
+    <Compile Remove="UnknownEffectFixtureBridge.cs" />
     <Reference Include="RNAssistant.Harness">
       <HintPath>../RNAssistant.Harness/bin/Debug/net8.0/RNAssistant.Harness.dll</HintPath>
     </Reference>
