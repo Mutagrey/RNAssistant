@@ -444,7 +444,7 @@ namespace RNAssistant.Harness
                 { "PowerPoint", powerpoint },
                 { "Outlook", outlook }
             };
-            AssertEqual(15, excel.Count, "complete Excel tool count");
+            AssertEqual(16, excel.Count, "complete Excel tool count");
             AssertEqual(8, word.Count, "complete Word tool count");
             AssertEqual(8, powerpoint.Count, "complete PowerPoint tool count");
             AssertEqual(4, outlook.Count, "complete Outlook tool count");
@@ -465,6 +465,7 @@ namespace RNAssistant.Harness
                         foreach (var variant in variants)
                         {
                             var arguments = MinimalValidArguments(variant);
+                            if (tool.Id == "excel.format_range") arguments["numberFormat"] = "General";
                             string argumentError;
                             AssertTrue(ToolSchemaSupport.ValidateArguments(arguments, schema, true, out argumentError), tool.Id + " variant arguments: " + argumentError);
                             var command = new ToolInvocation { ToolId = tool.Id };
@@ -526,7 +527,14 @@ namespace RNAssistant.Harness
             if (string.Equals(typeName, "integer", StringComparison.OrdinalIgnoreCase)) return (int?)schema["minimum"] ?? 1;
             if (string.Equals(typeName, "number", StringComparison.OrdinalIgnoreCase)) return (double?)schema["minimum"] ?? 1d;
             var minLength = Math.Max(1, (int?)schema["minLength"] ?? 1);
-            return new string('x', minLength);
+            var fallback = new string('x', minLength);
+            var pattern = (string)schema["pattern"];
+            if (string.IsNullOrWhiteSpace(pattern) || System.Text.RegularExpressions.Regex.IsMatch(fallback, pattern))
+                return fallback;
+            foreach (var candidate in new[] { "A1", "A" })
+                if (candidate.Length >= minLength && System.Text.RegularExpressions.Regex.IsMatch(candidate, pattern))
+                    return candidate;
+            return fallback;
         }
 
         private static void PromptToolMetadataIsWeakModelFriendly()
