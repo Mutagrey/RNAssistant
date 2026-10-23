@@ -80,6 +80,8 @@ an irreparable obstacle without reporting success or replaying a tool.
 - The `protocol context:` group passes 6/6. Confirmation continuation keeps
   the exact run identity through the evidence-citing finish; accepted call IDs
   survive compaction without being regenerated.
+- Prompt-schema migration and default-prompt checks pass with the shared v8
+  action guidance; migrated settings complete direct Agent and Plan turns.
 
 The full Harness still has legacy v7 wire bodies and assertions outside these
 migrated groups; its complete test suite is not yet green.

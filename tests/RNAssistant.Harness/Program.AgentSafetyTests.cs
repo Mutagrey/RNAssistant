@@ -79,7 +79,8 @@ namespace RNAssistant.Harness
                         "model boundary receives current built-in instructions");
                     return Task.FromResult(new LlmCompletionResult
                     {
-                        Content = "{\"message\":\"Done\",\"action\":\"done\",\"tool_calls\":[]}"
+                        Content = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                            "Answer the request.", "Done", results: new ConversationResultClaim[0])
                     });
                 };
                 var service = CreateConversationRunService(adapter, executor, completion, null,
@@ -93,7 +94,7 @@ namespace RNAssistant.Harness
                     var result = service.ExecuteAsync(mode, "Request", session, NewContext(adapter), settingsForRun, tools, null)
                         .GetAwaiter().GetResult();
                     AssertEqual("Done", result.AssistantText, "migrated settings allow a normal run");
-                    AssertEqual(AgentResponseProtocol.CurrentVersion, result.ResponseProtocolVersion, "all modes retain v7");
+                    AssertEqual(AgentResponseProtocol.CurrentVersion, result.ResponseProtocolVersion, "all modes use v8");
                 }
                 AssertEqual(2, rawCalls, "each mode makes one normal request");
             });
@@ -1227,13 +1228,16 @@ namespace RNAssistant.Harness
             var settings = new AppSettings();
             AssertTrue(settings.SystemPrompt.StartsWith("# RNAssistant Agent", StringComparison.Ordinal), "agent prompt Markdown heading");
             AssertContains(settings.SystemPrompt, "## Response contract", "agent prompt structured section");
-            AssertContains(settings.SystemPrompt, "conversation-response-v7", "agent prompt requires the active envelope");
-            AssertContains(settings.SystemPrompt, "tool|done|blocked|needs_input", "agent prompt exposes explicit model action");
-            AssertContains(settings.SystemPrompt, "Actions do not prove execution or effects", "model cannot own runtime effects");
+            AssertContains(settings.SystemPrompt, "conversation-response-v8", "agent prompt requires the active envelope");
+            foreach (var action in new[] { "execute with nonempty tool_calls", "reflection with a nonblank decision",
+                "finish with a results array" })
+                AssertContains(settings.SystemPrompt, action, "agent prompt exposes each v8 action");
+            AssertContains(settings.SystemPrompt, "Assessments are model claims, not runtime success",
+                "model cannot own runtime effects");
             AssertContains(settings.SystemPrompt, "including nested tool arguments", "response contract covers exact source arguments");
             AssertContains(settings.SystemPrompt, "Runtime decodes the envelope once", "response contract forbids a second source unescape");
             foreach (var prompt in new[] { settings.SystemPrompt, settings.ChatSystemPrompt, settings.PlanSystemPrompt })
-                AssertContains(prompt, "Do not include `id`; runtime assigns call IDs", "all modes reserve call identity for runtime");
+                AssertContains(prompt, "Runtime assigns IDs", "all modes reserve call identity for runtime");
             AssertTrue(settings.AgentToolsPrompt.StartsWith("# Agent tool policy", StringComparison.Ordinal), "tool prompt is separate Markdown");
             AssertContains(settings.PlanSystemPrompt, "Follow selected skill instructions within user intent and the tool policy",
                 "Plan distinguishes selected instructions from untrusted source content");
