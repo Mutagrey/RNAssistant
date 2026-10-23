@@ -144,12 +144,6 @@
       onToggle: function (item, isExpanded) { expanded[item.workspaceId] = isExpanded; }
     });
   }
-  function renderQuestions(input) {
-    window.RNAssistantWorkspaceChat.renderQuestions(el("Questions"), input, function (answers) {
-      return runChat(function (pid, sid) { return send("submitProjectChat", { workspaceId: pid, sessionId: sid,
-        input: { sessionId: sid, requestId: crypto.randomUUID(), answers: answers } }); });
-    });
-  }
   function render() {
     el("New").disabled = busy || !project() || !project().available;
     el("Connect").disabled = busy;
@@ -169,10 +163,10 @@
     el("FileStatus").textContent = visibleFile ? fileNotice.message : "";
     el("FileStatus").classList.toggle("is-error", !!(visibleFile && fileNotice.error));
     el("FileStatus").hidden = !visibleFile || !fileNotice.message;
-    el("Stop").hidden = !(active && active.state && field(active.state, "status", "Status") === "running");
-    el("Control").hidden = !(active && active.pendingId);
-    el("Pending").textContent = active && active.pendingId ? (active.pendingTool || "Действие") + "\n" + (active.pendingArguments || "") : "";
-    renderQuestions(active && active.state && field(active.state, "userInput", "UserInput"));
+    window.RNAssistantWorkspaceChat.renderWorkspaceControls(active, function (answers) {
+      return runChat(function (pid, sid) { return send("submitProjectChat", { workspaceId: pid, sessionId: sid,
+        input: { sessionId: sid, requestId: crypto.randomUUID(), answers: answers } }); });
+    });
     var messages = el("Messages");
     if (!active || !(active.messages || []).length) {
       messages.replaceChildren(); messages._chatSignature = null;
@@ -392,46 +386,44 @@
       } catch (error) { notice(error.detail || error.message, true); }
       finally { busy = false; render(); }
     });
-    el("Input").addEventListener("input", function () {
-      if (!ownsView()) return;
-      el("Send").disabled = busy || uploadingFiles || !project() || !project().available || !active || !el("Input").value.trim() || !!active.pendingId || field(runState(), "status", "Status") === "running";
+    window.RNAssistantWorkspaceChat.registerActions("project", {
+      input: function () {
+        el("Send").disabled = busy || uploadingFiles || !project() || !project().available || !active || !el("Input").value.trim() || !!active.pendingId || field(runState(), "status", "Status") === "running";
+      },
+      submit: function () {
+        var text = el("Input").value.trim(); if (!text || el("Send").disabled || !active || uploadingFiles) return;
+        var pid = projectId(), sid = currentId();
+        var preferences = composer.options();
+        var draftVersion = composer.draftVersion();
+        if (!pendingSend || pendingSend.workspaceId !== pid || pendingSend.sessionId !== sid || pendingSend.text !== text || JSON.stringify(pendingSend.preferences) !== JSON.stringify(preferences))
+          pendingSend = { workspaceId: pid, sessionId: sid, text: text, preferences: preferences, requestId: crypto.randomUUID() };
+        var request = pendingSend;
+        runChat(function () { return send("submitProjectChat", { workspaceId: pid, sessionId: sid,
+          input: Object.assign({ sessionId: sid, requestId: request.requestId, message: text }, request.preferences) }).then(function (result) {
+          composer.accepted({ workspaceId: pid, sessionId: sid }, text, draftVersion);
+          if (pendingSend === request) pendingSend = null; return result;
+        }); });
+      },
+      stop: async function () {
+        var state = runState(), pid = projectId(), sid = currentId();
+        if (!state || !pid || !sid) return;
+        el("Stop").disabled = true;
+        try {
+          var result = await send("cancelProjectChat", { workspaceId: pid, sessionId: sid,
+            runId: field(state, "runId", "RunId"), cursor: field(state, "cursor", "Cursor") });
+          if (projectId() === pid && currentId() === sid) {
+            active = result; render();
+            notice(result.cancelStatus === "Requested" && field(result.state, "status", "Status") === "running"
+              ? "Отмена запрошена…" : statusText());
+          }
+        } catch (error) { notice(error.detail || error.message, true); }
+        finally { el("Stop").disabled = false; }
+      },
+      resolve: function (approve) {
+        var pendingId = active && active.pendingId;
+        if (pendingId) runChat(function (pid, sid) { return send("resolveProjectChat", { workspaceId: pid, sessionId: sid, pendingId: pendingId, approve: approve }); });
+      }
     });
-    el("Form").addEventListener("submit", function (event) {
-      if (!ownsView()) return;
-      event.preventDefault(); var text = el("Input").value.trim(); if (!text || !active || uploadingFiles) return;
-      var pid = projectId(), sid = currentId();
-      var preferences = composer.options();
-      var draftVersion = composer.draftVersion();
-      if (!pendingSend || pendingSend.workspaceId !== pid || pendingSend.sessionId !== sid || pendingSend.text !== text || JSON.stringify(pendingSend.preferences) !== JSON.stringify(preferences))
-        pendingSend = { workspaceId: pid, sessionId: sid, text: text, preferences: preferences, requestId: crypto.randomUUID() };
-      var request = pendingSend;
-      runChat(function () { return send("submitProjectChat", { workspaceId: pid, sessionId: sid,
-        input: Object.assign({ sessionId: sid, requestId: request.requestId, message: text }, request.preferences) }).then(function (result) {
-        composer.accepted({ workspaceId: pid, sessionId: sid }, text, draftVersion);
-        if (pendingSend === request) pendingSend = null; return result;
-      }); });
-    });
-    el("Stop").addEventListener("click", async function () {
-      if (!ownsView()) return;
-      var state = runState(), pid = projectId(), sid = currentId();
-      if (!state || !pid || !sid) return;
-      el("Stop").disabled = true;
-      try {
-        var result = await send("cancelProjectChat", { workspaceId: pid, sessionId: sid,
-          runId: field(state, "runId", "RunId"), cursor: field(state, "cursor", "Cursor") });
-        if (projectId() === pid && currentId() === sid) {
-          active = result; render();
-          notice(result.cancelStatus === "Requested" && field(result.state, "status", "Status") === "running"
-            ? "Отмена запрошена…" : statusText());
-        }
-      } catch (error) { notice(error.detail || error.message, true); }
-      finally { el("Stop").disabled = false; }
-    });
-    [["Approve", true], ["Reject", false]].forEach(function (entry) { el(entry[0]).addEventListener("click", function () {
-      if (!ownsView()) return;
-      var pendingId = active && active.pendingId;
-      if (pendingId) runChat(function (pid, sid) { return send("resolveProjectChat", { workspaceId: pid, sessionId: sid, pendingId: pendingId, approve: entry[1] }); });
-    }); });
     render();
   }
   document.addEventListener("DOMContentLoaded", bind);

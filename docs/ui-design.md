@@ -106,10 +106,11 @@ Markdown, пустое состояние и стили composer; workspace-spec
 переносят одну физическую ленту сообщений и одну форму ввода с теми же
 textarea/Send/Stop. Черновик и доступные действия переключаются по owner;
 Office сохраняет history/attachment/edit/queue действия, проект — загрузку
-файлов, плагин — source chat. Обработчики отправки и состояния пока принадлежат
-соответствующим владельцам; единый ChatView controller остаётся этапом 1b.
-Общие workspace status/approval/question controls имеют нейтральные ID и один
-lookup в `app-workspace-chat.js`; временный plugin alias к `projectChat*` удалён.
+файлов, плагин — source chat. Единый ChatView controller в `app-workspace-chat.js`
+владеет mount, общей формой, Enter/Send/Stop и общими workspace
+approval/question controls. Он направляет события текущему owner; тематические
+модули сохраняют transport и состояние своих чатов. Общие controls имеют
+нейтральные ID; временный plugin alias к `projectChat*` удалён.
 Разрозненные простые рендереры сообщений и вопросов в
 `app-plugins.js`/`app-project-chats.js` удалены.
 Разделитель предпросмотра и чата плагина использует общий `.splitter` и

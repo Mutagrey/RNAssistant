@@ -34,7 +34,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     });
     for (const file of ["vendor/purify.min.js", "vendor/marked.min.js", "vendor/highlight.min.js", "app-utils.js",
       "app-markdown.js", "app-run-view-state.js", "app-agent-model.js", "app-agent.js", "app-agent-activity.js",
-      "app-messages.js", "app-chat-state.js", "app-chat-composer.js", "app-attachments.js", "app-chat-inbox.js", "app-chat-run.js", "app-chat.js"])
+      "app-messages.js", "app-chat-state.js", "app-chat-composer.js", "app-attachments.js", "app-chat-inbox.js", "app-chat-run.js", "app-chat.js", "app-workspace-chat.js"])
       await page.addScriptTag({ content: read("js/" + file) });
     await page.evaluate(() => {
       window.renderAgentPlanDock = window.renderChatSessions = window.bindAttachmentActions = () => {};
@@ -66,7 +66,8 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
         const box = $("messages"); box.dispatchEvent(new WheelEvent("wheel", { deltaY: -500 }));
         box.scrollTop -= 500; box.dispatchEvent(new Event("scroll"));
       });
-      await page.locator("#sendButton").click();
+      if (delivery === "Queue") await page.locator("#chatInput").press("Enter");
+      else await page.locator("#sendButton").click();
       await page.waitForFunction(() => !!window.acknowledge);
       const receiptBeforeAck = await page.evaluate(() => {
         const bubble = document.querySelector(".inbox-message").getBoundingClientRect();

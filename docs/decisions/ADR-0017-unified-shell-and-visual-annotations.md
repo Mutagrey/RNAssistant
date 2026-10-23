@@ -194,7 +194,9 @@ mode/reasoning, файловую ссылку, retry с тем же request ID, 
 физический workspace transcript/composer. Следующий срез подключил Office к
 тому же in-memory draft owner и versioned acknowledgement: late ack не стирает
 поздний ввод, включая идентичный текст и переключение чатов. Следующий срез
-объединил физическую ленту Office/Project/Plugin с isolation фоновых render;
-Office composer, owner-neutral selectors и остальная часть 1b ещё открыты.
-Остальные этапы выполняются
+объединил физическую ленту Office/Project/Plugin с isolation фоновых render.
+Последующие срезы перенесли общий composer и нейтральные controls, а единый
+ChatView controller получил mount, маршрутизацию формы и общие workspace
+approval/questions. Этап 1b завершён host-neutral; Windows/Office/WebView2
+qualification остаётся открытой. Остальные этапы выполняются
 последовательно по своим gates. Текущее evidence — в [PROGRESS](../stabilization/PROGRESS.md).

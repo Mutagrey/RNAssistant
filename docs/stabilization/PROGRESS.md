@@ -11,18 +11,20 @@ the estimate neither proves view-body delivery nor allocates global request
 overhead or measured provider usage. Focused Harness/Web checks pass
 host-neutral. Windows/Office/WebView2 and remaining attribution cases are open.
 
-## Unified Shell single composer (1b continuation) — 2026-10-23
+## Unified Shell ChatView controller (1b host-neutral) — 2026-10-23
 
 Owner: application/chat UI. Office, Project and Plugin now move one physical
 composer form and input with their shared transcript. Owner-scoped handlers keep
 Office edit, attachments and queue/steer, project file upload and plugin source
 chat; switching preserves separate draft identities, and background Office
-rendering cannot overwrite workspace input. Shared workspace status, approval
-and question controls now have owner-neutral IDs and one lookup in
-`app-workspace-chat.js`; the plugin ID alias is removed. Focused Chrome layout,
-draft, delivery, attachment and product-preview checks pass. Separate send/view
-controllers remain for the next 1b cutover. Windows/Office/WebView2 are not
-qualified.
+rendering cannot overwrite workspace input. `app-workspace-chat.js` now owns the
+single mount, composer, primary form actions and shared workspace
+approval/question controls. Office, Project and Plugin register owner-specific
+send/cancel/resolve behavior; the controller routes input, Enter, Send, Stop and
+approval by the mounted owner. Focused Chrome layout, draft, delivery,
+attachment, approval/question routing and product-preview checks pass. The 1b
+controller cutover is complete host-neutral; Windows/Office/WebView2 are not
+qualified. Host-recreation draft recovery remains a later shell gate.
 
 ## Resource Context retained text-body estimates — 2026-10-23
 
@@ -50,15 +52,15 @@ remain open in BACKLOG.
 
 ## Unified Shell single transcript (1b continuation) — 2026-10-23
 
-Owner: application/chat UI. Office, Project and Plugin now mount one physical
+Owner: application/chat UI. This earlier slice mounted one physical
 message list. Returning to Office rebuilds its history and restores the reading
 anchor; its renderer keeps paging and live output. Background Office updates
-cannot replace a mounted workspace transcript. Project/plugin retain their
-shared composer, while Office still has its richer separate composer and controls.
+cannot replace a mounted workspace transcript. At this checkpoint Project/Plugin
+had a shared composer, while Office still had a separate composer and controls.
 Focused Chrome chat layout, plugin,
-product preview and Office transcript/delivery checks pass. The remaining 1b
-composer/view-controller consolidation and Windows/Office/WebView2 qualification
-are open.
+product preview and Office transcript/delivery checks passed. Composer/controller
+consolidation was still open at this checkpoint; Windows/Office/WebView2
+qualification remains open.
 
 ## Unified Shell Office draft acknowledgement (1b continuation) — 2026-10-23
 
@@ -68,8 +70,8 @@ identities. Office input and attachment changes advance the draft version;
 accepted sends clear only the submitted version and remove only submitted
 attachments. Late acknowledgements preserve later text even when it is identical,
 including after switching chats. Focused inbox, attachment, chat-navigation and
-Chrome delivery checks pass. The physical Office ChatView is still separate and
-the full 1b mount remains open. Windows/Office/WebView2 remain unqualified.
+Chrome delivery checks passed. At this checkpoint the physical Office ChatView
+was still separate; Windows/Office/WebView2 remain unqualified.
 
 ## Resource Context paginated retained view inventory — 2026-10-23
 
@@ -104,8 +106,9 @@ list were removed; both surfaces keep their own navigation and workspace actions
 Background updates cannot write into the other surface's mounted chat, and source
 history remains available during a run. The shared status, approval and question
 controls now use workspace IDs; the temporary plugin ID adapter is removed.
-Office retains its richer actions; full 1b controller consolidation,
-host-recreation draft recovery and later shell work remain open.
+Office retains its richer actions. At this checkpoint 1b controller
+consolidation was still open; host-recreation draft recovery and later shell
+work remain open.
 
 Chrome checks pass for shared draft/mount, workspace layout and history navigation,
 plugin preview, product mock and Office input delivery. The screenshots were

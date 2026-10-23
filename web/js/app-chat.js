@@ -97,33 +97,24 @@ function bindChatActions() {
   });
   bindComposerPickers();
   $("compactContextButton").addEventListener("click", compactChatContext);
-  $("stopButton").addEventListener("click", function () { if (!window.RNAssistantWorkspaceChat || window.RNAssistantWorkspaceChat.owner() === "office") stopActiveSend(); });
-  $("clearInputButton").addEventListener("click", function () { if (!window.RNAssistantWorkspaceChat || window.RNAssistantWorkspaceChat.owner() === "office") setChatInputText("", true); });
   $("focusReplyButton").addEventListener("click", function () { $("chatInput").focus(); });
   $("cancelMessageEditButton").addEventListener("click", cancelMessageEdit);
-  $("chatInput").addEventListener("input", function () {
-    if (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office") return;
-    updateComposerInputState();
-    if (!hasActiveMessageEdit()) captureChatDraft(state.activeChatId, true);
-  });
   window.addEventListener("resize", resizeChatInput);
-  $("chatInput").addEventListener("keydown", function (event) {
-    if (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office") return;
-    if (event.key === "Escape" && hasActiveMessageEdit() && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
-      event.preventDefault();
-      cancelMessageEdit();
-      return;
-    }
-    if (event.key === "Enter" && !event.isComposing && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
-      event.preventDefault();
-      submitChatInput();
+  window.RNAssistantWorkspaceChat.registerActions("office", {
+    submit: submitChatInput,
+    stop: stopActiveSend,
+    clear: function () { setChatInputText("", true); },
+    input: function () {
+      updateComposerInputState();
+      if (!hasActiveMessageEdit()) captureChatDraft(state.activeChatId, true);
+    },
+    escape: function (event) {
+      if (hasActiveMessageEdit() && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
+        event.preventDefault(); cancelMessageEdit();
+      }
     }
   });
-  $("chatForm").addEventListener("submit", function (event) {
-    if (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office") return;
-    event.preventDefault();
-    submitChatInput();
-  });
+  window.RNAssistantWorkspaceChat.bindActions();
   if (typeof initChatInbox === "function") initChatInbox();
   updateComposerInputState();
 }

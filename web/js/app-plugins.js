@@ -129,8 +129,7 @@
     if(open){window.RNAssistantWorkspaceChat.mount('plugin',el('Chat'));
       if(chat)renderChat();
       else{chatComposer.select(null);chatComposer.lock(true);el('Messages').replaceChildren();el('Messages')._chatSignature=null;
-        el('ChatTitle').textContent='Чат исходников';el('Stop').hidden=true;el('Control').hidden=true;
-        window.RNAssistantWorkspaceChat.renderQuestions(el('Questions'),null,function(){});
+        el('ChatTitle').textContent='Чат исходников';window.RNAssistantWorkspaceChat.renderWorkspaceControls(null);
         el('Send').disabled=true;chatStatus('Загружаю чат…');}
       refreshSplitPanes();}
     if(refresh&&open&&!browsingRelease){if(!view||!view.preview)checkAndPreview();else pollSource();}}
@@ -159,10 +158,8 @@
     chatStatus(chat.pendingId?'Нужно подтвердить действие агента.':
       s.interruptedEffectPossible?'Возможное изменение требует проверки. Не повторяйте действие автоматически.':
       (s.Status||s.status)==='interrupted'?'Выполнение прервано. Проверьте ход работы.':running?'Агент работает…':'');
-    el('Stop').hidden=!running;el('Control').hidden=!chat.pendingId;
-    el('Pending').textContent=chat.pendingId ? chat.pendingTool+'\n'+chat.pendingArguments : '';
     chatComposer.select({workspaceId:chat.project.workspaceId,sessionId:chat.sessionId},s);
-    window.RNAssistantWorkspaceChat.renderQuestions(el('Questions'),s.userInput||s.UserInput,function(answers){
+    window.RNAssistantWorkspaceChat.renderWorkspaceControls(chat,function(answers){
       return chatAction(function(workspaceId,sessionId){return send('submitProjectChat',{workspaceId:workspaceId,sessionId:sessionId,input:{sessionId:sessionId,requestId:crypto.randomUUID(),answers:answers}});});});
     controls();
   }
@@ -411,27 +408,29 @@
       event.preventDefault();event.stopPropagation();
     });
     chatComposer=window.RNAssistantWorkspaceChat.bindComposer(el('Form'));
-    el('Input').addEventListener('input',function(){if(ownsChat())controls();});
     el('ChatNew').onclick=createChat;
     el('ChatHistory').onclick=openHistory;
     document.addEventListener('pointerdown',function(event){if(!event.target.closest('.plugin-history-menu'))closeHistory();});
-    el('Form').onsubmit=function(event){if(!ownsChat())return;event.preventDefault();var message=el('Input').value.trim();
-      if(!message||el('Send').disabled||!chat)return;
-      var sessionId=chat.sessionId,workspaceId=chat.project.workspaceId,options=chatComposer.options(),draftVersion=chatComposer.draftVersion();
-      if(!pendingChatSend||pendingChatSend.sessionId!==sessionId||pendingChatSend.message!==message||JSON.stringify(pendingChatSend.options)!==JSON.stringify(options))
-        pendingChatSend={sessionId:sessionId,message:message,options:options,requestId:crypto.randomUUID()};
-      var request=pendingChatSend;
-      chatAction(function(workspaceId){return send('submitProjectChat',{workspaceId:workspaceId,sessionId:sessionId,
-        input:Object.assign({sessionId:sessionId,message:message,requestId:request.requestId},request.options)}).then(function(result){
-        chatComposer.accepted({workspaceId:workspaceId,sessionId:sessionId},message,draftVersion);
-        if(pendingChatSend===request)pendingChatSend=null;return result;});});};
-    el('Stop').onclick=async function(){if(!ownsChat()||!chat||!selected)return;
-      var sessionId=chat.sessionId,workspaceId=chat.project.workspaceId,current=chatEpoch,s=chat.state;
-      try{var result=await send('cancelProjectChat',{workspaceId:workspaceId,sessionId:sessionId,runId:s.RunId||s.runId,cursor:s.Cursor||s.cursor});
-        if(chat&&chat.sessionId===sessionId&&current===chatEpoch){chat=result;renderChat();}}
-      catch(error){if(current===chatEpoch)chatStatus(error.message);}};
-    ['Approve','Reject'].forEach(function(id){el(id).onclick=function(){if(!ownsChat()||!chat)return;var pending=chat.pendingId;
-      chatAction(function(workspaceId,sessionId){return send('resolveProjectChat',{workspaceId:workspaceId,sessionId:sessionId,pendingId:pending,approve:id==='Approve'});});};});
+    window.RNAssistantWorkspaceChat.registerActions('plugin',{
+      input: function(){controls();},
+      submit: function(){var message=el('Input').value.trim();
+        if(!message||el('Send').disabled||!chat)return;
+        var sessionId=chat.sessionId,options=chatComposer.options(),draftVersion=chatComposer.draftVersion();
+        if(!pendingChatSend||pendingChatSend.sessionId!==sessionId||pendingChatSend.message!==message||JSON.stringify(pendingChatSend.options)!==JSON.stringify(options))
+          pendingChatSend={sessionId:sessionId,message:message,options:options,requestId:crypto.randomUUID()};
+        var request=pendingChatSend;
+        chatAction(function(workspaceId){return send('submitProjectChat',{workspaceId:workspaceId,sessionId:sessionId,
+          input:Object.assign({sessionId:sessionId,message:message,requestId:request.requestId},request.options)}).then(function(result){
+          chatComposer.accepted({workspaceId:workspaceId,sessionId:sessionId},message,draftVersion);
+          if(pendingChatSend===request)pendingChatSend=null;return result;});});},
+      stop: async function(){if(!chat||!selected)return;
+        var sessionId=chat.sessionId,workspaceId=chat.project.workspaceId,current=chatEpoch,s=chat.state;
+        try{var result=await send('cancelProjectChat',{workspaceId:workspaceId,sessionId:sessionId,runId:s.RunId||s.runId,cursor:s.Cursor||s.cursor});
+          if(chat&&chat.sessionId===sessionId&&current===chatEpoch){chat=result;renderChat();}}
+        catch(error){if(current===chatEpoch)chatStatus(error.message);}},
+      resolve: function(approve){if(!chat||!chat.pendingId)return;var pending=chat.pendingId;
+        chatAction(function(workspaceId,sessionId){return send('resolveProjectChat',{workspaceId:workspaceId,sessionId:sessionId,pendingId:pending,approve:approve});});}
+    });
     el('VendorsRefresh').onclick=function(){run(async function(){var catalog=await send('getPluginVendors',{});el('Vendors').replaceChildren();catalog.items.forEach(function(item){var row=document.createElement('p');row.textContent=item.id+' @ '+item.version+' · '+item.license;el('Vendors').appendChild(row);});status('Каталог обновлён. Проверка хешей выполняется при разрешении зависимости.');});};
     el('VendorImport').onclick=function(){run(async function(){var result=await send('importPluginVendor',{rootPath:el('VendorRoot').value});status('Добавлен '+result.id+' @ '+result.version);});};controls();
   }

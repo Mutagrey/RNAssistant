@@ -1,11 +1,40 @@
 (function () {
   "use strict";
   var selectedSessions = new Map();
-  var activeOwner = "office", sharedComposer = null;
+  var activeOwner = "office", sharedComposer = null, actions = Object.create(null), actionsBound = false;
   var viewNodes = { Messages: "messages", Form: "chatForm", Input: "chatInput", Send: "sendButton", Stop: "stopButton",
     Notice: "workspaceChatNotice", Control: "workspaceChatControl", Pending: "workspaceChatPending",
     Approve: "workspaceChatApprove", Reject: "workspaceChatReject", Questions: "workspaceChatQuestions" };
   function node(name) { return viewNodes[name] ? document.getElementById(viewNodes[name]) : null; }
+  function registerActions(owner, handlers) {
+    if (owner !== "office" && owner !== "project" && owner !== "plugin") throw new Error("Unknown chat owner: " + owner);
+    actions[owner] = handlers;
+  }
+  function dispatch(name, value) {
+    var handler = actions[activeOwner] && actions[activeOwner][name];
+    if (handler) handler(value);
+  }
+  function bindActions() {
+    if (actionsBound) return;
+    actionsBound = true;
+    var form = node("Form"), input = node("Input");
+    form.addEventListener("submit", function (event) { event.preventDefault(); dispatch("submit"); });
+    input.addEventListener("input", function () { dispatch("input"); });
+    input.addEventListener("keydown", function (event) {
+      if (event.key === "Escape") dispatch("escape", event);
+      if (!event.defaultPrevented && event.key === "Enter" && !event.isComposing &&
+          !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
+        event.preventDefault(); dispatch("submit");
+      }
+    });
+    node("Stop").addEventListener("click", function () { dispatch("stop"); });
+    document.getElementById("clearInputButton").addEventListener("click", function () {
+      if (activeOwner === "office") dispatch("clear");
+      else { input.value = ""; input.dispatchEvent(new Event("input", { bubbles: true })); input.focus(); }
+    });
+    node("Approve").addEventListener("click", function () { dispatch("resolve", true); });
+    node("Reject").addEventListener("click", function () { dispatch("resolve", false); });
+  }
   function mount(owner, container) {
     var view = document.getElementById("workspaceChatView");
     var list = document.getElementById("messages");
@@ -144,6 +173,15 @@
       finally { send.disabled = false; }
     };
   }
+  function renderWorkspaceControls(chat, submitQuestions) {
+    if (activeOwner === "office") return;
+    var snapshot = field(chat, "state") || {}, pending = field(chat, "pendingId");
+    node("Stop").hidden = field(snapshot, "status") !== "running";
+    node("Control").hidden = !pending;
+    node("Pending").textContent = pending ? (field(chat, "pendingTool") || "Действие") + "\n" +
+      (field(chat, "pendingArguments") || "") : "";
+    renderQuestions(node("Questions"), field(snapshot, "userInput"), submitQuestions || function () {});
+  }
   function bindComposer(form, options) {
     if (sharedComposer) { if (options && options.onFiles) sharedComposer.attachFiles(options); return sharedComposer; }
     var input = form.querySelector("textarea"), toolbar = form.querySelector(".composer-toolbar"), actions = form.querySelector(".composer-actions");
@@ -167,10 +205,6 @@
         activeRun ? "В этом запуске Office-инструменты недоступны" : "Новый запуск будет привязан к текущему документу Office, если он открыт";
     }
     var clear = document.getElementById("clearInputButton");
-    clear.addEventListener("click", function () {
-      if (activeOwner === "office") return;
-      input.value = ""; input.dispatchEvent(new Event("input", { bubbles: true })); input.focus();
-    });
     var quick = document.createElement("div"); quick.className = "composer-quick-actions workspace-composer-only";
     var picker = document.createElement("details"); picker.className = "composer-picker composer-add-picker";
     picker.id = "workspaceComposerPicker";
@@ -219,12 +253,6 @@
       label.textContent = field(state.settings, "model") || "Модель";
     }
     input.addEventListener("input", function () { if (activeOwner !== "office") { save(); update(); } });
-    input.addEventListener("keydown", function (event) {
-      if (activeOwner === "office") return;
-      if (event.key === "Enter" && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey && !event.isComposing) {
-        event.preventDefault(); form.requestSubmit();
-      }
-    });
     form.addEventListener("keydown", function (event) { if (event.key === "Escape" && picker.open) { picker.open = false; trigger.focus(); } });
     document.addEventListener("pointerdown", function (event) { if (!picker.contains(event.target)) picker.open = false; });
     window.addEventListener("resize", update);
@@ -292,8 +320,9 @@
     timer = setTimeout(tick, 2000);
     return stop;
   }
-  window.RNAssistantWorkspaceChat = { renderMessages: renderMessages, renderQuestions: renderQuestions, bindComposer: bindComposer,
+  window.RNAssistantWorkspaceChat = { renderMessages: renderMessages, renderWorkspaceControls: renderWorkspaceControls, bindComposer: bindComposer,
     mount: mount, owner: function () { return activeOwner; }, node: node, messages: function () { return node("Messages"); },
+    registerActions: registerActions, bindActions: bindActions,
     rememberSession: rememberSession, selectedSession: function (workspaceId) { return selectedSessions.get(workspaceId); },
     watchTitle: watchTitle };
 }());
