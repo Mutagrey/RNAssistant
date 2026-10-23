@@ -1,7 +1,8 @@
 # Unified Shell и Visual Annotator: аудит фазы 0
 
 Дата: 2026-10-23. Owner: application/chat UI; resource, storage и Office owners
-сохраняют свои границы. Статус: аудит выполнен, реализация не начата.
+сохраняют свои границы. Статус: baseline-аудит фазы 0 до реализации 1a;
+текущее состояние — в [PROGRESS](../stabilization/PROGRESS.md).
 Решения для согласования — [RFC / ADR-0017](../decisions/ADR-0017-unified-shell-and-visual-annotations.md).
 
 ## Основание и границы проверки

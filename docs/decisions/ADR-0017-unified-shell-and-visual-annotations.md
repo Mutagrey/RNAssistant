@@ -1,6 +1,6 @@
 # ADR-0017 / RFC: общий ChatView, shell и visual annotations
 
-Дата: 2026-10-23. Статус: **предложение после фазы 0, ожидает принятия**.
+Дата: 2026-10-23. Статус: **принят для поэтапной реализации; срез 1a выполнен**.
 Owner: application/chat UI. Основание: [аудит с кодом и browser evidence](../architecture/visual-annotator-audit.md).
 Это последовательность ограниченных изменений, не новый runtime-контракт.
 После реализации поведение переносится в canonical docs, этот RFC остаётся
@@ -186,7 +186,9 @@ workspace paging; native Frame injection и DOM→source mapping для generate
 одиночный `undefined.create` в rapid-preview probe. Эти вопросы не требуют нового
 runtime или блокировки конкретного исправления общего draft в фазе 1a.
 
-Согласование этого RFC разрешает сначала 1a. Закрытие 1a требует показать diff,
-проверку одного draft через обе поверхности и перечень удалённых дубликатов;
-дальнейшие этапы выполняются последовательно по gates, без объявления всего плана
-завершённым после одной UI-правки.
+Пользователь принял RFC после аудита. Срез 1a удалил оба локальных `drafts Map`:
+Project и Plugin теперь читают одно состояние по `workspaceId/sessionId` в
+существующем `state.chatDrafts`. Browser-проверка охватывает общий текст,
+mode/reasoning, файловую ссылку, retry с тем же request ID, двойной submit и
+поздний acknowledgement. Следующий шаг — 1b; оставшиеся этапы выполняются
+последовательно по своим gates. Текущее evidence — в [PROGRESS](../stabilization/PROGRESS.md).

@@ -70,7 +70,14 @@
   }
   function bindComposer(form, options) {
     var input = form.querySelector("textarea"), toolbar = form.querySelector(".composer-toolbar"), actions = form.querySelector(".composer-actions");
-    var drafts = new Map(), current = null, mode = "agent", reasoning = false, locked = false;
+    var current = null, loaded = null, mode = "agent", reasoning = false, locked = false;
+    var draftStore = window.RNAssistantChatDrafts;
+    function sameTarget(left, right) {
+      return !!left && !!right && left.workspaceId === right.workspaceId && left.sessionId === right.sessionId;
+    }
+    function save() {
+      if (current) loaded = draftStore.saveWorkspace(current, { text: input.value, mode: mode, reasoning: reasoning });
+    }
     var note = toolbar.querySelector(".plugin-chat-context-note, .project-chat-context-note");
     function showOfficeContext(snapshot) {
       if (!note) return;
@@ -106,12 +113,12 @@
       quick.appendChild(fileInput);
     }
     var plan = document.getElementById("chatPlanButton").cloneNode(true); plan.removeAttribute("id");
-    plan.onclick = function () { if (!locked) { mode = mode === "plan" ? "agent" : "plan"; update(); picker.open = false; } };
+    plan.onclick = function () { if (!locked) { mode = mode === "plan" ? "agent" : "plan"; save(); update(); picker.open = false; } };
     menu.appendChild(plan); picker.append(trigger, menu); quick.appendChild(picker); toolbar.insertBefore(quick, toolbar.firstChild);
     var model = document.createElement("button"); model.type = "button"; model.className = "composer-picker-trigger workspace-chat-model";
     model.title = "Модель из общих настроек"; model.onclick = function () { switchTab("settings"); };
     var label = document.createElement("span"); label.className = "composer-picker-trigger-label"; model.appendChild(label);
-    var think = button("Включить reasoning", "composer-reasoning-button", "bulb", function () { if (!locked) { reasoning = !reasoning; update(); } });
+    var think = button("Включить reasoning", "composer-reasoning-button", "bulb", function () { if (!locked) { reasoning = !reasoning; save(); update(); } });
     actions.prepend(model, think);
     function update() {
       clear.hidden = !input.value; resizeComposerInput(input);
@@ -121,7 +128,7 @@
       think.setAttribute("aria-label", reasoning ? "Выключить reasoning" : "Включить reasoning"); think.disabled = locked;
       label.textContent = field(state.settings, "model") || "Модель";
     }
-    input.addEventListener("input", update);
+    input.addEventListener("input", function () { save(); update(); });
     input.addEventListener("keydown", function (event) {
       if (event.key === "Enter" && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey && !event.isComposing) {
         event.preventDefault(); form.requestSubmit();
@@ -132,29 +139,44 @@
     window.addEventListener("resize", update);
     update();
     return {
-      select: function (key, snapshot) {
+      select: function (target, snapshot) {
         showOfficeContext(snapshot);
-        if (current === key) { update(); return; }
-        if (current) drafts.set(current, { text: input.value, mode: mode, reasoning: reasoning });
-        current = key; var saved = drafts.get(key);
+        var next = target && target.workspaceId && target.sessionId
+          ? { workspaceId: target.workspaceId, sessionId: target.sessionId } : null;
+        var same = sameTarget(current, next);
+        current = next;
+        var saved = draftStore.readWorkspace(next);
+        if (same && saved === loaded) { update(); return; }
+        loaded = saved;
         input.value = saved ? saved.text : ""; mode = saved ? saved.mode : field(snapshot, "mode") || "agent";
         reasoning = saved ? saved.reasoning : !!field(field(snapshot, "modelConfiguration"), "reasoningEnabled"); update();
       },
       options: function () { return { Mode: mode, ReasoningEnabled: reasoning }; },
+      draftVersion: function () {
+        if (!current) return null;
+        var saved = draftStore.readWorkspace(current);
+        if (saved !== loaded || !saved || saved.text !== input.value || saved.mode !== mode || saved.reasoning !== reasoning) save();
+        return loaded.version;
+      },
       lock: function (value) { locked = value; update(); },
-      append: function (key, line) {
-        if (current === key) {
+      append: function (target, line) {
+        if (sameTarget(current, target)) {
+          var latest = draftStore.readWorkspace(current);
+          if (latest !== loaded) this.select(target);
           input.value = input.value.trim() ? input.value.replace(/\s*$/, "") + "\n" + line : line;
           input.dispatchEvent(new Event("input", { bubbles: true }));
           return;
         }
-        var saved = drafts.get(key) || { text: "", mode: "agent", reasoning: false };
-        saved.text = saved.text.trim() ? saved.text.replace(/\s*$/, "") + "\n" + line : line;
-        drafts.set(key, saved);
+        var saved = draftStore.readWorkspace(target) || { text: "", mode: "agent", reasoning: false };
+        draftStore.saveWorkspace(target, { text: saved.text.trim() ? saved.text.replace(/\s*$/, "") + "\n" + line : line,
+          mode: saved.mode, reasoning: saved.reasoning });
       },
-      accepted: function (key, text) {
-        if (current === key && input.value.trim() === text) { input.value = ""; input.dispatchEvent(new Event("input", { bubbles: true })); }
-        else if (drafts.has(key) && drafts.get(key).text.trim() === text) drafts.get(key).text = "";
+      accepted: function (target, text, version) {
+        var previous = draftStore.readWorkspace(target);
+        var cleared = draftStore.acceptWorkspace(target, text, version);
+        if (cleared && sameTarget(current, target) && loaded === previous) {
+          input.value = ""; loaded = cleared; update();
+        }
       }
     };
   }

@@ -53,7 +53,7 @@
       completing = true;
       var result = await send("completeProjectChatFileUpload", { workspaceId: target.workspaceId,
         sessionId: target.sessionId, leaseId: lease.leaseId });
-      if (result.modelReadable) composer.append(target.sessionId, "Файл проекта: " + result.relativePath);
+      if (result.modelReadable) composer.append(target, "Файл проекта: " + result.relativePath);
       fileStatus(target, "Файл добавлен в проект: " + result.relativePath +
         (result.modelReadable ? "" : ". Его содержимое пока недоступно для чтения моделью в проектном чате."));
       return true;
@@ -144,7 +144,7 @@
   }
   function render() {
     if (composer) {
-      composer.select(currentId(), active && active.state);
+      composer.select({ workspaceId: projectId(), sessionId: currentId() }, active && active.state);
       composer.lock(busy || uploadingFiles || !active || !!active.pendingId || field(runState(), "status", "Status") === "running");
     }
 
@@ -259,6 +259,7 @@
   async function remove(entry, chat) {
     if (!window.confirm("Удалить чат «" + chat.Title + "»? История этого чата будет удалена; файлы проекта останутся.")) return;
     try { catalog = await send("deleteProjectChat", { workspaceId: entry.workspaceId, sessionId: chat.Id });
+      window.RNAssistantChatDrafts.forgetWorkspace({ workspaceId: entry.workspaceId, sessionId: chat.Id });
       if (window.RNAssistantWorkspaceChat.selectedSession(entry.workspaceId) === chat.Id)
         window.RNAssistantWorkspaceChat.rememberSession(entry.workspaceId, null);
       if (projectId() === entry.workspaceId && currentId() === chat.Id) active = null;
@@ -269,6 +270,9 @@
   async function removeHistory(entry) {
     if (!window.confirm("Удалить историю проекта «" + entry.name + "» и убрать его из дерева? Папка и файлы останутся.")) return;
     try { catalog = await send("deleteProjectHistory", { workspaceId: entry.workspaceId });
+      (entry.chats || []).forEach(function (chat) {
+        window.RNAssistantChatDrafts.forgetWorkspace({ workspaceId: entry.workspaceId, sessionId: chat.Id });
+      });
       window.RNAssistantWorkspaceChat.rememberSession(entry.workspaceId, null);
       if (projectId() === entry.workspaceId) {
         ++serial; active = null; pendingSend = null;
@@ -372,12 +376,14 @@
       event.preventDefault(); var text = el("Input").value.trim(); if (!text || !active || uploadingFiles) return;
       var pid = projectId(), sid = currentId();
       var preferences = composer.options();
+      var draftVersion = composer.draftVersion();
       if (!pendingSend || pendingSend.workspaceId !== pid || pendingSend.sessionId !== sid || pendingSend.text !== text || JSON.stringify(pendingSend.preferences) !== JSON.stringify(preferences))
         pendingSend = { workspaceId: pid, sessionId: sid, text: text, preferences: preferences, requestId: crypto.randomUUID() };
       var request = pendingSend;
       runChat(function () { return send("submitProjectChat", { workspaceId: pid, sessionId: sid,
         input: Object.assign({ sessionId: sid, requestId: request.requestId, message: text }, request.preferences) }).then(function (result) {
-        composer.accepted(sid, text); if (pendingSend === request) pendingSend = null; return result;
+        composer.accepted({ workspaceId: pid, sessionId: sid }, text, draftVersion);
+        if (pendingSend === request) pendingSend = null; return result;
       }); });
     });
     el("Stop").addEventListener("click", async function () {

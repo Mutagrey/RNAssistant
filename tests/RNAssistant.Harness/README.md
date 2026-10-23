@@ -192,6 +192,9 @@ the shared panel buttons (geometry, Enter/Space/Escape, pointer focus after keyb
 plugin name/icon/color editing and creation (including rendered SVG color pixels and neutral defaults following the theme), new source chats, navigation through the main history tree,
 draft restoration and late replies after switching chats.
 `RNA_CHAT_SCREENSHOTS` saves the visual review captures.
+`node tests/web/workspace-shared-draft.test.js` checks one project/plugin session
+draft and preferences across both screens, appended file reference, failed retry
+identity, double submit and late acknowledgement with identical later text.
 `node tests/web/splitter-preferences.test.js` checks the shared divider interaction:
 frame coalescing, commit/cancel, capture cleanup, keyboard controls and ARIA values.
 

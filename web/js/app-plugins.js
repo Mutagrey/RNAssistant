@@ -149,7 +149,7 @@
       (s.Status||s.status)==='interrupted'?'Выполнение прервано. Проверьте ход работы.':running?'Агент работает…':'';
     el('Stop').hidden=!running;el('Approval').hidden=!chat.pendingId;
     el('ApprovalText').textContent=chat.pendingId ? chat.pendingTool+'\n'+chat.pendingArguments : '';
-    chatComposer.select(chat.sessionId,s);
+    chatComposer.select({workspaceId:chat.project.workspaceId,sessionId:chat.sessionId},s);
     window.RNAssistantWorkspaceChat.renderQuestions(el('Questions'),s.userInput||s.UserInput,function(answers){
       return chatAction(function(workspaceId,sessionId){return send('submitProjectChat',{workspaceId:workspaceId,sessionId:sessionId,input:{sessionId:sessionId,requestId:crypto.randomUUID(),answers:answers}});});});
     controls();
@@ -405,13 +405,14 @@
     document.addEventListener('pointerdown',function(event){if(!event.target.closest('.plugin-history-menu'))closeHistory();});
     el('ChatForm').onsubmit=function(event){event.preventDefault();var message=el('Message').value.trim();
       if(!message||el('Send').disabled||!chat)return;
-      var sessionId=chat.sessionId,options=chatComposer.options();
+      var sessionId=chat.sessionId,workspaceId=chat.project.workspaceId,options=chatComposer.options(),draftVersion=chatComposer.draftVersion();
       if(!pendingChatSend||pendingChatSend.sessionId!==sessionId||pendingChatSend.message!==message||JSON.stringify(pendingChatSend.options)!==JSON.stringify(options))
         pendingChatSend={sessionId:sessionId,message:message,options:options,requestId:crypto.randomUUID()};
       var request=pendingChatSend;
       chatAction(function(workspaceId){return send('submitProjectChat',{workspaceId:workspaceId,sessionId:sessionId,
         input:Object.assign({sessionId:sessionId,message:message,requestId:request.requestId},request.options)}).then(function(result){
-        chatComposer.accepted(sessionId,message);if(pendingChatSend===request)pendingChatSend=null;return result;});});};
+        chatComposer.accepted({workspaceId:workspaceId,sessionId:sessionId},message,draftVersion);
+        if(pendingChatSend===request)pendingChatSend=null;return result;});});};
     el('Stop').onclick=async function(){if(!chat||!selected)return;
       var sessionId=chat.sessionId,workspaceId=chat.project.workspaceId,current=chatEpoch,s=chat.state;
       try{var result=await send('cancelProjectChat',{workspaceId:workspaceId,sessionId:sessionId,runId:s.RunId||s.runId,cursor:s.Cursor||s.cursor});

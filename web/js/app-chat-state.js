@@ -94,6 +94,35 @@ function chatDraftStore() {
   return state.chatDrafts;
 }
 
+var workspaceDraftVersion = 0;
+function workspaceDraftKey(target) {
+  return target && target.workspaceId && target.sessionId
+    ? "workspace:" + JSON.stringify([target.workspaceId, target.sessionId]) : null;
+}
+function readWorkspaceDraft(target) {
+  var key = workspaceDraftKey(target);
+  return key ? chatDraftStore()[key] || null : null;
+}
+function saveWorkspaceDraft(target, draft) {
+  var key = workspaceDraftKey(target);
+  if (!key) return null;
+  var saved = { text: draft.text || "", mode: draft.mode === "plan" ? "plan" : "agent",
+    reasoning: !!draft.reasoning, version: ++workspaceDraftVersion };
+  chatDraftStore()[key] = saved;
+  return saved;
+}
+function acceptWorkspaceDraft(target, text, version) {
+  var saved = readWorkspaceDraft(target);
+  if (!saved || saved.version !== version || saved.text.trim() !== text) return null;
+  return saveWorkspaceDraft(target, { text: "", mode: saved.mode, reasoning: saved.reasoning });
+}
+function forgetWorkspaceDraft(target) {
+  var key = workspaceDraftKey(target);
+  if (key) delete chatDraftStore()[key];
+}
+window.RNAssistantChatDrafts = { readWorkspace: readWorkspaceDraft, saveWorkspace: saveWorkspaceDraft,
+  acceptWorkspace: acceptWorkspaceDraft, forgetWorkspace: forgetWorkspaceDraft };
+
 function captureChatDraft(chatIdValue) {
   if (!chatIdValue) return;
   var input = $("chatInput");

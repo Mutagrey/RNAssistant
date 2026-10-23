@@ -1,5 +1,22 @@
 # Stabilization progress
 
+## Unified Shell shared workspace draft (1a) — 2026-10-23
+
+Owner: application/chat UI. The user accepted [ADR-0017](../decisions/ADR-0017-unified-shell-and-visual-annotations.md).
+Project and Plugin composers now share one in-memory draft owner keyed by
+`workspaceId/sessionId` in the existing chat state. Both per-composer draft Maps
+were removed. Text, plan/reasoning and appended project-file references follow
+the same session across screens. Accepted sends clear only the submitted draft
+version, so later input survives even when its text matches the sent text.
+
+The focused `workspace-shared-draft.test.js` passes in Chrome with the actual
+mock UI: cross-screen state, file link, failed retry ID, double submit and late
+acknowledgement. `chat-input-delivery.test.js` passes for the Office inbox.
+The existing `workspace-chat-layout.test.js` history-control mismatch remains
+open in [BACKLOG](BACKLOG.md); Windows/Office/WebView2 are unqualified. Draft
+recovery after host recreation and the full common ChatView are later gates.
+The original user plans are preserved in [docs/proposals](../proposals/RNAssistant_Unified_Shell_Plan.md).
+
 ## Unified Shell / Visual Annotator Phase 0 — 2026-10-23
 
 Owner: application/chat UI. [Audit](../architecture/visual-annotator-audit.md)
