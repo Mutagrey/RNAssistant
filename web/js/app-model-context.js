@@ -177,6 +177,9 @@
     function complete(label, value) { return label + ": " + (value === true ? "полностью" : value === false ? "не полностью" : "неизвестно"); }
     return ["Запрошено: " + requested,
       metadata.sourceCoverage ? "Покрытие в источнике: " + JSON.stringify(metadata.sourceCoverage) : "",
+      metadata.extractionProfile ? "Профиль извлечения: " + metadata.extractionProfile : "",
+      Number.isSafeInteger(metadata.sourcePageCount) && metadata.sourcePageCount > 0 ?
+        "Страниц в оригинале: " + metadata.sourcePageCount : "",
       complete("Выбранный фрагмент", metadata.selectionComplete),
       complete("Представление", metadata.representationComplete),
       complete("Источник", metadata.sourceComplete),

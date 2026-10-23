@@ -20,7 +20,7 @@ class Node {
   querySelectorAll() { return []; }
 }
 async function flush() { for (let i = 0; i < 25; i++) await new Promise(resolve => setImmediate(resolve)); }
-function fixture(withAliases = false) {
+function fixture(withAliases = false, pdf = false) {
   const nodes = new Map(), mounts = [], calls = [], closes = [], timers = new Map(), leases = new Map(); let timer = 0;
   const verification = { availability: "Verified", partsAvailability: "Verified", hold: null };
   const get = id => { if (!nodes.has(id)) nodes.set(id, new Node()); return nodes.get(id); };
@@ -68,6 +68,14 @@ function fixture(withAliases = false) {
               coverage: { kind: "yaml-path", path: "/config", start: 0, end: 1 }, observationComplete: false,
               readMetadata: { requestedCoverage: { kind: "yaml-path", path: "/config", start: 0, end: 2 },
                 requestedDepth: 1, selectionComplete: true, representationComplete: false, sourceComplete: false } }] }] : [];
+        if (pdf) resources.splice(0, resources.length, {
+          alias: "R1@v1", resource: { uri: "rna://attachment/pdf", revision: "pdf-r1" },
+          scope: { kind: "conversation", id: "chat" }, currentness: "Current",
+          observations: [{ requestAlias: "Q1", operationAlias: "O1", evidenceAlias: "E1", view: "text",
+            coverage: { kind: "page-range", start: 1, end: 3 }, observationComplete: false,
+            readMetadata: { requestedCoverage: { kind: "page-range", start: 1, end: 3 },
+              extractionProfile: "pdf-page-range-text:content-order-v1", sourcePageCount: 12,
+              selectionComplete: true, representationComplete: false, sourceComplete: false } }] });
         if (query.verifyViewVariantOrdinal != null) {
           if (verification.hold) await verification.hold;
           assert.equal(query.requestEventId, "r1");
@@ -289,6 +297,14 @@ function fixture(withAliases = false) {
   assert.equal(late.closes.length, 1, "late payload acquisition closes its lease even after dialog closed");
   assert.equal(late.mounts.length, 0, "late payload never renders into a closed or other chat");
   console.log("PASS model context: exact JSON, full download, following, preview staleness and cancellation");
+
+  const pdfRead = fixture(true, true);
+  pdfRead.c.RNAssistantModelContext.open(); await flush();
+  await pdfRead.get("modelContextResourcesTab").fire("click"); await flush();
+  const pdfDetails = pdfRead.get("modelContextBody").children.find(node => node.tag === "details");
+  assert.match(pdfDetails.children[1].children.map(node => node.textContent).join(" "),
+    /Профиль извлечения: pdf-page-range-text:content-order-v1 · Страниц в оригинале: 12/);
+  pdfRead.c.RNAssistantModelContext.close();
 
   const linked = fixture(true);
   linked.events[0].alias = "Q1";
