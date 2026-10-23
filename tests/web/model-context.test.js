@@ -79,6 +79,7 @@ function fixture(withAliases = false) {
               variant: { view: "source", coverage: ordinal === 0 ? { kind: "whole" } :
                 { kind: "character-range", start: 10, end: 80 },
                 payloadAvailability: "Verified", partsCount: ordinal === 0 ? 2 : 0,
+                estimatedTextBodyTokens: ordinal === 0 ? undefined : 5,
                 partsAvailability: ordinal === 0 ? verification.partsAvailability : null,
                 checkedUtc: "2026-10-02T11:00:00Z" } } };
         }
@@ -102,7 +103,7 @@ function fixture(withAliases = false) {
           const all = [
             { ordinal: 0, view: "source", coverage: { kind: "whole" }, payloadRegistered: true, partsCount: 2 },
             { ordinal: 1, view: "source", coverage: { kind: "character-range", start: 10, end: 80 },
-              payloadRegistered: true, partsCount: 0 },
+              payloadRegistered: true, partsCount: 0, estimatedTextBodyTokens: 5 },
             { ordinal: 2, view: "internal", coverage: { kind: "whole" }, payloadRegistered: false, partsCount: 0 }
           ];
           const offset = query.viewInventoryOffset || 0, snapshotCount = query.viewInventorySnapshotCount ?? all.length;
@@ -303,7 +304,7 @@ function fixture(withAliases = false) {
   assert.match(resourceText(), /Выбранный фрагмент: полностью.*Представление: не полностью.*Источник: неизвестно/);
   assert.match(resourceText(), /Заявлено провайдером при чтении: провайдер vba; тип module; MIME text\/plain; 1234 байт; представления source, outline; операции read/);
   assert.match(resourceText(), /параметры views source \(смещение, поток, байт за раз ≤ 65536\); текущая доступность не проверена; возможность чтения моделью не подтверждена/);
-  assert.match(resourceText(), /Сохранённое view source · покрытие \{"kind":"whole"\} · тело не проверено · частей: 2 · части не проверены/);
+  assert.match(resourceText(), /Сохранённое view source · покрытие \{"kind":"whole"\} · оценка текста неизвестна · тело не проверено · частей: 2 · части не проверены/);
   assert.match(resourceText(), /Запрошено: процедура Value \(property-get\)/);
   assert.match(resourceText(), /JSON Pointer "\/data", глубина 2, дети \[1, 3\)/);
   assert.match(resourceText(), /YAML pointer "\/config", глубина 1, дети \[0, 2\)/);
@@ -313,6 +314,8 @@ function fixture(withAliases = false) {
   assert.equal(linked.calls.at(-1).query.viewInventoryOffset, 0);
   assert.match(resourceText(), /Сохранённые views: 1–2 из 3/);
   assert.match(resourceText(), /#2 · source · покрытие.*character-range.*start.*10.*end.*80/);
+  assert.match(resourceText(), /#2 · source.*оценка текста ≈ 5 токенов \(по метаданным, UTF-8 байты\/4; без обвязки запроса\)/);
+  assert.match(resourceText(), /#1 · source.*оценка текста неизвестна/);
   assert.equal(linked.calls.filter(call => call.query.verifyResourceAlias).length, 0,
     "inventory metadata does not trigger CAS verification");
   await variantButton(linked, 2).fire("click"); await flush();

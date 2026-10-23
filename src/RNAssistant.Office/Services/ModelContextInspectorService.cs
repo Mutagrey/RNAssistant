@@ -256,7 +256,8 @@ namespace RNAssistant.Office.Services
                 SnapshotCount = page.SnapshotCount, NextOffset = page.NextOffset,
                 Items = page.Items.Select((view, index) => new ModelContextViewInventoryItemDto {
                     Ordinal = offset + index, View = view.View, Coverage = view.Coverage,
-                    PayloadRegistered = view.Payload != null, PartsCount = view.Parts.Count }).ToArray() };
+                    PayloadRegistered = view.Payload != null, PartsCount = view.Parts.Count,
+                    EstimatedTextBodyTokens = EstimateTextBodyTokens(view) }).ToArray() };
         }
 
         private ModelContextViewVariantVerificationDto VerifyViewVariant(ModelContextResourceDto resource,
@@ -281,7 +282,34 @@ namespace RNAssistant.Office.Services
                     ModelContextPayloadAvailability.Unchecked,
                 PartsCount = view.Parts.Count,
                 PartsAvailability = view.Parts.Count == 0 ? (ModelContextPayloadAvailability?)null :
-                    ModelContextPayloadAvailability.Unchecked, Retained = view };
+                    ModelContextPayloadAvailability.Unchecked,
+                EstimatedTextBodyTokens = EstimateTextBodyTokens(view), Retained = view };
+        }
+
+        // Same uncalibrated UTF-8 bytes/4 baseline as ModelContextBudget, for the
+        // retained body only. Indexes/parts and non-UTF-8 claims cannot represent
+        // a direct model-readable text body or its eventual request cost.
+        private static long? EstimateTextBodyTokens(ResourceRevisionView view)
+        {
+            if (view?.Payload == null || view.Parts.Count != 0 ||
+                view.View != ResourceRepresentations.Text && view.View != ResourceRepresentations.Source ||
+                view.Payload.ByteLength < 0) return null;
+            var mime = view.Payload.ContentType;
+            if (string.IsNullOrWhiteSpace(mime)) return null;
+            var fields = mime.Split(';');
+            if (!fields[0].Trim().StartsWith("text/", StringComparison.OrdinalIgnoreCase)) return null;
+            var utf8 = false;
+            foreach (var field in fields.Skip(1))
+            {
+                var parameter = field.Trim();
+                if (!parameter.StartsWith("charset=", StringComparison.OrdinalIgnoreCase)) continue;
+                if (!string.Equals(parameter.Substring(8).Trim().Trim('"'), "utf-8",
+                    StringComparison.OrdinalIgnoreCase)) return null;
+                utf8 = true;
+            }
+            if (!utf8) return null;
+            var bytes = view.Payload.ByteLength;
+            return bytes / 4 + (bytes % 4 == 0 ? 0 : 1);
         }
 
         private void VerifyPayload(ModelContextResourceDto row, CancellationToken token)

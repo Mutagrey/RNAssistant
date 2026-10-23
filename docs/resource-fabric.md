@@ -742,6 +742,16 @@ the UI. Checks record transient per-body status and check time; a valid view doe
 not establish currentness, semantic transformation validity or delivery to the
 model.
 
+For a registered `text` or `source` view with one payload, no parts and an
+explicit UTF-8 `text/*` MIME, Inspector reports a baseline estimate for that
+retained body's bytes: `ceil(byteLength / 4)`. The same estimate appears in
+known-name metadata and each inventory variant. This uses the existing raw
+text-token heuristic without model calibration; it is not the serialized tool
+message or total prompt cost. MIME and length are retained metadata claims until
+CAS verification, and the estimate does not establish live availability or
+delivery. Indexed/multipart, binary, non-UTF-8 and unclassified views keep an
+unknown token estimate rather than treating their metadata payload as model text.
+
 An adaptive first window retains the original whole-read intent rather than
 rewriting it to the provider's chosen window. Completeness of that chosen fragment
 does not prove completion of the original whole-read request. EOF can shorten

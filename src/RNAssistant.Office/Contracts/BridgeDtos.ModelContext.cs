@@ -68,6 +68,8 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("partsAvailability", NullValueHandling = NullValueHandling.Ignore)]
         public ModelContextPayloadAvailability? PartsAvailability { get; set; }
         [JsonProperty("checkedUtc", NullValueHandling = NullValueHandling.Ignore)] public DateTime? CheckedUtc { get; set; }
+        [JsonProperty("estimatedTextBodyTokens", NullValueHandling = NullValueHandling.Ignore)]
+        public long? EstimatedTextBodyTokens { get; set; }
         [JsonIgnore] internal ResourceRevisionView Retained { get; set; }
     }
 
@@ -78,6 +80,8 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("coverage")] public ResourceCoverage Coverage { get; set; }
         [JsonProperty("payloadRegistered")] public bool PayloadRegistered { get; set; }
         [JsonProperty("partsCount")] public int PartsCount { get; set; }
+        [JsonProperty("estimatedTextBodyTokens", NullValueHandling = NullValueHandling.Ignore)]
+        public long? EstimatedTextBodyTokens { get; set; }
     }
 
     public sealed class ModelContextViewInventoryDto

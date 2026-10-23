@@ -1,5 +1,17 @@
 # Stabilization progress
 
+## Resource Context retained text-body estimates — 2026-10-23
+
+Owner: Model Context Inspector. Exact retained `text/source` variants with one
+explicit UTF-8 text payload and no parts now show the existing bytes/4 token
+baseline in known-name metadata and paginated inventory. Indexed, binary,
+multipart and unclassified views remain unknown. This estimates only the
+registered body, not the projected tool message, complete prompt or measured
+usage; CAS verification, currentness and model delivery remain separate.
+Focused Harness/Web checks pass host-neutral. Windows/Office/WebView2 remain
+unqualified; full per-view cost, live availability and transformation provenance
+remain open in BACKLOG.
+
 ## Resource Context exact retained view variant checks — 2026-10-23
 
 Owner: Model Context Inspector and existing revision/CAS stores. An explicit

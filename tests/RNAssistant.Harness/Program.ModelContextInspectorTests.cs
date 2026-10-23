@@ -332,7 +332,7 @@ namespace RNAssistant.Harness
                 var second = new ResourceRef(identity.Uri, "revision-b");
                 var restored = new ResourceRef(identity.Uri, "revision-restored");
                 var otherRef = new ResourceRef(other.Uri, "revision-a");
-                var body = PayloadRef.FromBlob(payloads.StoreText("same bytes", "text/plain"));
+                var body = PayloadRef.FromBlob(payloads.StoreText("same bytes", "text/plain; charset=utf-8"));
                 var viewPart = PayloadRef.FromBlob(payloads.StoreText("retained view part", "text/plain"));
                 foreach (var reference in new[] { first, second, restored })
                     store.RegisterRevision(scope, new ResourceRevisionMetadata(reference, body.Sha256, body,
@@ -380,6 +380,8 @@ namespace RNAssistant.Harness
                     AssertEqual(ModelContextPayloadAvailability.Unchecked,
                         original.Resources[0].RetainedViews.Single().PartsAvailability.Value,
                         "view parts are not verified during metadata-only inspection");
+                    AssertTrue(original.Resources[0].RetainedViews.Single().EstimatedTextBodyTokens == null,
+                        "multipart retained views do not claim a direct text-body cost");
                     AssertTrue(original.Resources[0].PayloadCheckedUtc == null, "no invented verification timestamp");
                     Func<string, string, ModelContextResourceDto> verify = (eventId, alias) => inspector().Query(session,
                         new ModelContextQuery { RequestEventId = eventId, VerifyResourceAlias = alias }, CancellationToken.None)
@@ -498,6 +500,10 @@ namespace RNAssistant.Harness
                         "existing known-name lookup still prefers the whole retained view");
                     store.RegisterView(scope, new ResourceRevisionView(second, "text", body.Sha256, body,
                         ResourceCoverage.Whole()));
+                    AssertEqual((body.ByteLength + 3) / 4,
+                        inspector().Query(session, new ModelContextQuery { RequestEventId = q3.EventId }, CancellationToken.None)
+                            .Resources.Single().RetainedViews.Single().EstimatedTextBodyTokens.Value,
+                        "known-name metadata exposes the same direct UTF-8 body estimate");
                     Func<ModelContextQuery, ModelContextViewInventoryDto> inventory = query =>
                         inspector().Query(session, query, CancellationToken.None).ViewInventory;
                     var firstPage = inventory(new ModelContextQuery { RequestEventId = q1.EventId,
@@ -506,7 +512,13 @@ namespace RNAssistant.Harness
                     AssertEqual(20, firstPage.Items.Count, "inventory returns a bounded first page");
                     AssertEqual(20, firstPage.NextOffset.Value, "inventory exposes a continuation offset");
                     AssertEqual("outline", firstPage.Items[1].View, "unobserved registered view is listed");
+                    AssertTrue(firstPage.Items[1].EstimatedTextBodyTokens == null,
+                        "non-text view names do not claim a model text-body cost");
                     AssertEqual(0L, firstPage.Items[2].Coverage.Start.Value, "coverage variants retain append order");
+                    AssertTrue(firstPage.Items[2].EstimatedTextBodyTokens == null,
+                        "multipart range payload is not priced as complete text");
+                    AssertEqual((body.ByteLength + 3) / 4, firstPage.Items[3].EstimatedTextBodyTokens.Value,
+                        "direct UTF-8 range uses the existing uncalibrated bytes-per-four baseline");
                     AssertEqual(1, firstPage.Items[0].PartsCount, "inventory describes retained parts without reading them");
                     AssertTrue(firstPage.Items[0].PayloadRegistered, "inventory distinguishes registered payloads");
                     AssertTrue(!Newtonsoft.Json.JsonConvert.SerializeObject(firstPage).Contains(viewPart.Sha256),
@@ -565,6 +577,14 @@ namespace RNAssistant.Harness
                         ViewInventoryAlias = "R1@v1", ViewInventoryOffset = 0,
                         ViewInventorySnapshotCount = firstPage.SnapshotCount });
                     AssertEqual(25, revisited.SnapshotCount, "earlier pages can be revisited within the pinned inventory");
+                    var nonUtf8 = PayloadRef.FromBlob(payloads.StoreText("opaque", "text/plain; charset=windows-1251"));
+                    store.RegisterView(scope, new ResourceRevisionView(first, "source", nonUtf8.Sha256,
+                        nonUtf8, ResourceCoverage.Whole()));
+                    var unknownCost = inventory(new ModelContextQuery { RequestEventId = q1.EventId,
+                        ViewInventoryAlias = "R1@v1", ViewInventoryOffset = 26,
+                        ViewInventorySnapshotCount = 27 });
+                    AssertTrue(unknownCost.Items.Single().EstimatedTextBodyTokens == null,
+                        "non-UTF-8 charset leaves token cost unknown");
                     var replayed = new ResourceAuthorityStore(paths).ReadViews(scope, first, 20, 20, firstPage.SnapshotCount);
                     AssertTrue(replayed.Items.Select(view => view.Coverage.Start).SequenceEqual(
                         secondPage.Items.Select(item => item.Coverage.Start)),

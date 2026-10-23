@@ -47,8 +47,10 @@ page errors. Причина не установлена; при следующе
    сохранённого варианта по каждому известному имени view и по явному запросу
    отдельно проверяет его payload/части через CAS. Полный inventory
    сохранённых views/coverage доступен постранично для exact ревизии; выбранный
-   вариант отдельно проверяется по CAS вместе с его частями. Остаются cost
-   конкретных views, availability live providers, provenance преобразований;
+   вариант отдельно проверяется по CAS вместе с его частями. Для прямого UTF-8
+   `text/source` без частей Inspector показывает базовую оценку сохранённого
+   тела по байтам; стоимость готового model request этим не доказана. Остаются
+   cost прочих views, availability live providers, provenance преобразований;
    не подменять unknown предположением. При необходимости проверить старые traces
    и compaction/restart на реальном архиве. UI остаётся производной projection
    над canonical IDs без собственного CAS-доступа или model-facing адресации.
@@ -60,7 +62,9 @@ page errors. Причина не установлена; при следующе
    resource providers. Дополнять доказуемую атрибуцию преобразованных сообщений,
    coverage будущих специализированных selectors и cost/capabilities конкретных
    views. Model find уже скрывает application-only binary views и сообщает известные
-   MIME/byteLength; per-view token cost всё ещё не оценён. Существующий `Unknown`
+   MIME/byteLength; для прямого сохранённого UTF-8 текста есть только
+   некалиброванная оценка тела, а per-view cost с проекцией/обвязкой и для
+   структурных/media views всё ещё не оценён. Существующий `Unknown`
    сохранять, когда факт нельзя доказать; measured tokens не подменять estimate.
    Проверка: точный serialized request плюс соответствующие golden fixtures.
 3. **Специализированные selectors/views.** Owner: соответствующий provider через

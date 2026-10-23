@@ -366,6 +366,7 @@
           !checked || checked.resourceAlias !== row.alias || checked.ordinal !== item.ordinal ||
           checked.snapshotCount !== inventory.snapshotCount || !variant || variant.view !== item.view ||
           JSON.stringify(variant.coverage) !== JSON.stringify(item.coverage) || variant.partsCount !== item.partsCount ||
+          variant.estimatedTextBodyTokens !== item.estimatedTextBodyTokens ||
           (variant.payloadAvailability !== "NotRetained") !== item.payloadRegistered)
         throw new Error("Ответ проверки не соответствует выбранному варианту view.");
       item.payloadAvailability = variant.payloadAvailability;
@@ -374,6 +375,11 @@
       if (c.mode === "actual" && c.tab === "resources") { c.focusResource = row.alias; await render(c); }
     } catch (error) { if (valid(c, version) && note.isConnected) note.textContent = error.message || String(error); }
     finally { control.disabled = false; }
+  }
+  function retainedTextCost(view) {
+    return Number.isSafeInteger(view.estimatedTextBodyTokens) && view.estimatedTextBodyTokens >= 0 ?
+      " · оценка текста ≈ " + view.estimatedTextBodyTokens + " токенов (по метаданным, UTF-8 байты/4; без обвязки запроса)" :
+      " · оценка текста неизвестна";
   }
   function resourceMetadata(c, row, body) {
     var metadata = row.revisionMetadata, payload = metadata && metadata.payload;
@@ -404,6 +410,7 @@
         Unavailable: "одна или более частей отсутствует, повреждена или недоступна" };
       var viewNote = el("p", "Сохранённое view " + view.view +
         (view.coverage ? " · покрытие " + JSON.stringify(view.coverage) : "") +
+        retainedTextCost(view) +
         " · " + (viewAvailability[view.payloadAvailability] || viewAvailability.Unknown) +
         (view.partsCount ? " · частей: " + view.partsCount + " · " +
           (partsAvailability[view.partsAvailability] || "состояние частей неизвестно") : "") +
@@ -453,6 +460,7 @@
             Unavailable: "одна или более частей недоступна" };
           var itemNote = el("p", "#" + (item.ordinal + 1) + " · " + item.view +
             (item.coverage ? " · покрытие " + JSON.stringify(item.coverage) : "") +
+            retainedTextCost(item) +
             " · " + (item.payloadRegistered ? "payload зарегистрирован" : "payload не зарегистрирован") +
             " · частей: " + item.partsCount +
             (item.payloadAvailability ? " · " + (availability[item.payloadAvailability] || "состояние тела неизвестно") :
