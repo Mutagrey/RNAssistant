@@ -2944,20 +2944,31 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     LoadSkillResponse("common.vba_code_editing"),
-                    new JObject { ["message"] = "Обновляю VBA.", ["action"] = "tool",
-                        ["tool_calls"] = new JArray(new JObject { ["name"] = "common.vba_apply_patch",
-                            ["arguments"] = new JObject { ["moduleName"] = "Module1", ["patch"] = patch } }) }.ToString(),
-                    externalDrift
-                        ? "{\"message\":\"Изменение отклонено как устаревшее.\",\"action\":\"done\",\"tool_calls\":[]}"
-                        : "{\"message\":\"Изменение сохранено.\",\"action\":\"done\",\"tool_calls\":[]}"
+                    ModelProtocolWire.WriteAcceptedCall("Apply the requested VBA patch.", "Обновляю VBA.",
+                        new ConversationToolCall { Name = VbaToolCatalog.ApplyPatch,
+                            Arguments = new JObject { ["moduleName"] = "Module1", ["patch"] = patch } }),
+                    "__FINISH__"
                 });
                 var calls = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion =
                     (completionSettings, messages, options, stream, token) =>
                 {
                     calls.Add(messages.ToList());
+                    var response = responses.Dequeue();
+                    if (response == "__FINISH__")
+                    {
+                        var callId = messages.Single(message => message.Role == "assistant" &&
+                            message.ToolName == VbaToolCatalog.ApplyPatch &&
+                            message.AcceptedCallOrigin != null).ToolCallId;
+                        response = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                            "Report the confirmed patch outcome.",
+                            externalDrift ? "Изменение отклонено как устаревшее." : "Изменение сохранено.",
+                            results: new[] { new ConversationResultClaim(
+                                externalDrift ? "The patch was rejected after source drift." : "The patch was applied.",
+                                new[] { callId }, externalDrift ? ConversationAssessment.NotSatisfied : ConversationAssessment.Satisfied) });
+                    }
                     return Task.FromResult(new LlmCompletionResult
-                        { Content = responses.Dequeue() });
+                        { Content = response });
                 };
                 var service = CreateConversationRunService(
                     adapter, executor, completion);
