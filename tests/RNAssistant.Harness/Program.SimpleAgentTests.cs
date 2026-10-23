@@ -1362,7 +1362,9 @@ namespace RNAssistant.Harness
                     calls++;
                     return Task.FromResult(new LlmCompletionResult
                     {
-                        Content = "{\"message\":\"Лист Report создан.\",\"action\":\"done\",\"tool_calls\":[]}"
+                        Content = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                            "Answer without a tool call.", "Лист Report создан.",
+                            results: new ConversationResultClaim[0])
                     });
                 };
                 var session = NewSession(adapter);
@@ -1376,6 +1378,8 @@ namespace RNAssistant.Harness
                 AssertEqual(0, adapter.ExcelSheetRequests.Count(command => command.ToolId == "excel.add_sheet"), "no requested write was dispatched");
                 AssertTrue(!adapter.HasSheet("Report"), "model text did not create a sheet");
                 AssertEqual(RunViewLifecycles.Completed, result.RunViewState.Lifecycle, "a no-write response may finish the loop");
+                AssertEqual(RunGoalVerification.NotAssessed, result.RunViewState.GoalVerification,
+                    "a no-write finish cannot verify the requested sheet");
                 AssertRunViewState(result, session, "clean", 0, 0, 0);
                 AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "no-write response carries model completed");
                 AssertEqual("Лист Report создан.", session.Messages.Last().Content, "unsupported mutation claim reaches visible history");
