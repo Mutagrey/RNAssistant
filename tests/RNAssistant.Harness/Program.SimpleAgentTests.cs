@@ -1081,20 +1081,40 @@ namespace RNAssistant.Harness
             {
                 adapter.QueueExcelSheetApplyFailure(
                     "Write rejected before the effect.", "write_rejected", false);
+                var session = NewSession(adapter);
                 var responses = new Queue<string>(new[]
                 {
                     LoadToolSchemaResponse("excel.add_sheet"),
-                    "{\"message\":\"Добавляю лист.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"}}]}",
-                    "{\"message\":\"Лист Report создан.\",\"action\":\"done\",\"tool_calls\":[],\"executionSummary\":{\"ExecutionHealth\":\"clean\",\"WriteOk\":1000}}",
-                    "{\"message\":\"Лист Report создан.\",\"action\":\"done\",\"tool_calls\":[]}"
+                    ModelProtocolWire.WriteAcceptedCall("Create the requested sheet.", "Добавляю лист.",
+                        new ConversationToolCall { Name = "excel.add_sheet",
+                            Arguments = new JObject { ["name"] = "Report" } }),
+                    "__INVALID_FINISH__", "__FINISH__", "__HONEST_FINISH__"
                 });
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
                 {
                     requests.Add(messages.ToList());
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    var response = responses.Dequeue();
+                    if (response == "__INVALID_FINISH__" || response == "__FINISH__" ||
+                        response == "__HONEST_FINISH__")
+                    {
+                        var callId = session.Messages.Single(item => item.ToolName == "excel.add_sheet" &&
+                            item.AcceptedCallOrigin != null).ToolCallId;
+                        var honest = response == "__HONEST_FINISH__";
+                        var invalidShape = response == "__INVALID_FINISH__";
+                        response = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                            "Report the observed sheet write.", honest ? "Лист Report не создан." : "Лист Report создан.",
+                            results: new[] { new ConversationResultClaim(honest ? "Sheet Report was not created." : "Sheet Report was created.",
+                                new[] { callId }, honest ? ConversationAssessment.NotSatisfied : ConversationAssessment.Satisfied) });
+                        if (invalidShape)
+                        {
+                            var invalid = JObject.Parse(response);
+                            invalid["executionSummary"] = new JObject { ["ExecutionHealth"] = "clean", ["WriteOk"] = 1000 };
+                            response = invalid.ToString(Formatting.None);
+                        }
+                    }
+                    return Task.FromResult(new LlmCompletionResult { Content = response });
                 };
-                var session = NewSession(adapter);
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent, "Создай лист Report.", session, NewContext(adapter),
                     new AppSettings { AutoConfirmToolActions = true },
@@ -1110,17 +1130,21 @@ namespace RNAssistant.Harness
                     "the final model request saw the failed tool result");
                 AssertContains(FlattenSimple(requests.Last()), "Write rejected before the effect.",
                     "the folded error retains its actionable message");
-                AssertContains(requests.Last().Last().Content, "unsupported root field: executionSummary", "model cannot inject runtime health into v7");
+                AssertContains(requests[3].Last().Content, "forbids root field executionSummary",
+                    "model cannot inject runtime health into v8");
+                AssertContains(requests.Last().Last().Content, "contradictory_assessment",
+                    "satisfied claims on failed writes are rejected before an honest finish");
                 AssertEqual(RunViewLifecycles.Completed, result.RunViewState.Lifecycle, "loop completion is independent of execution health");
                 AssertRunViewState(result, session, "errors", 0, 1, 0);
-                AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "model completed is accepted after write error");
+                AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "honest finish is accepted after write error");
                 AssertContains(result.AssistantText, "операций записи завершились ошибкой",
-                    "runtime annotates a false success claim with authoritative write failure evidence");
+                    "runtime retains authoritative write failure evidence");
                 AssertContains(result.AssistantText, "История попыток:", "counts describe past attempts");
                 AssertContains(result.AssistantText, "а не число нерешённых проблем", "attempt counts cannot infer current task failure");
                 AssertContains(session.Messages.Last().Content, "последующее исправление конкретной операции ими не определяется",
                     "historical errors do not assert that the final task is still unresolved");
-                AssertEqual(AgentResponseStatuses.Completed, session.Messages.Last().ResponseStatus, "false completion enters accepted history");
+                AssertEqual(AgentResponseStatuses.Completed, session.Messages.Last().ResponseStatus,
+                    "only the honest completion enters accepted history");
             });
         }
 
@@ -1135,30 +1159,42 @@ namespace RNAssistant.Harness
                 adapter.VbaWriteTransform = code => code.Replace("\"after\"", "\"diverged\"");
                 var journal = new VbaJournalStore(paths);
                 var executor = new OfficeToolExecutor(adapter, journal, new SkillStore(paths));
+                var session = NewSession(adapter);
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"message\":\"Читаю текущий модуль.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.resources_read\",\"arguments\":{\"target\":\"VBA module: Module1\",\"representation\":\"source\"}}]}",
-                    "{\"message\":\"Загружаю процедуру редактирования VBA.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.skills_load\",\"arguments\":{\"id\":\"common.vba_code_editing\"}}]}",
-                    new JObject
-                    {
-                        ["message"] = "Обновляю модуль.",
-                        ["action"] = "tool",
-                        ["tool_calls"] = new JArray(new JObject
-                        {
-                            ["name"] = "common.vba_write_module",
-                            ["arguments"] = new JObject { ["moduleName"] = "Module1", ["code"] = intended }
-                        })
-                    }.ToString(Formatting.None),
-                    "{\"message\":\"Проверяю модуль после неподтверждённой записи.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.resources_read\",\"arguments\":{\"target\":\"VBA module: Module1\",\"representation\":\"source\"}}]}",
-                    "{\"message\":\"Модуль Module1 обновлён.\",\"action\":\"done\",\"tool_calls\":[]}"
+                    ModelProtocolWire.WriteAcceptedCall("Read the current module before editing.", "Читаю текущий модуль.",
+                        new ConversationToolCall { Name = ResourceToolCatalog.ReadToolId,
+                            Arguments = new JObject { ["target"] = "VBA module: Module1", ["representation"] = "source" } }),
+                    LoadSkillResponse("common.vba_code_editing"),
+                    ModelProtocolWire.WriteAcceptedCall("Apply the requested module source.", "Обновляю модуль.",
+                        new ConversationToolCall { Name = VbaToolCatalog.WriteModule,
+                            Arguments = new JObject { ["moduleName"] = "Module1", ["code"] = intended } }),
+                    ModelProtocolWire.WriteAcceptedCall("Inspect after the unverified write.",
+                        "Проверяю модуль после неподтверждённой записи.",
+                        new ConversationToolCall { Name = ResourceToolCatalog.ReadToolId,
+                            Arguments = new JObject { ["target"] = "VBA module: Module1", ["representation"] = "source" } }),
+                    "__FINISH__"
                 });
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
                 {
                     requests.Add(messages.ToList());
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    var response = responses.Dequeue();
+                    if (response == "__FINISH__")
+                    {
+                        var evidence = session.Messages.Where(item => item.RunId == session.LastRun.RunId &&
+                            item.AcceptedCallOrigin != null &&
+                            (item.ToolName == VbaToolCatalog.WriteModule ||
+                             item.ToolName == ResourceToolCatalog.ReadToolId))
+                            .Select(item => item.ToolCallId).ToArray();
+                        AssertEqual(3, evidence.Length, "finish cites the write and before/after reads");
+                        response = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                            "Report the divergent effect honestly.", "Модуль Module1 обновлён.",
+                            results: new[] { new ConversationResultClaim("Module source is divergent.",
+                                evidence, ConversationAssessment.Unverified) });
+                    }
+                    return Task.FromResult(new LlmCompletionResult { Content = response });
                 };
-                var session = NewSession(adapter);
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent, "Обнови модуль Module1.", session, NewContext(adapter),
                     new AppSettings { AutoConfirmToolActions = true },
