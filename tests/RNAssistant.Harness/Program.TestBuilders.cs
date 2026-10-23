@@ -157,6 +157,25 @@ namespace RNAssistant.Harness
                 });
         }
 
+        private static string ScriptedVerifiedFinish(ChatSession session, string reason, string message,
+            string summary, params string[] expectedTools)
+        {
+            var runId = session?.LastRun?.RunId;
+            AssertTrue(!string.IsNullOrWhiteSpace(runId), "scripted finish has a current run");
+            var calls = session.Messages.Where(item => item.RunId == runId &&
+                item.AcceptedCallOrigin != null && expectedTools.Contains(item.ToolName)).ToArray();
+            foreach (var group in expectedTools.GroupBy(name => name))
+                AssertEqual(group.Count(), calls.Count(item => item.ToolName == group.Key),
+                    "scripted finish has the expected accepted calls for " + group.Key);
+            foreach (var call in calls)
+                AssertTrue(session.Messages.Any(item => item.RunId == runId &&
+                    item.ToolCallId == call.ToolCallId && item.ExecutionProgress?.Outcome == ToolExecutionOutcome.Ok),
+                    "scripted finish cites a terminal successful result for " + call.ToolName);
+            return ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction, reason, message,
+                results: new[] { new ConversationResultClaim(summary,
+                    calls.Select(call => call.ToolCallId), ConversationAssessment.Satisfied) });
+        }
+
         private static ChatSession NewSession(FakeOfficeAdapter adapter)
         {
             return new ChatSession

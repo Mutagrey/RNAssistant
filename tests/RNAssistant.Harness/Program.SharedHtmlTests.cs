@@ -235,15 +235,18 @@ namespace RNAssistant.Harness
                     AssertTrue(executor.ExecuteManual(Command(HtmlWorkspaceToolCatalog.WriteFileToolId, "path", file[0], "content", file[1]),
                         tools, new AppSettings(), false, false, session).Success, "baseline file published");
                 var baseline = session.ActiveHtmlArtifactId;
-                Func<string, string, string, string> patch = (path, find, text) => ModelProtocolWire.Write("", new[] {
-                    new ConversationToolCall { Name = HtmlWorkspaceToolCatalog.ApplyPatchToolId, Arguments = new JObject {
-                        ["path"] = path, ["patch"] = new JArray(new JObject { ["op"] = "replace", ["find"] = find, ["text"] = text }) } } });
-                var responses = new Queue<string>(new[] {
-                    LoadSkillResponse("common.html_workspace_authoring"),
-                    patch("styles.css", "red", "green"), patch("index.html", "old", "updated"),
-                    ModelProtocolWire.Write("Updated the HTML and CSS.", new ConversationToolCall[0]) });
+                Func<string, string, string, string> patch = (path, find, text) =>
+                    ModelProtocolWire.WriteAcceptedCall("Apply the requested file patch.", "",
+                        new ConversationToolCall { Name = HtmlWorkspaceToolCatalog.ApplyPatchToolId, Arguments = new JObject {
+                            ["path"] = path, ["patch"] = new JArray(new JObject { ["op"] = "replace", ["find"] = find, ["text"] = text }) } });
+                var responses = new Queue<Func<string>>(new Func<string>[] {
+                    () => LoadSkillResponse("common.html_workspace_authoring"),
+                    () => patch("styles.css", "red", "green"), () => patch("index.html", "old", "updated"),
+                    () => ScriptedVerifiedFinish(session, "Both file patches completed.", "Updated the HTML and CSS.",
+                        "HTML and CSS were updated.", HtmlWorkspaceToolCatalog.ApplyPatchToolId,
+                        HtmlWorkspaceToolCatalog.ApplyPatchToolId) });
                 var service = CreateConversationRunService(adapter, executor,
-                    (settings, messages, options, stream, token) => Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() }));
+                    (settings, messages, options, stream, token) => Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue()() }));
                 Func<ChatTurnResult> run = () => service.ExecuteWithApprovalsAsync(ChatModes.Agent, "Update the HTML and CSS.", session,
                     NewContext(adapter), new AppSettings { AutoConfirmToolActions = true, ContextWindowOverrideTokens = 131072 }, tools, null).GetAwaiter().GetResult();
                 AssertEqual(RunViewLifecycles.Completed, run().RunViewState.Lifecycle, "production conversation completes sequential patches");
@@ -284,9 +287,11 @@ namespace RNAssistant.Harness
                 }
                 var selected = session.ActiveHtmlArtifactId;
                 var snapshotCount = session.Artifacts.Count(item => item.Kind == ChatArtifactKinds.HtmlWorkspace);
-                responses.Enqueue(LoadSkillResponse("common.html_workspace_authoring"));
-                responses.Enqueue(patch("index.html", "updated", "updated"));
-                responses.Enqueue(ModelProtocolWire.Write("No changes needed.", new ConversationToolCall[0]));
+                responses.Enqueue(() => LoadSkillResponse("common.html_workspace_authoring"));
+                responses.Enqueue(() => patch("index.html", "updated", "updated"));
+                responses.Enqueue(() => ScriptedVerifiedFinish(session, "The repeated patch made no change.",
+                    "No changes needed.", "The file already has the requested text.",
+                    HtmlWorkspaceToolCatalog.ApplyPatchToolId));
                 AssertEqual(RunViewLifecycles.Completed, run().RunViewState.Lifecycle, "later no-op run completes");
                 var noOpRun = session.LastRun.RunId;
                 var noOp = session.Messages.Single(message => message.RunId == noOpRun &&

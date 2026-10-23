@@ -112,14 +112,15 @@ namespace RNAssistant.Harness
                 else File.WriteAllText(Path.Combine(evidence, "before.json"), JsonConvert.SerializeObject(new {
                     html = vbaOnly ? new string[0][] : original, vba }, Formatting.Indented));
                 var client = new LlmClient(() => Environment.GetEnvironmentVariable("RNA_API_KEY"));
-                Func<string, JObject, string> call = (name, arguments) => ModelProtocolWire.Write("", new[] {
-                    new ConversationToolCall { Name = name, Arguments = arguments } });
+                Func<string, JObject, string> call = (name, arguments) =>
+                    ModelProtocolWire.WriteAcceptedCall("Perform the next requested workflow step.", "",
+                        new ConversationToolCall { Name = name, Arguments = arguments });
                 var script = new Queue<string>(new[] {
                     LoadSkillResponse("common.vba_code_editing"),
                     call(ResourceToolCatalog.ReadToolId, new JObject { ["target"] = "VBA module: ReportModule", ["representation"] = "source" }),
                     call("common.vba_apply_patch", new JObject { ["moduleName"] = "ReportModule", ["patch"] = new JArray(
                         new JObject { ["find"] = "ReportTitle = \"Old report\"", ["text"] = "ReportTitle = \"Sales report\"" }) }),
-                    ModelProtocolWire.Write("Исходник исправлен и проверен; выполнение VBA не проверялось.", new ConversationToolCall[0])
+                    null // Generate finish after terminal call IDs are assigned.
                 });
                 if (report != null) script = ExcelReportWorkflowFixture.Script();
                 var requests = 0;
@@ -147,7 +148,18 @@ namespace RNAssistant.Harness
                         if (!excelReport && number == 2) AssertEqual(1, session.LastRun.SelectedSkills.Count,
                             "minimal VBA skill must fit the explicit profile; see retained load result");
                         AssertTrue(script.Count > 0, "scripted workflow must not need protocol repair or compaction");
-                        response = new LlmCompletionResult { Content = script.Dequeue() };
+                        var scriptedResponse = script.Dequeue();
+                        if (scriptedResponse == null)
+                            scriptedResponse = report == null
+                                ? ScriptedVerifiedFinish(session, "The module patch completed with read-back.",
+                                    "Исходник исправлен и проверен; выполнение VBA не проверялось.",
+                                    "VBA module source was updated.", "common.vba_apply_patch")
+                                : ScriptedVerifiedFinish(session, "The report steps and final read completed.",
+                                    "Создан и проверен отчёт. Реальный Excel и внешний вид диаграммы не проверялись.",
+                                    "The requested report was created and read back.",
+                                    "common.resources_read", "common.resources_read", "excel.add_sheet",
+                                    "excel.write_range", "excel.add_table", "excel.format_range", "excel.upsert_chart");
+                        response = new LlmCompletionResult { Content = scriptedResponse };
                     }
                     else
                     {
