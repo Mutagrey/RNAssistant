@@ -2,10 +2,11 @@
 """Pinned, isolated CLI task comparison with exact local HTTP evidence.
 
 This is an exploratory runner, not the phase-5 qualification gate: the reason
-ablation still needs an isolated variant, and target-host checks remain open.
+ablation uses an explicit transport shim, and target-host checks remain open.
 """
 
 import argparse
+import copy
 import hashlib
 import json
 import os
@@ -86,13 +87,15 @@ def response_envelope(body):
 
 
 def apply_request_policy(body, policy):
-    if policy not in ("no_reflection_schema", "message_first_schema"):
+    if policy not in ("no_reflection_schema", "message_first_schema", "no_reason_schema"):
         return body
     request = json.loads(body)
     schema = (request.get("response_format") or {}).get("json_schema", {}).get("schema")
     message_first = policy == "message_first_schema"
+    no_reason = policy == "no_reason_schema"
     old_order = "Order fields: action, reason, action-specific fields, message last."
     new_order = "Order fields: message first, then action, reason, and action-specific fields."
+    no_reason_order = "Order fields: action, action-specific fields, message last. Do not include a root reason field."
     if schema is None:
         # Compatibility probes and JSON-object fallbacks have no branch schema.
         # Only task requests with the v8 guidance need a prompt-level policy.
@@ -101,11 +104,27 @@ def apply_request_policy(body, policy):
             return body
         request["messages"].append({"role": "developer", "content":
                                     "Benchmark policy: return message as the first JSON field." if message_first else
+                                    "Benchmark ablation: omit the root reason field from every response." if no_reason else
                                     "Benchmark policy: reflection is unavailable. Choose execute or finish."})
         return json.dumps(request, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     branches = schema.get("anyOf")
     if not isinstance(branches, list):
         return body
+    if no_reason:
+        schema["description"] = schema.get("description", "").replace(old_order, no_reason_order)
+        for branch in branches:
+            properties = branch["properties"]
+            if "reason" not in properties or "reason" not in branch["required"]:
+                raise ValueError("Expected required reason in v8 schema")
+            del properties["reason"]
+            branch["required"] = [field for field in branch["required"] if field != "reason"]
+        for message in request.get("messages", []):
+            if isinstance(message.get("content"), str):
+                message["content"] = message["content"].replace(old_order, no_reason_order)
+        request["messages"].append({"role": "developer", "content":
+                                    "Benchmark ablation: omit the root reason field from every response. "
+                                    "The test transport supplies a neutral runtime placeholder."})
+        return json.dumps(request, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     if message_first:
         schema["description"] = schema.get("description", "").replace(old_order, new_order)
         for branch in branches:
@@ -125,6 +144,35 @@ def apply_request_policy(body, policy):
         raise ValueError("Expected exactly one reflection branch in v8 schema")
     schema["anyOf"] = selected
     return json.dumps(request, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+
+
+def apply_response_policy(body, policy):
+    if policy != "no_reason_schema":
+        return body
+    envelope, _usage = response_envelope(body)
+    if not isinstance(envelope, dict) or envelope.get("action") not in ("execute", "reflection", "finish"):
+        return body
+    translated = {"action": envelope["action"],
+                  "reason": "Benchmark transport placeholder; no model reason was requested."}
+    translated.update({key: value for key, value in envelope.items() if key not in ("action", "reason")})
+    content = json.dumps(translated, ensure_ascii=False, separators=(",", ":"))
+    if not body.startswith(b"data:"):
+        response = json.loads(body)
+        response["choices"][0]["message"]["content"] = content
+        return json.dumps(response, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    chunks = [json.loads(line[5:].strip()) for line in body.decode("utf-8").splitlines()
+              if line.startswith("data:") and line[5:].strip() != "[DONE]"]
+    first = copy.deepcopy(chunks[0])
+    first["choices"][0]["delta"] = {"role": "assistant", "content": content}
+    terminal = next((copy.deepcopy(chunk) for chunk in chunks
+                     if chunk.get("choices") and chunk["choices"][0].get("finish_reason")), None)
+    usage = next((copy.deepcopy(chunk) for chunk in reversed(chunks) if chunk.get("usage")), None)
+    if terminal is None:
+        raise ValueError("No terminal SSE chunk in reason ablation")
+    terminal["choices"][0]["delta"] = {}
+    selected = [first, terminal] + ([usage] if usage else [])
+    return ("".join("data: " + json.dumps(chunk, ensure_ascii=False, separators=(",", ":")) + "\n\n"
+                    for chunk in selected) + "data: [DONE]\n\n").encode("utf-8")
 
 
 class CaptureProxy(BaseHTTPRequestHandler):
@@ -156,11 +204,18 @@ class CaptureProxy(BaseHTTPRequestHandler):
         started = time.monotonic()
         try:
             with urlopen(request, timeout=300) as response:
-                status, mime, payload = response.status, response.headers.get("Content-Type", "application/json"), response.read()
+                status, mime, upstream_payload = response.status, response.headers.get("Content-Type", "application/json"), response.read()
         except HTTPError as error:
-            status, mime, payload = error.code, error.headers.get("Content-Type", "application/json"), error.read()
+            status, mime, upstream_payload = error.code, error.headers.get("Content-Type", "application/json"), error.read()
         except Exception as error:
-            status, mime, payload = 502, "text/plain", str(error).encode("utf-8")
+            status, mime, upstream_payload = 502, "text/plain", str(error).encode("utf-8")
+        try:
+            payload = apply_response_policy(upstream_payload, self.server.request_policy) if self.path.startswith("/v1/chat/completions") and status == 200 else upstream_payload
+        except (ValueError, KeyError, TypeError) as error:
+            with self.server.capture_lock:
+                self.server.policy_errors.append(str(error))
+            self.send_error(502, "Benchmark response policy rejected the response")
+            return
         elapsed = round(time.monotonic() - started, 3)
         with self.server.capture_lock:
             index = self.server.capture_count
@@ -169,12 +224,17 @@ class CaptureProxy(BaseHTTPRequestHandler):
         if client_body != body:
             (self.server.capture_dir / (stem + ".client_request.body")).write_bytes(client_body)
         (self.server.capture_dir / (stem + ".request.body")).write_bytes(body)
+        if upstream_payload != payload:
+            (self.server.capture_dir / (stem + ".upstream_response.body")).write_bytes(upstream_payload)
         (self.server.capture_dir / (stem + ".response.body")).write_bytes(payload)
         action, usage = response_action(payload) if self.path.startswith("/v1/chat/completions") else (None, None)
         record = {"index": index, "method": self.command, "path": self.path, "status": status,
                   "seconds": elapsed, "request_policy_transformed": client_body != body,
                   "request_sha256": sha256(body),
-                  "client_request_sha256": sha256(client_body), "response_sha256": sha256(payload),
+                  "client_request_sha256": sha256(client_body),
+                  "upstream_response_sha256": sha256(upstream_payload),
+                  "response_policy_transformed": upstream_payload != payload,
+                  "response_sha256": sha256(payload),
                   "action": action, "usage": usage}
         with self.server.capture_lock:
             with (self.server.capture_dir / "requests.jsonl").open("a", encoding="utf-8") as output:
@@ -206,7 +266,8 @@ def run_case(name, dll, task_name, task, output, origin, model):
     proxy = CaptureServer(("127.0.0.1", 0), CaptureProxy)
     proxy.origin, proxy.capture_dir = origin, captures
     proxy.request_policy = {"v8_direct": "no_reflection_schema",
-                            "v8_message_first": "message_first_schema"}.get(name, "unchanged")
+                            "v8_message_first": "message_first_schema",
+                            "v8_no_reason": "no_reason_schema"}.get(name, "unchanged")
     proxy.capture_count, proxy.capture_lock, proxy.policy_errors = 0, threading.Lock(), []
     thread = threading.Thread(target=proxy.serve_forever, daemon=True)
     thread.start()
@@ -244,6 +305,10 @@ def run_case(name, dll, task_name, task, output, origin, model):
     usages = [item["usage"] for item in http if item["usage"]]
     responses = [response_envelope((captures / ("%04d.response.body" % item["index"])).read_bytes())[0]
                  for item in http if item["path"].startswith("/v1/chat/completions")]
+    upstream_responses = [response_envelope((captures / ("%04d.upstream_response.body" % item["index"])).read_bytes()
+                       if (captures / ("%04d.upstream_response.body" % item["index"])).exists()
+                       else (captures / ("%04d.response.body" % item["index"])).read_bytes())[0]
+                       for item in http if item["path"].startswith("/v1/chat/completions")]
     proposed_calls = [call for item in responses if isinstance(item, dict) and item.get("action") in ("execute", "tool")
                       for call in item.get("tool_calls", []) if isinstance(call, dict)]
     signatures = [json.dumps(call, sort_keys=True, ensure_ascii=False) for call in proposed_calls]
@@ -284,6 +349,7 @@ def run_case(name, dll, task_name, task, output, origin, model):
                "invalid_evidence_ids": sorted(set(citations) - set(terminal_results)),
                "satisfied_claim_without_external_artifact": any(claim.get("assessment") == "satisfied" for claim in claims) and not external_success,
                "message_first_envelopes": sum(next(iter(item), None) == "message" for item in responses if isinstance(item, dict)),
+               "upstream_reason_field_count": sum("reason" in item for item in upstream_responses if isinstance(item, dict)),
                "http_actions": [item["action"] for item in http if item["path"].startswith("/v1/chat/completions")],
                "prompt_tokens": sum(item.get("prompt_tokens", 0) for item in usages) if usages else None,
                "completion_tokens": sum(item.get("completion_tokens", 0) for item in usages) if usages else None}
@@ -301,7 +367,7 @@ def main():
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--tasks", default="ready,uppercase,two_files")
     parser.add_argument("--repeats", type=int, default=1)
-    parser.add_argument("--variants", default="v7,v8", help="Comma-separated v7, v8, v8_direct and/or v8_message_first variants")
+    parser.add_argument("--variants", default="v7,v8", help="Comma-separated v7, v8, v8_direct, v8_message_first and/or v8_no_reason variants")
     parser.add_argument("--start-v8", action="store_true", help="Reverse the first pair to balance order across runs")
     parser.add_argument("--v7-revision", required=True, help="Exact source revision used to build the v7 CLI")
     parser.add_argument("--v8-revision", required=True, help="Exact source revision used to build the v8 CLI")
@@ -313,8 +379,8 @@ def main():
         parser.error("--tasks must select ready, uppercase and/or two_files")
     selected_variants = args.variants.split(",")
     if not selected_variants or len(selected_variants) != len(set(selected_variants)) or \
-            any(variant not in ("v7", "v8", "v8_direct", "v8_message_first") for variant in selected_variants):
-        parser.error("--variants must select v7, v8, v8_direct and/or v8_message_first without duplicates")
+            any(variant not in ("v7", "v8", "v8_direct", "v8_message_first", "v8_no_reason") for variant in selected_variants):
+        parser.error("--variants must select v7, v8, v8_direct, v8_message_first and/or v8_no_reason without duplicates")
     if args.output.exists():
         parser.error("--output must be a new directory")
     for dll in (args.v7, args.v8):
@@ -333,7 +399,7 @@ def main():
                              "thinking": "off", "context_tokens": 32768},
                 "tasks": {task: TASKS[task] for task in tasks}, "runs": []}
     variants = [(name, dll) for name, dll in (("v7", args.v7), ("v8", args.v8),
-                ("v8_direct", args.v8), ("v8_message_first", args.v8))
+                ("v8_direct", args.v8), ("v8_message_first", args.v8), ("v8_no_reason", args.v8))
                 if name in selected_variants]
     for repeat in range(args.repeats):
         for task_index, task_name in enumerate(tasks):
