@@ -98,6 +98,10 @@ an irreparable obstacle without reporting success or replaying a tool.
 - The complete `agent continuity:` group passes 5/5 after updating the resource
   presentation fixture to the current `unavailableScopes` wire and runtime-owned
   media hydration evidence.
+- The `conversation:` streaming group passes 4/4 with v8 finish envelopes:
+  chunked escaped messages and provider reasoning remain separate, while a
+  rejected finish with an extra field resets the visible stream and reasoning
+  before its accepted repair.
 
 The full Harness still has legacy v7 wire bodies and assertions outside these
 migrated groups; its complete test suite is not yet green.
