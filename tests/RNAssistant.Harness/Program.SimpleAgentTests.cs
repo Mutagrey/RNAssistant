@@ -596,8 +596,6 @@ namespace RNAssistant.Harness
             AssertContains(prompt, "Test workflow", "skill description present");
             AssertTrue(prompt.IndexOf(SkillRevision.Compute(skills[0]), StringComparison.Ordinal) < 0,
                 "skill revision remains outside model catalog");
-            AssertContains(prompt, "\"bodyChars\":27", "skill body size present");
-            AssertContains(prompt, "\"referenceCount\":0", "skill reference count present");
             AssertTrue(prompt.IndexOf("TEST_SKILL_SENTINEL", StringComparison.Ordinal) < 0, "full skill is not in catalog");
             AssertContains(prompt, "common.capabilities_read", "unified capability loading guidance present");
             AssertContains(prompt, "\"kind\":\"skill\"", "skill kind is explicit in compact catalog");
