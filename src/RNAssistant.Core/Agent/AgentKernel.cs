@@ -44,6 +44,8 @@ namespace RNAssistant.Core.Agent
         {
             if (string.IsNullOrWhiteSpace(runId)) throw new ArgumentException("Run id is required.", nameof(runId));
             var pending = continuation == null ? null : continuation.Summary.PendingConfirmation;
+            if (continuation != null && !string.Equals(runId, continuation.Summary.RunId, StringComparison.Ordinal))
+                throw new InvalidOperationException("Pending confirmation must resume in its original run.");
             if (pending == null || continuation.Summary.Lifecycle != RunLifecycle.AwaitingConfirmation ||
                 !string.Equals(pending.PendingId, pendingId, StringComparison.Ordinal) ||
                 !continuation.AcceptedCallIds.Contains(pending.Call.Id, StringComparer.OrdinalIgnoreCase))

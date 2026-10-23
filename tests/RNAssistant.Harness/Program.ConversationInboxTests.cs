@@ -103,7 +103,7 @@ namespace RNAssistant.Harness
             f.Tools.OnExecute = (context, token) => Task.FromResult(KernelRecord(context, ToolExecutionOutcome.AwaitingConfirmation));
             var paused = await f.RunAsync();
             var input = new KernelInputFake(); input.Add("Use another approach");
-            var result = await new AgentKernel(f.Model, f.Tools, f.Store, input: input).ResumeAsync("resumed",
+            var result = await new AgentKernel(f.Model, f.Tools, f.Store, input: input).ResumeAsync(paused.Summary.RunId,
                 paused.Summary.PendingConfirmation.PendingId, paused.Continuation, CancellationToken.None, true);
             AssertEqual(1, f.Tools.Calls.Count, "old pending call never executes");
             AssertEqual(paused.Summary.ToolStepsUsed, result.Summary.ToolStepsUsed, "reservation is not reset or charged twice");

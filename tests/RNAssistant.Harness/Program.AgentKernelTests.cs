@@ -757,7 +757,7 @@ namespace RNAssistant.Harness
                 context.IsConfirmed ? ToolExecutionOutcome.Ok : ToolExecutionOutcome.AwaitingConfirmation));
             var paused = await f.RunAsync();
             var pending = paused.Summary.PendingConfirmation;
-            var resumed = await f.Kernel.ResumeAsync("resume", pending.PendingId, paused.Continuation, CancellationToken.None);
+            var resumed = await f.Kernel.ResumeAsync("run", pending.PendingId, paused.Continuation, CancellationToken.None);
             AssertEqual(RunLifecycle.Failed, resumed.Summary.Lifecycle, "allocation checks retained ids after confirmation");
             AssertEqual("call_id_allocation_failed", resumed.Summary.Reason, "post-confirmation collision remains an infrastructure failure");
             AssertEqual(2, f.Tools.Calls.Count, "only pending and confirmed dispatches enter runtime");
@@ -809,12 +809,16 @@ namespace RNAssistant.Harness
                 context.IsConfirmed ? ToolExecutionOutcome.Ok : ToolExecutionOutcome.AwaitingConfirmation));
             var paused = await f.RunAsync();
             await KernelThrowsAsync<InvalidOperationException>(() =>
-                f.Kernel.ResumeAsync("wrong", "different", paused.Continuation, CancellationToken.None));
+                f.Kernel.ResumeAsync("run", "different", paused.Continuation, CancellationToken.None));
             AssertEqual(1, f.Tools.Calls.Count, "wrong pending id cannot execute");
             var pendingId = paused.Summary.PendingConfirmation.PendingId;
-            await f.Kernel.ResumeAsync("resume", pendingId, paused.Continuation, CancellationToken.None);
+            var eventsBeforeWrongRun = f.Store.Events.Count;
+            await KernelThrowsAsync<InvalidOperationException>(() =>
+                f.Kernel.ResumeAsync("wrong", pendingId, paused.Continuation, CancellationToken.None));
+            AssertEqual(eventsBeforeWrongRun, f.Store.Events.Count, "wrong run id cannot claim a continuation cursor");
+            await f.Kernel.ResumeAsync("run", pendingId, paused.Continuation, CancellationToken.None);
             await KernelThrowsAsync<RunStoreException>(() =>
-                f.Kernel.ResumeAsync("again", pendingId, paused.Continuation, CancellationToken.None));
+                f.Kernel.ResumeAsync("run", pendingId, paused.Continuation, CancellationToken.None));
             AssertEqual(2, f.Tools.Calls.Count, "stale cursor rejected before a second confirmed dispatch");
         }
 
@@ -842,7 +846,7 @@ namespace RNAssistant.Harness
             f.Tools.OnExecute = (context, token) => Task.FromResult(
                 KernelRecord(context, ToolExecutionOutcome.AwaitingConfirmation));
             var paused = await f.RunAsync();
-            var denied = await f.Kernel.ResumeAsync("resume", paused.Summary.PendingConfirmation.PendingId,
+            var denied = await f.Kernel.ResumeAsync("run", paused.Summary.PendingConfirmation.PendingId,
                 paused.Continuation, CancellationToken.None, rejectPending: true);
             AssertEqual(RunLifecycle.Cancelled, denied.Summary.Lifecycle, "denial terminates the run");
             AssertEqual("confirmation_denied", denied.Summary.Reason, "denial has a distinct runtime reason");
@@ -860,7 +864,7 @@ namespace RNAssistant.Harness
                 f.Tools.OnExecute = (context, token) => Task.FromResult(KernelRecord(context, ToolExecutionOutcome.AwaitingConfirmation));
                 var paused = await f.RunAsync();
                 f.Tools.Policies["confirm"] = new ToolPolicySnapshot("confirm", "changed", true, true);
-                var result = await f.Kernel.ResumeAsync("resume", paused.Summary.PendingConfirmation.PendingId,
+                var result = await f.Kernel.ResumeAsync("run", paused.Summary.PendingConfirmation.PendingId,
                     paused.Continuation, CancellationToken.None);
                 AssertEqual(1, f.Tools.Calls.Count, "changed confirmed policy never executes");
                 AssertEqual("0,0,0,1,0", KernelCounts(result.Summary), "known rejection is error, not unknown effect");

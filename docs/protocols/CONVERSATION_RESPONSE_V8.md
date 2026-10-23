@@ -40,7 +40,8 @@ step and model-attempt origin. Reflection is persisted as a no-call accepted
 decision; at most two consecutive reflections are accepted, then bounded
 feedback and a terminal limit apply. Terminal tool results reset the
 consecutive reflection counter. Confirmation, restart and continuation keep
-the same run limits and accepted-call identities.
+the same run ID, limits and accepted-call identities; a confirmation cannot
+claim a continuation under a new run ID.
 
 Before accepting `finish`, the run store resolves cited IDs against the
 complete validated append-only event stream for this session, run and turn.
