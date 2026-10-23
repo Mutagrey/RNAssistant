@@ -372,8 +372,7 @@ namespace RNAssistant.Harness
                     "the paused message projection is durable without a new terminal message");
                 responses.Enqueue(ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
                     "The user selected Core after the question.", "Учту выбранную область Core.",
-                    results: new[] { new ConversationResultClaim("Scope selected: Core.",
-                        new[] { acceptedCall.ToolCallId }, ConversationAssessment.Satisfied) }));
+                    results: new ConversationResultClaim[0]));
                 var resumed = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Plan, "Core", reloaded, NewContext(adapter),
                     new AppSettings { ToolResultRole = resultRole, ContextWindowOverrideTokens = 65536 }, tools, null).GetAwaiter().GetResult();
