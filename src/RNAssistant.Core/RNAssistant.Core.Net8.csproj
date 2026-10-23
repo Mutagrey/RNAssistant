@@ -11,6 +11,7 @@
     <Compile Remove="Storage/ProtectedSecretStore.cs" />
     <Compile Remove="Storage/SettingsService.cs" />
     <Reference Include="Newtonsoft.Json" HintPath="../../packages/Newtonsoft.Json.13.0.3/lib/net6.0/Newtonsoft.Json.dll" />
+    <Reference Include="YamlDotNet" HintPath="../../packages/YamlDotNet.18.1.0/lib/net8.0/YamlDotNet.dll" />
     <Reference Include="Microsoft.Data.Sqlite" HintPath="../../packages/Microsoft.Data.Sqlite.Core.10.0.10/lib/net8.0/Microsoft.Data.Sqlite.dll" />
     <Reference Include="SQLitePCLRaw.core" HintPath="../../packages/SQLitePCLRaw.core.2.1.11/lib/netstandard2.0/SQLitePCLRaw.core.dll" />
     <Reference Include="SQLitePCLRaw.provider.sqlite3" HintPath="../../packages/SQLitePCLRaw.provider.sqlite3.2.1.11/lib/net6.0/SQLitePCLRaw.provider.sqlite3.dll" />
