@@ -785,17 +785,15 @@ namespace RNAssistant.Harness
 
         private static void SimpleAgentPublishesNewSkillAndToolInSameRun()
         {
-            Func<string, JObject, string> call = (name, arguments) => new JObject
-            {
-                ["message"] = "Продолжаю проверку пакета.",
-                ["action"] = "tool",
-                ["tool_calls"] = new JArray(new JObject { ["name"] = name, ["arguments"] = arguments })
-            }.ToString(Formatting.None);
+            Func<string, JObject, string> call = (name, arguments) =>
+                ModelProtocolWire.WriteAcceptedCall("Continue inspecting the authored capability.",
+                    "Продолжаю проверку пакета.", new ConversationToolCall { Name = name, Arguments = arguments });
             const string skillId = "excel.in_run_skill";
             const string toolId = "excel.in_run_tool";
             const string body = "# In-run skill\n\nIN_RUN_SKILL_SENTINEL";
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
+                var session = NewSession(adapter);
                 var responses = new Queue<string>(new[]
                 {
                     call("common.skills_load", new JObject { ["id"] = "common.skill_authoring" }),
@@ -805,15 +803,18 @@ namespace RNAssistant.Harness
                         ["version"] = "1.0.0", ["bodyMarkdown"] = body, ["enabled"] = true }),
                     call("common.capabilities_read", new JObject { ["id"] = skillId }),
                     call("common.skills_load", new JObject { ["id"] = skillId }),
-                    "{\"message\":\"Скилл создан и загружен.\",\"action\":\"done\",\"tool_calls\":[]}"
+                    null
                 });
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
                 {
                     requests.Add(messages.ToList());
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    var response = responses.Dequeue() ?? ScriptedVerifiedFinish(session,
+                        "The published skill was loaded in the same run.", "Скилл создан и загружен.",
+                        "The skill was published and loaded.", "common.skills_upsert", "common.skills_load",
+                        "common.skills_load");
+                    return Task.FromResult(new LlmCompletionResult { Content = response });
                 };
-                var session = NewSession(adapter);
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent, "Create and load a skill in this run.", session, NewContext(adapter),
                     new AppSettings { AutoConfirmToolActions = true, MaxAgentIterations = 8 },
@@ -834,6 +835,7 @@ namespace RNAssistant.Harness
 
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
+                var session = NewSession(adapter);
                 var authored = CustomTool("Excel", toolId);
                 authored.Components[0].Code = authored.Components[0].Code
                     .Replace("' <RNAssistantTool>", "<RNAssistantTool>")
@@ -846,16 +848,20 @@ namespace RNAssistant.Harness
                         ["id"] = toolId, ["components"] = ToolComponentsPayload(authored) }),
                     call("common.resources_read", new JObject { ["target"] = "tool source: " + toolId }),
                     call("common.capabilities_read", new JObject { ["id"] = toolId }),
-                    "{\"message\":\"Инструмент создан и его схема прочитана.\",\"action\":\"done\",\"tool_calls\":[]}"
+                    null
                 });
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (settings, messages, requestOptions, stream, token) =>
                 {
                     requests.Add(messages.ToList());
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    var response = responses.Dequeue() ?? ScriptedVerifiedFinish(session,
+                        "The published tool source and schema were read.", "Инструмент создан и его схема прочитана.",
+                        "The tool was published and inspected.", "common.tools_upsert",
+                        ResourceToolCatalog.ReadToolId, CapabilityToolCatalog.ReadToolId);
+                    return Task.FromResult(new LlmCompletionResult { Content = response });
                 };
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
-                    ChatModes.Agent, "Create and inspect a tool in this run.", NewSession(adapter), NewContext(adapter),
+                    ChatModes.Agent, "Create and inspect a tool in this run.", session, NewContext(adapter),
                     new AppSettings { AutoConfirmToolActions = true, MaxAgentIterations = 8 },
                     OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(),
                     null).GetAwaiter().GetResult();
