@@ -1,5 +1,10 @@
 # Conversation JSON flow
 
+The isolated `conversation-v8` branch now uses the
+[v8 response contract](protocols/CONVERSATION_RESPONSE_V8.md) and format-8
+execution streams. The v7-specific audit and qualification records below
+describe the main-branch baseline and remain historical until cutover.
+
 RNAssistant uses one `Core/Agent/AgentKernel`, invoked by Office's
 `ConversationRunService` and CLI's `WorkspaceConversationService`. A request may
 finish with zero calls; neither a router LLM nor a mandatory planner is involved.

@@ -10,6 +10,8 @@
     failed: true
   };
   var healthValues = { clean: true, errors: true, unknown: true };
+  var assessments = { satisfied: true, partially_satisfied: true,
+    unverified: true, not_satisfied: true };
 
   function text(source, key) {
     var result = source ? source[key] : null;
@@ -33,6 +35,26 @@
     return Object.freeze(result);
   }
 
+  function modelResults(source) {
+    var raw = source.ModelResults;
+    if (raw === null || raw === undefined) return Object.freeze([]);
+    if (!Array.isArray(raw)) return null;
+    var result = [];
+    for (var index = 0; index < raw.length; index += 1) {
+      var item = raw[index];
+      var summary = text(item, "Summary");
+      var assessment = text(item, "Assessment");
+      var evidence = item && item.Evidence;
+      if (!item || typeof item.Summary !== "string" || typeof item.Assessment !== "string" ||
+          !summary.trim() || assessments[assessment] !== true || !Array.isArray(evidence) ||
+          evidence.some(function (id) { return typeof id !== "string" || !id.trim(); }) ||
+          new Set(evidence).size !== evidence.length) return null;
+      result.push(Object.freeze({ summary: summary, assessment: assessment,
+        evidence: Object.freeze(evidence.slice()) }));
+    }
+    return Object.freeze(result);
+  }
+
   function normalize(source) {
     if (!source) return null;
     var normalizedLifecycle = text(source, "Lifecycle");
@@ -44,6 +66,7 @@
       lifecycle: normalizedLifecycle,
       executionHealth: executionHealth,
       goalVerification: text(source, "GoalVerification") || "not_assessed",
+      modelResults: modelResults(source),
       successfulReads: count(source, "SuccessfulReads"),
       verifiedWrites: count(source, "VerifiedWrites"),
       noChangeWrites: count(source, "NoChangeWrites"),
@@ -58,6 +81,8 @@
     if (!result.runId || !result.turnId || lifecycles[normalizedLifecycle] !== true ||
         healthValues[executionHealth] !== true ||
         result.goalVerification !== "not_assessed" ||
+        result.modelResults === null ||
+        (result.modelResults.length > 0 && normalizedLifecycle !== "completed") ||
         result.successfulReads === null || result.verifiedWrites === null || result.noChangeWrites === null ||
         result.unverifiedWrites === null || result.failedCalls === null || result.unknownEffects === null ||
         executionHealth !== (result.unknownEffects > 0 ? "unknown" : (result.failedCalls > 0 ? "errors" : "clean")) ||
@@ -175,8 +200,13 @@
       ? "Работа остановлена · результат действия неизвестен"
       : viewState.reason === "provider_refused" ? "Отказ провайдера" : "Ошибка выполнения";
     if (viewState.lifecycle === "completed") {
-      if (viewState.reason === "model_blocked") return "Работа заблокирована";
-      if (viewState.reason === "model_needs_input") return "Нужен ответ";
+      var results = viewState.modelResults || [];
+      if (results.some(function (item) { return item.assessment === "not_satisfied"; }))
+        return "Ответ завершён · задача не выполнена по оценке модели";
+      if (results.some(function (item) { return item.assessment === "unverified"; }))
+        return "Ответ завершён · итог не подтверждён по оценке модели";
+      if (results.some(function (item) { return item.assessment === "partially_satisfied"; }))
+        return "Ответ завершён · задача выполнена частично по оценке модели";
       return "Ответ завершён";
     }
     return "Выполняется";

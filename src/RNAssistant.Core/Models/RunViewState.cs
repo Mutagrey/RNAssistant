@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using Newtonsoft.Json;
 
 namespace RNAssistant.Core.Models
@@ -55,6 +57,30 @@ namespace RNAssistant.Core.Models
         }
     }
 
+    // A finish result is the model's stated assessment. Its evidence IDs link
+    // to runtime outcomes; this DTO never upgrades GoalVerification.
+    public sealed class ModelResultViewState
+    {
+        public string Summary { get; private set; }
+        public string Assessment { get; private set; }
+        public IReadOnlyList<string> Evidence { get; private set; }
+
+        [JsonConstructor]
+        public ModelResultViewState(string summary, string assessment, IEnumerable<string> evidence)
+        {
+            if (string.IsNullOrWhiteSpace(summary) ||
+                assessment != "satisfied" && assessment != "partially_satisfied" &&
+                assessment != "unverified" && assessment != "not_satisfied")
+                throw new ArgumentException("A model result requires a summary and v8 assessment.");
+            var refs = (evidence ?? throw new ArgumentNullException(nameof(evidence))).ToArray();
+            if (refs.Any(string.IsNullOrWhiteSpace) || refs.Distinct(StringComparer.Ordinal).Count() != refs.Length)
+                throw new ArgumentException("Model result evidence IDs must be nonblank and unique.");
+            Summary = summary;
+            Assessment = assessment;
+            Evidence = Array.AsReadOnly(refs);
+        }
+    }
+
     // Immutable runtime-to-UI projection. Narrative is carried as data; lifecycle
     // and effect health are never inferred from its text or model-authored status.
     public sealed class RunViewState
@@ -65,6 +91,7 @@ namespace RNAssistant.Core.Models
         public string Lifecycle { get; private set; }
         public string ExecutionHealth { get; private set; }
         public string GoalVerification { get; private set; }
+        public IReadOnlyList<ModelResultViewState> ModelResults { get; private set; }
         public int SuccessfulReads { get; private set; }
         public int VerifiedWrites { get; private set; }
         public int NoChangeWrites { get; private set; }
@@ -81,7 +108,8 @@ namespace RNAssistant.Core.Models
             string executionHealth, int successfulReads, int verifiedWrites, int noChangeWrites,
             int unverifiedWrites, int failedCalls, int unknownEffects,
             PendingConfirmationViewState pendingConfirmation, string reason, string currentAction,
-            DateTime startedUtc, string goalVerification = RunGoalVerification.NotAssessed)
+            DateTime startedUtc, string goalVerification = RunGoalVerification.NotAssessed,
+            IEnumerable<ModelResultViewState> modelResults = null)
         {
             // Json.NET passes null for this field in durable run views written before
             // goal verification was added; optional parameter defaults do not apply.
@@ -103,6 +131,10 @@ namespace RNAssistant.Core.Models
                 throw new ArgumentException("Run view health must match its effect evidence.");
             if ((lifecycle == RunViewLifecycles.AwaitingConfirmation) != (pendingConfirmation != null))
                 throw new ArgumentException("Pending confirmation must match the run lifecycle.");
+            var claims = (modelResults ?? new ModelResultViewState[0]).ToArray();
+            if (claims.Any(claim => claim == null) ||
+                claims.Length > 0 && lifecycle != RunViewLifecycles.Completed)
+                throw new ArgumentException("Model finish results require a completed run.");
 
             RunId = runId;
             TurnId = turnId;
@@ -110,6 +142,7 @@ namespace RNAssistant.Core.Models
             Lifecycle = lifecycle;
             ExecutionHealth = executionHealth;
             GoalVerification = goalVerification;
+            ModelResults = Array.AsReadOnly(claims);
             SuccessfulReads = successfulReads;
             VerifiedWrites = verifiedWrites;
             NoChangeWrites = noChangeWrites;

@@ -10,6 +10,7 @@ using RNAssistant.Core.Agent;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
+using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
 using RNAssistant.Core.Tools.Contracts;
 using RNAssistant.Office.Services;
@@ -85,6 +86,12 @@ internal static class Program
 
     private static void PromptSmoke()
     {
+        var legacy = new ChatSession { FormatVersion = 7 };
+        var refused = false;
+        try { ConversationRunPolicy.RequireCurrentSession(legacy); }
+        catch (InvalidOperationException) { refused = true; }
+        Expect(ChatSession.CurrentFormatVersion == 8 && ChatSession.IsReadableFormat(7) && refused,
+            "v7 history remains readable but cannot gain v8 execution authority");
         var composer = typeof(ConversationRunService).Assembly.GetType(
             "RNAssistant.Office.Services.ConversationPromptComposer", true);
         var flags = BindingFlags.Static | BindingFlags.NonPublic;
@@ -177,6 +184,20 @@ internal static class Program
             CancellationToken.None).GetAwaiter().GetResult();
         Expect(run.Summary.Lifecycle == RunLifecycle.Completed && callTools.Executions == 1 &&
             callModel.Feedback[2].Contains("missing_finish_evidence"), "premature finish rejected without replay");
+        var finishMessage = new ChatMessage { Role = "assistant", RunId = run.Summary.RunId,
+            ProtocolMessage = true, ResponseProtocolVersion = ConversationResponse.ProtocolVersion,
+            ResponseModelAttemptId = "attempt_finish",
+            Content = ModelProtocolWire.WriteAcceptedDecision(validFinish.Action, validFinish.Reason,
+                validFinish.Message, results: validFinish.Results) };
+        var view = RunViewStateProjector.Create(new ChatRunRecord {
+            KernelState = callStore.State, StartedUtc = DateTime.UtcNow },
+            new[] { finishMessage });
+        var restoredView = JsonConvert.DeserializeObject<RunViewState>(JsonConvert.SerializeObject(view));
+        Expect(restoredView.ModelResults.Count == 1 &&
+            restoredView.ModelResults[0].Assessment == "satisfied" &&
+            restoredView.ModelResults[0].Evidence.SequenceEqual(new[] { "call_1" }) &&
+            restoredView.GoalVerification == RunGoalVerification.NotAssessed,
+            "finish claims project with exact references without verifying the user goal");
 
         var restartStore = new KernelStore();
         var beforeRestart = new AgentKernel(new QueueModel(new[] { Reflection(), (AgentModelResult)null }),

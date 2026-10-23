@@ -63,6 +63,21 @@ namespace RNAssistant.Office.Services
                         decision.ResponseModelAttemptId = fact.SourceModelAttemptId;
                         if (_modelSession != null) _modelSession.AttachResponseEvidence(decision);
                         _session.Messages.Add(decision);
+                        if (fact.Response.Action == ConversationResponse.ReflectionAction)
+                        {
+                            var visibleDecision = string.IsNullOrWhiteSpace(fact.Response.Message)
+                                ? fact.Response.Decision : fact.Response.Message;
+                            _session.Messages.Add(new ChatMessage
+                            {
+                                Role = "assistant", Content = string.Empty,
+                                RuntimeProjection = true, ExcludeFromModelContext = true,
+                                Activity = new ChatActivity
+                                {
+                                    Kind = "step", StepId = fact.StepId, StepMessage = visibleDecision,
+                                    Title = "Промежуточное решение", Status = "completed"
+                                }
+                            });
+                        }
                     }
                     // Persist the entire accepted batch before any dispatch. Callable
                     // pack membership changes only at the next model-step boundary.
@@ -269,8 +284,9 @@ namespace RNAssistant.Office.Services
             if (fact.Kind == AgentRunEventKind.ModelStepStarted)
                 _progress("thinking", "Модель выбирает следующий шаг...", null);
             else if (fact.Kind == AgentRunEventKind.ResponseAccepted &&
-                fact.Response.Action == ConversationResponse.ReflectionAction && !string.IsNullOrWhiteSpace(_stepMessage))
-                _progress("thinking", _stepMessage, null);
+                fact.Response.Action == ConversationResponse.ReflectionAction)
+                _progress("thinking", string.IsNullOrWhiteSpace(_stepMessage)
+                    ? fact.Response.Decision : _stepMessage, null);
             else if (fact.Kind == AgentRunEventKind.ResponseAccepted && !fact.Response.Final && !string.IsNullOrWhiteSpace(_stepMessage))
                 _progress("acting", _stepMessage, new ChatActivity { StepId = fact.StepId, StepMessage = _stepMessage,
                     Kind = "step", Title = _stepMessage, Status = "running" });

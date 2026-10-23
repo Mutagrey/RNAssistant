@@ -11,12 +11,33 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from read_acceptance_context_smoke import CLI, REPO, DONE, call, read_progress
+from read_acceptance_context_smoke import CLI, REPO, read_progress
 
 
-TASK = "TASK_KEEP_LOCAL: inspect app.js and guard.txt, preserve external changes, create once.txt once, and read the final app.js before done."
+TASK = "TASK_KEEP_LOCAL: inspect app.js and guard.txt, preserve external changes, create once.txt once, and read the final app.js before finish."
 OLD = "const marker = 'OLD_MARKER';\n"
 EXTERNAL = "const marker = 'EXTERNAL_MARKER';\n"
+
+
+def call(name, **arguments):
+    return {"action": "execute", "reason": "Perform the checked file step.",
+            "tool_calls": [{"name": name, "arguments": arguments}],
+            "message": "Perform the checked file step."}
+
+
+def finish(request, assessment="satisfied", message="Finished."):
+    evidence = []
+    for item in request["messages"]:
+        content = item.get("content") or ""
+        if item.get("role") == "tool" and item.get("tool_call_id"):
+            evidence.append(item["tool_call_id"])
+        elif isinstance(content, str) and content.startswith("TOOL_RESULT:\n"):
+            evidence.append(json.loads(content.split("\n", 1)[1])["tool_call_id"])
+    evidence = list(dict.fromkeys(evidence))
+    return {"action": "finish", "reason": "Assess the available result evidence.",
+            "results": [{"summary": message, "evidence": evidence,
+                         "assessment": assessment}] if evidence else [],
+            "message": message}
 
 
 def run_case(root, recover):
@@ -33,8 +54,14 @@ def run_case(root, recover):
         def do_POST(self):
             try:
                 request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
-                requests.append(request)
                 content = "\n".join(item.get("content") or "" for item in request["messages"])
+                if "response_format" not in request and "CONVERSATION_PREFIX (data to summarize" not in content:
+                    body = json.dumps({"choices": [{"message": {"role": "assistant",
+                        "content": "Test title"}}]}).encode()
+                    self.send_response(200); self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
+                    return
+                requests.append(request)
                 if "CONVERSATION_PREFIX (data to summarize" in content:
                     sources = [json.loads(line) for line in content.splitlines() if line.startswith('{"sourceId":')]
                     assert sources, "Compaction must send exact admitted sources"
@@ -61,9 +88,10 @@ def run_case(root, recover):
                     elif phase["before"] == 1:
                         response = call("files.create", relativePath="once.txt", text="CREATED_ONCE")
                     elif phase["before"] == 2:
-                        response = {"message": "Read both exact sources.", "action": "tool", "tool_calls": [
+                        response = {"action": "execute", "reason": "Read both exact sources.", "tool_calls": [
                             {"name": "common.resources_read", "arguments": {"target": "app.js"}},
-                            {"name": "common.resources_read", "arguments": {"target": "guard.txt"}}]}
+                            {"name": "common.resources_read", "arguments": {"target": "guard.txt"}}],
+                            "message": "Read both exact sources."}
                     else:
                         response = call("common.resources_find", query="probe-" + str(phase["before"]))
                         # Deliberately grow accepted history within the reduced 24K
@@ -82,10 +110,11 @@ def run_case(root, recover):
                     elif phase["after"] == 2:
                         assert (workspace / "app.js").read_text() == EXTERNAL, "Stale observation overwrote the user's edit"
                         assert "source_observation_required" in content or "resource_conflict" in content
-                        response = call("common.resources_read", target="app.js") if recover else DONE
+                        response = call("common.resources_read", target="app.js") if recover else finish(request)
                     elif not recover:
                         assert phase["after"] == 3 and "completionFeedback" in content
-                        response = {"message": "The external edit requires review before I can finish.", "action": "blocked", "tool_calls": []}
+                        response = finish(request, "not_satisfied",
+                            "The external edit requires review before I can finish.")
                     elif phase["after"] == 3:
                         assert "EXTERNAL_MARKER" in content
                         response = call("files.patch", relativePath="app.js", oldText="EXTERNAL_MARKER", newText="VERIFIED_MARKER")
@@ -94,7 +123,7 @@ def run_case(root, recover):
                         response = call("common.resources_read", target="app.js")
                     else:
                         assert phase["after"] == 5 and read_progress(request)["remainingCompleteFileReads"] == 0
-                        response = DONE
+                        response = finish(request)
                 body = json.dumps({"choices": [{"message": {"role": "assistant", "content": json.dumps(response)}}]}).encode()
                 self.send_response(200); self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
@@ -141,11 +170,13 @@ def run_case(root, recover):
         assert stopped["ContextCheckpointId"] == before["ContextCheckpointId"]
         final = cli("resume", "--session", session, "--continue", "--run", stopped["RunId"], "--cursor", stopped["Cursor"],
                     "--context-tokens", "24576", code=0 if recover else 5)
-        assert final["RunId"] == stopped["RunId"] and final["reason"] == ("model_done" if recover else "model_blocked"), final
+        assert final["RunId"] == stopped["RunId"] and final["reason"] == "model_finish", final
         assert final["acceptance"] == ("passed" if recover else "failed")
         assert final["completeFileReads"] == (2 if recover else 1)
         assert final["verifiedFileChanges"] == (2 if recover else 1)
-        assert final["IterationsUsed"] == stopped["IterationsUsed"] + phase["after"], "Compaction cannot reset or spend kernel iterations"
+        assert final["IterationsUsed"] == stopped["IterationsUsed"] + phase["after"], \
+            ("Compaction cannot reset or spend kernel iterations", final["IterationsUsed"],
+             stopped["IterationsUsed"], phase, errors)
         assert (workspace / "once.txt").read_text() == "CREATED_ONCE" and not (workspace / "late.txt").exists()
         assert (workspace / "app.js").read_text() == (EXTERNAL.replace("EXTERNAL_MARKER", "VERIFIED_MARKER") if recover else EXTERNAL)
         assert not errors and len(summaries) == 1, (phase, len(summaries), errors)
@@ -162,7 +193,7 @@ def run_case(root, recover):
                 else:
                     assert not pending, "Native result must follow its accepted call"
             assert not pending, "Missing native result after compaction"
-        print("PASS compaction/resume", role, "repair" if recover else "premature done", ": exact checkpoint, task/provenance, drift guards, native pairs and original counters")
+        print("PASS compaction/resume", role, "repair" if recover else "honest incomplete finish", ": exact checkpoint, task/provenance, drift guards, native pairs and original counters")
     finally:
         release.set()
         if process is not None and process.poll() is None:

@@ -10,7 +10,31 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from read_acceptance_context_smoke import CLI, REPO, DONE, call
+from read_acceptance_context_smoke import CLI, REPO
+
+
+DONE = {"finish_from_request": True}
+
+
+def call(name, **arguments):
+    return {"action": "execute", "reason": "Perform the requested step.",
+            "tool_calls": [{"name": name, "arguments": arguments}],
+            "message": "Perform the requested step."}
+
+
+def finish_response(request):
+    evidence = []
+    for item in request["messages"]:
+        content = item.get("content") or ""
+        if item.get("role") == "tool" and item.get("tool_call_id"):
+            evidence.append(item["tool_call_id"])
+        elif isinstance(content, str) and content.startswith("TOOL_RESULT:\n"):
+            evidence.append(json.loads(content.split("\n", 1)[1])["tool_call_id"])
+    evidence = list(dict.fromkeys(evidence))
+    return {"action": "finish", "reason": "Report completed tool outcomes.",
+            "results": [{"summary": "Finished.", "evidence": evidence,
+                         "assessment": "satisfied"}] if evidence else [],
+            "message": "Finished."}
 
 
 def run_case(root):
@@ -30,9 +54,21 @@ def run_case(root):
         def do_POST(self):
             try:
                 assert self.path == "/v1/chat/completions"
-                requests.append(json.loads(self.rfile.read(int(self.headers["Content-Length"]))))
+                request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                if "response_format" not in request:
+                    body = json.dumps({"choices": [{"message": {"role": "assistant",
+                        "content": "Test title"}}]}).encode()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
+                requests.append(request)
                 assert replies, "Unexpected model request/replay"
                 response, entered, released = replies.pop(0)
+                if response == DONE:
+                    response = finish_response(request)
                 entered.set()
                 assert released.wait(30), "Fixture did not release model wait"
                 body = json.dumps({"choices": [{"message": {"role": "assistant", "content": json.dumps(response)}}]}).encode()
@@ -92,8 +128,9 @@ def run_case(root):
         reply(call("files.create", relativePath="note.txt", text="ONCE"))
         entered, released = reply(call("files.create", relativePath="late.txt", text="MUST_NOT_RUN"), True)
         process = start("run", "--message", "Create and read note.txt.", "--min-writes", "1", "--min-reads", "1",
-                        "--max-iterations", "4", "--max-tool-steps", "4", "--tool-result-role", "tool", "--instruction-role", "system")
-        assert entered.wait(12)
+                        "--max-iterations", "4", "--max-tool-steps", "4", "--tool-result-role", "tool", "--instruction-role", "system",
+                        "--auto-confirm", "on")
+        assert entered.wait(12), "CLI did not reach the second model wait"
         session = cli("sessions")["sessions"][0]["Id"]
         running = inspect(session)
         assert running["IterationsUsed"] == 2 and running["ToolStepsUsed"] == 1 and running["Status"] == "running"

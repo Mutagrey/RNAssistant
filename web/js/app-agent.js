@@ -434,15 +434,17 @@ function appendAgentRunOverview(parent, steps, timeline, stats) {
 function appendAgentRunViewState(parent, runViewState, runId) {
   var health = runViewState ? runViewState.executionHealth : "unknown";
   var uncertain = health === "unknown";
+  var modelResults = runViewState && runViewState.modelResults || [];
+  var modelConcern = modelResults.some(function (item) { return item.assessment !== "satisfied"; });
   // Goal verification stays in the typed state; an ordinary answer is not an alert.
-  if (health === "clean" && runViewState &&
+  if (health === "clean" && !modelConcern && runViewState &&
       ["failed", "cancelled"].indexOf(runViewState.lifecycle) < 0) return;
   var cause = runViewState && runViewState.lifecycle === "failed"
     ? window.RNAssistantRunViewState.failureReasonLabel(runViewState.reason)
     : runViewState && runViewState.lifecycle === "cancelled" ? "Выполнение отменено." : "";
   var note = document.createElement("div");
   note.className = "message-outcome agent-run-notice " + (uncertain ? "status-warning" : runViewState && runViewState.lifecycle === "failed" ? "status-failed" :
-    health === "errors" ? "status-warning" : "status-history");
+    health === "errors" || modelConcern ? "status-warning" : "status-history");
   note.setAttribute("data-runtime-health", health);
   note.setAttribute("role", uncertain ? "alert" : "status");
   if (window.RNAssistantIcons) {
@@ -462,10 +464,36 @@ function appendAgentRunViewState(parent, runViewState, runId) {
       ". Проверьте фактическое состояние перед повторной записью.";
   } else if (cause) {
     text.textContent = cause;
+  } else if (modelConcern) {
+    text.textContent = window.RNAssistantRunViewState.outcomeLabel(runViewState) +
+      ". Это оценка модели; достижение цели отдельно не проверено.";
   } else {
     text.textContent = "В ходе работы были неудачные попытки: " + runViewState.failedCalls + ".";
   }
   copy.appendChild(text);
+  if (modelConcern) {
+    var details = document.createElement("details");
+    details.className = "agent-model-results";
+    var heading = document.createElement("summary");
+    heading.textContent = "Итоги и ссылки на результаты";
+    details.appendChild(heading);
+    var list = document.createElement("ol");
+    modelResults.forEach(function (item) {
+      var row = document.createElement("li");
+      row.textContent = item.summary + " · " + ({
+        satisfied: "выполнено", partially_satisfied: "частично", unverified: "не подтверждено",
+        not_satisfied: "не выполнено"
+      }[item.assessment] || item.assessment);
+      if (item.evidence.length) {
+        var refs = document.createElement("small");
+        refs.textContent = " · результаты: " + item.evidence.join(", ");
+        row.appendChild(refs);
+      }
+      list.appendChild(row);
+    });
+    details.appendChild(list);
+    copy.appendChild(details);
+  }
   if (runId) {
     var openJournal = document.createElement("button");
     openJournal.type = "button";
@@ -474,7 +502,8 @@ function appendAgentRunViewState(parent, runViewState, runId) {
     var sourceChatId = state.activeChatId;
     openJournal.addEventListener("click", function () {
       if (state.activeChatId !== sourceChatId || typeof window.openRunJournal !== "function") return;
-      window.openRunJournal({ chatId: sourceChatId, runId: runId, filter: "problems" });
+      window.openRunJournal({ chatId: sourceChatId, runId: runId,
+        filter: modelConcern && health === "clean" ? "model" : "problems" });
     });
     copy.appendChild(openJournal);
   }
@@ -527,8 +556,7 @@ function renderAgentRunArticle(run) {
     var finalSection = document.createElement("section");
     finalSection.className = "agent-final-step";
     if (!run.live && !run.continued && runViewState &&
-        ((runViewState.lifecycle === "awaiting_user" && runViewState.reason === "model_needs_input") ||
-         (runViewState.lifecycle === "completed" && runViewState.reason === "model_blocked"))) {
+        runViewState.lifecycle === "awaiting_user" && runViewState.reason === "awaiting_user") {
       finalSection.setAttribute("data-run-interaction", "true");
       var title = document.createElement("strong");
       title.className = "agent-result-title";

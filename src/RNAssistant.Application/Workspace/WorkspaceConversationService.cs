@@ -1117,7 +1117,13 @@ namespace RNAssistant.Runtime
                     // Only the kernel accepts the response and decides whether to continue.
                     RefreshAcceptance(_files, _webSnapshots, _workspace, _session, request.RunId, _acceptance);
                     var unmet = UnmetAcceptance(_acceptance);
-                    if (unmet != null) return AgentModelResult.RejectCompletion(unmet);
+                    // A terminal honest failure remains possible. It cannot
+                    // satisfy the acceptance contract or turn CLI exit into 0.
+                    var admitsIncomplete = result.Response.Results != null &&
+                        result.Response.Results.Any(claim =>
+                            claim.Assessment != ConversationAssessment.Satisfied);
+                    if (unmet != null && !admitsIncomplete)
+                        return AgentModelResult.RejectCompletion(unmet);
                 }
                 return AgentModelResult.Accepted(new AgentResponseDraft(result.Response.Action,
                     result.Response.Reason, result.Response.Message,

@@ -1,5 +1,17 @@
 # Stabilization progress
 
+## Conversation v8 phase-4 persistence/UI slice — 2026-10-23
+
+The candidate branch now creates format-8 chats, keeps v7 readable but
+read-only, projects finish claims without upgrading task verification, and
+persists visible reflection steps. Controlled CLI checks cover process death,
+confirmation, compaction and cancellation/continuation. Workspace permits
+honest incomplete finish with failed acceptance; satisfied finish still
+requires explicit criteria. See [phase-4 evidence and gaps](conversation-v8/PHASE4.md).
+Full Harness migration, steer/UI integration, real-model comparison and
+Windows/Office gates remain open. Main remains v7. Owner: Core chat/run
+projection, Office transcript and Workspace/CLI recovery.
+
 ## Conversation v8 phase-3 adapter/prompt candidate — 2026-10-23
 
 The isolated branch now pins v8 guidance across default and editable prompts,

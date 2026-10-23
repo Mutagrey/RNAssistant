@@ -29,7 +29,7 @@ direct cutover объясняют порядок уже выполненной �
 | Область | Владелец текущего контракта |
 |---|---|
 | Model loop, modes, tool result/effect | [Conversation protocol](conversation-protocol.md) |
-| Wire JSON v7 | [Conversation response v7](protocols/CONVERSATION_RESPONSE_V7.md) |
+| Wire JSON v8 candidate | [Conversation response v8](protocols/CONVERSATION_RESPONSE_V8.md); [v7](protocols/CONVERSATION_RESPONSE_V7.md) remains main/historical |
 | Resources, URI, providers, ingestion | [Resource Fabric](resource-fabric.md) |
 | Tool catalog, schemas, authoring | [Tool Library](tool-library.md) |
 | Skills | [Skill Library](skills.md) |
@@ -72,7 +72,8 @@ canonical docs и существующим реестрам.
 Owner — Core ModelProtocol / AgentKernel. [Фаза 1](stabilization/conversation-v8/PHASE1.md)
 проверяет codec, [фаза 2](stabilization/conversation-v8/PHASE2.md) —
 kernel и admission по журналу, [кандидат фазы 3](stabilization/conversation-v8/PHASE3.md) —
-prompts, adapters и CLI в отдельном worktree. Host-neutral source
+prompts, adapters и CLI, [срез фазы 4](stabilization/conversation-v8/PHASE4.md) —
+format-8 persistence/UI и восстановление в отдельном worktree. Host-neutral source
 собирается; полный Harness ещё содержит v7 тестовые вызовы.
 Действующий контракт main остаётся v7. После переключения аудит
 становится историей, текущие правила переходят в canonical protocol docs.

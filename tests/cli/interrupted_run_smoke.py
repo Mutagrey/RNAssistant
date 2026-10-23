@@ -23,19 +23,33 @@ def main():
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self):
             assert self.path == "/v1/chat/completions", self.path
-            body = self.rfile.read(int(self.headers["Content-Length"]))
-            requests.append(json.loads(body))
+            body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            if "response_format" not in body:
+                content = "Test title"
+                response = json.dumps({"choices": [{"message": {"role": "assistant",
+                    "content": content}}]}).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(response)))
+                self.end_headers()
+                self.wfile.write(response)
+                return
+            requests.append(body)
             if len(requests) == 2:
                 entered.set()
                 release.wait(10)
-            content = {"message": "Waiting for an explicit new task.", "action": "needs_input", "tool_calls": []}
+            content = {"action": "finish", "reason": "No source change is authorized by this request.",
+                       "results": [], "message": "Waiting for an explicit new task."}
             if len(requests) == 1:
-                content = {"message": "Read the existing sources.", "action": "tool", "tool_calls": [
-                    {"name": "common.resources_read", "arguments": {"target": name}}
-                    for name in ("seed.txt", "second.txt")]}
+                content = {"action": "execute", "reason": "Inspect both source files.",
+                           "tool_calls": [{"name": "common.resources_read", "arguments": {"target": name}}
+                                          for name in ("seed.txt", "second.txt")],
+                           "message": "Read the existing sources."}
             if len(requests) == 4:
-                content = {"message": "Inspect available files.", "action": "tool", "tool_calls": [
-                    {"name": "common.resources_find", "arguments": {"query": "index.html"}}]}
+                content = {"action": "execute", "reason": "Inspect available files.",
+                           "tool_calls": [{"name": "common.resources_find",
+                                           "arguments": {"query": "index.html"}}],
+                           "message": "Inspect available files."}
             response = json.dumps({"choices": [{"message": {"role": "assistant", "content":
                 json.dumps(content)}}]}).encode()
             try:
@@ -98,9 +112,9 @@ def main():
 
             continued = cli("run", "--workspace", str(workspace), "--session", session_id,
                             "--message", "Continue only after my new input", "--tool-result-role", "tool")
-            assert continued.returncode == 3, (continued.stdout, continued.stderr)
+            assert continued.returncode == 0, (continued.stdout, continued.stderr)
             result = json.loads(continued.stdout.splitlines()[-1])
-            assert result["data"]["reason"] == "model_needs_input", result
+            assert result["data"]["reason"] == "model_finish", result
             assert len(requests) == 3, "one new model request after explicit input"
             for marker in ("FIRST_COMPLETED_READ_SENTINEL", "SECOND_COMPLETED_READ_SENTINEL"):
                 assert marker in json.dumps(requests[-1]), "Completed batch read lost after restart: " + marker

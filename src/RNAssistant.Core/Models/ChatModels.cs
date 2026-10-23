@@ -294,8 +294,8 @@ namespace RNAssistant.Core.Models
 
     public sealed class ChatSession
     {
-        public const int CurrentFormatVersion = 7;
-        public static bool IsReadableFormat(int? version) { return version == 6 || version == CurrentFormatVersion; }
+        public const int CurrentFormatVersion = 8;
+        public static bool IsReadableFormat(int? version) { return version == 6 || version == 7 || version == CurrentFormatVersion; }
 
         [JsonProperty(Required = Required.Always)]
         public int FormatVersion { get; set; }

@@ -1,0 +1,46 @@
+# Conversation v8: phase-4 persistence/UI slice
+
+2026-10-23. Owner: Core chat format/run projection, Office transcript and
+Workspace/CLI recovery. Branch: `conversation-v8`. This is a checked slice,
+not completed phase-4 or release qualification.
+
+New chats use stream format 8. Formats 6 and 7 remain readable, but run policy
+refuses execution in them; no history is rewritten or deleted. The
+[candidate wire contract](../../protocols/CONVERSATION_RESPONSE_V8.md) owns
+the v8 envelope, terminal evidence and model-claim boundaries.
+
+The Office run projection reconstructs accepted `finish.results` from the
+identified v8 protocol record for the exact run and exposes assessment,
+summary and evidence IDs in typed `RunViewState.ModelResults`.
+`GoalVerification` remains `not_assessed`. The UI shows partial, unverified
+and unsatisfied claims as model assessments with the IDs; an ordinary clean
+completed answer still has no service card. Accepted `reflection` also has
+one visible saved step excluded from model context. Old
+`model_done/model_blocked/model_needs_input` presentation paths are gone.
+
+Workspace preserves a terminal honest failure: when explicit acceptance
+criteria remain unmet, a finish containing an incomplete assessment can end
+the run with `acceptance=failed` and CLI exit 5. A finish with no incomplete
+assessment remains rejected with feedback. This preserves a way to stop at
+an irreparable obstacle without reporting success or replaying a tool.
+
+## Host-neutral checks
+
+- `sh tests/RNAssistant.V8KernelSmoke/run.sh`: source-linked production build
+  and 23 focused passing checks, including format-7 read-only policy and
+  finish-claim projection/serialization.
+- `node tests/web/run-view-state.test.js`: 7/7, including immutable model
+  results, a visible partial outcome and no card for an ordinary answer.
+- `dotnet build src/RNAssistant.Cli/RNAssistant.Cli.csproj --no-restore`:
+  passes. Controlled CLI/HTTP smokes pass:
+  `response_mode_smoke.py` (response modes, result roles, approval),
+  `interrupted_run_smoke.py` (process death and source revalidation),
+  `compaction_resume_smoke.py` (checkpoint, source drift, honest failure,
+  native result pairing), and `run_control_smoke.py` (cancel/continue, exact
+  cursor, lease, approved write with no replay).
+
+The full Harness still has legacy v7 fixtures and cannot compile as a whole.
+The phase-0 premature-finish HTTP reproducer and a focused steer/UI
+integration check are not yet migrated. Playwright layout qualification is
+unavailable in this worktree (`playwright` module absent); Windows x64 +
+Office x64 + WebView2 and real-model comparisons remain open.
