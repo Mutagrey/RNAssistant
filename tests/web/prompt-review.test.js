@@ -30,7 +30,9 @@ function fixture(loadPrompts = true) {
       documentElement: { getAttribute: () => "light", setAttribute() {}, style: { setProperty() {} } } },
     isPanelActive: () => !!context.libraryVisible, markdown: text => text,
     RNAssistantNavigationTree: { icon: name => `<svg data-icon="${name}"></svg>`, render: (root, nodes) => { trees.push(nodes); root.treeNodes = nodes; } },
+    RNAssistantLibraryGroups: { category: () => ({ key: "other", title: "Другие" }) },
     modelImageSupportOverrides: () => ({}), modelAudioSupportOverrides: () => ({}), modelCapabilitiesForSettings: () => ({}), attachmentModelPriorityForSettings: () => [], textToHeaders: () => ({}),
+    renderModelCapabilityList() {},
     renderContextMeter() {}, clearRuntimeData() {}, setControlBusy: (id, busy) => { get(id).disabled = busy; },
     log: (message, level) => { if (level === "error") errors.push(message); }, confirm: () => true, cancelBridgeRequest: async () => {},
     fetch: async (url, options) => {
@@ -83,6 +85,19 @@ function fixture(loadPrompts = true) {
     f.context.renderPromptSettings(extended);
     assert.match(f.errors.pop(), /metadata-only contract/);
     console.log("PASS prompt library tolerates only well-formed extra metadata");
+  }
+  {
+    const f = fixture();
+    f.context.state.prompts = undefined;
+    f.context.renderPromptSettings(f.context.state.prompts);
+    f.context.state.bridgeUnavailable = true;
+    f.context.renderPromptSettings(f.context.state.prompts);
+    assert.equal(f.errors.length, 0, "missing pre-init metadata is not a prompt contract failure");
+    f.context.state.bridgeUnavailable = false;
+    f.context.state.bridgeToken = "ready";
+    f.context.renderPromptSettings(f.context.state.prompts);
+    assert.match(f.errors.pop(), /metadata-only contract/, "missing metadata in a host response is still rejected");
+    console.log("PASS prompt metadata waits for a bridge response");
   }
   {
     const f = fixture(); assert.equal(f.calls.length, 0); await f.context.persistSettingsFromForm();
@@ -153,10 +168,10 @@ function fixture(loadPrompts = true) {
     f.context.libraryVisible = true; f.context.renderInstructions();
     const groups = f.trees.at(-1);
     assert.deepEqual(Array.from(groups, group => group.title), ["Навыки", "Инструменты", "Инструкции"]);
-    assert.match(groups[0].children[0].iconHtml, /skill/);
-    assert.match(groups[1].children[0].iconHtml, /tool/);
-    assert.equal(groups[0].children[0].title, "excel.audit");
-    assert.equal(groups[1].children[0].title, "excel.validate");
+    assert.match(groups[0].children[0].children[0].iconHtml, /skill/);
+    assert.match(groups[1].children[0].children[0].iconHtml, /tool/);
+    assert.equal(groups[0].children[0].children[0].title, "excel.audit");
+    assert.equal(groups[1].children[0].children[0].title, "excel.validate");
     console.log("PASS library uses the shared navigation tree for all three sections");
   }
   {
@@ -165,5 +180,5 @@ function fixture(loadPrompts = true) {
     assert.ok(read("js/app-prompts.js").includes("fetch: window.fetch.bind(window)"));
     assert.ok(!read("js/app-settings.js").includes("readPromptSettings")); console.log("PASS direct-cutover delivery keys and retired form reader removal");
   }
-  console.log("OK passed=11 failed=0 total=11");
+  console.log("OK passed=13 failed=0 total=13");
 })().catch(error => { console.error(error); process.exitCode = 1; });

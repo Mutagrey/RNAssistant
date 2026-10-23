@@ -331,8 +331,10 @@
 
   function renderPromptSettings(library) {
     promptLibrary = null;
-    try { promptLibrary = validatePromptLibrary(library); }
-    catch (error) { log(error.message, "error"); }
+    if ((library !== undefined && library !== null) || state.bridgeToken) {
+      try { promptLibrary = validatePromptLibrary(library); }
+      catch (error) { log(error.message, "error"); }
+    }
     cancelPromptSourceRead();
     Object.keys(promptSources).forEach(function (key) {
       var metadata = promptMetadata(key);

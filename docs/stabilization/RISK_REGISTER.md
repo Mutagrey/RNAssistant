@@ -17,6 +17,12 @@ the panel handshake. Source inspection shows that a missing bridge, init timeout
 host init failure or Web UI projection exception all produced the same misleading
 unavailable state. The current UI now shows the actual init error and offers an
 explicit retry when a bridge exists. Focused `bridge-bootstrap` passes host-neutral.
+The follow-up diagnostic photo shows two prompt-library contract errors followed
+by a bridge response timeout. `renderSettings` could emit those contract errors
+while prompt metadata was still absent before init or after transport failure;
+this secondary noise is now suppressed. Init reads chat headers, reconciles
+unfinished runs and loads the active chat before replying, so slow chat recovery
+is possible, but the photo does not identify the timed-out operation or stage.
 The triggering Windows cause remains open until the exact pane build and runtime
 log or a target-host reproduction are available; no chat data is reset for triage.
 

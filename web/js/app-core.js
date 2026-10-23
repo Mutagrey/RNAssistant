@@ -277,8 +277,11 @@ function refreshBridgeWait(id) {
   pending.timer = setTimeout(function () {
     if (state.pending[id] !== pending) return;
     takeBridgePending(id);
-    var error = new Error("Ответ Office не получен. Обновите состояние перед повтором операции.");
+    var error = new Error(pending.type === "init"
+      ? "Ответ RN Assistant при запуске панели не получен. Повторите загрузку."
+      : "Ответ Office не получен. Обновите состояние перед повтором операции.");
     error.code = "bridge_response_timeout";
+    error.operation = pending.type;
     error.resultUncertain = true;
     pending.reject(error);
   }, pending.idleTimeoutMs);

@@ -1182,6 +1182,8 @@ probes and JSON repair text remain fixed protocol safeguards, not authored promp
 
 Initialization and settings responses expose `SettingsControlsDto` (no prompt
 bodies) and `rnassistant.promptLibrary` v1 metadata for the eight Markdown fields.
+The editor does not validate absent metadata before bridge initialization or after
+transport loss; a completed host response missing the library still fails closed.
 `systemPromptRole` remains a scalar settings control. Opening a selected prompt
 calls typed `readPromptSource` with explicit chat and exact published field ref;
 `PromptEditorResourceService` uses the same Gateway/CAS snapshot and shared download

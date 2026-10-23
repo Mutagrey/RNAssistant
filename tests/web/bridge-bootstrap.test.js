@@ -297,6 +297,19 @@ function appInit(host, chatId) {
     console.log("PASS bridge bootstrap: lost and late replies settle without effect replay");
   }
 
+  {
+    const { context, timers, expire } = createContext();
+    const request = context.send("init", {});
+    const pending = context.state.pending[request.requestId];
+    assert.equal(pending.idleTimeoutMs, 30000);
+    const rejected = assert.rejects(request, error => error.code === "bridge_response_timeout" &&
+      error.operation === "init" && /запуске панели/.test(error.message));
+    expire(pending.timer);
+    await rejected;
+    assert.equal(timers.size, 0);
+    console.log("PASS bridge bootstrap: startup timeout identifies initialization");
+  }
+
   for (const version of [0, 1, 3, undefined]) {
     const { context, posted, deliver, contract, timers } = createContext();
     const init = context.send("init", {});
