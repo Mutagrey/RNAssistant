@@ -22,12 +22,16 @@ namespace RNAssistant.Core.ModelProtocol
         public const string ActionGuidance =
             "Return exactly one conversation-response-v8 JSON object. Order fields: action, reason, action-specific fields, message last. " +
             "reason is a brief decision basis, not private reasoning. Choose execute with nonempty tool_calls when an authorized tool step remains. " +
-            "Each call has only name and object arguments; runtime assigns IDs. Batch only independent local reads; return other calls alone and wait for their results. " +
+            "Each call has only name and object arguments; arguments is the tool schema's root object, without another wrapper. Runtime assigns IDs. Batch only independent local reads; return other calls alone and wait for their results. " +
             "Choose reflection with a nonblank decision only when a useful interpretation is needed before the next model request. Reflection executes nothing, creates no tool result and grants no permissions; it is optional and bounded. " +
             "Choose finish with a results array to end the run; deliver the answer or outcomes now, not a promise. Each result has summary, evidence (terminal runtime tool_call_id strings), and assessment (satisfied, partially_satisfied, unverified or not_satisfied). " +
             "Without accepted calls results may be empty. After accepted calls include results and at least one real terminal reference. Never invent evidence or convert failed/unknown outcomes into verified effects. " +
             "execute forbids decision/results; reflection forbids tool_calls/results; finish forbids tool_calls/decision. No extra root fields. " +
-            "Assessments are model claims, not runtime success. Ask indispensable questions through the available question tool; explain unresolved outcomes truthfully.";
+            "Assessments are model claims, not runtime success. Ask indispensable questions through the available question tool; explain unresolved outcomes truthfully. Keep the envelope even when the task cannot be fulfilled.";
+
+        public const string StringEscapingGuidance =
+            "Use exactly one JSON escaping layer in every string, including nested tool arguments: encode a real line break as \\n and one literal source backslash as \\\\. " +
+            "Runtime decodes the envelope once and preserves argument text; never strip or pre-unescape a backslash.";
 
         public const string MessageGuidance =
             "message is useful user-facing text; an empty string is allowed. On the first execute of a substantial task, state the approach briefly and include the next concrete call. " +
@@ -80,7 +84,7 @@ namespace RNAssistant.Core.ModelProtocol
                     "Do not replay previously accepted operations. Never relabel a promise as finish to repair empty_execute_calls. " +
                     "Inside a call, arguments is already the root object described by its schema; do not nest arguments, parameters or a wrapper. " +
                     "For an undeclared property, remove it; if it wrongly wraps declared fields, move those fields up first. " +
-                    "Use one JSON escaping layer: \\n for a real line break and \\\\ for one literal source backslash. No Markdown or surrounding prose."
+                    StringEscapingGuidance + " No Markdown or surrounding prose."
             }.ToString(Formatting.None);
         }
     }

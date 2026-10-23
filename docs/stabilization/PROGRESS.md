@@ -1,5 +1,15 @@
 # Stabilization progress
 
+## Conversation v8 phase-3 adapter/prompt candidate — 2026-10-23
+
+The isolated branch now pins v8 guidance across default and editable prompts,
+projects tool schemas from the v8 root union, reports CLI finish correctly and
+passes a controlled CLI/HTTP response-mode and result-role smoke. See
+[phase-3 checks and gaps](conversation-v8/PHASE3.md). The full Harness still
+contains unmigrated v7 fixtures; process replay/UI, real-model comparison and
+Windows/Office gates remain open. Main remains v7. Owner: Core ModelProtocol /
+Office and Workspace/CLI adapters.
+
 ## Conversation v8 phase-2 kernel candidate — 2026-10-23
 
 The isolated `conversation-v8` branch now has bounded reflection continuation,

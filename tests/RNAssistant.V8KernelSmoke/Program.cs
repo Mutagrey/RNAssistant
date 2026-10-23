@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
@@ -11,6 +12,7 @@ using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Tools;
 using RNAssistant.Core.Tools.Contracts;
+using RNAssistant.Office.Services;
 
 internal static class Program
 {
@@ -77,7 +79,46 @@ internal static class Program
             new string[0], new ConversationResultClaim[0], null).Accepted, "direct finish");
         Expect(ConversationFinishEvidenceAdmission.Evaluate(empty, Session, Run, Run,
             new string[0], new[] { new ConversationResultClaim("x", new string[0], ConversationAssessment.Unverified) }, null).Code == "unknown_evidence", "old-run claim rejected");
+        PromptSmoke();
         KernelSmoke();
+    }
+
+    private static void PromptSmoke()
+    {
+        var composer = typeof(ConversationRunService).Assembly.GetType(
+            "RNAssistant.Office.Services.ConversationPromptComposer", true);
+        var flags = BindingFlags.Static | BindingFlags.NonPublic;
+        foreach (var method in new[] { "BuildAgentInstruction", "BuildPlanInstruction" })
+        {
+            var custom = new AppSettings { SystemPrompt = "Custom agent guidance.",
+                PlanSystemPrompt = "Custom plan guidance.", AgentToolsPrompt = "Custom tools.",
+                AgentSkillsPrompt = "Custom skills." };
+            var content = (string)composer.GetMethod(method, flags).Invoke(null, new object[] { custom });
+            Expect(content.Contains(ModelProtocolWire.ActionGuidance) &&
+                content.Contains("Custom tools.") && !content.Contains("conversation-response-v7"),
+                method + " pins v8 guidance for editable prompts");
+        }
+        Expect(AgentPromptDefaults.StructuredResponseContract.Contains(ModelProtocolWire.ActionGuidance) &&
+            !AgentPromptDefaults.GeneralInstructions.Contains("conversation-response-v7"),
+            "default prompts use v8 guidance");
+
+        var tool = new ToolCatalogEntry { Id = Tool, Description = "Read source.",
+            ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}" };
+        var catalog = (JArray)composer.GetMethod("BuildTools", flags).Invoke(null,
+            new object[] { new[] { tool } });
+        var schema = ConversationResponseSchemaBuilder.Build(new[] { tool },
+            new ModelProtocolCallContext(new[] { Tool }));
+        var source = new ChatMessage { Role = "developer", Content = "Instructions\n\nRUNTIME_CONTEXT:\n" +
+            new JObject { ["tools"] = catalog }.ToString(Formatting.None) + "\n\nUSER_REQUEST:\nRead" };
+        var messages = new List<ChatMessage> { source };
+        var projected = (IReadOnlyList<ChatMessage>)composer.GetMethod("ProjectJsonSchemaMessages", flags)
+            .Invoke(null, new object[] { messages, new[] { tool }, schema });
+        var context = projected[0].Content.Split(new[] { "RUNTIME_CONTEXT:\n" }, StringSplitOptions.None)[1]
+            .Split(new[] { "\n\nUSER_REQUEST" }, StringSplitOptions.None)[0];
+        Expect(!object.ReferenceEquals(projected[0], source) &&
+            JObject.Parse(context).SelectToken("tools[0].function.parameters") == null &&
+            source.Content.Contains("parameters"),
+            "v8 schema projects duplicate tool schemas out of prompt");
     }
 
     private static void KernelSmoke()

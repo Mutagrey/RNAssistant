@@ -236,8 +236,7 @@ namespace RNAssistant.Office.Services
             string responseStatus = null;
             if (summary.Reason == "provider_refused") responseStatus = AgentResponseStatuses.Refused;
             else if (summary.Lifecycle == RunLifecycle.Completed)
-                responseStatus = summary.Reason == "model_blocked" ? AgentResponseStatuses.Blocked :
-                    summary.Reason == "model_needs_input" ? AgentResponseStatuses.AwaitingUser : AgentResponseStatuses.Completed;
+                responseStatus = AgentResponseStatuses.Completed;
             else diagnostic = new ChatActivity
             {
                 Kind = "diagnostic", Title = "Выполнение остановлено", Status = ConversationRunProjection.Status(summary),
@@ -307,7 +306,7 @@ namespace RNAssistant.Office.Services
         {
             if (summary.Lifecycle == RunLifecycle.AwaitingConfirmation) return "waiting_confirmation";
             if (summary.Lifecycle == RunLifecycle.Completed &&
-                (summary.Reason == "awaiting_user" || summary.Reason == "model_needs_input")) return "awaiting_user";
+                summary.Reason == "awaiting_user") return "awaiting_user";
             return summary.Lifecycle.ToString().ToLowerInvariant();
         }
 

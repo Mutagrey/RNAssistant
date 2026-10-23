@@ -906,10 +906,13 @@ dotnet run --no-build --project tests/RNAssistant.Harness/RNAssistant.Harness.cs
 
 Filtering limits executed tests. The harness source-links Core and Office-neutral production files, so a normal run still compiles that full linked source set. Compilation does not require reading every test file into agent context.
 
-Conversation v8 phase-1 candidate codec checks have a separate narrow
-[source-linked runner](../RNAssistant.ProtocolTests/README.md). They do not build
-Office or the not-yet-migrated v7 kernel/adapters/history and do not replace the
-full frozen-context/repair/kernel integration checks at cutover.
+Conversation v8 has narrow [protocol checks](../RNAssistant.ProtocolTests/README.md)
+and [source-linked kernel/prompt checks](../RNAssistant.V8KernelSmoke/run.sh).
+The latter builds host-neutral Core, Office and Workspace sources. The controlled
+`python3 -B tests/cli/response_mode_smoke.py` exercises v8 through actual
+CLI/HTTP requests. The full Harness still contains v7 test fixtures and does
+not compile in the candidate branch; these focused checks do not replace its
+integration coverage at cutover.
 
 Conversation v8 phase-0 red regression runs separately from the default suite:
 
@@ -921,11 +924,12 @@ dotnet run --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj -- \
 Use a new or empty output directory. The fixture sends scripted responses through
 real loopback HTTP and the production parser/kernel/store with fake Excel. It saves
 exact request/response bodies, decoded event export and the replayed UI projection.
-Expected current result is exit **1** with `FAIL conversation v8 admission`: v7
-accepts `done` after a verified sheet write, without creating requested data/chart
-or presenting results/evidence. Exit **2** is a fixture/precondition failure, not
-proof of this defect. At the atomic v8 cutover, replace the script with v8 responses
-and assert rejection/continuation without repeated mutation. This does not call a
+This historical v7 reproducer is not runnable in the v8 candidate until its
+scripted responses and assertions migrate. It previously exited **1** with
+`FAIL conversation v8 admission`: v7 accepted `done` after a verified sheet
+write, without creating requested data/chart or presenting results/evidence.
+The v8 regression must assert rejection/continuation without repeating the
+mutation. This does not call a
 real model or qualify Office/COM. Scope and retained evidence:
 [Conversation v8 audit](../../docs/stabilization/conversation-v8/AUDIT.md).
 

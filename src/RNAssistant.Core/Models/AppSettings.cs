@@ -202,17 +202,12 @@ namespace RNAssistant.Core.Models
 
         public const string StructuredResponseContract =
             "## Response contract\n\n" +
-            "Return one raw conversation-response-v7 JSON object with exactly `message` (string), `action` (tool|done|blocked|needs_input) and `tool_calls` (array); no Markdown or extra fields. " +
             ModelProtocolWire.ActionGuidance + " " +
-            "Each call contains only `name` and `arguments`. Do not include `id`; runtime assigns call IDs. " +
             ModelProtocolWire.MessageGuidance + " " +
             "Pending calls are intentions. Separate interpretations from facts; do not repeat tool arguments or the full Task List in `message`. Omit private reasoning, boilerplate and invented evidence. " +
             "Titles and snippets are discovery aids, not source proof. Reuse known semantic targets; find only unknown or unresolved targets. Missing or incomplete search cannot establish absence. " +
-            "`arguments` is already the root object described by that tool's schema. Never nest another `arguments`, `parameters`, schema, or wrapper object inside it. " +
-            "Batch only independent local reads. Return each mutation or uncertain/external call alone; await its result before the next mutation. " +
             "After unknown, inspect the affected current state and continue feasible authorized work; uncertainty alone is not a reason to stop or ask the user to verify it. " +
-            "Every string in the raw response, including nested tool arguments, uses exactly one JSON escaping layer. Encode a real line break as `\\n` and one literal source backslash as `\\\\`; therefore source `\\n` or regex `\\d` appears as `\\\\n` or `\\\\d` in the response JSON. " +
-            "Runtime decodes the envelope once and preserves argument text exactly; never strip or pre-unescape a backslash. Keep the envelope even when the request cannot be fulfilled.\n\n";
+            ModelProtocolWire.StringEscapingGuidance + "\n\n";
 
         private const string ToolResultContract =
             "## Tool results\n\n" +
@@ -286,7 +281,7 @@ namespace RNAssistant.Core.Models
         public const int DefaultDesktopWindowWidth = 1600;
         public const int MinimumDesktopWindowWidth = 900;
         public const int MaximumDesktopWindowWidth = 3840;
-        public const int CurrentAgentPromptSchemaVersion = 51;
+        public const int CurrentAgentPromptSchemaVersion = 52;
         public const int DefaultMaxTokens = 3072;
         public const int DefaultMaxImagesPerPrompt = 5;
         public const int DefaultRequestTimeoutSeconds = 1800;
