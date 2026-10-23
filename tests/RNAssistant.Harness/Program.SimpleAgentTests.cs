@@ -2583,49 +2583,31 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     LoadSkillResponse("common.vba_code_editing"),
-                    new JObject
-                    {
-                        ["message"] = "Добавляю диагностику и обновляю заголовок.",
-                        ["action"] = "tool",
-                        ["tool_calls"] = new JArray(
-                            new JObject { ["name"] = "common.vba_apply_patch", ["arguments"] = new JObject
-                            {
-                                ["moduleName"] = "Module1", ["patch"] = new JArray(new JObject
-                                { ["find"] = "Sub Main()", ["text"] = "Sub Main()\nDebug.Print \"started\"" })
-                            } },
-                            new JObject { ["name"] = "common.resources_read", ["arguments"] = new JObject
-                            { ["target"] = "VBA module: Module1", ["representation"] = "source" } },
-                            new JObject { ["name"] = "common.vba_write_module", ["arguments"] = new JObject
-                            { ["moduleName"] = "Module1", ["code"] = "' Version 2\n" + before, ["mode"] = "updateOnly" } })
-                    }.ToString(Formatting.None),
-                    new JObject
-                    {
-                        ["message"] = "Добавляю диагностику отдельным действием.",
-                        ["action"] = "tool",
-                        ["tool_calls"] = new JArray(new JObject { ["name"] = "common.vba_apply_patch", ["arguments"] = new JObject
-                        {
-                            ["moduleName"] = "Module1", ["patch"] = new JArray(new JObject
-                            { ["find"] = "Sub Main()", ["text"] = "Sub Main()\nDebug.Print \"started\"" })
-                        } })
-                    }.ToString(Formatting.None),
-                    new JObject
-                    {
-                        ["message"] = "Читаю текущий модуль после записи.",
-                        ["action"] = "tool",
-                        ["tool_calls"] = new JArray(new JObject { ["name"] = "common.resources_read", ["arguments"] = new JObject
-                        { ["target"] = "VBA module: Module1", ["representation"] = "source" } })
-                    }.ToString(Formatting.None),
-                    new JObject
-                    {
-                        ["message"] = "Сохраняю заголовок вместе с прочитанной диагностикой.",
-                        ["action"] = "tool",
-                        ["tool_calls"] = new JArray(new JObject
-                        {
-                            ["name"] = "common.vba_write_module", ["arguments"] = new JObject
-                            { ["moduleName"] = "Module1", ["code"] = "' Version 2\n" + patched, ["mode"] = "updateOnly" }
-                        })
-                    }.ToString(Formatting.None),
-                    "{\"message\":\"Проверка завершена.\",\"action\":\"done\",\"tool_calls\":[]}"
+                    ModelProtocolWire.Write(new ConversationResponse(ConversationResponse.ExecuteAction,
+                        "Try an invalid mixed read/write batch.", "Добавляю диагностику и обновляю заголовок.",
+                        calls: new[] {
+                            new ConversationToolCall { Name = "common.vba_apply_patch", Arguments = new JObject {
+                                ["moduleName"] = "Module1", ["patch"] = new JArray(new JObject {
+                                    ["find"] = "Sub Main()", ["text"] = "Sub Main()\nDebug.Print \"started\"" }) } },
+                            new ConversationToolCall { Name = ResourceToolCatalog.ReadToolId, Arguments = new JObject {
+                                ["target"] = "VBA module: Module1", ["representation"] = "source" } },
+                            new ConversationToolCall { Name = VbaToolCatalog.WriteModule, Arguments = new JObject {
+                                ["moduleName"] = "Module1", ["code"] = "' Version 2\n" + before, ["mode"] = "updateOnly" } }
+                        })),
+                    ModelProtocolWire.WriteAcceptedCall("Apply the source patch separately.",
+                        "Добавляю диагностику отдельным действием.", new ConversationToolCall {
+                            Name = "common.vba_apply_patch", Arguments = new JObject {
+                                ["moduleName"] = "Module1", ["patch"] = new JArray(new JObject {
+                                    ["find"] = "Sub Main()", ["text"] = "Sub Main()\nDebug.Print \"started\"" }) } }),
+                    ModelProtocolWire.WriteAcceptedCall("Read current source after the patch.",
+                        "Читаю текущий модуль после записи.", new ConversationToolCall {
+                            Name = ResourceToolCatalog.ReadToolId, Arguments = new JObject {
+                                ["target"] = "VBA module: Module1", ["representation"] = "source" } }),
+                    ModelProtocolWire.WriteAcceptedCall("Write the title against the fresh source.",
+                        "Сохраняю заголовок вместе с прочитанной диагностикой.", new ConversationToolCall {
+                            Name = VbaToolCatalog.WriteModule, Arguments = new JObject {
+                                ["moduleName"] = "Module1", ["code"] = "' Version 2\n" + patched, ["mode"] = "updateOnly" } }),
+                    null
                 });
                 var modelRequests = 0;
                 var sourceRequests = new List<IReadOnlyList<ChatMessage>>();
@@ -2646,7 +2628,10 @@ namespace RNAssistant.Harness
                         AssertEqual(1, journal.ListMutations(adapter.HostName, adapter.DocumentKey).Count,
                             "rejected batch creates no VBA preparation");
                     }
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    var response = responses.Dequeue() ?? ScriptedVerifiedFinish(session,
+                        "Both VBA mutations have terminal results.", "Проверка завершена.",
+                        "The patch and module write completed.", "common.vba_apply_patch", VbaToolCatalog.WriteModule);
+                    return Task.FromResult(new LlmCompletionResult { Content = response });
                 };
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent, "Добавь Debug.Print, сохрани его при обновлении заголовка.",
