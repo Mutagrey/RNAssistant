@@ -14,6 +14,8 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("alias")] public string Alias { get; set; }
         [JsonProperty("verifyResourceAlias")] public string VerifyResourceAlias { get; set; }
         [JsonProperty("verifyRetainedView")] public string VerifyRetainedView { get; set; }
+        [JsonProperty("verifyViewVariantOrdinal")] public int? VerifyViewVariantOrdinal { get; set; }
+        [JsonProperty("verifyViewVariantSnapshotCount")] public int? VerifyViewVariantSnapshotCount { get; set; }
         [JsonProperty("viewInventoryAlias")] public string ViewInventoryAlias { get; set; }
         [JsonProperty("viewInventoryOffset")] public int? ViewInventoryOffset { get; set; }
         [JsonProperty("viewInventorySnapshotCount")] public int? ViewInventorySnapshotCount { get; set; }
@@ -86,6 +88,14 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("items")] public IReadOnlyList<ModelContextViewInventoryItemDto> Items { get; set; }
     }
 
+    public sealed class ModelContextViewVariantVerificationDto
+    {
+        [JsonProperty("resourceAlias")] public string ResourceAlias { get; set; }
+        [JsonProperty("ordinal")] public int Ordinal { get; set; }
+        [JsonProperty("snapshotCount")] public int SnapshotCount { get; set; }
+        [JsonProperty("variant")] public ModelContextRetainedViewDto Variant { get; set; }
+    }
+
     public sealed class ModelContextResourceDto
     {
         [JsonProperty("alias")] public string Alias { get; set; }
@@ -112,6 +122,8 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("resources")] public IReadOnlyList<ModelContextResourceDto> Resources { get; set; }
         [JsonProperty("viewInventory", NullValueHandling = NullValueHandling.Ignore)]
         public ModelContextViewInventoryDto ViewInventory { get; set; }
+        [JsonProperty("viewVariantVerification", NullValueHandling = NullValueHandling.Ignore)]
+        public ModelContextViewVariantVerificationDto ViewVariantVerification { get; set; }
         [JsonProperty("operations")] public IReadOnlyList<ModelContextIdentityDto> Operations { get; set; }
         [JsonProperty("evidence")] public IReadOnlyList<ModelContextIdentityDto> Evidence { get; set; }
     }

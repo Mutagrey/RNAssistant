@@ -353,6 +353,28 @@
       control.disabled = false;
     }
   }
+  async function verifyInventoryVariant(c, row, inventory, item, control, note) {
+    var version = c.version, eventId = c.selected;
+    c.follow = false; control.disabled = true; note.textContent = "Проверка варианта view…";
+    try {
+      var response = await call(c, "getModelContext", { requestEventId: eventId,
+        verifyResourceAlias: row.alias, verifyViewVariantOrdinal: item.ordinal,
+        verifyViewVariantSnapshotCount: inventory.snapshotCount });
+      if (!valid(c, version) || c.selected !== eventId || c.inventory[row.alias] !== inventory) return;
+      var checked = response.viewVariantVerification, variant = checked && checked.variant;
+      if (response.chatId !== c.chatId || !(response.events || []).some(function (event) { return event.eventId === eventId; }) ||
+          !checked || checked.resourceAlias !== row.alias || checked.ordinal !== item.ordinal ||
+          checked.snapshotCount !== inventory.snapshotCount || !variant || variant.view !== item.view ||
+          JSON.stringify(variant.coverage) !== JSON.stringify(item.coverage) || variant.partsCount !== item.partsCount ||
+          (variant.payloadAvailability !== "NotRetained") !== item.payloadRegistered)
+        throw new Error("Ответ проверки не соответствует выбранному варианту view.");
+      item.payloadAvailability = variant.payloadAvailability;
+      item.partsAvailability = variant.partsAvailability;
+      item.checkedUtc = variant.checkedUtc;
+      if (c.mode === "actual" && c.tab === "resources") { c.focusResource = row.alias; await render(c); }
+    } catch (error) { if (valid(c, version) && note.isConnected) note.textContent = error.message || String(error); }
+    finally { control.disabled = false; }
+  }
   function resourceMetadata(c, row, body) {
     var metadata = row.revisionMetadata, payload = metadata && metadata.payload;
     if (metadata) {
@@ -423,12 +445,27 @@
         var range = inventory.items.length ? (inventory.offset + 1) + "–" +
           (inventory.offset + inventory.items.length) : "0";
         body.appendChild(el("p", "Сохранённые views: " + range + " из " +
-          inventory.snapshotCount + " в снимке authority. Байты списка не проверены."));
+          inventory.snapshotCount + " в снимке authority. Байты проверяются отдельно для каждого варианта."));
         inventory.items.forEach(function (item) {
-          body.appendChild(el("p", "#" + (item.ordinal + 1) + " · " + item.view +
+          var availability = { NotRetained: "тело не зарегистрировано", Unchecked: "тело не проверено",
+            Verified: "хеш и длина тела проверены", Unavailable: "тело отсутствует или повреждено" };
+          var parts = { Unchecked: "части не проверены", Verified: "все части проверены",
+            Unavailable: "одна или более частей недоступна" };
+          var itemNote = el("p", "#" + (item.ordinal + 1) + " · " + item.view +
             (item.coverage ? " · покрытие " + JSON.stringify(item.coverage) : "") +
             " · " + (item.payloadRegistered ? "payload зарегистрирован" : "payload не зарегистрирован") +
-            " · частей: " + item.partsCount));
+            " · частей: " + item.partsCount +
+            (item.payloadAvailability ? " · " + (availability[item.payloadAvailability] || "состояние тела неизвестно") :
+              (item.payloadRegistered || item.partsCount ? " · байты не проверены" : " · байты не сохранены")) +
+            (item.partsCount && item.partsAvailability ? " · " + (parts[item.partsAvailability] || "состояние частей неизвестно") : "") +
+            (item.checkedUtc ? " · " + new Date(item.checkedUtc).toLocaleString() : ""));
+          body.appendChild(itemNote);
+          if (item.payloadRegistered || item.partsCount > 0) {
+            var checkVariant = button("Проверить вариант #" + (item.ordinal + 1), function () {
+              return verifyInventoryVariant(c, row, inventory, item, checkVariant, itemNote);
+            });
+            body.appendChild(checkVariant);
+          }
         });
       }
       if (row.revisionRecorded === true && (!inventory || inventory.offset > 0 || inventory.nextOffset != null)) {

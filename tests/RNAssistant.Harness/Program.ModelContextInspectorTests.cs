@@ -487,9 +487,13 @@ namespace RNAssistant.Harness
                     AssertTrue(advertisedRow.RetainedViews.Select(view => view.View).OrderBy(view => view)
                         .SequenceEqual(new[] { "outline", "text" }),
                         "read-time descriptor can discover another exact retained view without a live provider read");
+                    var rangeBody = PayloadRef.FromBlob(payloads.StoreText("selected range bytes", "text/plain"));
+                    var rangePart = PayloadRef.FromBlob(payloads.StoreText("selected range part", "text/plain"));
                     for (var index = 0; index < 23; index++)
-                        store.RegisterView(scope, new ResourceRevisionView(first, "text", body.Sha256, body,
-                            new ResourceCoverage(ResourceCoverageKinds.CharacterRange, start: index, end: index + 1)));
+                        store.RegisterView(scope, new ResourceRevisionView(first, "text",
+                            index == 0 ? rangeBody.Sha256 : body.Sha256, index == 0 ? rangeBody : body,
+                            new ResourceCoverage(ResourceCoverageKinds.CharacterRange, start: index, end: index + 1),
+                            index == 0 ? new[] { rangePart } : null));
                     AssertEqual(ResourceCoverageKinds.Whole, store.GetView(scope, first, "text").Coverage.Kind,
                         "existing known-name lookup still prefers the whole retained view");
                     store.RegisterView(scope, new ResourceRevisionView(second, "text", body.Sha256, body,
@@ -507,6 +511,45 @@ namespace RNAssistant.Harness
                     AssertTrue(firstPage.Items[0].PayloadRegistered, "inventory distinguishes registered payloads");
                     AssertTrue(!Newtonsoft.Json.JsonConvert.SerializeObject(firstPage).Contains(viewPart.Sha256),
                         "inventory does not expose part CAS addresses");
+                    Func<string, string, int, int, ModelContextResponse> verifyVariant = (eventId, alias, ordinal, count) =>
+                        inspector().Query(session, new ModelContextQuery { RequestEventId = eventId,
+                            VerifyResourceAlias = alias, VerifyViewVariantOrdinal = ordinal,
+                            VerifyViewVariantSnapshotCount = count }, CancellationToken.None);
+                    var unobserved = verifyVariant(q1.EventId, "R1@v1", 1, firstPage.SnapshotCount);
+                    AssertEqual("outline", unobserved.ViewVariantVerification.Variant.View,
+                        "an unobserved but registered view can be verified by its inventory ordinal");
+                    var selected = verifyVariant(q1.EventId, "R1@v1", 2, firstPage.SnapshotCount);
+                    AssertEqual(0L, selected.ViewVariantVerification.Variant.Coverage.Start.Value,
+                        "variant verification targets the selected coverage rather than the whole view");
+                    AssertEqual(ModelContextPayloadAvailability.Verified,
+                        selected.ViewVariantVerification.Variant.PayloadAvailability, "selected range payload is verified");
+                    AssertEqual(ModelContextPayloadAvailability.Verified,
+                        selected.ViewVariantVerification.Variant.PartsAvailability.Value, "selected range parts are verified");
+                    AssertTrue(selected.ViewVariantVerification.Variant.CheckedUtc.HasValue &&
+                        selected.Resources[0].PayloadAvailability == ModelContextPayloadAvailability.Unchecked,
+                        "variant verification records its own time without claiming revision-payload verification");
+                    var selectedJson = Newtonsoft.Json.JsonConvert.SerializeObject(selected.ViewVariantVerification);
+                    AssertTrue(!selectedJson.Contains(rangeBody.Sha256) && !selectedJson.Contains(rangePart.Sha256),
+                        "variant verification does not expose retained CAS addresses");
+                    var rangePartPath = payloads.PathFor(rangePart.Sha256);
+                    var rangePartBytes = System.IO.File.ReadAllBytes(rangePartPath);
+                    System.IO.File.Delete(rangePartPath);
+                    var missingPart = verifyVariant(q1.EventId, "R1@v1", 2, firstPage.SnapshotCount);
+                    AssertEqual(ModelContextPayloadAvailability.Verified,
+                        missingPart.ViewVariantVerification.Variant.PayloadAvailability,
+                        "a missing part does not invalidate a separately verified selected payload");
+                    AssertEqual(ModelContextPayloadAvailability.Unavailable,
+                        missingPart.ViewVariantVerification.Variant.PartsAvailability.Value,
+                        "a missing selected part is not masked by a valid whole-view payload");
+                    System.IO.File.WriteAllBytes(rangePartPath, rangePartBytes);
+                    var rangeBodyPath = payloads.PathFor(rangeBody.Sha256);
+                    var rangeBodyBytes = System.IO.File.ReadAllBytes(rangeBodyPath);
+                    System.IO.File.Delete(rangeBodyPath);
+                    var missingBody = verifyVariant(q1.EventId, "R1@v1", 2, firstPage.SnapshotCount);
+                    AssertEqual(ModelContextPayloadAvailability.Unavailable,
+                        missingBody.ViewVariantVerification.Variant.PayloadAvailability,
+                        "selected variant checks its own payload rather than the whole-view payload");
+                    System.IO.File.WriteAllBytes(rangeBodyPath, rangeBodyBytes);
                     store.RegisterView(scope, new ResourceRevisionView(first, "internal", body.Sha256, null,
                         ResourceCoverage.Whole()));
                     var secondPage = inventory(new ModelContextQuery { RequestEventId = q1.EventId,
@@ -537,6 +580,16 @@ namespace RNAssistant.Harness
                     RuntimeThrows<InvalidOperationException>(() => inventory(new ModelContextQuery {
                         RequestEventId = q1.EventId, ViewInventoryAlias = "R1@v1", ViewInventoryOffset = 30,
                         ViewInventorySnapshotCount = 26 }));
+                    RuntimeThrows<InvalidOperationException>(() => verifyVariant(q1.EventId, "R2@v1", 2, firstPage.SnapshotCount));
+                    RuntimeThrows<InvalidOperationException>(() => verifyVariant(q1.EventId, "R1@v1", 25, firstPage.SnapshotCount));
+                    RuntimeThrows<ResourceAuthorityConflictException>(() => verifyVariant(q1.EventId, "R1@v1", 2, 100));
+                    RuntimeThrows<InvalidOperationException>(() => inspector().Query(session, new ModelContextQuery {
+                        RequestEventId = q1.EventId, VerifyResourceAlias = "R1@v1", VerifyViewVariantOrdinal = 2 }, CancellationToken.None));
+                    RuntimeThrows<InvalidOperationException>(() => inspector().Query(session, new ModelContextQuery {
+                        RequestEventId = q1.EventId, VerifyResourceAlias = "R1@v1", VerifyViewVariantSnapshotCount = 25 }, CancellationToken.None));
+                    RuntimeThrows<InvalidOperationException>(() => inspector().Query(session, new ModelContextQuery {
+                        RequestEventId = q1.EventId, VerifyResourceAlias = "R1@v1", VerifyRetainedView = "text",
+                        VerifyViewVariantOrdinal = 2, VerifyViewVariantSnapshotCount = 25 }, CancellationToken.None));
                     var foreign = chats.AppendTrace(session, SessionEventTypes.LlmRequest,
                         new LlmTraceRecord { RequestId = Guid.NewGuid().ToString("N"),
                             ContextMessages = new System.Collections.Generic.List<ContextMessagePresentation> {
@@ -564,6 +617,7 @@ namespace RNAssistant.Harness
                     RuntimeThrows<InvalidOperationException>(() => verifyView(foreign.EventId, "R3@v1", "text"));
                     RuntimeThrows<InvalidOperationException>(() => inventory(new ModelContextQuery {
                         RequestEventId = foreign.EventId, ViewInventoryAlias = "R3@v1" }));
+                    RuntimeThrows<InvalidOperationException>(() => verifyVariant(foreign.EventId, "R3@v1", 0, 1));
                     AssertEqual("R1@v1", inspector().Query(session, new ModelContextQuery {
                         Alias = "R1@v1" }, CancellationToken.None).Resources[0].Alias,
                         "new scope does not renumber an older alias");

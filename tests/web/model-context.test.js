@@ -67,6 +67,21 @@ function fixture(withAliases = false) {
               coverage: { kind: "yaml-path", path: "/config", start: 0, end: 1 }, observationComplete: false,
               readMetadata: { requestedCoverage: { kind: "yaml-path", path: "/config", start: 0, end: 2 },
                 requestedDepth: 1, selectionComplete: true, representationComplete: false, sourceComplete: false } }] }] : [];
+        if (query.verifyViewVariantOrdinal != null) {
+          if (verification.hold) await verification.hold;
+          assert.equal(query.requestEventId, "r1");
+          assert.equal(query.verifyResourceAlias, "R1@v1");
+          assert.equal(query.verifyViewVariantSnapshotCount, 3);
+          const ordinal = query.verifyViewVariantOrdinal;
+          assert.ok(ordinal === 0 || ordinal === 1);
+          return { chatId: "chat", revision, events: [events[0]], resources,
+            viewVariantVerification: { resourceAlias: "R1@v1", ordinal, snapshotCount: 3,
+              variant: { view: "source", coverage: ordinal === 0 ? { kind: "whole" } :
+                { kind: "character-range", start: 10, end: 80 },
+                payloadAvailability: "Verified", partsCount: ordinal === 0 ? 2 : 0,
+                partsAvailability: ordinal === 0 ? verification.partsAvailability : null,
+                checkedUtc: "2026-10-02T11:00:00Z" } } };
+        }
         if (query.verifyResourceAlias) {
           if (verification.hold) await verification.hold;
           assert.equal(query.requestEventId, "r1");
@@ -280,6 +295,8 @@ function fixture(withAliases = false) {
     .children[1].children.find(node => node.tag === "button" && node.textContent === "Проверить view source");
   const inventoryButton = (f, label) => f.get("modelContextBody").children.find(node => node.tag === "details")
     .children[1].children.find(node => node.tag === "button" && node.textContent === label);
+  const variantButton = (f, ordinal) => f.get("modelContextBody").children.find(node => node.tag === "details")
+    .children[1].children.find(node => node.tag === "button" && node.textContent === "Проверить вариант #" + ordinal);
   assert.match(resourceText(), /Предыдущая ревизия:.*prior.*Восстановлена из:.*original.*Зависимость:.*dependency/);
   assert.match(resourceText(), /1234 байт.*text\/plain.*payload-hash.*сохранённое тело не проверено/);
   assert.match(resourceText(), /Запрошено:.*"end":6.*Покрытие в источнике:.*"end":2/);
@@ -298,17 +315,33 @@ function fixture(withAliases = false) {
   assert.match(resourceText(), /#2 · source · покрытие.*character-range.*start.*10.*end.*80/);
   assert.equal(linked.calls.filter(call => call.query.verifyResourceAlias).length, 0,
     "inventory metadata does not trigger CAS verification");
+  await variantButton(linked, 2).fire("click"); await flush();
+  assert.equal(linked.calls.at(-1).query.verifyViewVariantOrdinal, 1);
+  assert.equal(linked.calls.at(-1).query.verifyViewVariantSnapshotCount, 3);
+  assert.match(resourceText(), /#2 · source.*хеш и длина тела проверены/);
+  assert.match(resourceText(), /сохранённое тело не проверено/,
+    "variant verification does not claim to check the revision payload");
+  await variantButton(linked, 1).fire("click"); await flush();
+  assert.match(resourceText(), /#1 · source.*все части проверены/);
+  let releaseVariant;
+  linked.verification.hold = new Promise(resolve => releaseVariant = resolve);
+  const lateVariant = variantButton(linked, 2).fire("click"); await flush();
   await inventoryButton(linked, "Следующая страница views").fire("click"); await flush();
+  releaseVariant(); await lateVariant; await flush();
+  linked.verification.hold = null;
   assert.equal(linked.calls.at(-1).query.viewInventoryOffset, 2);
   assert.equal(linked.calls.at(-1).query.viewInventorySnapshotCount, 3);
   assert.match(resourceText(), /Сохранённые views: 3–3 из 3.*#3 · internal/);
   assert.doesNotMatch(resourceText(), /#2 · source/, "older pages leave the DOM");
+  assert.equal(variantButton(linked, 3), undefined, "metadata-only variant has no CAS-check action");
   assert.equal(inventoryButton(linked, "Следующая страница views"), undefined,
     "complete inventory has no forward continuation");
   await inventoryButton(linked, "Предыдущая страница views").fire("click"); await flush();
   assert.equal(linked.calls.at(-1).query.viewInventoryOffset, 0);
   assert.equal(linked.calls.at(-1).query.viewInventorySnapshotCount, 3);
   assert.match(resourceText(), /Сохранённые views: 1–2 из 3/);
+  assert.match(resourceText(), /#2 · source.*байты не проверены/,
+    "a late check from a prior page cannot mark the revisited page as verified");
   await checkButton(linked).fire("click"); await flush();
   assert.equal(linked.calls.at(-1).query.verifyResourceAlias, "R1@v1");
   assert.match(resourceText(), /хеш и длина сохранённого тела проверены/);

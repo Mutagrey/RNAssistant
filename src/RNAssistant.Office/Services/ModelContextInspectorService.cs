@@ -40,6 +40,13 @@ namespace RNAssistant.Office.Services
                   inventoryOffset < 0 || query.ViewInventorySnapshotCount < 0 ||
                   (inventoryOffset > 0 && !query.ViewInventorySnapshotCount.HasValue))))
                 throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: view inventory requires an exact saved request and a valid page.");
+            var variantRequested = query.VerifyViewVariantOrdinal.HasValue;
+            if (variantRequested != query.VerifyViewVariantSnapshotCount.HasValue ||
+                variantRequested && (string.IsNullOrEmpty(query.VerifyResourceAlias) ||
+                    !string.IsNullOrEmpty(query.VerifyRetainedView) || inventoryRequested ||
+                    query.VerifyViewVariantOrdinal < 0 || query.VerifyViewVariantSnapshotCount <= 0 ||
+                    query.VerifyViewVariantOrdinal >= query.VerifyViewVariantSnapshotCount))
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: exact retained view variant and inventory snapshot are required.");
             var response = new ModelContextResponse { ChatId = session.Id, Revision = session.Revision,
                 Events = new ModelContextEventDto[0] };
             if (!query.BeforeSequence.HasValue && string.IsNullOrEmpty(query.RequestEventId) &&
@@ -79,7 +86,10 @@ namespace RNAssistant.Office.Services
                     var resource = response.Resources.SingleOrDefault(row => row.Alias == query.VerifyResourceAlias);
                     if (resource == null)
                         throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: resource alias is absent from the selected request.");
-                    if (string.IsNullOrEmpty(query.VerifyRetainedView)) VerifyPayload(resource, token);
+                    if (variantRequested)
+                        response.ViewVariantVerification = VerifyViewVariant(resource,
+                            query.VerifyViewVariantOrdinal.Value, query.VerifyViewVariantSnapshotCount.Value, token);
+                    else if (string.IsNullOrEmpty(query.VerifyRetainedView)) VerifyPayload(resource, token);
                     else VerifyView(resource, query.VerifyRetainedView, token);
                 }
                 response.Operations = DescribeIdentities(trace, entry => new[] { entry.ToolCallId }, aliases.Operation);
@@ -214,12 +224,7 @@ namespace RNAssistant.Office.Services
                         .Where(name => !string.IsNullOrWhiteSpace(name)).Distinct(StringComparer.Ordinal).ToArray();
                     row.RetainedViews = names.Select(name => revisions.GetView(scope, row.Resource, name))
                         .Where(view => view != null)
-                        .Select(view => new ModelContextRetainedViewDto { View = view.View, Coverage = view.Coverage,
-                            PayloadAvailability = view.Payload == null ? ModelContextPayloadAvailability.NotRetained :
-                                ModelContextPayloadAvailability.Unchecked,
-                            PartsCount = view.Parts.Count,
-                            PartsAvailability = view.Parts.Count == 0 ? (ModelContextPayloadAvailability?)null :
-                                ModelContextPayloadAvailability.Unchecked, Retained = view })
+                        .Select(DescribeRetainedView)
                         .ToArray();
                 }
             }
@@ -254,6 +259,31 @@ namespace RNAssistant.Office.Services
                     PayloadRegistered = view.Payload != null, PartsCount = view.Parts.Count }).ToArray() };
         }
 
+        private ModelContextViewVariantVerificationDto VerifyViewVariant(ModelContextResourceDto resource,
+            int ordinal, int snapshotCount, CancellationToken token)
+        {
+            var revisions = _authority?.Store as IResourceRevisionStore;
+            if (resource.RevisionMetadata == null || revisions == null)
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: retained view variant is unavailable for this request and scope.");
+            var page = revisions.ReadViews(resource.Scope, resource.Resource, ordinal, 1, snapshotCount);
+            if (page.Items.Count != 1)
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: retained view variant is absent from this inventory snapshot.");
+            var variant = DescribeRetainedView(page.Items[0]);
+            VerifyRetainedView(variant, token);
+            return new ModelContextViewVariantVerificationDto { ResourceAlias = resource.Alias,
+                Ordinal = ordinal, SnapshotCount = snapshotCount, Variant = variant };
+        }
+
+        private static ModelContextRetainedViewDto DescribeRetainedView(ResourceRevisionView view)
+        {
+            return new ModelContextRetainedViewDto { View = view.View, Coverage = view.Coverage,
+                PayloadAvailability = view.Payload == null ? ModelContextPayloadAvailability.NotRetained :
+                    ModelContextPayloadAvailability.Unchecked,
+                PartsCount = view.Parts.Count,
+                PartsAvailability = view.Parts.Count == 0 ? (ModelContextPayloadAvailability?)null :
+                    ModelContextPayloadAvailability.Unchecked, Retained = view };
+        }
+
         private void VerifyPayload(ModelContextResourceDto row, CancellationToken token)
         {
             // Only metadata authorized by DescribeAuthority can supply a payload.
@@ -271,6 +301,11 @@ namespace RNAssistant.Office.Services
                 .SingleOrDefault(view => view.View == name);
             if (item?.Retained == null)
                 throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: retained view is absent from this request and scope.");
+            VerifyRetainedView(item, token);
+        }
+
+        private void VerifyRetainedView(ModelContextRetainedViewDto item, CancellationToken token)
+        {
             var retained = item.Retained;
             if (retained.Payload != null) item.PayloadAvailability = VerifyBlob(retained.Payload, token);
             if (retained.Parts.Count != 0)

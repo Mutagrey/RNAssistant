@@ -1,5 +1,17 @@
 # Stabilization progress
 
+## Resource Context exact retained view variant checks — 2026-10-23
+
+Owner: Model Context Inspector and existing revision/CAS stores. An explicit
+check selects a registered view/coverage variant by its ordinal in a pinned
+inventory for an exact saved request. The runtime resolves it in the authorized
+scope/revision and verifies its payload and all retained parts; the UI receives
+per-body status and check time without CAS addresses. Missing bytes cannot be
+reported as verified, and the revision payload is not implicitly checked.
+Focused Harness/Web checks pass host-neutral. Windows/Office/WebView2 remain
+unqualified; view-specific cost, live availability and transformation provenance
+remain open in BACKLOG.
+
 ## Unified Shell Office draft acknowledgement (1b continuation) — 2026-10-23
 
 Owner: application/chat UI. Office and workspace drafts now use the same in-memory

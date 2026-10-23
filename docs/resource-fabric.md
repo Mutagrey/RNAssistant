@@ -732,12 +732,15 @@ for the selected exact revision in that scope, in append order. The first page's
 `snapshotCount` bounds later pages, so views registered after it appear only in a
 fresh inventory; the Inspector displays one page at a time. Pages expose coverage,
 payload-registration and part count as metadata; they do not read the live
-provider or authenticate CAS bytes. An
-omitted name is unknown, not proof that a live provider cannot read it. Explicit
-checks verify either the revision payload or one known-name view payload and all
-its parts by full hash and length. They record transient
-per-body status and check time; a valid view does not establish currentness,
-semantic transformation validity or delivery to the model.
+provider or authenticate CAS bytes. An omitted name is unknown, not proof that
+a live provider cannot read it. Explicit checks verify the revision payload,
+one known-name view or one selected inventory variant by ordinal and the pinned
+first-page count. The runtime resolves that
+variant again in the authorized exact revision, then verifies its payload and
+all retained parts by full hash and length without accepting CAS addresses from
+the UI. Checks record transient per-body status and check time; a valid view does
+not establish currentness, semantic transformation validity or delivery to the
+model.
 
 An adaptive first window retains the original whole-read intent rather than
 rewriting it to the provider's chosen window. Completeness of that chosen fragment
