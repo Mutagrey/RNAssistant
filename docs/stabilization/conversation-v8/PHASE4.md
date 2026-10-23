@@ -167,15 +167,15 @@ an irreparable obstacle without reporting success or replaying a tool.
   The context-continuity Harness fixture checks reflection compaction and reload.
 
 The full host-neutral Harness completed after the v8 fixture migration through
-`99bf54b0`: 975 passed, 29 failed, 1004 total. Three failures need the absent
-pinned Data Templates native package on this Mac. Other failures include
-unmigrated v7 fixtures, stale assertions and separate resource/host-neutral
-investigations; the full suite is not qualified. After that run, seven formerly
-failing cases passed individually: failed/unknown write characterization,
-mixed VBA batch refusal, large accepted-call replay, accepted-prose projection,
-active HTML target and VBA skill guidance. The full suite was not repeated after
-those changes. One bridge cancellation check failed in the full run but passed
-immediately when run alone; its reproducibility is tracked in the
+`6de9a8bd`: 986 passed, 18 failed, 1004 total. All formerly red v8
+lifecycle/history cases pass. Three remaining failures need the absent pinned
+Data Templates native package on this Mac; the others are separate resource,
+tool-catalog and bridge investigations, so the full suite is not qualified.
+The Outlook archive/CAS pointer-lock failure in this run was fixed at
+`5a91261b`; its archive/collection and malformed-name checks pass individually,
+but the full suite has not been repeated after that change. A bridge cancellation
+check failed in both full runs but passed immediately when run alone; its
+reproducibility is tracked in the
 [risk register](../RISK_REGISTER.md#harness-bridge-cancellation-flake--2026-10-23).
 
 The [isolated real-model pilot](PHASE5_PILOT.md) compares exact file tasks on a

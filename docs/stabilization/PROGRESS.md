@@ -19,10 +19,11 @@ honest partial claim after the verified sheet write. Workspace permits
 honest incomplete finish with failed acceptance; satisfied finish still
 requires explicit criteria. See [phase-4 evidence and gaps](conversation-v8/PHASE4.md).
 The host-neutral Harness builds and focused v8 workflow/replay scenarios pass.
-The last complete run had 975 passed / 29 failed / 1004 total; seven of those
-failures subsequently passed focused checks, but the full suite was not rerun.
-Three failures depend on a missing local Data Templates package; other red
-cases still need triage. An [isolated pinned real-model pilot](conversation-v8/PHASE5_PILOT.md)
+The latest complete run had 986 passed / 18 failed / 1004 total. All previously
+red v8 lifecycle/history fixtures now pass; three remaining failures depend on a
+missing local Data Templates package, and independent resource/tool/bridge cases
+still need triage. The Outlook archive/CAS pointer-lock failure was fixed and
+passed targeted checks after that full run. An [isolated pinned real-model pilot](conversation-v8/PHASE5_PILOT.md)
 passed all three synthetic tasks on v8 after a workspace read-selector fix,
 while v7 completed none. This is not the required three-way/ablation benchmark
 or Windows/Office qualification. Accepted v8 replay now sanitizes runtime

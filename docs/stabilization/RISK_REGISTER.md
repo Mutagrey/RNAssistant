@@ -41,9 +41,10 @@ also retains the real-model benchmark and Windows qualification gates.
 
 ## Harness bridge cancellation flake — 2026-10-23
 
-The complete host-neutral v8 Harness run (975 passed / 29 failed) reported
-`bridge: agent run keeps controls responsive` failing to return a terminal
-response after cancellation. The same check passed immediately in isolation.
+Two complete host-neutral v8 Harness runs (975/29 and 986/18 passed/failed)
+reported `bridge: agent run keeps controls responsive` failing to return a
+terminal response after cancellation. The same check passed immediately in
+isolation.
 Owner: Office bridge/run cancellation. Reproduce under suite load and inspect
 the addressed run's terminal event and bridge reply before treating cancellation
 as qualified. This is not Windows/Office/WebView2 evidence.
