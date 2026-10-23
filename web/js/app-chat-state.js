@@ -95,6 +95,7 @@ function chatDraftStore() {
 }
 
 var chatDraftVersion = 0;
+var workspacePendingInputs = Object.create(null);
 function workspaceDraftKey(target) {
   return target && target.workspaceId && target.sessionId
     ? "workspace:" + JSON.stringify([target.workspaceId, target.sessionId]) : null;
@@ -118,10 +119,22 @@ function acceptWorkspaceDraft(target, text, version) {
 }
 function forgetWorkspaceDraft(target) {
   var key = workspaceDraftKey(target);
-  if (key) delete chatDraftStore()[key];
+  if (key) { delete chatDraftStore()[key]; delete workspacePendingInputs[key]; }
+}
+function prepareWorkspaceInput(target, text, options) {
+  var key = workspaceDraftKey(target), pending = workspacePendingInputs[key];
+  if (!pending || pending.message !== text || pending.Mode !== options.Mode || pending.ReasoningEnabled !== options.ReasoningEnabled)
+    pending = workspacePendingInputs[key] = { sessionId: target.sessionId, requestId: crypto.randomUUID(),
+      message: text, Mode: options.Mode, ReasoningEnabled: options.ReasoningEnabled };
+  return pending;
+}
+function acknowledgeWorkspaceInput(target, input) {
+  var key = workspaceDraftKey(target);
+  if (workspacePendingInputs[key] === input) delete workspacePendingInputs[key];
 }
 window.RNAssistantChatDrafts = { readWorkspace: readWorkspaceDraft, saveWorkspace: saveWorkspaceDraft,
-  acceptWorkspace: acceptWorkspaceDraft, forgetWorkspace: forgetWorkspaceDraft };
+  acceptWorkspace: acceptWorkspaceDraft, forgetWorkspace: forgetWorkspaceDraft,
+  prepareWorkspaceInput: prepareWorkspaceInput, acknowledgeWorkspaceInput: acknowledgeWorkspaceInput };
 
 function officeDraftKey(chatIdValue) { return chatIdValue ? "office:" + chatIdValue : null; }
 function readOfficeDraft(chatIdValue) {

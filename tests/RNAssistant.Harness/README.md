@@ -204,6 +204,13 @@ history access during a run, draft restoration and late replies after switching 
 `node tests/web/workspace-shared-draft.test.js` checks one mounted project/plugin
 view and composer, one session draft and preferences across both screens, appended file reference, failed retry
 identity, double submit and late acknowledgement with identical later text.
+It also loses replies after acceptance and retries across project/plugin screens,
+checking one request identity and one persisted user message.
+`node tests/web/workspace-chat-races.test.js` delays running snapshots past the
+terminal response in both screens and switches plugin selection before an input
+reply arrives; completed chats must remain writable without stale busy state.
+It also opens a run started outside the panel and observes completion through
+read-only polling in both project and plugin views.
 `node tests/web/splitter-preferences.test.js` checks the shared divider interaction:
 frame coalescing, commit/cancel, capture cleanup, keyboard controls and ARIA values.
 

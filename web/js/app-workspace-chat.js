@@ -2,6 +2,7 @@
   "use strict";
   var selectedSessions = new Map();
   var activeOwner = "office", sharedComposer = null, actions = Object.create(null), actionsBound = false;
+  var officeComposerAnchor = null;
   var viewNodes = { Messages: "messages", Form: "chatForm", Input: "chatInput", Send: "sendButton", Stop: "stopButton",
     Notice: "workspaceChatNotice", Control: "workspaceChatControl", Pending: "workspaceChatPending",
     Approve: "workspaceChatApprove", Reject: "workspaceChatReject", Questions: "workspaceChatQuestions" };
@@ -43,6 +44,10 @@
     if (owner !== "office" && !container) return false;
     var changed = activeOwner !== owner;
     if (activeOwner === "office" && owner !== "office") {
+      if (!officeComposerAnchor) {
+        officeComposerAnchor = document.createComment("Office composer");
+        form.parentNode.insertBefore(officeComposerAnchor, form);
+      }
       suspendOfficeTranscript();
       captureChatDraft(state.activeChatId, false);
       list._chatSignature = null;
@@ -64,7 +69,7 @@
     form.classList.toggle("project-chat-composer", owner !== "office");
     if (owner === "office") {
       if (form.parentNode !== document.getElementById("chatDropZone"))
-        document.getElementById("chatDropZone").insertBefore(form, document.getElementById("modelContextDialog"));
+        document.getElementById("chatDropZone").insertBefore(form, officeComposerAnchor);
       document.getElementById("stopButton").hidden = false;
       input.setAttribute("aria-label", "Сообщение в чат Office");
       if (changed) {
@@ -107,6 +112,36 @@
     if (sessionId) selectedSessions.set(workspaceId, sessionId); else selectedSessions.delete(workspaceId);
   }
   function field(value, key) { return value && (value[key] !== undefined ? value[key] : value[key[0].toUpperCase() + key.slice(1)]); }
+  function latestSnapshot(current, incoming) {
+    if (!current || field(current, "sessionId") !== field(incoming, "sessionId") ||
+        field(field(current, "project"), "workspaceId") !== field(field(incoming, "project"), "workspaceId")) return incoming;
+    var previousRevision = field(field(current, "state"), "revision");
+    var nextRevision = field(field(incoming, "state"), "revision");
+    return Number.isSafeInteger(previousRevision) && (!Number.isSafeInteger(nextRevision) || nextRevision < previousRevision)
+      ? current : incoming;
+  }
+  function createRunObserver(read, changed, failed) {
+    var target = null, timer = null;
+    async function tick(current) {
+      if (target !== current) return;
+      timer = null;
+      try {
+        var snapshot = await read(current);
+        if (target === current) changed(snapshot);
+      } catch (error) { if (target === current) failed(error); }
+      if (target === current) timer = setTimeout(function () { tick(current); }, 1200);
+    }
+    return { select: function (snapshot, pending) {
+      var workspaceId = field(field(snapshot, "project"), "workspaceId"), sessionId = field(snapshot, "sessionId");
+      var observe = workspaceId && sessionId && (pending || field(field(snapshot, "state"), "status") === "running");
+      if (observe && target && target.workspaceId === workspaceId && target.sessionId === sessionId) return;
+      if (timer) clearTimeout(timer);
+      timer = null; target = null;
+      if (!observe) return;
+      var current = target = { workspaceId: workspaceId, sessionId: sessionId };
+      timer = setTimeout(function () { tick(current); }, 1200);
+    } };
+  }
   function button(label, className, icon, action) {
     var node = document.createElement("button"); node.type = "button"; node.className = className;
     node.title = label; node.setAttribute("aria-label", label);
@@ -297,6 +332,7 @@
         reasoning = saved ? saved.reasoning : !!field(field(snapshot, "modelConfiguration"), "reasoningEnabled"); update();
       },
       options: function () { return { Mode: mode, ReasoningEnabled: reasoning }; },
+      prepareInput: function (target, text) { return draftStore.prepareWorkspaceInput(target, text, this.options()); },
       draftVersion: function () {
         if (!current) return null;
         var saved = draftStore.readWorkspace(current);
@@ -316,7 +352,8 @@
         draftStore.saveWorkspace(target, { text: saved.text.trim() ? saved.text.replace(/\s*$/, "") + "\n" + line : line,
           mode: saved.mode, reasoning: saved.reasoning });
       },
-      accepted: function (target, text, version) {
+      accepted: function (target, text, version, request) {
+        draftStore.acknowledgeWorkspaceInput(target, request);
         var previous = draftStore.readWorkspace(target);
         var cleared = draftStore.acceptWorkspace(target, text, version);
         if (cleared && sameTarget(current, target) && loaded === previous) {
@@ -347,5 +384,5 @@
     mount: mount, owner: function () { return activeOwner; }, node: node, messages: function () { return node("Messages"); },
     registerActions: registerActions, bindActions: bindActions,
     rememberSession: rememberSession, selectedSession: function (workspaceId) { return selectedSessions.get(workspaceId); },
-    watchTitle: watchTitle };
+    watchTitle: watchTitle, latestSnapshot: latestSnapshot, createRunObserver: createRunObserver };
 }());

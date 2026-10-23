@@ -600,6 +600,13 @@ lease, with another lookup inside the lease before acceptance. A duplicate does
 not append events, start/reconcile a run, re-grade acceptance or replay tools.
 Caller-supplied IDs require a pre-existing session.
 
+Within one UI lifetime the shared workspace draft owner retains an unacknowledged
+input's request ID across project/plugin navigation and project selection.
+Retrying the same text/mode/thinking uses that identity, including when acceptance
+succeeded but the bridge reply was lost. Acknowledgement removes only that pending
+input; draft clearing separately checks its version. This is in-memory delivery
+state, not an additional durable input journal or a guarantee across panel reload.
+
 Office `submitChatInput` requires an operation ID and uses the same conflict check.
 Its fingerprint covers text or typed answers, draft IDs and delivery mode. Lookup
 precedes draft loading, so a retry works after drafts were consumed; a matching

@@ -1,7 +1,11 @@
 (function () {
   "use strict";
-  var scope = "office", catalog = null, active = null, busy = false, serial = 0, poll = null, pendingSend = null, stopTitleWatch = null;
+  var scope = "office", catalog = null, active = null, busy = false, serial = 0, stopTitleWatch = null;
   var composer = null, uploadingFiles = false;
+  var runObserver = window.RNAssistantWorkspaceChat.createRunObserver(
+    function (target) { return send("getProjectChat", target); },
+    function (snapshot) { active = window.RNAssistantWorkspaceChat.latestSnapshot(active, snapshot); notice(statusText()); render(); },
+    function (error) { notice(error.detail || error.message, true); });
   var selectedWorkspaceId = null, expanded = {}, query = "", connectionMode = "connect";
   var noticeText = "", noticeError = false, fileNotice = null;
   function el(id) {
@@ -145,6 +149,7 @@
     });
   }
   function render() {
+    runObserver.select(project() && project().available ? active : null, busy);
     el("New").disabled = busy || !project() || !project().available;
     el("Connect").disabled = busy;
     el("Create").disabled = busy;
@@ -192,7 +197,7 @@
         buttons: suggestions
       }));
     } else window.RNAssistantWorkspaceChat.renderMessages(messages, active);
-    if (!busy && statusText()) notice(statusText());
+    if (!busy && !noticeError && statusText()) notice(statusText());
     else notice(noticeText, noticeError);
   }
   async function refresh(target) {
@@ -206,7 +211,7 @@
     else if (result.selectedWorkspaceId) selectedWorkspaceId = result.selectedWorkspaceId;
     else if (!projects().some(function (item) { return item.workspaceId === selectedWorkspaceId; }))
       selectedWorkspaceId = (projects().find(function (item) { return item.available; }) || projects()[0] || {}).workspaceId || null;
-    if (previousProject !== projectId()) { active = null; pendingSend = null; }
+    if (previousProject !== projectId()) { active = null; }
     notice("");
     render();
     var chats = project() && project().chats || [];
@@ -223,7 +228,7 @@
   }
   function selectProject(workspaceId, openFirst) {
     if (!workspaceId || !projects().some(function (item) { return item.workspaceId === workspaceId; })) return;
-    if (selectedWorkspaceId !== workspaceId) { ++serial; selectedWorkspaceId = workspaceId; active = null; pendingSend = null; }
+    if (selectedWorkspaceId !== workspaceId) { ++serial; selectedWorkspaceId = workspaceId; active = null; }
     render();
     var entry = project();
     if (openFirst !== false && entry.available && entry.chats && entry.chats.length) open(workspaceId, entry.chats[0].Id);
@@ -231,7 +236,7 @@
   async function open(workspaceId, sessionId) {
     if (!workspaceId || !sessionId) return;
     if (stopTitleWatch) { stopTitleWatch(); stopTitleWatch = null; }
-    if (projectId() !== workspaceId) { ++serial; selectedWorkspaceId = workspaceId; active = null; pendingSend = null; render(); }
+    if (projectId() !== workspaceId) { ++serial; selectedWorkspaceId = workspaceId; active = null; render(); }
     if (!project() || !project().available) return;
     var version = ++serial, pid = projectId();
     if (currentId() !== sessionId) { active = null; render(); }
@@ -239,7 +244,7 @@
     try {
       var result = await send("getProjectChat", { workspaceId: pid, sessionId: sessionId });
       if (version === serial && projectId() === pid) {
-        active = result; window.RNAssistantWorkspaceChat.rememberSession(pid, result.sessionId); notice(statusText()); render();
+        active = window.RNAssistantWorkspaceChat.latestSnapshot(active, result); window.RNAssistantWorkspaceChat.rememberSession(pid, result.sessionId); notice(statusText()); render();
       }
     } catch (error) { if (version === serial) notice(error.detail || error.message, true); }
   }
@@ -249,7 +254,7 @@
     try {
       var result = await send("createProjectChat", { workspaceId: pid, title: "Новый чат" });
       if (projectId() === pid) {
-        active = result; window.RNAssistantWorkspaceChat.rememberSession(pid, result.sessionId);
+        active = window.RNAssistantWorkspaceChat.latestSnapshot(active, result); window.RNAssistantWorkspaceChat.rememberSession(pid, result.sessionId);
         catalog = await send("getProjectChats", {}); notice(statusText()); render();
       }
     } catch (error) { notice(error.detail || error.message, true); }
@@ -282,7 +287,7 @@
       });
       window.RNAssistantWorkspaceChat.rememberSession(entry.workspaceId, null);
       if (projectId() === entry.workspaceId) {
-        ++serial; active = null; pendingSend = null;
+        ++serial; active = null;
         selectedWorkspaceId = (projects().find(function (item) { return item.available; }) || projects()[0] || {}).workspaceId || null;
       }
       notice(""); render();
@@ -290,17 +295,11 @@
         open(projectId(), project().chats[0].Id); }
     catch (error) { await refresh(); notice(error.detail || error.message, true); }
   }
-  async function readCurrent(pid, sid) {
-    try { var result = await send("getProjectChat", { workspaceId: pid, sessionId: sid });
-      if (projectId() === pid && currentId() === sid) { active = result; notice(statusText()); render(); } }
-    catch (error) { if (projectId() === pid && currentId() === sid) notice(error.detail || error.message, true); }
-  }
   async function runChat(action, reportFailure) {
     if (busy || !active || !project() || !project().available) return false;
     busy = true; var pid = projectId(), sid = currentId(); render();
-    poll = window.setInterval(function () { readCurrent(pid, sid); }, 1200);
     try { var result = await action(pid, sid); if (projectId() === pid && currentId() === sid) {
-      active = result; notice(statusText()); render();
+      active = window.RNAssistantWorkspaceChat.latestSnapshot(active, result); notice(statusText()); render();
       try { var latestCatalog = await send("getProjectChats", {});
         if (projectId() === pid && currentId() === sid) { catalog = latestCatalog; render(); }
       } catch (_) { /* The chat result remains available. */ }
@@ -308,14 +307,14 @@
       stopTitleWatch = window.RNAssistantWorkspaceChat.watchTitle(result,
         function () { return send("getProjectChat", { workspaceId: pid, sessionId: sid }); },
         async function (latest) { if (projectId() !== pid || currentId() !== sid) return;
-          active = latest; render();
+          active = window.RNAssistantWorkspaceChat.latestSnapshot(active, latest); render();
           try { catalog = await send("getProjectChats", {}); if (projectId() === pid && currentId() === sid) render(); }
           catch (_) { /* The refreshed title is still shown in the open chat. */ }
         });
     } return true; }
     catch (error) { if (projectId() === pid && currentId() === sid) notice(error.detail || error.message, true);
       if (reportFailure) throw error; return false; }
-    finally { window.clearInterval(poll); poll = null; busy = false; render(); }
+    finally { busy = false; render(); }
   }
   function setScope(next, target) {
     scope = next; ++serial;
@@ -330,7 +329,6 @@
     document.querySelectorAll(".chat-scope-switcher").forEach(function (picker) { picker.open = false; });
     var loaded;
     if (next === "projects") loaded = refresh(target);
-    else if (poll) { window.clearInterval(poll); poll = null; }
     if (window.RNAssistantShellLayout) window.RNAssistantShellLayout.refresh();
     return loaded;
   }
@@ -382,7 +380,7 @@
       busy = true; render();
       try {
         var result = await send(connectionMode === "create" ? "createProjectWorkspace" : "connectProjectWorkspace", { rootPath: path });
-        catalog = result; selectedWorkspaceId = result.selectedWorkspaceId; active = null; pendingSend = null;
+        catalog = result; selectedWorkspaceId = result.selectedWorkspaceId; active = null;
         el("Connection").hidden = true; el("ConnectionPath").value = ""; notice(""); render();
       } catch (error) { notice(error.detail || error.message, true); }
       finally { busy = false; render(); }
@@ -394,15 +392,12 @@
       submit: function () {
         var text = el("Input").value.trim(); if (!text || el("Send").disabled || !active || uploadingFiles) return;
         var pid = projectId(), sid = currentId();
-        var preferences = composer.options();
-        var draftVersion = composer.draftVersion();
-        if (!pendingSend || pendingSend.workspaceId !== pid || pendingSend.sessionId !== sid || pendingSend.text !== text || JSON.stringify(pendingSend.preferences) !== JSON.stringify(preferences))
-          pendingSend = { workspaceId: pid, sessionId: sid, text: text, preferences: preferences, requestId: crypto.randomUUID() };
-        var request = pendingSend;
+        var target = { workspaceId: pid, sessionId: sid }, draftVersion = composer.draftVersion();
+        var request = composer.prepareInput(target, text);
         runChat(function () { return send("submitProjectChat", { workspaceId: pid, sessionId: sid,
-          input: Object.assign({ sessionId: sid, requestId: request.requestId, message: text }, request.preferences) }).then(function (result) {
-          composer.accepted({ workspaceId: pid, sessionId: sid }, text, draftVersion);
-          if (pendingSend === request) pendingSend = null; return result;
+          input: request }).then(function (result) {
+          composer.accepted(target, text, draftVersion, request);
+          return result;
         }); });
       },
       stop: async function () {
@@ -413,7 +408,7 @@
           var result = await send("cancelProjectChat", { workspaceId: pid, sessionId: sid,
             runId: field(state, "runId", "RunId"), cursor: field(state, "cursor", "Cursor") });
           if (projectId() === pid && currentId() === sid) {
-            active = result; render();
+            active = window.RNAssistantWorkspaceChat.latestSnapshot(active, result); render();
             notice(result.cancelStatus === "Requested" && field(result.state, "status", "Status") === "running"
               ? "Отмена запрошена…" : statusText());
           }

@@ -1,5 +1,29 @@
 # Stabilization progress
 
+## Unified Shell regression review — 2026-10-23
+
+Owner: application/shared ChatView. Browser reproductions exposed five defects:
+Office composer restoration referenced the relocated diagnostics node; retrying
+an accepted input after a lost reply and project/plugin navigation generated a
+new request ID; delayed running snapshots replaced terminal state; reselecting a
+plugin during a pending reply retained its busy flag; reopening an already running
+chat read history once without observing completion.
+
+The composer now restores through its own DOM anchor, workspace input identity
+belongs to the shared draft owner, snapshots retain monotonic session revision,
+and plugin busy state follows its selection epoch. A common read-only run observer
+replaces the per-action polling loops and follows an opened running session until
+completion or selection change. It rejects superseded replies and does not replay
+execution. Request IDs remain in memory; full panel reload is not a durable input
+retry guarantee.
+
+Focused browser evidence covers shared drafts/lost replies, state ordering and
+running-chat reconnect, action routing, Office input delivery and shared layout.
+Concurrent browser runs hit startup/scroll-fixture timeouts; isolated reruns
+passed. Node workspace-v8 and run-view-state checks cover
+presentation. No build, full Harness or Office/VSTO validation was run;
+Windows/Office/WebView2 qualification remains open.
+
 ## Conversation v8 post-merge regression review — 2026-10-23
 
 Owner: Core accepted-history reader / Workspace replay. Review of `a61b5207`

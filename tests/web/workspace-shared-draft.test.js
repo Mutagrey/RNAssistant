@@ -68,7 +68,7 @@ const root = path.resolve(__dirname, '../..');
 
     await page.evaluate(() => {
       const original = send;
-      window.draftTest = {requests:[], release:null, failOnce:true};
+      window.draftTest = {original, requests:[], release:null, failOnce:true};
       window.send = async function (type, payload) {
         if (type !== 'submitProjectChat') return original(type, payload);
         draftTest.requests.push(payload);
@@ -101,7 +101,41 @@ const root = path.resolve(__dirname, '../..');
     await page.evaluate(([workspace, session]) => RNAssistantProjectChats.open(workspace, session), [workspaceId, sessionId]);
     assert.equal(await page.locator('#chatInput').inputValue(), 'Тот же текст',
       'project and plugin still read the same later draft');
+
+    for (const destination of ['plugin', 'project']) {
+      const message = 'Повтор после потери ответа: ' + destination;
+      await page.evaluate(() => {
+        const original = draftTest.original;
+        window.retryTest = {requests:[], failOnce:true};
+        window.send = async function (type, payload) {
+          const result = await original(type, payload);
+          if (type === 'submitProjectChat') {
+            retryTest.requests.push(payload);
+            if (retryTest.failOnce) { retryTest.failOnce = false; throw Error('Accepted reply lost'); }
+          }
+          return result;
+        };
+      });
+      await page.locator('#chatInput').fill(message);
+      await page.locator('#chatInput').press('Enter');
+      await page.waitForFunction(() => retryTest.requests.length === 1 &&
+        !document.querySelector(RNAssistantWorkspaceChat.owner() === 'plugin' ? '#pluginChatNew' : '#projectChatNew').disabled);
+      if (destination === 'plugin') await page.evaluate(() => RNAssistantPlugins.select('data-templates'));
+      else await page.evaluate(([workspace, session]) => RNAssistantProjectChats.open(workspace, session), [workspaceId, sessionId]);
+      assert.equal(await page.locator('#chatInput').inputValue(), message, 'unacknowledged draft survives navigation');
+      await page.locator('#chatInput').press('Enter');
+      await page.waitForFunction(() => retryTest.requests.length === 2);
+      const retried = await page.evaluate(() => retryTest.requests);
+      assert.equal(retried[0].input.requestId, retried[1].input.requestId,
+        'cross-surface retry preserves accepted input identity: ' + destination);
+      const count = await page.evaluate(async ({workspaceId, sessionId, message}) => {
+        const snapshot = await draftTest.original('getProjectChat', {workspaceId, sessionId});
+        return snapshot.messages.filter(item => item.role === 'user' && item.text === message).length;
+      }, {workspaceId, sessionId, message});
+      assert.equal(count, 1, 'lost acknowledgement must not execute the input twice');
+      await page.waitForFunction(() => !document.querySelector('#chatInput').value);
+    }
     assert.deepEqual(errors, [], 'no browser errors');
-    console.log('PASS workspace shared draft: project/plugin session, preferences, file link, failed retry, double submit, late ack');
+    console.log('PASS workspace shared draft: project/plugin session, preferences, file link, failed retry, double submit, late ack, cross-surface accepted-input retry');
   } finally { await browser.close(); server.kill(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });
