@@ -2232,6 +2232,23 @@ namespace RNAssistant.Harness
                     "VBA URI survives completed document identity migration");
 
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
+                var staleRename = executor.ExecuteManual(
+                    Command(
+                        "common.vba_rename_module",
+                        "moduleName", "ResourceModule",
+                        "newModuleName", "ResourceModuleRenamed"),
+                    tools,
+                    new AppSettings { AutoConfirmToolActions = true },
+                    false,
+                    false,
+                    session);
+                AssertEqual("stale_vba_module", staleRename.ErrorCode,
+                    "a partial read after external drift cannot authorize rename");
+                var currentForRename = ReadResource(gateway, session, component.Reference.Uri,
+                    ResourceRepresentations.Source, null, 32000).Result;
+                AssertTrue(currentForRename.Complete &&
+                    currentForRename.Text.Contains("ResourceNeedleChanged"),
+                    "rename setup observes the complete current module");
                 var renamed = executor.ExecuteManual(
                     Command(
                         "common.vba_rename_module",

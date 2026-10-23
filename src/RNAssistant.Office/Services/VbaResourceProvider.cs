@@ -126,7 +126,8 @@ namespace RNAssistant.Office.Services
                     ? LoadModules().SingleOrDefault(item => string.Equals(item.Name,
                         target.Substring(prefix.Length), StringComparison.Ordinal)) : null;
                 if (module != null) return DescribeComponent(session, module, null);
-                throw new ResourceRequestException("VBA target is no longer available: " + target,
+                throw new ResourceRequestException("VBA target is no longer available: " + target +
+                    ". Run common.resources_find with scope=vba and choose one current module target.",
                     "resource_target_not_found", true);
             });
         }

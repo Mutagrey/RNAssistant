@@ -1,5 +1,15 @@
 # Stabilization progress
 
+## Resource harness VBA recovery — 2026-10-23
+
+Owner: VBA resource provider and Resource Gateway fixture. The Outlook/HTML
+collection check from the old backlog passes on current `main`; no schema change
+was needed. The VBA fixture now proves that a partial read after external drift
+cannot authorize rename, then observes the complete current module before retry.
+The stale semantic target error includes `common.resources_find(scope=vba)` for
+recovery. Both focused host-neutral Harness cases pass. Windows/Office behavior
+remains unqualified; the separate Markdown section failures remain in BACKLOG.
+
 ## Unified Shell shared workspace draft (1a) — 2026-10-23
 
 Owner: application/chat UI. The user accepted [ADR-0017](../decisions/ADR-0017-unified-shell-and-visual-annotations.md).

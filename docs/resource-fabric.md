@@ -630,6 +630,10 @@ names and code with `common.resources_find(scope=vba, query=...)`, then use
 Project discovery and tool guidance expose this route. A structure-only target
 fails with non-retryable `resource_search_unsupported` and actionable guidance
 before a text read; it is never silently searched as a different scope.
+A renamed or removed VBA module target returns `resource_target_not_found` with
+`common.resources_find(scope=vba)` as the recovery route. When a session's last
+complete source observation is stale, a later partial read does not refresh its
+rename guard; observe the complete current source before retrying.
 
 Agent `common.file_create` creates a text/code file with an explicit extension;
 `common.file_copy` creates an independent authored `File` from an exact complete

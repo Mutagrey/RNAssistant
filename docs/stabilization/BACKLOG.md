@@ -83,16 +83,6 @@ page errors. Причина не установлена; при следующе
    предыдущие точечные Harness/Web прогоны за общий проход. Ранее открытый HTML
    restore fixture закрыт host-neutral исправлением; target-host evidence остаётся.
 
-## Исходные сбои расширенного resource harness — 2026-10-22
-
-Owner: HTML binding schema and VBA mutation guard tests. On clean `HEAD`,
-`outlook resources: exact folder collection and HTML records` fails because
-`common.html_bind_data` rejects `path`; `resources: live Office and VBA are bounded
-and guarded` fails to rename after its external-drift setup with
-`stale_vba_module`. Both failures are unchanged by the large-text read/write work.
-Resolve them separately with their contract owners. The two Markdown section
-failures below also reproduce on clean `HEAD`.
-
 ## CLI resource-preview scripted write fixture — 2026-10-22
 
 Owner: `tests/cli/resource_preview_smoke.py` / scripted `Scenario`. The existing
