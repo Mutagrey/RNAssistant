@@ -691,17 +691,31 @@ function refreshLiveAgentOutput(node) {
     section.className = "agent-model-step agent-stream-step";
     node.querySelector(".agent-run-actions").appendChild(section);
   }
+  var run = state.chatRuns && state.chatRuns[state.activeChatId];
+  paintLiveModelOutput(section, {
+    content: state.liveStreamContent || "",
+    reasoning: state.liveReasoning || "",
+    reasoningComplete: !!state.liveReasoningComplete,
+    retrying: !!(run && run.streamRetrying)
+  });
+}
+
+// The same live model leaf is used by Office and workspace chat transcripts.
+function paintLiveModelOutput(section, output) {
   var previous = section.liveOutput || {};
-  var content = state.liveStreamContent || "";
-  var reasoning = state.liveReasoning || "";
-  var reasoningComplete = !!state.liveReasoningComplete;
-  if (previous.reasoning !== reasoning || previous.reasoningComplete !== reasoningComplete) {
+  var content = output.content || "";
+  var reasoning = output.reasoning || "";
+  var reasoningComplete = !!output.reasoningComplete;
+  var reasoningTruncated = !!output.reasoningTruncated ||
+    (typeof MAX_LIVE_REASONING_CHARS === "number" && reasoning.length >= MAX_LIVE_REASONING_CHARS);
+  if (previous.reasoning !== reasoning || previous.reasoningComplete !== reasoningComplete ||
+      previous.reasoningTruncated !== reasoningTruncated) {
     var oldReasoning = section.querySelector(".reasoning-block");
     if (reasoning && typeof reasoningBlock === "function") {
       if (oldReasoning) {
-        updateReasoningBlock(oldReasoning, reasoning, null, !reasoningComplete, reasoning.length >= MAX_LIVE_REASONING_CHARS);
+        updateReasoningBlock(oldReasoning, reasoning, null, !reasoningComplete, reasoningTruncated);
       } else {
-        var block = reasoningBlock(reasoning, null, !reasoningComplete, reasoning.length >= MAX_LIVE_REASONING_CHARS);
+        var block = reasoningBlock(reasoning, null, !reasoningComplete, reasoningTruncated);
         block.setAttribute("data-disclosure-key", "live-reasoning");
         section.insertBefore(block, section.firstChild);
       }
@@ -727,11 +741,11 @@ function refreshLiveAgentOutput(node) {
       enhanceMarkdown(body, { enableJsonViewer: true, sourceText: content, streaming: true });
     } else if (body) section.removeChild(body);
   }
-  var run = state.chatRuns && state.chatRuns[state.activeChatId];
-  var label = run && run.streamRetrying ? "Повторная попытка…" : content ? "Формируется…" : "";
+  var label = output.retrying ? "Повторная попытка…" : content || output.showStatus ? "Формируется…" : "";
   if (status.hidden !== !label) status.hidden = !label;
   if (status.textContent !== label) status.textContent = label;
-  section.liveOutput = { content: content, reasoning: reasoning, reasoningComplete: reasoningComplete };
+  section.liveOutput = { content: content, reasoning: reasoning,
+    reasoningComplete: reasoningComplete, reasoningTruncated: reasoningTruncated };
 }
 
 function messageUnitSignature(message) {
@@ -909,11 +923,15 @@ function buildLiveMessageUnits() {
   return units.concat(typeof buildPendingInputUnits === "function" ? buildPendingInputUnits() : []);
 }
 
+function messageDisclosureKey(details, index) {
+  return details.getAttribute("data-disclosure-key") || details.className + ":" + index;
+}
+
 function messageDisclosureSnapshot(node) {
   var result = Object.create(null);
   if (!node || !node.querySelectorAll) return result;
   Array.prototype.forEach.call(node.querySelectorAll("details"), function (details, index) {
-    var key = details.getAttribute("data-disclosure-key") || details.className + ":" + index;
+    var key = messageDisclosureKey(details, index);
     if (details.savedDisclosureState) Object.keys(details.savedDisclosureState).forEach(function (savedKey) {
       result[savedKey] = details.savedDisclosureState[savedKey];
     });
@@ -930,18 +948,19 @@ function restoreMessageDisclosures(node, snapshot) {
     if (snapshot[details.getAttribute("data-disclosure-key")]) details.ensureDisclosureContent();
   });
   Array.prototype.forEach.call(node.querySelectorAll("details"), function (details, index) {
-    var key = details.getAttribute("data-disclosure-key") || details.className + ":" + index;
+    var key = messageDisclosureKey(details, index);
     if (Object.prototype.hasOwnProperty.call(snapshot, key)) details.open = snapshot[key];
   });
 }
 
-function reconcileMessageUnits(box, units, liveOnly) {
-  var nextCache = {};
-  if (liveOnly) Object.keys(renderedMessageUnits).forEach(function (key) {
-    if (key.indexOf("live:") !== 0) nextCache[key] = renderedMessageUnits[key];
+function reconcileMessageUnits(box, units, liveOnly, cachedUnits) {
+  var previousCache = cachedUnits === undefined ? renderedMessageUnits : cachedUnits;
+  var nextCache = Object.create(null);
+  if (liveOnly) Object.keys(previousCache).forEach(function (key) {
+    if (key.indexOf("live:") !== 0) nextCache[key] = previousCache[key];
   });
   units.forEach(function (unit) {
-    var cached = renderedMessageUnits[unit.key];
+    var cached = previousCache[unit.key];
     var node = cached && cached.signature === unit.signature ? cached.node : null;
     if (node && cached.actionsSignature !== unit.actionsSignature && unit.refreshActions) {
       unit.refreshActions(node);
@@ -950,8 +969,12 @@ function reconcileMessageUnits(box, units, liveOnly) {
     if (!node) {
       var disclosures = messageDisclosureSnapshot(cached && cached.node);
       var focused = document.activeElement;
-      var focusKey = focused && focused.tagName === "SUMMARY" && cached && cached.node.contains(focused)
-        ? focused.parentNode.getAttribute("data-disclosure-key") : null;
+      var focusKey = null;
+      if (focused && focused.tagName === "SUMMARY" && cached && cached.node.contains(focused)) {
+        var oldDetails = cached.node.querySelectorAll("details");
+        var focusedIndex = Array.prototype.indexOf.call(oldDetails, focused.parentNode);
+        if (focusedIndex >= 0) focusKey = messageDisclosureKey(focused.parentNode, focusedIndex);
+      }
       if (cached && cached.node && typeof releaseMessageMediaThumbnails === "function") {
         releaseMessageMediaThumbnails(cached.node);
       }
@@ -962,7 +985,7 @@ function reconcileMessageUnits(box, units, liveOnly) {
       if (unit.update) unit.update(node);
       restoreMessageDisclosures(node, disclosures);
       node.messageUnitKey = unit.key;
-      if (!cached && Object.keys(renderedMessageUnits).length &&
+      if (!cached && Object.keys(previousCache).length &&
           !(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) &&
           node.animate) {
         node.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 140, easing: "cubic-bezier(.2, .8, .2, 1)" });
@@ -971,8 +994,8 @@ function reconcileMessageUnits(box, units, liveOnly) {
       if (cached && cached.node && cached.node.parentNode === box) {
         box.insertBefore(node, cached.node);
         box.removeChild(cached.node);
-        if (focusKey) Array.prototype.some.call(node.querySelectorAll("details[data-disclosure-key]"), function (details) {
-          if (details.getAttribute("data-disclosure-key") !== focusKey) return false;
+        if (focusKey) Array.prototype.some.call(node.querySelectorAll("details"), function (details, index) {
+          if (messageDisclosureKey(details, index) !== focusKey) return false;
           details.querySelector("summary").focus({ preventScroll: true });
           return true;
         });
@@ -980,9 +1003,9 @@ function reconcileMessageUnits(box, units, liveOnly) {
     }
     nextCache[unit.key] = { signature: unit.signature, actionsSignature: unit.actionsSignature, node: node };
   });
-  Object.keys(renderedMessageUnits).forEach(function (key) {
-    if (!nextCache[key] && renderedMessageUnits[key].node) {
-      var removed = renderedMessageUnits[key].node;
+  Object.keys(previousCache).forEach(function (key) {
+    if (!nextCache[key] && previousCache[key].node) {
+      var removed = previousCache[key].node;
       if (typeof releaseMessageMediaThumbnails === "function") releaseMessageMediaThumbnails(removed);
       if (typeof clearMarkdownEnhancements === "function") clearMarkdownEnhancements(removed);
       if (removed.parentNode === box) box.removeChild(removed);
@@ -1005,7 +1028,7 @@ function reconcileMessageUnits(box, units, liveOnly) {
   }
   units.forEach(function (unit) {
     var node = nextCache[unit.key].node;
-    var previous = renderedMessageUnits[unit.key];
+    var previous = previousCache[unit.key];
     if (previous && previous.node !== node && previous.node.parentNode === box) {
       if (cursor === previous.node) cursor = previous.node.nextSibling;
       box.removeChild(previous.node);
@@ -1013,7 +1036,8 @@ function reconcileMessageUnits(box, units, liveOnly) {
     if (node !== cursor) box.insertBefore(node, cursor);
     else cursor = cursor.nextSibling;
   });
-  renderedMessageUnits = nextCache;
+  if (cachedUnits === undefined) renderedMessageUnits = nextCache;
+  return nextCache;
 }
 
 function scheduleLiveStreamRender(fullProjection) {

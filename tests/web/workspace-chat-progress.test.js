@@ -27,23 +27,33 @@ const { chromium } = require('playwright');
       RNAssistantWorkspaceChat.renderMessages(list, chat);
       const live = list.querySelector('.agent-stream-step');
       const retained = saved === list.querySelector('.reasoning-block') && step === list.querySelector('.workspace-reflection-step') && document.activeElement === summary && saved.open;
-      chat.state.modelProgress.Message = 'Longer preview.';
+      first.ReasoningContent = 'Revised accepted reasoning.';
       RNAssistantWorkspaceChat.renderMessages(list, chat);
-      const updated = live === list.querySelector('.agent-stream-step') && live.textContent.includes('Longer preview.');
+      const revised = list.querySelector('.reasoning-block');
+      const replaced = revised !== saved && revised.open &&
+        document.activeElement === revised.querySelector('summary') && revised.textContent.includes('Revised accepted reasoning.');
+      const liveReasoning = live.querySelector('.reasoning-block');
+      liveReasoning.open = true; liveReasoning.querySelector('summary').focus();
+      chat.state.modelProgress.Message = 'Longer preview.';
+      chat.state.modelProgress.Reasoning = 'Longer reasoning.';
+      RNAssistantWorkspaceChat.renderMessages(list, chat);
+      const updated = live === list.querySelector('.agent-stream-step') && live.textContent.includes('Longer preview.') &&
+        liveReasoning === live.querySelector('.reasoning-block') && liveReasoning.open &&
+        document.activeElement === liveReasoning.querySelector('summary') && live.textContent.includes('Longer reasoning.');
       chat.state.modelProgress = { RunId: 'run', StepId: 'step-2', AttemptId: 'b', Message: '', Reasoning: '', Retrying: true };
       RNAssistantWorkspaceChat.renderMessages(list, chat);
-      const reset = !live.textContent.includes('New reasoning.') && !live.textContent.includes('Longer preview.') && live.textContent.includes('Повторная попытка');
+      const reset = !live.textContent.includes('Longer reasoning.') && !live.textContent.includes('Longer preview.') && live.textContent.includes('Повторная попытка');
       chat.messages.push({ Id: 'finish', RunId: 'run', Role: 'assistant', Content: 'Final answer.', ReasoningContent: 'Accepted final reasoning.' });
       chat.state = { runId: 'run', status: 'completed' };
       RNAssistantWorkspaceChat.renderMessages(list, chat);
-      const finished = !list.querySelector('.agent-stream-step') && list.textContent.includes('Accepted final reasoning.') && saved.isConnected;
+      const finished = !list.querySelector('.agent-stream-step') && list.textContent.includes('Accepted final reasoning.') && revised.isConnected;
       chat.state = { runId: 'new-run', status: 'running', modelProgress: { RunId: 'run', Message: 'Stale preview.' } };
       RNAssistantWorkspaceChat.renderMessages(list, chat);
       const scoped = !list.textContent.includes('Stale preview.');
       list.remove();
       const settings = state.settings; settings.MaxConsecutiveReflections = 0; renderSettings();
       const zero = document.getElementById('maxConsecutiveReflectionsInput').value === '0';
-      return { retained, updated, reset, finished, scoped, zero };
+      return { retained, replaced, updated, reset, finished, scoped, zero };
     });
     for (const [name, passed] of Object.entries(checks)) assert.equal(passed, true, name);
     assert.deepEqual(errors, []);

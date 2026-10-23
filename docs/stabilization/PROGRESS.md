@@ -10,6 +10,9 @@ claims and saved tool activity are shown without sending raw protocol bodies or
 runtime guards to the browser. Office and workspace history use one 80-record
 window contract; project and plugin can load earlier pages. Current snapshots
 retain already loaded pages, and a stale page cannot replace a newer revision.
+Office and workspace transcripts now use the same keyed DOM reconciliation and
+live model output painter. Replacing a saved message preserves an open reasoning
+disclosure and its keyboard focus; unchanged messages stay mounted.
 
 Focused Harness projection/history and v8 recovery checks, Node reconciliation
 checks and Chrome project/plugin layout, paging, progress and reconnect checks

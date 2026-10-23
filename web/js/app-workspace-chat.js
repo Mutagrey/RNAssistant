@@ -183,24 +183,22 @@
     var start = field(chat, "messageStartIndex") || 0;
     var signature = JSON.stringify([chat.messages || [], live, start, field(chat, "messageTotalCount")]);
     if (!changed && list._chatSignature === signature) return;
-    var expanded = new Set(Array.from(list.querySelectorAll("details[open][data-message-key]")).map(function (item) { return item.dataset.messageKey; }));
     var scroll = list.scrollTop, height = list.scrollHeight;
     var oldStart = changed ? null : Number(list.dataset.startIndex);
     if (changed) { list.replaceChildren(); list._workspaceEntries = Object.create(null); }
     list.dataset.session = key; list.dataset.startIndex = String(start); list._chatSignature = signature;
-    var previous = list._workspaceEntries || Object.create(null), next = Object.create(null), ordered = [];
+    var units = [];
     if (start > 0) {
-      var historyKey = "history:older", saved = previous[historyKey];
-      var more = saved ? saved.nodes[0] : document.createElement("button");
-      if (!saved) {
+      appendMessageUnit(units, "history:older", String(start), function () {
+        var more = document.createElement("button");
         more.type = "button"; more.className = "chat-history-more";
         more.textContent = "Показать предыдущие сообщения";
         more.onclick = function () {
           more.disabled = true;
           Promise.resolve(dispatch("loadPrevious")).finally(function () { more.disabled = false; });
         };
-      }
-      next[historyKey] = saved || { nodes: [more] }; ordered.push(more);
+        return more;
+      });
     }
     var visible = (chat.messages || []).filter(function (message) {
       return !message.ProtocolMessage && (!!(message.Content || "").trim() || !!message.Activity ||
@@ -208,59 +206,24 @@
         !!(message.Results && message.Results.length));
     });
     if (!visible.length && !start && !live) {
-      var empty = previous.empty || { signature: "empty", nodes: [renderChatEmptyState({ title: "С чего начнём?",
-        text: "Опишите изменение плагина или задайте вопрос об исходниках." })] };
-      next.empty = empty; ordered.push.apply(ordered, empty.nodes);
+      appendMessageUnit(units, "empty", "empty", function () { return renderChatEmptyState({ title: "С чего начнём?",
+        text: "Опишите изменение плагина или задайте вопрос об исходниках." }); });
     }
     visible.forEach(function (message, index) {
-      var id = message.Id || "fixture:" + index, messageSignature = JSON.stringify(message);
-      var cached = previous[id];
-      if (cached && cached.signature === messageSignature) {
-        next[id] = cached; ordered.push.apply(ordered, cached.nodes); return;
-      }
-      var article = renderMessageArticle(message, index, { workspace: true });
-      article.querySelectorAll("details[data-message-key]").forEach(function (details) {
-        details.open = !changed && expanded.has(details.dataset.messageKey);
-      });
-      var nodes = [article];
-      next[id] = { signature: messageSignature, nodes: nodes }; ordered.push(article);
+      appendMessageUnit(units, "message:" + (message.Id || "fixture:" + index), JSON.stringify(message),
+        function () { return renderMessageArticle(message, index, { workspace: true }); });
     });
     if (live) {
-      var liveKey = "live:" + field(live, "runId"), liveEntry = previous[liveKey];
-      var node = liveEntry ? liveEntry.nodes[0] : document.createElement("section");
-      node.className = "agent-model-step agent-stream-step";
-      var thoughts = field(live, "reasoning") || "", oldReasoning = node.querySelector(".reasoning-block");
-      if (thoughts && typeof reasoningBlock === "function") {
-        if (oldReasoning) updateReasoningBlock(oldReasoning, thoughts, null, true, !!field(live, "reasoningTruncated"));
-        else node.insertBefore(reasoningBlock(thoughts, null, true, !!field(live, "reasoningTruncated")), node.firstChild);
-      } else if (oldReasoning) node.removeChild(oldReasoning);
-      var content = field(live, "message") || "", body = node.querySelector(".agent-stream-message");
-      if (content !== node._content) {
-        if (body && typeof clearMarkdownEnhancements === "function") clearMarkdownEnhancements(body);
-        if (content) {
-          if (!body) { body = document.createElement("div"); body.className = "agent-step-message markdown agent-stream-message"; node.appendChild(body); }
-          body.innerHTML = markdown(content); enhanceMarkdown(body, { enableJsonViewer: true, sourceText: content, streaming: true });
-        } else if (body) node.removeChild(body);
-        node._content = content;
-      }
-      var status = node.querySelector(".agent-stream-status");
-      if (!status) { status = document.createElement("div"); status.className = "agent-stream-status"; status.setAttribute("role", "status"); node.appendChild(status); }
-      status.textContent = field(live, "retrying") ? "Повторная попытка…" : "Формируется…";
-      next[liveKey] = liveEntry || { nodes: [node] }; ordered.push(node);
-    }
-    Object.keys(previous).forEach(function (id) {
-      if (next[id] === previous[id]) return;
-      previous[id].nodes.forEach(function (node) {
-        if (typeof clearMarkdownEnhancements === "function") clearMarkdownEnhancements(node);
-        if (node.parentNode === list) list.removeChild(node);
+      appendMessageUnit(units, "live:workspace-model", String(field(live, "runId")), function () {
+        var node = document.createElement("section");
+        node.className = "agent-model-step agent-stream-step";
+        return node;
+      }, "", null, function (node) {
+        paintLiveModelOutput(node, { content: field(live, "message"), reasoning: field(live, "reasoning"),
+          reasoningTruncated: field(live, "reasoningTruncated"), retrying: field(live, "retrying"), showStatus: true });
       });
-    });
-    var cursor = list.firstChild;
-    ordered.forEach(function (node) {
-      if (node === cursor) cursor = cursor.nextSibling;
-      else list.insertBefore(node, cursor);
-    });
-    list._workspaceEntries = next;
+    }
+    list._workspaceEntries = reconcileMessageUnits(list, units, false, list._workspaceEntries || Object.create(null));
     list.scrollTop = !changed && Number.isSafeInteger(oldStart) && start < oldStart
       ? scroll + list.scrollHeight - height : following ? list.scrollHeight : scroll;
   }

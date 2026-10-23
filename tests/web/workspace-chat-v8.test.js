@@ -36,8 +36,10 @@ class Element {
   }
 }
 
-const context = vm.createContext({ document: { createElement: tag => new Element(tag) } });
+const context = vm.createContext({ document: { createElement: tag => new Element(tag), activeElement: null } });
 context.window = context;
+vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-messages.js"), "utf8"), context,
+  { filename: "app-messages.js" });
 const rendered = [];
 context.renderMessageArticle = function (message) {
   rendered.push(message);
