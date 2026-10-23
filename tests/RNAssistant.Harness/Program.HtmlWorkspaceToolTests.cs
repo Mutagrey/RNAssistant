@@ -637,7 +637,8 @@ namespace RNAssistant.Harness
                 AssertEqual(ToolExecutionOutcome.Ok, read.Outcome, "exact current HTML source is read");
                 var args = new Dictionary<string, object> { ["target"] = target, ["representation"] = "source" };
                 var acceptedRead = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall {
-                    Id = readCall.Id, Name = readCall.Name, Arguments = args }, "Read source.", null,
+                    Id = readCall.Id, Name = readCall.Name, Arguments = args }, "Read source.",
+                    "Read the current HTML source.", null,
                     settings.ToolResultRole, new AcceptedToolCallOrigin("read-step", "read-attempt", 0));
                 acceptedRead.RunId = session.LastRun.RunId;
                 var invocation = new ToolInvocation { ToolId = readCall.Name, ToolCallId = readCall.Id,
@@ -666,7 +667,8 @@ namespace RNAssistant.Harness
                     model.AppendToolCall(new AgentToolCall { Id = writeId,
                         Name = HtmlWorkspaceToolCatalog.WriteFileToolId,
                         Arguments = new Dictionary<string, object> { ["path"] = "index.html",
-                            ["content"] = "<main>after</main>" } }, "Update page.", null,
+                            ["content"] = "<main>after</main>" } }, "Update page.",
+                        "Update the observed HTML source.", null,
                         new AcceptedToolCallOrigin("write-step", "write-attempt", 0));
                     var accepted = session.Messages.Last();
                     accepted.RunId = session.LastRun.RunId;
@@ -708,7 +710,7 @@ namespace RNAssistant.Harness
                     Id = callId,
                     Name = toolId,
                     Arguments = values
-                }, "Read source.", null, ToolResultRoles.User,
+                }, "Read source.", "Read the current source.", null, ToolResultRoles.User,
                 new AcceptedToolCallOrigin("source_step", "source_attempt", 0));
             call.RunId = runId;
             session.Messages.Add(call);

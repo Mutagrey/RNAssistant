@@ -1696,7 +1696,8 @@ namespace RNAssistant.Harness
                 chatA.Messages.Add(AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall {
                     Id = command.ToolCallId, Name = command.ToolId,
                     Arguments = new Dictionary<string, object> { ["target"] = "Excel range: Data!J1", ["representation"] = "text" }
-                }, "Read the cell.", null, settings.ToolResultRole, new AcceptedToolCallOrigin("read-step", "read-attempt", 0)));
+                }, "Read the cell.", "Use the current cell observation.", null,
+                    settings.ToolResultRole, new AcceptedToolCallOrigin("read-step", "read-attempt", 0)));
                 chatA.Messages.Add(AgentJsonProtocol.CreateToolResultMessage(command,
                     new ToolResultMaterialization(read.Result, resourceEvidence: read.ResourceEvidence), settings.ToolResultRole));
                 foreach (var fact in chatA.Messages.Where(item => item.ProtocolMessage)) fact.RunId = "read-run";
@@ -1754,7 +1755,7 @@ namespace RNAssistant.Harness
                         Id = "next-call-" + scenario,
                         Name = "common.resources_find",
                         Arguments = new Dictionary<string, object> { ["scope"] = "document", ["query"] = "Data" }
-                    }, "Continue.", null,
+                    }, "Continue.", "Find the current resource.", null,
                         new AcceptedToolCallOrigin("next-step-" + scenario, "next-attempt-" + scenario, 0));
                     AssertEqual(scenario == "no-op",
                         chatA.Messages.Last().ResourceEvidence.Any(item => item.EvidenceId == evidence.EvidenceId),

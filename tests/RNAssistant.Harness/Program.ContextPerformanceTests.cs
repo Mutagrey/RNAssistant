@@ -201,7 +201,8 @@ namespace RNAssistant.Harness
                 result.ResourceEffect = new ResourceEffect("effect-" + id, "create", ResourceEffectOutcome.FailedNoEffect);
                 var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = id, Name = "files.create",
                     Arguments = new Dictionary<string, object> { { "relativePath", id + ".html" },
-                        { "content", new string('x', 2048) } } }, "Create " + id, null, role, FixtureCallOrigin(id));
+                        { "content", new string('x', 2048) } } }, "Create " + id,
+                    "Record the requested file creation.", null, role, FixtureCallOrigin(id));
                 call.Id = "call-" + id;
                 facts.Add(call); facts.Add(result);
             }
