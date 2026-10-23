@@ -3148,8 +3148,8 @@ namespace RNAssistant.Harness
             {
                 adapter.VbaModuleCode = "P\r\nA\r\nB\r\nS";
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
-                var parsed = ParseV4(
-                    "{\"message\":\"patch\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.vba_apply_patch\",\"arguments\":{\"moduleName\":\"Module1\",\"patch\":[{\"find\":\"A\\nB\",\"text\":\"\\nA\\n\\nB\\n\"}]}}]}",
+                var parsed = ParseV8(
+                    "{\"action\":\"execute\",\"reason\":\"Apply the exact patch.\",\"tool_calls\":[{\"name\":\"common.vba_apply_patch\",\"arguments\":{\"moduleName\":\"Module1\",\"patch\":[{\"find\":\"A\\nB\",\"text\":\"\\nA\\n\\nB\\n\"}]}}],\"message\":\"patch\"}",
                     tools.ToArray());
                 AssertTrue(parsed.Success, "raw model JSON with escaped newlines parses");
                 var invocation = new ToolInvocation

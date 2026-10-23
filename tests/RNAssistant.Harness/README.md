@@ -458,18 +458,18 @@ premature finish and a replayed partial outcome. It does not run Office/COM.
 the actual controller with a fake host, including permission snapshot cloning,
 approval after settings changes/restart, AutoConfirm and planning wrappers.
 
-`conversation v7:` checks batch policy in both parser and actual HTTP response
+`conversation v8:` checks batch policy in both parser and generated transport
 schema: authorized reads, singleton effects, mixed batches, contradictory policy
 and the 32-call bound. `protocol context: immutable complete snapshots` also
 rejects schema generation with missing/incomplete authority. Request-size and
 tool-pack checks cover schema projection and admission with both array branches.
 
-`no-tool` checks distinct terminal outcomes, rejection and frozen repair of the
-removed `continue` action, and resuming tool work only after an actual user reply.
-It also checks missing-call repair followed by either a complete code answer or a
-real tool step/result before that answer, in both response formats and result roles.
-These scripted responses check control flow and emitted guidance, not whether a
-real model will select `done` at the right time.
+`agent: no-tool` checks rejection and frozen repair of removed `continue`,
+schema admission followed by a typed question, and a new run after the user's
+answer. It also checks empty-`execute` repair followed by either a direct
+answer or a real tool result with a cited v8 `finish`, in both response formats
+and result roles. These scripted responses check control flow and emitted
+guidance, not real-model decision quality.
 `kernel: stopped continuation rejects unsafe history` and `protocol preflight:`
 reject unsafe checkpoints/history without migration or dispatch. After building the CLI,
 `python3 -B tests/cli/turn_decisions_smoke.py` checks production HTTP requests in
@@ -551,7 +551,7 @@ limits normalize to 10/20, and exhausted replies preserve the prior checkpoint.
 Both modes keep frozen sources/schema and only the latest correction, preserve
 accepted history, and do not retry refusal, transport errors or cancellation.
 Kind-mismatch repair names the supplied source and allowed kinds without copying
-the rejected claim. `conversation v7: batches only independent reads` also checks
+the rejected claim. `conversation v8: batches only independent reads` also checks
 that rejected skill-load batches expose no partial calls and require a standalone
 load; the existing exact-admission and usable-selection checks cover recovery
 after a refused load.
@@ -571,8 +571,8 @@ assistant provenance through repeated-read folding, empty updates, two actual
 compaction-helper requests, checkpoint save/reload and claim-promotion rejection
 in all three result roles. Claims are scripted; this proves transport/provenance,
 not real-model summary quality. The large-call archive case also retains exact
-narration without hydrating arguments. `settings: prompt`, `conversation v7:` and
-`no-tool` cover schema-44 migration, silent tool responses and shared default/schema/
+narration without hydrating arguments. `settings: prompt`, `conversation v8:` and
+`no-tool` cover prompt-schema migration, silent tool responses and shared default/schema/
 repair guidance. `tests/web/live-run-projection.test.js` verifies that one comment
 can cover several visible tool activities in live and restored history.
 

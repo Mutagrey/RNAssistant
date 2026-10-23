@@ -40,14 +40,20 @@ namespace RNAssistant.Harness
                 var wire = ModelProtocolWire.WriteAcceptedCall(parsed.Response.Reason,
                     parsed.Response.Message, new ConversationToolCall { Name = call.Name, Arguments = arguments });
                 AssertTrue(JObject.Parse(wire)["tool_calls"][0]["id"] == null, "history identity never becomes a model-generated wire field");
-                AssertTrue(!ParseV4(wire, V4ReadTool()).Success, "history reading does not grant execution authority");
+                AssertTrue(!ParseV8(wire, V8ReadTool()).Success, "history reading does not grant execution authority");
                 arguments["at"] = "changed copy";
                 AssertEqual(before, JsonConvert.SerializeObject(message), "history reader does not rewrite its source record");
             }
-            var final = AgentTranscript.CreateAssistantMessage(V4Envelope(V4Call()), null, null, AgentResponseStatuses.Refused);
-            var plain = ConversationResponseHistoryReader.Read(final);
-            AssertTrue(plain.Success && plain.Response.ToolCalls.Count == 0, "plain final text is not sniffed as a tool envelope");
-            AssertEqual(final.Content, plain.Response.Message, "JSON-looking final text remains exact text");
+            var final = AgentTranscript.CreateAssistantMessage(V8Envelope(), null, null, AgentResponseStatuses.Completed);
+            final.ProtocolMessage = true;
+            final.ResponseModelAttemptId = "accepted_finish";
+            var accepted = ConversationResponseHistoryReader.Read(final);
+            AssertTrue(accepted.Success && accepted.Response.ToolCalls.Count == 0,
+                "identified v8 finish reads without tool metadata");
+            AssertEqual("Читаю.", accepted.Response.Message, "finish message remains exact");
+            var unmarked = AgentTranscript.CreateAssistantMessage(V8Envelope(), null, null, AgentResponseStatuses.Refused);
+            AssertTrue(!ConversationResponseHistoryReader.Read(unmarked).Success,
+                "JSON-looking text without accepted origin is not inferred as v8 history");
         }
 
         private static void ConversationHistoryRejectsAmbiguousRecords()
@@ -112,7 +118,7 @@ namespace RNAssistant.Harness
             AssertTrue(rejected, "one raw call position cannot map to two accepted identities");
         }
 
-        private static ToolCatalogEntry V4ReadTool(string id = "test.read")
+        private static ToolCatalogEntry V8ReadTool(string id = "test.read")
         {
             return new ToolCatalogEntry
             {
@@ -125,9 +131,9 @@ namespace RNAssistant.Harness
             };
         }
 
-        private static ToolCatalogEntry V4StructuredReadTool()
+        private static ToolCatalogEntry V8StructuredReadTool()
         {
-            var tool = V4ReadTool();
+            var tool = V8ReadTool();
             tool.ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{" +
                 "\"query\":{\"type\":\"string\",\"description\":\"Query.\",\"minLength\":1}," +
                 "\"at\":{\"type\":\"string\",\"description\":\"Optional timestamp.\"}," +
@@ -138,57 +144,62 @@ namespace RNAssistant.Harness
             return tool;
         }
 
-        private static JObject V4Call(string name = "test.read", JObject arguments = null)
+        private static JObject V8Call(string name = "test.read", JObject arguments = null)
         {
             return new JObject { ["name"] = name,
                 ["arguments"] = arguments ?? new JObject { ["query"] = "A" } };
         }
 
-        private static string V4Envelope(params JObject[] calls)
+        private static string V8Envelope(params JObject[] calls)
         {
             return new JObject
             {
-                ["message"] = "Читаю.",
-                ["action"] = calls == null || calls.Length == 0 ? "done" : "tool",
-                ["tool_calls"] = new JArray(calls ?? new JObject[0])
+                ["action"] = calls == null || calls.Length == 0 ? "finish" : "execute",
+                ["reason"] = "Handle the request.",
+                [calls == null || calls.Length == 0 ? "results" : "tool_calls"] =
+                    new JArray(calls ?? new JObject[0]),
+                ["message"] = "Читаю."
             }.ToString(Formatting.None);
         }
 
-        private static string V4EnvelopeWithFinal(bool final, params JObject[] calls)
+        private static string V8FinishWithIllegalCalls(params JObject[] calls)
         {
             return new JObject
             {
-                ["message"] = "Читаю.",
-                ["action"] = final ? "done" : "tool",
-                ["tool_calls"] = new JArray(calls ?? new JObject[0])
+                ["action"] = "finish",
+                ["reason"] = "Handle the request.",
+                ["results"] = new JArray(),
+                ["tool_calls"] = new JArray(calls ?? new JObject[0]),
+                ["message"] = "Читаю."
             }.ToString(Formatting.None);
         }
 
-        private static ConversationResponseParseResult ParseV4(string json, params ToolCatalogEntry[] tools)
+        private static ConversationResponseParseResult ParseV8(string json, params ToolCatalogEntry[] tools)
         {
             return new ConversationResponseParser().Parse(json, tools, tools,
                 new ModelProtocolCallContext(tools.Select(tool => tool.Id)));
         }
 
-        private static void ConversationV4RoundTripsWithoutStatus()
+        private static void ConversationV8RoundTripsWithoutStatus()
         {
             foreach (var message in new[] { "Готово.", "", "  ", "Не удалось выполнить.\nНужен доступ.", "He said \"done\" \\ / \t" })
             {
-                var json = new JObject { ["message"] = message, ["action"] = "done", ["tool_calls"] = new JArray() }.ToString(Formatting.None);
-                var parsed = ParseV4(json);
-                AssertTrue(parsed.Success, "v7 accepts a string message without interpreting its wording");
+                var json = new JObject { ["action"] = "finish", ["reason"] = "Answer the user.",
+                    ["results"] = new JArray(), ["message"] = message }.ToString(Formatting.None);
+                var parsed = ParseV8(json);
+                AssertTrue(parsed.Success, "v8 accepts a string message without interpreting its wording");
                 AssertEqual(message, parsed.Response.Message, "message remains exact");
                 AssertTrue(parsed.Response.Final, "final answer intent is explicit");
                 AssertTrue(JToken.DeepEquals(JObject.Parse(json), JObject.Parse(parsed.Response.ToJson())), "status-free final round trip");
             }
-            var tool = V4StructuredReadTool();
-            var callJson = V4Envelope(V4Call(arguments: new JObject
+            var tool = V8StructuredReadTool();
+            var callJson = V8Envelope(V8Call(arguments: new JObject
             {
                 ["query"] = "\\u0061", ["at"] = "2026-08-28T12:34:56Z",
                 ["items"] = new JArray(new JObject { ["name"] = "nested" })
             }));
-            var call = ParseV4(callJson, tool);
-            AssertTrue(call.Success, "v4 tool parses");
+            var call = ParseV8(callJson, tool);
+            AssertTrue(call.Success, "v8 execute parses");
             AssertEqual(typeof(JObject), typeof(ConversationToolCall).GetProperty("Arguments").PropertyType,
                 "validated arguments remain one JSON tree until canonical ArgumentsJson");
             AssertTrue(call.Response.ToolCalls[0].Arguments.Parent == null,
@@ -201,26 +212,26 @@ namespace RNAssistant.Harness
             AssertTrue(!call.Response.Final, "tool turns are not final answers");
             var silent = JObject.Parse(callJson);
             silent["message"] = "";
-            AssertTrue(ParseV4(silent.ToString(), tool).Success, "a tool call does not require visible narration");
+            AssertTrue(ParseV8(silent.ToString(), tool).Success, "a tool call does not require visible narration");
             AssertTrue(JToken.DeepEquals(JObject.Parse(callJson), JObject.Parse(call.Response.ToJson())), "call round trip preserves arguments without assigning ids");
-            AssertTrue(typeof(ConversationResponse).GetProperty("Status") == null, "v7 DTO has no model or universal status");
+            AssertTrue(typeof(ConversationResponse).GetProperty("Status") == null, "v8 DTO has no model or universal status");
             foreach (var action in new[] { ConversationResponse.ReflectionAction, ConversationResponse.FinishAction })
             {
                 var envelope = ModelProtocolWire.WriteAcceptedDecision(action,
                     "Record the next decision.", "Observed result; next decision is explicit.",
                     decision: action == ConversationResponse.ReflectionAction ? "Consider the observation." : null,
                     results: action == ConversationResponse.FinishAction ? new ConversationResultClaim[0] : null);
-                var parsed = ParseV4(envelope);
+                var parsed = ParseV8(envelope);
                 AssertTrue(parsed.Success && parsed.Response.Action == action && parsed.Response.ToolCalls.Count == 0,
                     "v8 preserves no-call action: " + action);
                 AssertEqual(envelope, parsed.Response.ToJson(), "no-call action round trips exactly");
             }
-            AssertTrue(!ParseV4("{\"message\":\"Wait\",\"action\":\"continue\",\"tool_calls\":[{}]}").Success,
+            AssertTrue(!ParseV8("{\"message\":\"Wait\",\"action\":\"continue\",\"tool_calls\":[{}]}").Success,
                 "progress cannot conceal a call");
-            AssertTrue(!ParseV4("{\"message\":\"Observed fact.\",\"action\":\"continue\",\"tool_calls\":[]}").Success,
+            AssertTrue(!ParseV8("{\"message\":\"Observed fact.\",\"action\":\"continue\",\"tool_calls\":[]}").Success,
                 "no-call progress is excluded even with a concrete message");
-            AssertTrue(!ParseV4("{\"message\":\"\",\"action\":\"blocked\",\"tool_calls\":[]}").Success,
-                "a blocked outcome must explain the remaining work");
+            AssertTrue(!ParseV8("{\"message\":\"\",\"action\":\"blocked\",\"tool_calls\":[]}").Success,
+                "removed blocked action is rejected");
         }
 
         private static void SimpleAgentEndsNoToolTurn()
@@ -256,9 +267,16 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) => {
                 var responses = new Queue<string>(new[] {
                     "{\"message\":\"I will continue.\",\"action\":\"continue\",\"tool_calls\":[]}",
-                    "{\"message\":\"Какой источник использовать?\",\"action\":\"needs_input\",\"tool_calls\":[]}",
-                    V4Envelope(V4Call("common.capabilities_search", new JObject { ["query"] = "markdown" })),
-                    "{\"message\":\"Готово.\",\"action\":\"done\",\"tool_calls\":[]}" });
+                    LoadToolSchemaResponse(UserQuestionToolCatalog.AskToolId),
+                    ModelProtocolWire.WriteAcceptedCall("The source requires the user's choice.", "Нужен выбор источника.",
+                        new ConversationToolCall { Name = UserQuestionToolCatalog.AskToolId,
+                            Arguments = new JObject { ["questions"] = new JArray(new JObject {
+                                ["header"] = "Источник", ["prompt"] = "Какой источник использовать?",
+                                ["selection"] = "single", ["options"] = new JArray(
+                                    new JObject { ["label"] = "Markdown", ["description"] = "Использовать Markdown." },
+                                    new JObject { ["label"] = "HTML", ["description"] = "Использовать HTML." }) }) } }),
+                    ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                        "The user chose Markdown.", "Использую Markdown.", results: new ConversationResultClaim[0]) });
                 var requests = new List<JObject>();
                 var session = NewSession(adapter);
                 var settings = new AppSettings { AgentResponseMode = responseMode, ToolResultRole = ToolResultRoles.Tool };
@@ -271,8 +289,8 @@ namespace RNAssistant.Harness
                 var waiting = service.ExecuteAsync(ChatModes.Agent, "Изучи источник.", session, NewContext(adapter), settings, catalog, null)
                     .GetAwaiter().GetResult();
                 AssertEqual(AgentResponseStatuses.AwaitingUser, waiting.ResponseStatus, "repair may ask a question instead of claiming completion");
-                AssertEqual("model_needs_input", waiting.RunViewState.Reason, "question is not done");
-                AssertEqual(2, requests.Count, "one rejected response and repair, then wait for actual input");
+                AssertEqual("awaiting_user", waiting.RunViewState.Reason, "typed question pauses the run");
+                AssertEqual(3, requests.Count, "rejected response, schema load and typed question precede the wait");
                 var original = (JArray)requests[0]["messages"];
                 var repaired = (JArray)requests[1]["messages"];
                 AssertTrue(JToken.DeepEquals(original, new JArray(repaired.Take(original.Count))), "repair keeps the frozen request intact");
@@ -284,170 +302,176 @@ namespace RNAssistant.Harness
                     "rejected narrative never enters durable chat history");
                 if (responseMode == AgentResponseModes.JsonSchema)
                 {
-                    AssertTrue(JToken.DeepEquals(new JArray("tool", "done", "blocked", "needs_input"),
-                        requests[0].SelectToken("response_format.json_schema.schema.properties.action.enum")), "schema exposes only four actions");
+                    AssertTrue(JToken.DeepEquals(new JArray("execute", "reflection", "finish"),
+                        new JArray(requests[0].SelectTokens("response_format.json_schema.schema.anyOf[*].properties.action.const"))),
+                        "schema exposes exactly the three v8 actions");
                     AssertEqual(ModelProtocolWire.MessageGuidance,
-                        (string)requests[0].SelectToken("response_format.json_schema.schema.properties.message.description"),
+                        (string)requests[0].SelectToken("response_format.json_schema.schema.anyOf[0].properties.message.description"),
                         "actual strict wire shares optional progress guidance with repair and defaults");
                     AssertContains((string)requests[0].SelectToken("response_format.json_schema.schema.description"),
                         ModelProtocolWire.ActionGuidance, "actual strict wire shares the completion decision rules");
                 }
                 var completed = service.ExecuteAsync(ChatModes.Agent, "Используй Markdown.", session, NewContext(adapter), settings, catalog, null)
                     .GetAwaiter().GetResult();
-                AssertEqual(AgentResponseStatuses.Completed, completed.ResponseStatus, "user reply resumes work through a real tool step");
-                AssertEqual(4, requests.Count, "user reply and tool result each drive one request");
-                AssertContains(requests[2]["messages"].ToString(), "Какой источник использовать?", "next turn retains the question");
-                AssertContains(requests[2]["messages"].ToString(), "Используй Markdown.", "next turn contains the actual answer");
+                AssertEqual(AgentResponseStatuses.Completed, completed.ResponseStatus, "user reply resumes the next run");
+                AssertEqual(4, requests.Count, "user reply drives one final model request");
+                AssertContains(requests[3]["messages"].ToString(), "Какой источник использовать?", "next turn retains the question");
+                AssertContains(requests[3]["messages"].ToString(), "Используй Markdown.", "next turn contains the actual answer");
                 AssertTrue(!requests.Any(request => request["messages"].ToString().Contains("RUNTIME_FEEDBACK:")), "no narrative feedback path remains");
             });
         }
 
-        private static void ConversationV4RejectsUnknownRootFields()
+        private static void ConversationV8RejectsUnknownRootFields()
         {
             foreach (var field in new[] { "status", "phase", "completed", "retry", "verified", "Message", "extra" })
             {
-                var root = JObject.Parse(V4Envelope());
+                var root = JObject.Parse(V8Envelope());
                 root[field] = "completed";
-                var parsed = ParseV4(root.ToString(Formatting.None));
+                var parsed = ParseV8(root.ToString(Formatting.None));
                 AssertTrue(!parsed.Success && parsed.Response == null, "unknown root field rejected: " + field);
                 AssertContains(parsed.Error, field, "unknown field diagnostic");
             }
-            AssertTrue(!ParseV4(V4EnvelopeWithFinal(true, V4Call()), V4ReadTool()).Success,
-                "final answer intent cannot accompany a tool call");
-            AssertTrue(!ParseV4("{\"message\":\"thinking\",\"action\":\"tool\",\"tool_calls\":[]}").Success,
-                "non-final intent requires a real tool call");
-            AssertTrue(!ParseV4("{\"message\":\"old\",\"final\":true,\"tool_calls\":[]}").Success,
-                "v5 envelope is not silently interpreted as v7");
-            foreach (var json in new[] { "{}", "{\"message\":\"x\"}", "{\"message\":\"x\",\"action\":\"done\"}",
-                "{\"message\":\"x\",\"tool_calls\":[]}", "{\"tool_calls\":[]}",
-                "{\"message\":null,\"action\":\"done\",\"tool_calls\":[]}", "{\"message\":1,\"action\":\"done\",\"tool_calls\":[]}",
-                "{\"message\":\"x\",\"final\":null,\"tool_calls\":[]}", "{\"message\":\"x\",\"final\":\"true\",\"tool_calls\":[]}",
-                "{\"message\":\"x\",\"final\":1,\"tool_calls\":[]}",
-                "{\"message\":\"x\",\"action\":\"done\",\"tool_calls\":null}", "{\"message\":\"x\",\"action\":\"done\",\"tool_calls\":{}}" })
-                AssertTrue(!ParseV4(json).Success, "missing/wrong root type rejected: " + json);
+            AssertTrue(!ParseV8(V8FinishWithIllegalCalls(V8Call()), V8ReadTool()).Success,
+                "finish cannot accompany a tool call");
+            AssertEqual(ConversationResponseError.EmptyExecuteCalls,
+                ParseV8("{\"action\":\"execute\",\"reason\":\"Read first.\",\"tool_calls\":[],\"message\":\"thinking\"}").ErrorKind,
+                "execute requires a real tool call");
+            AssertTrue(!ParseV8("{\"message\":\"old\",\"final\":true,\"tool_calls\":[]}").Success,
+                "legacy envelope is not silently interpreted as v8");
+            var valid = JObject.Parse(V8Envelope());
+            foreach (var json in new[] { "{}", "{\"message\":\"x\"}",
+                new JObject { ["action"] = "finish", ["results"] = new JArray(), ["message"] = "x" }.ToString(),
+                new JObject { ["action"] = "finish", ["reason"] = " ", ["results"] = new JArray(), ["message"] = "x" }.ToString(),
+                new JObject { ["action"] = "finish", ["reason"] = "Answer.", ["message"] = "x" }.ToString(),
+                new JObject { ["action"] = "finish", ["reason"] = "Answer.", ["results"] = new JObject(), ["message"] = "x" }.ToString(),
+                new JObject { ["action"] = "finish", ["reason"] = "Answer.", ["results"] = new JArray(), ["message"] = JValue.CreateNull() }.ToString(),
+                new JObject { ["action"] = "finish", ["reason"] = "Answer.", ["results"] = new JArray(), ["message"] = 1 }.ToString(),
+                valid.ToString(Formatting.None).Replace("\"finish\"", "\"done\"") })
+                AssertTrue(!ParseV8(json).Success, "missing/wrong root type rejected: " + json);
         }
 
-        private static void ConversationV4RejectsMalformedJson()
+        private static void ConversationV8RejectsMalformedJson()
         {
+            var valid = V8Envelope();
             foreach (var json in new[]
             {
                 "", "<html>Blocked</html>", "content rejected by protection", "[]", "null",
-                "```json\n{\"message\":\"x\",\"action\":\"done\",\"tool_calls\":[]}\n```",
-                "text {\"message\":\"x\",\"action\":\"done\",\"tool_calls\":[]}",
-                "{\"message\":\"x\",\"action\":\"done\",\"tool_calls\":[]} {}",
-                "{\"message\":\"x\",\"message\":\"y\",\"action\":\"done\",\"tool_calls\":[]}",
-                "{\"message\":\"x\",/*comment*/\"action\":\"done\",\"tool_calls\":[]}",
-                "{'message':'x','final':true,'tool_calls':[]}",
-                "{message:\"x\",\"action\":\"done\",\"tool_calls\":[]}",
-                "{true:\"x\",\"message\":\"x\",\"action\":\"done\",\"tool_calls\":[]}",
-                "{\"message\":\"x\",\"action\":\"done\",\"tool_calls\":[],}",
-                "{\"message\":\"line\nbreak\",\"action\":\"done\",\"tool_calls\":[]}",
-                "{\"message\":\"bad\\'escape\",\"action\":\"done\",\"tool_calls\":[]}",
-                "{\"message\":\"bad\\u12xx\",\"action\":\"done\",\"tool_calls\":[]}",
-                "{\"message\":\"x\",\"action\":\"done\",\"tool_calls\":[}",
-                "{\"message\":\"x\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"test.read\",\"arguments\":{\"query\":\"A\",\"limit\":NaN}}]}"
-            }) AssertTrue(!ParseV4(json, V4ReadTool()).Success, "non-JSON or incomplete envelope rejected: " + json);
+                "```json\n" + valid + "\n```", "text " + valid, valid + " {}",
+                valid.Replace("\"reason\":", "\"reason\":\"duplicate\",\"reason\":"),
+                valid.Replace("\"reason\":", "/*comment*/\"reason\":"),
+                "{'action':'finish','reason':'Answer.','results':[],'message':'x'}",
+                valid.Replace("\"action\":", "action:"),
+                valid.Replace("\"action\":", "true:"),
+                valid.Substring(0, valid.Length - 1) + ",}",
+                valid.Replace("\"message\":\"Читаю.\"", "\"message\":\"line\nbreak\""),
+                valid.Replace("Читаю.", "bad\\'escape"),
+                valid.Replace("Читаю.", "bad\\u12xx"),
+                valid.Replace("\"results\":[]", "\"results\":[}"),
+                V8Envelope(V8Call(arguments: new JObject { ["query"] = "A", ["limit"] = "NUMBER" }))
+                    .Replace("\"NUMBER\"", "NaN")
+            }) AssertEqual(ConversationResponseError.InvalidJson, ParseV8(json, V8ReadTool()).ErrorKind,
+                "non-JSON or extended JSON rejected before v8 envelope validation: " + json);
 
             foreach (var number in new[] { "01", "+1", ".5", "0x10", "undefined", "Infinity", "1e999", "999999999999999999999999999999999" })
             {
-                var json = V4Envelope(V4Call(arguments: new JObject { ["query"] = "A", ["limit"] = "NUMBER" }))
+                var json = V8Envelope(V8Call(arguments: new JObject { ["query"] = "A", ["limit"] = "NUMBER" }))
                     .Replace("\"NUMBER\"", number);
-                AssertTrue(!ParseV4(json, V4ReadTool()).Success, "non-JSON/non-finite number rejected: " + number);
+                AssertTrue(!ParseV8(json, V8ReadTool()).Success, "non-JSON/non-finite number rejected: " + number);
             }
-            var escaped = ParseV4("{\"message\":\"\\u0410\\/\\b\\f\\n\\r\\t\",\"action\":\"done\",\"tool_calls\":[]}");
+            var escaped = ParseV8("{\"action\":\"finish\",\"reason\":\"Answer the user.\",\"results\":[],\"message\":\"\\u0410\\/\\b\\f\\n\\r\\t\"}");
             AssertTrue(escaped.Success, "standard Unicode and control escapes are accepted");
             var exactSource = "line 1\nconst escaped = \"\\n\";\nconst regex = /\\d+\\\\path/;";
-            var exactWire = V4Envelope(V4Call(arguments: new JObject { ["query"] = exactSource }));
+            var exactWire = V8Envelope(V8Call(arguments: new JObject { ["query"] = exactSource }));
             AssertContains(exactWire, "line 1\\nconst escaped", "real source line break has one outer JSON escape");
             AssertContains(exactWire, "\\\"\\\\n\\\"", "literal source backslash survives as two outer JSON backslashes");
-            var exact = ParseV4(exactWire, V4ReadTool());
+            var exact = ParseV8(exactWire, V8ReadTool());
             AssertTrue(exact.Success, "escaped source argument is accepted");
             AssertEqual(exactSource,
                 (string)exact.Response.ToolCalls.Single().Arguments["query"],
                 "one JSON decode preserves real lines and literal source backslashes");
-            var nested = V4Envelope(V4Call(arguments: new JObject { ["query"] = "A", ["deep"] = "NESTED" }))
+            var nested = V8Envelope(V8Call(arguments: new JObject { ["query"] = "A", ["deep"] = "NESTED" }))
                 .Replace("\"NESTED\"", new string('[', 70) + "0" + new string(']', 70));
-            AssertTrue(!ParseV4(nested, V4ReadTool()).Success, "excessive nesting is a typed parse failure");
+            AssertTrue(!ParseV8(nested, V8ReadTool()).Success, "excessive nesting is a typed parse failure");
         }
 
-        private static void ConversationV4RequiresExactCallShape()
+        private static void ConversationV8RequiresExactCallShape()
         {
             foreach (var field in new[] { "name", "arguments" })
             {
-                var call = V4Call();
+                var call = V8Call();
                 call.Remove(field);
-                AssertTrue(!ParseV4(V4Envelope(call), V4ReadTool()).Success, "missing call field rejected: " + field);
+                AssertTrue(!ParseV8(V8Envelope(call), V8ReadTool()).Success, "missing call field rejected: " + field);
             }
             foreach (var arguments in new JToken[] { JValue.CreateNull(), new JValue("{}"), new JArray(), new JValue(3) })
             {
-                var call = V4Call();
+                var call = V8Call();
                 call["arguments"] = arguments;
-                AssertTrue(!ParseV4(V4Envelope(call), V4ReadTool()).Success, "arguments must be an object");
+                AssertTrue(!ParseV8(V8Envelope(call), V8ReadTool()).Success, "arguments must be an object");
             }
             foreach (var field in new[] { "id", "retry", "verified", "phase" })
             {
-                var extra = V4Call();
+                var extra = V8Call();
                 extra[field] = "model_owned";
-                AssertTrue(!ParseV4(V4Envelope(extra), V4ReadTool()).Success, "extra call field rejected: " + field);
+                AssertTrue(!ParseV8(V8Envelope(extra), V8ReadTool()).Success, "extra call field rejected: " + field);
             }
-            AssertTrue(!ParseV4(V4Envelope(V4Call(name: "")), V4ReadTool()).Success, "blank name rejected");
-            AssertTrue(!ParseV4(V4Envelope(V4Call(arguments: new JObject { ["query"] = "A", ["Query"] = "B" })), V4ReadTool()).Success,
+            AssertTrue(!ParseV8(V8Envelope(V8Call(name: "")), V8ReadTool()).Success, "blank name rejected");
+            AssertTrue(!ParseV8(V8Envelope(V8Call(arguments: new JObject { ["query"] = "A", ["Query"] = "B" })), V8ReadTool()).Success,
                 "ambiguous argument names rejected before normalization");
-            AssertTrue(!ParseV4(V4Envelope(V4Call(arguments: new JObject
+            AssertTrue(!ParseV8(V8Envelope(V8Call(arguments: new JObject
                 {
                     ["query"] = "A",
                     ["items"] = new JArray(new JObject { ["name"] = "A", ["Name"] = "B" })
-                })), V4StructuredReadTool()).Success,
+                })), V8StructuredReadTool()).Success,
                 "nested names that differ only by case fail schema validation");
-            AssertTrue(!ParseV4(V4Envelope(V4Call()).Replace("\"query\":\"A\"", "\"query\":\"A\",\"query\":\"B\""), V4ReadTool()).Success,
+            AssertTrue(!ParseV8(V8Envelope(V8Call()).Replace("\"query\":\"A\"", "\"query\":\"A\",\"query\":\"B\""), V8ReadTool()).Success,
                 "duplicate nested JSON property rejected");
         }
 
-        private static void ConversationV4RequiresCallableAuthority()
+        private static void ConversationV8RequiresCallableAuthority()
         {
-            var loaded = V4ReadTool();
-            var unloaded = V4ReadTool("test.other");
+            var loaded = V8ReadTool();
+            var unloaded = V8ReadTool("test.other");
             var parser = new ConversationResponseParser();
-            var result = parser.Parse(V4Envelope(V4Call(name: unloaded.Id)), new[] { loaded }, new[] { loaded, unloaded }, new ModelProtocolCallContext(new[] { loaded.Id }));
+            var result = parser.Parse(V8Envelope(V8Call(name: unloaded.Id)), new[] { loaded }, new[] { loaded, unloaded }, new ModelProtocolCallContext(new[] { loaded.Id }));
             AssertTrue(!result.Success, "known but unloaded tool cannot execute");
             AssertContains(result.Error, "Tool schema is not loaded", "unloaded tool diagnosis");
             AssertContains(result.Error, "common.capabilities_read", "explicit read recovery");
             AssertContains(result.Error, "\"id\":\"test.other\"", "recovery names exact capability");
             foreach (var name in new[] { "test.unknown", "TEST.READ", "test.read " })
             {
-                result = ParseV4(V4Envelope(V4Call(name: name)), loaded);
+                result = ParseV8(V8Envelope(V8Call(name: name)), loaded);
                 AssertTrue(!result.Success, "unknown/case-mismatched tool rejected");
                 AssertContains(result.Error, "Unknown tool", "unknown name diagnosis");
             }
             loaded.ArgumentSchemaJson = "{}";
-            AssertTrue(!ParseV4(V4Envelope(V4Call()), loaded).Success, "malformed callable schema cannot grant authority");
-            AssertTrue(!parser.Parse(V4Envelope(), new ToolCatalogEntry[0], new ToolCatalogEntry[0], null).Success,
+            AssertTrue(!ParseV8(V8Envelope(V8Call()), loaded).Success, "malformed callable schema cannot grant authority");
+            AssertTrue(!parser.Parse(V8Envelope(), new ToolCatalogEntry[0], new ToolCatalogEntry[0], null).Success,
                 "local safety context must be explicit, even if empty");
-            AssertTrue(!parser.Parse(V4Envelope(), new ToolCatalogEntry[0], new ToolCatalogEntry[0], new ModelProtocolCallContext(null)).Success,
+            AssertTrue(!parser.Parse(V8Envelope(), new ToolCatalogEntry[0], new ToolCatalogEntry[0], new ModelProtocolCallContext(null)).Success,
                 "batch safety authority must be explicit");
         }
 
-        private static void ConversationV4KeepsIdenticalCallsWithoutIds()
+        private static void ConversationV8KeepsIdenticalCallsWithoutIds()
         {
-            var tool = V4ReadTool();
-            var raw = V4Envelope(V4Call(), V4Call());
-            var first = ParseV4(raw, tool);
+            var tool = V8ReadTool();
+            var raw = V8Envelope(V8Call(), V8Call());
+            var first = ParseV8(raw, tool);
             AssertTrue(first.Success, "identical model requests are not misclassified as duplicate identity");
             AssertEqual(2, first.Response.ToolCalls.Count, "both requested calls are preserved without deduplication");
             AssertTrue(JToken.DeepEquals(JObject.Parse(raw), JObject.Parse(first.Response.ToJson())), "wire payload is unchanged by identity bookkeeping");
-            AssertTrue(ParseV4(raw, tool).Success, "a later step may request the same content without ID-triggered repair");
+            AssertTrue(ParseV8(raw, tool).Success, "a later step may request the same content without ID-triggered repair");
             AssertTrue(typeof(ConversationToolCall).GetProperty("Id") == null, "model-facing DTO cannot assign execution identity");
-            var rejected = ParseV4(V4Envelope(V4Call(), V4Call("unknown")), tool);
+            var rejected = ParseV8(V8Envelope(V8Call(), V8Call("unknown")), tool);
             AssertTrue(!rejected.Success && rejected.Response == null, "invalid complete response yields no partial accepted calls");
         }
 
-        private static void ConversationV4BatchesOnlyExplicitReadOnlyCalls()
+        private static void ConversationV8BatchesOnlyExplicitReadOnlyCalls()
         {
-            var read = V4ReadTool();
+            var read = V8ReadTool();
             var parser = new ConversationResponseParser();
-            var calls = V4Envelope(V4Call(arguments: new JObject { ["query"] = "first" }),
-                V4Call(arguments: new JObject { ["query"] = "second" }));
-            var accepted = ParseV4(calls, read);
+            var calls = V8Envelope(V8Call(arguments: new JObject { ["query"] = "first" }),
+                V8Call(arguments: new JObject { ["query"] = "second" }));
+            var accepted = ParseV8(calls, read);
             AssertTrue(accepted.Success, "independent read-only calls may be batched");
             AssertTrue(accepted.Response.ToolCalls.Select(call => (string)call.Arguments["query"]).SequenceEqual(new[] { "first", "second" }), "call order is preserved");
             AssertTrue(!parser.Parse(calls, new[] { read }, new[] { read }, new ModelProtocolCallContext(new string[0])).Success,
@@ -457,7 +481,7 @@ namespace RNAssistant.Harness
 
             foreach (var kind in new[] { "document", "local", "confirmation", "external", "unclassified" })
             {
-                var tool = V4ReadTool("test.action");
+                var tool = V8ReadTool("test.action");
                 tool.MutatesDocument = kind == "document";
                 tool.MutatesLocalState = kind == "local";
                 tool.RequiresConfirmation = kind == "confirmation";
@@ -473,13 +497,13 @@ namespace RNAssistant.Harness
                 var context = new ModelProtocolCallContext(batchSafe);
                 var catalog = new[] { read, tool };
                 AssertResponseBatchSchema(true, calls, catalog, context);
-                AssertResponseBatchSchema(true, V4Envelope(), catalog, context);
-                AssertResponseBatchSchema(true, V4Envelope(V4Call(tool.Id)), catalog, context);
-                AssertResponseBatchSchema(false, V4Envelope(V4Call(tool.Id), V4Call(tool.Id)), catalog, context);
+                AssertResponseBatchSchema(true, V8Envelope(), catalog, context);
+                AssertResponseBatchSchema(true, V8Envelope(V8Call(tool.Id)), catalog, context);
+                AssertResponseBatchSchema(false, V8Envelope(V8Call(tool.Id), V8Call(tool.Id)), catalog, context);
                 foreach (var batch in new[]
                 {
-                    V4Envelope(V4Call(tool.Id), V4Call(read.Id)),
-                    V4Envelope(V4Call(read.Id), V4Call(tool.Id))
+                    V8Envelope(V8Call(tool.Id), V8Call(read.Id)),
+                    V8Envelope(V8Call(read.Id), V8Call(tool.Id))
                 })
                 {
                     var result = parser.Parse(batch, new[] { read, tool }, new[] { read, tool }, new ModelProtocolCallContext(batchSafe));
@@ -490,30 +514,30 @@ namespace RNAssistant.Harness
                     AssertResponseBatchSchema(false, batch, catalog, context);
                 }
                 if (kind == "document" || kind == "local")
-                    AssertTrue(!parser.Parse(V4Envelope(V4Call(tool.Id), V4Call(tool.Id)),
+                    AssertTrue(!parser.Parse(V8Envelope(V8Call(tool.Id), V8Call(tool.Id)),
                         new[] { tool }, new[] { tool }, new ModelProtocolCallContext(new[] { tool.Id })).Success,
                         kind + " cannot batch two mutations even with forged batch context");
-                AssertTrue(parser.Parse(V4Envelope(V4Call(name: tool.Id)), new[] { tool }, new[] { tool }, new ModelProtocolCallContext(batchSafe)).Success,
+                AssertTrue(parser.Parse(V8Envelope(V8Call(name: tool.Id)), new[] { tool }, new[] { tool }, new ModelProtocolCallContext(batchSafe)).Success,
                     kind + " singleton is valid protocol, not execution permission");
             }
             var loader = SkillLoadToolHandler.Entry();
-            var load = V4Call(loader.Id, new JObject { ["id"] = "common.html_workspace_authoring" });
-            var loadVba = V4Call(loader.Id, new JObject { ["id"] = "common.vba_code_editing" });
+            var load = V8Call(loader.Id, new JObject { ["id"] = "common.html_workspace_authoring" });
+            var loadVba = V8Call(loader.Id, new JObject { ["id"] = "common.vba_code_editing" });
             var selectionContext = new ModelProtocolCallContext(new[] { read.Id });
             var selectionTools = new[] { loader, read };
-            foreach (var batch in new[] { V4Envelope(load, loadVba), V4Envelope(V4Call(), load) })
+            foreach (var batch in new[] { V8Envelope(load, loadVba), V8Envelope(V8Call(), load) })
             {
                 var rejected = parser.Parse(batch, selectionTools, selectionTools, selectionContext);
                 AssertTrue(!rejected.Success && rejected.Response == null, "skill batch is rejected as a whole");
-                AssertContains(rejected.Error, "No skill in this rejected response was loaded", "repair does not imply admission");
-                AssertContains(rejected.Error, "common.skills_load call alone", "repair preserves the prerequisite load");
+                AssertContains(rejected.Error, "No calls from this response were executed", "repair does not imply admission");
+                AssertContains(rejected.Error, "one at a time", "repair preserves the prerequisite load");
                 AssertResponseBatchSchema(false, batch, selectionTools, selectionContext);
             }
-            AssertTrue(parser.Parse(V4Envelope(load), selectionTools, selectionTools, selectionContext).Success,
+            AssertTrue(parser.Parse(V8Envelope(load), selectionTools, selectionTools, selectionContext).Success,
                 "the same skill selection is valid when returned alone");
         }
 
-        private static void ConversationV4ValidatesArgumentsBeforeAcceptance()
+        private static void ConversationV8ValidatesArgumentsBeforeAcceptance()
         {
             foreach (var arguments in new[]
             {
@@ -522,25 +546,25 @@ namespace RNAssistant.Harness
                 new JObject { ["query"] = "A", ["limit"] = "10" }, new JObject { ["query"] = "A", ["extra"] = true }
             })
             {
-                var parsed = ParseV4(V4Envelope(V4Call(arguments: arguments)), V4ReadTool());
+                var parsed = ParseV8(V8Envelope(V8Call(arguments: arguments)), V8ReadTool());
                 AssertTrue(!parsed.Success && parsed.Response == null, "argument contract violation cannot be accepted");
                 AssertContains(parsed.Error, "Invalid arguments", "schema violation diagnosis");
             }
-            var strictNulls = ParseV4(V4Envelope(V4Call(arguments: new JObject
+            var strictNulls = ParseV8(V8Envelope(V8Call(arguments: new JObject
             {
                 ["query"] = "A", ["limit"] = JValue.CreateNull(), ["at"] = JValue.CreateNull()
-            })), V4ReadTool());
+            })), V8ReadTool());
             AssertTrue(strictNulls.Success, "structured-output optional nulls are accepted");
             AssertEqual(1, strictNulls.Response.ToolCalls[0].Arguments.Count, "optional nulls removed, no execution defaults applied by protocol");
         }
 
-        private static void ConversationV4BoundsCallCount()
+        private static void ConversationV8BoundsCallCount()
         {
-            var tool = V4ReadTool();
-            var calls = Enumerable.Range(0, 32).Select(i => V4Call()).ToArray();
-            AssertTrue(ParseV4(V4Envelope(calls), tool).Success, "32 read-only calls accepted");
-            var oversized = V4Envelope(calls.Concat(new[] { V4Call() }).ToArray());
-            AssertTrue(!ParseV4(oversized, tool).Success, "33 calls rejected");
+            var tool = V8ReadTool();
+            var calls = Enumerable.Range(0, 32).Select(i => V8Call()).ToArray();
+            AssertTrue(ParseV8(V8Envelope(calls), tool).Success, "32 read-only calls accepted");
+            var oversized = V8Envelope(calls.Concat(new[] { V8Call() }).ToArray());
+            AssertTrue(!ParseV8(oversized, tool).Success, "33 calls rejected");
         }
 
         private static void SimpleAgentPromptContainsToolsAndSkills()
@@ -1579,18 +1603,25 @@ namespace RNAssistant.Harness
                 const string promise = "Сейчас подготовлю CSS.";
                 const string answer = "Добавьте после исходных стилей:\n```css\nbutton { border-radius: 8px; }\n```";
                 var responses = new Queue<string>();
-                responses.Enqueue(new JObject { ["message"] = promise, ["action"] = "tool", ["tool_calls"] = new JArray() }.ToString());
+                responses.Enqueue(new JObject { ["action"] = "execute", ["reason"] = "Prepare the CSS.",
+                    ["tool_calls"] = new JArray(), ["message"] = promise }.ToString(Formatting.None));
                 if (needsTool)
-                    responses.Enqueue(V4Envelope(V4Call("common.capabilities_search", new JObject { ["query"] = "CSS" })));
-                responses.Enqueue(ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
-                    "Answer with the requested CSS.", answer, results: new ConversationResultClaim[0]));
+                    responses.Enqueue(ModelProtocolWire.WriteAcceptedCall("Find CSS capabilities.", string.Empty,
+                        new ConversationToolCall { Name = "common.capabilities_search",
+                            Arguments = new JObject { ["query"] = "CSS" } }));
+                else
+                    responses.Enqueue(ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                        "Answer with the requested CSS.", answer, results: new ConversationResultClaim[0]));
                 var requests = new List<IReadOnlyList<ChatMessage>>();
+                var session = NewSession(adapter);
                 LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
                 {
                     requests.Add(messages.ToList());
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    return Task.FromResult(new LlmCompletionResult { Content = responses.Count > 0
+                        ? responses.Dequeue()
+                        : ScriptedVerifiedFinish(session, "Answer after capability discovery.", answer,
+                            "CSS guidance is ready.", "common.capabilities_search") });
                 };
-                var session = NewSession(adapter);
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
                     needsTool ? "Найди доступные инструменты CSS и предложи скругление button." : "Предложи CSS для скругления button.",
@@ -1601,9 +1632,9 @@ namespace RNAssistant.Harness
                 AssertEqual(needsTool ? 3 : 2, requests.Count, "repair either delivers the answer or continues through a real tool result");
                 AssertContains(FlattenSimple(requests[1]), "FORMAT_REPAIR:",
                     "repair reaches the model before accepting an answer");
-                AssertContains(FlattenSimple(requests[1]), "action must be tool with calls",
+                AssertContains(FlattenSimple(requests[1]), "empty_execute_calls",
                     "repair explains the exact invalid combination");
-                AssertContains(FlattenSimple(requests[1]), "Never relabel a promise as done",
+                AssertContains(FlattenSimple(requests[1]), "Never relabel a promise as finish",
                     "format repair cannot instruct the model to abandon unfinished work by changing only action");
                 AssertContains(FlattenSimple(requests[1]), ModelProtocolWire.ActionGuidance,
                     "both response formats receive the same work-or-answer decision rules");
@@ -1618,7 +1649,7 @@ namespace RNAssistant.Harness
                 }
                 AssertEqual(answer, result.AssistantText, "terminal response delivers the actual code without scheduling another model request");
                 AssertEqual(RunViewLifecycles.Completed, result.RunViewState.Lifecycle,
-                    "action=done with no calls ends the run");
+                    "v8 finish ends the run");
             });
         }
 

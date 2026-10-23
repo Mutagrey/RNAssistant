@@ -70,10 +70,13 @@ an irreparable obstacle without reporting success or replaying a tool.
   complete with runtime-assigned terminal IDs in their v8 finish claims.
   A tight-context VBA continuation refuses before model/tool dispatch when
   its complete causal context does not fit.
+- The migrated `conversation v8:` parser/schema group passes 13/13 checks.
+  The two `agent: no-tool` cases now cover rejected `continue`, typed question
+  and post-answer continuation, plus empty-`execute` repair with evidence-citing
+  finish. Related schema fallback, Task List and VBA patch fixtures pass.
 
 The full Harness still has legacy v7 wire bodies and assertions outside these
-migrated groups; its complete test suite is not yet green. For example, the
-old no-call `continue`/`needs_input` fixtures still expect removed actions.
+migrated groups; its complete test suite is not yet green.
 The original v7 red audit and its route have been retired; its captured evidence
 remains historical. The full Harness suite and Office
 steer/UI integration checks are not yet migrated. Playwright layout qualification is
