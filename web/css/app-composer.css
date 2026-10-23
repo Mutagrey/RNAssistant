@@ -27,6 +27,19 @@
   transition: background 0.12s ease, box-shadow 0.12s ease;
 }
 
+#chatForm[data-owner="office"] .workspace-composer-only,
+#chatForm:not([data-owner="office"]) :is(#inboxAnnouncer, #inboxStatus, #messageEditBar, #attachmentDrafts,
+  #attachmentStatus, #contextStrip, #contextManager, #composerAddPicker, #attachmentFileInput,
+  #contextMeterWrap, #chatModelPicker, #chatReasoningToggle) {
+  display: none !important;
+}
+
+#chatForm[data-owner="plugin"] #projectChatContextNote,
+#chatForm[data-owner="project"] #pluginChatSource,
+#chatForm[data-owner="plugin"] #projectChatFileStatus {
+  display: none !important;
+}
+
 .composer:focus-within {
   background: var(--composer-surface-focus);
   box-shadow: var(--composer-shadow-focus);

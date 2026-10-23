@@ -129,6 +129,13 @@ function readOfficeDraft(chatIdValue) {
   return key ? chatDraftStore()[key] || null : null;
 }
 
+function officeChatDraftText() {
+  if (!window.RNAssistantWorkspaceChat || window.RNAssistantWorkspaceChat.owner() === "office")
+    return $("chatInput") ? $("chatInput").value : "";
+  var draft = readOfficeDraft(state.activeChatId);
+  return draft ? draft.text : "";
+}
+
 function officeDraftAttachmentId(item) { return item && (item.Id || item.id) || ""; }
 
 function retainUnsentInputAttachments(drafts, sent) {
@@ -172,6 +179,7 @@ window.RNAssistantChatDrafts.acceptOffice = acceptOfficeDraft;
 
 function captureChatDraft(chatIdValue, changed) {
   if (!chatIdValue) return null;
+  if (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office") return readOfficeDraft(chatIdValue);
   var input = $("chatInput");
   var editing = typeof hasActiveMessageEdit === "function" && hasActiveMessageEdit();
   var text = editing && state.editingDraftCaptured
@@ -187,6 +195,7 @@ function restoreChatDraft(chatIdValue) {
   if (typeof renderAttachmentDrafts === "function") {
     renderAttachmentDrafts();
   }
+  if (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office") return;
   if (typeof setChatInputText === "function") {
     setChatInputText(draft ? draft.text : "", false, false);
   } else if ($("chatInput")) {

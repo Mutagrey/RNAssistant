@@ -85,6 +85,8 @@
   });
 
   function submitPlanHandoff() {
+    if (window.RNAssistantProjectChats) window.RNAssistantProjectChats.setScope("office");
+    switchTab("chat");
     var input = $("chatInput");
     var form = $("chatForm");
     if (!input || !form || typeof form.requestSubmit !== "function") return false;

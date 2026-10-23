@@ -5,14 +5,21 @@
   function mount(owner, container) {
     var view = document.getElementById("workspaceChatView");
     var list = document.getElementById("messages");
-    if (!view || !list || (owner !== "office" && owner !== "project" && owner !== "plugin")) return false;
+    var form = document.getElementById("chatForm"), input = document.getElementById("chatInput");
+    if (!view || !list || !form || !input || (owner !== "office" && owner !== "project" && owner !== "plugin")) return false;
     if (owner !== "office" && !container) return false;
     var changed = activeOwner !== owner;
     if (activeOwner === "office" && owner !== "office") {
       suspendOfficeTranscript();
+      captureChatDraft(state.activeChatId, false);
       list._chatSignature = null;
       delete list.dataset.session;
     }
+    if (changed) ["composerAddPicker", "chatModelPicker", "workspaceComposerPicker"].forEach(function (id) {
+      var picker = document.getElementById(id);
+      if (picker) picker.open = false;
+    });
+    if (changed && activeOwner !== "office" && sharedComposer) sharedComposer.select(null);
     var transcriptMount = document.getElementById(owner === "office" ? "officeChatTranscriptMount" : "workspaceChatTranscriptMount");
     if (list.parentNode !== transcriptMount) {
       if (owner === "office") transcriptMount.insertBefore(list, document.getElementById("chatScrollBottomButton"));
@@ -20,8 +27,30 @@
       changed = true;
     }
     activeOwner = owner;
-    if (owner === "office") { list.setAttribute("aria-label", "Сообщения чата"); return changed; }
+    form.dataset.owner = owner;
+    form.classList.toggle("project-chat-composer", owner !== "office");
+    if (owner === "office") {
+      if (form.parentNode !== document.getElementById("chatDropZone"))
+        document.getElementById("chatDropZone").insertBefore(form, document.getElementById("modelContextDialog"));
+      document.getElementById("stopButton").hidden = false;
+      input.setAttribute("aria-label", "Сообщение в чат Office");
+      if (changed) {
+        var editText = hasActiveMessageEdit() ? state.editingText : null;
+        restoreChatDraft(state.activeChatId);
+        if (editText !== null) setChatInputText(editText || "", false, false);
+      }
+      renderSendControls();
+      list.setAttribute("aria-label", "Сообщения чата");
+      return changed;
+    }
     if (view.parentNode !== container) container.appendChild(view);
+    if (form.parentNode !== view) view.appendChild(form);
+    form.classList.remove("is-message-editing", "is-preparing-attachments", "is-dragging");
+    document.getElementById("stopButton").classList.remove("hidden");
+    document.getElementById("sendButton").title = "Отправить";
+    document.getElementById("sendButton").setAttribute("aria-label", "Отправить");
+    input.readOnly = false;
+    if (changed && sharedComposer) sharedComposer.select(null);
     var plugin = owner === "plugin";
     view.dataset.owner = owner;
     view.classList.toggle("chat-main", !plugin);
@@ -34,7 +63,6 @@
       document.getElementById(id).hidden = !plugin;
     });
     if (plugin) document.getElementById("projectChatFileStatus").hidden = true;
-    var input = document.getElementById("projectChatInput");
     input.placeholder = plugin ? "Опишите изменение плагина" : "Спросите о проекте…";
     input.setAttribute("aria-label", plugin ? "Сообщение в чат исходников" : "Сообщение в чат проекта");
     list.setAttribute("aria-label", plugin ? "Сообщения чата исходников" : "Сообщения чата проекта");
@@ -134,10 +162,14 @@
       note.title = pinned ? "Документ закреплён за этим запуском, включая подтверждение действий" :
         activeRun ? "В этом запуске Office-инструменты недоступны" : "Новый запуск будет привязан к текущему документу Office, если он открыт";
     }
-    var clear = button("Очистить ввод", "composer-clear-button", "close", function () { input.value = ""; input.dispatchEvent(new Event("input", { bubbles: true })); input.focus(); });
-    input.parentNode.appendChild(clear);
-    var quick = document.createElement("div"); quick.className = "composer-quick-actions";
+    var clear = document.getElementById("clearInputButton");
+    clear.addEventListener("click", function () {
+      if (activeOwner === "office") return;
+      input.value = ""; input.dispatchEvent(new Event("input", { bubbles: true })); input.focus();
+    });
+    var quick = document.createElement("div"); quick.className = "composer-quick-actions workspace-composer-only";
     var picker = document.createElement("details"); picker.className = "composer-picker composer-add-picker";
+    picker.id = "workspaceComposerPicker";
     var trigger = document.createElement("summary"); trigger.className = "composer-picker-trigger composer-add-trigger";
     trigger.setAttribute("aria-label", "Действия чата"); trigger.title = "Действия чата"; trigger.innerHTML = window.RNAssistantIcons.render("plus");
     var menu = document.createElement("div"); menu.className = "composer-picker-menu composer-add-menu";
@@ -162,14 +194,19 @@
       if (sharedComposer) update();
     }
     var plan = document.getElementById("chatPlanButton").cloneNode(true); plan.removeAttribute("id");
+    plan.id = "workspacePlanButton";
     plan.onclick = function () { if (!locked) { mode = mode === "plan" ? "agent" : "plan"; save(); update(); picker.open = false; } };
     menu.appendChild(plan); picker.append(trigger, menu); quick.appendChild(picker); toolbar.insertBefore(quick, toolbar.firstChild);
     var model = document.createElement("button"); model.type = "button"; model.className = "composer-picker-trigger workspace-chat-model";
-    model.title = "Модель из общих настроек"; model.onclick = function () { switchTab("settings"); };
+    model.id = "workspaceModelButton";
+    model.title = "Модель из общих настроек"; model.classList.add("workspace-composer-only");
+    model.onclick = function () { switchTab("settings"); };
     var label = document.createElement("span"); label.className = "composer-picker-trigger-label"; model.appendChild(label);
-    var think = button("Включить reasoning", "composer-reasoning-button", "bulb", function () { if (!locked) { reasoning = !reasoning; save(); update(); } });
+    var think = button("Включить reasoning", "composer-reasoning-button workspace-composer-only", "bulb", function () { if (!locked) { reasoning = !reasoning; save(); update(); } });
+    think.id = "workspaceReasoningToggle";
     actions.prepend(model, think);
     function update() {
+      if (activeOwner === "office") return;
       clear.hidden = !input.value; resizeComposerInput(input);
       plan.classList.toggle("is-selected", mode === "plan"); plan.setAttribute("aria-pressed", String(mode === "plan")); plan.disabled = locked;
       if (fileAction) { fileAction.hidden = activeOwner !== "project"; fileAction.disabled = locked || !current || activeOwner !== "project"; }
@@ -177,8 +214,9 @@
       think.setAttribute("aria-label", reasoning ? "Выключить reasoning" : "Включить reasoning"); think.disabled = locked;
       label.textContent = field(state.settings, "model") || "Модель";
     }
-    input.addEventListener("input", function () { save(); update(); });
+    input.addEventListener("input", function () { if (activeOwner !== "office") { save(); update(); } });
     input.addEventListener("keydown", function (event) {
+      if (activeOwner === "office") return;
       if (event.key === "Enter" && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey && !event.isComposing) {
         event.preventDefault(); form.requestSubmit();
       }

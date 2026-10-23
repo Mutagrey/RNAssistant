@@ -198,6 +198,9 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       window.headersToText = () => ""; window.textToHeaders = () => ({});
       for (const name of ["modelImageSupportOverrides", "modelAudioSupportOverrides", "modelCapabilitiesForSettings"])
         window[name] = () => ({});
+      window.formModel = () => "";
+      window.findModel = () => null;
+      window.effectiveModelCapabilityValue = () => null;
       window.attachmentModelPriorityForSettings = () => [];
       window.settingsSaves = [];
       window.saveSettingsWithPromptChanges = async settings => {
@@ -207,7 +210,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       state.settings = {}; renderSettings();
     });
     assert.equal(await page.locator("#autoConfirmToolActionsInput").isChecked(), false);
-    assert.match(await page.locator("#autoConfirmToolActionsNote").textContent(), /новых запусков во всех чатах/);
+    assert.match(await page.locator("#autoConfirmToolActionsNote").textContent(), /новых запусков/);
     await page.evaluate(() => { $("autoConfirmToolActionsInput").checked = true; });
     assert.equal(await page.evaluate(() => settingsSaves.length), 0, "editing the flag alone never dispatches");
     await page.evaluate(() => persistSettingsFromForm());

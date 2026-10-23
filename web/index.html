@@ -26,7 +26,7 @@
   <link rel="stylesheet" href="css/app.css?v=theme-tokens-20261019-1">
   <link rel="stylesheet" href="css/app-chat.css?v=theme-tokens-20261019-1">
   <link rel="stylesheet" href="css/app-markdown.css?v=theme-tokens-20261019-1">
-  <link rel="stylesheet" href="css/app-composer.css?v=theme-tokens-20261019-1">
+  <link rel="stylesheet" href="css/app-composer.css?v=single-composer-20261023-1">
   <link rel="stylesheet" href="css/app-reasoning.css?v=accent-chat-20261012-1">
   <link rel="stylesheet" href="css/app-context-chips.css?v=theme-tokens-20261019-1">
   <link rel="stylesheet" href="css/app-models.css?v=model-tables-20260930-1">
@@ -120,7 +120,7 @@
             <button type="button" class="link-button" id="focusReplyButton" aria-controls="chatInput">Ответить</button>
           </div>
         <div class="agent-approval-dock hidden" id="agentApprovalDock" aria-live="polite"></div>
-        <form class="composer" id="chatForm">
+        <form class="composer" id="chatForm" data-owner="office">
           <span id="inboxAnnouncer" class="inbox-sr-only" aria-live="polite"></span>
           <span id="inboxStatus" class="inbox-status" role="status" aria-live="polite"></span>
           <div class="composer-edit-bar hidden" id="messageEditBar" aria-hidden="true">
@@ -137,6 +137,7 @@
           </div>
           <div class="attachment-drafts hidden" id="attachmentDrafts" aria-live="polite"></div>
           <div class="attachment-status" id="attachmentStatus" role="status" aria-live="polite" hidden></div>
+          <div class="attachment-status workspace-composer-only" id="projectChatFileStatus" role="status" aria-live="polite" hidden></div>
           <div class="context-strip hidden" id="contextStrip">
             <div class="context-strip-head">
               <button type="button" class="context-manage-button" id="openContextTabButton" title="Управлять контекстом" aria-label="Управлять контекстом" aria-expanded="false">
@@ -196,6 +197,8 @@
               </details>
               <input id="attachmentFileInput" type="file" multiple hidden>
             </div>
+            <span class="project-chat-context-note workspace-composer-only" id="projectChatContextNote" title="Файлы проекта добавляются в контекст только через инструменты агента.">Файлы через инструменты агента</span>
+            <span class="plugin-chat-context-note workspace-composer-only" id="pluginChatSource" title="Папка исходников" hidden></span>
             <div class="composer-actions">
               <div class="composer-tooltip-wrap" id="contextMeterWrap" hidden>
                 <button class="context-meter" id="contextMeter" type="button" data-level="unknown" aria-label="Контекстное окно" aria-describedby="contextMeterTooltip" aria-expanded="false" aria-controls="promptContextInspector">
@@ -357,17 +360,6 @@
             <div class="chat-scroll-region" id="workspaceChatTranscriptMount"></div>
             <div class="project-chat-control" id="projectChatControl" hidden><pre id="projectChatPending"></pre><button type="button" id="projectChatApprove">Разрешить</button><button type="button" id="projectChatReject">Отклонить</button></div>
             <form class="project-chat-questions" id="projectChatQuestions" hidden></form>
-            <form class="composer project-chat-composer" id="projectChatForm">
-              <div class="composer-input-wrap"><textarea id="projectChatInput" rows="2" placeholder="Спросите о проекте…" aria-label="Сообщение в чат проекта"></textarea></div>
-              <div class="attachment-status" id="projectChatFileStatus" role="status" aria-live="polite" hidden></div>
-              <div class="composer-toolbar">
-                <span class="project-chat-context-note" id="projectChatContextNote" title="Файлы проекта добавляются в контекст только через инструменты агента.">Файлы через инструменты агента</span><span class="plugin-chat-context-note" id="pluginChatSource" title="Папка исходников" hidden></span>
-                <div class="composer-actions">
-                  <button type="button" class="composer-stop-button" id="projectChatStop" title="Остановить" aria-label="Остановить" hidden><svg data-rna-icon="stop" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
-                  <button type="submit" class="composer-send-button" id="projectChatSend" title="Отправить" aria-label="Отправить"><svg data-rna-icon="send" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
-                </div>
-              </div>
-            </form>
           </div>
         </div>
       </section>
@@ -1139,9 +1131,9 @@
   <script src="js/app-model-picker.js?v=model-modules-20260823-2-panel-model-20261002-1"></script>
   <script src="js/app-model-capabilities.js?v=model-capability-inline-20260826-1"></script>
   <script src="js/app-model-render.js?v=model-settings-20260930-1-panel-model-20261002-1"></script>
-  <script src="js/app-models.js?v=ui-lazy-20260903-1-usage-20261002-1-panel-model-20261002-2-large-chat-1"></script>
+  <script src="js/app-models.js?v=single-composer-20261023-1"></script>
   <script src="js/app-context-data.js"></script>
-  <script src="js/app-chat-state.js?v=office-draft-20261023-1"></script>
+  <script src="js/app-chat-state.js?v=single-composer-20261023-1"></script>
   <script src="js/app-tools-structured.js?v=library-ux-20260903-1"></script>
   <script src="js/app-tools-actions.js?v=manual-tool-chat-20260908-1"></script>
   <script src="js/app-tools-documentation.js?v=tool-docs-20260906-1"></script>
@@ -1161,10 +1153,10 @@
   <script src="js/app-html-workspace-tree.js?v=html-memory-20261002-1-artifact-tree-20261013-1"></script>
   <script src="js/app-artifact-viewer-actions.js?v=binary-chunks-20260906-1"></script>
   <script src="js/app-html-workspace-actions.js?v=html-action-guard-20260908-1-large-chat-1-artifact-tree-20261013-1"></script>
-  <script src="js/app-html-workspace.js?v=html-memory-20261002-1-vendors-1-artifact-tree-20261013-1"></script>
+  <script src="js/app-html-workspace.js?v=single-composer-20261023-1"></script>
   <script src="js/app-context.js?v=office-draft-20261023-1"></script>
-  <script src="js/app-model-context.js?v=resource-inspector-20261023-5"></script>
-  <script src="js/app-context-inspector.js?v=composer-tooltips-20261015-1"></script>
+  <script src="js/app-model-context.js?v=single-composer-20261023-1"></script>
+  <script src="js/app-context-inspector.js?v=single-composer-20261023-1"></script>
   <script src="js/app-tool-result-preview.js?v=question-delivery-20261014-1"></script>
   <script src="js/app-agent-data.js?v=step-results-20260908-1"></script>
   <script src="js/app-agent-model.js?v=catalog-display-chat-20260908-1-run-isolation-1"></script>
@@ -1179,16 +1171,16 @@
   <script src="js/app-agent.js?v=step-disclosure-20261014-1"></script>
   <script src="js/app-messages.js?v=shared-transcript-20261023-1"></script>
   <script src="js/app-reasoning.js?v=chat-projection-20260907-1"></script>
-  <script src="js/app-attachments.js?v=office-draft-20261023-1"></script>
+  <script src="js/app-attachments.js?v=single-composer-20261023-1"></script>
   <script src="js/app-chat-session.js?v=bridge-contract-20261015-1"></script>
-  <script src="js/app-chat-composer.js?v=office-draft-20261023-1"></script>
+  <script src="js/app-chat-composer.js?v=single-composer-20261023-1"></script>
   <script src="js/app-chat-inbox.js?v=office-draft-20261023-1"></script>
   <script src="js/app-chat-run.js?v=response-render-timing-20260928-1-usage-20261002-1-navigation-20261002-1-inbox-20261002-1-large-chat-1-run-isolation-1-transcript-20261012-1-settings-delivery-1"></script>
-  <script src="js/app-chat.js?v=office-draft-20261023-1"></script>
-  <script src="js/app-chat-edit.js?v=chat-sync-20260903-1-usage-20261002-1"></script>
-  <script src="js/app-workspace-chat.js?v=shared-transcript-20261023-1"></script>
-  <script src="js/app-plugins.js?v=shared-transcript-20261023-1"></script>
-  <script src="js/app-project-chats.js?v=shared-transcript-20261023-1"></script>
+  <script src="js/app-chat.js?v=single-composer-20261023-1"></script>
+  <script src="js/app-chat-edit.js?v=single-composer-20261023-1"></script>
+  <script src="js/app-workspace-chat.js?v=single-composer-20261023-1"></script>
+  <script src="js/app-plugins.js?v=single-composer-20261023-1"></script>
+  <script src="js/app-project-chats.js?v=single-composer-20261023-1"></script>
   <script src="js/app.js?v=rail-popovers-20261019-1"></script>
 </body>
 </html>

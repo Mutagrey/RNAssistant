@@ -1,5 +1,16 @@
 # Stabilization progress
 
+## Unified Shell single composer (1b continuation) — 2026-10-23
+
+Owner: application/chat UI. Office, Project and Plugin now move one physical
+composer form and input with their shared transcript. Owner-scoped handlers keep
+Office edit, attachments and queue/steer, project file upload and plugin source
+chat; switching preserves separate draft identities, and background Office
+rendering cannot overwrite workspace input. Focused Chrome layout, draft,
+delivery, attachment and product-preview checks pass. The separate send/view
+controllers and project-prefixed status/approval/question IDs remain for the
+next 1b cutover. Windows/Office/WebView2 are not qualified.
+
 ## Resource Context retained text-body estimates — 2026-10-23
 
 Owner: Model Context Inspector. Exact retained `text/source` variants with one

@@ -308,6 +308,7 @@ function bindAttachmentActions() {
   });
   window.addEventListener("dragend", clearDrag);
   $("chatInput").addEventListener("paste", function (event) {
+    if (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office") return;
     var files = attachmentTransferFiles(event.clipboardData);
     if (files && files.length) {
       event.preventDefault();

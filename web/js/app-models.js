@@ -80,7 +80,7 @@ async function saveChatModelSelection(value) {
   }
 
   state.modelSaving = true;
-  if ($("sendButton")) {
+  if ($("sendButton") && (!window.RNAssistantWorkspaceChat || window.RNAssistantWorkspaceChat.owner() === "office")) {
     $("sendButton").disabled = true;
   }
   var targetChatId = state.activeChatId;

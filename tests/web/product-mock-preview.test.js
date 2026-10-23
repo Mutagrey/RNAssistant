@@ -424,32 +424,32 @@ async function serve() {
     assert.equal(await normal.locator('#projectChatOpenData').count(), 0,
       'project chat no longer repeats the Data Templates button');
     await normal.locator("#messages .chat-empty-suggestion").first().click();
-    assert.match(await normal.locator("#projectChatInput").inputValue(), /Сравни сентябрь с августом/);
-    await normal.locator("#projectChatInput").fill("");
-    await normal.locator('#projectChatForm .composer-add-trigger').click();
-    assert.equal(await normal.locator('#projectChatForm .composer-add-menu').getByText('Файл с компьютера').count(), 1,
+    assert.match(await normal.locator("#chatInput").inputValue(), /Сравни сентябрь с августом/);
+    await normal.locator("#chatInput").fill("");
+    await normal.locator('#workspaceComposerPicker .composer-add-trigger').click();
+    assert.equal(await normal.locator('#workspaceComposerPicker .composer-add-menu').getByText('Файл с компьютера').count(), 1,
       'project chat offers file selection beside planning');
-    await normal.locator('#projectChatForm .composer-add-menu').getByText('Файл с компьютера').click();
-    await normal.locator('#projectChatForm input[type="file"]').setInputFiles({
+    await normal.locator('#workspaceComposerPicker .composer-add-menu').getByText('Файл с компьютера').click();
+    await normal.locator('#chatForm .workspace-composer-only input[type="file"]').setInputFiles({
       name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('Проектный файл для проверки.')
     });
-    await normal.waitForFunction(() => document.querySelector('#projectChatInput').value.includes('chat-files/'));
+    await normal.waitForFunction(() => document.querySelector('#chatInput').value.includes('chat-files/'));
     assert.match(await normal.locator('#projectChatFileStatus').textContent(), /Файл добавлен в проект/);
-    await normal.locator("#projectChatInput").fill("");
-    await normal.locator('#projectChatForm .composer-add-trigger').click();
-    await normal.locator('#projectChatForm .composer-add-menu').getByText('Файл с компьютера').click();
-    await normal.locator('#projectChatForm input[type="file"]').setInputFiles({
+    await normal.locator("#chatInput").fill("");
+    await normal.locator('#workspaceComposerPicker .composer-add-trigger').click();
+    await normal.locator('#workspaceComposerPicker .composer-add-menu').getByText('Файл с компьютера').click();
+    await normal.locator('#chatForm .workspace-composer-only input[type="file"]').setInputFiles({
       name: 'raw.bin', mimeType: 'application/octet-stream', buffer: Buffer.from([0, 255, 1])
     });
     await normal.locator('#projectChatFileStatus').getByText(/недоступно для чтения моделью/).waitFor();
-    assert.equal(await normal.locator('#projectChatInput').inputValue(), '',
+    assert.equal(await normal.locator('#chatInput').inputValue(), '',
       'a binary upload does not claim that the project model can read it');
     await normal.locator("#projectChatNew").click();
     await normal.waitForFunction(() => document.querySelector("#projectChatTree [aria-current='page']")?.textContent.includes("Новый чат"));
-    await normal.locator("#projectChatInput").fill("Проверь источники");
-    await normal.locator("#projectChatSend").click();
-    await normal.locator("#projectChatStop").waitFor({ state: "visible" });
-    await normal.locator("#projectChatStop").click();
+    await normal.locator("#chatInput").fill("Проверь источники");
+    await normal.locator("#sendButton").click();
+    await normal.locator("#stopButton").waitFor({ state: "visible" });
+    await normal.locator("#stopButton").click();
     await normal.waitForFunction(() => document.querySelector("#projectChatNotice").textContent.includes("прервано"));
     assert.match(await normal.locator("#messages").textContent(), /Проверь источники/);
     await normal.locator('#projectChatWorkspaceMenu summary').click();

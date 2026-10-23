@@ -97,16 +97,18 @@ function bindChatActions() {
   });
   bindComposerPickers();
   $("compactContextButton").addEventListener("click", compactChatContext);
-  $("stopButton").addEventListener("click", stopActiveSend);
-  $("clearInputButton").addEventListener("click", function () { setChatInputText("", true); });
+  $("stopButton").addEventListener("click", function () { if (!window.RNAssistantWorkspaceChat || window.RNAssistantWorkspaceChat.owner() === "office") stopActiveSend(); });
+  $("clearInputButton").addEventListener("click", function () { if (!window.RNAssistantWorkspaceChat || window.RNAssistantWorkspaceChat.owner() === "office") setChatInputText("", true); });
   $("focusReplyButton").addEventListener("click", function () { $("chatInput").focus(); });
   $("cancelMessageEditButton").addEventListener("click", cancelMessageEdit);
   $("chatInput").addEventListener("input", function () {
+    if (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office") return;
     updateComposerInputState();
     if (!hasActiveMessageEdit()) captureChatDraft(state.activeChatId, true);
   });
   window.addEventListener("resize", resizeChatInput);
   $("chatInput").addEventListener("keydown", function (event) {
+    if (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office") return;
     if (event.key === "Escape" && hasActiveMessageEdit() && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
       event.preventDefault();
       cancelMessageEdit();
@@ -118,6 +120,7 @@ function bindChatActions() {
     }
   });
   $("chatForm").addEventListener("submit", function (event) {
+    if (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office") return;
     event.preventDefault();
     submitChatInput();
   });

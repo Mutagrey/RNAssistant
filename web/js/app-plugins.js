@@ -8,10 +8,10 @@
   var frameReady=false,pendingNavigation=null;
   var browsingRelease=null,publishedSourceStamps=Object.create(null),versionCursor=null,versionEpoch=0;
   var navigation={projectName:'Проект данных',view:'sources',templateId:'',templates:[],expanded:{project:true,templates:true,dictionary:true}};
-  var sharedChatIds={Message:'Input',ChatForm:'Form',Send:'Send',Stop:'Stop',
-    ChatStatus:'Notice',Approval:'Control',ApprovalText:'Pending',Approve:'Approve',Reject:'Reject',Questions:'Questions'};
+  var sharedChatIds={ChatStatus:'Notice',Approval:'Control',ApprovalText:'Pending',Approve:'Approve',Reject:'Reject',Questions:'Questions'};
+  var composerIds={Message:'chatInput',ChatForm:'chatForm',Send:'sendButton',Stop:'stopButton'};
   function el(id){return id==='ChatMessages' ? window.RNAssistantWorkspaceChat.messages() :
-    document.getElementById((sharedChatIds[id]?'projectChat':'plugin')+(sharedChatIds[id]||id));}
+    document.getElementById(composerIds[id]||(sharedChatIds[id]?'projectChat'+sharedChatIds[id]:'plugin'+id));}
   function ownsChat(){return window.RNAssistantWorkspaceChat.owner()==='plugin';}
   function chatStatus(text){if(ownsChat())el('ChatStatus').textContent=text||'';}
   var statusTimer=null;

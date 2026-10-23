@@ -118,6 +118,7 @@ function renderChatRunNotice() {
 }
 
 function renderSendControls() {
+  if (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office") return;
   renderChatRunNotice();
   var navigating = !!(state.chatNavigationPending || state.initializePromise);
   var detailUnavailable = !!(state.chatDetailPending || state.chatDetailError);
@@ -211,6 +212,7 @@ function renderSendControls() {
 }
 
 function updateComposerInputState() {
+  if (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office") return;
   var input = $("chatInput");
   var form = $("chatForm");
   var clearButton = $("clearInputButton");
@@ -234,6 +236,7 @@ function updateComposerInputState() {
 }
 
 function updateSendButtonAvailability(hasContent) {
+  if (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office") return;
   var sendButton = $("sendButton");
   if (!sendButton) {
     return;
@@ -280,6 +283,11 @@ function resizeComposerInput(input) {
 }
 
 function setChatInputText(text, shouldFocus, saveDraft) {
+  if (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office") {
+    if (saveDraft !== false && state.activeChatId && !hasActiveMessageEdit())
+      saveOfficeDraft(state.activeChatId, text || "", state.draftAttachments || [], true);
+    return;
+  }
   var input = $("chatInput");
   if (!input) {
     return;

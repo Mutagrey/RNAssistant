@@ -2,9 +2,13 @@
   "use strict";
   var scope = "office", catalog = null, active = null, busy = false, serial = 0, poll = null, pendingSend = null, stopTitleWatch = null;
   var composer = null, uploadingFiles = false;
+  var composerIds = { Form: "chatForm", Input: "chatInput", Send: "sendButton", Stop: "stopButton" };
   var selectedWorkspaceId = null, expanded = {}, query = "", connectionMode = "connect";
   var noticeText = "", noticeError = false, fileNotice = null;
-  function el(id) { return id === "Messages" ? window.RNAssistantWorkspaceChat.messages() : document.getElementById("projectChat" + id); }
+  function el(id) {
+    return id === "Messages" ? window.RNAssistantWorkspaceChat.messages() :
+      document.getElementById(composerIds[id] || "projectChat" + id);
+  }
   function ownsView() { return window.RNAssistantWorkspaceChat.owner() === "project"; }
   function node(tag, className, text) {
     var result = document.createElement(tag);

@@ -112,7 +112,7 @@ async function loadPromptContextInspector(includeRaw) {
   promptContextInspectorRequest = operation;
   try {
     var response = await send("inspectPromptContext", {
-      chatId: chatId, text: $("chatInput") ? $("chatInput").value : "",
+      chatId: chatId, text: typeof officeChatDraftText === "function" ? officeChatDraftText() : $("chatInput") ? $("chatInput").value : "",
       resourceDraftIds: promptContextResourceDraftIds(), includeRaw: !!includeRaw
     });
     operation.lease = response && response.rawData;

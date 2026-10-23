@@ -17,7 +17,7 @@ function resetMessageEditState(options) {
   state.editingDraftScrollTop = 0;
 
   var input = $("chatInput");
-  if (!restoreDraft || !input) {
+  if (!restoreDraft || !input || window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office") {
     return;
   }
 
@@ -103,6 +103,7 @@ function canSaveMessageEdit(message, index) {
 
 function focusMessageEditComposer() {
   window.setTimeout(function () {
+    if (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office") return;
     var input = $("chatInput");
     if (!input) {
       return;

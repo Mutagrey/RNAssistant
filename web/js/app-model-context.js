@@ -650,7 +650,8 @@
       await render(c);
     } catch (error) { if (valid(c, version)) status(c, error.message || String(error)); }
   }
-  function draft() { var chat = activeChatSummary(); return JSON.stringify([$("chatInput").value, promptContextResourceDraftIds(), chat && (chat.revision || chat.Revision)]); }
+  function composerText() { return typeof officeChatDraftText === "function" ? officeChatDraftText() : $("chatInput").value; }
+  function draft() { var chat = activeChatSummary(); return JSON.stringify([composerText(), promptContextResourceDraftIds(), chat && (chat.revision || chat.Revision)]); }
   function previewAvailability(c) {
     $("modelContextPreviewOption").disabled = !!state.chatReadOnly;
     var unavailable = !!state.chatReadOnly && c.mode === "preview";
@@ -666,7 +667,7 @@
     }
     c.previewDraft = draft(); status(c, "Сборка предварительного контекста…");
     try {
-      var response = await call(c, "inspectModelContextPreview", { text: $("chatInput").value,
+      var response = await call(c, "inspectModelContextPreview", { text: composerText(),
         resourceDraftIds: promptContextResourceDraftIds(), includeRaw: true });
       var value = await download(c, response, "context-inspector", version);
       if (!valid(c, version)) return;
