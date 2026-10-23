@@ -355,6 +355,25 @@ namespace RNAssistant.Harness
                     new Dictionary<string, object> { ["target"] = "pages.pdf", ["representation"] = "text",
                         ["pageIndex"] = 2 }), System.Threading.CancellationToken.None).GetAwaiter().GetResult();
                 AssertTrue(outside.Result.Status != ToolResultStatus.Ok, "workspace invalid page fails explicitly");
+                var longPdf = new PdfDocumentBuilder();
+                var longFont = longPdf.AddStandard14Font(Standard14Font.Helvetica);
+                for (var index = 0; index < 120; index++)
+                    longPdf.AddPage(300, 300).AddText("page " + index, 12,
+                        new PdfPoint(20, 250), longFont);
+                System.IO.File.WriteAllBytes(System.IO.Path.Combine(workspace.RootPath, "long.pdf"), longPdf.Build());
+                var longRead = handler.ExecuteAsync(new ToolHandlerContext(execution,
+                    new Dictionary<string, object> { ["target"] = "long.pdf", ["representation"] = "text",
+                        ["startPage"] = 0, ["pageCount"] = 3 }),
+                    System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+                AssertEqual(ToolResultStatus.Ok, longRead.Result.Status, "long PDF page range succeeds");
+                var longResult = JObject.Parse(longRead.Result.DataJson);
+                AssertEqual(120, (int)longResult["pageCount"], "long PDF reports original page count");
+                AssertEqual(3L, (long)longResult["coverage"]["end"],
+                    "three extracted pages retain only their selected coverage");
+                AssertTrue((bool)longResult["selectionComplete"] && !(bool)longResult["complete"] &&
+                    !(bool)longResult["sourceComplete"], "three pages never claim the whole PDF");
+                AssertEqual(120, longRead.ResourceEvidence.Single().ReadMetadata.SourcePageCount.Value,
+                    "long PDF evidence keeps source extent separate from selected coverage");
             });
         }
 
