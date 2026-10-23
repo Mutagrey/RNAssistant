@@ -77,6 +77,9 @@ an irreparable obstacle without reporting success or replaying a tool.
 - The `model protocol:` group passes 15/15 with v8 accepted responses and
   current repair guidance; retry, fallback and provider budgets retain their
   original assertions.
+- The `protocol context:` group passes 6/6. Confirmation continuation keeps
+  the exact run identity through the evidence-citing finish; accepted call IDs
+  survive compaction without being regenerated.
 
 The full Harness still has legacy v7 wire bodies and assertions outside these
 migrated groups; its complete test suite is not yet green.

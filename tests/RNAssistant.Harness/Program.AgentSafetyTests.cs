@@ -510,26 +510,30 @@ namespace RNAssistant.Harness
             {
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"message\":\"Bad attempt\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"unknown.tool\",\"arguments\":{}}]}",
+                    ModelProtocolWire.WriteAcceptedCall("Try the requested read.", "Bad attempt",
+                        new ConversationToolCall { Name = "unknown.tool", Arguments = new JObject() }),
                     LoadToolSchemaResponse("excel.inspect"),
-                    "{\"message\":\"Read\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}," +
-                    "{\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
-                    "{\"message\":\"Invalid model id\",\"action\":\"tool\",\"tool_calls\":[{\"id\":\"rejected_id\",\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
-                    "{\"message\":\"Done\",\"action\":\"done\",\"tool_calls\":[]}",
-                    "{\"message\":\"Fresh answer\",\"action\":\"done\",\"tool_calls\":[]}"
+                    V8Envelope(V8Call("excel.inspect", new JObject { ["kind"] = "sheets" }),
+                        V8Call("excel.inspect", new JObject { ["kind"] = "sheets" })),
+                    "{\"action\":\"execute\",\"reason\":\"Inspect sheets.\",\"tool_calls\":[{\"id\":\"rejected_id\",\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}],\"message\":\"Invalid model id\"}"
                 });
                 var rawCalls = 0;
                 var attemptIds = new List<string>();
+                var session = NewSession(adapter);
                 LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
                 {
                     rawCalls++;
                     attemptIds.Add(options.TraceModelAttemptId);
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    var content = responses.Count > 0 ? responses.Dequeue() : rawCalls == 5
+                        ? ScriptedVerifiedFinish(session, "Report the completed reads.", "Done", "Sheets inspected.",
+                            "common.capabilities_read", "excel.inspect", "excel.inspect")
+                        : ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                            "Answer the new request.", "Fresh answer", results: new ConversationResultClaim[0]);
+                    return Task.FromResult(new LlmCompletionResult { Content = content });
                 };
                 var requests = new List<ModelProtocolRequest>();
                 var service = CreateConversationRunService(adapter, executor, completion, null,
                     () => new RecordingModelProtocol(completion, requests));
-                var session = NewSession(adapter);
                 var settingsForRun = new AppSettings { AutoConfirmToolActions = true, MaxAgentFormatRetries = 2 };
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var result = service.ExecuteAsync(ChatModes.Agent, "Inspect sheets", session, NewContext(adapter), settingsForRun, tools, null)
@@ -553,7 +557,7 @@ namespace RNAssistant.Harness
                     "independent native reads dispatch once each through the direct typed backend");
                 AssertTrue(requests[0].CallContext.SequentialBatchToolIds.Contains("common.resources_read") &&
                     requests[0].CallContext.SequentialBatchToolIds.Contains("excel.inspect"), "runtime metadata feeds the batch-safe projection");
-                AssertEqual(AgentResponseProtocol.CurrentVersion, result.ResponseProtocolVersion, "accepted writes use v7");
+                AssertEqual(AgentResponseProtocol.CurrentVersion, result.ResponseProtocolVersion, "accepted writes use v8");
                 var acceptedBeforeNextRun = JsonConvert.SerializeObject(acceptedCalls);
                 var safetyBeforeNextRun = requests[0].CallContext.SequentialBatchToolIds.ToArray();
                 service.ExecuteAsync(ChatModes.Agent, "New request", session, NewContext(adapter), settingsForRun, tools, null).GetAwaiter().GetResult();
@@ -572,15 +576,18 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     LoadSkillResponse("common.skill_authoring"),
-                    "{\"message\":\"Create skill\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.skills_upsert\",\"arguments\":{\"id\":\"common.context_probe\",\"description\":\"Test\",\"bodyMarkdown\":\"# Test\"}}]}",
-                    "{\"message\":\"Done\",\"action\":\"done\",\"tool_calls\":[]}"
+                    ModelProtocolWire.WriteAcceptedCall("Create the requested skill.", "Create skill",
+                        new ConversationToolCall { Name = "common.skills_upsert", Arguments = new JObject {
+                            ["id"] = "common.context_probe", ["description"] = "Test", ["bodyMarkdown"] = "# Test" } })
                 });
+                var session = NewSession(adapter);
                 LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
-                    Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    Task.FromResult(new LlmCompletionResult { Content = responses.Count > 0 ? responses.Dequeue() :
+                        ScriptedVerifiedFinish(session, "Report the confirmed skill write.", "Done",
+                            "Skill created.", "common.skills_upsert") });
                 var requests = new List<ModelProtocolRequest>();
                 var service = CreateConversationRunService(adapter, executor, completion, null,
                     () => new RecordingModelProtocol(completion, requests));
-                var session = NewSession(adapter);
                 session.LastRun = new ChatRunRecord { RunId = "original_run", TurnId = "original_run", ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion, Status = "running" };
                 var settingsForRun = new AppSettings { AutoConfirmToolActions = false, ToolResultRole = role };
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
@@ -595,8 +602,8 @@ namespace RNAssistant.Harness
                 var selectionId = selectionCall.ToolCallId;
                 var skillId = skillCall.ToolCallId;
                 AssertEqual(skillId, confirmed.ToolCallId, "pending confirmation retains the accepted runtime ID");
+                AssertEqual(session.LastRun.RunId, skillCall.RunId, "accepted write stays pinned to its exact run");
                 var originalOrigins = JsonConvert.SerializeObject(new[] { selectionCall.AcceptedCallOrigin, skillCall.AcceptedCallOrigin });
-                foreach (var message in session.Messages) message.RunId = "original_run";
                 var through = session.Messages.First(message => message.ProtocolMessage && message.Role != "assistant" && message.ToolCallId == selectionId);
                 var checkpoint = new ContextCheckpoint { ThroughMessageId = through.Id, SummaryMarkdown = "Skill selection summarized.",
                     Claims = new List<StructuredContextClaim> { new StructuredContextClaim {
@@ -607,17 +614,14 @@ namespace RNAssistant.Harness
                     MimeType = "application/json", InlineText = JsonConvert.SerializeObject(checkpoint, Formatting.None) });
                 session.ContextCheckpoints.Add(checkpoint);
                 session.ActiveContextCheckpointId = checkpoint.Id;
-                session.LastRun.RunId = "confirmation_run";
-                skillCall.RunId = "confirmation_run";
-                // Same controller-style identity transition, with real host-neutral tool
-                // execution against the fixture's disposable skill store (no Office COM).
+                // Keep the exact run identity through confirmation and finish.
                 AssertEqual(session.LastRun.KernelState.Summary.TurnId, session.LastRun.TurnId, "logical turn binding");
                 AssertEqual(session.LastRun.KernelState.Summary.PendingConfirmation.Call.ArgumentsJson,
                     JsonConvert.SerializeObject(confirmed.Arguments, Formatting.None), "confirmed argument binding");
                 ConversationProtocolContext.EnsureCanContinue(session, confirmed);
                 var restored = ConversationProtocolContext.RestoreContinuation(session, confirmed);
                 AssertTrue(restored.AcceptedCallIds.SequenceEqual(new[] { selectionId, skillId }.OrderBy(id => id, StringComparer.Ordinal)),
-                    "new runtime RunId restores logical-turn IDs, including compacted-away skill selection");
+                    "continuation restores logical-turn IDs, including compacted-away skill selection");
                 var last = service.ConfirmAsync("pending_context", confirmed, session,
                     new ConversationRunInput(settingsForRun, NewContext(adapter), tools), null).GetAwaiter().GetResult();
                 AssertEqual(1, last.RunViewState.VerifiedWrites,
@@ -637,7 +641,7 @@ namespace RNAssistant.Harness
                 AssertEqual(1, session.Messages.Count(message => message.ProtocolMessage && message.Role != "assistant" && message.ToolCallId == skillId),
                     "confirmed result references the same runtime call exactly once");
                 AssertTrue(!continuation.CallContext.SequentialBatchToolIds.Contains("common.skills_upsert"), "confirmation tool is never batch-safe");
-                AssertEqual(AgentResponseProtocol.CurrentVersion, last.ResponseProtocolVersion, "confirmation writes the active v7 protocol: " + role);
+                AssertEqual(AgentResponseProtocol.CurrentVersion, last.ResponseProtocolVersion, "confirmation writes the active v8 protocol: " + role);
             });
         }
 
